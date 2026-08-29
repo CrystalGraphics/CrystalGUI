@@ -1143,7 +1143,7 @@ public final class MyPanel extends UIElement implements Networked<MyModel> {
     }
     @Override public void serve(MyModel m, ServerScope io) {     // before open(), enforced
         io.sheet(SheetRef.ofResource("mymod:theme", hash), css);
-        io.onActivate(save, ctx -> m.save());
+        io.on(save, Button.ACTIVATE, ctx -> m.save());
         io.onCall  ("save",  (args, respond) -> respond.ok(null)); // window-scoped
         io.onNotify("ping",  payload -> noted());                  // window-scoped
         io.attach(engines, m.engines());     // child's "save" becomes "engines/save", both sides

@@ -174,7 +174,7 @@ public class MultiViewerTest {
     @Test
     public void anEventFromEitherViewerReachesTheServer() {
         AtomicInteger presses = new AtomicInteger();
-        server.onActivate(button, ctx -> presses.incrementAndGet());
+        server.on(button, Button.ACTIVATE, ctx -> presses.incrementAndGet());
         server.addViewer(serverB);
         server.open();
         settle();

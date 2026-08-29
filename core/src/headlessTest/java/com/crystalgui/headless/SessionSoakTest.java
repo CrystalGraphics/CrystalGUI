@@ -94,7 +94,7 @@ public class SessionSoakTest {
         AtomicInteger clientCallsAnswered = new AtomicInteger();
         AtomicInteger callFailures = new AtomicInteger();
 
-        server.onActivate(button, ctx -> presses.incrementAndGet());
+        server.on(button, Button.ACTIVATE, ctx -> presses.incrementAndGet());
         server.onCall("soak/echo", (args, respond) -> {
             StateMap<Object> out = new StateMap<>(PlainOps.INSTANCE);
             out.putInt("n", args.getInt("n", -1));

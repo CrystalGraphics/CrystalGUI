@@ -725,7 +725,7 @@ public class WindowLifecycleTest {
 
         @Override
         public void serve(String key, ServerScope io) {
-            io.onActivate(press, ctx -> presses.incrementAndGet());
+            io.on(press, Button.ACTIVATE, ctx -> presses.incrementAndGet());
         }
 
         @Override
@@ -797,7 +797,7 @@ public class WindowLifecycleTest {
 
         @Override
         public void serve(String model, ServerScope io) {
-            io.onActivate(press, ctx -> presses.incrementAndGet());
+            io.on(press, Button.ACTIVATE, ctx -> presses.incrementAndGet());
         }
 
         @Override
@@ -859,7 +859,7 @@ public class WindowLifecycleTest {
                 out.putString("by", "the child");
                 respond.ok(out);
             });
-            io.onActivate(late, ctx -> presses.incrementAndGet());
+            io.on(late, Button.ACTIVATE, ctx -> presses.incrementAndGet());
         }
 
         @Override
@@ -942,7 +942,7 @@ public class WindowLifecycleTest {
         @Override
         public void serve(String model, ServerScope io) {
             io.attach(save, model);
-            io.onActivate(save.late, ctx -> { });
+            io.on(save.late, Button.ACTIVATE, ctx -> { });
         }
     }
 

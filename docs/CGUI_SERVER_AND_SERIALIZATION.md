@@ -296,7 +296,7 @@ var session = new ServerUiSession<>(windowId, root, transport, PlainOps.INSTANCE
         .addSheet(SheetRef.ofResource("crystalgui:ore", oreHash))
         .setUseUserAgentSheet(true);
 
-session.onActivate(myButton, ctx -> ctx.session().call("client:toast", null, …));
+session.on(myButton, Button.ACTIVATE, ctx -> ctx.session().call("client:toast", null, …));
 session.on(mySlider, UiEventKinds.VALUE, ctx -> model.set(ctx.payload().getFloat("v", 0)));
 session.onCall("server:save", (args, responder) -> responder.ok(result));
 

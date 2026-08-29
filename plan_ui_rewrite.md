@@ -170,7 +170,7 @@ there is no way to add an 88th without answering the question.
 
 | | |
 |---|---|
-| The contract types | `ui/contract/` — `WidgetContract`, `State`, `Event`, `StateType`/`StateTypes`, `RatePolicy`, `EventKind`, `WidgetContracts` |
+| The contract types | `ui/contract/` — `WidgetContract`, `State`, `Event`, `StateType`/`StateTypes`, `RatePolicy`, `WidgetContracts` |
 | The twelve, ported | `Button` `Checkbox` `ColorSelector` `Dropdown` `ProgressBar` `Slider` `SplitView` `Switch` `Tab` `TabView` `TextField` `UIText` — every hand-written `writeState`/`readState` pair deleted |
 | Beyond the twelve | `SearchField` `Dialog` `MenuItem` `Tooltip` `Popover` `Menu`, and **ten config controls** through one `ConfigControlContracts` factory — the largest group that could carry nothing, and the widgets a served settings panel is made of |
 | The census | `ui/elements/WidgetCensus` — 59 classes, each with a reason falling under one of four headings |
@@ -257,7 +257,53 @@ in every context, per-connection refusal counter with a threshold, per-viewer vi
 and counted, two-viewer attribution, the seven tear-out behaviours re-pinned as plain reparent
 tests (they pass because M2 made reparenting free — no `Detached`).
 
-### M4 — Windows, view commands, sheets, limits · M · after: M2, M3
+### M4 — Windows, view commands, client-initiated open, sheets, limits · M · after: M2, M3
+
+#### Client-initiated open (audit N10) — decided 2026-08-29
+
+Folded in here rather than before M2, because refusing honestly needs the mirror's error plumbing and
+doing it earlier would mean writing the refusal path twice. Three decisions, taken:
+
+1. **A request, not a notify.** The client has to be able to learn it was refused. Today's hand-rolled
+   idiom (`MachineExample`'s `machine/open`) is a notify whose comment says *"the window arriving IS
+   the answer"* — fine while it always succeeds, and indistinguishable from a lost packet when it does
+   not: the player presses the key and nothing happens, forever.
+2. **Openability is declared server-at-registration**, not on the `UiType`. The same panel class may be
+   openable in one context and not another, so putting it on the type makes a deployment decision into
+   a property of a class.
+3. **The reply carries success only.** The window itself arrives through the ordinary
+   `ui/openWindow` path, so there is exactly one code path for "a window appeared" no matter who asked
+   for it.
+
+Shape:
+
+```java
+// Server, once. The resolver IS the authority: it gets the viewer, and null means refuse.
+ServerWindows.openable(FurnacePanel.TYPE, (viewer, args) -> {
+    BlockPos pos = readPos(args);                   // UNTRUSTED -- re-derive, never dereference
+    if (!world.isBlockLoaded(pos)) return null;
+    if (viewer.getDistanceSq(pos) > 64) return null;
+    return furnaceAt(pos);
+});
+
+// Client
+ClientWindows.of(connection).requestOpen(FurnacePanel.TYPE, args, result -> { ... });
+```
+
+Notes that have to survive into the implementation:
+
+- **`args` is untrusted.** The resolver re-derives the model from it (a position, an id) and never
+  accepts a reference. Same Rule-of-2 posture §4.8 takes for event payloads.
+- **A refusal is an ordinary answer**, not an exception — `null` from the resolver.
+- **Asking twice must not open twice.** `key(model)` already settles that once the open happens, so
+  the resolver returning the same model is enough; no second mechanism.
+- **The single-player trap belongs in the docs for this**, loudly: a client-initiated open almost
+  always means opening a `GuiScreen`, and one that pauses the game stops the integrated server
+  ticking, so the connection is never pumped and every call dies at its timeout. `doesGuiPauseGame()`
+  must be `false`. It is invisible on a dedicated server, which is the configuration nobody tests the
+  wire in.
+
+#### The rest of M4
 
 View commands (`focus`, `scrollIntoView`, `showDialog`/`hideDialog`, `openMenu`, `tooltip`,
 `setTitle`, `setIcon`, `geometryHint`, `notify`, `requestClose`), the close veto wired to
@@ -267,12 +313,15 @@ interim until M5's native scopes) and refcounted by hash across windows. Caps: w
 connection, elements and bytes per description and per sheet, cache sizes; rate limits per method;
 capability negotiation at open.
 
-**Ships:** a server can focus, title, dialog, notify and ask-before-close; sheets no longer leak or
-bleed; a hostile server or client cannot take the other side down.
+**Ships:** a server can focus, title, dialog, notify and ask-before-close; **a client can ask for a
+window and be told no**; sheets no longer leak or bleed; a hostile server or client cannot take the
+other side down.
 **Deletes:** `CgUiWindowMount.sheetSupply`'s global `addStylesheet`, `contentReplaced`, the version
 refusal as the only skew handling.
 **Accepts:** hostile-description fuzzing, skew fixtures (client missing a tag / a field), the sheet
-refcount test (open twice, close twice, engine sheet list unchanged), eviction reason test.
+refcount test (open twice, close twice, engine sheet list unchanged), eviction reason test, and for
+N10: a refused request reaches the client AS a refusal (not a timeout), an un-declared type cannot be
+opened by a client at all, and a resolver that re-derives from `args` is not fooled by a forged one.
 
 ### M5 — The three-tree engine core · XL · after: M0 (S1, S2), D2–D4
 

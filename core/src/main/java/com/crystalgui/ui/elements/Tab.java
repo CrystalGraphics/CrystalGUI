@@ -1,6 +1,5 @@
 package com.crystalgui.ui.elements;
 
-import com.crystalgui.ui.contract.EventKind;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -66,7 +65,7 @@ public class Tab extends Button {
      * and that is the veto path M4 needs, so it is the one declared.</p>
      */
     public static final Event<Tab, Void> CLOSE_REQUESTED =
-            Event.signal(EventKind.CLOSE_REQUESTED, (tab, sink) -> tab.onCloseRequested.connect(sink));
+            Event.signal("closeRequested", (tab, sink) -> tab.onCloseRequested.connect(sink));
 
     public static final WidgetContract<Tab> CONTRACT = WidgetContracts.register(
             WidgetContract.of(Tab.class, "tab")

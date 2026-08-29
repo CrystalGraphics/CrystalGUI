@@ -417,7 +417,7 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
             model.setLabel(typed);
         });
 
-        io.onActivate(purge, ctx -> {
+        io.on(purge, Button.ACTIVATE, ctx -> {
             MachineTrace.log(MachineTrace.SERVER, "event: purge pressed");
             model.purge();
         });
@@ -430,7 +430,7 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
          * about one of them. The answer lands on the SERVER thread some ticks later, so writing it
          * into a widget is an ordinary state change and travels back as an ordinary state delta.
          */
-        io.onActivate(pingClient, ctx -> {
+        io.on(pingClient, Button.ACTIVATE, ctx -> {
             MachineTrace.log(MachineTrace.SERVER, "-> asking the client machine/clientInfo");
             // WRITTEN BEFORE THE CALL, and this is the point of the readout: a request has a gap
             // between asking and knowing, and a notification does not.
@@ -453,7 +453,7 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
          * The same wire, no answer. There is no callback to pass because there is nothing to call back
          * with -- a notification that could fail visibly would be a request.
          */
-        io.onActivate(announce, ctx -> {
+        io.on(announce, Button.ACTIVATE, ctx -> {
             StateMap<Object> out = io.newMap();
             out.putString("text", model.label() + " says hello");
             out.putInt("cycles", model.completedCycles());

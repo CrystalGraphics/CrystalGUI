@@ -178,8 +178,8 @@ public class TwoWindowsOnOneConnectionTest {
     public void anEventReachesOnlyItsOwnSession() {
         AtomicInteger pressesOne = new AtomicInteger();
         AtomicInteger pressesTwo = new AtomicInteger();
-        windowOne.onActivate(buttonOne, ctx -> pressesOne.incrementAndGet());
-        windowTwo.onActivate(buttonTwo, ctx -> pressesTwo.incrementAndGet());
+        windowOne.on(buttonOne, Button.ACTIVATE, ctx -> pressesOne.incrementAndGet());
+        windowTwo.on(buttonTwo, Button.ACTIVATE, ctx -> pressesTwo.incrementAndGet());
         windowOne.open();
         windowTwo.open();
         settle();

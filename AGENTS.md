@@ -993,7 +993,7 @@ talks to the client over RPC and bindings.
   `StateMap` (widget state), `UIDescriptionCodec`, `ContentHash`; `serialization/style/` holds
   `StyleValueCodecs` and `InlineStyleCodec`.
 - **`net/`** — `UITransport`, `InMemoryTransport`, `ServerUiSession`, `ClientUiSession`,
-  `NetworkIds`, `SheetRef`, `UiEventKinds`; `net/protocol/` holds the four-kind `Envelope`,
+  `NetworkIds`, `SheetRef`; `net/protocol/` holds the four-kind `Envelope`,
   `EnvelopeCodec`, `MessageRouter`, `Call` and the `UiMethods` vocabulary; `net/wire/` holds the
   multiplexed byte transport (`FrameCodec`, `FrameMultiplexer`, `WireTransport`) over the
   four-method `CgNetworkChannel` platform seam.
@@ -1653,9 +1653,11 @@ com.crystalgui.ui.contract     WHAT A KIND OF WIDGET IS — one declaration, fou
                                widgets depend on), Event<W,P> (a kind, a payload codec, and HOW A
                                CLIENT LISTENS — which is what deleted the instanceof switch),
                                StateType/StateTypes, RatePolicy (immediate/typing/dragging; a widget
-                               knows its own tempo and a handler cannot), EventKind (sixteen kinds,
-                               where there were four), WidgetContracts (the registry, and the
-                               local-only list with reasons). plan_ui_rewrite.md M1
+                               knows its own tempo and a handler cannot), WidgetContracts (the
+                               registry, and the local-only list with reasons). NOTE there is no kind
+                               vocabulary class: a kind is a string an Event declares, unique only
+                               within its own widget's contract, so a third party mints one without
+                               editing anything of ours. plan_ui_rewrite.md M1
 
 com.crystalgui.ui.dom          THE SEAM — the tree as everything above the engine sees it.
                                TreeSource<N> (stable node identity, light-tree iteration, contractOf,
@@ -1799,7 +1801,7 @@ com.crystalgui.serialization   Codec<A>, DynamicOps<T>, Codecs, CodecException, 
 
 com.crystalgui.net             UITransport, InMemoryTransport,
                                ServerUiSession, ClientUiSession, ClientUiSessions, UiWindowMux,
-                               NetworkIds, SheetRef, UiEventKinds
+                               NetworkIds, SheetRef
   .window                      A WINDOW'S LIFETIME — the layer above the sessions, and the one a mod
                                uses. Networked<M> (ONE class per UI: a UIElement whose widgets are
                                FIELDS — the field name becomes the id — with layout/serve/tick/

@@ -2,7 +2,6 @@ package com.crystalgui.ui.elements;
 
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.contract.RatePolicy;
-import com.crystalgui.ui.contract.EventKind;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -72,7 +71,7 @@ public class Dialog extends UIElement {
      * a server hears the request and decides what to do about it.
      */
     public static final Event<Dialog, Void> CLOSE_REQUESTED =
-            Event.signal(EventKind.CLOSE_REQUESTED,
+            Event.signal("closeRequested",
                     (dialog, sink) -> dialog.getCloseButton().attachListener(sink));
 
     /** A dialog is a container: its content is described children, not internals. */

@@ -170,7 +170,7 @@ public final class EnginePanel extends UIElement implements Networked<EngineMode
             engine.setLoad(value);
         });
 
-        io.onActivate(restart, ctx -> {
+        io.on(restart, Button.ACTIVATE, ctx -> {
             MachineTrace.log(MachineTrace.SERVER, "engine: restart pressed");
             engine.restart();
             // Events UP, as an ordinary call on an ordinary object. @see the class javadoc

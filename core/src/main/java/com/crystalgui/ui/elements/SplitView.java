@@ -1,7 +1,6 @@
 package com.crystalgui.ui.elements;
 
 import com.crystalgui.ui.contract.RatePolicy;
-import com.crystalgui.ui.contract.EventKind;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -115,18 +114,18 @@ public class SplitView extends UIElement {
      * Throttled, and the released position always travels -- a drag that stopped between ticks
      * otherwise reports a layout the user is not looking at.</p>
      */
-    public static final Event<SplitView, float[]> RESIZED = Event.of(EventKind.VALUE,
+    public static final Event<SplitView, float[]> RESIZED = Event.of("value",
             (split, sink) -> split.attachListener(percentage -> sink.accept(split.getWeights())),
             new Event.Payload<float[]>() {
                 @Override public <T> void write(StateMap<T> out, float[] value) {
                     java.util.List<Float> boxed = new java.util.ArrayList<>();
                     if (value != null) for (float weight : value) boxed.add(weight);
-                    out.putList(EventKind.PAYLOAD_WEIGHTS, boxed,
+                    out.putList("weights", boxed,
                             (entry, weight) -> entry.putFloat(KEY_WEIGHT, weight));
                 }
                 @Override public <T> float[] read(StateMap<T> in) {
                     java.util.List<Float> boxed =
-                            in.getList(EventKind.PAYLOAD_WEIGHTS, entry -> entry.getFloat(KEY_WEIGHT, 0f));
+                            in.getList("weights", entry -> entry.getFloat(KEY_WEIGHT, 0f));
                     float[] out = new float[boxed.size()];
                     for (int i = 0; i < out.length; i++) out[i] = boxed.get(i);
                     return out;

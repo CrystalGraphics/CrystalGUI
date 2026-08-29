@@ -181,7 +181,7 @@ public class TreeDeltaTest {
     public void anEventStillReachesItsHandlerAfterAReshape() {
         Button button = (Button) root.getChildren().get(1);
         AtomicInteger presses = new AtomicInteger();
-        server.onActivate(button, ctx -> presses.incrementAndGet());
+        server.on(button, Button.ACTIVATE, ctx -> presses.incrementAndGet());
         server.open();
         settle();
 

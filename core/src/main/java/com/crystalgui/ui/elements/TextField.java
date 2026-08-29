@@ -1,7 +1,6 @@
 package com.crystalgui.ui.elements;
 
 import com.crystalgui.ui.contract.RatePolicy;
-import com.crystalgui.ui.contract.EventKind;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -105,14 +104,14 @@ public class TextField extends UIElement implements UIFrameTicker {
                     .omittedWhen("");
 
     /** Every keystroke, debounced. @see RatePolicy#TYPING */
-    public static final Event<TextField, String> TEXT_CHANGED = Event.of(EventKind.TEXT,
+    public static final Event<TextField, String> TEXT_CHANGED = Event.of("text",
             (field, sink) -> field.attachListener(sink::accept),
             new Event.Payload<String>() {
                 @Override public <T> void write(StateMap<T> out, String value) {
-                    out.putString(EventKind.PAYLOAD_TEXT, value == null ? "" : value);
+                    out.putString("text", value == null ? "" : value);
                 }
                 @Override public <T> String read(StateMap<T> in) {
-                    return in.getString(EventKind.PAYLOAD_TEXT, "");
+                    return in.getString("text", "");
                 }
             }, RatePolicy.TYPING);
 
@@ -123,14 +122,14 @@ public class TextField extends UIElement implements UIFrameTicker {
      * and an expensive one only when the user commits. {@code UpdateMode} has drawn this distinction
      * locally since it existed and had no way to say it over a wire.</p>
      */
-    public static final Event<TextField, String> COMMITTED = Event.of(EventKind.COMMIT,
+    public static final Event<TextField, String> COMMITTED = Event.of("commit",
             (field, sink) -> field.onSubmit.connect(sink::accept),
             new Event.Payload<String>() {
                 @Override public <T> void write(StateMap<T> out, String value) {
-                    out.putString(EventKind.PAYLOAD_TEXT, value == null ? "" : value);
+                    out.putString("text", value == null ? "" : value);
                 }
                 @Override public <T> String read(StateMap<T> in) {
-                    return in.getString(EventKind.PAYLOAD_TEXT, "");
+                    return in.getString("text", "");
                 }
             }, RatePolicy.IMMEDIATE);
 
