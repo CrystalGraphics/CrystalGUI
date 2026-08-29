@@ -1,7 +1,8 @@
 package com.crystalgui.headless;
 
 import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.UITreeObserver;
+import com.crystalgui.ui.dom.ElementTreeSource;
+import com.crystalgui.ui.dom.TreeObserver;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.Checkbox;
 import com.crystalgui.ui.elements.Slider;
@@ -15,22 +16,35 @@ import java.util.List;
 import static org.junit.Assert.*;
 
 /**
- * {@link UITreeObserver} — the change feed a networked session drains once per tick.
+ * {@link TreeObserver} — the change feed a networked session drains once per tick, and what it says
+ * about <b>widgets</b> rather than about tree shape.
+ *
+ * <p>The shape half is {@code TreeSourceContractTest}, written purely against the seam so M5's engine
+ * must pass it unchanged. This file is the other half and is deliberately not seam-pure: it drives real
+ * {@code Button}s, {@code Checkbox}es and {@code Slider}s to pin the <b>attribution</b> rule (an
+ * internal label dirties its composite) and the <b>no-op</b> rule (an equality-suppressed setter reports
+ * nothing). Both are properties of the widgets, so they belong beside the widgets.</p>
+ *
+ * <p>Ported from {@code UITreeObserverTest} at M0. Two things changed and both are visible below:
+ * installing an observer no longer reports an attach per element, and a reparent is a {@code moved}
+ * rather than a detach followed by an attach.</p>
  *
  * <p>Everything here asserts on an exact recorded sequence rather than "something happened". A
  * dirty-tracking layer that over-reports looks correct in a spot check and quietly sends the whole
  * tree every frame.</p>
  */
-public class UITreeObserverTest {
+public class TreeObserverBehaviourTest {
 
     /** Records what it is told, in order. */
-    private static final class Recorder implements UITreeObserver {
+    private static final class Recorder implements TreeObserver<UIElement> {
         final List<String> events = new ArrayList<>();
 
-        @Override public void onAttached(UIElement e) { events.add("attach:" + name(e)); }
-        @Override public void onDetached(UIElement e) { events.add("detach:" + name(e)); }
-        @Override public void onStateDirty(UIElement e) { events.add("state:" + name(e)); }
-        @Override public void onIdentityDirty(UIElement e) { events.add("identity:" + name(e)); }
+        @Override public void inserted(UIElement e, UIElement p, int i) { events.add("attach:" + name(e)); }
+        @Override public void removed(UIElement e, UIElement p) { events.add("detach:" + name(e)); }
+        @Override public void moved(UIElement e, UIElement p, int i) { events.add("move:" + name(e)); }
+        @Override public void stateChanged(UIElement e) { events.add("state:" + name(e)); }
+        @Override public void attributeChanged(UIElement e) { events.add("identity:" + name(e)); }
+        @Override public void inlineStyleChanged(UIElement e) { events.add("inline:" + name(e)); }
 
         private static String name(UIElement e) {
             return e.getId().isEmpty() ? e.tagName() : e.getId();
@@ -45,14 +59,18 @@ public class UITreeObserverTest {
 
     private Recorder recorder;
     private UIElement root;
+    private ElementTreeSource source;
 
     @Before
     public void setUp() {
         recorder = new Recorder();
         root = new UIElement();
         root.setId("root");
-        root.setObserver(recorder);
-        recorder.clear();
+        source = new ElementTreeSource(root);
+        source.observe(recorder);
+        // No clear() needed any more, and that is the change: installing an observer used to emit an
+        // attach for every element it walked, so every consumer had to discard its own installation
+        // before it could tell a real insertion from being handed the tree.
     }
 
     // ── Attachment ──────────────────────────────────────────────────────────
@@ -71,8 +89,14 @@ public class UITreeObserverTest {
         assertEquals(List.of("attach:branch", "attach:leaf"), recorder.only("attach"));
     }
 
+    /**
+     * <b>Changed at M0, on purpose.</b> This used to assert {@code [detach:branch, detach:leaf]} -- one
+     * message per descendant for a single deletion. A receiver removing a node removes what is under it,
+     * so naming the subtree root is complete, and the old shape made deleting a large panel cost a
+     * message per element in it.
+     */
     @Test
-    public void detachingASubtreeReportsTheWholeThing() {
+    public void detachingASubtreeNamesOnlyItsRoot() {
         UIElement branch = new UIElement();
         branch.setId("branch");
         branch.addChild(new UIElement().setId("leaf"));
@@ -81,7 +105,7 @@ public class UITreeObserverTest {
 
         root.removeChild(branch);
 
-        assertEquals(List.of("detach:branch", "detach:leaf"), recorder.only("detach"));
+        assertEquals(List.of("detach:branch"), recorder.only("detach"));
     }
 
     /** A detached subtree must stop reporting entirely, or a session leaks updates for dead nodes. */
@@ -99,12 +123,30 @@ public class UITreeObserverTest {
                 recorder.events.isEmpty());
     }
 
-    /** A widget's internal children are part of the observed tree too — they arrive with their owner. */
+    /**
+     * A composite arrives as ONE node. Its internals are scaffolding its own constructor rebuilds on the
+     * far side, so describing them would duplicate the structure -- which is the same distinction
+     * {@code describedChildren} draws, now visible in the change stream rather than only in the codec.
+     */
     @Test
-    public void compositeWidgetsBringTheirInternalsWhenAttached() {
+    public void aCompositeArrivesAsOneNode() {
         root.addChild(new Button("hi"));
-        assertTrue("the Button itself must be reported",
-                recorder.only("attach").stream().anyMatch(s -> s.equals("attach:button")));
+        assertEquals(List.of("attach:button"), recorder.only("attach"));
+    }
+
+    /** The counterpart to the above: a composite's own state still travels, attributed to it. */
+    @Test
+    public void aReparentIsAMoveRatherThanADetachAndAttach() {
+        UIElement from = new UIElement().setId("from");
+        UIElement to = new UIElement().setId("to");
+        UIElement moving = new UIElement().setId("moving");
+        root.addChildren(from, to);
+        from.addChild(moving);
+        recorder.clear();
+
+        to.addChild(moving);
+
+        assertEquals(List.of("move:moving"), recorder.events);
     }
 
     // ── State ───────────────────────────────────────────────────────────────
@@ -226,7 +268,7 @@ public class UITreeObserverTest {
         checkbox.addClass("c");
         plain.removeChild(checkbox);
 
-        assertNull(plain.getObserver());
-        assertNull(checkbox.getObserver());
+        assertNull(plain.getDomObserver());
+        assertNull(checkbox.getDomObserver());
     }
 }

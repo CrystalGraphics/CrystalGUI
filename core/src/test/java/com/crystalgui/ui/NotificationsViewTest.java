@@ -288,6 +288,15 @@ public class NotificationsViewTest extends UiTestBase {
      */
     @Test(timeout = 5000)
     public void aFifthBalloonDoesNotSpin() {
+        // TAKE OWNERSHIP OF setUp()'s WINDOW ON THIS THREAD. JUnit's `timeout` runs only the method
+        // BODY on a fresh thread -- @Before runs on the runner's -- so one logical test spans two OS
+        // threads, and the history panel setUp() built is attached to a window the OTHER one painted.
+        // `Notifications` is a global signal, so anything raised below reaches that panel and mutates
+        // that tree; without this the frame-thread guard refuses it, correctly, for a race that only
+        // the test harness invented. Painting it here is the honest statement that this thread now
+        // drives that window. @see FrameThreadOwnershipTest
+        settle();
+
         NotificationBalloons balloons = new NotificationBalloons();
         UIElement root = new UIElement().layout(l -> l.width(300).height(400));
         root.addChild(balloons);

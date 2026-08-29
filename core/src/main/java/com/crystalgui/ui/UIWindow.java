@@ -853,6 +853,20 @@ public final class UIWindow {
         FrameProfile.frameEnd();
     }
 
+    /**
+     * The thread that has run frames for this window, or null before the first one.
+     *
+     * <p>What {@code UIElement}'s mutation guard consults. Per-window rather than per-process because a
+     * tree nobody is painting has no owner to offend -- see {@link UiThread#require(String, Thread)}.</p>
+     */
+    private volatile Thread frameThread;
+
+    /** @see #frameThread */
+    @Nullable
+    public Thread frameThread() {
+        return frameThread;
+    }
+
     /** Shared prologue of {@link #paintFrame()} and {@link #updateWithoutPainting()}. */
     /**
      * <b>Where a first frame spends its time</b> — {@code -Dcrystalgui.startup.trace=true}, first frame
@@ -882,6 +896,9 @@ public final class UIWindow {
         // named rather than merely felt. Marked from the frame itself so it is right whatever drives one
         // -- a real window, the harness, or a test stepping frames by hand. @see UiThread
         UiThread.markCurrent();
+        // ...and record it against THIS tree, which is what UIElement's mutation guard asks. Volatile
+        // because the thread asking is by definition not always this one.
+        frameThread = Thread.currentThread();
         FrameProfile.frameBegin();
         long now = System.nanoTime();
         float deltaSeconds = (now - lastFrameNanos) / 1_000_000_000f;

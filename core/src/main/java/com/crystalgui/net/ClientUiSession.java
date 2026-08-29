@@ -11,6 +11,7 @@ import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.serialization.UIDescriptionCodec;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.dom.ElementTreeSource;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.Checkbox;
 import com.crystalgui.ui.elements.Slider;
@@ -77,6 +78,15 @@ public final class ClientUiSession<T> {
     private int expectedElementCount = -1;
     @Nullable
     private UIElement root;
+
+    /**
+     * The client half of the seam -- the id table for whatever tree is currently mounted.
+     *
+     * <p>Replaced wholesale whenever the root is, because the numbering is derived from that tree by a
+     * walk both sides run: a table outliving the tree it describes is a set of numbers nobody agrees
+     * on. Null exactly when {@link #root} is.</p>
+     */
+    private ElementTreeSource ids;
     private List<SheetRef> sheets = List.of();
     private boolean useUserAgentSheet = true;
 
@@ -342,6 +352,7 @@ public final class ClientUiSession<T> {
             if (in.getInt(UiMethods.WINDOW, windowId) != windowId) return;
             String reason = in.getString("reason", "");
             root = null;
+            ids = null;
             deferred.clear();
             release();
             if (onWindowClosed != null) onWindowClosed.accept(reason);
@@ -353,7 +364,7 @@ public final class ClientUiSession<T> {
         {
             for (StateMap<T> entry : in.getList("entries", e -> e)) {
                 int nid = entry.getInt("nid", -1);
-                UIElement anchor = NetworkIds.find(root, nid);
+                UIElement anchor = NetworkIds.find(ids, nid);
                 if (anchor == null) {
                     CrystalGuiCore.LOGGER.warn("Tree delta for unknown element {}", nid);
                     continue;
@@ -372,13 +383,14 @@ public final class ClientUiSession<T> {
                 }
             }
 
-            int assigned = NetworkIds.assign(root);
+            int assigned = NetworkIds.assign(ids, root);
             int expected = in.getInt("count", assigned);
             if (assigned != expected) {
                 CrystalGuiCore.LOGGER.error("Refusing a tree delta: the server numbered {} elements and "
                         + "this client derived {} — the two sides are building different structure, so "
                         + "every id past the divergence would be wrong", expected, assigned);
                 root = null;
+            ids = null;
                 release();
                 return;
             }
@@ -424,7 +436,7 @@ public final class ClientUiSession<T> {
     private void applyEntries(StateMap<T> in) {
         for (StateMap<T> entry : in.getList("entries", e -> e)) {
             int nid = entry.getInt("nid", -1);
-            UIElement target = NetworkIds.find(root, nid);
+            UIElement target = NetworkIds.find(ids, nid);
             if (target == null) {
                 CrystalGuiCore.LOGGER.warn("State update for unknown element {}", nid);
                 continue;
@@ -527,7 +539,8 @@ public final class ClientUiSession<T> {
 
     private void buildFrom(T encoded) {
         UIElement rebuilt = UIDescriptionCodec.CODEC.decode(ops, encoded);
-        int actual = NetworkIds.assign(rebuilt);
+        ElementTreeSource rebuiltIds = new ElementTreeSource(rebuilt);
+        int actual = NetworkIds.assign(rebuiltIds, rebuilt);
 
         // Ids are positions in a document-order walk, so they only agree if both sides built the same
         // structure. Internals are never serialized, so a client whose widget constructors differ from
@@ -544,6 +557,7 @@ public final class ClientUiSession<T> {
         }
 
         root = rebuilt;
+        ids = rebuiltIds;
         wireReportedEvents(root);
         // BEFORE the callback, so a host mounting the tree sees the state the server has already sent
         // rather than the description's and one frame of catching up. @see #deferred
@@ -600,7 +614,7 @@ public final class ClientUiSession<T> {
         if (applyingDelta) return;
         StateMap<T> out = new StateMap<>(ops);
         out.putInt(UiMethods.WINDOW, windowId);
-        out.putInt("nid", element.getNetworkId());
+        out.putInt("nid", ids.idOf(element));
         out.putString("kind", kind);
         if (payload != null) out.putRaw("p", payload.encode());
         router.notify(UiMethods.EVENT, out.encode());
@@ -689,6 +703,7 @@ public final class ClientUiSession<T> {
         out.putString("reason", reason == null ? "" : reason);
         notify(UiMethods.CLOSE, out);
         root = null;
+        ids = null;
         release();
     }
 

@@ -55,7 +55,7 @@ public final class StatusBar {
      * {@link #text()} — a walk of every entry building a string — ran on <em>every</em> write, including
      * the caret readout on every selection change and the shader graph's line-owner readout on every caret
      * move, whether or not anything was listening for a string. A listener re-reads what it needs, exactly
-     * as {@code DiagnosticSet.onChanged} and {@code UITreeObserver.onStateDirty} already do.</p>
+     * as {@code DiagnosticSet.onChanged} and {@code TreeObserver.stateChanged} already do.</p>
      */
     public static final Signal.Action onDidChange = new Signal.Action();
 

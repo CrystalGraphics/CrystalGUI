@@ -32,6 +32,8 @@ import com.crystalgui.style.property.visual.OverflowClip;
 import com.crystalgui.style.property.visual.ScrollBehavior;
 import com.crystalgui.style.property.visual.border.BorderRadiusProperties;
 import com.crystalgui.style.property.visual.border.LengthPercent;
+import com.crystalgui.core.async.UiThread;
+import com.crystalgui.ui.dom.TreeObserver;
 import com.crystalgui.ui.event.DOMEvent;
 import com.crystalgui.ui.event.FocusEvent;
 import com.crystalgui.ui.event.DragEvent;
@@ -598,9 +600,19 @@ public class UIElement implements SettingsScope, DataProvider {
     }
 
     private UIElement addChildAtInternal(UIElement child, int index) {
+        // THE TREE HAS ONE OWNER. Placed on the two mutation primitives rather than on the public API,
+        // because everything that changes tree shape funnels through this pair -- addChild, addChildAt,
+        // addInternalChild, insertInternalChildAt, every reparent -- and a guard per public method is a
+        // guard somebody adds a thirteenth method beside. Silent until a host has marked a thread, so
+        // headlessTest and a dedicated server are unaffected. @see UiThread#require
+        requireOwnerThread("Adding a child");
         if (child == null) return this;
         if (child == this) throw new IllegalArgumentException("Cannot add self as a child");
         if (hasChild(child)) throw new IllegalArgumentException("Cannot add the same child twice");
+
+        // A reparent, not a fresh insertion. Captured BEFORE the detach, because the parent link is
+        // cleared on the way out and by the time we could ask again it is gone.
+        UIElement movedFrom = child.getParent();
 
         if (child.hasParent()) {
             UIElement previous = child.getParent();
@@ -614,17 +626,66 @@ public class UIElement implements SettingsScope, DataProvider {
             // box but positioned relative to a completely different one. removeInternalChild is the
             // counterpart that can actually detach it, and it also runs the setAttachedWindow(null)
             // that lets the re-add register a fresh Taffy node under the new parent.
-            if (!previous.removeChild(child)) previous.removeInternalChild(child);
+            // Reported as a MOVE by the re-attach below, not as a removal here. See `reparenting`.
+            child.reparenting = movedFrom != null && movedFrom.domObserver == this.domObserver;
+            try {
+                if (!previous.removeChild(child)) previous.removeInternalChild(child);
+            } finally {
+                child.reparenting = false;
+            }
         }
 
         child.parent = this;
         children.add(index, child);
         child.setAttachedWindow(this.attachedWindow);
-        child.setObserver(this.observer);
+        child.setDomObserver(this.domObserver);
         this.runtimeCache.sortedChildren.invalidate();
         this.invalidateFocusableChain();
         child.onAdded();
+
+        // MOVED rather than removed-then-inserted when the element was already in this observed tree.
+        // The distinction is the whole reason identity had to stop being positional: a receiver told
+        // "destroyed, and here is an identical one" rebuilds the subtree and loses the instance, its
+        // scroll position and anything half-typed in it. Told "moved", it keeps it.
+        if (domObserver != null) {
+            if (movedFrom != null && movedFrom.domObserver == this.domObserver) {
+                domObserver.moved(child, this, index);
+            } else {
+                reportInsertedSubtree(child, this, index);
+            }
+        }
         return this;
+    }
+
+    /**
+     * Reports a whole grafted subtree, <b>parents first</b>, so a receiver can place each node against
+     * a parent it has already been told about.
+     *
+     * <p>Walks the DESCRIBED children rather than every child: a composite rebuilds its own scaffolding
+     * on the far side, so reporting it would describe structure the receiver is about to build anyway
+     * and then be unable to place.</p>
+     */
+    private void reportInsertedSubtree(UIElement node, UIElement parent, int index) {
+        domObserver.inserted(node, parent, index);
+        List<UIElement> described = node.describedChildrenFor();
+        for (int i = 0; i < described.size(); i++) {
+            reportInsertedSubtree(described.get(i), node, i);
+        }
+    }
+
+    /**
+     * Refuses a tree mutation from a thread that does not own this tree.
+     *
+     * <p>Asks the WINDOW, not the process: a tree nothing has painted has no owner, so everything a
+     * headless test or a dedicated server builds is free, and a tree that is being painted refuses
+     * everyone but its painter. That is the case that can corrupt something -- the cascade's dirty-match
+     * set was once mutated by a script thread while the frame thread was copying it, and it surfaced as
+     * an {@code ArrayIndexOutOfBoundsException} inside {@code HashMap.keysToArray} with nothing about
+     * the culprit anywhere in the trace.</p>
+     */
+    private void requireOwnerThread(String what) {
+        UIWindow window = this.attachedWindow;
+        if (window != null) UiThread.require(what, window.frameThread());
     }
 
     public UIElement addChildren(UIElement... elements) {
@@ -778,9 +839,14 @@ public class UIElement implements SettingsScope, DataProvider {
 
     // ── Networking ───────────────────────────────────────────────────────────
 
-    /** Assigned by a session in document order; {@code -1} until then. See {@code NetworkIds}. */
-    @Getter @Setter
-    private int networkId = -1;
+    // THE NETWORK ID USED TO BE A FIELD HERE, and it was the defect the rewrite came out of.
+    //
+    // It was written by a depth-first walk, so it WAS the element position: inserting a sibling
+    // renumbered everything after it, and a client-side reparent moved the element out from under the
+    // number the server was still addressing it by. It now lives in ui.dom.ElementTreeSource's table,
+    // allocated on first sight and stable for the life of that source -- and, because the table belongs
+    // to the source rather than to the element, two sessions over one tree can each keep their own
+    // numbering instead of overwriting one field. See plan_ui_rewrite.md M0.
 
     /** Null on every element in a local UI. Lazily created — most elements report nothing. */
     @Nullable
@@ -806,28 +872,55 @@ public class UIElement implements SettingsScope, DataProvider {
 
     // ── Tree observation ─────────────────────────────────────────────────────
 
-    /** Null for every element in a purely client-side UI, which is the common case. */
+    /**
+     * Null for every element in a purely client-side UI, which is the common case.
+     *
+     * <p>The seam observer, not the session one: what is reported here is an EDIT SCRIPT -- an insert
+     * carries its index, a reparent is a {@code moved} rather than a destroy-and-rebuild -- and who
+     * turns that into packets is nothing this class knows. {@code ui.dom.ElementTreeSource} installs
+     * itself here and forwards.</p>
+     */
     @Nullable
-    private UITreeObserver observer;
+    private TreeObserver<UIElement> domObserver;
+
+    /**
+     * Set for the duration of a reparent's detach, so it reports nothing.
+     *
+     * <p><b>A move must be ONE event.</b> A reparent detaches and re-attaches, so without this the
+     * stream reads {@code removed} then {@code moved} -- and a receiver applying that in order deletes
+     * the node, losing the instance and everything the instance was holding, and then has nothing left
+     * to move. Emitting the {@code moved} alone is the whole reason the distinction exists.</p>
+     *
+     * <p>A field rather than a parameter because the detach goes through the PUBLIC
+     * {@link #removeChild}/{@link #removeInternalChild} pair -- which is deliberate, since only they
+     * know how to detach an internal child -- so there is no signature between here and there to carry
+     * it. Safe as a field for the same reason the tree needs no locking: one thread owns it, and that
+     * is now asserted rather than assumed ({@link UiThread#require}).</p>
+     */
+    private boolean reparenting;
 
     @Nullable
-    public UITreeObserver getObserver() {
-        return observer;
+    public TreeObserver<UIElement> getDomObserver() {
+        return domObserver;
     }
 
     /**
      * Installs {@code observer} on this element and its whole subtree.
      *
-     * <p>Propagated exactly like {@link #attachedWindow}: set when an element is added, cleared when
-     * it is removed. That symmetry is what makes a grafted subtree report itself correctly without
-     * the session ever walking the tree.</p>
+     * <p>Propagated exactly like {@link #attachedWindow}: set when an element is added, cleared when it
+     * is removed. That symmetry is what makes a grafted subtree report itself without anything having
+     * to walk the tree.</p>
+     *
+     * <p><b>Installing reports nothing.</b> The old {@code setObserver} emitted {@code onAttached} for
+     * every element it walked, so a session had to remember to discard its own installation before it
+     * could tell a real insertion from being handed the tree in the first place -- a rule that lived in
+     * a test name rather than in the mechanism. An edit script describes CHANGES, and being given a tree
+     * is not one.</p>
      */
-    public final void setObserver(@Nullable UITreeObserver observer) {
-        if (this.observer == observer) return;
-        if (this.observer != null) this.observer.onDetached(this);
-        this.observer = observer;
-        if (observer != null) observer.onAttached(this);
-        for (UIElement child : children) child.setObserver(observer);
+    public final void setDomObserver(@Nullable TreeObserver<UIElement> observer) {
+        if (this.domObserver == observer) return;
+        this.domObserver = observer;
+        for (UIElement child : children) child.setDomObserver(observer);
     }
 
     /**
@@ -841,12 +934,24 @@ public class UIElement implements SettingsScope, DataProvider {
     protected final void notifyStateChanged() {
         UIElement target = this;
         while (target.isInternalUI() && target.parent != null) target = target.parent;
-        if (target.observer != null) target.observer.onStateDirty(target);
+        TreeObserver.Dispatch.stateChanged(target.domObserver, target);
     }
 
-    /** Reports an id/class/enabled/focus change — the inputs to the far side's selector matching. */
+    /**
+     * Reports an inline-style change -- what a peer cannot re-derive from a stylesheet.
+     *
+     * <p>Split out from {@link #notifyIdentityChanged()} because the two carry different payloads and
+     * were being conflated into one flag that then carried neither: the old {@code onIdentityDirty} was
+     * collected by the session and never flushed at all, so disabling a button after the window had
+     * opened did nothing on the far side.</p>
+     */
+    protected final void notifyInlineStyleChanged() {
+        TreeObserver.Dispatch.inlineStyleChanged(domObserver, this);
+    }
+
+    /** Reports an id/class/enabled/focus change -- the inputs to the far side selector matching. */
     private void notifyIdentityChanged() {
-        if (observer != null) observer.onIdentityDirty(this);
+        TreeObserver.Dispatch.attributeChanged(domObserver, this);
     }
 
     /** Marks this element (and its current subtree) as internal — structural content owned by a
@@ -905,10 +1010,15 @@ public class UIElement implements SettingsScope, DataProvider {
      * {@code UIWindow.suspendDesktop} is that case: the compositor comes back carrying windows.</p>
      */
     boolean removeChildInternal(UIElement child) {
+        requireOwnerThread("Removing a child");
         children.remove(child);
         child.onRemoved();
-        // Before the parent link is cleared, so an observer can still see where it was.
-        child.setObserver(null);
+        // BEFORE the parent link is cleared, so an observer can still ask where it was -- and before
+        // the observer is uninstalled below, or the report would go nowhere. Only the subtree ROOT is
+        // reported: a receiver removing a node removes what is under it, so saying so per descendant is
+        // a message per node for one deletion.
+        if (!child.reparenting) TreeObserver.Dispatch.removed(child.domObserver, child, this);
+        child.setDomObserver(null);
         child.setAttachedWindow(null);
         child.parent = null;
         this.runtimeCache.sortedChildren.invalidate();

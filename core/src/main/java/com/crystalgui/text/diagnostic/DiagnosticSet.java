@@ -69,7 +69,7 @@ public final class DiagnosticSet {
     public static final String DEFAULT_OWNER = "default";
 
     /** Fires whenever the contents change. Carries no value: a listener re-reads, so ten mutations in a
-     * tick collapse to one repaint, exactly as {@code UITreeObserver.onStateDirty} does. */
+     * tick collapse to one repaint, exactly as {@code TreeObserver.stateChanged} does. */
     public final Signal.Action onChanged = new Signal.Action();
 
     /** Insertion-ordered, so {@link #owners()} is stable and a merge is reproducible. */
