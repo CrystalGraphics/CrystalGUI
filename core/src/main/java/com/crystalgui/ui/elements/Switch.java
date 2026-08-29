@@ -64,6 +64,7 @@ public class Switch extends UIElement {
             WidgetContract.of(Switch.class, "switch")
                     .state(CHECKED)
                     .event(TOGGLE)
+                    .primary(CHECKED)
                     .build());
 
     @Override

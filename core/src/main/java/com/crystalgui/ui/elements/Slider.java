@@ -97,6 +97,7 @@ public class Slider extends UIElement {
                     .state(STEP)
                     .state(VALUE)
                     .event(VALUE_CHANGED)
+                    .primary(VALUE)
                     .build());
 
     public static final String FILL_CLASS = "__fill__";

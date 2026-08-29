@@ -71,6 +71,7 @@ public class Tab extends Button {
             WidgetContract.of(Tab.class, "tab")
                     .state(TEXT)
                     .event(CLOSE_REQUESTED)
+                    .primary(TEXT)
                     .build());
 
     /** On the content pane, not on the tab itself. */
