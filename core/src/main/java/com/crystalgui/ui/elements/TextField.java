@@ -143,6 +143,7 @@ public class TextField extends UIElement implements UIFrameTicker {
                     .state(VALUE)
                     .event(TEXT_CHANGED)
                     .event(COMMITTED)
+                    .primary(TEXT)
                     .build());
 
     /** What the content is expected to be. Drives parsing, the auto-constraints and {@code :invalid}. */

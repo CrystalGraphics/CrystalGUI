@@ -91,6 +91,7 @@ public class ColorSelector extends UIElement {
                     .state(ORIGINAL)
                     .state(COLOR)
                     .event(CHANGED)
+                    .primary(COLOR)
                     .build());
 
     public static final String WHEEL_CLASS = "__wheel__";

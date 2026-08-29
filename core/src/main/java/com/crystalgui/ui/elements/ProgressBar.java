@@ -51,6 +51,7 @@ public class ProgressBar extends UIElement implements UIFrameTicker {
     public static final WidgetContract<ProgressBar> CONTRACT = WidgetContracts.register(
             WidgetContract.of(ProgressBar.class, "progressbar")
                     .state(FRACTION)
+                    .primary(FRACTION)
                     .build());
 
     /** The moving part. Themed through this class, never sized here. */

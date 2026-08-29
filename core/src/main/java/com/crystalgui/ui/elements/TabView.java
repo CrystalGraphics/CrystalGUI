@@ -76,6 +76,7 @@ public class TabView extends UIElement {
             WidgetContract.of(TabView.class, "tabview")
                     .state(SELECTED)
                     .event(SELECTION)
+                    .primary(SELECTED)
                     .build());
 
     /** Which edge the header strip sits on. */

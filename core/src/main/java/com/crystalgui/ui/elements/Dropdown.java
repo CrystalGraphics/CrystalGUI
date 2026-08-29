@@ -85,6 +85,7 @@ public class Dropdown extends Button {
                     .state(OPTIONS)
                     .state(SELECTED)
                     .event(SELECTION)
+                    .primary(SELECTED)
                     .build());
 
     public static final String MENU_CLASS = "__menu__";

@@ -71,6 +71,7 @@ public class SearchField extends UIElement {
                     .state(TEXT)
                     .state(NOT_FOUND)
                     .event(QUERY)
+                    .primary(TEXT)
                     .build());
 
 

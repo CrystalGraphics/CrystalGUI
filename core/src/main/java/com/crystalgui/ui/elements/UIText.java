@@ -137,6 +137,7 @@ public final class UIText extends UIElement {
     public static final WidgetContract<UIText> CONTRACT = WidgetContracts.register(
             WidgetContract.of(UIText.class, "text")
                     .state(TEXT)
+                    .primary(TEXT)
                     .build());
 
     /**

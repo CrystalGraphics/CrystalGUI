@@ -63,6 +63,7 @@ public class Checkbox extends UIElement {
                     .state(LABEL)
                     .state(CHECKED)
                     .event(TOGGLE)
+                    .primary(CHECKED)
                     .build());
 
     @Override

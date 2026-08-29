@@ -45,13 +45,17 @@ public final class WidgetContract<W extends UIElement> implements NodeContract {
     private final List<Event<W, ?>> events;
     private final boolean acceptsDescribedChildren;
 
+    @Nullable
+    private final State<W, ?> primary;
+
     private WidgetContract(Class<W> type, String name, List<State<W, ?>> states,
-                           List<Event<W, ?>> events, boolean acceptsDescribedChildren) {
+                           List<Event<W, ?>> events, boolean acceptsDescribedChildren, @Nullable State<W, ?> primary) {
         this.type = type;
         this.name = name;
         this.states = Collections.unmodifiableList(new ArrayList<>(states));
         this.events = Collections.unmodifiableList(new ArrayList<>(events));
         this.acceptsDescribedChildren = acceptsDescribedChildren;
+        this.primary = primary;
     }
 
     public static <W extends UIElement> Builder<W> of(Class<W> type, String name) {
@@ -69,6 +73,26 @@ public final class WidgetContract<W extends UIElement> implements NodeContract {
         private Builder(Class<W> type, String name) {
             this.type = Objects.requireNonNull(type, "type");
             this.name = Objects.requireNonNull(name, "name");
+        }
+
+        /**
+         * Names the one slot that <b>IS</b> this widget, for a caller that has a value and no way to
+         * choose between several.
+         *
+         * <p>Optional, and unset means "this widget has no single obvious meaning" rather than "use the
+         * first". Guessing is what this exists to prevent: {@code Slider} declares {@code MIN},
+         * {@code MAX} and {@code VALUE}, all three of them floats, and declaration order deliberately
+         * puts the range first because a value applied before its range is clamped against the old one.
+         * So neither the first slot nor the type disambiguates, and a convention that guessed would be
+         * wrong for the widget it is most useful on.</p>
+         *
+         * <p>The slot must be one of this contract's own; {@link #build()} refuses otherwise, because a
+         * primary naming a slot the contract does not carry is a typo that would present as a widget
+         * silently declining to be auto-wired.</p>
+         */
+        public Builder<W> primary(State<W, ?> slot) {
+            this.primary = slot;
+            return this;
         }
 
         public Builder<W> state(State<W, ?> slot) {
@@ -101,8 +125,15 @@ public final class WidgetContract<W extends UIElement> implements NodeContract {
             return this;
         }
 
+        @Nullable
+        private State<W, ?> primary;
+
         public WidgetContract<W> build() {
-            return new WidgetContract<>(type, name, states, events, acceptsDescribedChildren);
+            if (primary != null && !states.contains(primary)) {
+                throw new IllegalArgumentException(name + ": primary state " + primary.key()
+                        + " is not one of this contract's slots");
+            }
+            return new WidgetContract<>(type, name, states, events, acceptsDescribedChildren, primary);
         }
     }
 
@@ -110,6 +141,18 @@ public final class WidgetContract<W extends UIElement> implements NodeContract {
 
     public Class<W> type() {
         return type;
+    }
+
+    /**
+     * The one slot that <b>is</b> this widget, or {@code null} where it has no single obvious meaning.
+     *
+     * <p>What {@code autoProject} targets. Null is a real answer and not a gap -- a {@code SplitView}'s
+     * divider position and a {@code Dialog}'s title are not "what the widget is" in the way a slider's
+     * value is -- and a caller must report the widget as unwired rather than pick a slot for it.</p>
+     */
+    @Nullable
+    public State<W, ?> primary() {
+        return primary;
     }
 
     /** The registered name this kind is described by — the tag. */

@@ -112,6 +112,16 @@ public final class State<W extends UIElement, V> {
         return getter.apply(widget);
     }
 
+    /**
+     * Writes {@code value} straight onto {@code widget}, sanitizer applied.
+     *
+     * <p>The symmetric partner of {@link #read}, and what a projection uses: the wire path goes through
+     * {@link #apply} because it has a {@code StateMap} to decode, and a model has a value already.</p>
+     */
+    public void set(W widget, V value) {
+        setter.accept(widget, sanitize == null ? value : sanitize.apply(value));
+    }
+
     /** Writes this slot's value, unless it is the omitted-when value. */
     public <T> void write(W widget, StateMap<T> out) {
         V value = getter.apply(widget);
