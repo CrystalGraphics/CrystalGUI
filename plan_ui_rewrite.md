@@ -1,6 +1,6 @@
 # The UI rewrite — one plan over both audits
 
-**Status: M0 shipped 2026-08-29. M1 is next.** This knits `plan_ui_network_audit.md` (the wire,
+**Status: M0 and M1 shipped 2026-08-29. M2 (the mirror) is next.** This knits `plan_ui_network_audit.md` (the wire,
 sessions, contracts, presentation) and `plan_engine_core_audit.md` (the three-tree engine) into one
 ordered set of milestones. Each audit stays the reference for *why*; this document is the reference
 for *what, in which order, gated by what*. Where the two audits' step lists disagreed on order, this
@@ -160,7 +160,56 @@ engine passes and the new one (M5) must pass unchanged.
 
 *(Kept verbatim as written on 2026-08-28. §2.0.1 records where it was wrong.)*
 
-### M1 — Contracts on the widgets · M · after: M0
+### M1 — Contracts on the widgets · M · after: M0 · **SHIPPED 2026-08-29**
+
+#### What M1 delivered, and where it went beyond the spec
+
+The spec said "all twelve state-carrying widgets". The port covers **all 87 widget classes**: 28
+contracted, 59 explicitly local-only with a written reason, and the coverage test walks the classes so
+there is no way to add an 88th without answering the question.
+
+| | |
+|---|---|
+| The contract types | `ui/contract/` — `WidgetContract`, `State`, `Event`, `StateType`/`StateTypes`, `RatePolicy`, `EventKind`, `WidgetContracts` |
+| The twelve, ported | `Button` `Checkbox` `ColorSelector` `Dropdown` `ProgressBar` `Slider` `SplitView` `Switch` `Tab` `TabView` `TextField` `UIText` — every hand-written `writeState`/`readState` pair deleted |
+| Beyond the twelve | `SearchField` `Dialog` `MenuItem` `Tooltip` `Popover` `Menu`, and **ten config controls** through one `ConfigControlContracts` factory — the largest group that could carry nothing, and the widgets a served settings panel is made of |
+| The census | `ui/elements/WidgetCensus` — 59 classes, each with a reason falling under one of four headings |
+| Acceptance | `WidgetContractCoverageTest` (6 assertions), `WidgetContractRoundTripTest` (18) |
+
+#### The five that could not report now can
+
+`Dropdown` (`select`), `TabView` (`select`), `ColorSelector` (`change`), `SplitView` (`value`), and
+`Tab` — which gets `closeRequested` rather than the `selected` the spec named, because a tab has no
+selection signal of its own (selection belongs to the strip, and `TabView.SELECT` reports it with the
+index) while a close request is a thing a tab genuinely owns, and is the veto path M4 needs.
+
+#### Three things the port found
+
+- **`addReportedEvent` accepted anything.** A session could ask any element for any string; the request
+  was recorded, written into the description, and the client's wiring hit a `default` arm that logged
+  *"which this client cannot observe"* and carried on. It now refuses a kind the contract does not
+  declare, so a widget that cannot report something can no longer be asked to.
+- **"Can report" and "was asked to report" are different questions**, and collapsing them makes every
+  client report everything its widgets are capable of. `getReportableEvents()` is the contract's;
+  `getReportedEvents()` is the per-instance subset a session subscribed to. The latter is *still*
+  per-instance, and M2 is where it stops being — the encoder that writes it is a context-free
+  `Codec<UIElement>`, so today the element is the only place both halves can reach.
+- **A slot needs a real getter.** Three slots were written with stub getters because the widget had a
+  setter and no reader — which makes the state **write-only**: settable by a server, never written to
+  the wire, looking declared and doing nothing. `MenuItem.isCheckable`/`getAccelerator` and
+  `SearchField.getPlaceholder`/`isNotFound` exist because the coverage test found them.
+
+#### Deliberately not done, with the reason
+
+`ListView`, `TableView`, `TreeView` and `ArrayControl` are local-only, because a collection's contract
+is its **rows** and rows have to be a *stream* — a count and a template from the server, `rows{from,to}`
+from the client as it scrolls. That needs the mirror underneath it, so it is M7. A contract carrying
+only the selection would describe a list whose contents never arrive, which is worse than saying
+nothing.
+
+#### The original M1 specification
+
+
 
 `WidgetContract`: `State<T>` and `Event<T>` constants with type, default, validation and default
 rate policy, registered with the element's namespaced name (D5, D7). The engine derives
@@ -306,7 +355,7 @@ names it.
 | Milestone | Deleted |
 |---|---|
 | M0 | **Done, with corrections — see §2.0.1.** `UIElement.networkId` (deleted), the `UITreeObserver` interface (deleted), `NetworkIds.find`'s tree walk (now a map lookup). `reportedEvents` and `describedChildren*` were **surfaced through the seam rather than deleted**, because both are still per-instance and making them per-kind IS M1 |
-| M1 | hand-written `writeState`/`readState` ×12, `addReportedEvent`/`getReportedEvents` |
+| M1 | **Done.** hand-written `writeState`/`readState` ×12, the `instanceof` switch in `ClientUiSession.wireReportedEvents`, the per-instance reported-event set as the ANSWER to "what can this report". **`UiEventKinds` still exists and ten files still use it** — `EventKind` is a superset with the same string values, so the two agree, but two vocabularies for one thing is drift and M3 collapses them when it makes events typed. `addReportedEvent` survives as the per-instance *request* until M2 gives the mirror the description |
 | M2 | positional `NetworkIds`, `ui/treeDelta`, `dirtyIdentity`, global count check, `wireReportedEvents`' switch, `ServerUiSession`/`ClientUiSession` internals |
 | M3 | `UiEventKinds`, string-kind `on`, viewer-less `UiEventContext`, `bound()`, `layout(M)` |
 | M4 | global sheet application, `contentReplaced`, VERSION-only skew handling |
