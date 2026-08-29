@@ -2,7 +2,6 @@ package com.crystalgui.example.machine.ui;
 
 import com.crystalgui.example.machine.MachineModel;
 import com.crystalgui.example.machine.MachineTrace;
-import com.crystalgui.net.UiEventKinds;
 import com.crystalgui.net.window.ClientScope;
 import com.crystalgui.net.window.Networked;
 import com.crystalgui.net.window.ServerScope;
@@ -403,22 +402,19 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
 
         unsubscribe = model.onChanged(() -> dirty = true);
 
-        io.on(power, UiEventKinds.TOGGLE, ctx -> {
-            boolean on = ctx.payload().getBool("checked", false);
+        io.on(power, Switch.TOGGLE, (ctx, on) -> {
             MachineTrace.log(MachineTrace.SERVER, "event: power -> " + on);
             model.setRunning(on);
         });
 
-        io.on(throughput, UiEventKinds.VALUE, ctx -> {
-            float value = ctx.payload().getFloat("value", 0f);
+        io.on(throughput, Slider.VALUE_CHANGED, (ctx, value) -> {
             MachineTrace.log(MachineTrace.SERVER, String.format("event: throughput -> %.2f", value));
             model.setThroughput(value);
         });
 
-        io.on(label, UiEventKinds.TEXT, ctx -> {
-            String text = ctx.payload().getString("text", "");
-            MachineTrace.log(MachineTrace.SERVER, "event: label -> '" + text + "'");
-            model.setLabel(text);
+        io.on(label, TextField.TEXT_CHANGED, (ctx, typed) -> {
+            MachineTrace.log(MachineTrace.SERVER, "event: label -> '" + typed + "'");
+            model.setLabel(typed);
         });
 
         io.onActivate(purge, ctx -> {

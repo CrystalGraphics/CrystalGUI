@@ -3,7 +3,6 @@ package com.crystalgui.headless;
 import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
-import com.crystalgui.net.UiEventKinds;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;

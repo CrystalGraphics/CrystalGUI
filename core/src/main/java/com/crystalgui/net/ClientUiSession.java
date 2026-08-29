@@ -11,6 +11,11 @@ import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.serialization.UIDescriptionCodec;
 import com.crystalgui.ui.UIElement;
+import java.util.Set;
+
+import com.crystalgui.ui.contract.Event;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.ElementTreeSource;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.Checkbox;
@@ -571,38 +576,41 @@ public final class ClientUiSession<T> {
      * <p>The client runs the real DOM dispatch — capture, target, bubble, hit-testing, all of it —
      * and only the outcome is reported. The server never sees a coordinate.</p>
      */
+    /**
+     * Attaches a listener for every kind this element was asked to report.
+     *
+     * <h3>What this replaces</h3>
+     *
+     * <p>A {@code switch} over kind names, each arm holding an {@code instanceof} chain -- the session
+     * knew how to listen to a {@code Slider} because somebody had written
+     * {@code if (element instanceof Slider slider)} inside it. Two consequences, both real: the
+     * networking layer imported every widget it could hear from, and a widget outside the chain fell
+     * to a {@code default} arm that logged <i>"which this client cannot observe"</i> and carried on --
+     * so a {@code Dropdown}, a {@code TabView}, a {@code ColorSelector} and a {@code SplitView} could
+     * be asked to report and silently would not.</p>
+     *
+     * <p>The widget now says how to listen to itself ({@link Event#attach}), so adding a reportable
+     * widget touches the widget alone and this method never changes again.</p>
+     */
+    @SuppressWarnings("unchecked")
     private void wireReportedEvents(UIElement element) {
-        for (String kind : element.getReportedEvents()) {
-            switch (kind) {
-                case UiEventKinds.ACTIVATE -> {
-                    if (element instanceof Button button) {
-                        button.attachListener(() -> report(element, kind, null));
-                    }
+        Set<String> requested = element.getReportedEvents();
+        if (!requested.isEmpty()) {
+            WidgetContract<UIElement> contract = (WidgetContract<UIElement>) WidgetContracts.of(element);
+            for (String kind : requested) {
+                Event<UIElement, Object> event = contract == null
+                        ? null : (Event<UIElement, Object>) contract.event(kind);
+                if (event == null) {
+                    // Reachable only from a peer describing a kind this build's contract does not have
+                    // -- a newer server against an older client. Warn and carry on, because refusing
+                    // the whole window over one unlistenable event is a worse answer than a control
+                    // that does not report.
+                    CrystalGuiCore.LOGGER.warn(
+                            "Description asked <{}> to report '{}', which its contract does not declare",
+                            element.tagName(), kind);
+                    continue;
                 }
-                case UiEventKinds.TOGGLE -> {
-                    if (element instanceof Checkbox checkbox) {
-                        checkbox.attachListener(checked -> report(element, kind,
-                                new StateMap<T>(ops).putBool("checked", checked)));
-                    } else if (element instanceof Switch toggle) {
-                        toggle.attachListener(checked -> report(element, kind,
-                                new StateMap<T>(ops).putBool("checked", checked)));
-                    }
-                }
-                case UiEventKinds.VALUE -> {
-                    if (element instanceof Slider slider) {
-                        slider.attachListener(value -> report(element, kind,
-                                new StateMap<T>(ops).putFloat("value", value)));
-                    }
-                }
-                case UiEventKinds.TEXT -> {
-                    if (element instanceof TextField field) {
-                        field.attachListener(text -> report(element, kind,
-                                new StateMap<T>(ops).putString("text", text)));
-                    }
-                }
-                default -> CrystalGuiCore.LOGGER.warn(
-                        "Description asked to report '{}' on <{}>, which this client cannot observe",
-                        kind, element.tagName());
+                event.attach(element, payload -> report(element, kind, event.encode(ops, payload)));
             }
         }
         for (UIElement child : element.getChildren()) wireReportedEvents(child);

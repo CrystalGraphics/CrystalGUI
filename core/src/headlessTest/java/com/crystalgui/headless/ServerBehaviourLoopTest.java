@@ -7,7 +7,6 @@ import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.net.protocol.Envelope;
 import com.crystalgui.net.protocol.EnvelopeCodec;
 import com.crystalgui.net.protocol.UiMethods;
-import com.crystalgui.net.UiEventKinds;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.serialization.UIDescriptionCodec;
@@ -106,7 +105,7 @@ public class ServerBehaviourLoopTest {
     @Test
     public void aToggleCarriesItsValue() {
         AtomicReference<Boolean> seen = new AtomicReference<>();
-        server.on(checkbox, UiEventKinds.TOGGLE, ctx -> seen.set(ctx.payload().getBool("checked", false)));
+        server.on(checkbox, Checkbox.TOGGLE, (ctx, checked) -> seen.set(checked));
         server.open();
         settle();
 
@@ -119,7 +118,7 @@ public class ServerBehaviourLoopTest {
     @Test
     public void aSliderCarriesItsValue() {
         AtomicReference<Float> seen = new AtomicReference<>();
-        server.on(slider, UiEventKinds.VALUE, ctx -> seen.set(ctx.payload().getFloat("value", -1f)));
+        server.on(slider, Slider.VALUE_CHANGED, (ctx, value) -> seen.set(value));
         server.open();
         settle();
 
