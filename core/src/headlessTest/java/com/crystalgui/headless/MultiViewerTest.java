@@ -3,7 +3,6 @@ package com.crystalgui.headless;
 import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
-import com.crystalgui.net.UiEventKinds;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
@@ -211,7 +210,7 @@ public class MultiViewerTest {
     public void aServerDrivenChangeIsNotReportedBackAsAnInteraction() {
         AtomicInteger reports = new AtomicInteger();
         // Before open(), because the set of reported events is part of the description.
-        server.on(slider, UiEventKinds.VALUE, ctx -> reports.incrementAndGet());
+        server.on(slider, Slider.VALUE_CHANGED, (ctx, value) -> reports.incrementAndGet());
         server.addViewer(serverB);
         server.open();
         settle();

@@ -2,17 +2,19 @@ package com.crystalgui.net.window;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
 import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.net.SheetRef;
-import com.crystalgui.net.UiEventKinds;
 import com.crystalgui.net.protocol.Call;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.contract.Event;
+import com.crystalgui.ui.contract.EventKind;
 
 /**
  * What a panel's {@link Networked#serve} is handed — <b>its registration surface, namespaced to its
@@ -76,9 +78,32 @@ public final class ServerScope {
         return this;
     }
 
+    /**
+     * Subscribes to an event the widget declares, typed.
+     *
+     * <pre>{@code io.on(picker, ColorSelector.CHANGED, (ctx, colour) -> model.setColour(colour)); }</pre>
+     *
+     * <p><b>The form to reach for.</b> No kind vocabulary to consult, no string to misspell, a decoded
+     * payload, and an event belonging to another widget will not compile. @see
+     * ServerUiSession#on(UIElement, Event, java.util.function.BiConsumer)</p>
+     */
+    public <W extends UIElement, P> ServerScope on(
+            W element, Event<W, P> event,
+          BiConsumer<ServerUiSession.UiEventContext<Object>, P> handler) {
+        session.on(element, event, handler);
+        return this;
+    }
+
+    /** Subscribes to an event that carries nothing — a press, a close request. */
+    public <W extends UIElement> ServerScope on(
+            W element, Event<W, Void> event, Consumer<ServerUiSession.UiEventContext<Object>> handler) {
+        session.on(element, event, handler);
+        return this;
+    }
+
     /** A press, a toggle, or a commit — whatever the widget considers "the user did the thing". */
     public ServerScope onActivate(UIElement element, Consumer<ServerUiSession.UiEventContext<Object>> handler) {
-        return on(element, UiEventKinds.ACTIVATE, handler);
+        return on(element, EventKind.ACTIVATE, handler);
     }
 
     // ── Wire methods ────────────────────────────────────────────────────────

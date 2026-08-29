@@ -26,12 +26,12 @@ import com.crystalgui.net.window.WindowProtocol;
 import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.example.machine.ui.MachineStyles;
 import com.crystalgui.net.InMemoryTransport;
-import com.crystalgui.net.UiEventKinds;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.ProgressBar;
 import com.crystalgui.ui.elements.Switch;
 
@@ -617,7 +617,7 @@ public class MachineExampleTest {
     public void behaviourCannotBeAddedOnceTheDescriptionHasGone() {
         Loopback net = new Loopback().open();
         try {
-            net.server.session().on(net.serverPanel.purge, UiEventKinds.ACTIVATE, ctx -> { });
+            net.server.session().on(net.serverPanel.purge, Button.ACTIVATE, ctx -> { });
             fail("expected a refusal");
         } catch (IllegalStateException expected) {
             assertTrue("the message should say why, not merely that",

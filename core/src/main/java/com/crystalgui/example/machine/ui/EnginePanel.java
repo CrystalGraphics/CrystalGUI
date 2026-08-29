@@ -4,7 +4,6 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.example.machine.EngineModel;
 import com.crystalgui.example.machine.MachineTrace;
-import com.crystalgui.net.UiEventKinds;
 import com.crystalgui.net.window.ClientScope;
 import com.crystalgui.net.window.Networked;
 import com.crystalgui.net.window.ServerScope;
@@ -166,8 +165,7 @@ public final class EnginePanel extends UIElement implements Networked<EngineMode
     @Override
     public void serve(EngineModel engine, ServerScope io) {
         // ELEMENT-KEYED, so unprefixed and unambiguous however deeply this panel is nested.
-        io.on(load, UiEventKinds.VALUE, ctx -> {
-            float value = ctx.payload().getFloat("value", 0f);
+        io.on(load, Slider.VALUE_CHANGED, (ctx, value) -> {
             MachineTrace.log(MachineTrace.SERVER, String.format("engine: load -> %.2f", value));
             engine.setLoad(value);
         });

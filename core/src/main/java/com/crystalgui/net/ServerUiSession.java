@@ -11,6 +11,8 @@ import com.crystalgui.serialization.ContentHash;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.UIDescriptionCodec;
 import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.contract.Event;
+import com.crystalgui.ui.contract.EventKind;
 import com.crystalgui.ui.dom.ElementTreeSource;
 import com.crystalgui.ui.dom.TreeObserver;
 
@@ -639,9 +641,64 @@ public final class ServerUiSession<T> implements TreeObserver<UIElement> {
         return this;
     }
 
+    /**
+     * Subscribes to an event the widget itself declares, <b>typed</b>.
+     *
+     * <pre>{@code
+     * io.on(picker, ColorSelector.CHANGED, (ctx, colour) -> model.setColour(colour));
+     * io.on(slider, Slider.VALUE_CHANGED, (ctx, value)  -> model.setRate(value));
+     * }</pre>
+     *
+     * <h3>Why this is the form to reach for</h3>
+     *
+     * <p>The string form below needs a vocabulary, and a vocabulary is a <b>central list a third party
+     * cannot edit</b>. A mod shipping a widget with a {@code scrub} or {@code reorder} event would have
+     * to patch {@code EventKind} -- which it cannot -- or pass a bare string and lose every check.
+     * Handing over the widget's own {@link Event} removes the middleman: the element owns its events,
+     * and a new one is a {@code public static final} on the widget and nothing else.</p>
+     *
+     * <p>Three things the compiler now refuses that the string form could only catch at runtime, or not
+     * at all:</p>
+     *
+     * <ul>
+     *   <li><b>An event that is not this widget's.</b> {@code Event<W, P>} is typed in the widget, so
+     *       {@code on(slider, TextField.COMMITTED, ...)} does not compile.</li>
+     *   <li><b>A misspelled kind.</b> There is no string to misspell.</li>
+     *   <li><b>A wrongly-typed payload.</b> The handler is handed a decoded {@code P}, so a colour
+     *       arrives as an {@code Integer} rather than as {@code ctx.payload().getInt("color", 0)} --
+     *       one place that knows the key and the default, instead of one per handler.</li>
+     * </ul>
+     *
+     * <p><b>The wire is unchanged.</b> This resolves to {@link #on(UIElement, String, Consumer)} with
+     * {@code event.kind()}, so registration costs one extra call and dispatch is the same map lookup by
+     * the same string. Kinds remain strings <em>on the wire</em> because they have to be -- what goes
+     * away is having to write one.</p>
+     *
+     * <p>The contract check still runs underneath, and still earns its place: {@code Dropdown extends
+     * Button}, so {@code on(dropdown, Button.ACTIVATE, ...)} type-checks while a {@code Dropdown}'s
+     * contract declares no {@code activate} for a client to attach. Inheritance is exactly what the
+     * types cannot see.</p>
+     */
+    public <W extends UIElement, P> ServerUiSession<T> on(
+            W element, Event<W, P> event, java.util.function.BiConsumer<UiEventContext<T>, P> handler) {
+        return on(element, event.kind(), ctx -> handler.accept(ctx, event.decode(ctx.payload())));
+    }
+
+    /**
+     * Subscribes to an event that carries nothing — a press, a focus change, a close request.
+     *
+     * <p>A separate overload rather than a {@code BiConsumer} taking a null: the arities differ, so a
+     * lambda picks the right one on its own, and a handler for a signal should not have to name a
+     * parameter that is always null.</p>
+     */
+    public <W extends UIElement> ServerUiSession<T> on(
+            W element, Event<W, Void> event, Consumer<UiEventContext<T>> handler) {
+        return on(element, event.kind(), handler);
+    }
+
     /** A press, a toggle, or a commit — whatever the widget considers "the user did the thing". */
     public ServerUiSession<T> onActivate(UIElement element, Consumer<UiEventContext<T>> handler) {
-        return on(element, UiEventKinds.ACTIVATE, handler);
+        return on(element, EventKind.ACTIVATE, handler);
     }
 
     /** What a handler is given. Carries no coordinates — see {@link UiMethods#EVENT}. */
