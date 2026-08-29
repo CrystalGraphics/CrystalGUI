@@ -847,6 +847,70 @@ public class UIElement implements SettingsScope, DataProvider {
     }
 
 
+    /**
+     * Moves a child this element ALREADY has to a new position among its described children.
+     *
+     * <p>A reorder, spelled as one. {@link #addChildAt} deliberately refuses it — {@code hasChild}
+     * throws <i>"Cannot add the same child twice"</i>, and that guard stays because it has caught three
+     * real double-parenting bugs (see {@code CrystalEditor}, {@code StatusBarView} and
+     * {@code DockGroup}), each of which would otherwise have silently become a move. So the two are
+     * different operations with different names rather than one method guessing which was meant.</p>
+     *
+     * <p>It reports {@code moved}, which is the entire point: a receiver told "removed, and here is an
+     * identical one" rebuilds the subtree and loses the instance, its scroll position and anything
+     * half-typed in it. The wire has carried a {@code move} op since M2 and nothing could produce one
+     * for a same-parent reorder until now.</p>
+     *
+     * <p>The target index is interpreted <b>after</b> the child is taken out of the list, which is the
+     * only reading that makes "move it to position 2" mean the same thing whichever side it came from.
+     * Out-of-range clamps to the end, and moving something to where it already is does nothing at all —
+     * including reporting nothing, so a settled list costs no traffic.</p>
+     */
+    public final void moveDescribedChildTo(UIElement child, int describedIndex) {
+        requireOwnerThread("Moving a child");
+        if (child == null) return;
+        if (child.getParent() != this) {
+            throw new IllegalArgumentException(
+                    "moveDescribedChildTo is for a child this element already has — use "
+                            + "addDescribedChildAt to bring one in from somewhere else");
+        }
+        List<UIElement> described = describedChildrenFor();
+        int from = described.indexOf(child);
+        if (from < 0) return;                       // internal: not part of the described order
+
+        List<UIElement> without = new ArrayList<>(described);
+        without.remove(from);
+        int to = describedIndex < 0 ? 0 : Math.min(describedIndex, without.size());
+        if (from == to) return;
+
+        // The element the child must end up in FRONT of, chosen from the list it is not in — so the
+        // index means the same thing before and after the detach.
+        UIElement before = to < without.size() ? without.get(to) : null;
+
+        UIElement movedFrom = this;
+        child.reparenting = true;
+        try {
+            if (!removeChild(child)) removeInternalChild(child);
+        } finally {
+            child.reparenting = false;
+        }
+
+        int realIndex = before == null ? children.size() : children.indexOf(before);
+        if (realIndex < 0) realIndex = children.size();
+
+        child.parent = this;
+        children.add(realIndex, child);
+        child.setAttachedWindow(this.attachedWindow);
+        child.setDomObserver(this.domObserver);
+        this.runtimeCache.sortedChildren.invalidate();
+        this.invalidateFocusableChain();
+        child.onAdded();
+
+        if (domObserver != null && movedFrom.domObserver == this.domObserver) {
+            domObserver.moved(child, this, to);
+        }
+    }
+
     public final boolean acceptsDescribedChildrenFor() {
         return acceptsDescribedChildren();
     }
