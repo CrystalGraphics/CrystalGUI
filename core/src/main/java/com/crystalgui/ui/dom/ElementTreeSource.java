@@ -31,8 +31,8 @@ import com.crystalgui.ui.UIElement;
  * improvements rather than side effects:</p>
  *
  * <ul>
- *   <li><b>{@link #byId} is a map lookup.</b> {@code NetworkIds.find} walked the tree comparing a field
- *       on every element, per packet.</li>
+ *   <li><b>{@link #byId} is a map lookup.</b> {@code NetworkIds.find} — the class this replaced, now
+ *       deleted — walked the tree comparing a field on every element, per packet.</li>
  *   <li><b>Ids are per-source.</b> Two sessions over one tree each keep their own numbering instead of
  *       fighting over one field — which is why {@code UIElement.setObserver} could only ever hold one
  *       observer, a limitation its own callers document.</li>
@@ -97,41 +97,71 @@ public final class ElementTreeSource implements TreeSource<UIElement> {
         return byId.get(id);
     }
 
-    /**
-     * Numbers {@code from}'s whole subtree in document order, including internal children.
-     *
-     * <p><b>Legacy, and M2 deletes it.</b> It exists so the wire's numbering does not change on the same
-     * commit the storage moves: the protocol still expects both sides to derive the same ids from the
-     * same walk, and changing the policy and the storage together would leave a failure attributable to
-     * either. After M2 nothing calls this and ids are allocated by {@link #idOf} on first sight, which
-     * is the point of the exercise.</p>
-     *
-     * @return how many elements were numbered
-     */
-    public int assignInDocumentOrder(UIElement from) {
-        requireOpen();
-        return assignFrom(from);
-    }
-
     private int assignFrom(UIElement element) {
         int allocated = nextId++;
         ids.put(element, allocated);
         byId.put(allocated, element);
         int total = 1;
-        for (UIElement child : element.getChildren()) total += assignFrom(child);
+        for (UIElement child : element.describedChildrenFor()) total += assignFrom(child);
         return total;
     }
 
-    /** Drops every allocation, so the next walk starts at zero. What a re-describe needs. */
+    /**
+     * Numbers a subtree that has just joined, as one contiguous block from the counter.
+     *
+     * <p>The other half of "identity is not position". An insert carries its <b>base</b> id and its
+     * described count, and the far side numbers its own decoded copy the same way — so both sides
+     * agree without either renumbering anything that was already there, which is the entire point.</p>
+     *
+     * @return the base id; the subtree occupies {@code base .. base + describedCount - 1}
+     */
+    @Override
+    public int allocate(UIElement subtreeRoot) {
+        requireOpen();
+        return assignFrom(subtreeRoot) == 0 ? NO_ID : ids.get(subtreeRoot);
+    }
+
+    /**
+     * Forgets every id in {@code subtreeRoot}'s described subtree.
+     *
+     * <p>Called when a subtree leaves. An element the server keeps a reference to and re-adds later is
+     * then a fresh insert with a fresh block, which is what the DOM does with a node you hold and
+     * re-append — and is why a re-attach in a LATER tick is not a move.</p>
+     */
+    @Override
+    public void release(UIElement subtreeRoot) {
+        Integer id = ids.remove(subtreeRoot);
+        if (id != null) byId.remove(id);
+        for (UIElement child : subtreeRoot.describedChildrenFor()) release(child);
+    }
+
+    /**
+     * Records {@code node} under an id the OTHER side chose.
+     *
+     * <p>The client half of a block allocation: an insert carries its base, and the receiver numbers
+     * its own decoded copy the same way rather than allocating from a counter of its own. That is what
+     * makes two sides agree on ids without either renumbering anything.</p>
+     */
+    @Override
+    public void assignAt(UIElement node, int id) {
+        requireOpen();
+        ids.put(node, id);
+        byId.put(id, node);
+        if (id >= nextId) nextId = id + 1;
+    }
+
+    /**
+     * Drops every allocation, so the next walk starts at zero.
+     *
+     * <p>Only {@code open()} does this. After a window is open, ids are STABLE -- an element keeps its
+     * number through inserts, moves and removals of its siblings -- so anything calling this on a live
+     * window would invalidate every id the far side is holding.</p>
+     */
+    @Override
     public void resetIds() {
         ids.clear();
         byId.clear();
         nextId = 0;
-    }
-
-    /** How many ids have been handed out. */
-    public int allocatedCount() {
-        return ids.size();
     }
 
     // ── Structure ────────────────────────────────────────────────────────────
@@ -236,21 +266,6 @@ public final class ElementTreeSource implements TreeSource<UIElement> {
         ids.clear();
         byId.clear();
         contracts.clear();
-    }
-
-    /**
-     * Every element the source currently holds an id for, in allocation order.
-     *
-     * <p>For a flush that has to walk what it has told the far side about, rather than what is in the
-     * tree — the two differ exactly when something has been detached, which is the case that matters.
-     */
-    public List<UIElement> numbered() {
-        List<UIElement> out = new ArrayList<>(ids.size());
-        for (int id = 0; id < nextId; id++) {
-            UIElement element = byId.get(id);
-            if (element != null) out.add(element);
-        }
-        return out;
     }
 
     private void requireOpen() {
