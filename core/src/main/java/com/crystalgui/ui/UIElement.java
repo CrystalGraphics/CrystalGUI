@@ -820,6 +820,33 @@ public class UIElement implements SettingsScope, DataProvider {
         addDescribedChild(child);
     }
 
+    /**
+     * Puts a described child back <b>at a given position</b> among this element's described children.
+     *
+     * <p>The indexed form an edit script needs: an insert says WHERE, and a move says where it went.
+     * Both are meaningless without it -- appending would put a row the server inserted second at the
+     * end, and the two trees would diverge in a way nothing checks.</p>
+     *
+     * <p>The index counts DESCRIBED children only, which is the list both sides share; it is
+     * translated to a real child index here, so a composite's internal scaffolding does not shift it.
+     * A negative or out-of-range index appends, because an older peer may not send one.</p>
+     */
+    public final void addDescribedChildAt(UIElement child, int describedIndex) {
+        List<UIElement> described = describedChildrenFor();
+        if (describedIndex < 0 || describedIndex >= described.size()) {
+            addDescribedChild(child);
+            return;
+        }
+        UIElement before = described.get(describedIndex);
+        int realIndex = children.indexOf(before);
+        if (realIndex < 0) {
+            addDescribedChild(child);
+            return;
+        }
+        addChildAt(child, realIndex);
+    }
+
+
     public final boolean acceptsDescribedChildrenFor() {
         return acceptsDescribedChildren();
     }

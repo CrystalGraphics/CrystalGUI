@@ -8,12 +8,16 @@ import com.crystalgui.net.protocol.MessageRouter;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.serialization.ContentHash;
+import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.UIDescriptionCodec;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.contract.Event;
+import com.crystalgui.net.mirror.ElementNodeMirror;
+import com.crystalgui.net.mirror.NodeMirror;
+import com.crystalgui.net.mirror.ServerTreeMirror;
+import com.crystalgui.net.mirror.TreeOps;
 import com.crystalgui.ui.dom.ElementTreeSource;
-import com.crystalgui.ui.dom.TreeObserver;
 
 import com.crystalgui.serialization.StateMap;
 
@@ -46,7 +50,7 @@ import java.util.function.Consumer;
  * bookkeeping. Fanning one tree out to several viewers needs per-viewer version state and is not
  * what this is.</p>
  */
-public final class ServerUiSession<T> implements TreeObserver<UIElement> {
+public final class ServerUiSession<T> {
 
     private final int windowId;
     private final UIElement root;
@@ -104,16 +108,18 @@ public final class ServerUiSession<T> implements TreeObserver<UIElement> {
      */
     private final ElementTreeSource ids;
 
-    private final Set<UIElement> dirtyState = new LinkedHashSet<>();
-    private final Set<UIElement> dirtyIdentity = new LinkedHashSet<>();
-
     /**
-     * Elements whose described children changed — the input to {@code ui/treeDelta}.
+     * <b>The mirror.</b> Everything about turning tree changes into messages lives there, written
+     * against the {@code ui.dom} seam and naming no widget, no session and no transport.
      *
-     * <p>Separate from {@link #dirtyIdentity}, which is about an element's own id/class/enabled state.
-     * A structural change is about the SHAPE around an element, and the two coincide only by accident.</p>
+     * <p>It was inline here until it was noticed that a session doing this job itself pins the mirror to
+     * {@code UIElement} -- which quietly voids the seam's reason to exist, since the engine swap was
+     * supposed to be a port of the seam's implementation rather than of the mirror.</p>
      */
-    private final Set<UIElement> structuralAnchors = new LinkedHashSet<>();
+    private final ServerTreeMirror<UIElement, T> mirror;
+
+    /** How a {@code UIElement} is described. The mirror's other half; see {@link NodeMirror}. */
+    private final NodeMirror<UIElement, T> nodes;
 
     /** Element -> kind -> lambda. Lives here, never on the element: that is what keeps behaviour on
      * the side that owns it while the client holds only a description. */
@@ -201,6 +207,8 @@ public final class ServerUiSession<T> implements TreeObserver<UIElement> {
         this.windowId = windowId;
         this.root = root;
         this.ids = new ElementTreeSource(root);
+        this.nodes = new ElementNodeMirror<>(ops);
+        this.mirror = new ServerTreeMirror<>(ids, nodes, ops);
         this.ops = ops;
         this.ownsConnection = true;
         transport.setReceiver(packet -> {
@@ -231,6 +239,8 @@ public final class ServerUiSession<T> implements TreeObserver<UIElement> {
         this.root = root;
         this.ids = new ElementTreeSource(root);
         this.ops = connection.ops();
+        this.nodes = new ElementNodeMirror<>(this.ops);
+        this.mirror = new ServerTreeMirror<>(ids, nodes, this.ops);
         this.ownsConnection = false;
         addViewer(connection.router(), connection.peer(), UiWindowMux.of(connection));
     }
@@ -413,20 +423,22 @@ public final class ServerUiSession<T> implements TreeObserver<UIElement> {
         if (open) throw new IllegalStateException("Session " + windowId + " is already open");
         open = true;
 
-        elementCount = NetworkIds.assign(ids, root);
-        encodedDescription = UIDescriptionCodec.CODEC.encode(ops, root);
+        elementCount = mirror.describeAndNumber();
+        encodedDescription = nodes.describe(root);
         descHash = ContentHash.of(ops, encodedDescription);
 
-        // Observe only after the snapshot: mutations before open are already in the description, and
-        // marking them dirty would send a delta restating what was just sent.
-        ids.observe(this);
-        // Installing an observer reports NOTHING -- an edit script describes changes, and being handed a
-        // tree is not one. The old setObserver emitted an attach per element, so these three clears were
-        // load-bearing rather than defensive; they stay only because a caller may have mutated the tree
-        // between building it and opening.
-        dirtyState.clear();
-        dirtyIdentity.clear();
-        structuralAnchors.clear();
+        /*
+         * Observe only after the snapshot: mutations before open are already in the description, and
+         * marking them dirty would send a delta restating what was just sent.
+         *
+         * Three clears used to follow this line, defending against the old setObserver, which emitted
+         * an attach per element -- so being handed a tree looked exactly like every element having just
+         * been inserted, and every consumer had to remember to discard its own installation. Installing
+         * an observer now reports NOTHING, an edit script describing changes and being handed a tree not
+         * being one, so there is nothing to discard: the mirror cannot have recorded anything before the
+         * line below puts it in place.
+         */
+        ids.observe(mirror);
 
         rebuildOpenPayload();
         for (Viewer<T> viewer : viewers) sendOpenTo(viewer);
@@ -609,8 +621,9 @@ public final class ServerUiSession<T> implements TreeObserver<UIElement> {
          * ClientUiSession.wireReportedEvents runs over every element a delta brings. So an element that
          * has never been numbered has not been described, and wiring it is not late at all.
          *
-         * peekId() < 0 is exactly that test: NetworkIds.assign numbers what open() and every
-         * flushStructure describe, and a freshly built element reports -1 until it is in one of those.
+         * peekId() < 0 is exactly that test: an id is allocated when open() numbers the tree or when
+         * flushStructure encodes the INSERT that carries the element, and a freshly built element
+         * reports -1 until one of those has happened to it.
          * Without this relaxation nothing could ever be added to a live window -- no fragment, no row,
          * no lazily-built page -- which is a much bigger prohibition than the sentence justifying it.
          */
@@ -706,36 +719,22 @@ public final class ServerUiSession<T> implements TreeObserver<UIElement> {
      * in the same tick must be computed <em>after</em> that and sent <em>after</em> it — the transport
      * preserves order within a stream, so the client applies them the same way round.</p>
      */
+    /**
+     * One tick's worth of change, structure first.
+     *
+     * <p><b>The visibility gate is above BOTH drains, and has to be.</b> A tree delta renumbers both
+     * sides, so gating only the send -- which reads as equivalent -- lets this peer renumber while the
+     * other does not, and every state delta afterwards lands on the wrong element. Silently, because an
+     * id is an int and every one of them still resolves to something. Above both, the tree is simply
+     * not re-described while nobody is looking and the client's numbering stays the one it was last
+     * told. @see #setViewerVisible
+     */
     private void flush() {
-        /*
-         * NOBODY IS LOOKING, so nothing is sent -- and nothing is RECOMPUTED either, which is the part
-         * that has to be got right. Suppressing only the send while still running flushStructure would
-         * renumber this side and not the other, and every state delta after the window came back would
-         * address the wrong elements. Both halves stay pending: dirtyState and structuralAnchors keep
-         * accumulating, and the flush that runs when the window comes back describes the tree as it is
-         * then, in one pass. @see #setViewerVisible
-         */
         if (!viewerVisible) return;
         flushStructure();
-        if (dirtyState.isEmpty()) return;
-        List<T> entries = new ArrayList<>(dirtyState.size());
-        for (UIElement element : dirtyState) {
-            if (ids.peekId(element) < 0) continue;   // never numbered: not part of the open tree
-            StateMap<T> state = new StateMap<>(ops);
-            element.writeStateTo(state);
-            StateMap<T> entry = new StateMap<>(ops);
-            entry.putInt("nid", ids.idOf(element));
-            entry.putRaw("s", state.encode());
-            entries.add(entry.encode());
-        }
-        dirtyState.clear();
-        dirtyIdentity.clear();
-        if (entries.isEmpty()) return;
-        StateMap<T> out = new StateMap<>(ops);
-        out.putRaw("entries", ops.createList(entries));
-        notifyClient(UiMethods.STATE_DELTA, out);
+        StateMap<T> state = mirror.drainState();
+        if (state != null) notifyClient(UiMethods.STATE_DELTA, state);
     }
-
     /**
      * Sends {@code ui/treeDelta} for every anchor whose children changed, then renumbers.
      *
@@ -746,60 +745,31 @@ public final class ServerUiSession<T> implements TreeObserver<UIElement> {
      * subtree is bounded by that subtree, and the common case — one row appended to one list — sends
      * that list rather than the window.</p>
      */
+    /**
+     * Sends this tick's edit script. {@link TreeOps}.
+     *
+     * <p>Ops are encoded here rather than when they were recorded, because an insert carries a
+     * description and the subtree may have been filled in further during the same tick. Ids are
+     * allocated here too, in send order, so the far side can number its own copy identically.</p>
+     */
+    /**
+     * Sends the edit script, and re-describes the window for anyone joining later.
+     *
+     * <p>The re-description is this method's and not the mirror's: what a LATE viewer is handed is a
+     * question about a window, not about a tree.</p>
+     */
     private void flushStructure() {
-        if (!open || structuralAnchors.isEmpty()) return;
+        StateMap<T> out = mirror.drainStructure();
+        if (out == null) return;
 
-        // SHALLOWEST ONLY. Adding a subtree dirties every parent inside it, and re-describing an anchor
-        // already covers everything beneath it -- so a descendant entry is both redundant and wrong,
-        // since the client would have replaced it before reaching the entry that names it.
-        List<UIElement> anchors = new ArrayList<>();
-        for (UIElement candidate : structuralAnchors) {
-            if (ids.peekId(candidate) < 0) continue;
-            boolean covered = false;
-            for (UIElement other : structuralAnchors) {
-                if (other != candidate && ids.peekId(other) >= 0 && isAncestor(other, candidate)) {
-                    covered = true;
-                    break;
-                }
-            }
-            if (!covered) anchors.add(candidate);
-        }
-        structuralAnchors.clear();
-        if (anchors.isEmpty()) return;
-
-        List<T> entries = new ArrayList<>(anchors.size());
-        for (UIElement anchor : anchors) {
-            List<T> described = new ArrayList<>();
-            for (UIElement child : anchor.describedChildrenFor()) {
-                described.add(UIDescriptionCodec.CODEC.encode(ops, child));
-            }
-            StateMap<T> entry = new StateMap<>(ops);
-            entry.putInt("nid", ids.idOf(anchor));
-            entry.putRaw("children", ops.createList(described));
-            entries.add(entry.encode());
-        }
-
-        // RENUMBER, then say what the new total is. The client re-derives the same numbering from the
-        // same tree, and the count is the same cross-check open() uses -- a disagreement is refused
-        // rather than silently misapplied.
-        elementCount = NetworkIds.assign(ids, root);
-        encodedDescription = UIDescriptionCodec.CODEC.encode(ops, root);
+        elementCount = ids.describedCount(root);
+        // A reshaped window's ids are no longer derivable from a walk, so from here on the description
+        // it serves carries them.
+        encodedDescription = nodes.describeLive(root, ids::idOf);
         descHash = ContentHash.of(ops, encodedDescription);
-        // The hash just moved, so what a LATE VIEWER is told has to move with it. @see #rebuildOpenPayload
         rebuildOpenPayload();
 
-        StateMap<T> out = new StateMap<>(ops);
-        out.putRaw("entries", ops.createList(entries));
-        out.putInt("count", elementCount);
-        out.putString("hash", descHash);
-        notifyClient(UiMethods.TREE_DELTA, out);
-    }
-
-    private static boolean isAncestor(UIElement maybeAncestor, UIElement element) {
-        for (UIElement walk = element.getParent(); walk != null; walk = walk.getParent()) {
-            if (walk == maybeAncestor) return true;
-        }
-        return false;
+        notifyClient(UiMethods.TREE_OPS, out);
     }
 
     /**
@@ -840,6 +810,7 @@ public final class ServerUiSession<T> implements TreeObserver<UIElement> {
     private void closeInternal(String reason, boolean tellPeer) {
         open = false;
         ids.observe(null);
+        mirror.stop();
         if (tellPeer) {
             StateMap<T> out = new StateMap<>(ops);
             out.putString("reason", reason == null ? "" : reason);
@@ -960,7 +931,7 @@ public final class ServerUiSession<T> implements TreeObserver<UIElement> {
             StateMap<T> in = read(payload);
             if (!mine(in)) return;
             int nid = in.getInt("nid", -1);
-            UIElement element = NetworkIds.find(ids, nid);
+            UIElement element = ids.byId(nid);
             if (element == null) {
                 CrystalGuiCore.LOGGER.warn("Session {}: event for unknown element {}", windowId, nid);
                 return;
@@ -1063,82 +1034,8 @@ public final class ServerUiSession<T> implements TreeObserver<UIElement> {
                 }));
     }
 
-    // ── TreeObserver ────────────────────────────────────────────────────────────
-
-    // ── TreeObserver ────────────────────────────────────────────────────────────
-
-    /**
-     * <b>The index and the move are not used yet, and that is M2 work, not an oversight.</b> This
-     * session re-describes an anchor wholesale, so it has nowhere to put "at position 3" -- which is
-     * precisely the cost the mirror is being rewritten to remove. Taking the richer stream now, and
-     * throwing most of it away, is what lets the seam be exercised by the working engine before
-     * anything depends on it.
-     */
-    @Override
-    public void inserted(UIElement element, UIElement parent, int index) {
-        dirtyIdentity.add(element);
-        noteStructuralChange(element);
-    }
-
-    @Override
-    public void moved(UIElement element, UIElement parent, int index) {
-        // Today a move is re-described like an insertion, which loses the far side instance. It is the
-        // headline defect Appendix A of the network audit is about, and M2 is where `moved` starts
-        // meaning something on the wire.
-        dirtyIdentity.add(element);
-        noteStructuralChange(element);
-    }
-
-    @Override
-    public void removed(UIElement element, UIElement parent) {
-        dirtyState.remove(element);
-        dirtyIdentity.remove(element);
-        // ANCHORED ON THE PARENT WE WERE HANDED, not on a link that is about to be cleared. The old
-        // callback took no parent and had to read getParent() before the detach finished, which is why
-        // it carried a paragraph explaining the ordering it depended on.
-        noteStructuralChangeUnder(parent);
-    }
-
-    /**
-     * Records where the tree changed, as an ANCHOR the client already knows a number for.
-     *
-     * <p>Walks up from the changed element's parent past anything the client has never seen — a subtree
-     * grafted in one go has several new elements, and only the first ancestor that existed at the last
-     * numbering can be addressed. An element that has never been numbered reports {@code -1}, which is
-     * exactly the test.</p>
-     */
-    private void noteStructuralChange(UIElement element) {
-        noteStructuralChangeUnder(element.getParent());
-    }
-
-    private void noteStructuralChangeUnder(UIElement parent) {
-        UIElement anchor = parent;
-        while (anchor != null && ids.peekId(anchor) < 0) anchor = anchor.getParent();
-        if (anchor != null) structuralAnchors.add(anchor);
-    }
-
-    @Override
-    public void stateChanged(UIElement element) {
-        dirtyState.add(element);
-    }
-
-    @Override
-    public void attributeChanged(UIElement element) {
-        dirtyIdentity.add(element);
-    }
-
-    @Override
-    public void inlineStyleChanged(UIElement element) {
-        // Collected with attributes, because nothing sends either yet: `dirtyIdentity` is cleared on
-        // every flush and never encoded. That is network audit finding S-something in one line -- an
-        // element disabled after the window opened stays enabled on the far side forever -- and M2 is
-        // where both start travelling. Keeping them SEPARATE on the way in is the part that matters
-        // now, since one flag that carried neither is how they came to be conflated.
-        dirtyIdentity.add(element);
-    }
-
-    /** Visible for tests until deltas exist — what the next flush would have to cover. */
+    /** The elements whose state has changed and not yet been flushed. For diagnostics and tests. */
     public Set<UIElement> pendingStateChanges() {
-        return Set.copyOf(dirtyState);
+        return mirror.pendingStateChanges();
     }
 }

@@ -53,7 +53,11 @@ public final class UiMethods {
      * stream: a state delta computed after a renumber must not overtake the tree delta that caused
      * it.</p>
      */
-    public static final String TREE_DELTA = "ui/treeDelta";
+    /**
+     * An ordered edit script for the described tree. Replaced {@code ui/treeDelta}, which re-described
+     * a whole child list per changed place and so destroyed every sibling's instance. @see TreeOps
+     */
+    public static final String TREE_OPS = "ui/treeOps";
 
     /** Server → client: this window is finished. Notification. */
     public static final String CLOSE_WINDOW = "ui/closeWindow";

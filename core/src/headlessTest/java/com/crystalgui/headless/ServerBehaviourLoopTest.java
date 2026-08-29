@@ -2,7 +2,6 @@ package com.crystalgui.headless;
 
 import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.InMemoryTransport;
-import com.crystalgui.net.NetworkIds;
 import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.net.protocol.Envelope;
 import com.crystalgui.net.protocol.EnvelopeCodec;
@@ -193,18 +192,42 @@ public class ServerBehaviourLoopTest {
         // that one shared field happens to hold one value.
         ElementTreeSource serverIds = new ElementTreeSource(root);
         ElementTreeSource clientIds = new ElementTreeSource(client.root());
-        NetworkIds.assign(serverIds, root);
-        NetworkIds.assign(clientIds, client.root());
+        serverIds.assignInDocumentOrder(root);
+        clientIds.assignInDocumentOrder(client.root());
 
         assertEquals(serverIds.peekId(root), clientIds.peekId(client.root()));
-        for (int i = 0; i < root.getChildren().size(); i++) {
-            assertEquals("child " + i + " must have the same id on both sides",
-                    serverIds.peekId(root.getChildren().get(i)),
-                    clientIds.peekId(client.root().getChildren().get(i)));
+        for (int i = 0; i < root.describedChildrenFor().size(); i++) {
+            int serverId = serverIds.peekId(root.describedChildrenFor().get(i));
+            assertTrue("a described child must actually be numbered", serverId >= 0);
+            assertEquals("child " + i + " must have the same id on both sides", serverId,
+                    clientIds.peekId(client.root().describedChildrenFor().get(i)));
         }
-        // Internals are numbered too — a Button's label exists identically on both sides.
-        assertTrue("composites contribute internals to the numbering",
-                NetworkIds.count(root) > root.getChildren().size() + 1);
+
+        /*
+         * INTERNALS ARE NOT NUMBERED, and this assertion used to say the opposite.
+         *
+         * It read "composites contribute internals to the numbering" -- true when the walk numbered
+         * every child, and the reason a client whose Button carried one more internal label than the
+         * server's mis-addressed every element after it, with the description unable to reveal why
+         * because internals are never serialized. Numbering only what is DESCRIBED makes that skew
+         * harmless, which is what it always should have been.
+         *
+         * Note the loop above had to move to describedChildrenFor() with it: walking getChildren()
+         * compares -1 against -1 for every internal, so it passes whatever the numbering does.
+         */
+        UIElement composite = null;
+        for (UIElement candidate : root.describedChildrenFor()) {
+            if (candidate.getChildren().size() > candidate.describedChildrenFor().size()) {
+                composite = candidate;
+                break;
+            }
+        }
+        assertNotNull("the fixture needs a widget with internal children for this to mean anything",
+                composite);
+        for (UIElement child : composite.getChildren()) {
+            if (composite.describedChildrenFor().contains(child)) continue;
+            assertEquals("an internal child must carry no network id", -1, serverIds.peekId(child));
+        }
     }
 
     /**
@@ -224,7 +247,7 @@ public class ServerBehaviourLoopTest {
         open.putInt("protocol", EnvelopeCodec.VERSION);
         open.putInt(UiMethods.WINDOW, 1);
         open.putString("hash", hash);
-        open.putInt("count", NetworkIds.count(root) + 1);
+        open.putInt("count", new ElementTreeSource(root).describedCount(root) + 1);
         pair[0].send(EnvelopeCodec.encode(PlainOps.INSTANCE,
                 new Envelope.Notification<>(UiMethods.OPEN_WINDOW, open.encode())));
         pair[1].deliver();
