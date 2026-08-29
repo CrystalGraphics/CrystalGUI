@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.function.Consumer;
 
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -111,6 +112,37 @@ public class CompletionEscapeTest extends UiTestBase {
         assertTrue("nothing claimed the close", popup.requestClose());
         assertTrue("the SESSION must close, not just the box -- it owns Enter, Tab and the arrows",
                 session.isClosed());
+    }
+
+    /**
+     * <b>A list with nothing in it takes up no space.</b>
+     *
+     * <p>An empty answer that is still flagged incomplete keeps the session alive on purpose — narrowing
+     * may reach rows the provider never sent — but there is nothing to put on screen meanwhile. What
+     * showed was a bare hint strip floating over the line being typed: a box offering nothing, sitting on
+     * the text, that looked like the editor had stuck.</p>
+     *
+     * <p>Asserted on the box's measured size rather than on its {@code display}, because
+     * {@code getComputed} answers null for a property nothing has written — so a test asking "what is its
+     * display" passes by accident on a popup that was never styled at all.</p>
+     */
+    @Test
+    public void anEmptyListTakesUpNoSpace() {
+        Object[] open = openList(List.of());
+        CompletionPopup popup = (CompletionPopup) open[1];
+
+        assertEquals("an empty list still drew a box over the editor",
+                0f, popup.getRuntimeCache().getHeight(), 0.5f);
+    }
+
+    /** ...and one with rows does, which is the counter-assertion. */
+    @Test
+    public void aListWithRowsStillTakesUpSpace() {
+        Object[] open = openList(List.of(item("alpha"), item("beta")));
+        CompletionPopup popup = (CompletionPopup) open[1];
+
+        assertTrue("a list with rows drew nothing at all",
+                popup.getRuntimeCache().getHeight() > 0f);
     }
 
     /**

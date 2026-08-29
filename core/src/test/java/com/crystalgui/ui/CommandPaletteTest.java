@@ -4,6 +4,7 @@ import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
+import com.crystalgui.core.data.DataKey;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiTestBase;
@@ -45,6 +46,8 @@ public class CommandPaletteTest extends UiTestBase {
 
     private static final String SCOPED = "test.scopedCommand";
     private static final String GLOBAL = "test.globalCommand";
+    /** Enabled by a provider on the WINDOW rather than by anything on the focus path. */
+    private static final String WINDOW_SCOPED = "test.windowScopedCommand";
     /** A third row, so navigation tests distinguish "moved" from "wrapped" — with two rows both
      * answers are index 1 and the test passes for either behaviour. */
     private static final String THIRD = "test.thirdCommand";
@@ -392,5 +395,89 @@ public class CommandPaletteTest extends UiTestBase {
         QuickPick pick = CommandPalette.open(window);
 
         assertTrue(idsOf(pick).contains(ChromeCommands.SHOW_COMMANDS));
+    }
+
+    // ── Contextuality ───────────────────────────────────────────────────────────────────────────
+
+    private static QuickPickItem itemFor(List<QuickPickItem> items, String id) {
+        return items.stream().filter(item -> item.id().equals(id)).findFirst().orElseThrow();
+    }
+
+    /**
+     * <b>A command that needed the focused element to be available is marked contextual.</b>
+     *
+     * <p>This is how the palette leads with the verbs of whatever it was opened over. It is measured
+     * rather than declared: each command is asked twice, once against the focused element and once
+     * against the root, and the ones whose answer changes are the ones focus decided. Nothing has to
+     * name a widget, and a command that grows a guard later starts ranking correctly with no other
+     * edit.</p>
+     *
+     * <p>The global command is the control. Without it a computation that marked <em>everything</em>
+     * contextual would pass, and the ordering it drives would do nothing at all.</p>
+     */
+    @Test
+    public void aCommandThatNeededTheFocusedElementIsMarkedContextual() {
+        window.getInputHandler().requestFocus(inner);
+        frame();
+
+        List<QuickPickItem> items = CommandPalette.itemsFor(window.getCommands(), inner);
+
+        assertTrue(itemFor(items, SCOPED).enabled());
+        assertTrue("a command enabled only inside its scope did not read as contextual",
+                itemFor(items, SCOPED).contextual());
+        assertTrue(itemFor(items, GLOBAL).enabled());
+        assertFalse("a command enabled at the root did not need the focused element",
+                itemFor(items, GLOBAL).contextual());
+    }
+
+    /**
+     * <b>A command the WINDOW answers for is not contextual</b> — the case that decides the baseline.
+     *
+     * <p>{@code DataContext.fromWindow} returns immediately when the source is null, so measuring
+     * "anywhere" with an empty context takes the window's own providers away too — and those are exactly
+     * how Go to File and Reload from Disk find their subject with nothing focused. Every one of them
+     * would report itself unavailable at the baseline and be marked contextual, which is the opposite of
+     * true, and would put them at the top of a palette opened over an editor.</p>
+     *
+     * <p>Nothing else in this fixture can see that: a command with no guard at all is enabled against any
+     * context, empty or not, so it answers the same either way.</p>
+     */
+    @Test
+    public void aCommandTheWindowAnswersForIsNotContextual() {
+        DataKey<String> key = DataKey.create("test.windowScoped", String.class);
+        window.addDataProvider(asked -> asked == key ? "yes" : null);
+        window.getCommands().register(Command.of(WINDOW_SCOPED, "Window Action")
+                .enabledWhereData(data -> data.has(key))
+                .run(context -> { }));
+
+        window.getInputHandler().requestFocus(inner);
+        frame();
+
+        List<QuickPickItem> items = CommandPalette.itemsFor(window.getCommands(), inner);
+
+        assertTrue("the window's provider was not consulted at all",
+                itemFor(items, WINDOW_SCOPED).enabled());
+        assertFalse("a window-scoped command was measured against an empty context",
+                itemFor(items, WINDOW_SCOPED).contextual());
+    }
+
+    /**
+     * <b>...and the baseline is the ROOT, not an empty context.</b>
+     *
+     * <p>The distinction the measurement turns on. {@code CommandContext.of(null)} empties the
+     * {@code DataContext} outright — {@code fromWindow} returns immediately without a source — so every
+     * window-scoped command would report itself unavailable there and be marked contextual, which is the
+     * opposite of true. Opened <em>at</em> the root, nothing is contextual, because nothing about focus
+     * decided anything.</p>
+     */
+    @Test
+    public void nothingIsContextualWhenThePaletteWasOpenedAtTheRoot() {
+        List<QuickPickItem> items =
+                CommandPalette.itemsFor(window.getCommands(), window.ui.rootElement);
+
+        assertFalse(itemFor(items, SCOPED).enabled());
+        assertFalse(itemFor(items, SCOPED).contextual());
+        assertTrue(itemFor(items, GLOBAL).enabled());
+        assertFalse(itemFor(items, GLOBAL).contextual());
     }
 }

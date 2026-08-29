@@ -220,9 +220,13 @@ public final class RhinoResolution {
     @Nullable
     public String typeCaptureFor(String binaryName) {
         if (interop == null || binaryName == null || binaryName.isEmpty()) return null;
-        SymbolInfo described = interop.describe(binaryName, false);
-        if (described == null || described.kind() == null) return null;
-        return described.kind().captureName();
+        // KIND ONLY. This asked `describe`, which also resolves the declaration site, the quoted
+        // signature and the javadoc -- and each of those parses the whole source file the type was
+        // declared in. So colouring an import line cost a source parse per type named: 83ms for one
+        // 76KB class, and seconds for a script naming several Minecraft ones, during which the file sat
+        // readable but unmarked. A colour is a kind and never needed any of the rest.
+        SymbolKind kind = interop.kindOf(binaryName);
+        return kind == null ? null : kind.captureName();
     }
 
     public String memberCaptureAt(PropertyGet access) {
@@ -237,17 +241,36 @@ public final class RhinoResolution {
         // (`java.util.ArrayList`) is a TYPE that `markJavaChains` has already marked, so resolving it
         // here put a second token on the same range under a different name -- the exact defect that
         // pass's own comment records being added to prevent.
-        TypeRef receiver = typeOf(access.getTarget(), access.getAbsolutePosition());
+        // KIND ONLY, ALL THE WAY DOWN. The receiver is resolved purely to learn whether it is a
+        // Java type and which one -- never for its declaration -- and resolving it in full parsed
+        // the whole source file of whatever class it turned out to be.
+        TypeRef receiver = typeOf(access.getTarget(), access.getAbsolutePosition(), false);
         if (receiver == null || JsTypeRef.javaNameOf(receiver) == null) return null;
 
-        SymbolInfo member = resolveMember(access, property);
-        if (member == null || member.kind() == null) return null;
-        return member.kind().captureName();
+        // THE MEMBER LIST, NOT A FULL RESOLUTION. `resolveMember` quotes the member's signature out of
+        // its declaring class's source and asks the owner's kind besides -- the same source parse the
+        // type path above was paying, reached from the other direction. `membersOf` carries the kind and
+        // deliberately carries no signature, so it is already the cheap answer and is already cached.
+        String javaName = JsTypeRef.javaNameOf(receiver);
+        boolean staticSide = receiver instanceof JsTypeRef && ((JsTypeRef) receiver).isStaticSide();
+        for (SymbolInfo candidate : interop.membersOf(javaName, staticSide)) {
+            // EITHER SPELLING, exactly as resolveMember allows -- a script may write the runtime name of
+            // a mapped member rather than the readable one. @see InteropResolver#isCalled
+            if (!interop.isCalled(javaName, candidate, property.getIdentifier())) continue;
+            return candidate.kind() == null ? null : candidate.kind().captureName();
+        }
+        return null;
     }
 
     /** A property read: ask the receiver's type what it has by that name. */
     @Nullable
     private SymbolInfo resolveMember(PropertyGet access, Name property) {
+        return resolveMember(access, property, true);
+    }
+
+    /** @param detailed @see #typeOf(AstNode, int, boolean) */
+    @Nullable
+    private SymbolInfo resolveMember(PropertyGet access, Name property, boolean detailed) {
         String identifier = property.getIdentifier();
         if (identifier == null || identifier.isEmpty()) return null;
 
@@ -261,12 +284,12 @@ public final class RhinoResolution {
         if (interop != null) {
             String typeName = RhinoInference.javaNameOf(access, scopes::declaresAnywhere);
             if (typeName != null && typeName.endsWith("." + identifier)) {
-                SymbolInfo type = interop.describe(typeName, false);
+                SymbolInfo type = interop.describe(typeName, false, detailed);
                 if (type != null) return type;
             }
         }
 
-        TypeRef receiver = typeOf(access.getTarget(), access.getAbsolutePosition());
+        TypeRef receiver = typeOf(access.getTarget(), access.getAbsolutePosition(), detailed);
         String javaName = receiver == null ? null : JsTypeRef.javaNameOf(receiver);
         if (javaName != null && interop != null) {
             boolean staticSide = receiver instanceof JsTypeRef && ((JsTypeRef) receiver).isStaticSide();
@@ -279,6 +302,11 @@ public final class RhinoResolution {
                 // perfectly either way, and until this asked, the editor could say nothing at all about
                 // the first kind. @see InteropResolver#isCalled
                 if (!interop.isCalled(javaName, candidate, identifier)) continue;
+                // THE MEMBER LIST'S OWN ANSWER IS ENOUGH FOR A COLOUR. `membersOf` carries the kind and
+                // the type and deliberately carries no signature, so everything below this line exists to
+                // add detail a colour never reads -- and both of the calls that add it (the doc-comment
+                // probe, and the owner's kind) parse the source of the class they are about.
+                if (!detailed) return candidate;
                 // AND ITS SIGNATURE, WHICH `membersOf` DOES NOT CARRY, asked of the Java engine for this
                 // one member -- so a hover over `list.add` quotes `src.zip` exactly as it does in a .java
                 // file. Null when there is no source beside the class, and then the signature is assembled
@@ -365,11 +393,17 @@ public final class RhinoResolution {
      */
     @Nullable
     private TypeRef initializerType(RhinoScopes.Declaration declared) {
+        return initializerType(declared, true);
+    }
+
+    /** @param detailed @see #typeOf(AstNode, int, boolean) */
+    @Nullable
+    private TypeRef initializerType(RhinoScopes.Declaration declared, boolean detailed) {
         TypeRef syntactic = inferredType(declared.initializer);
         if (syntactic != null || declared.initializer == null) return syntactic;
         if (!typingDeclarations.add(declared.offset)) return null;
         try {
-            return typeOf(declared.initializer, declared.offset);
+            return typeOf(declared.initializer, declared.offset, detailed);
         } finally {
             typingDeclarations.remove(declared.offset);
         }
@@ -387,8 +421,16 @@ public final class RhinoResolution {
      */
     @Nullable
     private TypeRef typeOf(@Nullable AstNode expression, int offset) {
+        return typeOf(expression, offset, true);
+    }
+
+    /**
+     * @param detailed false when the answer is only wanted for its TYPE — which is the colouring pass,
+     *                 and which must not pay for a declaration site it will never read. @see #describe
+     */
+    private TypeRef typeOf(@Nullable AstNode expression, int offset, boolean detailed) {
         if (expression instanceof Name) {
-            SymbolInfo resolved = resolveName((Name) expression, offset);
+            SymbolInfo resolved = resolveName((Name) expression, offset, detailed);
             return resolved == null ? null : resolved.type();
         }
         // THE SYNTACTIC ANSWER FIRST, because `Java.type("a.b.C")` and a bare `java.util.List` are both
@@ -399,14 +441,18 @@ public final class RhinoResolution {
         if (expression instanceof PropertyGet) {
             // `a.b` as a receiver is the member b, and its type is what b holds.
             PropertyGet get = (PropertyGet) expression;
-            SymbolInfo member = get.getProperty() == null ? null : resolveMember(get, get.getProperty());
+            SymbolInfo member = get.getProperty() == null ? null
+                    : resolveMember(get, get.getProperty(), detailed);
             return member == null ? null : member.type();
         }
         if (expression instanceof FunctionCall) {
             // A CALL'S TYPE IS ITS CALLEE'S. A method's `type` is its RETURN type -- that is what a
             // SymbolInfo means for anything invocable, in both engines -- so resolving the thing being
             // called and taking its type is the whole of it, and it composes to any depth of chain.
-            return typeOf(((FunctionCall) expression).getTarget(), offset);
+            // A CHAIN INHERITS IT. `a.b().c` resolves its receiver the same way, so a
+            // detailed=false ask that became detailed=true one link along would pay exactly the
+            // cost it set out to avoid.
+            return typeOf(((FunctionCall) expression).getTarget(), offset, detailed);
         }
         return null;
     }
@@ -414,6 +460,11 @@ public final class RhinoResolution {
     /** A plain name: the tiers, in order. */
     @Nullable
     private SymbolInfo resolveName(Name name, int offset) {
+        return resolveName(name, offset, true);
+    }
+
+    /** @param detailed @see #typeOf(AstNode, int, boolean) */
+    private SymbolInfo resolveName(Name name, int offset, boolean detailed) {
         String identifier = name.getIdentifier();
         if (identifier == null || identifier.isEmpty()) return null;
 
@@ -424,19 +475,19 @@ public final class RhinoResolution {
         // an offset and nothing else.
         RhinoScopes.Declaration declared = scopes.declarationOf(name);
         if (declared == null) declared = scopes.visibleDeclaration(identifier, offset);
-        if (declared != null) return fromDeclaration(declared, identifier);
+        if (declared != null) return fromDeclaration(declared, identifier, detailed);
 
         // NOT DECLARED HERE. A run may have made it a global, the host may have bound it, it may be a
         // Java package root, or it may genuinely be nothing -- and those are four different things to say.
         SymbolInfo fromRun = fromLiveScope(identifier);
         if (fromRun != null) return fromRun;
 
-        SymbolInfo bound = fromHostBinding(identifier);
+        SymbolInfo bound = fromHostBinding(identifier, detailed);
         if (bound != null) return bound;
 
         String javaName = RhinoInference.javaNameOf(name.getParent(), scopes::declaresAnywhere);
         if (javaName != null && interop != null && interop.exists(javaName)) {
-            return interop.describe(javaName, true);
+            return interop.describe(javaName, true, detailed);
         }
         return null;
     }
@@ -493,6 +544,13 @@ public final class RhinoResolution {
      * became a Java object still types from the run, which is the case the tier was added for.</p>
      */
     private SymbolInfo fromDeclaration(RhinoScopes.Declaration declared, String identifier) {
+        return fromDeclaration(declared, identifier, true);
+    }
+
+    /** @param detailed @see #typeOf(AstNode, int, boolean) */
+    @Nullable
+    private SymbolInfo fromDeclaration(RhinoScopes.Declaration declared, String identifier,
+                                       boolean detailed) {
         DeclarationSite site = DeclarationSite.here(lines.pointAt(declared.offset),
                 lines.pointAt(declared.offset + declared.length));
         String container = containerOf(declared);
@@ -505,7 +563,7 @@ public final class RhinoResolution {
         String declaredType = doc.declaredType();
         TypeRef stated = declaredType != null ? typeNamed(declaredType)
                 : declared.kind == SymbolKind.FUNCTION ? null
-                : initializerType(declared);
+                : initializerType(declared, detailed);
 
         TypeRef live = liveTypeFor(declared, identifier);
         TypeRef type = live != null ? live : stated;
@@ -598,6 +656,11 @@ public final class RhinoResolution {
      */
     @Nullable
     private SymbolInfo fromHostBinding(String identifier) {
+        return fromHostBinding(identifier, true);
+    }
+
+    /** @param detailed @see #typeOf(AstNode, int, boolean) */
+    private SymbolInfo fromHostBinding(String identifier, boolean detailed) {
         String typeName = hostBindings.get(identifier);
         if (typeName == null || typeName.isEmpty()) return null;
         // AN IMPORTED NAME IS THE CLASS ITSELF, and is described by the engine that knows it. `import
@@ -615,7 +678,7 @@ public final class RhinoResolution {
             if (module != null) return module;
         }
         if (imported.contains(identifier) && interop != null) {
-            SymbolInfo described = interop.describe(typeName, true);
+            SymbolInfo described = interop.describe(typeName, true, detailed);
             if (described != null) return described;
         }
         TypeRef type = typeName.indexOf('.') > 0 ? JsTypeRef.javaInstance(typeName)

@@ -1135,6 +1135,26 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
             return "";
         }
 
+        /**
+         * What KIND of thing is at {@code offset} — and nothing else. @see Analysis#kindAt
+         *
+         * <p>Shares {@link #describe}'s branches rather than re-deriving them, because a second copy of
+         * "an enum constant is an ENUM_MEMBER and a parameter is a PARAMETER" is a copy that drifts —
+         * and the two answers appearing in the same file under different colours is precisely the
+         * failure that would be invisible.</p>
+         */
+        @Override
+        public SymbolKind kindAt(int offset) {
+            CompilationUnit resolved = unit;
+            if (resolved == null) return null;
+            SimpleName name = nameAt(resolved, offset);
+            if (name == null) return null;
+            IBinding binding = bindingFor(name);
+            if (binding == null) return null;
+            SymbolInfo described = describe(resolved, name, binding, false);
+            return described == null ? null : described.kind();
+        }
+
         @Override
         public SymbolInfo resolveAt(int offset) {
             CompilationUnit resolved = unit;
@@ -1296,6 +1316,17 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         }
 
         private SymbolInfo describe(CompilationUnit unit, SimpleName name, IBinding binding) {
+            return describe(unit, name, binding, true);
+        }
+
+        /**
+         * @param detailed whether to work out the declaration SITE, the quoted signature and the javadoc
+         *                 — the three things here that reach {@code AttachedSources}, and therefore the
+         *                 three that cost a parse of the whole compilation unit a classpath binding was
+         *                 declared in. @see #kindAt
+         */
+        private SymbolInfo describe(CompilationUnit unit, SimpleName name, IBinding binding,
+                                    boolean detailed) {
             Set<SymbolModifier> modifiers = modifiersOf(binding);
             if (binding instanceof IVariableBinding) {
                 IVariableBinding variable = (IVariableBinding) binding;
@@ -1306,10 +1337,10 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                 ITypeBinding declaring = variable.getDeclaringClass();
                 return new SymbolInfo(name.getIdentifier(), kind, typeRef(variable.getType()),
                         containerName(declaring), null, modifiers,
-                        declarationOf(unit, binding))
+                        detailed ? declarationOf(unit, binding) : null)
                         .withContainerKind(declaring == null ? null : JavaSignatures.kindOf(declaring))
-                        .withSignature(signatures.of(binding, kind, name.getIdentifier()))
-                        .withDocumentation(signatures.documentationOf(binding));
+                        .withSignature(detailed ? signatures.of(binding, kind, name.getIdentifier()) : null)
+                        .withDocumentation(detailed ? signatures.documentationOf(binding) : null);
             }
             if (binding instanceof IMethodBinding) {
                 IMethodBinding method = (IMethodBinding) binding;
@@ -1318,10 +1349,10 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                         ? SymbolKind.CONSTRUCTOR : SymbolKind.METHOD;
                 return new SymbolInfo(name.getIdentifier(), kind, typeRef(method.getReturnType()),
                         containerName(declaring), null, modifiers,
-                        declarationOf(unit, binding), parameterTypesOf(method))
+                        detailed ? declarationOf(unit, binding) : null, parameterTypesOf(method))
                         .withContainerKind(declaring == null ? null : JavaSignatures.kindOf(declaring))
-                        .withSignature(signatures.of(binding, kind, name.getIdentifier()))
-                        .withDocumentation(signatures.documentationOf(binding));
+                        .withSignature(detailed ? signatures.of(binding, kind, name.getIdentifier()) : null)
+                        .withDocumentation(detailed ? signatures.documentationOf(binding) : null);
             }
             if (binding instanceof ITypeBinding) {
                 ITypeBinding type = (ITypeBinding) binding;
@@ -1338,9 +1369,9 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                         : SymbolKind.CLASS;
                 return new SymbolInfo(name.getIdentifier(), kind, typeRef(type),
                         type.getPackage() == null ? null : type.getPackage().getName(), null,
-                        modifiers, declarationOf(unit, binding))
-                        .withSignature(signatures.of(binding, kind, name.getIdentifier()))
-                        .withDocumentation(signatures.documentationOf(binding));
+                        modifiers, detailed ? declarationOf(unit, binding) : null)
+                        .withSignature(detailed ? signatures.of(binding, kind, name.getIdentifier()) : null)
+                        .withDocumentation(detailed ? signatures.documentationOf(binding) : null);
             }
             return SymbolInfo.of(name.getIdentifier(), SymbolKind.UNKNOWN);
         }

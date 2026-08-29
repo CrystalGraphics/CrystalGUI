@@ -298,6 +298,14 @@ public final class AttachedSources {
             CompilationUnit unit = parseAttached(topLevelName, found);
             FrameProfile.step(timed, "attached.parse " + topLevelName
                     + " (" + found.text.length() + " chars)");
+            if (Boolean.getBoolean("crystalgui.attached.trace")) {
+                StringBuilder who = new StringBuilder("[attached] who asked for " + topLevelName + ":");
+                StackTraceElement[] stack = new Throwable().getStackTrace();
+                for (int i = 0; i < stack.length && i < 22; i++) {
+                    who.append("\n    ").append(stack[i]);
+                }
+                System.err.println(who);
+            }
             return unit == null ? null : new Attached(unit, found.text, null);
         } catch (RuntimeException | LinkageError refused) {
             // A source archive this band cannot read -- a JDK 21 src.zip under band 8's JDT is the

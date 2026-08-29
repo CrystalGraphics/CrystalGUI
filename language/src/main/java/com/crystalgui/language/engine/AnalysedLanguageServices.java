@@ -103,6 +103,19 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
     private final String id;
     private final TextBuffer buffer;
     @Nullable private final JobScheduler scheduler;
+
+    /**
+     * Where work that is a pure function of a snapshot belongs, or <b>null for "do it here"</b>.
+     *
+     * <p>Null is what a test passes, and it is the whole reason a subclass may safely move something off
+     * the frame thread: {@code JobScheduler}'s {@code onDone} runs during {@code drain()}, which only a
+     * painting window performs — so a headless caller that scheduled an answer would wait for a frame
+     * that never comes. A subclass therefore asks for the scheduler and stays synchronous without one.</p>
+     */
+    @Nullable
+    protected JobScheduler scheduler() {
+        return scheduler;
+    }
     private final JobKey analysisKey;
     private final String retainedLane;
     private final String runtimeLane;
