@@ -548,9 +548,38 @@ io.on(purge, Button.ACTIVATE, ctx -> model.purge());
 
 ### What `ctx` gives you
 
-`ctx` is a `UiEventContext` — `session()`, `element()` (the widget that reported), and `payload()`
-(the raw `StateMap`, which you rarely want since the value is already decoded). Most handlers ignore
-it entirely.
+```java
+ctx.viewer()        // WHO did it — the player, on 1.7.10 the EntityPlayer
+ctx.element()       // which widget
+ctx.payload()       // the raw payload, if you took the untyped `on`
+ctx.session()       // the window's session
+
+ctx.call("mymod/ask", args, ok -> …, err -> …);   // ask THE VIEWER THAT DID THIS
+ctx.setVisible(false);                            // stop sending this viewer updates
+```
+
+`ctx.viewer()` is what makes a handler able to say *who*. Without it a handler that counts anything
+credits whoever happens to be first in the viewer list, and "this player may press it and that one may
+not" cannot even be expressed. Minecraft's own container handlers receive the `ServerPlayer` for the
+same reason.
+
+**`ctx.call` rather than `io.call`** in a handler: the answer is about the interaction that just
+happened, so it belongs to whoever caused it. `io.call` is for a question genuinely addressed to the
+window, and it refuses when there is more than one viewer and therefore no such thing as "the" client.
+
+### The server does not take your client's word for it
+
+A handler is given a value that has already been made safe. That is not politeness — a client is a
+program on someone else's machine, and it may be lying:
+
+- **A value a gesture could have produced is clamped and delivered.** A forged slider value of 9999
+  arrives as your slider's maximum, `NaN` arrives as its minimum, a string longer than
+  `setMaxLength` arrives cut. Your handler runs and your model stays sane.
+- **Something no gesture could have produced is refused before it reaches you**: an event on a
+  disabled or inert element, or a kind you never asked for. Refusals are counted per viewer, and a
+  viewer that keeps sending them stops being listened to — the window stays open for everyone else.
+
+You get this by using the widget's own event constant. Nothing is asked of you.
 
 ### Every event, by widget
 

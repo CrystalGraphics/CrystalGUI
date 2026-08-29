@@ -300,7 +300,52 @@ global check, the `instanceof` switch in `wireReportedEvents`, `shouldSuppress`'
 client instance; two viewers agree on every id after a reshape; a hidden-then-reshaped window comes
 back with its instances; an idle window is silent; the mutation-checked count test.
 
-### M3 — Events, validation, authoring surface · M · after: M2
+### M3 — Events, validation, authoring surface · M · after: M2 · **MOSTLY SHIPPED 2026-08-30**
+
+#### What has shipped
+
+| | |
+|---|---|
+| Typed events | `io.on(el, Slider.VALUE_CHANGED, (ctx, v) -> …)` — `EventKind` deleted |
+| §M3.P projections | the model→view direction, with its own review pass |
+| **Viewer in every context** (S6) | `UiEventContext.viewer()`, plus `ctx.call(…)` and `ctx.setVisible(…)` |
+| **Per-viewer visibility** (S7) | `setViewerVisible(peer, visible)`; structure to all, state to the watching |
+| **Validation on dispatch** (S5) | sanitize what a gesture could produce, refuse and count what it could not |
+| **Rate policy applied** | declared since M1, read by nothing until now |
+| Per-connection refusal counter | per VIEWER, with a threshold that stops that viewer and not the window |
+
+#### The finding that changed the spec: `bound()` and `client()` must not merge
+
+D9 asked for `bound()` + `client(io)` to become one `client(io)`. **They answer different questions and
+the merge is unsound in both directions**, which is only visible from how they are invoked
+(`ClientWindows.bindPanels`): `bound()` runs on **every** bind — mount and every re-describe — while
+`client(io)` runs on `firstMount` alone.
+
+- Run the merged hook **once** and widget listeners are not re-attached after a re-describe, which is
+  the precise bug `bound()` exists to prevent: a delta replaces the tree and every listener is left on
+  widgets that no longer exist.
+- Run it **every time** and wire methods are registered again, which `MessageRouter` refuses outright —
+  correctly, since a duplicate handler is one registration reaching inside another.
+
+Making it work would mean idempotent registration on `ClientScope`, i.e. weakening the duplicate refusal
+that exists to catch exactly that mistake. The two hooks are kept, and the naming should say what they
+are for rather than merging them: the useful half of D9 is that `bound()` is badly named for "re-attach
+what the tree replaced".
+
+#### Also deferred, with the reason
+
+- **`call()` → `callViewer` only.** Not removed. It already refuses when there is more than one viewer
+  and therefore no such thing as "the" client, so it is safe rather than ambiguous, and deleting it
+  would make every single-viewer panel more verbose for no gain. What the viewer unlocked is the thing
+  actually worth having: **`ctx.call(…)` answers the viewer that spoke**, which is what a handler
+  almost always means.
+- **The `layout` → `build` rename.** Mechanical and untouched, because it lands in every panel, every
+  test and the whole user guide, and doing it in the same pass as behaviour would put a rename through
+  a diff that is being read for correctness.
+
+#### The original M3 specification
+
+
 
 #### M3.P — Projections: the model→view direction · **SHIPPED 2026-08-30, ahead of the rest of M3**
 

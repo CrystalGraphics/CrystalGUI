@@ -751,6 +751,24 @@ public final class ServerUiSession<T> {
      */
     public record UiEventContext<T>(ServerUiSession<T> session, @Nullable Object viewer,
                                     UIElement element, StateMap<T> payload) {
+
+        /**
+         * Asks <b>the viewer that did this</b>, rather than broadcasting.
+         *
+         * <p>Almost always what a handler means: the answer is about the interaction that just
+         * happened, so it belongs to whoever caused it. {@code session().call(...)} is still there for a
+         * question genuinely addressed to the window rather than to a person, and it refuses when there
+         * is more than one viewer and therefore no such thing as "the" client.</p>
+         */
+        public void call(String method, @Nullable StateMap<T> args,
+                         @Nullable Consumer<StateMap<T>> onResult, @Nullable Consumer<String> onError) {
+            session.callViewer(viewer, method, args, onResult, onError);
+        }
+
+        /** Says whether this viewer is watching. @see ServerUiSession#setViewerVisible(Object, boolean) */
+        public void setVisible(boolean visible) {
+            session.setViewerVisible(viewer, visible);
+        }
     }
 
     /**
