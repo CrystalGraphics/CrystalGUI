@@ -170,11 +170,17 @@
  *       of reported events is part of the description, so a handler added for an element the client
  *       has <em>already been described</em> throws. The host calls {@code bind} and then opens, so
  *       there is no way to get the ordering wrong from inside a window — and an element added
- *       <em>later</em> (a fragment, a new row) may be wired at any time, because a tree delta
- *       re-describes its reported events too.</li>
- *   <li><b>Nothing sends element ids.</b> Both sides derive them from a document-order walk of the
- *       same tree. That is why a structural change must go through {@code ui/treeDelta} rather than
- *       an ad-hoc mutation: everything after an insertion renumbers.</li>
+ *       <em>later</em> (a fragment, a new row) may be wired at any time, because the {@code insert} op
+ *       carries its reported events too.</li>
+ *   <li><b>An element's id is allocated once and then belongs to it.</b> A pristine description sends
+ *       no ids at all — both sides derive them from one document-order walk, which is what keeps a
+ *       description content-addressed, so re-opening the same UI costs one small packet. From the
+ *       first structural change onward the server owns the numbering and says so: {@code ui/treeOps}
+ *       carries {@code insert}/{@code remove}/{@code move} naming the ids involved, and a viewer
+ *       joining afterwards is handed a <em>live</em> description with each element's id written into
+ *       it, because it can no longer compute them. <b>An insert renumbers nothing</b> — which is the
+ *       whole point, since a message in flight names an element and a name that moves is not a
+ *       name.</li>
  *   <li><b>The description carries only {@code INLINE}-origin styles.</b> A widget's own baseline
  *       look is produced locally by the client's copy of the same class, and a theme travels as a
  *       {@link com.crystalgui.net.SheetRef} — usually as a hash the client already has, so nothing

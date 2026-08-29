@@ -149,20 +149,36 @@ This is what makes re-opening cheap: `OpenWindow` carries the hash and the eleme
 description. A client that already holds that hash rebuilds immediately with **zero** transfer,
 however large the tree.
 
-## 5. Network ids — derived, not transmitted
+## 5. Network ids — allocated once, then owned
 
-`net/NetworkIds.java`
+`ui/dom/ElementTreeSource.java`
 
 ```java
-int count = NetworkIds.assign(root);        // document-order walk, stamps element.networkId
-UIElement el = NetworkIds.find(root, nid);
+int nid = ids.idOf(element);       // allocated on first sight, kept for the life of the source
+UIElement el = ids.byId(nid);      // a map lookup
 ```
 
-Ids come from a deterministic document-order walk on **both** sides. Nothing is sent. Both sides
-rebuilt the same tree from the same description, so both walks produce the same numbering.
+An id lives in a table the tree source owns, keyed by element identity. **It survives a sibling
+insert, a reparent and a detach** — which is the whole point, because a message in flight names an
+element and a name that moves is not a name.
 
-The trade-off is explicit: this is why there is no structural delta yet (§8). Inserting an element
-renumbers everything after it.
+Ids are still *derived* for the opening description and *stated* from then on, and the two cases
+answer different questions:
+
+| | Ids on the wire | Why |
+|---|---|---|
+| **Pristine description** (`open()`) | none — both sides run the same document-order walk | Nothing sent is what makes a description **content-addressed**: two windows showing the same thing hash the same, so re-opening costs one small packet however large the tree |
+| **Live description** (a late viewer joining a reshaped window) | each element carries `nid` | After the first structural change a walk no longer reproduces the numbering the existing viewers hold, so a newcomer has to be told it — otherwise every id it derived would name a different element |
+
+`UIDescriptionCodec.encodeLive`/`decodeLive` are the second form. A live description hashes to
+something no pristine one matches, which is correct rather than unfortunate: a reshaped window was
+never going to share another window's cache entry.
+
+> **This section used to describe the opposite**, and the entry that replaced it is worth keeping:
+> ids came from a walk on both sides, nothing was sent, and *"inserting an element renumbers
+> everything after it"* was recorded as an accepted trade-off. It was the defect the whole rewrite
+> came out of — a positional id is not an identity, and a structural delta cannot be written on top of
+> one, because you cannot say "this one moved" without a name for "this one".
 
 ## 6. Stylesheets over the wire — `SheetRef`
 
@@ -320,15 +336,26 @@ the tree on open, exposes `root()`/`sheets()`/`useUserAgentSheet()`, and the sam
 
 ## 8. Known gaps — stated honestly
 
-- **No `TreeDelta`.** A structural add/remove means a *new description* and a re-open, which the
-  content-addressed cache makes cheap but which is not a delta. Positional network ids (§5) are what
-  make an incremental version a real design problem, not an afternoon.
 - **No slots/inventory.** The Minecraft-specific half of a container GUI does not exist.
-- **No multi-viewer fan-out.** One session, one client.
 - **`TabView`'s tabs and panes do not round-trip** — they live in internal containers, which the
   description codec does not descend into.
-- **Only seven widgets implement `writeState`/`readState`**; the rest carry no state worth sending
-  today, but a new stateful widget must add them or it will silently arrive blank.
+- **A collection widget sends no rows.** `ListView`, `TableView`, `TreeView` and `ArrayControl` are
+  deliberately local-only: a collection's contract is its *rows*, and rows have to be a **stream** — a
+  count and a template from the server, `rows{from,to}` from the client as it scrolls. A contract
+  carrying only the selection would describe a list whose contents never arrive, which is worse than
+  saying nothing.
+- **Rate policy is declared and not yet applied.** An `Event` carries `IMMEDIATE`/`TYPING`/`DRAGGING`,
+  and nothing coalesces on it — a drag still reports per frame. `ClientUiSession.shouldSuppress` is the
+  narrow ancestor doing the one job that could not wait (stopping a delta landing on a focused text
+  field and resetting the caret).
+
+Three entries that used to stand here are gone, and what replaced each is worth knowing:
+
+| Was | Now |
+|---|---|
+| *No `TreeDelta` — a structural change means a new description and a re-open* | `ui/treeOps` carries `insert`/`remove`/`move`. The entry named positional ids as what made the incremental version *"a real design problem, not an afternoon"*, and that was exactly right: the ids had to stop being positional first (§5) |
+| *No multi-viewer fan-out — one session, one client* | Many viewers per window, each with its own visibility gate. `MultiViewerTest` |
+| *Only seven widgets implement `writeState`/`readState`* | 28 widgets carry a `WidgetContract`; the engine derives state encoding from it. The other 59 are on a census with a written reason each, and a coverage test fails on a class that is neither |
 
 ## 9. The headless contract
 
@@ -355,7 +382,12 @@ drift.
 | `HeadlessTreeSmokeTest` | build/attach/lay out a tree with no GL |
 | `UIDescriptionCodecTest` | tree round-trip, both ops |
 | `WidgetStateRoundTripTest` | per-widget `writeState`/`readState` |
-| `UITreeObserverTest` | attach/detach/state-dirty notifications |
+| `TreeObserverBehaviourTest` | attach/detach/move/state-dirty notifications |
+| `TreeSourceContractTest` | the `ui.dom` seam, on its own terms — no session involved |
+| `MirrorIdentityTest` | **M2's acceptance** — a sibling insert keeps every other instance, a move keeps one, identity and inline style travel, an idle window is silent |
+| `TreeOpsTest` | the `insert`/`remove`/`move` wire vocabulary |
+| `WidgetContractRoundTripTest` | every contracted widget's state through its contract |
+| `MultiViewerTest` | two viewers agree, and a hidden one is not sent to |
 | `ContentHashTest` | canonical form and collision resistance |
 | `SessionHandshakeTest` | open → req-desc → desc, and the cache-hit path that transfers nothing |
 | `ServerBehaviourLoopTest` | event in, handler runs, state update out |
