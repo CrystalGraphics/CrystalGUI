@@ -124,7 +124,7 @@
  * <pre>{@code
  * public EnginePanel engine;                                  // a panel is an element
  *
- * public void layout(MachineModel m) {
+ * public void build(MachineModel m) {
  *     engine = EnginePanel.TYPE.build(m.engine());            // built WITH its slice
  *     addChild(engine);
  * }

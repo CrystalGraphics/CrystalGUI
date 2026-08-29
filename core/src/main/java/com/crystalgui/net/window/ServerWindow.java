@@ -165,17 +165,6 @@ public final class ServerWindow<P extends UIElement> {
         return key;
     }
 
-    /** Why a window ended. @see ServerWindows */
-    public enum CloseReason {
-        /** The server asked — {@code window.close(…)} or {@code host.close(window, …)}. */
-        SERVER,
-        /** The user closed the frame. {@code ui/close}, the direction that used to be missing. */
-        CLIENT,
-        /** {@link Networked#stillValid} answered false. */
-        NOT_VALID,
-        /** The peer went away: a logout, a kick, a server stop. Nothing was sent; nobody was there. */
-        CONNECTION_LOST
-    }
 
     // ── What the host gives back ────────────────────────────────────────────
 
@@ -207,6 +196,6 @@ public final class ServerWindow<P extends UIElement> {
     }
 
     /** A nested panel's server hooks, captured with its slice at {@link ServerScope#attach}. */
-    record Attached(Runnable ticker, Consumer<String> closer) {
+    record Attached(Runnable ticker, Consumer<CloseReason> closer) {
     }
 }

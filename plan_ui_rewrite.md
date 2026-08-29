@@ -300,7 +300,7 @@ global check, the `instanceof` switch in `wireReportedEvents`, `shouldSuppress`'
 client instance; two viewers agree on every id after a reshape; a hidden-then-reshaped window comes
 back with its instances; an idle window is silent; the mutation-checked count test.
 
-### M3 — Events, validation, authoring surface · M · after: M2 · **MOSTLY SHIPPED 2026-08-30**
+### M3 — Events, validation, authoring surface · M · after: M2 · **SHIPPED 2026-08-30**
 
 #### What has shipped
 
@@ -332,6 +332,27 @@ that exists to catch exactly that mistake. The two hooks are kept, and the namin
 are for rather than merging them: the useful half of D9 is that `bound()` is badly named for "re-attach
 what the tree replaced".
 
+#### The authoring rename (D9), as far as it is sound
+
+`layout(M)` → **`build(M)`**, and `bound()` → **`bindWidgets()`** — which is the useful half of the
+merge D9 asked for. The two hooks stay two, because they run at different times and always did; what
+was wrong was that `bound()` named a state rather than a job, so nothing about it said *"attach your
+widget listeners here, again, every time the tree is replaced"*. `bindWidgets()` does, and reads as the
+counterpart to `client(io)`'s once.
+
+`closed(String)` → **`closed(CloseReason)`**, and this one fixed a real inconsistency rather than a
+name. The old javadoc admitted it outright: the server was handed a reason NAME and the client "the
+detail string the wire carried", so the same panel class asked the same question got `"NOT_VALID"` on
+one side and `"no longer valid"` on the other — and a teardown that branched on it worked on exactly
+one of them. `CloseReason` is top-level in `net.window` now (a client naming a server class to hear
+about its own teardown is backwards), the close message carries a machine-readable **code** beside the
+human-readable detail, and `CloseReason.parse` answers `UNKNOWN` rather than throwing across a version
+gap — a window ending is not the moment to fail.
+
+**Both halves travel, because two consumers want different ones and neither is wrong**: a PANEL
+branches on the code, a HOST shows the detail. *"The block was broken"* is what a player should read,
+and `SERVER` is not.
+
 #### Also deferred, with the reason
 
 - **`call()` → `callViewer` only.** Not removed. It already refuses when there is more than one viewer
@@ -339,9 +360,6 @@ what the tree replaced".
   would make every single-viewer panel more verbose for no gain. What the viewer unlocked is the thing
   actually worth having: **`ctx.call(…)` answers the viewer that spoke**, which is what a handler
   almost always means.
-- **The `layout` → `build` rename.** Mechanical and untouched, because it lands in every panel, every
-  test and the whole user guide, and doing it in the same pass as behaviour would put a rename through
-  a diff that is being read for correctness.
 
 #### The original M3 specification
 

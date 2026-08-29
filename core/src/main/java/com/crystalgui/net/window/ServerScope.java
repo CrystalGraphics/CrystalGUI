@@ -329,7 +329,7 @@ public final class ServerScope {
      * <pre>{@code
      * public EnginePanel engines;                          // a panel is an element: just a field
      *
-     * @Override public void layout(MachineModel m) { addChild(engines); }
+     * @Override public void build(MachineModel m) { addChild(engines); }
      * @Override public void serve(MachineModel m, ServerScope io) {
      *     io.attach(engines, m.engines());                 // props down: the SLICE, not the model
      * }
@@ -368,7 +368,7 @@ public final class ServerScope {
         }
         window.attached.add(new ServerWindow.Attached(
                 () -> child.tick(slice),
-                reason -> child.closed(reason)));
+                child::closed));
         child.serve(slice, new ServerScope(session, window, prefix + name + "/"));
         return this;
     }

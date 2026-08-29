@@ -2,6 +2,7 @@ package com.crystalgui.example.machine.ui;
 
 import com.crystalgui.example.machine.MachineModel;
 import com.crystalgui.example.machine.MachineTrace;
+import com.crystalgui.net.window.CloseReason;
 import com.crystalgui.net.window.ClientScope;
 import com.crystalgui.net.window.Networked;
 import com.crystalgui.net.window.ServerScope;
@@ -176,7 +177,7 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
      * thing no amount of reflection could infer. {@code this} is the root: a panel is an element.</p>
      */
     @Override
-    public void layout(MachineModel model) {
+    public void build(MachineModel model) {
         addClass(MachineStyles.PANEL_CLASS);
 
         UIText title = new UIText("Machine control");
@@ -571,7 +572,7 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
      * between this and a server-wired one, and neither can the stylesheet.</p>
      */
     @Override
-    public void bound() {
+    public void bindWidgets() {
         askStats.attachListener(this::requestStats);
         heartbeat.attachListener(this::sendHeartbeat);
         // Deliberately blank -- the server refuses it, which is the only way to watch the error
@@ -728,7 +729,7 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
     }
 
     @Override
-    public void closed(String reason) {
+    public void closed(CloseReason reason) {
         /*
          * ONE METHOD, BOTH SIDES. The server's own close and the client hearing about one arrive
          * here, on two different instances -- and `io` is the tell, because only the client half was

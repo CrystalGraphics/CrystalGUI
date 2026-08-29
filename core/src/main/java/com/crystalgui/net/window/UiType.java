@@ -169,7 +169,7 @@ public final class UiType<P extends UIElement & Networked<M>, M> {
             // default, not a seizure.
             if (value.getId().isEmpty()) value.setId(part.getName());
         }
-        panel.layout(model);
+        panel.build(model);
         // Nested panels the layout just built get the same rule, after the fact -- the id is what
         // scopes their methods and what the client resolves the field by.
         for (Field part : partsOf(type)) {
