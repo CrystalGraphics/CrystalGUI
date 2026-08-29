@@ -1,11 +1,11 @@
 package com.crystalgui.ui;
 
 import com.crystalgraphics.api.PoseStack;
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.async.JobScheduler;
-import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.async.UiThread;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataProvider;
@@ -32,7 +32,10 @@ import javax.annotation.Nullable;
 import java.util.*;
 import com.crystalgui.ui.elements.Popover;
 import com.crystalgui.ui.elements.desktop.Desktop;
+import com.crystalgui.ui.elements.desktop.DesktopPresentation;
+import com.crystalgui.ui.elements.desktop.ScreenOverlay;
 import com.crystalgui.ui.elements.desktop.WindowFrame;
+import com.crystalgui.ui.elements.desktop.WindowState;
 
 /**
  * Runtime engine. Owns the paint context, the live
@@ -435,6 +438,164 @@ public final class UIWindow {
         return desktopSuspended;
     }
 
+    // ── HUD: pinned windows over the running game ───────────────────────────────────────
+
+    /** What {@link #enterHudMode} put away, so {@link #exitHudMode} can put it back. */
+    private final List<WindowFrame> hiddenForHud = new ArrayList<>();
+    private boolean hudMode;
+
+    /**
+     * Puts the desktop on the HUD: every unpinned window goes away, pinned ones keep running.
+     *
+     * <p>What a host calls instead of {@link #suspendDesktop()} when something is pinned — Discord's and
+     * Steam's in-game overlays are the precedent, and live debugging is the use case: pin the Run
+     * console, close the screen, play, and watch it stream.</p>
+     *
+     * <p><b>Unpinned windows are HIDDEN, not merely unpainted</b>, which is what makes the freeze
+     * contract hold unchanged: hiding is detaching, so nothing matches a selector, nothing lays out, a
+     * ticker returns false and the input handler forgets every element in the subtree. That is the same
+     * mechanism {@link #suspendDesktop()} applies to the whole compositor, one level down — and it is
+     * why the set has to be REMEMBERED here rather than inferred on the way out. A window the user had
+     * already minimised must stay minimised when the screen comes back.</p>
+     *
+     * <p><b>Visible stays live.</b> The freeze contract keys on <em>hidden</em>, not on the screen being
+     * closed, so a pinned window keeps its tickers, transitions and connections. Watching live data is
+     * the entire point; a frozen HUD would be a screenshot.</p>
+     */
+    public void enterHudMode() {
+        if (hudMode) return;
+        hudMode = true;
+        // The desktop stays ATTACHED, unlike a suspend: a detached subtree lays out and paints nothing,
+        // and a pinned window has to do both.
+        desktop();
+        hiddenForHud.clear();
+        for (WindowFrame frame : new ArrayList<>(desktop.registry().windows())) {
+            if (frame.isPinned() || frame.state() != WindowState.VISIBLE) continue;
+            hiddenForHud.add(frame);
+            frame.hide();
+        }
+        for (WindowFrame frame : desktop.registry().windows()) {
+            if (frame.isPinned()) frame.addClass(WindowFrame.HUD_CLASS);
+        }
+    }
+
+    /** Takes the desktop off the HUD, restoring exactly what {@link #enterHudMode} put away. */
+    public void exitHudMode() {
+        if (!hudMode) return;
+        hudMode = false;
+        for (WindowFrame frame : desktop.registry().windows()) {
+            frame.removeClass(WindowFrame.HUD_CLASS);
+        }
+        // persisted: a restore of a window that WAS on screen, never a first show.
+        for (WindowFrame frame : hiddenForHud) frame.show(true);
+        hiddenForHud.clear();
+    }
+
+    /** @see #screenOverlay() */
+    private ScreenOverlay screenOverlay;
+
+    /**
+     * The seam a loader uses while a foreign screen is up — arbitration and keyboard ownership.
+     *
+     * <p>Lazy, because a host with no screens never asks: the harness drives {@code paintFrame} and
+     * never has a GUI it does not own.</p>
+     */
+    public ScreenOverlay screenOverlay() {
+        if (screenOverlay == null) screenOverlay = new ScreenOverlay(this);
+        return screenOverlay;
+    }
+
+    public boolean isHudMode() {
+        return hudMode;
+    }
+
+    /** Whether anything is pinned — what a host asks to choose between a suspend and a HUD. */
+    public boolean hasPinnedWindows() {
+        if (desktop == null) return false;
+        for (WindowFrame frame : desktop.registry().windows()) {
+            if (frame.isPinned()) return true;
+        }
+        return false;
+    }
+
+    /**
+     * What the compositor should be showing, given what the host has on screen.
+     *
+     * <p>The host answers two booleans it can see and this answers the one thing it cannot: what state
+     * the desktop is actually in. Keeping the decision here rather than at each hook is what removed the
+     * close flicker — @see DesktopPresentation.</p>
+     *
+     * @param ourScreenIsUp  the host's own CrystalGUI screen is the current one
+     * @param anyScreenIsUp  <em>some</em> screen is current, ours or a foreign one. When this is true a
+     *                       cursor exists, which is the whole precondition for interactivity
+     */
+    public DesktopPresentation presentation(boolean ourScreenIsUp, boolean anyScreenIsUp) {
+        if (ourScreenIsUp) return DesktopPresentation.DESKTOP;
+        if (desktop == null || desktop.getParent() == null) return DesktopPresentation.NONE;
+        if (!hasPinnedWindows()) return DesktopPresentation.NONE;
+        return anyScreenIsUp ? DesktopPresentation.OVERLAY : DesktopPresentation.HUD;
+    }
+
+    /**
+     * Paints one frame in {@code presentation} — <b>the one paint entry</b>.
+     *
+     * <p>{@code paintFrame()} and the old {@code paintHudFrame} are the {@code DESKTOP} and {@code HUD}
+     * arms of this. Folding them together is not tidiness: it is what stops two callers each deciding
+     * whether it is their turn, which is what dropped a frame every time the screen closed.</p>
+     *
+     * <p>Three things vary and nothing else does — <b>what</b> is painted (the whole tree, or the window
+     * layer alone), whether the <b>top layer</b> goes with it, and whether <b>input</b> runs. Each is a
+     * question the presentation answers, so a new situation is a new arm rather than a new path.</p>
+     *
+     * <p>The {@code rootTransform} is seeded identically in every arm, which is what makes a pinned
+     * window pixel-identical on the desktop, over a foreign GUI and on the HUD.</p>
+     */
+    public void paint(DesktopPresentation presentation, int screenWidth, int screenHeight) {
+        if (presentation == null || !presentation.paintsAnything()) return;
+        if (!presentation.paintsWholeDesktop() && (desktop == null || desktop.getParent() == null)) return;
+
+        // A HOST-SIZED init, and it must be idempotent: paintFrame() re-passes the size already in
+        // force, so this has to be a no-op rather than a resize. UIWindow.init already early-returns on
+        // unchanged dimensions -- which is why paintFrame can route through here at all.
+        init(screenWidth, screenHeight);
+        advanceFrame();
+        tracePhase("layout");
+
+        CgUiPaintContext paintContext = CgUiPaintContext.getInstance();
+        paintContext.beginFrame(actualScreenWidth, actualScreenHeight);
+        tracePhase("paint context + material bind");
+
+        PoseStack pose = paintContext.getPoseStack();
+        pose.pushPose();
+        // Same matrix RuntimeCache.localToWorld falls back to, so painted and not-yet-painted frames
+        // agree on what uiScale means. Don't inline a scale() here -- that's how the two definitions
+        // drifted before.
+        pose.mulPoseMatrix(rootTransform);
+
+        if (presentation.paintsWholeDesktop()) {
+            ui.rootElement.drawSubtree(paintContext);
+        } else {
+            // THE WINDOW LAYER, not the desktop: the taskbar is chrome for a desktop that is not up, and
+            // a strip listing windows most of which are hidden is not something to put over a game.
+            desktop.windowLayer().drawSubtree(paintContext);
+        }
+        tracePhase("drawSubtree (glyph atlases, icon SVGs)");
+
+        pose.popPose();
+
+        if (presentation.paintsTopLayer()) topLayer.paint(paintContext, pose, rootTransform);
+
+        paintContext.endFrame();
+
+        if (presentation.isInteractive()) {
+            inputHandler.beginFrame();
+            inputHandler.endFrame();
+        }
+        tracePhase("top layer + endFrame");
+        tracedFirstFrame = true;
+    }
+
+
     /**
      * Opens a window on this window's desktop — the one call an application makes.
      *
@@ -808,54 +969,23 @@ public final class UIWindow {
             FrameProfile.mark("layout");
             FrameProfile.count("restyle-passes", 1);
         }
-        // NOT frameEnd(). A frame is not over here -- paintFrame goes on to bind the context, draw the
-        // whole subtree, paint the top layer and dispatch input, and ending the profile at the bottom of
-        // advanceFrame made every one of those INVISIBLE. That is how a reported drop survived three
-        // rounds of fixing things the profile could see. @see #paintFrame
         return deltaSeconds;
     }
 
     /** @see #advanceFrame() */
     private static final int MAX_RESTYLE_PASSES = 4;
 
+    /**
+     * Paints a full desktop frame — the {@link DesktopPresentation#DESKTOP} arm, by its old name.
+     *
+     * <p>Kept because it is what every non-Minecraft host calls and what every test drives: a harness
+     * scene has no {@code GuiScreen} to ask about, so making it answer two booleans to say "draw
+     * everything" would be ceremony. In a host that HAS screens, go through
+     * {@link #paint(DesktopPresentation, int, int)} instead — deciding per call site is the thing that
+     * dropped a frame.</p>
+     */
     public void paintFrame() {
-        advanceFrame();
-        tracePhase("layout");
-
-        CgUiPaintContext paintContext = CgUiPaintContext.getInstance();
-        paintContext.beginFrame(actualScreenWidth, actualScreenHeight);
-        // MATERIALS COMPILE HERE on a first frame -- beginFrame binds gui_quad, which parses and links
-        // it if nothing has yet.
-        tracePhase("paint context + material bind");
-
-        PoseStack pose = paintContext.getPoseStack();
-        pose.pushPose();
-
-        // Same matrix RuntimeCache.localToWorld falls back to, so painted and not-yet-painted
-        // frames agree on what uiScale means. Don't inline a scale() here — that's how the two
-        // definitions drifted before.
-        pose.mulPoseMatrix(rootTransform);
-
-        FrameProfile.mark("gl:begin");
-        ui.rootElement.drawSubtree(paintContext);
-        // FONTS AND ICONS RESOLVE HERE. A glyph atlas is built the first time a string is measured or
-        // drawn, and every SVG is parsed the first time it is asked for.
-        FrameProfile.mark("gl:draw");
-        tracePhase("drawSubtree (glyph atlases, icon SVGs)");
-
-        pose.popPose();
-
-        topLayer.paint(paintContext, pose, rootTransform);
-        FrameProfile.mark("gl:toplayer");
-
-        paintContext.endFrame();
-        FrameProfile.mark("gl:end");
-        inputHandler.beginFrame();
-        inputHandler.endFrame();
-        FrameProfile.mark("input");
-        tracePhase("top layer + endFrame");
-        tracedFirstFrame = true;
-        FrameProfile.frameEnd();
+        paint(DesktopPresentation.DESKTOP, actualScreenWidth, actualScreenHeight);
     }
 
 
@@ -1139,6 +1269,55 @@ public final class UIWindow {
         // no longer a wholesale answer to give. A window-level modal is the same predicate — it blocks
         // everything outside itself — so this one line covers both.
         return isModalBlocked(hit) ? null : hit;
+    }
+
+    /**
+     * The element under {@code (x, y)} <b>if it is something the overlay presentation paints</b>.
+     *
+     * <p><b>Input must accept exactly what paint draws, and this is the one place that can say so.</b>
+     * The overlay draws the window layer AND the top layer, so both are hits — and the first two
+     * versions of the caller each knew about only part of that. It asked for pinned frames (so the
+     * window switcher's freshly-shown window was painted and dead), then for any visible frame (so a
+     * Preferences dialog, a menu, a dropdown or the command palette were painted and dead, because a
+     * promoted element is not a {@code WindowFrame} at all).</p>
+     *
+     * <p>Built on {@link #getHoveredElement}, which already tests the top layer first and in reverse
+     * paint order, and already answers {@code null} for a hit a modal blocks. That last part matters
+     * here more than anywhere: a modal dialog over a pinned window must swallow clicks aimed past it
+     * rather than let them fall through to Minecraft.</p>
+     *
+     * <p>The desktop's own chrome is deliberately NOT a hit. The taskbar is still attached in this
+     * presentation and nobody is painting it, so a click at the bottom of the screen belongs to the
+     * game.</p>
+     */
+    public @Nullable UIElement overlayHitTest(float x, float y) {
+        UIElement hit = getHoveredElement(x, y);
+        if (hit == null) return null;
+
+        // Promoted into the top layer -- a dialog, a menu, a tooltip, the switcher. The promoted
+        // element ITSELF is a legitimate hit, so this matches at depth zero.
+        for (UIElement promoted : topLayer.elements()) {
+            for (UIElement walk = hit; walk != null; walk = walk.getParent()) {
+                if (walk == promoted) return hit;
+            }
+        }
+
+        // Or INSIDE A WINDOW -- and "inside a window" is not the same as "somewhere under the window
+        // layer", which is what the previous version asked and is why it swallowed every click on the
+        // screen. The layer is full-size (its box IS the work area) and nothing turns its hit-testing
+        // off, so getHoveredElement answers with the LAYER for any point not over a window. Matching
+        // that made the whole screen ours: Minecraft's own Game Menu buttons stopped responding, because
+        // every press was being consumed before it could be forwarded.
+        //
+        // Asking for a WindowFrame in the chain is the precise question. It excludes the bare layer, and
+        // it excludes the taskbar for free -- which is desktop chrome this presentation does not paint,
+        // so a click at the bottom of the screen belongs to the game.
+        UIElement layer = desktop == null ? null : desktop.windowLayer();
+        for (UIElement walk = hit; walk != null; walk = walk.getParent()) {
+            if (walk instanceof WindowFrame) return hit;
+            if (walk == layer) return null;
+        }
+        return null;
     }
 
     // ── Modality ────────────────────────────────────────────────────────────

@@ -566,6 +566,45 @@ that also has an error is red *and* keeps its `M`, where taking the heaviest who
 facts the row was asked to show. Decorations bubble to ancestor folders, which is what makes a collapsed
 tree useful, and a bubbled one keeps the colour and drops the badge.
 
+### The brand mark: `crystalgui:logo`
+
+`ui/icons/logo.svg` is the CrystalGraphics / CrystalGUI mark — original artwork, nothing owed. **A
+crystal cluster**: three hexagonal prisms fanning from one base, each drawn as its three visible faces
+(a bright front, two darker sides, every face pointed top and bottom) — a cyan→blue main shard, a
+fuchsia→violet one leaning left, a small pink one at the right. Flat and hard-edged, no tile: the
+silhouette is the icon, as it is for every product icon in the taskbars this sits beside.
+
+It took four rounds to get there, and the rejects are worth a line each because they say what the mark
+is *not*: a bevelled, ten-facet C read as blocky; a plain round gradient C read as generic; a black
+square with a mono C over rotated gradient shards was a good icon and unmistakably JetBrains'. What
+survived every round was the palette (cyan/blue, fuchsia/violet, a pink accent) and the first-round
+observation that the literal crystals were the part that looked like *us* — so the final mark is that
+palette on that object, and no letter.
+
+Four rules it is authored under, each because the renderer made it so:
+
+1. **Filled polygons and gradients only.** Every face is a `<polygon>` with its own two- or three-stop
+   `linearGradient`. No strokes — a stroke has no gradient here and its joins are whatever cap the
+   segments carry.
+2. **No `currentColor` anywhere**, and that is load-bearing rather than incidental: it is what
+   `SvgDocument.usesCurrentColor()` reads to tell `WindowIcon` this is artwork that *is* a tile, not a
+   chrome mark that needs one put under it.
+3. **One shard, placed three times through `<g transform="translate() rotate() scale()">`.** That
+   depends on `SvgTransform.parse` composing a list rightmost-first, as the spec says — it composed
+   leftmost-first for as long as it existed, and no shipped icon had chained two functions to notice. An
+   earlier draft placed a part with `translate scale translate` and it vanished off-canvas. Fixed and
+   pinned by `SvgTransformOrderTest`; the cluster is the first shipped artwork to rely on it.
+4. **Arcs are sampled per quarter turn.** Found while a round C was a candidate: `SvgPath.arc` gave
+   every arc the same `steps` regardless of sweep, so a rounded corner and a 296° letterform got eight
+   segments each at tile size — one smooth, one an octagon. Normalised on the quarter (a corner is
+   unchanged; a long arc gets what its length needs), which also fixes every `<circle>` drawn small.
+
+**The renderer's own tessellation is the reference, not a browser's.** Every candidate was judged from
+PNGs rasterised over `SvgDocument.ops()` — per-triangle ramps evaluated exactly as the fragment stage
+does — at 12, 14, 18, 24, 28 and 36 device pixels, the taskbar, preview, switcher and title-bar slots at
+both `uiScale`s, each parsed at the LOD tier the engine draws that size at. The IntelliJ icon itself
+rendered through the same path as a control, and came out right.
+
 Nothing registers a provider yet, so the feature costs nothing until something does. **E16 (dirty state)
 is the first real consumer** — it is a `FileDecorationProvider` returning `decoration-dirty` for whatever
 `WorkingCopies` reports modified, which is now a class rather than a change to the row renderer. That is

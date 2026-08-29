@@ -38,6 +38,7 @@ public final class DesktopCommands {
     public static final String SWITCH_WINDOW = "desktop.switchWindow";
     public static final String SWITCH_WINDOW_BACK = "desktop.switchWindowBack";
     public static final String SHOW_DESKTOP = "desktop.showDesktop";
+    public static final String TASKBAR_DESIGNER = "desktop.taskbarDesigner";
 
     private static boolean registered;
 
@@ -76,6 +77,27 @@ public final class DesktopCommands {
         // registered, enabled, working, and findable by nobody, which was reported as the feature not
         // existing. The taskbar's own context menu is where Windows puts it and where somebody looking
         // for it would look.
+        // A DESIGN TOOL, and it ships behind a menu entry as well as a chord for the reason SHOW_DESKTOP
+        // records below: a command reachable only from the palette is a command findable by nobody. The
+        // strip's own context menu is where somebody tuning the strip would look.
+        //
+        // It TOGGLES on its key rather than opening a second one, because two designers would fight for
+        // the same IMPORTANT slots on the same island and the loser's sliders would silently stop doing
+        // anything -- which reads as the tool being broken rather than as there being two of it.
+        registry.register(Command.of(TASKBAR_DESIGNER, "Design Taskbar…")
+                .binding("Mod+Alt+T")
+                .menu(MenuId.TASKBAR_CONTEXT, "9_design", 10)
+                .run(context -> {
+                    Desktop desktop = desktopFor(context);
+                    if (desktop == null) return;
+                    UIWindow window = desktop.getAttachedWindow();
+                    if (window == null) return;
+                    WindowFrame existing = desktop.registry().byKey("taskbar-designer");
+                    if (existing != null) existing.requestClose();
+                    else TaskbarDesigner.open(window);
+                })
+                .enabledWhen(context -> desktopFor(context) != null));
+
         registry.register(Command.of(SHOW_DESKTOP, "Show Desktop")
                 .menu(MenuId.TASKBAR_CONTEXT, "1_desktop", 10)
                 // AND ON THE DESKTOP ITSELF, which is where Windows also puts it and the only

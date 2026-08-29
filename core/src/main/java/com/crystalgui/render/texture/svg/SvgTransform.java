@@ -77,7 +77,15 @@ public record SvgTransform(float a, float b, float c, float d, float e, float f)
     }
 
     /**
-     * Parses a {@code transform} attribute — a whitespace-separated list, applied left to right.
+     * Parses a {@code transform} attribute — a whitespace-separated list whose <b>rightmost</b> function
+     * reaches the point first.
+     *
+     * <p>That is the spec's matrix product: {@code translate(a) scale(b)} is {@code T·S}, and a point is
+     * {@code T(S(p))} — scaled, then moved. It used to be read the other way round, applying the LEFTMOST
+     * first, and nothing in the shipped set could tell: every icon in it carries at most one function.
+     * The idiom that can tell is scaling about a point — {@code translate(36 32) scale(0.42)
+     * translate(-32 -32)}, which is what Illustrator and Inkscape write for a nested group — and read
+     * leftmost-first it put the group at {@code (-3, -5)}, off the canvas, with nothing to say why.</p>
      *
      * <p>{@code translate}, {@code scale}, {@code rotate} (with and without a centre), {@code matrix},
      * {@code skewX} and {@code skewY}. That is the whole of SVG's transform vocabulary.</p>
@@ -101,7 +109,8 @@ public record SvgTransform(float a, float b, float c, float d, float e, float f)
             name = name.substring(nameStart);
 
             float[] args = numbers(raw.substring(open + 1, close));
-            result = result.then(build(name, args));
+            // This function is applied BEFORE everything already parsed to its left -- see the javadoc.
+            result = build(name, args).then(result);
             at = close + 1;
         }
         return result;

@@ -91,8 +91,20 @@ public class DesktopActivationTest extends UiTestBase {
     }
 
     /** A point inside a frame's title bar — the chrome, not its content. */
+    /**
+     * Presses the caption's <b>drag area</b> — deliberately not its centre.
+     *
+     * <p>These windows are 160px wide and the controls are 20px each, so the centre of the title bar is
+     * 80px in and the controls start at 80: pressing the centre landed on the leftmost CONTROL the
+     * moment a fourth one was added, and the test then failed reporting that focus went to the wrong
+     * Button — true, and nothing to do with activation. The gesture these tests mean is "press the bar
+     * where you would drag it", so press a quarter across, which is background for any caption that has
+     * room to be dragged at all.</p>
+     */
     private void pressTitleBarOf(WindowFrame frame) {
-        pressCentreOf(frame.titleBar());
+        UIElement bar = frame.titleBar();
+        press(bar.getRuntimeCache().getX() + bar.getRuntimeCache().getWidth() * 0.25f,
+                bar.getRuntimeCache().getY() + bar.getRuntimeCache().getHeight() / 2f);
     }
 
     private int zOf(WindowFrame frame) {
