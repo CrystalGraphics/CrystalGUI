@@ -563,23 +563,6 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
 
     // ── The CLIENT half ─────────────────────────────────────────────────────
 
-    /**
-     * Listeners on this panel's own widgets. <b>Every bind</b> — at mount and after a re-describe.
-     *
-     * <p>These are the other thing a client may do: {@code attachListener} on a widget it was handed,
-     * with the listener staying <b>entirely local</b>. Nothing about it crosses the wire, the server
-     * never learns it exists, and the description is unchanged. The button cannot tell the difference
-     * between this and a server-wired one, and neither can the stylesheet.</p>
-     */
-    @Override
-    public void bindWidgets() {
-        askStats.attachListener(this::requestStats);
-        heartbeat.attachListener(this::sendHeartbeat);
-        // Deliberately blank -- the server refuses it, which is the only way to watch the error
-        // callback fire. See the machine/rename handler above.
-        badRename.attachListener(() -> rename("   "));
-        showEngine.attachListener(this::toggleEngine);
-    }
 
     /**
      * Opens and closes the engine section — <b>and this is the whole of it, on the client, in
@@ -616,6 +599,17 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
      */
     @Override
     public void client(ClientScope io) {
+        // ── the tree, every bind ────────────────────────────────────────────
+        askStats.attachListener(this::requestStats);
+        heartbeat.attachListener(this::sendHeartbeat);
+        // Deliberately blank -- the server refuses it, which is the only way to watch the error
+        // callback fire. See the machine/rename handler above.
+        badRename.attachListener(() -> rename("   "));
+        showEngine.attachListener(this::toggleEngine);
+    
+
+        // ── wire methods ───────────────────────────────────────────────────
+
         this.io = io;
 
         /*

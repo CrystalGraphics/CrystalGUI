@@ -184,27 +184,30 @@ public interface Networked<M> {
     }
 
     /**
-     * The panel was just bound to a tree — <b>client side, at mount and again after every
-     * re-describe</b>. Attach listeners to this panel's own widgets here.
+     * <b>The client half of the panel</b> — widget listeners, wire methods, anything local.
      *
-     * <p>Widget listeners belong here and nowhere else, because they die with the tree that carried
-     * them: a re-describe replaces the panel wholesale, so anything attached to the old widgets went
-     * with them. Nothing here touches the wire — that is {@link #client}'s job.</p>
-     */
-    default void bindWidgets() {
-    }
-
-    /**
-     * Registers what this panel answers <b>on the wire, on the client</b>. Once, at mount.
+     * <p>Runs <b>every time this panel's tree is built</b>, which is:</p>
      *
-     * <p>Separate from {@link #bound()} because the two have different lifetimes and the difference is
-     * not cosmetic: a session registration is keyed by <em>method</em>, so running it twice is not a
-     * duplicate listener but a <b>{@code MessageRouter} refusal</b>. Widget listeners are the opposite
-     * and must run every time.</p>
+     * <ul>
+     *   <li>when the window is first shown, and</li>
+     *   <li>again whenever the server changes the tree's shape and re-describes it.</li>
+     * </ul>
      *
-     * <p>The scope mirrors the server's: a nested panel's methods are qualified by the same id path on
-     * both sides, so the two halves of {@code "engines/save"} agree by construction. May freely name
-     * client-only types: this is a method body. @see Networked</p>
+     * <p>Each of those hands you a <b>new panel instance over a new tree</b>, so write everything here
+     * and write it as though nothing had been set up before — because on this instance, nothing has.
+     * A listener attached to a widget from a previous build would be attached to a widget that is no
+     * longer on screen.</p>
+     *
+     * <p>Registering the same wire method again is fine: it replaces the previous handler rather than
+     * failing.</p>
+     *
+     * <pre>{@code
+     * @Override
+     * public void client(ClientScope io) {
+     *     purge.onPressed.connect(() -> flash());          // a widget listener
+     *     io.onNotify("machine/announce", payload -> …);   // a wire method
+     * }
+     * }</pre>
      */
     default void client(ClientScope io) {
     }

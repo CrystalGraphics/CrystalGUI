@@ -393,8 +393,7 @@ void serve(FurnaceData model, ServerScope)  // server — has one
 void tick(FurnaceData model)                // server — has one (and is usually EMPTY: see
                                             // projections, above)
 
-void bindWidgets()                          // client — no model, and there never was one
-void client(ClientScope io)                 // client — likewise
+void client(ClientScope io)                 // client — no model, and there never was one
 ```
 
 The client is showing a *picture* of your furnace, assembled from the description and kept up to date
@@ -474,12 +473,11 @@ second `open` brings the existing window forward instead of building another.
 |---|---|---|
 | `build(model)` | server, once | structure — `addChild`, rows, classes |
 | `serve(model, io)` | server, once | what the UI *does* |
-| `tick(model)` | server, per world tick | copy the model into the widgets |
+| `tick(model)` | server, per world tick | logic of your own; usually omitted — the screen is kept up to date by [projections](#keeping-the-screen-up-to-date--projections) |
 | `stillValid(model, viewer)` | server, per tick | `false` closes the window (player walked away) |
 | `title(model)` / `key(model)` | server | what to call it; `key` makes re-opening bring the existing window forward |
-| `bindWidgets()` | client, on mount **and after every re-describe** | widget listeners |
-| `client(io)` | client, once | wire methods |
-| `closed(CloseReason)` | both | teardown — **the same reason on both sides** since M3 |
+| `client(io)` | client, on mount **and again after every re-describe** | widget listeners, wire methods |
+| `closed(CloseReason)` | both | teardown — the same reason on both sides |
 
 Two rules that save real debugging:
 
@@ -488,9 +486,9 @@ Two rules that save real debugging:
   for logic of your own, and most panels leave it out entirely. (Earlier versions of this guide taught
   the copy-it-every-tick shape; it works and it is a list you can forget to add a field to, which fails
   by looking correct.)
-- **Widget listeners go in `bindWidgets()`, not `client(io)`.** A re-describe replaces the tree, so
-  listeners attached once would be attached to widgets that no longer exist. `bindWidgets()` runs again;
-  `client(io)` does not.
+- **Everything client-side goes in `client(io)`**, and it runs again each time the server re-describes
+  the tree. Each run hands you a new panel over a new tree, so set everything up every time — a
+  listener from a previous build is attached to a widget that is no longer on screen.
 
 ### Why fields become widgets
 
@@ -506,7 +504,7 @@ runs.
 
 **Fields are the exception, and it is not a style rule.** A field's type resolves when the class
 loads, so a panel with a field of a client-only type fails to load on a dedicated server — the whole
-class, not just that field. Keep client-only things inside `client(io)` and `bindWidgets()`.
+class, not just that field. Keep client-only things inside `client(io)`.
 
 ---
 
@@ -745,9 +743,8 @@ window.close("the block was broken");           // server
 ```
 
 The user pressing the X reaches `closed(CloseReason)` on both sides, with the same value in it —
-`SERVER`, `CLIENT`, `NOT_VALID` or `CONNECTION_LOST`. (It used to be a `String` and the two sides
-disagreed about what was in it: the server got the reason's name, the client got the wire's
-human-readable detail. A teardown that branched on it worked on exactly one side.) Give the panel a `key` and re-opening
+`SERVER`, `CLIENT`, `NOT_VALID` or `CONNECTION_LOST` — the same value on both, so a teardown can
+branch on it and behave the same way wherever it runs. Give the panel a `key` and re-opening
 brings the existing window forward — keeping its scroll position and anything half-typed in it —
 instead of building a new one.
 
@@ -948,9 +945,9 @@ public static final UiType<MyPanel, MyModel> TYPE = UiType.of("mymod:thing", MyP
 
 build(m)       → addChild(...)                       server, once
 serve(m, io)   → io.on(widget, Widget.EVENT, ...)    server, once
-tick(m)        → widget.setX(m.getX())               server, per tick
-bindWidgets()  → widget.attachListener(...)          client, every describe
-client(io)     → io.onCall / io.onNotify             client, once
+io.project(w, State, m::get)                         server, stated once, kept true
+client(io)     → widget.attachListener(...)          client, on mount AND
+               → io.onCall / io.onNotify                     every re-describe
 
 ServerWindows.of(connection).open(TYPE, model);
 
@@ -967,5 +964,5 @@ l.flexDirection(FlexDirection.ROW).gapAll(8)     // a row
 | A panel is zero-high | missing `height(0).flexGrow(1)` — `flex-shrink` is `0` here |
 | One widget never updates while the rest do | no projection for it — check `autoProject`'s log, it names what it could not wire |
 | Nothing on screen ever updates | no projections at all, or you wrote a `tick` that copies and expected the engine to call something else |
-| Listeners stop working after an update | they were attached in `client(io)` instead of `bindWidgets()` |
+| Listeners stop working after an update | they were attached somewhere other than `client(io)`, which is the only thing re-run when the tree is rebuilt |
 | A widget arrives blank over the wire | it has no contract — see §10 |

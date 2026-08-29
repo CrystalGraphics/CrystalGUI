@@ -745,12 +745,8 @@ public class WindowLifecycleTest {
         }
 
         @Override
-        public void bindWidgets() {
-            bounds.incrementAndGet();
-        }
-
-        @Override
         public void client(ClientScope io) {
+            bounds.incrementAndGet();
             net = io;
         }
 
@@ -802,7 +798,7 @@ public class WindowLifecycleTest {
         }
 
         @Override
-        public void bindWidgets() {
+        public void client(ClientScope io) {
             bounds.incrementAndGet();
         }
     }
@@ -869,12 +865,8 @@ public class WindowLifecycleTest {
         }
 
         @Override
-        public void bindWidgets() {
-            bounds.incrementAndGet();
-        }
-
-        @Override
         public void client(ClientScope io) {
+            bounds.incrementAndGet();
             net = io;
         }
     }

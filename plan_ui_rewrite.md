@@ -314,44 +314,26 @@ back with its instances; an idle window is silent; the mutation-checked count te
 | **Rate policy applied** | declared since M1, read by nothing until now |
 | Per-connection refusal counter | per VIEWER, with a threshold that stops that viewer and not the window |
 
-#### The finding that changed the spec: `bound()` and `client()` must not merge
+#### The merge D9 asked for, and what had to be fixed first
 
-D9 asked for `bound()` + `client(io)` to become one `client(io)`. **They answer different questions and
-the merge is unsound in both directions**, which is only visible from how they are invoked
-(`ClientWindows.bindPanels`): `bound()` runs on **every** bind — mount and every re-describe — while
-`client(io)` runs on `firstMount` alone.
+`bound()` and `client(io)` are now **one `client(io)`**, run on every bind. The first attempt declined
+the merge as unsound in both directions, and that reading was half right and stopped too early:
 
-- Run the merged hook **once** and widget listeners are not re-attached after a re-describe, which is
-  the precise bug `bound()` exists to prevent: a delta replaces the tree and every listener is left on
-  widgets that no longer exist.
-- Run it **every time** and wire methods are registered again, which `MessageRouter` refuses outright —
-  correctly, since a duplicate handler is one registration reaching inside another.
+- Run once and widget listeners are not re-attached after a re-describe.
+- Run every time and wire methods re-register, which `MessageRouter` refuses.
 
-Making it work would mean idempotent registration on `ClientScope`, i.e. weakening the duplicate refusal
-that exists to catch exactly that mistake. The two hooks are kept, and the naming should say what they
-are for rather than merging them: the useful half of D9 is that `bound()` is badly named for "re-attach
-what the tree replaced".
+Both true, and the conclusion — keep two hooks — was wrong, because **the status quo was already
+broken**. `ClientWindows` said so in a comment: a re-describe builds *fresh panel instances*, so
+handlers registered by the previous instance close over a panel that is now detached. They run, they
+write widgets nothing draws, and nothing reports it. That was a recorded gap in `plan_ui_host.md`
+worked around with a comment rather than fixed, and it is exactly what the merge exists to close.
 
-#### The authoring rename (D9), as far as it is sound
-
-`layout(M)` → **`build(M)`**, and `bound()` → **`bindWidgets()`** — which is the useful half of the
-merge D9 asked for. The two hooks stay two, because they run at different times and always did; what
-was wrong was that `bound()` named a state rather than a job, so nothing about it said *"attach your
-widget listeners here, again, every time the tree is replaced"*. `bindWidgets()` does, and reads as the
-counterpart to `client(io)`'s once.
-
-`closed(String)` → **`closed(CloseReason)`**, and this one fixed a real inconsistency rather than a
-name. The old javadoc admitted it outright: the server was handed a reason NAME and the client "the
-detail string the wire carried", so the same panel class asked the same question got `"NOT_VALID"` on
-one side and `"no longer valid"` on the other — and a teardown that branched on it worked on exactly
-one of them. `CloseReason` is top-level in `net.window` now (a client naming a server class to hear
-about its own teardown is backwards), the close message carries a machine-readable **code** beside the
-human-readable detail, and `CloseReason.parse` answers `UNKNOWN` rather than throwing across a version
-gap — a window ending is not the moment to fail.
-
-**Both halves travel, because two consumers want different ones and neither is wrong**: a PANEL
-branches on the code, a HOST shows the detail. *"The block was broken"* is what a player should read,
-and `SERVER` is not.
+The obstacle was the router refusal, and registrations do not have to *persist* — they have to be
+*replaceable*. `ClientUiSession` now routes each wire method once and dispatches through a swappable
+delegate, so re-running replaces the handler. **That is not a weakening of the duplicate rule**, which
+exists to catch two different owners colliding on one name: within one session a repeated qualified
+method is by construction the same panel rebinding itself, since nested panels are prefixed by ids
+`ServerScope.attach` keeps unique.
 
 #### Also deferred, with the reason
 

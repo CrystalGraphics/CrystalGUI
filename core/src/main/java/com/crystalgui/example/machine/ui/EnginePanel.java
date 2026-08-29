@@ -215,14 +215,16 @@ public final class EnginePanel extends UIElement implements Networked<EngineMode
 
     // ── The CLIENT half ─────────────────────────────────────────────────────
 
-    @Override
-    public void client(ClientScope io) {
-        this.io = io;
-        clientWire.setText(io.qualify("tune"));
-    }
 
     @Override
-    public void bindWidgets() {
+    public void client(ClientScope io) {
+        // ── the tree, every bind ────────────────────────────────────────────
+        this.io = io;
+        clientWire.setText(io.qualify("tune"));
+    
+
+        // ── wire methods ───────────────────────────────────────────────────
+
         tune.attachListener(this::tuneToFull);
     }
 
