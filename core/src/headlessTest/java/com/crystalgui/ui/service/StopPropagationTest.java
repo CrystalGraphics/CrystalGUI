@@ -7,8 +7,8 @@ import static com.crystalgui.ui.service.ServiceFixtures.press;
 import static org.junit.Assert.assertEquals;
 
 import com.crystalgui.core.data.ReadOnlyVec2f;
-import com.crystalgui.ui.dom.Document;
-import com.crystalgui.ui.dom.Node;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.event.PropagationPhase;
 import java.util.ArrayList;
@@ -36,9 +36,9 @@ public class StopPropagationTest {
 
     @Test
     public void stopPropagationEndsTheWalkAndNotTheNodesOwnListeners() {
-        Document document = new Document();
-        Node parent = at("parent", 0, 0, 200, 200);
-        Node child = at("child", 10, 10, 100, 100);
+        UIDocument document = new UIDocument();
+        UINode parent = at("parent", 0, 0, 200, 200);
+        UINode child = at("child", 10, 10, 100, 100);
         parent.append(child);
         document.append(parent);
         frame(document);
@@ -60,9 +60,9 @@ public class StopPropagationTest {
 
     @Test
     public void stopImmediatePropagationIsWhatEndsThem() {
-        Document document = new Document();
-        Node parent = at("parent", 0, 0, 200, 200);
-        Node child = at("child", 10, 10, 100, 100);
+        UIDocument document = new UIDocument();
+        UINode parent = at("parent", 0, 0, 200, 200);
+        UINode child = at("child", 10, 10, 100, 100);
         parent.append(child);
         document.append(parent);
         frame(document);
@@ -85,7 +85,7 @@ public class StopPropagationTest {
     public void theOldDispatcherConflatesThem() {
         // The counter-assertion, driven through the OLD emit path on the same shared group: without
         // it, "the new one is right" is a claim about one implementation rather than a difference.
-        Node node = at("node", 0, 0, 100, 100);
+        UINode node = at("node", 0, 0, 100, 100);
         List<String> log = new ArrayList<>();
         on(node, MouseEvent.Down.class, (n, e) -> {
             log.add("first");
@@ -102,9 +102,9 @@ public class StopPropagationTest {
 
     @Test
     public void aCapturingAncestorCanStopAnEventBeforeItsTarget() {
-        Document document = new Document();
-        Node parent = at("parent", 0, 0, 200, 200);
-        Node child = at("child", 10, 10, 100, 100);
+        UIDocument document = new UIDocument();
+        UINode parent = at("parent", 0, 0, 200, 200);
+        UINode child = at("child", 10, 10, 100, 100);
         parent.append(child);
         document.append(parent);
         frame(document);

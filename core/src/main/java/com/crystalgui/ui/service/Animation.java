@@ -1,7 +1,8 @@
 package com.crystalgui.ui.service;
 
 import com.crystalgui.style.easing.Easing;
-import com.crystalgui.ui.dom.Node;
+import com.crystalgui.ui.dom.UINode;
+
 import java.util.ArrayList;
 import java.util.List;
 import javax.annotation.Nullable;
@@ -108,7 +109,7 @@ public final class Animation {
         }
     }
 
-    private record OwnedHook(Node owner, Hook hook) {
+    private record OwnedHook(UINode owner, Hook hook) {
     }
 
     private final List<Timeline> timelines = new ArrayList<>();
@@ -138,7 +139,7 @@ public final class Animation {
      * keeps compiling". Ownership makes that structural: hiding is freezing, and freezing drops the
      * hooks.</p>
      */
-    public void every(Node owner, Hook hook) {
+    public void every(UINode owner, Hook hook) {
         hooks.add(new OwnedHook(owner, hook));
     }
 
@@ -159,7 +160,7 @@ public final class Animation {
     }
 
     /** Drops the hooks a subtree owns — the lifecycle service, freezing or destroying it. */
-    public void forget(Node node) {
-        hooks.removeIf(owned -> Node.isShadowIncludingInclusiveAncestor(node, owned.owner()));
+    public void forget(UINode node) {
+        hooks.removeIf(owned -> UINode.isShadowIncludingInclusiveAncestor(node, owned.owner()));
     }
 }

@@ -15,7 +15,7 @@ import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.BoxOrigin;
 import com.crystalgui.style.property.visual.border.BorderRadiusProperties;
 import com.crystalgui.style.property.visual.border.LengthPercent;
-import com.crystalgui.ui.dom.Node;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgraphics.api.PoseStack;
 import dev.vfyjxf.taffy.geometry.FloatRect;
 import javax.annotation.Nullable;
@@ -33,8 +33,8 @@ import org.joml.Matrix4f;
  * (the surface's {@code uiScale}), and a thumbnail is a second box with a second matrix (5.4).</p>
  *
  * <p>The box model is the painter's: background (fill and border together, under the children as
- * CSS stacks them), then the node's {@link Node#paintContent content}, the children, the node's
- * {@link Node#paintDecoration decoration}, {@code overlay}, and {@code outline} last. A fractional
+ * CSS stacks them), then the node's {@link UINode#paintContent content}, the children, the node's
+ * {@link UINode#paintDecoration decoration}, {@code overlay}, and {@code outline} last. A fractional
  * {@code opacity} or a rounded {@code overflow: hidden} routes the whole box through the paint
  * context's layer-FBO path exactly as before; a square clip is a scissor. The drawables, the SDF
  * rounded rect and the compositing are the backend's and unchanged — this class only decides what
@@ -58,7 +58,7 @@ public final class BoxPainter {
     private static void paintBox(Box box, CgUiPaintContext ctx, Matrix4f base) {
         float opacity = box.opacity();
         if (opacity <= 0f) return;
-        Node node = box.node();
+        UINode node = box.node();
         ComputedStyle style = node.computedStyle();
         PoseStack pose = ctx.getPoseStack();
         pose.pushPose();

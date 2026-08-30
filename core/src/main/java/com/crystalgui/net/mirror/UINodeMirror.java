@@ -3,8 +3,9 @@ package com.crystalgui.net.mirror;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.Node;
-import com.crystalgui.ui.dom.NodeRegistry;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UINodeRegistry;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -14,7 +15,7 @@ import java.util.function.ToIntFunction;
 import javax.annotation.Nullable;
 
 /**
- * {@link NodeMirror} over the new engine's {@link Node} tree — the second engine's whole networking
+ * {@link NodeMirror} over the new engine's {@link UINode} tree — the second engine's whole networking
  * half, beside {@link ElementNodeMirror}'s for the first.
  *
  * <p>A node is described as its {@link Name}, its id, its classes, every attribute something set that
@@ -28,7 +29,7 @@ import javax.annotation.Nullable;
  *
  * @param <T> the serialization form
  */
-public final class DomNodeMirror<T> implements NodeMirror<Node, T> {
+public final class UINodeMirror<T> implements NodeMirror<UINode, T> {
 
     private static final String NAME = "n";
     private static final String ID = "i";
@@ -39,23 +40,23 @@ public final class DomNodeMirror<T> implements NodeMirror<Node, T> {
 
     private final DynamicOps<T> ops;
 
-    public DomNodeMirror(DynamicOps<T> ops) {
+    public UINodeMirror(DynamicOps<T> ops) {
         this.ops = ops;
     }
 
     // ── Descriptions ─────────────────────────────────────────────────────────
 
     @Override
-    public T describe(Node node) {
+    public T describe(UINode node) {
         return write(node, null);
     }
 
     @Override
-    public T describeLive(Node node, ToIntFunction<Node> idOf) {
+    public T describeLive(UINode node, ToIntFunction<UINode> idOf) {
         return write(node, idOf);
     }
 
-    private T write(Node node, @Nullable ToIntFunction<Node> idOf) {
+    private T write(UINode node, @Nullable ToIntFunction<UINode> idOf) {
         Map<T, T> fields = new LinkedHashMap<>();
         fields.put(key(NAME), ops.createString(node.name().toString()));
         if (!node.id().isEmpty()) fields.put(key(ID), ops.createString(node.id()));
@@ -65,27 +66,27 @@ public final class DomNodeMirror<T> implements NodeMirror<Node, T> {
         if (idOf != null) fields.put(key(NID), ops.createNumber(idOf.applyAsInt(node)));
         if (!node.children().isEmpty()) {
             List<T> children = new ArrayList<>(node.children().size());
-            for (Node child : node.children()) children.add(write(child, idOf));
+            for (UINode child : node.children()) children.add(write(child, idOf));
             fields.put(key(CHILDREN), ops.createList(children));
         }
         return ops.createMap(fields);
     }
 
     @Override
-    public Node decode(T described) {
+    public UINode decode(T described) {
         return read(described, null);
     }
 
     @Override
-    public Node decodeLive(T described, ObjIntConsumer<Node> idSink) {
+    public UINode decodeLive(T described, ObjIntConsumer<UINode> idSink) {
         return read(described, idSink);
     }
 
-    private Node read(T described, @Nullable ObjIntConsumer<Node> idSink) {
+    private UINode read(T described, @Nullable ObjIntConsumer<UINode> idSink) {
         Map<T, T> fields = ops.getMapValue(described);
         T name = fields.get(key(NAME));
         if (name == null) throw new IllegalArgumentException("A described node names its kind");
-        Node node = NodeRegistry.create(Name.parse(ops.getStringValue(name)));
+        UINode node = UINodeRegistry.create(Name.parse(ops.getStringValue(name)));
         applyIdentity(fields, node);
         T nid = fields.get(key(NID));
         if (nid != null && idSink != null) idSink.accept(node, ops.getNumberValue(nid).intValue());
@@ -100,19 +101,19 @@ public final class DomNodeMirror<T> implements NodeMirror<Node, T> {
 
     @Override
     @Nullable
-    public T encodeState(Node node) {
+    public T encodeState(UINode node) {
         return null;   // no plain node carries state; M6's widgets do, through their contracts
     }
 
     @Override
-    public void applyState(T value, Node node) {
+    public void applyState(T value, UINode node) {
     }
 
     // ── Attributes (identity) ────────────────────────────────────────────────
 
     @Override
     @Nullable
-    public T encodeAttributes(Node node) {
+    public T encodeAttributes(UINode node) {
         Map<T, T> fields = new LinkedHashMap<>();
         fields.put(key(ID), ops.createString(node.id()));
         fields.put(key(CLASSES), ops.createString(String.join(" ", node.classes())));
@@ -122,12 +123,12 @@ public final class DomNodeMirror<T> implements NodeMirror<Node, T> {
     }
 
     @Override
-    public void applyAttributes(T value, Node node) {
+    public void applyAttributes(T value, UINode node) {
         applyIdentity(ops.getMapValue(value), node);
     }
 
     @Nullable
-    private T attributesOf(Node node) {
+    private T attributesOf(UINode node) {
         Map<T, T> out = null;
         for (Attribute<?> key : node.setAttributes()) {
             if (!key.isCarried()) continue;
@@ -138,12 +139,12 @@ public final class DomNodeMirror<T> implements NodeMirror<Node, T> {
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private static String writeAttribute(Node node, Attribute key) {
+    private static String writeAttribute(UINode node, Attribute key) {
         return key.write(node.get(key));
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private void applyIdentity(Map<T, T> fields, Node node) {
+    private void applyIdentity(Map<T, T> fields, UINode node) {
         T id = fields.get(key(ID));
         if (id != null) node.setId(ops.getStringValue(id));
         T classes = fields.get(key(CLASSES));
@@ -177,23 +178,23 @@ public final class DomNodeMirror<T> implements NodeMirror<Node, T> {
 
     @Override
     @Nullable
-    public T encodeInlineStyle(Node node) {
+    public T encodeInlineStyle(UINode node) {
         return ops.createMap(Map.of());
     }
 
     @Override
-    public void applyInlineStyle(T value, Node node) {
+    public void applyInlineStyle(T value, UINode node) {
     }
 
     // ── Structure ────────────────────────────────────────────────────────────
 
     @Override
-    public void insertChild(Node parent, Node child, int index) {
+    public void insertChild(UINode parent, UINode child, int index) {
         parent.insertAt(index, child);
     }
 
     @Override
-    public void removeChild(Node parent, Node child) {
+    public void removeChild(UINode parent, UINode child) {
         parent.remove(child);
     }
 

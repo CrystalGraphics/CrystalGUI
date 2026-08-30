@@ -15,18 +15,18 @@ import javax.annotation.Nullable;
  * and moving content between two windows becomes moving a node between two slots, with no flag to
  * remember and put back.</p>
  */
-public class Slot extends Node {
+public class UISlot extends UINode {
 
     private String slotName;
-    private final List<Node> assigned = new ArrayList<>();
-    private final List<Node> assignedView = Collections.unmodifiableList(assigned);
+    private final List<UINode> assigned = new ArrayList<>();
+    private final List<UINode> assignedView = Collections.unmodifiableList(assigned);
 
     /** The default slot. */
-    public Slot() {
+    public UISlot() {
         this("");
     }
 
-    public Slot(String slotName) {
+    public UISlot(String slotName) {
         super(Name.SLOT);
         this.slotName = slotName == null ? "" : slotName;
     }
@@ -35,7 +35,7 @@ public class Slot extends Node {
         return slotName;
     }
 
-    public Slot setSlotName(String name) {
+    public UISlot setSlotName(String name) {
         String value = name == null ? "" : name;
         if (value.equals(slotName)) return this;
         slotName = value;
@@ -45,7 +45,7 @@ public class Slot extends Node {
     }
 
     /** The light children of the host assigned here, in the host's order; empty when showing fallback. */
-    public final List<Node> assignedNodes() {
+    public final List<UINode> assignedNodes() {
         ShadowRoot root = containingShadowRoot();
         if (root != null) root.ensureAssigned();
         return assignedView;
@@ -53,8 +53,8 @@ public class Slot extends Node {
 
     /** Assigned nodes, or this slot's own children as fallback. */
     @Override
-    public List<Node> composedChildren() {
-        List<Node> nodes = assignedNodes();
+    public List<UINode> composedChildren() {
+        List<UINode> nodes = assignedNodes();
         return nodes.isEmpty() ? children() : nodes;
     }
 
@@ -66,11 +66,11 @@ public class Slot extends Node {
         assigned.clear();
     }
 
-    void assign(Node node) {
+    void assign(UINode node) {
         assigned.add(node);
     }
 
-    List<Node> assignedSnapshot() {
+    List<UINode> assignedSnapshot() {
         return new ArrayList<>(assigned);
     }
 
@@ -81,7 +81,7 @@ public class Slot extends Node {
 
     /** The slot {@code node} is assigned to, or null — a static so a caller need not know the host. */
     @Nullable
-    public static Slot of(Node node) {
+    public static UISlot of(UINode node) {
         return node.assignedSlot();
     }
 }

@@ -43,17 +43,17 @@ public class EngineBoundaryTest {
      * thing.
      */
     private static final List<String> NEW_DOM_CLASSES = List.of(
-            "com/crystalgui/ui/dom/Node",
-            "com/crystalgui/ui/dom/Document",
+            "com/crystalgui/ui/dom/UINode",
+            "com/crystalgui/ui/dom/UIDocument",
             "com/crystalgui/ui/dom/ShadowRoot",
-            "com/crystalgui/ui/dom/Slot",
+            "com/crystalgui/ui/dom/UISlot",
             "com/crystalgui/ui/dom/Name",
             "com/crystalgui/ui/dom/Attribute",
-            "com/crystalgui/ui/dom/NodeTreeSource",
-            "com/crystalgui/ui/dom/NodeRegistry",
+            "com/crystalgui/ui/dom/UINodeTreeSource",
+            "com/crystalgui/ui/dom/UINodeRegistry",
             // The mirror is written once against the seam and has one implementation per engine;
             // this is the node tree's, beside ElementNodeMirror, and it is new-engine code.
-            "com/crystalgui/net/mirror/DomNodeMirror");
+            "com/crystalgui/net/mirror/UINodeMirror");
 
     /** What the new engine must never name. */
     private static final List<String> OLD_ENGINE = List.of(

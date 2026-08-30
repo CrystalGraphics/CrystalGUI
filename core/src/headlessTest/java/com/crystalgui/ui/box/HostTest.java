@@ -13,8 +13,8 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import com.crystalgui.ui.dom.Document;
-import com.crystalgui.ui.dom.Node;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UINode;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 import java.util.List;
 import org.junit.Test;
@@ -28,9 +28,9 @@ public class HostTest {
 
     @Test
     public void aHostedBoxLaysOutAgainstItsHostAndTheNodeTreeIsUntouched() {
-        Document document = new Document();
-        Node panel = absolute(200, 200, 300, 300);
-        Node popup = absolute(10, 10, 50, 50);
+        UIDocument document = new UIDocument();
+        UINode panel = absolute(200, 200, 300, 300);
+        UINode popup = absolute(10, 10, 50, 50);
         panel.append(popup);
         document.append(panel);
         document.update(800, 600);
@@ -54,11 +54,11 @@ public class HostTest {
 
     @Test
     public void anOwnedWindowIsHostedOnItsOwnersOverlaySlot() {
-        Document document = new Document();
-        Node window = absolute(100, 100, 400, 400);
-        Node overlay = absolute(0, 0, 400, 400);
-        Node content = sized(400, 400);
-        Node dialog = absolute(20, 30, 100, 100);
+        UIDocument document = new UIDocument();
+        UINode window = absolute(100, 100, 400, 400);
+        UINode overlay = absolute(0, 0, 400, 400);
+        UINode content = sized(400, 400);
+        UINode dialog = absolute(20, 30, 100, 100);
         content.append(dialog);
         window.append(content).append(overlay);
         document.append(window);
@@ -75,10 +75,10 @@ public class HostTest {
 
     @Test
     public void twoBoxesHostedOnTheSameHostStackInTheOrderTheyArrived() {
-        Document document = new Document();
-        Node first = absolute(0, 0, 100, 100);
-        Node second = absolute(0, 0, 100, 100);
-        Node holder = sized(800, 600);
+        UIDocument document = new UIDocument();
+        UINode first = absolute(0, 0, 100, 100);
+        UINode second = absolute(0, 0, 100, 100);
+        UINode holder = sized(800, 600);
         holder.append(first).append(second);
         document.append(holder);
         document.update(800, 600);
@@ -92,11 +92,11 @@ public class HostTest {
 
     @Test
     public void aMirrorIsASecondBoxWithItsOwnPlaceInTheHitOrder() {
-        Document document = new Document();
-        Node window = absolute(0, 0, 200, 100);
-        Node label = absolute(10, 10, 20, 20);
+        UIDocument document = new UIDocument();
+        UINode window = absolute(0, 0, 200, 100);
+        UINode label = absolute(10, 10, 20, 20);
         window.append(label);
-        Node strip = absolute(0, 500, 800, 100);
+        UINode strip = absolute(0, 500, 800, 100);
         document.append(window).append(strip);
         document.update(800, 600);
 
@@ -122,9 +122,9 @@ public class HostTest {
 
     @Test
     public void displayNoneHasNoBoxAndNeitherDoesAnythingUnderIt() {
-        Document document = new Document();
-        Node hidden = sized(100, 100);
-        Node inside = sized(10, 10);
+        UIDocument document = new UIDocument();
+        UINode hidden = sized(100, 100);
+        UINode inside = sized(10, 10);
         hidden.append(inside);
         document.append(hidden);
         layout(hidden, l -> l.display(TaffyDisplay.NONE));
@@ -144,10 +144,10 @@ public class HostTest {
 
     @Test
     public void aHostMustBelongToTheSameTree() {
-        Document a = new Document();
-        Document b = new Document();
-        Node inA = sized(10, 10);
-        Node inB = sized(10, 10);
+        UIDocument a = new UIDocument();
+        UIDocument b = new UIDocument();
+        UINode inA = sized(10, 10);
+        UINode inB = sized(10, 10);
         a.append(inA);
         b.append(inB);
         a.update(100, 100);

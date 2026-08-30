@@ -40,12 +40,12 @@ import javax.annotation.Nullable;
  * the mirror is being told about a change that is still being made, and a second change under it
  * would put the edit script out of order.</p>
  */
-public final class Document extends Node {
+public final class UIDocument extends UINode {
 
     @Nullable
     private volatile Thread frameThread;
 
-    private final Map<String, Node> byId = new HashMap<>();
+    private final Map<String, UINode> byId = new HashMap<>();
 
     /** The cascade over this tree. Sheets are installed here, for the whole tree or for a subtree. */
     private final StyleEngine styles = new StyleEngine(this::allNodes);
@@ -67,7 +67,7 @@ public final class Document extends Node {
     @Nullable
     private Lifecycle lifecycle;
 
-    public Document() {
+    public UIDocument() {
         super(Name.DOCUMENT);
         this.document = this;
     }
@@ -75,7 +75,7 @@ public final class Document extends Node {
     // ── The frame thread ─────────────────────────────────────────────────────
 
     /** Claims the current thread as the one that runs frames for this tree. */
-    public Document markFrameThread() {
+    public UIDocument markFrameThread() {
         frameThread = Thread.currentThread();
         return this;
     }
@@ -179,16 +179,16 @@ public final class Document extends Node {
     }
 
     /** Every connected node, light and shadow — what a sheet change has to re-match. */
-    public List<Node> allNodes() {
-        List<Node> out = new ArrayList<>();
+    public List<UINode> allNodes() {
+        List<UINode> out = new ArrayList<>();
         collect(this, out);
         return out;
     }
 
-    private static void collect(Node at, List<Node> into) {
+    private static void collect(UINode at, List<UINode> into) {
         if (at.isFrozen()) return;   // frozen is not live: it matches nothing
         into.add(at);
-        for (Node child : at.children()) collect(child, into);
+        for (UINode child : at.children()) collect(child, into);
         ShadowRoot shadow = at.shadowRoot();
         if (shadow != null) collect(shadow, into);
     }
@@ -197,15 +197,15 @@ public final class Document extends Node {
 
     /** The connected node with this id, or null. The first to claim an id keeps it. */
     @Nullable
-    public Node getElementById(String id) {
+    public UINode getElementById(String id) {
         return byId.get(id);
     }
 
-    void index(Node node) {
+    void index(UINode node) {
         if (!node.id().isEmpty()) byId.putIfAbsent(node.id(), node);
     }
 
-    void unindex(Node node) {
+    void unindex(UINode node) {
         if (!node.id().isEmpty() && byId.get(node.id()) == node) byId.remove(node.id());
     }
 

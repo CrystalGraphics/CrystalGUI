@@ -1,7 +1,7 @@
 package com.crystalgui.ui.service;
 
-import com.crystalgui.ui.dom.Document;
-import com.crystalgui.ui.dom.Node;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UINode;
 
 /**
  * The lifecycle service: freeze, thaw, destroy — and the reason hide-as-detach has no counterpart.
@@ -25,9 +25,9 @@ import com.crystalgui.ui.dom.Node;
  */
 public final class Lifecycle {
 
-    private final Document document;
+    private final UIDocument document;
 
-    public Lifecycle(Document document) {
+    public Lifecycle(UIDocument document) {
         this.document = document;
     }
 
@@ -37,23 +37,23 @@ public final class Lifecycle {
      * <p>The frozen flag is set on the whole composed subtree so every reader — the box tree's sync,
      * the style pass, the focus predicates — can answer with one field read rather than a walk.</p>
      */
-    public void freeze(Node node) {
+    public void freeze(UINode node) {
         if (node.isFrozen()) return;
         document.input().forget(node);
         document.focus().forget(node);
         document.animation().forget(node);
-        for (Node at : node.composedSubtree()) at.setFrozen(true);
+        for (UINode at : node.composedSubtree()) at.setFrozen(true);
         // The structure changed as far as the box tree is concerned: a frozen subtree has no boxes.
         node.markStructureChanged();
-        for (Node at : node.composedSubtree()) at.fireFrozen();
+        for (UINode at : node.composedSubtree()) at.fireFrozen();
     }
 
     /** Brings a frozen subtree back. Its boxes are rebuilt on the next pass. */
-    public void thaw(Node node) {
+    public void thaw(UINode node) {
         if (!node.isFrozen()) return;
-        for (Node at : node.composedSubtree()) at.setFrozen(false);
+        for (UINode at : node.composedSubtree()) at.setFrozen(false);
         node.markStructureChanged();
-        for (Node at : node.composedSubtree()) {
+        for (UINode at : node.composedSubtree()) {
             at.invalidateStyleMatch();
             at.fireThawed();
         }
@@ -65,7 +65,7 @@ public final class Lifecycle {
      * <p>Deliberately not a "close": whether something MAY be destroyed is a policy question its
      * owner answers, and this is what happens once that has been decided.</p>
      */
-    public void destroy(Node node) {
+    public void destroy(UINode node) {
         document.input().forget(node);
         document.focus().forget(node);
         document.animation().forget(node);

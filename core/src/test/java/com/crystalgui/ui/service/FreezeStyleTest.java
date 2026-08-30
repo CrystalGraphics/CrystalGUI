@@ -6,8 +6,8 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
-import com.crystalgui.ui.dom.Document;
-import com.crystalgui.ui.dom.Node;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UINode;
 import org.junit.Test;
 
 /**
@@ -21,9 +21,9 @@ public class FreezeStyleTest extends UiTestBase {
 
     @Test
     public void aFrozenSubtreeMatchesNoSelectorAndCatchesUpOnTheWayBack() {
-        Document document = new Document();
+        UIDocument document = new UIDocument();
         document.styles().addStylesheet(StyleSheet.parse(".lit { opacity: 0.25 }"));
-        Node panel = new Node().setId("panel");
+        UINode panel = new UINode().setId("panel");
         StyleGroup.inlinePipeline(panel.getStyle().getLayoutGroup(), l -> l.width(200f).height(200f));
         document.append(panel);
         document.update(800f, 600f);

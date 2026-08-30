@@ -14,8 +14,8 @@ import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.ui.dom.Attribute;
-import com.crystalgui.ui.dom.Document;
-import com.crystalgui.ui.dom.Node;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.dom.ShadowRoot;
 import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
@@ -33,7 +33,7 @@ import org.junit.Test;
  */
 public class FocusServiceTest {
 
-    private static Node focusable(String id, float x, float y, FocusPolicy policy) {
+    private static UINode focusable(String id, float x, float y, FocusPolicy policy) {
         return at(id, x, y, 60, 30).setFocusPolicy(policy);
     }
 
@@ -41,9 +41,9 @@ public class FocusServiceTest {
 
     @Test
     public void clickNotTabbableIsFullyClickableAndOutOfTheTabRing() {
-        Document document = new Document();
-        Node tab = focusable("tab", 0, 0, FocusPolicy.CLICK_NOT_TABBABLE);
-        Node after = focusable("after", 0, 100, FocusPolicy.CLICK);
+        UIDocument document = new UIDocument();
+        UINode tab = focusable("tab", 0, 0, FocusPolicy.CLICK_NOT_TABBABLE);
+        UINode after = focusable("after", 0, 100, FocusPolicy.CLICK);
         document.append(tab).append(after);
         frame(document);
 
@@ -59,10 +59,10 @@ public class FocusServiceTest {
 
     @Test
     public void focusDelegationAndTabTraversalAskDifferentQuestions() {
-        Document document = new Document();
-        Node scope = at("scope", 0, 0, 400, 300).set(Attribute.FOCUS_SCOPE, true);
-        Node notTabbable = focusable("roving", 10, 10, FocusPolicy.CLICK_NOT_TABBABLE);
-        Node tabbable = focusable("stop", 10, 100, FocusPolicy.CLICK);
+        UIDocument document = new UIDocument();
+        UINode scope = at("scope", 0, 0, 400, 300).set(Attribute.FOCUS_SCOPE, true);
+        UINode notTabbable = focusable("roving", 10, 10, FocusPolicy.CLICK_NOT_TABBABLE);
+        UINode tabbable = focusable("stop", 10, 100, FocusPolicy.CLICK);
         scope.append(notTabbable).append(tabbable);
         document.append(scope);
         frame(document);
@@ -75,10 +75,10 @@ public class FocusServiceTest {
 
     @Test
     public void aContainerThatDelegatesFocusHandsItToWhatIsInside() {
-        Document document = new Document();
-        Node dock = at("dock", 0, 0, 400, 300).setFocusPolicy(FocusPolicy.CLICK);
+        UIDocument document = new UIDocument();
+        UINode dock = at("dock", 0, 0, 400, 300).setFocusPolicy(FocusPolicy.CLICK);
         ShadowRoot shadow = dock.attachShadow(true);
-        Node editor = focusable("editor", 10, 10, FocusPolicy.CLICK);
+        UINode editor = focusable("editor", 10, 10, FocusPolicy.CLICK);
         shadow.append(editor);
         document.append(dock);
         frame(document);
@@ -92,9 +92,9 @@ public class FocusServiceTest {
 
     @Test
     public void aPressFocusesTheNearestAncestorThatTakesFocusOnClick() {
-        Document document = new Document();
-        Node button = focusable("button", 0, 0, FocusPolicy.CLICK);
-        Node label = at("label", 5, 5, 20, 10);
+        UIDocument document = new UIDocument();
+        UINode button = focusable("button", 0, 0, FocusPolicy.CLICK);
+        UINode label = at("label", 5, 5, 20, 10);
         button.append(label);
         document.append(button);
         frame(document);
@@ -106,9 +106,9 @@ public class FocusServiceTest {
 
     @Test
     public void onlyThePrimaryButtonMovesFocus() {
-        Document document = new Document();
-        Node a = focusable("a", 0, 0, FocusPolicy.CLICK);
-        Node b = focusable("b", 0, 100, FocusPolicy.CLICK);
+        UIDocument document = new UIDocument();
+        UINode a = focusable("a", 0, 0, FocusPolicy.CLICK);
+        UINode b = focusable("b", 0, 100, FocusPolicy.CLICK);
         document.append(a).append(b);
         frame(document);
         press(document, 20, 10);
@@ -122,8 +122,8 @@ public class FocusServiceTest {
 
     @Test
     public void aPressOnNothingBlursButAPressAModalAteDoesNot() {
-        Document document = new Document();
-        Node field = focusable("field", 0, 0, FocusPolicy.CLICK);
+        UIDocument document = new UIDocument();
+        UINode field = focusable("field", 0, 0, FocusPolicy.CLICK);
         document.append(field);
         frame(document);
         press(document, 20, 10);
@@ -133,8 +133,8 @@ public class FocusServiceTest {
         assertNull("click empty space and the active element goes away, as a browser does",
                 document.focus().focused());
 
-        Node dialog = at("dialog", 100, 100, 200, 150).set(Attribute.FOCUS_SCOPE, true);
-        Node inside = focusable("inside", 110, 110, FocusPolicy.CLICK);
+        UINode dialog = at("dialog", 100, 100, 200, 150).set(Attribute.FOCUS_SCOPE, true);
+        UINode inside = focusable("inside", 110, 110, FocusPolicy.CLICK);
         dialog.append(inside);
         document.append(dialog);
         frame(document);
@@ -150,8 +150,8 @@ public class FocusServiceTest {
 
     @Test
     public void programmaticAndKeyboardFocusRingAndAClickDoesNot() {
-        Document document = new Document();
-        Node a = focusable("a", 0, 0, FocusPolicy.CLICK);
+        UIDocument document = new UIDocument();
+        UINode a = focusable("a", 0, 0, FocusPolicy.CLICK);
         document.append(a);
         frame(document);
 
@@ -166,8 +166,8 @@ public class FocusServiceTest {
 
     @Test
     public void aFocusedTextInputRingsHoweverItWasFocused() {
-        Document document = new Document();
-        Node field = new Node() {
+        UIDocument document = new UIDocument();
+        UINode field = new UINode() {
             @Override
             public boolean consumesTextInput() {
                 return true;
@@ -187,9 +187,9 @@ public class FocusServiceTest {
 
     @Test
     public void everyAncestorOfTheFocusOwnerIsFocusWithin() {
-        Document document = new Document();
-        Node panel = at("panel", 0, 0, 300, 200);
-        Node control = focusable("control", 10, 10, FocusPolicy.CLICK);
+        UIDocument document = new UIDocument();
+        UINode panel = at("panel", 0, 0, 300, 200);
+        UINode control = focusable("control", 10, 10, FocusPolicy.CLICK);
         panel.append(control);
         document.append(panel);
         frame(document);
@@ -207,16 +207,16 @@ public class FocusServiceTest {
 
     @Test
     public void aModalMakesItsOwnScopeInertAndLeavesOtherScopesAlone() {
-        Document document = new Document();
-        Node windowA = at("a", 0, 0, 300, 300).set(Attribute.FOCUS_SCOPE, true);
-        Node contentA = focusable("content-a", 10, 10, FocusPolicy.CLICK);
-        Node dialogA = at("dialog-a", 20, 20, 200, 150).set(Attribute.FOCUS_SCOPE, true);
-        Node inDialog = focusable("in-dialog", 30, 30, FocusPolicy.CLICK);
+        UIDocument document = new UIDocument();
+        UINode windowA = at("a", 0, 0, 300, 300).set(Attribute.FOCUS_SCOPE, true);
+        UINode contentA = focusable("content-a", 10, 10, FocusPolicy.CLICK);
+        UINode dialogA = at("dialog-a", 20, 20, 200, 150).set(Attribute.FOCUS_SCOPE, true);
+        UINode inDialog = focusable("in-dialog", 30, 30, FocusPolicy.CLICK);
         dialogA.append(inDialog);
         windowA.append(contentA).append(dialogA);
 
-        Node windowB = at("b", 400, 0, 300, 300).set(Attribute.FOCUS_SCOPE, true);
-        Node contentB = focusable("content-b", 410, 10, FocusPolicy.CLICK);
+        UINode windowB = at("b", 400, 0, 300, 300).set(Attribute.FOCUS_SCOPE, true);
+        UINode contentB = focusable("content-b", 410, 10, FocusPolicy.CLICK);
         windowB.append(contentB);
         document.append(windowA).append(windowB);
         frame(document);
@@ -237,11 +237,11 @@ public class FocusServiceTest {
 
     @Test
     public void tabIsTrappedInsideTheModalOverTheFocusedScope() {
-        Document document = new Document();
-        Node content = focusable("content", 0, 0, FocusPolicy.CLICK);
-        Node dialog = at("dialog", 100, 100, 200, 150).set(Attribute.FOCUS_SCOPE, true);
-        Node first = focusable("first", 110, 110, FocusPolicy.CLICK);
-        Node second = focusable("second", 110, 150, FocusPolicy.CLICK);
+        UIDocument document = new UIDocument();
+        UINode content = focusable("content", 0, 0, FocusPolicy.CLICK);
+        UINode dialog = at("dialog", 100, 100, 200, 150).set(Attribute.FOCUS_SCOPE, true);
+        UINode first = focusable("first", 110, 110, FocusPolicy.CLICK);
+        UINode second = focusable("second", 110, 150, FocusPolicy.CLICK);
         dialog.append(first).append(second);
         document.append(content).append(dialog);
         frame(document);
@@ -256,9 +256,9 @@ public class FocusServiceTest {
 
     @Test
     public void aDetachedModalIsPoppedRatherThanLeavingTheTreeInert() {
-        Document document = new Document();
-        Node content = focusable("content", 0, 0, FocusPolicy.CLICK);
-        Node dialog = at("dialog", 100, 100, 200, 150).set(Attribute.FOCUS_SCOPE, true);
+        UIDocument document = new UIDocument();
+        UINode content = focusable("content", 0, 0, FocusPolicy.CLICK);
+        UINode dialog = at("dialog", 100, 100, 200, 150).set(Attribute.FOCUS_SCOPE, true);
         document.append(content).append(dialog);
         frame(document);
         document.focus().pushModal(dialog);
@@ -274,9 +274,9 @@ public class FocusServiceTest {
 
     @Test
     public void tabWrapsAtBothEnds() {
-        Document document = new Document();
-        Node a = focusable("a", 0, 0, FocusPolicy.CLICK);
-        Node b = focusable("b", 0, 100, FocusPolicy.CLICK);
+        UIDocument document = new UIDocument();
+        UINode a = focusable("a", 0, 0, FocusPolicy.CLICK);
+        UINode b = focusable("b", 0, 100, FocusPolicy.CLICK);
         document.append(a).append(b);
         frame(document);
         document.focus().requestFocus(b);
@@ -287,10 +287,10 @@ public class FocusServiceTest {
 
     @Test
     public void aDisabledOrInertNodeIsNotInTheTabRing() {
-        Document document = new Document();
-        Node a = focusable("a", 0, 0, FocusPolicy.CLICK);
-        Node blocked = focusable("blocked", 0, 100, FocusPolicy.CLICK).set(Attribute.ENABLED, false);
-        Node c = focusable("c", 0, 200, FocusPolicy.CLICK);
+        UIDocument document = new UIDocument();
+        UINode a = focusable("a", 0, 0, FocusPolicy.CLICK);
+        UINode blocked = focusable("blocked", 0, 100, FocusPolicy.CLICK).set(Attribute.ENABLED, false);
+        UINode c = focusable("c", 0, 200, FocusPolicy.CLICK);
         document.append(a).append(blocked).append(c);
         frame(document);
         document.focus().requestFocus(a);
@@ -302,9 +302,9 @@ public class FocusServiceTest {
 
     @Test
     public void shiftTabWalksBackwards() {
-        Document document = new Document();
-        Node a = focusable("a", 0, 0, FocusPolicy.CLICK);
-        Node b = focusable("b", 0, 100, FocusPolicy.CLICK);
+        UIDocument document = new UIDocument();
+        UINode a = focusable("a", 0, 0, FocusPolicy.CLICK);
+        UINode b = focusable("b", 0, 100, FocusPolicy.CLICK);
         document.append(a).append(b);
         frame(document);
         document.focus().requestFocus(b);
@@ -320,8 +320,8 @@ public class FocusServiceTest {
 
     @Test
     public void aNodeWithNoBoxCannotTakeFocus() {
-        Document document = new Document();
-        Node hidden = focusable("hidden", 0, 0, FocusPolicy.CLICK);
+        UIDocument document = new UIDocument();
+        UINode hidden = focusable("hidden", 0, 0, FocusPolicy.CLICK);
         ServiceFixtures.layout(hidden, l -> l.display(TaffyDisplay.NONE));
         document.append(hidden);
         frame(document);
@@ -335,9 +335,9 @@ public class FocusServiceTest {
 
     @Test
     public void theFocusOwnerIsAnnouncedOncePerRealChange() {
-        Document document = new Document();
-        Node a = focusable("a", 0, 0, FocusPolicy.CLICK);
-        Node b = focusable("b", 0, 100, FocusPolicy.CLICK);
+        UIDocument document = new UIDocument();
+        UINode a = focusable("a", 0, 0, FocusPolicy.CLICK);
+        UINode b = focusable("b", 0, 100, FocusPolicy.CLICK);
         document.append(a).append(b);
         frame(document);
 

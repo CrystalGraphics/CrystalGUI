@@ -12,8 +12,8 @@ import static org.junit.Assert.assertTrue;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.headless.ClassReferences;
-import com.crystalgui.ui.dom.Document;
-import com.crystalgui.ui.dom.Node;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -38,7 +38,7 @@ import org.junit.Test;
 public class ModeStackTest {
 
     /** A mode that records what it was offered and takes only what it is told to. */
-    private static final class Recorder implements Mode {
+    private static final class Recorder implements InputMode {
         private final String name;
         private final int takes;
         final List<String> log;
@@ -69,7 +69,7 @@ public class ModeStackTest {
 
     @Test
     public void theInnermostLiveInteractionIsAskedFirst() {
-        Document document = new Document();
+        UIDocument document = new UIDocument();
         document.append(at("content", 0, 0, 100, 100));
         frame(document);
         List<String> log = new ArrayList<>();
@@ -100,8 +100,8 @@ public class ModeStackTest {
 
     @Test
     public void aModeThatDoesNotWantAKeyLetsItThrough() {
-        Document document = new Document();
-        Node node = at("node", 0, 0, 100, 100).setFocusPolicy(FocusPolicy.FOCUSABLE);
+        UIDocument document = new UIDocument();
+        UINode node = at("node", 0, 0, 100, 100).setFocusPolicy(FocusPolicy.FOCUSABLE);
         document.append(node);
         frame(document);
         document.focus().requestFocus(node);
@@ -118,10 +118,10 @@ public class ModeStackTest {
 
     @Test
     public void modesAreReportedInnermostFirst() {
-        Document document = new Document();
+        UIDocument document = new UIDocument();
         List<String> log = new ArrayList<>();
-        Mode outer = new Recorder("outer", -1, log);
-        Mode inner = new Recorder("inner", -1, log);
+        InputMode outer = new Recorder("outer", -1, log);
+        InputMode inner = new Recorder("inner", -1, log);
         document.input().pushMode(outer);
         document.input().pushMode(inner);
 
@@ -135,9 +135,9 @@ public class ModeStackTest {
 
     @Test
     public void aDragEatsEscapeAndTellsItsTargetAndItsSource() {
-        Document document = new Document();
-        Node source = at("source", 0, 0, 100, 100);
-        Node target = at("target", 200, 0, 100, 100);
+        UIDocument document = new UIDocument();
+        UINode source = at("source", 0, 0, 100, 100);
+        UINode target = at("target", 200, 0, 100, 100);
         document.append(source).append(target);
         frame(document);
 
@@ -170,9 +170,9 @@ public class ModeStackTest {
 
     @Test
     public void rejectionIsTheDefaultAndAcceptanceIsReReadEveryFrame() {
-        Document document = new Document();
-        Node source = at("source", 0, 0, 100, 100);
-        Node target = at("target", 200, 0, 100, 100);
+        UIDocument document = new UIDocument();
+        UINode source = at("source", 0, 0, 100, 100);
+        UINode target = at("target", 200, 0, 100, 100);
         document.append(source).append(target);
         frame(document);
         List<String> drops = new ArrayList<>();
@@ -194,9 +194,9 @@ public class ModeStackTest {
 
     @Test
     public void theSourceAndItsSubtreeAreNeverADropTarget() {
-        Document document = new Document();
-        Node source = at("source", 0, 0, 200, 200);
-        Node inside = at("inside", 10, 10, 50, 50);
+        UIDocument document = new UIDocument();
+        UINode source = at("source", 0, 0, 200, 200);
+        UINode inside = at("inside", 10, 10, 50, 50);
         source.append(inside);
         document.append(source);
         frame(document);
@@ -210,8 +210,8 @@ public class ModeStackTest {
 
     @Test
     public void aDragEndsOnTheButtonThatStartedIt() {
-        Document document = new Document();
-        Node source = at("source", 0, 0, 100, 100);
+        UIDocument document = new UIDocument();
+        UINode source = at("source", 0, 0, 100, 100);
         document.append(source);
         frame(document);
         List<String> log = new ArrayList<>();

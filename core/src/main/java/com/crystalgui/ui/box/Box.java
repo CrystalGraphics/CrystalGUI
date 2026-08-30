@@ -6,7 +6,7 @@ import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.ui.UITransform;
 import com.crystalgui.ui.dom.Attribute;
-import com.crystalgui.ui.dom.Node;
+import com.crystalgui.ui.dom.UINode;
 import dev.vfyjxf.taffy.geometry.FloatRect;
 import dev.vfyjxf.taffy.tree.NodeId;
 import java.util.ArrayList;
@@ -39,7 +39,7 @@ import org.joml.Vector4f;
 public final class Box {
 
     final BoxTree tree;
-    final Node node;
+    final UINode node;
     final boolean mirror;
     final TaffyBridge bridge;
     NodeId taffyId;
@@ -70,7 +70,7 @@ public final class Box {
     final Matrix4f localToWorld = new Matrix4f();
     final Matrix4f worldToLocal = new Matrix4f();
 
-    Box(BoxTree tree, Node node, boolean mirror) {
+    Box(BoxTree tree, UINode node, boolean mirror) {
         this.tree = tree;
         this.node = node;
         this.mirror = mirror;
@@ -79,7 +79,7 @@ public final class Box {
 
     // ── Identity ─────────────────────────────────────────────────────────────
 
-    public Node node() {
+    public UINode node() {
         return node;
     }
 

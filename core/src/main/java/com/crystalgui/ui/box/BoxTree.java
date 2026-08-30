@@ -6,8 +6,8 @@ import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.ui.UITransform;
-import com.crystalgui.ui.dom.Document;
-import com.crystalgui.ui.dom.Node;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UINode;
 import dev.vfyjxf.taffy.geometry.FloatSize;
 import dev.vfyjxf.taffy.geometry.TaffySize;
 import dev.vfyjxf.taffy.style.AvailableSpace;
@@ -27,7 +27,7 @@ import javax.annotation.Nullable;
 import org.joml.Matrix4f;
 
 /**
- * The box tree: one layout tree per {@link Document}, derived from the composed node tree, laid out
+ * The box tree: one layout tree per {@link UIDocument}, derived from the composed node tree, laid out
  * in ONE pass, with world matrices and hit-testing that need no paint to have happened.
  *
  * <p>What it replaces is the old engine's layout being a property of the element (a Taffy node id
@@ -51,13 +51,13 @@ import org.joml.Matrix4f;
  *   scroll and transform included.</li>
  * </ol>
  *
- * <p>A structure change is REPORTED by the node tree ({@link Document#addStructureListener}), so the
+ * <p>A structure change is REPORTED by the node tree ({@link UIDocument#addStructureListener}), so the
  * walk is skipped on frames where nothing moved, and a mutation nothing reported cannot exist —
  * the node tree owns its mutators.</p>
  *
  * <h3>Mirrors</h3>
  *
- * <p>{@link #mirror(Node, Box)} lays a subtree out a second time under another host — what a
+ * <p>{@link #mirror(UINode, Box)} lays a subtree out a second time under another host — what a
  * taskbar thumbnail is. The old engine drew a subtree twice and corrupted hit-testing unless the
  * pass said it was a copy, because every element reconciled ONE cached matrix against whatever pose
  * it was last drawn with. A mirror has boxes of its own, so each copy has its own matrices and its
@@ -65,11 +65,11 @@ import org.joml.Matrix4f;
  */
 public final class BoxTree {
 
-    private final Document document;
+    private final UIDocument document;
     private final TaffyTree taffy = new TaffyTree();
 
     /** The node's own box, for every node that has one. */
-    private final Map<Node, Box> boxes = new IdentityHashMap<>();
+    private final Map<UINode, Box> boxes = new IdentityHashMap<>();
     private final List<Mirror> mirrors = new ArrayList<>();
     private @Nullable Box root;
 
@@ -83,18 +83,18 @@ public final class BoxTree {
 
     /** A subtree laid out again under another host. */
     private static final class Mirror {
-        final Node subtree;
+        final UINode subtree;
         final Box root;
-        final Map<Node, Box> realm = new IdentityHashMap<>();
+        final Map<UINode, Box> realm = new IdentityHashMap<>();
 
-        Mirror(Node subtree, Box root) {
+        Mirror(UINode subtree, Box root) {
             this.subtree = subtree;
             this.root = root;
             realm.put(subtree, root);
         }
     }
 
-    public BoxTree(Document document) {
+    public BoxTree(UIDocument document) {
         this.document = document;
         taffy.disableRounding();
         document.addStructureListener(this::structureChanged);
@@ -108,7 +108,7 @@ public final class BoxTree {
     }
 
     /** The node's own box, or null when it has none — off the tree, or {@code display: none}. */
-    public @Nullable Box boxOf(Node node) {
+    public @Nullable Box boxOf(UINode node) {
         return boxes.get(node);
     }
 
@@ -158,7 +158,7 @@ public final class BoxTree {
      * move the original too, so a caller that wants the copy elsewhere hosts it under a box that is
      * elsewhere, or sets a transform on the returned box).
      */
-    public Box mirror(Node subtree, Box host) {
+    public Box mirror(UINode subtree, Box host) {
         if (host.tree != this) throw new IllegalArgumentException("host belongs to another box tree");
         Box mirrorRoot = new Box(this, subtree, true);
         mirrorRoot.hostOverride = host;
@@ -241,7 +241,7 @@ public final class BoxTree {
         for (Mirror mirror : mirrors) {
             live.add(mirror.root);
             inOrder.add(mirror.root);
-            for (Node child : mirror.subtree.composedChildren()) {
+            for (UINode child : mirror.subtree.composedChildren()) {
                 syncNode(child, mirror.root, mirror.realm, true, live, inOrder);
             }
         }
@@ -276,7 +276,7 @@ public final class BoxTree {
         }
     }
 
-    private @Nullable Box syncNode(Node node, @Nullable Box naturalHost, Map<Node, Box> realm,
+    private @Nullable Box syncNode(UINode node, @Nullable Box naturalHost, Map<UINode, Box> realm,
                                    boolean mirror, Set<Box> live, List<Box> inOrder) {
         // No box, and none below it -- reaped with everything else not walked to. A FROZEN subtree is
         // the same answer for a different reason: it is still in the tree and is not live, so it lays
@@ -295,7 +295,7 @@ public final class BoxTree {
         box.naturalHost = naturalHost;
         live.add(box);
         inOrder.add(box);
-        for (Node child : node.composedChildren()) syncNode(child, box, realm, mirror, live, inOrder);
+        for (UINode child : node.composedChildren()) syncNode(child, box, realm, mirror, live, inOrder);
         return box;
     }
 

@@ -12,8 +12,8 @@ import static org.junit.Assert.assertTrue;
 
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Overflow;
-import com.crystalgui.ui.dom.Document;
-import com.crystalgui.ui.dom.Node;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.input.FocusPolicy;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,10 +25,10 @@ import org.junit.Test;
  */
 public class FreezeTest {
 
-    private static Node scroller(Document document) {
-        Node clip = at("clip", 0, 0, 100, 100);
+    private static UINode scroller(UIDocument document) {
+        UINode clip = at("clip", 0, 0, 100, 100);
         StyleGroup.inlinePipeline(clip.getStyle().getGeneralGroup(), g -> g.overflow(Overflow.HIDDEN));
-        Node tall = at("tall", 0, 0, 100, 400);
+        UINode tall = at("tall", 0, 0, 100, 400);
         clip.append(tall);
         document.append(clip);
         return clip;
@@ -36,9 +36,9 @@ public class FreezeTest {
 
     @Test
     public void aFrozenSubtreeHasNoBoxesAndComesBackWithThem() {
-        Document document = new Document();
-        Node panel = at("panel", 0, 0, 200, 200);
-        Node child = at("child", 10, 10, 50, 50);
+        UIDocument document = new UIDocument();
+        UINode panel = at("panel", 0, 0, 200, 200);
+        UINode child = at("child", 10, 10, 50, 50);
         panel.append(child);
         document.append(panel);
         frame(document);
@@ -59,9 +59,9 @@ public class FreezeTest {
 
     @Test
     public void aFrozenSubtreeIsUnreachableByThePointer() {
-        Document document = new Document();
-        Node behind = at("behind", 0, 0, 300, 300);
-        Node panel = at("panel", 0, 0, 200, 200);
+        UIDocument document = new UIDocument();
+        UINode behind = at("behind", 0, 0, 300, 300);
+        UINode panel = at("panel", 0, 0, 200, 200);
         document.append(behind).append(panel);
         frame(document);
         press(document, 50, 50);
@@ -75,8 +75,8 @@ public class FreezeTest {
 
     @Test
     public void aFrozenSubtreeKeepsItsScrollWithNothingCaptured() {
-        Document document = new Document();
-        Node clip = scroller(document);
+        UIDocument document = new UIDocument();
+        UINode clip = scroller(document);
         frame(document);
         clip.box().setScroll(0f, 150f);
         assertEquals(150f, clip.box().scrollTop(), 0.001f);
@@ -95,8 +95,8 @@ public class FreezeTest {
 
     @Test
     public void aFrozenSubtreeCostsNoTicks() {
-        Document document = new Document();
-        Node panel = at("panel", 0, 0, 200, 200);
+        UIDocument document = new UIDocument();
+        UINode panel = at("panel", 0, 0, 200, 200);
         document.append(panel);
         frame(document);
 
@@ -119,9 +119,9 @@ public class FreezeTest {
 
     @Test
     public void freezingTakesFocusAndThawingDoesNotGiveItBack() {
-        Document document = new Document();
-        Node panel = at("panel", 0, 0, 200, 200);
-        Node control = at("control", 10, 10, 50, 30).setFocusPolicy(FocusPolicy.CLICK);
+        UIDocument document = new UIDocument();
+        UINode panel = at("panel", 0, 0, 200, 200);
+        UINode control = at("control", 10, 10, 50, 30).setFocusPolicy(FocusPolicy.CLICK);
         panel.append(control);
         document.append(panel);
         frame(document);
@@ -139,9 +139,9 @@ public class FreezeTest {
 
     @Test
     public void freezingAndThawingRunTheHooksAndAreIdempotent() {
-        Document document = new Document();
+        UIDocument document = new UIDocument();
         List<String> log = new ArrayList<>();
-        Node panel = new Node() {
+        UINode panel = new UINode() {
             @Override
             protected void frozen() {
                 log.add("frozen");
@@ -166,8 +166,8 @@ public class FreezeTest {
 
     @Test
     public void aDestroyedSubtreeIsForgottenEverywhere() {
-        Document document = new Document();
-        Node panel = at("panel", 0, 0, 200, 200).setFocusPolicy(FocusPolicy.CLICK);
+        UIDocument document = new UIDocument();
+        UINode panel = at("panel", 0, 0, 200, 200).setFocusPolicy(FocusPolicy.CLICK);
         document.append(panel);
         frame(document);
         press(document, 50, 50);

@@ -10,8 +10,8 @@ import com.crystalgraphics.platform.input.CgSystemInput.Mouse;
 import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.dom.Document;
-import com.crystalgui.ui.dom.Node;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.event.PropagationPhase;
@@ -32,7 +32,7 @@ import org.joml.Vector2f;
  *
  * <p>It is not the old {@code UIInputHandler}, which was the sink, the hover cache, the focus owner,
  * the tab ring, the modal trap, the keymap ladder and the drag controller in 962 lines. Focus is
- * {@link Focus}; a live interaction is a {@link Mode}; a keymap is the {@link Chords} seam a host
+ * {@link Focus}; a live interaction is a {@link InputMode}; a keymap is the {@link Chords} seam a host
  * installs. What is left here is genuinely one job: turn platform events into tree events.</p>
  *
  * <h3>The frame model, kept</h3>
@@ -59,7 +59,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
      * @return whether a binding fired, in which case the keystroke is spent
      */
     public interface Chords {
-        boolean resolve(@Nullable Node from, int key, int modifiers, boolean pressed, boolean repeat, long millis);
+        boolean resolve(@Nullable UINode from, int key, int modifiers, boolean pressed, boolean repeat, long millis);
 
         /**
          * The wheel, resolved the same way and for the same reason: the widget under the pointer
@@ -67,7 +67,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
          * which is what lets a scroller keep plain and Shift+wheel while Mod+wheel zooms, with no
          * widget hard-coding either and both remappable.
          */
-        default boolean wheel(@Nullable Node from, float notches, int modifiers) {
+        default boolean wheel(@Nullable UINode from, float notches, int modifiers) {
             return false;
         }
     }
@@ -89,48 +89,48 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
 
     private static final int BUTTONS = 8;
 
-    private final Document document;
-    private final List<Mode> modes = new ArrayList<>();
+    private final UIDocument document;
+    private final List<InputMode> modes = new ArrayList<>();
     private final ButtonState[] buttons = new ButtonState[BUTTONS];
     private final Vector2f position = new Vector2f();
     private final ReadOnlyVec2f pointer = new ReadOnlyVec2f(position);
 
     private boolean hoverValid;
-    private @Nullable Node hover;
-    private @Nullable Node lastFrameHover;
-    private @Nullable Node pressTarget;
-    private @Nullable Node keyboardPressTarget;
-    private @Nullable Node capture;
+    private @Nullable UINode hover;
+    private @Nullable UINode lastFrameHover;
+    private @Nullable UINode pressTarget;
+    private @Nullable UINode keyboardPressTarget;
+    private @Nullable UINode capture;
     private float scrollDelta;
 
     private @Nullable Chords chords;
     private @Nullable CursorSink cursors;
     private CgCursor lastCursor = CgCursor.DEFAULT;
 
-    public Input(Document document) {
+    public Input(UIDocument document) {
         this.document = document;
     }
 
     // ── The mode stack ───────────────────────────────────────────────────────
 
     /** Pushes a live interaction above everything on the tree. The last pushed is asked first. */
-    public void pushMode(Mode mode) {
+    public void pushMode(InputMode mode) {
         modes.add(mode);
     }
 
     /** Ends a mode wherever it sits in the stack, and tells it so. A no-op if it is not there. */
-    public void popMode(Mode mode) {
+    public void popMode(InputMode mode) {
         if (modes.remove(mode)) mode.ended();
     }
 
     /** Whether this mode is live. */
-    public boolean hasMode(Mode mode) {
+    public boolean hasMode(InputMode mode) {
         return modes.contains(mode);
     }
 
     /** The live modes, innermost first — what is asked, in the order it is asked. */
-    public List<Mode> modes() {
-        List<Mode> topFirst = new ArrayList<>(modes);
+    public List<InputMode> modes() {
+        List<InputMode> topFirst = new ArrayList<>(modes);
         Collections.reverse(topFirst);
         return topFirst;
     }
@@ -159,12 +159,12 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
 
     /** The hover diff, the boundary events, the move and the wheel — once, from this frame's layout. */
     public void endFrame() {
-        Node current = hoverTarget();
-        Node last = lastFrameHover;
+        UINode current = hoverTarget();
+        UINode last = lastFrameHover;
         if (last == current) {
             if (current != null) send(current, new MouseEvent.Move(current, pointer));
         } else {
-            Node common = commonComposedAncestor(last, current);
+            UINode common = commonComposedAncestor(last, current);
             updateHoverChain(last, current, common);
             leaveChain(last, common);
             enterChain(current, common);
@@ -193,7 +193,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
      * frame and only the sink call is skipped — a stationary pointer can still need a different
      * cursor because the node under it changed.</p>
      */
-    private void presentCursor(@Nullable Node hovered) {
+    private void presentCursor(@Nullable UINode hovered) {
         if (cursors == null) return;
         CgCursor resolved = resolveCursor(hovered);
         if (resolved == lastCursor) return;
@@ -205,7 +205,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
      * The spec's {@code auto} rule: {@code text} over an editable node, {@code default} otherwise.
      * {@code cursor} is inheritable, so the cascade has already answered what a nested node shows.
      */
-    private static CgCursor resolveCursor(@Nullable Node hovered) {
+    private static CgCursor resolveCursor(@Nullable UINode hovered) {
         if (hovered == null) return CgCursor.DEFAULT;
         CgCursor declared = hovered.computedStyle().get(StylePropertyRegistry.CURSOR);
         if (declared == null) return CgCursor.DEFAULT;
@@ -235,7 +235,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
 
     /** What the pointer is over: the capture target while captured, the real hit otherwise. */
     @Nullable
-    public Node hoverTarget() {
+    public UINode hoverTarget() {
         if (!hoverValid) {
             hover = resolveHit(position.x, position.y);
             hoverValid = true;
@@ -251,7 +251,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
      * capture, so the per-frame diff sees no change and nothing enters or leaves. Fails silently
      * with no button down, per spec — a capture nothing can release would wedge input.</p>
      */
-    public void setPointerCapture(Node node) {
+    public void setPointerCapture(UINode node) {
         if (node == null || node.document() != document || !anyButtonDown()) return;
         capture = node;
         hoverValid = false;
@@ -264,12 +264,12 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
     }
 
     @Nullable
-    public Node pointerCaptureTarget() {
+    public UINode pointerCaptureTarget() {
         return capture;
     }
 
-    private @Nullable Node resolveHit(float x, float y) {
-        Node captured = capture;
+    private @Nullable UINode resolveHit(float x, float y) {
+        UINode captured = capture;
         if (captured != null) {
             if (captured.document() == document) return captured;
             capture = null;
@@ -298,9 +298,9 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
      * old engine conflated them, which is why a listener attached to a widget's own group after its
      * constructor could never run.</p>
      */
-    public void send(@Nullable Node target, UIEvent event) {
+    public void send(@Nullable UINode target, UIEvent event) {
         if (target == null) return;
-        List<Node> path = composedPath(target);   // root first, path.get(last) == target
+        List<UINode> path = composedPath(target);   // root first, path.get(last) == target
 
         event.setPhase(PropagationPhase.CAPTURE);
         for (int i = 0; i < path.size() - 1 && !event.isPropagationStopped(); i++) {
@@ -318,33 +318,33 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         }
     }
 
-    private static void emit(Node listener, Node target, UIEvent event) {
-        event.retarget(Node.retarget(target, listener));
+    private static void emit(UINode listener, UINode target, UIEvent event) {
+        event.retarget(UINode.retarget(target, listener));
         listener.events.emitToGroupDom(event);
     }
 
     /** The composed path from the document down to {@code target}, inclusive. */
-    private static List<Node> composedPath(Node target) {
-        List<Node> path = new ArrayList<>();
-        for (Node at = target; at != null; at = at.composedParent()) path.add(at);
+    private static List<UINode> composedPath(UINode target) {
+        List<UINode> path = new ArrayList<>();
+        for (UINode at = target; at != null; at = at.composedParent()) path.add(at);
         Collections.reverse(path);
         return path;
     }
 
     @Nullable
-    private static Node commonComposedAncestor(@Nullable Node a, @Nullable Node b) {
+    private static UINode commonComposedAncestor(@Nullable UINode a, @Nullable UINode b) {
         if (a == null || b == null) return null;
-        for (Node up = a; up != null; up = up.composedParent()) {
-            for (Node down = b; down != null; down = down.composedParent()) {
+        for (UINode up = a; up != null; up = up.composedParent()) {
+            for (UINode down = b; down != null; down = down.composedParent()) {
                 if (up == down) return up;
             }
         }
         return null;
     }
 
-    private static void updateHoverChain(@Nullable Node from, @Nullable Node to, @Nullable Node common) {
-        for (Node at = from; at != null && at != common; at = at.composedParent()) at.setHovered(false);
-        for (Node at = to; at != null && at != common; at = at.composedParent()) at.setHovered(true);
+    private static void updateHoverChain(@Nullable UINode from, @Nullable UINode to, @Nullable UINode common) {
+        for (UINode at = from; at != null && at != common; at = at.composedParent()) at.setHovered(false);
+        for (UINode at = to; at != null && at != common; at = at.composedParent()) at.setHovered(true);
     }
 
     /**
@@ -352,22 +352,22 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
      * the DOM still fires one per node in the chain. Firing only on the exact target means a
      * container with children never hears about the pointer at all.
      */
-    private void leaveChain(@Nullable Node from, @Nullable Node common) {
+    private void leaveChain(@Nullable UINode from, @Nullable UINode common) {
         if (from == null) return;
         send(from, new MouseEvent.Move(from, pointer));
-        for (Node at = from; at != null && at != common; at = at.composedParent()) {
+        for (UINode at = from; at != null && at != common; at = at.composedParent()) {
             send(at, new MouseEvent.Leave(at, pointer));
         }
     }
 
     /** The counterpart, outermost first: an ancestor learns the pointer arrived before its child. */
-    private void enterChain(@Nullable Node to, @Nullable Node common) {
+    private void enterChain(@Nullable UINode to, @Nullable UINode common) {
         if (to == null) return;
         send(to, new MouseEvent.Move(to, pointer));
-        List<Node> entered = new ArrayList<>();
-        for (Node at = to; at != null && at != common; at = at.composedParent()) entered.add(at);
+        List<UINode> entered = new ArrayList<>();
+        for (UINode at = to; at != null && at != common; at = at.composedParent()) entered.add(at);
         for (int i = entered.size() - 1; i >= 0; i--) {
-            Node at = entered.get(i);
+            UINode at = entered.get(i);
             send(at, new MouseEvent.Enter(at, pointer));
         }
     }
@@ -380,19 +380,19 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         position.set(event.x(), event.y());
         scrollDelta += event.wheelDelta();
 
-        for (Mode mode : modes()) {
+        for (InputMode mode : modes()) {
             if (mode.pointerMoved(position.x, position.y)) break;
         }
         if (event.button() == -1) return false;
 
-        for (Mode mode : modes()) {
+        for (InputMode mode : modes()) {
             if (mode.pointerButton(event.button(), event.state(), position.x, position.y)) return true;
         }
         return button(event);
     }
 
     private boolean button(Mouse.Event event) {
-        Node target = hoverTarget();
+        UINode target = hoverTarget();
         int ordinal = event.button();
         ButtonState state = buttonState(ordinal);
         if (state != null) {
@@ -426,14 +426,14 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
     @Override
     public boolean consumeKeyboardEvent(Keyboard.Event event) {
         int modifiers = modifiers();
-        for (Mode mode : modes()) {
+        for (InputMode mode : modes()) {
             boolean taken = event.pressed()
                     ? mode.keyPressed(event.key(), modifiers, event.repeat())
                     : mode.keyReleased(event.key(), modifiers);
             if (taken) return true;
         }
 
-        Node focused = document.focus().focused();
+        UINode focused = document.focus().focused();
         // I6: A MODIFIED CHORD GOES TO THE KEYMAP FIRST unless the target claims it.
         //
         // The old order was the reverse -- dispatch, then the keymap on whatever nothing consumed --
@@ -482,7 +482,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
      * user happened to click something focusable first. A browser hands the keystroke to the
      * document; so do we.</p>
      */
-    private Node scopeFor(@Nullable Node from) {
+    private UINode scopeFor(@Nullable UINode from) {
         return from != null ? from : document;
     }
 
@@ -509,7 +509,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
      * Space/Enter over a focused node synthesize the same press a mouse would — which is the whole
      * of keyboard activation, and why {@code Button} contains no keyboard code.
      */
-    private void activation(Keyboard.Event event, @Nullable Node focused) {
+    private void activation(Keyboard.Event event, @Nullable UINode focused) {
         if (focused == null) return;
         if (event.key() != CgKeyCodes.KEY_SPACE
                 && event.key() != CgKeyCodes.KEY_RETURN) return;
@@ -539,8 +539,8 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
      * baseline in a detached subtree and the next diff asked for a common ancestor across two trees:
      * a walk that never converges.</p>
      */
-    public void forget(Node node) {
-        for (Node at : node.composedSubtree()) {
+    public void forget(UINode node) {
+        for (UINode at : node.composedSubtree()) {
             if (hover == at) {
                 hover = null;
                 hoverValid = false;
