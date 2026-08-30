@@ -1,5 +1,6 @@
 package com.crystalgui.ui.dom;
 
+import com.crystalgui.ui.input.FocusPolicy;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,6 +34,15 @@ public final class Attribute<T> {
     /** Whether hit-testing may land on this subtree; {@code pointer-events: none} when false. */
     public static final Attribute<Boolean> HIT_TEST = of("hit-test", Boolean.class, true);
     /** The name of the slot a light child asks to be placed in; empty for the default slot. */
+    /**
+     * A focus navigation scope: a dialog, a window frame, a pane. Tab is trapped inside whichever
+     * one a modal blocks, and "is focus already in here" is asked of one.
+     */
+    public static final Attribute<Boolean> FOCUS_SCOPE = of("focus-scope", Boolean.class, false);
+
+    /** Whether and how this node takes focus. Four values, and two of them look alike. */
+    public static final Attribute<FocusPolicy> FOCUS_POLICY = of("focus-policy", FocusPolicy.class, FocusPolicy.NONE);
+
     public static final Attribute<String> SLOT = of("slot", String.class, "");
     /** The {@code ::part()} name a node inside a shadow tree is exposed under; empty for none. */
     public static final Attribute<String> PART = of("part", String.class, "");

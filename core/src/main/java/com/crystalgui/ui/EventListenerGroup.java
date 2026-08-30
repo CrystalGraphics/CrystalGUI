@@ -50,6 +50,26 @@ public final class EventListenerGroup<E extends EventTarget, T extends UIEvent> 
         }
     }
 
+    /**
+     * Emits with the DOM's propagation semantics: {@code stopPropagation} ends the WALK (which is
+     * the dispatcher's business) and the remaining listeners on THIS element still run; only
+     * {@code stopImmediatePropagation} ends those.
+     *
+     * <p>Beside {@link #emitTarget} rather than replacing it: the old engine's dispatcher conflates
+     * the two, which several widgets are written against, and M6 deletes that path with it.</p>
+     */
+    public void emitTargetDom(T event) {
+        switch (event.getPhase()) {
+            case CAPTURE -> capture.continueEmittingUnderCondition(element, event, UIEvent::isImmediatePropagationStopped);
+            case TARGET -> {
+                target.continueEmittingUnderCondition(element, event, UIEvent::isImmediatePropagationStopped);
+                if (!event.isDefaultPrevented())
+                    defaultEvents.emit(element, event);
+            }
+            case BUBBLE -> bubble.continueEmittingUnderCondition(element, event, UIEvent::isImmediatePropagationStopped);
+        }
+    }
+
     public void disconnectAll(boolean capture, boolean bubble) {
         this.target.disconnectAll();
         if (capture)
@@ -70,6 +90,16 @@ public final class EventListenerGroup<E extends EventTarget, T extends UIEvent> 
         @SuppressWarnings("unchecked")
         public <T extends UIEvent> EventListenerGroup<E, T> getGroup(Class<T> clazz) {
             return (EventListenerGroup<E, T>) lookupMap.computeIfAbsent(clazz, c -> new EventListenerGroup<E, T>(element));
+        }
+
+        /** {@link EventListenerGroup#emitTargetDom} for whichever group this event belongs to. */
+        public void emitToGroupDom(UIEvent event) {
+            if (event == null) return;
+            var group = lookupMap.get(event.getClass());
+            if (group != null) {
+                //noinspection unchecked
+                ((EventListenerGroup<E, UIEvent>) group).emitTargetDom(event);
+            }
         }
 
         public void emitToGroup(UIEvent event) {

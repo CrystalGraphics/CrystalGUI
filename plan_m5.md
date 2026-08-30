@@ -30,7 +30,7 @@ the audit's numbers (§1 there: ~26,700 lines replaced, of which the engine's ow
 | 5.2 | The style pass, re-hosted and scoped | M | 5.1 | The cascade is host-agnostic; scopes and `:root` inheritance work; the engine writes nothing into it | **shipped 2026-08-30** — see §4.2 notes |
 | 5.3 | The box tree and one-pass layout | L | 5.2 | Layout of the gallery's trees runs to completion in **one** pass; hit-testing is correct before any paint | **shipped 2026-08-30** — see §4.3 notes |
 | 5.4 | Paint and hit-test through boxes, in the harness | M | 5.3 | A fixed tree renders pixel-identically on both engines; the harness runs either | **shipped 2026-08-30** — see §4.4 notes |
-| 5.5 | The services: input, focus, motion, lifecycle | L | 5.3 | The 38 focus rows and the 20 hit-test rows are tests, and pass; a frozen window costs nothing | planned |
+| 5.5 | The services: input, focus, motion, lifecycle | L | 5.3 | The 38 focus rows and the 20 hit-test rows are tests, and pass; a frozen window costs nothing | **shipped 2026-08-30** — see §4.5 notes |
 | 5.6 | Acceptance, the porting guide, the M6 handoff | S | 5.4, 5.5 | Every M5 acceptance criterion in one run; M6's first step is written down | planned |
 
 5.4 and 5.5 are independent of each other and both depend on 5.3. Everything else is a chain.
@@ -444,6 +444,49 @@ rung in the handler naming any of them); `StopPropagationTest` (DOM semantics, w
 within-a-phase behaviour as the counter-assertion); `FreezeTest` (a frozen subtree paints nothing,
 matches no selector, keeps its scroll offset and its text without any capture, and costs no ticks).
 **Proves:** the rows are tests, and a retained window is frozen rather than detached.
+
+#### 5.5 — what shipped, what is deliberately different, and what is NOT ported
+
+Shipped: `ui.service` — `Input` (the platform sink, the hit test, three-phase dispatch over the
+composed tree with retargeting, pointer capture, press/click detail, keyboard activation, the
+cursor's `auto` rule, and the `Chords` keymap seam), `Mode` + the stack, `Drag` as a mode, `Focus`
+(one owner, one traversal, one inertness predicate, scopes, modality, `delegatesFocus`),
+`Animation` (timelines + node-owned per-frame hooks), `Lifecycle` (freeze/thaw/destroy),
+`Document.frame(delta, w, h)`, `Box.scrollIntoView`, and `Node`'s interaction state, focus policy,
+`consumesTextInput`, `claimsChord` and scroll. **58 tests**, each named for the invariant row it
+pins. Headless went 1634 → 1691, all green.
+
+**Five deliberate divergences**, each mandated by the audit: DOM `stopPropagation` (the old
+within-a-phase behaviour is the documented `TextEditor` defect, and `StopPropagationTest` asserts
+both); modified chords resolving BEFORE content unless the target claims them, so the yield lists
+disappear; inertness as one predicate rather than four enforcement points; focus delegation through
+`delegatesFocus` rather than a focusable container being a wall; and per-frame hooks OWNED by a node
+rather than one-way `UIFrameTicker` registration.
+
+**Three real bugs the row-tests found**, none of which a behavioural sketch would have caught:
+
+- **A modal blocks the scope CONTAINING it, not its own.** A dialog is a focus scope itself, so
+  asking `scopeOf(modal)` answered the dialog — which contains nothing outside it, so nothing
+  anywhere was ever blocked and the document stayed hittable under an open modal.
+- **A skipped box is not a CANDIDATE; its children still are.** Returning null on skip made a modal
+  unreachable the instant it blocked the document it sits in — the pointer could not reach the one
+  thing it was still allowed to touch. `hit-test` is the property that IS subtree-wide.
+- **Opening a modal changes what is hittable with no pointer movement and no frame**, so the hover
+  cache has to be told. Without it a press arriving between the modal opening and the next frame is
+  answered from a hit resolved when nothing was blocked.
+
+**Not ported, and named so it is not mistaken for done:**
+
+| Deferred | Why |
+|---|---|
+| Close watchers, light dismiss, `Dialog.pulse` on a blocked press | All three are widget-layer (`Popover`, `Dialog`), and Escape's cascade needs those widgets to exist. M6. |
+| `TransitionEngine` as the motion service's cascade-facing client | M6, when the cascade's clients move. |
+| The drag GHOST | `DragGhost` is a `ui.elements` widget. M6. |
+| `scrollExempt` children in the painter | A 5.4 gap: a scrollbar would scroll away with its content. |
+
+`Document` deliberately does NOT implement the platform sink itself — `Input` does, and a host or a
+test reaches it through `document.input()`. Giving the document a second identity as a raw event
+sink is exactly what `UIWindow` avoided, and for the same reason.
 
 ### 5.6 — Acceptance, the porting guide, the M6 handoff · S · after: 5.4, 5.5
 

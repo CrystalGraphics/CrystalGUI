@@ -11,6 +11,7 @@ import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.ui.EventListenerGroup;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.event.EventTarget;
+import com.crystalgui.ui.input.FocusPolicy;
 import java.util.Collection;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -93,6 +94,8 @@ public class Node implements EventTarget, Styleable {
     TreeObserver<Node> observer;
 
     private boolean frozen;
+    private float scrollLeft;
+    private float scrollTop;
 
     /** The cascade's store for this node, created on first use. */
     @Nullable
@@ -564,8 +567,24 @@ public class Node implements EventTarget, Styleable {
         return frozen;
     }
 
-    void setFrozen(boolean frozen) {
+    /** The lifecycle service's. Set across the composed subtree, so every reader is one field read. */
+    public final void setFrozen(boolean frozen) {
         this.frozen = frozen;
+    }
+
+    /** The lifecycle service's: runs this node's {@link #frozen()} hook. */
+    public final void fireFrozen() {
+        frozen();
+    }
+
+    /** The lifecycle service's: runs this node's {@link #thawed()} hook. */
+    public final void fireThawed() {
+        thawed();
+    }
+
+    /** Says the composed structure moved — what the box tree listens for. */
+    public final void markStructureChanged() {
+        structureChanged();
     }
 
     // ── Styleable: what the cascade asks (plan_m5.md D5.2) ───────────────────
@@ -754,31 +773,105 @@ public class Node implements EventTarget, Styleable {
         if (property == LayoutProperties.DISPLAY) structureChanged();
     }
 
-    /** Asks the engine to re-run selector matching for this node on the next style pass. */
-    protected final void invalidateStyleMatch() {
+    /**
+     * Asks the engine to re-run selector matching for this node on the next style pass.
+     *
+     * <p>A FROZEN node matches nothing: it is not live, so re-matching is work for a subtree nobody
+     * can see, and its state cannot have moved in a way anyone reads.</p>
+     */
+    public final void invalidateStyleMatch() {
+        if (frozen) return;
         StyleEngine engine = styleEngine();
         if (engine != null) engine.markDirty(this);
     }
 
-    // the services set these (5.5); a change is a pseudo-class change, so it re-matches
-    void setHovered(boolean value) {
+    // ── Interaction state: the services write it, the cascade reads it (5.5) ─
+
+    /** The input service's. A change is a pseudo-class change, so it re-matches. */
+    public final void setHovered(boolean value) {
         if (hovered != value) { hovered = value; invalidateStyleMatch(); }
     }
 
-    void setPressed(boolean value) {
+    /** The input service's. */
+    public final void setPressed(boolean value) {
         if (pressed != value) { pressed = value; invalidateStyleMatch(); }
     }
 
-    void setFocused(boolean value) {
+    /**
+     * The focus service's. {@code visible} is what {@code :focus-visible} reads: a ring, which
+     * keyboard and programmatic focus earn and a click does not — unless the node takes typing,
+     * where a caret alone is a weak affordance.
+     */
+    public final void setFocused(boolean value, boolean visible) {
+        setFocused(value);
+        setFocusVisible(value && visible);
+    }
+
+    public final void setFocused(boolean value) {
         if (focused != value) { focused = value; invalidateStyleMatch(); }
     }
 
-    void setFocusVisible(boolean value) {
+    public final void setFocusVisible(boolean value) {
         if (focusVisible != value) { focusVisible = value; invalidateStyleMatch(); }
     }
 
-    void setFocusWithin(boolean value) {
+    /** The focus service's: an ancestor of the focus owner. */
+    public final void setFocusWithin(boolean value) {
         if (focusWithin != value) { focusWithin = value; invalidateStyleMatch(); }
+    }
+
+    // ── Focus policy, typing, chords ─────────────────────────────────────────
+
+    /** Whether and how this node takes focus. */
+    public final FocusPolicy focusPolicy() {
+        return get(Attribute.FOCUS_POLICY);
+    }
+
+    public final Node setFocusPolicy(FocusPolicy policy) {
+        return set(Attribute.FOCUS_POLICY, policy);
+    }
+
+    /**
+     * Whether typing goes into this node — a text field, an editor. Space is then a character
+     * rather than an activation, and focusing it rings however it was focused.
+     */
+    public boolean consumesTextInput() {
+        return false;
+    }
+
+    /**
+     * Whether this node wants a MODIFIED chord for itself, before the keymap sees it.
+     *
+     * <p>The inverse of the old engine's yield lists: a widget stated which chords it would GIVE UP
+     * ({@code TextEditor}'s own comment says the native keys must yield to a modified chord) and
+     * forgetting one — Tab — made {@code Ctrl+Tab} indent a line while the window switcher never
+     * heard the chord, with nothing failing, because an indent is a perfectly good thing for Tab to
+     * do. A widget knows what it wants; it cannot know what every host might bind.</p>
+     */
+    public boolean claimsChord(int key, int modifiers) {
+        return false;
+    }
+
+    // ── Scroll: per NODE, not per box ────────────────────────────────────────
+
+    /**
+     * How far this node's content is scrolled. On the node rather than on its box, deliberately: a
+     * box is dropped when the subtree is frozen and rebuilt when it comes back, and an offset that
+     * died with it would have to be captured and restored — which is the machinery freezing exists
+     * to remove. A mirror of this subtree shows the same offset, which is right.
+     */
+    public final float scrollLeft() {
+        return scrollLeft;
+    }
+
+    public final float scrollTop() {
+        return scrollTop;
+    }
+
+    /** The box's, once it has clamped against the content it laid out. */
+    public final void setScrollOffsets(float left, float top) {
+        this.scrollLeft = left;
+        this.scrollTop = top;
     }
 
     // ── Wiring: document, observer, shadow flag ──────────────────────────────

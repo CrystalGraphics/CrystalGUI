@@ -1,6 +1,7 @@
 package com.crystalgui.ui.box;
 
 import com.crystalgraphics.api.font.CgFontFamily;
+import com.crystalgraphics.api.text.CgShapedParagraph;
 import com.crystalgraphics.api.text.CgTextLayout;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.property.StylePropertyRegistry;
@@ -42,7 +43,7 @@ public class TextNode extends Node implements Measurable {
     private String text = "";
     private @Nullable CgFontFamily shapedWith;
     private @Nullable String shapedText;
-    private @Nullable com.crystalgraphics.api.text.CgShapedParagraph paragraph;
+    private @Nullable CgShapedParagraph paragraph;
     private final List<Float> measuredAt = new ArrayList<>();
 
     public TextNode() {

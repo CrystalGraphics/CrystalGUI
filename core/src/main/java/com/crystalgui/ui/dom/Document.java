@@ -4,6 +4,10 @@ import com.crystalgui.core.async.UiThread;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgui.ui.box.BoxTree;
+import com.crystalgui.ui.service.Animation;
+import com.crystalgui.ui.service.Focus;
+import com.crystalgui.ui.service.Input;
+import com.crystalgui.ui.service.Lifecycle;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -54,6 +58,14 @@ public final class Document extends Node {
     private final List<Runnable> structureListeners = new ArrayList<>();
     @Nullable
     private BoxTree boxes;
+    @Nullable
+    private Input input;
+    @Nullable
+    private Focus focus;
+    @Nullable
+    private Animation animation;
+    @Nullable
+    private Lifecycle lifecycle;
 
     public Document() {
         super(Name.DOCUMENT);
@@ -88,6 +100,47 @@ public final class Document extends Node {
     public BoxTree boxes() {
         if (boxes == null) boxes = new BoxTree(this);
         return boxes;
+    }
+
+    // ── Services (5.5) ───────────────────────────────────────────────────────
+
+    /** Platform events in, tree events out: the hit test, the dispatch, the mode stack. */
+    public Input input() {
+        if (input == null) input = new Input(this);
+        return input;
+    }
+
+    /** One focus owner, one traversal, one inertness predicate — over focus navigation scopes. */
+    public Focus focus() {
+        if (focus == null) focus = new Focus(this);
+        return focus;
+    }
+
+    /** Timelines and the per-frame hooks a tree is allowed to have. */
+    public Animation animation() {
+        if (animation == null) animation = new Animation();
+        return animation;
+    }
+
+    /** Freeze, thaw, destroy. */
+    public Lifecycle lifecycle() {
+        if (lifecycle == null) lifecycle = new Lifecycle(this);
+        return lifecycle;
+    }
+
+    /**
+     * A whole frame with nothing drawn: the hover is invalidated, motion advances, the cascade
+     * settles, layout runs once, and the pointer is diffed against the layout that just ran.
+     *
+     * <p>Paint sits between {@link #layout} and the input diff for a host that draws; the order here
+     * is what makes hover correct on a frame where a reflow moved something under a still pointer.</p>
+     */
+    public void frame(float deltaSeconds, float width, float height) {
+        input().beginFrame();
+        animation().tick(deltaSeconds);
+        calculateStyle(deltaSeconds);
+        layout(width, height);
+        input().endFrame();
     }
 
     /** Lays the document out at the viewport size -- the box tree's one pass. Run style first. */
@@ -133,6 +186,7 @@ public final class Document extends Node {
     }
 
     private static void collect(Node at, List<Node> into) {
+        if (at.isFrozen()) return;   // frozen is not live: it matches nothing
         into.add(at);
         for (Node child : at.children()) collect(child, into);
         ShadowRoot shadow = at.shadowRoot();
