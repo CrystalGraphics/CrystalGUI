@@ -62,7 +62,7 @@ flag it replaces, which is fine for a spike and exactly what 5.1 must not do.
 per node kind. Implemented today by `ElementTreeSource` over `UIElement`. Its acceptance suite is
 `TreeSourceContractTest` (23 tests, seam-pure: *repoint `sourceOver` at 5.1 and change nothing else*),
 `TreeObserverBehaviourTest` (13), and `MirrorIsEngineAgnosticTest` (7), which already runs the mirror
-over a twelve-line `Node` class — so the networking half of M5 is a `TreeSource` and a `NodeMirror`
+over a twelve-line `UINode` class — so the networking half of M5 is a `TreeSource` and a `NodeMirror`
 for the new tree and nothing more.
 
 **D2 — strangler.** New packages beside the old ones; the old engine runnable until M6 ends. **D3 —
@@ -88,8 +88,8 @@ means for the box tree written now.
    stacking, visibility, opacity, culling and animation are box properties (audit §3, 46 files at
    `IMPORTANT` today). A minor milestone that finds itself wanting `importantPipeline` has found a
    missing box property, and adds that instead.
-4. **Thread affinity is asserted at the node tree's boundary** — every mutation entry on `Node`,
-   `ShadowRoot`, `Slot` and `Document` — via the existing `UiThread.require(what, treeOwner)`, keyed
+4. **Thread affinity is asserted at the node tree's boundary** — every mutation entry on `UINode`,
+   `ShadowRoot`, `UISlot` and `UIDocument` — via the existing `UiThread.require(what, treeOwner)`, keyed
    per document. Not in setters; there are no setters below the boundary.
 5. **Lifecycle callbacks run after a mutation completes, never during it.** Rows 36, 48, 78 and 281
    are each a widget building inside a callback that fired mid-mutation. The node tree queues
@@ -113,14 +113,14 @@ than during it. **Decisions taken 2026-08-30 as recommended unless the status co
 | # | Decision | Recommendation | Why it blocks | Status |
 |---|---|---|---|---|
 | D5.1 | **Package names.** The audit says `ui.dom` for the node tree and `ui.render` for the box tree; `ui/dom/` already holds the seam, and `com.crystalgui.render` is the paint backend | `com.crystalgui.ui.dom` (node tree **beside** the seam it implements; `ElementTreeSource` stays until M6), `com.crystalgui.ui.box` for the box tree — *not* `ui.render`, which would sit one segment from the backend it draws through and be confused with it in every import list; `com.crystalgui.ui.service` for input/focus/motion/lifecycle | Every class written from 5.0 on lives somewhere; renaming packages later touches every file | recommended |
-| D5.2 | **Share or fork the cascade.** `style/` is ~11,400 lines and exactly **7 files (54 references)** name `UIElement`: `StyleEngine` 21, `PseudoClasses` 13, `TransitionEngine` 9, `GeneralGroup` 4, `ElementStyle` 3, `StyleSheet` 3, `HighlightStyle` 1. Everything else — properties, values, selectors, sheets, slots, the two-winner-map logic, easings — is already host-agnostic | **Share.** Extract a `Styleable` seam from those seven (identity for the rule index, the eight pseudo-class predicates `PseudoClasses` binds by method reference, parent for inheritance, the candidate store, a dirty-match hook) and have both `UIElement` and the new `Node` implement it. A fork copies 11,000 lines to change 54 references and then fixes every cascade bug twice | 5.2 cannot start without knowing whether it writes a new `StyleEngine` or re-hosts this one; the seam touches the old engine, which rule 2 caps | **done**: `Styleable` extracted; nine files retyped, not seven — `StyleProperty`'s listeners and both selector classes named the element too |
+| D5.2 | **Share or fork the cascade.** `style/` is ~11,400 lines and exactly **7 files (54 references)** name `UIElement`: `StyleEngine` 21, `PseudoClasses` 13, `TransitionEngine` 9, `GeneralGroup` 4, `ElementStyle` 3, `StyleSheet` 3, `HighlightStyle` 1. Everything else — properties, values, selectors, sheets, slots, the two-winner-map logic, easings — is already host-agnostic | **Share.** Extract a `Styleable` seam from those seven (identity for the rule index, the eight pseudo-class predicates `PseudoClasses` binds by method reference, parent for inheritance, the candidate store, a dirty-match hook) and have both `UIElement` and the new `UINode` implement it. A fork copies 11,000 lines to change 54 references and then fixes every cascade bug twice | 5.2 cannot start without knowing whether it writes a new `StyleEngine` or re-hosts this one; the seam touches the old engine, which rule 2 caps | **done**: `Styleable` extracted; nine files retyped, not seven — `StyleProperty`'s listeners and both selector classes named the element too |
 | D5.3 | **Node names.** D5 says registered namespaced names | A `Name` value (`namespace:local`, a `ResourceLocation` shape) declared by the class and registered once; a subclass inherits its supertype's name unless it declares its own — the `Dropdown`/`ToolWindowFrame` row from both directions. `crystalgui:button`, `crystalgui:machine` (from the `UiType` id). Selector type matching is on the name; the codec writes it | The rule index, the codec and the contract registry all key on it from 5.1 | recommended |
 | D5.4 | **Attributes.** The audit lists `enabled`, `inert`, `hit-test`, `focus-policy`, "arbitrary data keys" | **Typed keys**: `Attribute<T>` constants (`Attribute.ENABLED`, `Attribute.INERT`, …) on a per-node map, plus string attributes for what the codec carries. Keymap and settings scope become attributes looked up through the tree the way `DataContext` already walks, which retires two fields on the node | The seam's `attributeChanged` and the codec's `a` entry read from it; the focus service reads `INERT` and `FOCUS_POLICY` from it | recommended |
 | D5.5 | **Slots.** How much of the slot spec | Named slots and one default slot, `slot=` assignment by name, fallback children when nothing is assigned, `assignedSlot` on the node, `assignedNodes()` on the slot, `slotchange` as a lifecycle callback. **Not** `manual` slot assignment — nothing in the 54 composites needs it | Composed-tree iteration is written against it in 5.1 and the box tree walks it in 5.3 | recommended |
-| D5.6 | **Events.** `ui.event` is 8 files (365 lines + `EventListenerGroup`) and every type holds a `UIElement target` | **Generalise in place** over an `EventTarget` interface (`UIElement` and `Node` both implement); listener groups keyed on it. Duplicating the eight types would leave the drag controller, the keymap and every handler written twice | 5.1's retargeting and 5.5's dispatch need the types; this is old-engine touch #1 and must be a pure retype | **done** (`e2019d35`): 21 readers cast, one field retyped, every lambda unchanged |
+| D5.6 | **Events.** `ui.event` is 8 files (365 lines + `EventListenerGroup`) and every type holds a `UIElement target` | **Generalise in place** over an `EventTarget` interface (`UIElement` and `UINode` both implement); listener groups keyed on it. Duplicating the eight types would leave the drag controller, the keymap and every handler written twice | 5.1's retargeting and 5.5's dispatch need the types; this is old-engine touch #1 and must be a pure retype | **done** (`e2019d35`): 21 readers cast, one field retyped, every lambda unchanged |
 | D5.7 | **Scope model for stylesheets** | CSS `@scope`: a sheet is installed *for* a subtree (a document, a window, a shadow root) with a root and an optional lower boundary; scoping proximity ranks between specificity and source order, per the spec. M4's `ScopedSheets` selector rewrite becomes a scope with the window's root as its root, and its dual-form emission (root + descendants) disappears because a scope root matches itself | 5.2 writes the cascade ordering once; adding proximity later re-sorts every candidate comparison | **done**: `StyleEngine.addStylesheet(sheet, root)`, proximity on `StyleSlot` |
 | D5.8 | **CSS defaults in the box tree** — D4 says "adopt at M6 while every UA sheet is being ported" | **The box tree is written CSS-correct from its first line**: `flex-direction: row`, `flex-shrink: 1`, `min-size: auto`, `align-content: stretch`, `box-sizing: border-box`. There is no old sheet under the new engine to break, so the divergence rows never exist there; M6's port pays the sheet cost D4 already budgeted. Deciding otherwise means writing the defaults twice | 5.3's `BoxStyle` defaults and every layout test after it | **done**: `BoxStyle` writes the engine's defaults for anything unset — and had to for margin, padding and border too, whose registry initial is `auto` |
-| D5.9 | **One Taffy tree per document, or per host** | One per document; a host is a *parent choice* when the box is inserted into the Taffy tree, not a second tree. Promotion, owned attachment, tear-out and thumbnails are all "this box's Taffy parent is that box's" — one `insertChildAtIndex`. A per-host tree would reintroduce the two coordinate chains as two layout results | 5.3's `Box.host` and every world-matrix computation | **done**: one `TaffyTree` per `Document`; `Box.setHost` is a parent choice; a mirror is a second box, not a second tree |
+| D5.9 | **One Taffy tree per document, or per host** | One per document; a host is a *parent choice* when the box is inserted into the Taffy tree, not a second tree. Promotion, owned attachment, tear-out and thumbnails are all "this box's Taffy parent is that box's" — one `insertChildAtIndex`. A per-host tree would reintroduce the two coordinate chains as two layout results | 5.3's `Box.host` and every world-matrix computation | **done**: one `TaffyTree` per `UIDocument`; `Box.setHost` is a parent choice; a mirror is a second box, not a second tree |
 | D5.10 | **What the first `Measurable` is** | A minimal `TextNode` — shaped text under a measure function, painted as a run — written in 5.3 and painted in 5.4. It is the only way to prove the measure protocol against real shaping (the `MeasureFuncUnderFlexWrapTest` shape), and it is the seed M6's `UIText` port grows from | Without a real measurable, one-pass layout is proven against boxes with explicit sizes, which proves nothing about the loop that was removed | **done**: `TextNode implements Measurable`, shaped through `CgTextLayout`; `Measurable.Fit` distinguishes the min-content ask, which the old measure function never saw |
 
 ---
@@ -141,7 +141,7 @@ than during it. **Decisions taken 2026-08-30 as recommended unless the status co
 - The harness switch: `--engine=old|new` read by the scene base class, with the default `old`. In 5.0
   `new` boots an empty document and draws nothing; it exists so that 5.4 lands into a switch that
   every scene already honours rather than into a fork of the scene base.
-- A headless `Document` fixture in the test source set — the equivalent of today's
+- A headless `UIDocument` fixture in the test source set — the equivalent of today's
   `UIWindow.updateWithoutPainting()`: style, tick, layout, no GL — as an empty class that 5.1–5.3
   fill in. Tests are written against it from 5.1 on.
 
@@ -154,34 +154,34 @@ other, and it is a test that says so.
 
 **Contents.** Audit §12.1, and nothing that belongs to §12.3.
 
-- `Node`: parent, light children, `shadowRoot`, `assignedSlot`, `Name` (D5.3), id, classes, typed
+- `UINode`: parent, light children, `shadowRoot`, `assignedSlot`, `Name` (D5.3), id, classes, typed
   attributes (D5.4), the event listener groups (D5.6), a nullable `Box` reference, and the
   `Styleable` face 5.2 will fill. **No** geometry, Taffy id, world matrix, scroll offset, keymap,
   settings, network field or internal flag. Mutation entry points: `append`, `insertAt`, `remove`,
   `moveTo(parent, index)` — the last being the `moved` op the wire has carried since M2 and the old
   tree could not spell without `moveDescribedChildTo`.
 - `ShadowRoot` (a node subtree that is not a light child; `delegatesFocus`; its own style scope) and
-  `Slot` (D5.5), with `assignedNodes()`, fallback content, and `slotchange`.
+  `UISlot` (D5.5), with `assignedNodes()`, fallback content, and `slotchange`.
 - **Composed-tree iteration** (`composedChildren`, `composedParent`, a depth-first iterator over
   light + shadow via slots) as the walk layout, paint and hit-testing will read; **light-tree
   iteration** as what authors, the codec and the mirror see. `describedChildren`, `internal`,
   `markAsInternal`, `removeChildInternal` and `addDescribedChildAt` have no counterpart.
 - **Retargeting**: `retarget(target, relativeTo)` per the spec's algorithm, used by events crossing a
   shadow boundary and by focus (`activeElement` seen from outside a host is the host).
-- `Document`: the root, the id index, the observer slot, the frame-thread owner
+- `UIDocument`: the root, the id index, the observer slot, the frame-thread owner
   (`UiThread.require` at every mutation entry, rule 4), the lifecycle queue (rule 5) with
   `connected`/`disconnected`/`frozen`/`thawed` dispatched after the mutation, in document order.
-- `NodeTreeSource implements TreeSource<Node>` natively: ids in a table on the source (as
+- `UINodeTreeSource implements TreeSource<UINode>` natively: ids in a table on the source (as
   `ElementTreeSource` does today), light children as `childrenOf`, contracts by `Name` through
-  `WidgetContracts`, the observer forwarded from the document. `NodeMirror<Node, T>` over the codec
+  `WidgetContracts`, the observer forwarded from the document. `NodeMirror<UINode, T>` over the codec
   — description by name + attributes + light children, state by the node's contract.
 - The codec seam: `UIDescriptionCodec` reads through `TreeSource.childrenOf` already (M0 §2.0.1); what
-  5.1 adds is decoding into a `Node` by registered `Name`, behind the same `Codec` shape.
+  5.1 adds is decoding into a `UINode` by registered `Name`, behind the same `Codec` shape.
 
 **Touches the old engine:** `ui.event` retyped over `EventTarget` (D5.6) — old tests unchanged.
 **Acceptance:** `TreeSourceContractTest` with `sourceOver` repointed and **nothing else changed**
 (23); `TreeObserverBehaviourTest` ported to run over both sources (13 ×2); `MirrorIsEngineAgnosticTest`
-gains a run over `NodeTreeSource` beside its twelve-line fixture; new `NodeTreeTest`: composed
+gains a run over `UINodeTreeSource` beside its twelve-line fixture; new `NodeTreeTest`: composed
 iteration through nested shadow roots and slots, default and named slot assignment, fallback content
 appearing and disappearing, retargeting across two boundaries, `moveTo` reported as one `moved`,
 lifecycle order (a child's `connected` after its parent's, `disconnected` before), a mutation from
@@ -191,15 +191,15 @@ milestone's whole claim about networking.
 
 #### 5.0 and 5.1 — what shipped, and where the plan was wrong
 
-**5.0** shipped as written, with one honest deviation: the headless `Document` fixture came with 5.1
+**5.0** shipped as written, with one honest deviation: the headless `UIDocument` fixture came with 5.1
 and the class it wraps, because an empty class is not a fixture. The harness `--engine` flag is
 committed on the harness's own branch (`8f04e46`); master's submodule pointer was **not** moved,
 because the checked-out harness has diverged from the recorded commit onto a line whose slot scene
 needs a core branch master does not have — moving the pointer would have made master's harness
 uncompilable against master's core. Reconciling the two lines is the user's, and 5.4 needs it done.
 
-**5.1** shipped `ui.dom`'s `Name`, `Attribute`, `Node`, `ShadowRoot`, `Slot`, `Document`, `NodeRegistry`,
-`NodeTreeSource`, and `net.mirror.DomNodeMirror`. Three things the plan said differently:
+**5.1** shipped `ui.dom`'s `Name`, `Attribute`, `UINode`, `ShadowRoot`, `UISlot`, `UIDocument`, `UINodeRegistry`,
+`UINodeTreeSource`, and `net.mirror.DomNodeMirror`. Three things the plan said differently:
 
 - *"Repoint `sourceOver` and change nothing else"* was not literally possible: the M0 suite built
   `UIElement`s directly. The honest version is `TreeSourceContract<N>` — the assertions verbatim,
@@ -213,7 +213,7 @@ uncompilable against master's core. Reconciling the two lines is the user's, and
   contract's edit-script half. `MirrorIsEngineAgnosticTest` kept its twelve-line fixture and
   `MirrorOverNodeTreeTest` is the run over the real tree — seven tests, including that a shadow tree
   never travels and that a change inside one produces no traffic.
-- There is no `Lifecycle` interface; the four callbacks are protected hooks on `Node` (custom
+- There is no `Lifecycle` interface; the four callbacks are protected hooks on `UINode` (custom
   elements' shape), because an interface would have made them public. And the composed walk is
   `composedSubtree()`, inclusive of its start, which is what a layout or paint pass wants.
 
@@ -228,7 +228,7 @@ what left the described tree left it.
 **Contents.** Audit §12.2 and §5.
 
 - The `Styleable` seam extracted from the seven files (D5.2); `UIElement` implements it by
-  delegation to what it already has; `Node` implements it natively. `PseudoClasses` binds to the
+  delegation to what it already has; `UINode` implements it natively. `PseudoClasses` binds to the
   seam's eight predicates instead of `UIElement::`.
 - `NodeStyle` (the candidate store per node — `ElementStyle`'s two-winner-map logic behind the seam,
   not copied) and **`ComputedStyle`**: an immutable value produced per node per pass, every property
@@ -262,8 +262,8 @@ host-agnostic, and the engine has no way to write into it.
 Shipped: `style.Styleable` (the seam), `style.ComputedStyle`, scopes with proximity, `:root`, the
 per-rule catch, `ElementStyle`/`StyleEngine`/`TransitionEngine`/`PseudoClasses`/both selectors/
 `StyleSheet`/`StyleSlot` re-hosted over the seam, `UIElement implements Styleable` by mostly already
-existing, `Node implements Styleable` with a store, interaction state and a `PART` attribute, and
-`Document.styles()`. `NodeStylePassTest` is the acceptance: twelve tests over the node host, and the
+existing, `UINode implements Styleable` with a store, interaction state and a `PART` attribute, and
+`UIDocument.styles()`. `NodeStylePassTest` is the acceptance: twelve tests over the node host, and the
 old engine's 80 style tests as the guard for the retype. Three corrections to the plan:
 
 - **Nine files, not seven.** The census counted files naming `UIElement` in `style/` root, `sheet`
@@ -304,7 +304,7 @@ costs its rule and nothing else, on both engines.
 - **The measure protocol**: `Measurable.measure(constraints) -> size` on a node's skin, wired to
   Taffy's `setMeasureFunc`; `TextNode` (D5.10) as the first implementor, shaping through the same
   `FontFamilyCache` and `CgShapedParagraph` the old `UIText` uses.
-- **One-pass layout**: `Document.layout()` calls `computeLayout` once. There is no `while
+- **One-pass layout**: `UIDocument.layout()` calls `computeLayout` once. There is no `while
   (isLayoutDirty())`, no `MAX_LAYOUT_PASSES`, and nothing a layout callback can write that re-dirties
   the tree. Geometry feedback that used to go through `IMPORTANT` candidates (`UIText`,
   `ProgressBar`) goes through `measure`.
@@ -330,7 +330,7 @@ Shipped: `ui.box` — `Box` (geometry, host, scroll, z/opacity/transform overrid
 `hitTest`), `BoxTree` (one Taffy tree per document; sync on a REPORTED structure change; restyle
 by `ComputedStyle` identity; `computeLayout` once; read; compose), `BoxStyle` (the one mapper),
 `Measurable` (+`Constraints`, `Size`, `Fit`), `TextNode` (the first measurable, shaped through
-`CgTextLayout`), `Document.boxes()/layout()/update()/addStructureListener()`, `Node.box()` and a
+`CgTextLayout`), `UIDocument.boxes()/layout()/update()/addStructureListener()`, `UINode.box()` and a
 `structureChanged()` call at every mutator. Twenty-one tests: `OnePassLayoutTest` (five trees on
 both engines, geometry identical to 0.01px, one pass, no walk on an unchanged frame),
 `HitTestBeforePaintTest`, `HostTest` (promotion, owned slot, stacking order, mirrors, `display:
@@ -355,7 +355,7 @@ Four corrections to the plan:
   `MeasureFunc`'s `AvailableSpace` carries which. Answering min-content with one unbroken line makes
   a text leaf's minimum its whole line, so it can never shrink below it. `Measurable.Constraints`
   carries the `Fit`; `TextNode` wraps at 1px for it.
-- **`Document.structureChanged()` could not be named that** — `Document extends Node` and the
+- **`UIDocument.structureChanged()` could not be named that** — `UIDocument extends UINode` and the
   node's own hook is final. `fireStructureChanged` on the document, `structureChanged` on the node.
 
 ### 5.4 — Paint and hit-test through boxes, in the harness · M · after: 5.3
@@ -388,9 +388,9 @@ can run either engine — the row's stated condition.
 
 Shipped: `BoxPainter` — the pass over the box tree (background/rounded wrap/mask/overlay/outline
 ported against `ComputedStyle`, layer-FBO opacity and mask through the same paint context, a square
-clip as a scissor in box-local space), `Node.paintContent`/`paintDecoration` (the skin hooks; the
+clip as a scissor in box-local space), `UINode.paintContent`/`paintDecoration` (the skin hooks; the
 box model is the painter's), `TextNode.paintContent` through `CgTextRenderer` (5.3's measurable is
-the first thing on screen), `BoxTree.paint(ctx)`/`Document.paint(ctx)`, the harness's
+the first thing on screen), `BoxTree.paint(ctx)`/`UIDocument.paint(ctx)`, the harness's
 `cgui-engine-parity` scene (one spec + one stylesheet built on BOTH engines, alternating every 2s,
 PNGs on frames 4/5), and `EngineParityTest` comparing the PNGs within tolerance — skipped with a
 message when no GL run has written them, gating on the ENVIRONMENT and never the answer. Notes:
@@ -432,7 +432,7 @@ message when no GL run has written them, gating on the ENVIRONMENT and never the
   hooks and marks it `frozen`; the node tree stays, session state is not captured because nothing
   is lost; `thaw` rebuilds the boxes on the next pass; `destroy` disconnects. Hide-as-detach has no
   counterpart, and neither do the eight rows that are its cost.
-- The headless `Document` fixture gains `consumeMouseEvent`/`consumeKeyboardEvent` so the focus and
+- The headless `UIDocument` fixture gains `consumeMouseEvent`/`consumeKeyboardEvent` so the focus and
   hit-test rows can be driven at a point, which is the only way most of them can be seen.
 
 **Touches the old engine:** no. **Acceptance:** the **38 focus rows and the 20 hit-test rows of
@@ -449,10 +449,10 @@ matches no selector, keeps its scroll offset and its text without any capture, a
 
 Shipped: `ui.service` — `Input` (the platform sink, the hit test, three-phase dispatch over the
 composed tree with retargeting, pointer capture, press/click detail, keyboard activation, the
-cursor's `auto` rule, and the `Chords` keymap seam), `Mode` + the stack, `Drag` as a mode, `Focus`
+cursor's `auto` rule, and the `Chords` keymap seam), `InputMode` + the stack, `Drag` as a mode, `Focus`
 (one owner, one traversal, one inertness predicate, scopes, modality, `delegatesFocus`),
 `Animation` (timelines + node-owned per-frame hooks), `Lifecycle` (freeze/thaw/destroy),
-`Document.frame(delta, w, h)`, `Box.scrollIntoView`, and `Node`'s interaction state, focus policy,
+`UIDocument.frame(delta, w, h)`, `Box.scrollIntoView`, and `UINode`'s interaction state, focus policy,
 `consumesTextInput`, `claimsChord` and scroll. **58 tests**, each named for the invariant row it
 pins. Headless went 1634 → 1691, all green.
 
@@ -484,7 +484,7 @@ rather than one-way `UIFrameTicker` registration.
 | The drag GHOST | `DragGhost` is a `ui.elements` widget. M6. |
 | `scrollExempt` children in the painter | A 5.4 gap: a scrollbar would scroll away with its content. |
 
-`Document` deliberately does NOT implement the platform sink itself — `Input` does, and a host or a
+`UIDocument` deliberately does NOT implement the platform sink itself — `Input` does, and a host or a
 test reaches it through `document.input()`. Giving the document a second identity as a raw event
 sink is exactly what `UIWindow` avoided, and for the same reason.
 
@@ -523,7 +523,7 @@ explanation at the head of the table rather than twelve parentheticals; and
   widgets that outlive the port; a guide whose entire subject is the difference between two engines
   rots the moment one of them goes. It is indexed from `AGENTS.md` and deleted whole at M8.
 - **The paper port changed the guide five times**, which is what the exercise is for. The sharpest:
-  the registry's factory is a `Supplier<? extends Node>`, so a widget whose only constructor takes
+  the registry's factory is a `Supplier<? extends UINode>`, so a widget whose only constructor takes
   its text does not compile as `Button::new` and the codec has nothing to build it with — the same
   no-arg requirement `ElementRegistry` always had, in a place nobody would look for it.
 - **The rows are MARKED, never deleted.** The old engine ships until M8 and its readers still need
@@ -572,7 +572,7 @@ record into a display list later without changing the tree.
 | Places special-casing a promoted element | 9 + one `IMPORTANT` write | 0 (a host) |
 | Engine writes into the cascade | 46 files at `IMPORTANT` | 0 (no API) |
 | Motion mechanisms | 5 | 1 service + transitions as its client |
-| Seam suite | passes on `UIElement` | passes on `Node`, unchanged |
+| Seam suite | passes on `UIElement` | passes on `UINode`, unchanged |
 | Focus / hit-test invariant rows that are tests | 0 | 58 |
 | Constant-pool references across the strangler line | untested | 0, asserted |
 | Engines the harness can run | 1 | 2 |
