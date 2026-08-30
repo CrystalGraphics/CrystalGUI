@@ -5,7 +5,7 @@ import com.crystalgui.style.StyleEngine;
 import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.selector.Selector;
 import com.crystalgui.style.selector.SelectorType;
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.style.Styleable;
 import lombok.Getter;
 
 import java.util.ArrayList;
@@ -184,7 +184,19 @@ public final class StyleSheet {
             for (String selectorText : selectorList.split(",")) {
                 String trimmed = selectorText.trim();
                 if (trimmed.isEmpty()) continue;
-                rules.add(new StyleRule(Selector.parse(trimmed), declarations, sourceOrder));
+                // A BAD SELECTOR INVALIDATES ITS RULE, NEVER THE SHEET. One :focus-within used to take
+                // six unrelated panels down with it (audit §5 S3); CSS drops the rule and keeps going.
+                try {
+                    // A BAD SELECTOR INVALIDATES ITS RULE, NEVER THE SHEET. One :focus-within used to take
+                // six unrelated panels down with it (audit §5 S3); CSS drops the rule and keeps going.
+                try {
+                    rules.add(new StyleRule(Selector.parse(trimmed), declarations, sourceOrder));
+                } catch (IllegalArgumentException unparseable) {
+                    CrystalGuiCore.LOGGER.warn("Dropping the rule for '{}': {}", trimmed, unparseable.getMessage());
+                }
+                } catch (IllegalArgumentException unparseable) {
+                    CrystalGuiCore.LOGGER.warn("Dropping the rule for '{}': {}", trimmed, unparseable.getMessage());
+                }
             }
             sourceOrder++;
         }
@@ -328,7 +340,7 @@ public final class StyleSheet {
      * All rules whose bucket key could plausibly match {@code element} — a bucket hit only narrows
      * the candidate set, callers must still verify with {@link Selector#matches}.
      */
-    public List<StyleRule> candidatesFor(UIElement element) {
+    public List<StyleRule> candidatesFor(Styleable element) {
         Set<StyleRule> candidates = new LinkedHashSet<>(universal);
         if (!element.getId().isEmpty()) {
             candidates.addAll(byId.getOrDefault(element.getId(), List.of()));
@@ -336,7 +348,9 @@ public final class StyleSheet {
         for (String cls : element.getClasses()) {
             candidates.addAll(byClass.getOrDefault(cls, List.of()));
         }
-        candidates.addAll(byType.getOrDefault(element.tagName(), List.of()));
+        for (String type : element.typeKeys()) {
+            candidates.addAll(byType.getOrDefault(type, List.of()));
+        }
         return new ArrayList<>(candidates);
     }
 

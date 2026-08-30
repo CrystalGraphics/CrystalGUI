@@ -1,7 +1,7 @@
 package com.crystalgui.style.selector;
 
 import com.crystalgui.style.PseudoClasses;
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.style.Styleable;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
  * One simple-selector group with no combinators, e.g. {@code .foo.bar:hover} or {@code button#id}.
  * A {@link Selector} chains these together with combinators for descendant/child matching.
  *
- * <p>Pseudo-classes are matched by delegating directly to {@link PseudoClasses#applies(UIElement)} —
+ * <p>Pseudo-classes are matched by delegating directly to {@link PseudoClasses#applies(Styleable)} —
  * no synthetic {@code __hovered__}-style classes are added to the element.
  */
 public record CompoundSelector(List<Part> parts) {
@@ -86,13 +86,13 @@ public record CompoundSelector(List<Part> parts) {
      * paint the whole paragraph in the highlight colour — the single most likely way to get this
      * wrong.</p>
      */
-    public boolean matches(UIElement element) {
+    public boolean matches(Styleable element) {
         if (pseudoElement() != null) return false;
         return matchesOriginating(element);
     }
 
     /** Matches ignoring any pseudo-element part — "is this the <em>originating</em> element?" */
-    public boolean matchesOriginating(UIElement element) {
+    public boolean matchesOriginating(Styleable element) {
         for (var part : parts) {
             if (part.type() == SelectorType.PSEUDO_ELEMENT) continue;
             if (!partMatches(part, element)) return false;
@@ -100,10 +100,10 @@ public record CompoundSelector(List<Part> parts) {
         return true;
     }
 
-    private static boolean partMatches(Part part, UIElement element) {
+    private static boolean partMatches(Part part, Styleable element) {
         return switch (part.type()) {
             case UNIVERSAL -> true;
-            case TYPE -> element.tagName().equals(part.identity());
+            case TYPE -> element.matchesType(part.identity());
             case ID -> element.getId().equals(part.identity());
             case CLASS -> element.hasClass(part.identity());
             case PSEUDO_CLASS -> PseudoClasses.lookup(part.identity()).applies(element);

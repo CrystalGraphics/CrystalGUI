@@ -18,7 +18,10 @@ import com.crystalgui.render.texture.CgUiRoundedRect;
 import com.crystalgui.render.texture.CornerRadiusAware;
 import com.crystalgui.render.texture.CgUiSprite;
 import com.crystalgui.style.ElementStyle;
+import com.crystalgui.style.Styleable;
 import com.crystalgui.style.StyleEngine;
+import com.crystalgui.style.property.StyleProperty;
+import com.crystalgui.ui.shadow.ShadowRoot;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.property.layout.LayoutProperties;
@@ -74,7 +77,7 @@ import static com.crystalgui.ui.UIWindow.EMPTY_LAYOUT;
  * like an HTML {@code <div>}).
  */
 @Accessors(chain = true)
-public class UIElement implements EventTarget, SettingsScope, DataProvider {
+public class UIElement implements EventTarget, Styleable, SettingsScope, DataProvider {
     private static final Comparator<UIElement> Z_INDEX_DESCENDING = (a, b) -> Integer.compare(b.style.generalGroup.zIndex(), a.style.generalGroup.zIndex());
 
     // ── Core state ───────────────────────────────────────────────────────────
@@ -2689,6 +2692,35 @@ public class UIElement implements EventTarget, SettingsScope, DataProvider {
     private boolean hasFontRelativeStyles;
 
     /** Told by {@code StyleEngine.rematch} whether this element's rules use {@code em}. */
+    // ── Styleable: the seam the cascade is written against (plan_m5.md D5.2) ─────────────────
+    // Most of it is methods this class already had, which is why the seam borrowed their names.
+
+    @Override
+    @Nullable
+    public Styleable shadowHost() {
+        return ShadowRoot.hostOf(this);
+    }
+
+    @Override
+    @Nullable
+    public String partName() {
+        return ShadowRoot.partOf(this);
+    }
+
+    @Override
+    @Nullable
+    public StyleEngine styleEngine() {
+        UIWindow window = getAttachedWindow();
+        return window == null ? null : window.getStyleEngine();
+    }
+
+    /** The old engine's answer: the property's listeners, which is how a layout property reaches Taffy. */
+    @Override
+    @SuppressWarnings("unchecked")
+    public void computedChanged(StyleProperty<?> property, @Nullable Object oldValue, @Nullable Object newValue) {
+        ((StyleProperty<Object>) property).notifyListeners(this, oldValue, newValue);
+    }
+
     public void setHasFontRelativeStyles(boolean value) {
         this.hasFontRelativeStyles = value;
     }

@@ -70,7 +70,8 @@ public class EngineBoundaryTest {
             "com/crystalgui/ui/elements/",
             "com/crystalgui/ui/shadow/",
             "com/crystalgui/ui/dom/ElementTreeSource",
-            "com/crystalgui/style/ElementStyle",
+            // NOT ElementStyle: D5.2 shares the cascade's store between engines behind Styleable.
+            // TaffyBridge stays forbidden -- it is the old engine's layout listener path.
             "com/crystalgui/style/TaffyBridge");
 
     private static boolean isNewEngine(String relativeClassPath) {
@@ -110,6 +111,42 @@ public class EngineBoundaryTest {
                 root, root.resolve("com/crystalgui"), path -> !isNewEngine(path), forbidden);
         assertTrue("the old engine reaches into the new one:\n" + String.join("\n", offences),
                 offences.isEmpty());
+    }
+
+    /** What a class may not DO with the cascade: write at the origin an author's {@code !important} lives at. */
+    private static final List<String> ENGINE_WRITES = List.of(
+            "com/crystalgui/style/StyleOrigin.IMPORTANT",
+            "com/crystalgui/style/StyleGroup.importantPipeline");
+
+    /**
+     * <b>The engine writes nothing into the cascade</b> — plan_m5.md §2, rule 3. Placement, stacking,
+     * visibility, opacity and animation are box properties; an {@code IMPORTANT} write from engine
+     * code is how the old cascade became the only mutable box model it had (audit §3: 46 files).
+     */
+    @Test
+    public void theNewEngineWritesNothingIntoTheCascade() throws IOException {
+        Path root = ClassReferences.mainClassesRoot(EngineBoundaryTest.class);
+        List<String> offences = new java.util.ArrayList<>();
+        try (java.util.stream.Stream<Path> files = Files.walk(root.resolve("com/crystalgui"))) {
+            for (Path file : files.filter(p -> p.toString().endsWith(".class")).toArray(Path[]::new)) {
+                String relative = root.relativize(file).toString().replace('\\', '/');
+                if (!isNewEngine(relative)) continue;
+                for (String member : ClassReferences.memberReferencesOf(file)) {
+                    if (ENGINE_WRITES.contains(member)) offences.add(relative + " uses " + member);
+                }
+            }
+        }
+        assertTrue("the new engine writes into the cascade:\n" + String.join("\n", offences), offences.isEmpty());
+    }
+
+    @Test
+    public void andTheOldEngineDOESWriteAtImportant() throws IOException {
+        // The negative control for the rule above: UIText's geometry feedback is an IMPORTANT write.
+        Path root = ClassReferences.mainClassesRoot(EngineBoundaryTest.class);
+        java.util.Set<String> members = ClassReferences.memberReferencesOf(
+                root.resolve("com/crystalgui/ui/elements/UIText.class"));
+        assertTrue("the member scan found no importantPipeline call in UIText -- it is not detecting anything",
+                members.contains("com/crystalgui/style/StyleGroup.importantPipeline"));
     }
 
     @Test

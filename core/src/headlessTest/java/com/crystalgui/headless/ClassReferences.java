@@ -74,6 +74,36 @@ public final class ClassReferences {
         return offences;
     }
 
+    /**
+     * Every {@code owner.member} a class's bodies touch: a field read or written, a method called.
+     * For rules about WHAT is done with a type rather than whether it is named — an enum constant, a
+     * particular static method.
+     */
+    public static Set<String> memberReferencesOf(Path classFile) throws IOException {
+        Set<String> members = new LinkedHashSet<>();
+        try (InputStream stream = Files.newInputStream(classFile)) {
+            new ClassReader(stream).accept(new ClassVisitor(Opcodes.ASM9) {
+                @Override
+                public MethodVisitor visitMethod(int access, String name, String descriptor,
+                                                 String signature, String[] exceptions) {
+                    return new MethodVisitor(Opcodes.ASM9) {
+                        @Override
+                        public void visitFieldInsn(int opcode, String owner, String fieldName, String fieldDescriptor) {
+                            members.add(owner + "." + fieldName);
+                        }
+
+                        @Override
+                        public void visitMethodInsn(int opcode, String owner, String methodName,
+                                                    String methodDescriptor, boolean isInterface) {
+                            members.add(owner + "." + methodName);
+                        }
+                    };
+                }
+            }, ClassReader.SKIP_FRAMES);
+        }
+        return members;
+    }
+
     private static boolean matches(String referenced, String rule) {
         if (rule.endsWith("/")) return referenced.startsWith(rule);
         return referenced.equals(rule) || referenced.startsWith(rule + "$");

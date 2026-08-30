@@ -27,7 +27,7 @@ the audit's numbers (§1 there: ~26,700 lines replaced, of which the engine's ow
 |---|---|---|---|---|---|
 | 5.0 | The strangler line and the second engine's skeleton | S | — | The two engines cannot reach each other, and a test says so | **shipped 2026-08-30** — `8f6090fc` + harness `8f04e46` |
 | 5.1 | The node tree | L | 5.0 | The seam suite passes on a tree that has never heard of `UIElement` | **shipped 2026-08-30** — see §4.1 notes |
-| 5.2 | The style pass, re-hosted and scoped | M | 5.1 | The cascade is host-agnostic; scopes and `:root` inheritance work; the engine writes nothing into it | planned |
+| 5.2 | The style pass, re-hosted and scoped | M | 5.1 | The cascade is host-agnostic; scopes and `:root` inheritance work; the engine writes nothing into it | **shipped 2026-08-30** — see §4.2 notes |
 | 5.3 | The box tree and one-pass layout | L | 5.2 | Layout of the gallery's trees runs to completion in **one** pass; hit-testing is correct before any paint | planned |
 | 5.4 | Paint and hit-test through boxes, in the harness | M | 5.3 | A fixed tree renders pixel-identically on both engines; the harness runs either | planned |
 | 5.5 | The services: input, focus, motion, lifecycle | L | 5.3 | The 38 focus rows and the 20 hit-test rows are tests, and pass; a frozen window costs nothing | planned |
@@ -113,12 +113,12 @@ than during it. **Decisions taken 2026-08-30 as recommended unless the status co
 | # | Decision | Recommendation | Why it blocks | Status |
 |---|---|---|---|---|
 | D5.1 | **Package names.** The audit says `ui.dom` for the node tree and `ui.render` for the box tree; `ui/dom/` already holds the seam, and `com.crystalgui.render` is the paint backend | `com.crystalgui.ui.dom` (node tree **beside** the seam it implements; `ElementTreeSource` stays until M6), `com.crystalgui.ui.box` for the box tree — *not* `ui.render`, which would sit one segment from the backend it draws through and be confused with it in every import list; `com.crystalgui.ui.service` for input/focus/motion/lifecycle | Every class written from 5.0 on lives somewhere; renaming packages later touches every file | recommended |
-| D5.2 | **Share or fork the cascade.** `style/` is ~11,400 lines and exactly **7 files (54 references)** name `UIElement`: `StyleEngine` 21, `PseudoClasses` 13, `TransitionEngine` 9, `GeneralGroup` 4, `ElementStyle` 3, `StyleSheet` 3, `HighlightStyle` 1. Everything else — properties, values, selectors, sheets, slots, the two-winner-map logic, easings — is already host-agnostic | **Share.** Extract a `Styleable` seam from those seven (identity for the rule index, the eight pseudo-class predicates `PseudoClasses` binds by method reference, parent for inheritance, the candidate store, a dirty-match hook) and have both `UIElement` and the new `Node` implement it. A fork copies 11,000 lines to change 54 references and then fixes every cascade bug twice | 5.2 cannot start without knowing whether it writes a new `StyleEngine` or re-hosts this one; the seam touches the old engine, which rule 2 caps | recommended |
+| D5.2 | **Share or fork the cascade.** `style/` is ~11,400 lines and exactly **7 files (54 references)** name `UIElement`: `StyleEngine` 21, `PseudoClasses` 13, `TransitionEngine` 9, `GeneralGroup` 4, `ElementStyle` 3, `StyleSheet` 3, `HighlightStyle` 1. Everything else — properties, values, selectors, sheets, slots, the two-winner-map logic, easings — is already host-agnostic | **Share.** Extract a `Styleable` seam from those seven (identity for the rule index, the eight pseudo-class predicates `PseudoClasses` binds by method reference, parent for inheritance, the candidate store, a dirty-match hook) and have both `UIElement` and the new `Node` implement it. A fork copies 11,000 lines to change 54 references and then fixes every cascade bug twice | 5.2 cannot start without knowing whether it writes a new `StyleEngine` or re-hosts this one; the seam touches the old engine, which rule 2 caps | **done**: `Styleable` extracted; nine files retyped, not seven — `StyleProperty`'s listeners and both selector classes named the element too |
 | D5.3 | **Node names.** D5 says registered namespaced names | A `Name` value (`namespace:local`, a `ResourceLocation` shape) declared by the class and registered once; a subclass inherits its supertype's name unless it declares its own — the `Dropdown`/`ToolWindowFrame` row from both directions. `crystalgui:button`, `crystalgui:machine` (from the `UiType` id). Selector type matching is on the name; the codec writes it | The rule index, the codec and the contract registry all key on it from 5.1 | recommended |
 | D5.4 | **Attributes.** The audit lists `enabled`, `inert`, `hit-test`, `focus-policy`, "arbitrary data keys" | **Typed keys**: `Attribute<T>` constants (`Attribute.ENABLED`, `Attribute.INERT`, …) on a per-node map, plus string attributes for what the codec carries. Keymap and settings scope become attributes looked up through the tree the way `DataContext` already walks, which retires two fields on the node | The seam's `attributeChanged` and the codec's `a` entry read from it; the focus service reads `INERT` and `FOCUS_POLICY` from it | recommended |
 | D5.5 | **Slots.** How much of the slot spec | Named slots and one default slot, `slot=` assignment by name, fallback children when nothing is assigned, `assignedSlot` on the node, `assignedNodes()` on the slot, `slotchange` as a lifecycle callback. **Not** `manual` slot assignment — nothing in the 54 composites needs it | Composed-tree iteration is written against it in 5.1 and the box tree walks it in 5.3 | recommended |
 | D5.6 | **Events.** `ui.event` is 8 files (365 lines + `EventListenerGroup`) and every type holds a `UIElement target` | **Generalise in place** over an `EventTarget` interface (`UIElement` and `Node` both implement); listener groups keyed on it. Duplicating the eight types would leave the drag controller, the keymap and every handler written twice | 5.1's retargeting and 5.5's dispatch need the types; this is old-engine touch #1 and must be a pure retype | **done** (`e2019d35`): 21 readers cast, one field retyped, every lambda unchanged |
-| D5.7 | **Scope model for stylesheets** | CSS `@scope`: a sheet is installed *for* a subtree (a document, a window, a shadow root) with a root and an optional lower boundary; scoping proximity ranks between specificity and source order, per the spec. M4's `ScopedSheets` selector rewrite becomes a scope with the window's root as its root, and its dual-form emission (root + descendants) disappears because a scope root matches itself | 5.2 writes the cascade ordering once; adding proximity later re-sorts every candidate comparison | recommended |
+| D5.7 | **Scope model for stylesheets** | CSS `@scope`: a sheet is installed *for* a subtree (a document, a window, a shadow root) with a root and an optional lower boundary; scoping proximity ranks between specificity and source order, per the spec. M4's `ScopedSheets` selector rewrite becomes a scope with the window's root as its root, and its dual-form emission (root + descendants) disappears because a scope root matches itself | 5.2 writes the cascade ordering once; adding proximity later re-sorts every candidate comparison | **done**: `StyleEngine.addStylesheet(sheet, root)`, proximity on `StyleSlot` |
 | D5.8 | **CSS defaults in the box tree** — D4 says "adopt at M6 while every UA sheet is being ported" | **The box tree is written CSS-correct from its first line**: `flex-direction: row`, `flex-shrink: 1`, `min-size: auto`, `align-content: stretch`, `box-sizing: border-box`. There is no old sheet under the new engine to break, so the divergence rows never exist there; M6's port pays the sheet cost D4 already budgeted. Deciding otherwise means writing the defaults twice | 5.3's `BoxStyle` defaults and every layout test after it | recommended |
 | D5.9 | **One Taffy tree per document, or per host** | One per document; a host is a *parent choice* when the box is inserted into the Taffy tree, not a second tree. Promotion, owned attachment, tear-out and thumbnails are all "this box's Taffy parent is that box's" — one `insertChildAtIndex`. A per-host tree would reintroduce the two coordinate chains as two layout results | 5.3's `Box.host` and every world-matrix computation | recommended |
 | D5.10 | **What the first `Measurable` is** | A minimal `TextNode` — shaped text under a measure function, painted as a run — written in 5.3 and painted in 5.4. It is the only way to prove the measure protocol against real shaping (the `MeasureFuncUnderFlexWrapTest` shape), and it is the seed M6's `UIText` port grows from | Without a real measurable, one-pass layout is proven against boxes with explicit sizes, which proves nothing about the loop that was removed | recommended |
@@ -256,6 +256,32 @@ outside it; `::part` reaches in); `RootFontSizeTest` (`em` on a wrapper resolves
 size); `BadSelectorTest` (one broken rule, the rest of the sheet applied); `ComputedStyleTest` (no
 property answers null; the value is immutable across the pass). **Proves:** the cascade is
 host-agnostic, and the engine has no way to write into it.
+
+#### 5.2 — what shipped, and where the plan was wrong
+
+Shipped: `style.Styleable` (the seam), `style.ComputedStyle`, scopes with proximity, `:root`, the
+per-rule catch, `ElementStyle`/`StyleEngine`/`TransitionEngine`/`PseudoClasses`/both selectors/
+`StyleSheet`/`StyleSlot` re-hosted over the seam, `UIElement implements Styleable` by mostly already
+existing, `Node implements Styleable` with a store, interaction state and a `PART` attribute, and
+`Document.styles()`. `NodeStylePassTest` is the acceptance: twelve tests over the node host, and the
+old engine's 80 style tests as the guard for the retype. Three corrections to the plan:
+
+- **Nine files, not seven.** The census counted files naming `UIElement` in `style/` root, `sheet`
+  and `transition`; `StyleProperty`'s listener interface and both selector classes name it too. The
+  listener type was left as it is — `computedChanged` on the seam is where the old engine runs its
+  listeners and the node tree does not, so `StyleProperty.notifyListeners(UIElement …)` is called by
+  exactly one class and goes with it at M6.
+- **The dirty set is drained parents first, and until settled.** Found by the `em` test: a hash set
+  can match a child before its parent, so an `em` resolved against a font size the parent had not
+  computed. Depth order is what a top-down recalc is, and a match that dirties descendants (a
+  font-size change) is re-drained in the same pass, bounded at eight rounds. Both engines get this.
+- **`ComputedStyle` is cached with the parent's snapshot as part of the key**, so an inherited value
+  that moved above is seen below without a walk down — the alternative was invalidating a subtree per
+  change, which is the cost the cache exists to avoid.
+
+And one theme test changed its mind: `poisonedCssIsRefusedAtRegistration` pinned S3's defect (an
+unknown pseudo-class refusing the whole theme); it now asserts the opposite, because a bad selector
+costs its rule and nothing else, on both engines.
 
 ### 5.3 — The box tree and one-pass layout · L · after: 5.2
 

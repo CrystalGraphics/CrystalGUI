@@ -1,0 +1,121 @@
+package com.crystalgui.style;
+
+import com.crystalgui.style.property.StyleProperty;
+import java.util.Collection;
+import java.util.List;
+import javax.annotation.Nullable;
+
+/**
+ * What the cascade asks of the thing it styles — and nothing else.
+ *
+ * <p>The style engine was written against {@code UIElement} and named it in seven files and
+ * fifty-four places (plan_m5.md D5.2). Read one at a time, those places ask for exactly this: an
+ * identity for the rule index and the selectors, a parent for combinators and another for
+ * inheritance, nine state predicates for the pseudo-classes, a shadow host and a part name for
+ * {@code ::part()}, the candidate store, and three callbacks. So this is the seam, and the cascade —
+ * properties, values, selectors, sheets, slots, the two winner maps, transitions, highlights — is
+ * <b>shared</b> between the old engine and the new node tree rather than forked: a cascade bug is
+ * fixed once.</p>
+ *
+ * <p>The method names are {@code UIElement}'s where it already had one, so the old engine implements
+ * most of this by already existing; the node tree adds a handful of one-line adapters. The two
+ * parents are different on purpose: {@link #getParent()} is the light parent, which is what a
+ * descendant combinator walks (a rule outside a shadow tree cannot reach in); {@link #inheritsFrom()}
+ * is the composed parent, which is what an inherited property comes from (a value set on the host
+ * reaches its parts, as on the web — spike S2's finding).</p>
+ */
+public interface Styleable {
+
+    // ── Identity ─────────────────────────────────────────────────────────────
+
+    /** The id, or {@code ""}. */
+    String getId();
+
+    Collection<String> getClasses();
+
+    boolean hasClass(String className);
+
+    /** The type a selector's type component matches against. */
+    String tagName();
+
+    /** Whether a type selector written as {@code identity} matches this. The node tree accepts more than one spelling. */
+    default boolean matchesType(String identity) {
+        return tagName().equals(identity);
+    }
+
+    /** The keys the rule index is asked under for this type. */
+    default Collection<String> typeKeys() {
+        return List.of(tagName());
+    }
+
+    // ── Tree ─────────────────────────────────────────────────────────────────
+
+    /** The parent a descendant or child combinator walks to. Null at a root — a document, a shadow root. */
+    @Nullable
+    Styleable getParent();
+
+    /** The parent an inherited property is taken from. The composed parent on the node tree. */
+    @Nullable
+    default Styleable inheritsFrom() {
+        return getParent();
+    }
+
+    /** The host of the shadow tree this is inside, or null when it is not inside one. */
+    @Nullable
+    Styleable shadowHost();
+
+    /** This element's {@code ::part()} name when it is a part of its host's shadow tree, else null. */
+    @Nullable
+    String partName();
+
+    /** {@code :root}. */
+    default boolean isRoot() {
+        return getParent() == null;
+    }
+
+    // ── State, for the pseudo-classes ────────────────────────────────────────
+
+    boolean isEnabled();
+
+    boolean isChecked();
+
+    boolean isBlank();
+
+    boolean isInvalid();
+
+    boolean isHovered();
+
+    boolean isPressed();
+
+    boolean isFocused();
+
+    boolean isFocusVisible();
+
+    boolean isFocusWithin();
+
+    // ── The store and the engine ─────────────────────────────────────────────
+
+    /** The candidate store — every value ever set, at every origin, and the two winner maps. */
+    ElementStyle getStyle();
+
+    /** The engine styling the tree this is in, or null while it is in none. */
+    @Nullable
+    StyleEngine styleEngine();
+
+    // ── Callbacks the cascade makes ──────────────────────────────────────────
+
+    /** Computed values changed. */
+    void onStyleChanged();
+
+    /** A layout-affecting value changed; whatever lays this out has to run again. */
+    void markTreeDirty();
+
+    /** Whether any applied declaration is font-relative ({@code em}), so a font-size change re-matches. */
+    void setHasFontRelativeStyles(boolean value);
+
+    /**
+     * One property's real value changed. The old engine runs the property's listeners here (which is
+     * how its layout properties reach the layout engine); the node tree records it for the box tree.
+     */
+    void computedChanged(StyleProperty<?> property, @Nullable Object oldValue, @Nullable Object newValue);
+}
