@@ -48,6 +48,7 @@ public class MultiViewerTest {
     private ServerUiSession<Object> server;
     private ClientUiSession<Object> viewerA;
     private ClientUiSession<Object> viewerB;
+    private long clock;
 
     @Before
     public void setUp() {
@@ -69,8 +70,9 @@ public class MultiViewerTest {
         clientB = Protocols.open(linkB[1], PlainOps.INSTANCE, () -> { }, null);
 
         server = new ServerUiSession<>(1, root, serverA);
-        viewerA = new ClientUiSession<>(clientA);
-        viewerB = new ClientUiSession<>(clientB);
+        clock = 10_000L;
+        viewerA = new ClientUiSession<>(clientA).setClock(() -> clock);
+        viewerB = new ClientUiSession<>(clientB).setClock(() -> clock);
     }
 
     @After
@@ -128,6 +130,70 @@ public class MultiViewerTest {
      * <p>The half that makes late joining work at all: without it, a second player opening a shared
      * window would wait for the next mutation to discover it exists — and on a quiet window, forever.</p>
      */
+    /**
+     * <b>A viewer is not told what it just told the server.</b>
+     *
+     * <p>The value came FROM that viewer, so the message carries nothing it does not already have — and
+     * by the time it lands the viewer has usually moved past it, so applying it drags the control
+     * BACKWARDS to a value from a round trip ago. Measured in a running client at ~110ms of lag: the
+     * knob was hauled back to 0.51, 0.58, 0.67 and 0.74 while the user held it at 0.79, and on release,
+     * with no more local movement to correct it, the remaining echoes played out as a visible walk.</p>
+     */
+    @Test
+    public void aViewerIsNotToldWhatItJustSent() {
+        server.addViewer(serverB);
+        server.on(slider, Slider.VALUE_CHANGED, (ctx, v) -> slider.setValue(v));
+        server.open();
+        settle();
+
+        Slider onAlice = (Slider) viewerA.root().getChildren().get(1);
+        Slider onBob = (Slider) viewerB.root().getChildren().get(1);
+
+        // ALICE drives it. The server applies it and its own widget follows.
+        onAlice.setValue(7f);
+        settle();
+
+        assertEquals("the server took it", 7f, slider.getValue(), 0.001f);
+        assertEquals("BOB must be told -- to him this is ordinary news", 7f, onBob.getValue(), 0.001f);
+        assertEquals("and alice keeps what she set", 7f, onAlice.getValue(), 0.001f);
+
+        // The proof that alice was SKIPPED rather than merely sent something harmless: with the echo
+        // suppressed there is nothing for her in the batch at all.
+        // Past the slider's own 50ms throttle first, or the second change is held rather than sent --
+        // Slider.VALUE_CHANGED is RatePolicy.DRAGGING.
+        clock += 200;
+        linkA[0].clearSent();
+        onAlice.setValue(3f);
+        settle();
+        assertEquals("alice hears nothing back about her own change", 0, linkA[0].sent().size());
+        assertEquals("while bob still does", 3f, onBob.getValue(), 0.001f);
+    }
+
+    /**
+     * <b>...but she IS told when the server disagreed with her.</b>
+     *
+     * <p>The counter-assertion, and the reason the rule is "matches what you sent" rather than "came
+     * from you". A server that clamped, refused, or had something else move the value has genuinely new
+     * information, and that is exactly the moment the sender must hear it — suppressing there would
+     * leave a control showing a value the server never accepted.</p>
+     */
+    @Test
+    public void aViewerIsToldWhenTheServerChangedWhatItSent() {
+        server.addViewer(serverB);
+        // The server refuses to go above 5, whatever it is sent.
+        server.on(slider, Slider.VALUE_CHANGED, (ctx, v) -> slider.setValue(Math.min(5f, v)));
+        server.open();
+        settle();
+
+        Slider onAlice = (Slider) viewerA.root().getChildren().get(1);
+        clock += 200;
+        onAlice.setValue(9f);
+        settle();
+
+        assertEquals("the server clamped it", 5f, slider.getValue(), 0.001f);
+        assertEquals("and alice must be corrected rather than left at 9", 5f, onAlice.getValue(), 0.001f);
+    }
+
     /**
      * <b>One viewer looking away does not silence the others.</b> Network audit finding S7.
      *
