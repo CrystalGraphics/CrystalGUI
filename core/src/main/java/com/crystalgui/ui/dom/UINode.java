@@ -15,6 +15,7 @@ import com.crystalgui.ui.EventListenerGroup;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.event.EventTarget;
+import com.crystalgui.ui.event.UIEvent;
 import com.crystalgui.ui.event.FocusEvent;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
@@ -1057,6 +1058,21 @@ public class UINode implements EventTarget, Styleable {
     void runCommandHooks() {
         if (COMMANDS_REGISTERED.add(getClass())) registerCommands(CommandRegistry.global());
         bindKeys();
+    }
+
+    // ── Default actions ──────────────────────────────────────────────────────
+
+    /**
+     * A widget's OWN behaviour for an event — what {@code preventDefault()} suppresses.
+     *
+     * <p>Fires in the TARGET phase only, and only when nothing called {@code preventDefault()}. That
+     * is the whole distinction from an ordinary listener: a caller who attaches to {@code onMouseUp}
+     * is watching, while a widget's activation IS the event's default action, and a listener that
+     * cancels it must be able to.</p>
+     */
+    protected final <T extends UIEvent> void attachDefaultListener(
+            EventListenerGroup<UINode, T> group, UIEvent.Listener<UINode, T> defaultAction) {
+        group.attachDefaultListener(defaultAction);
     }
 
     // ── Dismissal ────────────────────────────────────────────────────────────

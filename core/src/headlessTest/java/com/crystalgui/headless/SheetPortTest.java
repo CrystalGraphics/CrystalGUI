@@ -132,10 +132,20 @@ public class SheetPortTest {
         Set<String> ported = new LinkedHashSet<>();
         for (String line : Files.readAllLines(repoRoot().resolve("tools/port/port-ledger.tsv"),
                 StandardCharsets.UTF_8)) {
-            String[] f = line.split("\t");
-            if (line.startsWith("CLASS\t") && f.length > 6 && "ported".equals(f[6])) {
+            String[] f = line.split("	");
+            if (line.startsWith("CLASS	") && f.length > 6 && "ported".equals(f[6])) {
                 String path = f[1];
-                ported.add(path.substring(path.lastIndexOf('/') + 1).toLowerCase(java.util.Locale.ROOT));
+                String simple = path.substring(path.lastIndexOf('/') + 1);
+                // FORCE THE CLASS TO LOAD BEFORE ASKING THE REGISTRY, and it is not a test
+                // convenience: a widget registers its kind from its own static initialiser, and a
+                // class nothing has touched has not initialised. So `UINodeRegistry.names()` is
+                // empty of it until something mentions it -- which is exactly the reason the three
+                // BUILT-IN kinds are registered BY the registry rather than by themselves, and it is
+                // an open question for the DECODE path at 6.8: a description naming
+                // `crystalgui:button` arriving before anything has constructed one finds nothing
+                // registered. The old engine answered it with ElementRegistry.bootstrapBuiltins().
+                loadPortedWidget(f[3], simple);
+                ported.add(simple.toLowerCase(java.util.Locale.ROOT));
             }
         }
         if (ported.isEmpty()) return;
@@ -146,7 +156,7 @@ public class SheetPortTest {
         }
         List<String> missing = new ArrayList<>();
         for (String sel : selectors()) {
-            for (String compound : sel.split("\\s*>\\s*|\\s+")) {
+            for (String compound : sel.split("\s*>\s*|\s+")) {
                 Matcher m = Pattern.compile("^([a-z][a-z0-9-]*)").matcher(compound);
                 if (!m.find()) continue;
                 String tag = m.group(1);
@@ -155,5 +165,14 @@ public class SheetPortTest {
         }
         assertTrue("a ported widget's sheet names a type nothing registered -- it will match nothing, "
                 + "silently:\n" + String.join("\n", new LinkedHashSet<>(missing)), missing.isEmpty());
+    }
+
+    /** Touches a ported widget's class so its static initialiser runs. @see above */
+    private static void loadPortedWidget(String destination, String simpleName) {
+        try {
+            Class.forName("com.crystalgui." + destination.replace('/', '.') + "." + simpleName);
+        } catch (ClassNotFoundException ignored) {
+            // Marked ported in the ledger but not on the classpath -- PortLedgerTest's business.
+        }
     }
 }

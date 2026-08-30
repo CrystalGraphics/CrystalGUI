@@ -143,15 +143,22 @@ public class PortLedgerTest {
      */
     @Test
     public void aPortedClassHasConfirmedParts() throws IOException {
-        boolean anythingPorted = classes().stream().anyMatch(r -> "ported".equals(r.status()));
-        if (!anythingPorted) return;
+        // PER OWNER, not globally: one ported widget demanding all 674 rows would make the first
+        // port impossible and the check something to switch off. A class's OWN parts are the ones
+        // whose kind is about to be acted on.
+        Set<String> ported = new LinkedHashSet<>();
+        for (ClassRow row : classes()) {
+            if ("ported".equals(row.status())) {
+                ported.add(row.path().substring(row.path().lastIndexOf('/') + 1));
+            }
+        }
         List<String> unconfirmed = new ArrayList<>();
         for (PartRow part : parts()) {
-            if (!"confirmed".equals(part.source())) {
+            if (ported.contains(part.owner()) && !"confirmed".equals(part.source())) {
                 unconfirmed.add(part.owner() + "/" + part.name() + " (" + part.kind() + ")");
             }
         }
-        assertTrue("the port has begun and these part kinds are still the generator's guess:\n"
+        assertTrue("a ported widget's part kinds are still the generator's guess:\n"
                 + String.join("\n", unconfirmed), unconfirmed.isEmpty());
     }
 

@@ -28,7 +28,7 @@ import com.crystalgui.ui.UIElement;
  * @param <W> the widget type
  * @param <P> the payload type, or {@link Void} for a kind that carries nothing
  */
-public final class Event<W extends UIElement, P> {
+public final class Event<W, P> {
 
     private final String kind;
     private final BiConsumer<W, Consumer<P>> attach;
@@ -67,13 +67,13 @@ public final class Event<W extends UIElement, P> {
      * @param attach how a <b>client</b> listens: given the widget and a sink, subscribe so that each
      *               occurrence hands the sink its payload
      */
-    public static <W extends UIElement, P> Event<W, P> of(
+    public static <W, P> Event<W, P> of(
             String kind, BiConsumer<W, Consumer<P>> attach, Payload<P> payload, RatePolicy rate) {
         return new Event<>(kind, attach, Objects.requireNonNull(payload, "payload"), rate, null);
     }
 
     /** An event carrying nothing — a press, a focus change. */
-    public static <W extends UIElement> Event<W, Void> signal(String kind, BiConsumer<W, Runnable> attach) {
+    public static <W> Event<W, Void> signal(String kind, BiConsumer<W, Runnable> attach) {
         return new Event<>(kind, (widget, sink) -> attach.accept(widget, () -> sink.accept(null)),
                 null, RatePolicy.IMMEDIATE, null);
     }

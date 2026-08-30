@@ -29,11 +29,11 @@ import org.junit.Test;
  * {@code ConfiguratorGroup} in the application — and both are what a layer boundary would have
  * refused.</p>
  *
- * <h3>It passes trivially today, and that is the point</h3>
+ * <h3>It was written before anything was ported, and that is the point</h3>
  *
- * <p>Nothing is ported yet, so every layer below is empty and every assertion is vacuous. Written now
- * because the first ported widget is the one that would otherwise establish the wrong precedent, and
- * a test added after the fact is a test somebody has to make pass.</p>
+ * <p>Every assertion was vacuous at 6.0 — the layers were all empty. Written then because the first
+ * ported widget is the one that would otherwise set the wrong precedent, and a test added after the
+ * fact is a test somebody has to make pass. {@code widget/control} is the first to exist.</p>
  *
  * @see EngineBoundaryTest the OTHER direction: what the new engine may not name at all
  */
@@ -98,31 +98,33 @@ public class LayeringTest {
     }
 
     /**
-     * The layering is only meaningful while the tree it describes is the tree that exists.
+     * A package that exists and is governed by nothing.
      *
-     * <p>Every directory named above must be one M6 actually creates, or the two assertions pass by
-     * describing nothing — which is exactly how a governance test rots. This fails the moment a
-     * package is renamed without the plan and this file following, and it is deliberately allowed to
-     * pass while the layers are all still EMPTY: 6.0 has ported nothing.</p>
+     * <p>That is how a layering test rots: its two assertions keep passing by describing a tree that
+     * is not there. Checked in the direction that is true mid-port — the layers arrive one batch at a
+     * time, so their ABSENCE is the plan working, and only an unrecognised one is a problem.</p>
+     *
+     * <p>The first version asserted the opposite (once any layer exists, they all do) and Button's
+     * port failed it immediately: {@code widget/control} lands in 6.1 and {@code workbench} not until
+     * 6.7.</p>
      */
     @Test
-    public void everyLayerNamedHereIsOneTheTreeWillHave() throws IOException {
+    public void theTreeHasNoWidgetPackageThisFileHasNotHeardOf() throws IOException {
         Path root = ClassReferences.mainClassesRoot(getClass());
-        List<String> populated = new ArrayList<>();
         List<String> all = new ArrayList<>(LAYERS);
         all.addAll(WIDGET_TIERS);
-        for (String layer : all) {
-            if (Files.isDirectory(root.resolve(layer))) populated.add(layer);
+        Path widget = root.resolve("com/crystalgui/widget");
+        if (!Files.isDirectory(widget)) return;
+        List<String> ungoverned = new ArrayList<>();
+        try (java.util.stream.Stream<Path> walk = Files.walk(widget, 2)) {
+            for (Path p : walk.toList()) {
+                if (!Files.isDirectory(p)) continue;
+                String rel = root.relativize(p).toString().replace('\\', '/') + "/";
+                boolean known = all.contains(rel) || all.stream().anyMatch(l -> l.startsWith(rel));
+                if (!known) ungoverned.add(rel);
+            }
         }
-        // Before the first port every one is absent, which is legal. Once ANY exists, the widget
-        // tiers and the layers are being created, and a name in this list that is not on disk is a
-        // rename this file did not hear about.
-        if (populated.isEmpty()) return;
-        List<String> missing = new ArrayList<>();
-        for (String layer : all) {
-            if (!Files.isDirectory(root.resolve(layer))) missing.add(layer);
-        }
-        assertTrue("the port has begun but these layers do not exist -- renamed without updating "
-                + "LayeringTest and plan_m6.md §2.6?\n" + String.join("\n", missing), missing.isEmpty());
+        assertTrue("a widget package no tier governs -- renamed without updating LayeringTest and "
+                + "plan_m6.md §2.6?\n" + String.join("\n", ungoverned), ungoverned.isEmpty());
     }
 }

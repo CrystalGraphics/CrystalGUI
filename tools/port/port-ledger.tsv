@@ -45,7 +45,7 @@ CLASS	net/window/UiType	298	net/window	6.8	copy	pending
 CLASS	net/window/ViewCommands	119	net/window	6.8	copy	pending
 CLASS	net/window/WindowMount	74	net/window	6.8	copy	pending
 CLASS	net/window/WindowProtocol	57	net/window	6.8	move	pending
-CLASS	ui/elements/Button	208	widget/control	6.1	copy	pending
+CLASS	ui/elements/Button	208	widget/control	6.1	copy	ported
 CLASS	ui/elements/Checkbox	156	widget/control	6.1	copy	pending
 CLASS	ui/elements/CheckboxGroup	58	widget/control	6.1	copy	pending
 CLASS	ui/elements/ColorSelector	767	widget/control	6.1	copy	pending
@@ -354,9 +354,9 @@ PART	Breadcrumbs	crumb	A	0	proposed	leaf in every rule
 PART	Breadcrumbs	crumb-current	A	0	proposed	leaf in every rule
 PART	Breadcrumbs	crumb-icon	A	0	proposed	leaf in every rule
 PART	Breadcrumbs	crumb-sep	A	0	proposed	leaf in every rule
-PART	Button	post-icon	A	0	proposed	leaf in every rule
-PART	Button	pre-icon	A	0	proposed	leaf in every rule
-PART	Button	underlay	A	0	proposed	leaf in every rule
+PART	Button	post-icon	A	0	confirmed	leaf in every rule
+PART	Button	pre-icon	A	0	confirmed	leaf in every rule
+PART	Button	underlay	A	0	confirmed	leaf in every rule
 PART	CanvasView	content	A	0	proposed	leaf in every rule
 PART	CanvasView	panning	C	2	proposed	state adjective
 PART	CategoryHeader	arrow	A	4	proposed	leaf in every rule, scoped by an ancestor in 4

@@ -20,7 +20,15 @@ public final class EventListenerGroup<E extends EventTarget, T extends UIEvent> 
         this.element = element;
     }
 
-    void attachDefaultListener(UIEvent.Listener<E, T> listener) {
+    /**
+     * The widget's OWN behaviour — what {@code preventDefault()} suppresses.
+     *
+     * <p>Public since M6.0: the old engine reached it through a {@code protected} hop on
+     * {@code UIElement}, which works while every widget IS a {@code UIElement} and stops working the
+     * moment a widget is a {@code UINode} in another package. {@code UINode} keeps the same
+     * {@code protected} hop for the same discoverability, and both engines call this.</p>
+     */
+    public void attachDefaultListener(UIEvent.Listener<E, T> listener) {
         defaultEvents.connect(listener);
     }
 

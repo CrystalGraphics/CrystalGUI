@@ -37,7 +37,7 @@ import com.crystalgui.ui.dom.NodeContract;
  *
  * @param <W> the widget type
  */
-public final class WidgetContract<W extends UIElement> implements NodeContract {
+public final class WidgetContract<W> implements NodeContract {
 
     private final Class<W> type;
     private final String name;
@@ -58,12 +58,12 @@ public final class WidgetContract<W extends UIElement> implements NodeContract {
         this.primary = primary;
     }
 
-    public static <W extends UIElement> Builder<W> of(Class<W> type, String name) {
+    public static <W> Builder<W> of(Class<W> type, String name) {
         return new Builder<>(type, name);
     }
 
     /** Fluent, because the ORDER slots are added in is the order they are applied. @see State */
-    public static final class Builder<W extends UIElement> {
+    public static final class Builder<W> {
         private final Class<W> type;
         private final String name;
         private final List<State<W, ?>> states = new ArrayList<>();
