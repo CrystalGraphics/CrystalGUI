@@ -627,6 +627,14 @@ opened by a client at all, and a resolver that re-derives from `args` is not foo
 
 ### M5 — The three-tree engine core · XL · after: M0 (S1, S2), D2–D4
 
+> **Broken into seven minor milestones in `plan_m5.md` (2026-08-30) — read that, not this paragraph,
+> before starting.** 5.0 the strangler line and skeleton · 5.1 the node tree · 5.2 the style pass
+> re-hosted and scoped · 5.3 the box tree and one-pass layout · 5.4 paint and hit-test through boxes,
+> in the harness · 5.5 the services · 5.6 acceptance and the porting guide. Ten decisions the row
+> left open (package names, share-not-fork the cascade, names, attributes, slots, events, scopes, CSS
+> defaults in the box tree, one Taffy tree per document, `TextNode` as the first measurable) are
+> recorded there with recommendations. The paragraph below is kept as the row was written.
+
 `ui.dom` node tree (identity, attributes, children, shadow roots, slots, composed iteration,
 retargeting, lifecycle callbacks, thread assertion) implementing the M0 seam natively; the style pass
 (cascade kept, `@scope` semantics, `font-size` inherits, rule-level invalidation on a bad selector,
