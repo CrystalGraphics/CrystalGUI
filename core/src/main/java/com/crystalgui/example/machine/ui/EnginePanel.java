@@ -59,8 +59,9 @@ import com.crystalgui.ui.elements.UIText;
  * thread</b>. Routing this through a session message would be a round trip to the room you are
  * standing in, and would also invent a wire contract for something no client ever sees.</p>
  *
- * <p>One slot, not a list — the opposite of {@code MachineModel.onChanged}, deliberately. A model has
- * as many watchers as there are open windows; a child element has exactly one parent.</p>
+ * <p>One slot, not a list, and not a listener the MODEL carries: a child element has exactly one
+ * parent, and this is the parent hearing from its own child in the same process. The model itself
+ * carries no listeners at all — the panels project it.</p>
  *
  * <h3>Which hooks a nested panel is actually asked</h3>
  *
