@@ -25,8 +25,8 @@ the audit's numbers (§1 there: ~26,700 lines replaced, of which the engine's ow
 
 | # | Minor milestone | Size | After | Proves | Status |
 |---|---|---|---|---|---|
-| 5.0 | The strangler line and the second engine's skeleton | S | — | The two engines cannot reach each other, and a test says so | planned |
-| 5.1 | The node tree | L | 5.0 | The seam suite passes on a tree that has never heard of `UIElement` | planned |
+| 5.0 | The strangler line and the second engine's skeleton | S | — | The two engines cannot reach each other, and a test says so | **shipped 2026-08-30** — `8f6090fc` + harness `8f04e46` |
+| 5.1 | The node tree | L | 5.0 | The seam suite passes on a tree that has never heard of `UIElement` | **shipped 2026-08-30** — see §4.1 notes |
 | 5.2 | The style pass, re-hosted and scoped | M | 5.1 | The cascade is host-agnostic; scopes and `:root` inheritance work; the engine writes nothing into it | planned |
 | 5.3 | The box tree and one-pass layout | L | 5.2 | Layout of the gallery's trees runs to completion in **one** pass; hit-testing is correct before any paint | planned |
 | 5.4 | Paint and hit-test through boxes, in the harness | M | 5.3 | A fixed tree renders pixel-identically on both engines; the harness runs either | planned |
@@ -117,7 +117,7 @@ than during it. **Decisions taken 2026-08-30 as recommended unless the status co
 | D5.3 | **Node names.** D5 says registered namespaced names | A `Name` value (`namespace:local`, a `ResourceLocation` shape) declared by the class and registered once; a subclass inherits its supertype's name unless it declares its own — the `Dropdown`/`ToolWindowFrame` row from both directions. `crystalgui:button`, `crystalgui:machine` (from the `UiType` id). Selector type matching is on the name; the codec writes it | The rule index, the codec and the contract registry all key on it from 5.1 | recommended |
 | D5.4 | **Attributes.** The audit lists `enabled`, `inert`, `hit-test`, `focus-policy`, "arbitrary data keys" | **Typed keys**: `Attribute<T>` constants (`Attribute.ENABLED`, `Attribute.INERT`, …) on a per-node map, plus string attributes for what the codec carries. Keymap and settings scope become attributes looked up through the tree the way `DataContext` already walks, which retires two fields on the node | The seam's `attributeChanged` and the codec's `a` entry read from it; the focus service reads `INERT` and `FOCUS_POLICY` from it | recommended |
 | D5.5 | **Slots.** How much of the slot spec | Named slots and one default slot, `slot=` assignment by name, fallback children when nothing is assigned, `assignedSlot` on the node, `assignedNodes()` on the slot, `slotchange` as a lifecycle callback. **Not** `manual` slot assignment — nothing in the 54 composites needs it | Composed-tree iteration is written against it in 5.1 and the box tree walks it in 5.3 | recommended |
-| D5.6 | **Events.** `ui.event` is 8 files (365 lines + `EventListenerGroup`) and every type holds a `UIElement target` | **Generalise in place** over an `EventTarget` interface (`UIElement` and `Node` both implement); listener groups keyed on it. Duplicating the eight types would leave the drag controller, the keymap and every handler written twice | 5.1's retargeting and 5.5's dispatch need the types; this is old-engine touch #1 and must be a pure retype | recommended |
+| D5.6 | **Events.** `ui.event` is 8 files (365 lines + `EventListenerGroup`) and every type holds a `UIElement target` | **Generalise in place** over an `EventTarget` interface (`UIElement` and `Node` both implement); listener groups keyed on it. Duplicating the eight types would leave the drag controller, the keymap and every handler written twice | 5.1's retargeting and 5.5's dispatch need the types; this is old-engine touch #1 and must be a pure retype | **done** (`e2019d35`): 21 readers cast, one field retyped, every lambda unchanged |
 | D5.7 | **Scope model for stylesheets** | CSS `@scope`: a sheet is installed *for* a subtree (a document, a window, a shadow root) with a root and an optional lower boundary; scoping proximity ranks between specificity and source order, per the spec. M4's `ScopedSheets` selector rewrite becomes a scope with the window's root as its root, and its dual-form emission (root + descendants) disappears because a scope root matches itself | 5.2 writes the cascade ordering once; adding proximity later re-sorts every candidate comparison | recommended |
 | D5.8 | **CSS defaults in the box tree** — D4 says "adopt at M6 while every UA sheet is being ported" | **The box tree is written CSS-correct from its first line**: `flex-direction: row`, `flex-shrink: 1`, `min-size: auto`, `align-content: stretch`, `box-sizing: border-box`. There is no old sheet under the new engine to break, so the divergence rows never exist there; M6's port pays the sheet cost D4 already budgeted. Deciding otherwise means writing the defaults twice | 5.3's `BoxStyle` defaults and every layout test after it | recommended |
 | D5.9 | **One Taffy tree per document, or per host** | One per document; a host is a *parent choice* when the box is inserted into the Taffy tree, not a second tree. Promotion, owned attachment, tear-out and thumbnails are all "this box's Taffy parent is that box's" — one `insertChildAtIndex`. A per-host tree would reintroduce the two coordinate chains as two layout results | 5.3's `Box.host` and every world-matrix computation | recommended |
@@ -188,6 +188,40 @@ lifecycle order (a child's `connected` after its parent's, `disconnected` before
 inside a callback refused by the queue, a mutation from another thread refused by the assertion.
 **Proves:** the seam suite passes on a tree that has never heard of `UIElement`, which is the
 milestone's whole claim about networking.
+
+#### 5.0 and 5.1 — what shipped, and where the plan was wrong
+
+**5.0** shipped as written, with one honest deviation: the headless `Document` fixture came with 5.1
+and the class it wraps, because an empty class is not a fixture. The harness `--engine` flag is
+committed on the harness's own branch (`8f04e46`); master's submodule pointer was **not** moved,
+because the checked-out harness has diverged from the recorded commit onto a line whose slot scene
+needs a core branch master does not have — moving the pointer would have made master's harness
+uncompilable against master's core. Reconciling the two lines is the user's, and 5.4 needs it done.
+
+**5.1** shipped `ui.dom`'s `Name`, `Attribute`, `Node`, `ShadowRoot`, `Slot`, `Document`, `NodeRegistry`,
+`NodeTreeSource`, and `net.mirror.DomNodeMirror`. Three things the plan said differently:
+
+- *"Repoint `sourceOver` and change nothing else"* was not literally possible: the M0 suite built
+  `UIElement`s directly. The honest version is `TreeSourceContract<N>` — the assertions verbatim,
+  driven through a nine-method `Fixture` — with `TreeSourceContractTest` (elements) and
+  `NodeTreeSourceContractTest` (nodes) as its two subclasses. Scaffolding is an internal child on one
+  and shadow content on the other, which is the whole difference. The two tests needing a *widget*
+  (a contract that reports; an element refusing to report what it cannot) stay with the old engine
+  until M6.
+- `TreeObserverBehaviourTest` was not generalised: nine of its thirteen tests exercise widget state
+  (`Checkbox.setChecked`, `Slider.setValue`), which no node has yet. Its structural third is the shared
+  contract's edit-script half. `MirrorIsEngineAgnosticTest` kept its twelve-line fixture and
+  `MirrorOverNodeTreeTest` is the run over the real tree — seven tests, including that a shadow tree
+  never travels and that a change inside one produces no traffic.
+- There is no `Lifecycle` interface; the four callbacks are protected hooks on `Node` (custom
+  elements' shape), because an interface would have made them public. And the composed walk is
+  `composedSubtree()`, inclusive of its start, which is what a layout or paint pass wants.
+
+Two findings for 5.2 and 5.3. **An insertion still names every node, parents first** (M2's rule),
+reported from each node to its own effective observer — the first implementation reported the graft
+root only, and the contract suite caught it. And **a move across a shadow boundary is a removal or an
+insertion as the light tree saw it**, never a `moved`: the mirror describes light children only, so
+what left the described tree left it.
 
 ### 5.2 — The style pass, re-hosted and scoped · M · after: 5.1
 
