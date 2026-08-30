@@ -111,8 +111,18 @@ public class UINode implements EventTarget, Styleable {
     /** The listener groups, one per event type, created on first use. */
     public final EventListenerGroup.Map<UINode> events = new EventListenerGroup.Map<>(this);
 
+    /**
+     * A plain container — the {@code <div>} of this engine, and what the no-argument constructor
+     * makes.
+     *
+     * <p>Named {@code element} rather than {@code node} because it is what a <em>stylesheet</em>
+     * writes: this is the tag a type selector matches, and {@code element { }} is the rule an author
+     * means. The Java type is a node because a document and a shadow root are ones too.</p>
+     */
+    public static final Name NAME = Name.of("element");
+
     public UINode() {
-        this(Name.ELEMENT);
+        this(NAME);
     }
 
     public UINode(Name name) {

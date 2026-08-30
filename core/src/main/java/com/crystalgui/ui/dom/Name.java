@@ -15,19 +15,21 @@ import java.util.Objects;
  *
  * <p>Both halves are lowercase ASCII letters, digits, {@code -}, {@code _} or {@code .}, and neither
  * is empty. {@link #parse} accepts the bare local form and puts it in {@link #DEFAULT_NAMESPACE}.</p>
+ *
+ * <h3>A name lives on the class it names, never here</h3>
+ *
+ * <p>This class held {@code ELEMENT}, {@code DOCUMENT}, {@code SHADOW_ROOT} and {@code SLOT} as
+ * constants, which reads as a vocabulary and is really a <b>second registry</b>: two places to look
+ * for what a kind is called, and only one of them can be extended. A widget outside this module
+ * declares its own {@code NAME} beside its class ({@link com.crystalgui.ui.box.TextNode} does, and
+ * every widget M6 ports will), so the four built-ins doing something different would make the
+ * pattern a special case rather than the rule. They are now {@code UINode.NAME},
+ * {@code UIDocument.NAME}, {@code ShadowRoot.NAME} and {@code UISlot.NAME} — declared where the
+ * thing they name is declared, which is also where a reader looking for a tag would go first.</p>
  */
 public final class Name implements Comparable<Name> {
 
     public static final String DEFAULT_NAMESPACE = "crystalgui";
-
-    /** A plain container — the {@code <div>} of this engine. */
-    public static final Name ELEMENT = of(DEFAULT_NAMESPACE, "element");
-    /** The root of a tree, which owns the frame thread, the id index and the observer. */
-    public static final Name DOCUMENT = of(DEFAULT_NAMESPACE, "document");
-    /** A shadow root: never a light child, never described, never styled from outside. */
-    public static final Name SHADOW_ROOT = of(DEFAULT_NAMESPACE, "shadow-root");
-    /** Where a host's light children appear inside its shadow tree. */
-    public static final Name SLOT = of(DEFAULT_NAMESPACE, "slot");
 
     private final String namespace;
     private final String local;
@@ -43,6 +45,22 @@ public final class Name implements Comparable<Name> {
         requireHalf("namespace", namespace);
         requireHalf("local name", local);
         return new Name(namespace, local);
+    }
+
+    /**
+     * A name in {@link #DEFAULT_NAMESPACE} — {@code of("button")} is {@code crystalgui:button}.
+     *
+     * <p>For this engine's own kinds, which is every one that ships here. A mod names its own
+     * namespace with the two-argument form, and that asymmetry is the point: {@code of(local)} being
+     * shorter is what makes the default namespace the thing you fall into rather than the thing you
+     * spell out.</p>
+     *
+     * <p><b>Not {@link #parse}.</b> This takes the local half and nothing else, so a colon fails the
+     * character check rather than silently splitting — {@code of("mymod:machine")} is a mistake and
+     * says so, where {@code parse} is the reader that is <em>meant</em> to take either shape.</p>
+     */
+    public static Name of(String local) {
+        return of(DEFAULT_NAMESPACE, local);
     }
 
     /** {@code ns:local}, or a bare {@code local} in the default namespace. */

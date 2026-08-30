@@ -369,4 +369,49 @@ public class UINodeTreeTest {
         assertEquals(List.of("removed content", "inserted content"), lines);
         assertFalse(content.isInShadowTree());
     }
+
+    /**
+     * {@code of(local)} is the default namespace and NOT {@link Name#parse} — the distinction that is
+     * silent when it is got wrong.
+     *
+     * <p>Both take one string, and a qualified one is exactly what somebody reaches for {@code of}
+     * with. {@code parse} is the reader and splits it; {@code of} takes the LOCAL half, so a colon
+     * fails the character check and says so. If {@code of} ever started splitting, every mod naming
+     * {@code mymod:machine} would land in the wrong namespace and collide with ours, which is the one
+     * thing a namespace exists to prevent.</p>
+     */
+    @Test
+    public void ofTakesTheLocalHalfAndParseTakesEither() {
+        assertEquals(Name.of("crystalgui", "button"), Name.of("button"));
+        assertEquals(Name.of("crystalgui", "button"), Name.parse("button"));
+        assertEquals(Name.of("mymod", "machine"), Name.parse("mymod:machine"));
+
+        try {
+            Name.of("mymod:machine");
+            fail("of() takes the local half; a qualified name must not silently split");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage(), expected.getMessage().contains("local name"));
+        }
+    }
+
+    /**
+     * A kind's name is declared on the class it names, and the registry is asked by that name.
+     *
+     * <p>Pins the move off {@code Name}'s own constants: the four were a second place to look up what
+     * a kind is called, and only one of the two could be extended by a widget outside this module.
+     * Asserting the registry answers {@code UINode.NAME} is what makes the constant load-bearing
+     * rather than decorative.</p>
+     */
+    @Test
+    public void aKindsNameIsDeclaredOnItsOwnClass() {
+        assertEquals("crystalgui:element", UINode.NAME.toString());
+        assertEquals("crystalgui:document", UIDocument.NAME.toString());
+        assertEquals("crystalgui:slot", UISlot.NAME.toString());
+        assertEquals("crystalgui:shadow-root", ShadowRoot.NAME.toString());
+
+        assertTrue(UINodeRegistry.create(UINode.NAME) instanceof UINode);
+        assertTrue(UINodeRegistry.create(UISlot.NAME) instanceof UISlot);
+        assertTrue("a shadow root is never described, so nothing builds one from a name",
+                !UINodeRegistry.isRegistered(ShadowRoot.NAME));
+    }
 }

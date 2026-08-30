@@ -56,6 +56,9 @@ public final class UIDocument extends UINode {
     private final ArrayDeque<Runnable> callbacks = new ArrayDeque<>();
     private final Set<ShadowRoot> dirtyShadowRoots = new LinkedHashSet<>();
     private final List<Runnable> structureListeners = new ArrayList<>();
+    /** The root of a tree, which owns the frame thread, the id index and the observer. */
+    public static final Name NAME = Name.of("document");
+
     @Nullable
     private BoxTree boxes;
     @Nullable
@@ -68,7 +71,7 @@ public final class UIDocument extends UINode {
     private Lifecycle lifecycle;
 
     public UIDocument() {
-        super(Name.DOCUMENT);
+        super(NAME);
         this.document = this;
     }
 

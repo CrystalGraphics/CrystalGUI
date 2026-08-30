@@ -32,7 +32,7 @@ import javax.annotation.Nullable;
  */
 public class TextNode extends UINode implements Measurable {
 
-    public static final Name NAME = Name.of("crystalgui", "text");
+    public static final Name NAME = Name.of("text");
 
     static {
         UINodeRegistry.register(NAME, TextNode::new, UINodeRegistry.plain(NAME, false));
