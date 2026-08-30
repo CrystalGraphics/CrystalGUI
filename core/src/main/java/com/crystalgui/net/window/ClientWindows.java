@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
@@ -210,7 +211,7 @@ public final class ClientWindows {
      */
     public static <P extends UIElement & Networked<M>, M> void requestOpen(
             UiType<P, M> type, @Nullable StateMap<Object> args,
-            @Nullable java.util.function.Consumer<Boolean> onGranted) {
+            @Nullable Consumer<Boolean> onGranted) {
         ClientWindows windows = CLIENT;
         if (windows == null) {
             // NOT CONNECTED is answered rather than thrown: a key bound to this can be pressed on a
@@ -377,9 +378,9 @@ public final class ClientWindows {
         if (live == null) return true;
         for (Networked<?> panel : live.panels) {
             try {
-                if (!panel.requestClose()) return false;
+                if (!panel.mayClose()) return false;
             } catch (RuntimeException failed) {
-                CrystalGuiCore.LOGGER.error("<{}>.requestClose failed; taking that as consent: {}",
+                CrystalGuiCore.LOGGER.error("<{}>.mayClose failed; taking that as consent: {}",
                         live.type(), failed.getMessage(), failed);
             }
         }

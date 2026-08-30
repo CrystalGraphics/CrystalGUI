@@ -1,6 +1,7 @@
 package com.crystalgui.headless;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -57,7 +58,7 @@ public class CloseVetoTest {
         }
 
         @Override
-        public boolean requestClose() {
+        public boolean mayClose() {
             ASKED.add("asked");
             return !REFUSE.get();
         }
@@ -65,6 +66,26 @@ public class CloseVetoTest {
 
     private static final UiType<GuardedPanel, String> TYPE =
             UiType.of("test:guarded", GuardedPanel::new);
+
+    /**
+     * A panel that says nothing at all about closing — which is nearly every real one.
+     *
+     * <p>Deliberately overrides no close hook, because the bug this exists for is only reachable when
+     * it does not: the framework's question went by a name {@code UIElement} already used for the
+     * close-watcher, where {@code false} means "I did not handle this". A class method beats an
+     * interface default, so every panel that had not overridden it vetoed its own close and the X
+     * silently did nothing. Every test above happens to override, which is exactly why they all passed
+     * against it.</p>
+     */
+    public static class PlainPanel extends UIElement implements Networked<String> {
+        @Override
+        public void build(String model) {
+            addChild(new UIText(model));
+        }
+    }
+
+    private static final UiType<PlainPanel, String> PLAIN =
+            UiType.of("test:plain", PlainPanel::new);
 
     private InMemoryTransport<Object>[] link;
     private ProtocolConnection<Object> serverEnd;
@@ -105,6 +126,38 @@ public class CloseVetoTest {
             serverEnd.tick();
             clientEnd.tick();
         }
+    }
+
+    /**
+     * <b>A panel that overrides nothing is closeable.</b> The regression test for the collision above.
+     *
+     * <p>Asserted through the guard the host actually consults — {@code WindowFrame.setDiscardGuard} is
+     * wired to this, and a {@code false} there makes {@code requestClose()} return without closing, so
+     * the window stays with no error anywhere.</p>
+     */
+    @Test
+    public void aPanelThatOverridesNothingMayClose() {
+        ServerWindow<PlainPanel> plain = ServerWindows.of(serverEnd).open(PLAIN, "hello");
+        settle();
+
+        ClientWindowContext shown = ClientWindows.of(clientEnd).windows().stream()
+                .filter(w -> w.type().equals("test:plain")).findFirst().orElse(null);
+        assertNotNull("the plain window mounted", shown);
+        assertTrue("a panel with no opinion must not veto its own close", shown.mayClose());
+
+        // THE TWO QUESTIONS, side by side, which is the whole point of the separate name. UIElement's
+        // requestClose() is the close-watcher hook and answers FALSE for "I did not handle this"; the
+        // framework's mayClose() answers TRUE for "yes, you may". One name for both meant every panel
+        // that had not overridden it vetoed its own close, silently.
+        PlainPanel panel = (PlainPanel) shown.root();
+        assertFalse("UIElement's close-watcher hook says 'I did not handle it'", panel.requestClose());
+        assertTrue("...and the framework's question says 'yes, you may'", panel.mayClose());
+
+        Boolean[] decided = { null };
+        plain.requestClose("done", answer -> decided[0] = answer);
+        settle();
+        assertEquals(Boolean.TRUE, decided[0]);
+        assertFalse(plain.isLive());
     }
 
     @Test
