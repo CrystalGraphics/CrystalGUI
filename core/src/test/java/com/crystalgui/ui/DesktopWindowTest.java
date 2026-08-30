@@ -217,12 +217,14 @@ public class DesktopWindowTest extends UiTestBase {
     }
 
     /**
-     * A window nobody positioned is cascaded from the last one — Win32's {@code CW_USEDEFAULT}, one
-     * caption height along each time. The step is measured from the title bar rather than written as a
-     * constant, so a theme that changes the caption's height moves the cascade with it.
+     * A window nobody positioned opens centred, and the next one is cascaded from it — one caption
+     * height along each time. Centred because every GuiContainer in Minecraft is, and because the
+     * top-left corner is where an UNPLACED window is drawn, so a placed one there is indistinguishable
+     * from the bug. The step is measured from the title bar rather than written as a constant, so a
+     * theme that changes the caption's height moves the cascade with it.
      */
     @Test
-    public void aWindowNobodyPlacedIsCascaded() {
+    public void aWindowNobodyPlacedIsCentredAndTheNextCascadedFromIt() {
         build();
         WindowFrame first = window.openWindow(new WindowFrame("One")).resizeTo(120, 100);
         WindowFrame second = window.openWindow(new WindowFrame("Two")).resizeTo(120, 100);
@@ -231,8 +233,10 @@ public class DesktopWindowTest extends UiTestBase {
         assertTrue("the cascade must have placed both", first.isPlaced() && second.isPlaced());
         float step = captionOf(first);
         assertTrue("a caption has to have been measured for the step to mean anything", step > 0f);
-        assertEquals(0f, first.left(), 0.01f);
-        assertEquals(step, second.left(), 0.01f);
-        assertEquals(step, second.top(), 0.01f);
+        UIElement area = window.desktop().windowLayer();
+        assertEquals((area.getRuntimeCache().getWidth() - 120f) / 2f, first.left(), 0.01f);
+        assertEquals((area.getRuntimeCache().getHeight() - 100f) / 2f, first.top(), 0.01f);
+        assertEquals(first.left() + step, second.left(), 0.01f);
+        assertEquals(first.top() + step, second.top(), 0.01f);
     }
 }

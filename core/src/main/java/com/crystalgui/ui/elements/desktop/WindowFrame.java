@@ -18,6 +18,7 @@ import com.crystalgui.ui.UITransform;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.Tooltip;
+import com.crystalgui.ui.elements.ScrollerView;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.input.UIInputHandler;
@@ -524,7 +525,14 @@ public class WindowFrame extends UIElement implements Disposable {
         titleBar.addChild(controls);
         addInternalChild(titleBar);
 
-        content = new UIElement();
+        // A SCROLL VIEW, so a window smaller than its content gets a bar rather than a clip. The slot
+        // has always scrolled -- overflow: hidden is a scroll container, and scrollIntoView from inside
+        // a panel relies on it -- but nothing drew a bar, so a panel that grew past the work area (the
+        // machine window's engine section unfolding) was cut off with nothing to grab. A browser scrolls
+        // its document when the viewport is smaller than it; a window here does the same for its content.
+        // ScrollerView's bars are overlays and it takes no focus, so nothing about layout, click-focus
+        // or the frame's focus delegate changes for content that fits.
+        content = new ScrollerView();
         content.addClass(CONTENT_CLASS);
         addInternalChild(content);
 

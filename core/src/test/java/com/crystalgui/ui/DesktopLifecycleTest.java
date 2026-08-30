@@ -125,7 +125,8 @@ public class DesktopLifecycleTest extends UiTestBase {
     public void hidingClearsInputStateInsideTheWindow() {
         build();
         WindowFrame frame = open("One");
-        Button inside = (Button) frame.content().getChildren().get(0);
+        // The slot is a scroll view whose bars come first in the raw list; ask for the CONTENT.
+        Button inside = (Button) frame.content().describedChildren().get(0);
         input.requestFocus(inside);
         assertSame(inside, input.getFocusedElement());
 
@@ -412,7 +413,8 @@ public class DesktopLifecycleTest extends UiTestBase {
         minimised.hide();
         visible.moveTo(70, 50);
         settle();
-        input.requestFocus((Button) visible.content().getChildren().get(0));
+        // The slot is a scroll view whose bars come first in the raw list; ask for the CONTENT.
+        input.requestFocus((Button) visible.content().describedChildren().get(0));
 
         window.suspendDesktop();
         settle();
