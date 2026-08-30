@@ -835,7 +835,41 @@ public class UINode implements EventTarget, Styleable {
     public final void invalidateStyleMatch() {
         if (frozen) return;
         StyleEngine engine = styleEngine();
-        if (engine != null) engine.markDirty(this);
+        if (engine == null) return;
+        engine.markDirty(this);
+        invalidateExposedParts(engine);
+    }
+
+    /**
+     * Re-matches this node's own shadow parts, because a {@code ::part} rule is indexed under the
+     * <b>host</b>.
+     *
+     * <p>{@code checkbox:checked::part(mark)} is a rule about the mark whose every selectable input —
+     * the type, the classes, the state — belongs to the checkbox. So when the host re-matches, the
+     * parts have to as well: nothing about the mark itself changed, and without this the mark keeps
+     * the styles it matched when the host was last in some other state.</p>
+     *
+     * <p>It presents as the widget being unstyled in exactly one state, which is the failure the old
+     * engine records three times over — once each for {@code :checked}, {@code :disabled} and
+     * {@code :hover}, once per widget that met it, and each time repaired with a class the widget
+     * flipped itself. Here it is the engine's business: a part is not something a widget should have
+     * to remember to invalidate.</p>
+     *
+     * <p>Only nodes carrying a {@code part} name are marked — an unexposed node in a shadow tree is
+     * unreachable from outside by construction, so nothing about the host can have changed what
+     * matches it. A nested shadow root ends the walk: reaching into one needs {@code exportparts},
+     * which does not exist yet, so there is nothing there for an outer rule to match.</p>
+     */
+    private void invalidateExposedParts(StyleEngine engine) {
+        if (shadowRoot == null) return;
+        markExposedParts(shadowRoot, engine);
+    }
+
+    private static void markExposedParts(UINode at, StyleEngine engine) {
+        for (UINode child : at.children) {
+            if (!child.frozen && !child.get(Attribute.PART).isEmpty()) engine.markDirty(child);
+            if (child.shadowRoot == null) markExposedParts(child, engine);
+        }
     }
 
     // ── Interaction state: the services write it, the cascade reads it (5.5) ─
@@ -1178,6 +1212,42 @@ public class UINode implements EventTarget, Styleable {
                 live.setScroll(fromLeft + (targetLeft - fromLeft) * t, fromTop + (targetTop - fromTop) * t);
             }
         }, null);
+    }
+
+    // ── Reporting a state change ─────────────────────────────────────────────
+
+    /**
+     * Reports that this widget's serializable state changed — re-read at flush time.
+     *
+     * <p><b>Attributed to the nearest node the far side has heard of</b>, which on this engine is the
+     * nearest node <em>outside</em> every enclosing shadow tree. A {@code Button}'s label is a
+     * {@link com.crystalgui.ui.box.TextNode} in the button's shadow root and never travels as a node
+     * of its own, so {@code button.setText(...)} has to dirty the <em>Button</em>, whose contract
+     * carries the text. The old engine walked out of internal children for exactly this and said so;
+     * the shadow boundary is the same boundary, spelled by the engine instead of by a flag.</p>
+     *
+     * <p>The walk is a loop rather than one hop because shadow trees nest: a widget built out of
+     * other widgets puts its parts inside <em>their</em> shadow roots, and stopping at the first host
+     * would dirty a node that is itself invisible to a peer.</p>
+     *
+     * <h3>Why this is not optional, and why nothing would have said so</h3>
+     *
+     * <p>A shadow subtree inherits a {@code null} observer (see {@link #attachedTo}), which is right
+     * for structure and for attributes — a part being inserted or gaining a class is genuinely not
+     * something a peer can act on. State is the exception, and without this walk the report is
+     * dropped at the boundary: the widget is correct locally, the server's tree is correct, the dirty
+     * set is simply never filled, and a viewer keeps whatever the description said forever. That is
+     * one step earlier than the defect {@code AGENTS.md} already records as <i>"a dirty set that is
+     * cleared without being encoded is indistinguishable from one that was never filled"</i>, and it
+     * is silent in the same way — no error at any layer.</p>
+     */
+    protected final void notifyStateChanged() {
+        UINode target = this;
+        for (ShadowRoot root = target.containingShadowRoot(); root != null;
+                root = target.containingShadowRoot()) {
+            target = root.host();
+        }
+        TreeObserver.Dispatch.stateChanged(target.observer, target);
     }
 
     // ── Wiring: document, observer, shadow flag ──────────────────────────────

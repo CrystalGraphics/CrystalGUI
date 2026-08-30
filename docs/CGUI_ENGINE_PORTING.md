@@ -159,6 +159,40 @@ node.set(Attribute.HIT_TEST, false);    // `pointer-events: none`, subtree-wide
 > `invalidateStyleMatch()`, exactly as the old engine's did. `set(Attribute…)` does it for you;
 > a widget's own field (the `checked` above) does not, so a setter that flips one must say so.
 
+You do **not** have to invalidate your own parts. `invalidateStyleMatch()` marks the exposed nodes in
+your shadow tree as well, because a `::part` rule is indexed under the *host* — `checkbox:checked::part(mark)`
+is a rule about the mark whose every selectable input belongs to the checkbox. The old engine had no
+such thing, and each widget that hit it repaired it locally by flipping a class of its own; that is
+why several widgets you are porting carry a `__on__`-style class beside a perfectly good
+pseudo-class. **Port the pseudo-class and drop the class**, unless the class is carrying something a
+pseudo-class genuinely cannot say.
+
+### Report the state, or it never leaves the process
+
+A setter that changes what the widget's contract carries must end with `notifyStateChanged()`:
+
+```java
+public Checkbox setChecked(boolean value) {
+    if (this.checked == value) return this;   // the guard is load-bearing -- see below
+    this.checked = value;
+    invalidateStyleMatch();
+    notifyStateChanged();
+    onCheckedChanged.emit(value);
+    return this;
+}
+```
+
+It walks out of every enclosing shadow tree, so a composite's label dirties the *composite* — whose
+contract carries the text — rather than a node no peer has heard of. You get that for free when the
+state lives in a `TextNode`, which reports its own text; you have to write it when the state is a
+field of your own.
+
+> **⚠ the guard is not an optimisation.** Every state setter must be idempotent, because "mirror the
+> model each tick" is the shape every server-side panel is written in. The old `ProgressBar.setFraction`
+> was the one setter for which this was false, and a panel following the documented shape sent a delta
+> per tick carrying a value nobody had moved. Assert on the **traffic**, never on the state, or the
+> test passes against exactly that bug.
+
 ---
 
 ## 4. Geometry: nothing writes into the cascade

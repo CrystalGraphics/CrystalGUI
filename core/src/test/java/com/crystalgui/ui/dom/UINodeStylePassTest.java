@@ -255,4 +255,59 @@ public class UINodeStylePassTest extends UiTestBase {
         assertNotSame(before, child.computedStyle());
         assertEquals((Integer) 0xFFFF0000, child.computedStyle().get(StylePropertyRegistry.COLOR));
     }
+
+    /**
+     * <b>A host's change re-matches its own shadow parts</b>, because a {@code ::part} rule's every
+     * selectable input belongs to the host.
+     *
+     * <p>Nothing about the part itself moved, so nothing marked it dirty and it kept the styles it
+     * matched under the host's previous state. It presents as a widget being unstyled in exactly one
+     * state — the failure the old engine records once each for {@code :checked}, {@code :disabled}
+     * and {@code :hover}, repaired each time by having the widget flip a class of its own. Asserted
+     * here rather than per widget because it is the engine's business: every ported widget with a
+     * state-dependent part rule depends on it, and none of them should have to know.</p>
+     *
+     * <p>Driven through a CLASS rather than a pseudo-class, so it holds for any reason a host
+     * re-matches and not just for state.</p>
+     */
+    @Test
+    public void aHostsOwnChangeRematchesItsShadowParts() {
+        UIDocument document = document("#h.on::part(inner) { opacity: 0.25 }");
+        UINode host = node("h");
+        UINode part = node("");
+        part.set(Attribute.PART, "inner");
+        host.attachShadow().append(part);
+        document.append(host);
+        document.calculateStyle(0f);
+        assertEquals("nothing matches it yet", 1f, opacity(part), 0.001f);
+
+        host.addClass("on");
+        document.calculateStyle(0f);
+
+        assertEquals("the host's class decided what matches the PART", 0.25f, opacity(part), 0.001f);
+    }
+
+    /**
+     * And an <b>unexposed</b> node in a shadow tree is not marked — it cannot be reached from outside,
+     * so nothing about the host can have changed what matches it.
+     *
+     * <p>The counter-assertion to the one above: an invalidation written as "mark the whole shadow
+     * subtree" satisfies that test and does needless work on every hover of every composite. This one
+     * cannot see the work directly, so it asserts the observable consequence — a rule that would only
+     * match if the engine treated an unexposed node as a part.</p>
+     */
+    @Test
+    public void anUnexposedShadowNodeIsNotReachableFromOutside() {
+        UIDocument document = document("#h.on::part(inner) { opacity: 0.25 }");
+        UINode host = node("h");
+        UINode hidden = node("");
+        host.attachShadow().append(hidden);
+        document.append(host);
+        document.calculateStyle(0f);
+
+        host.addClass("on");
+        document.calculateStyle(0f);
+
+        assertEquals("no part name, no rule", 1f, opacity(hidden), 0.001f);
+    }
 }

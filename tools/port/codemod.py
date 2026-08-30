@@ -45,10 +45,23 @@ LEDGER = os.path.join(ROOT, 'tools', 'port', 'port-ledger.tsv')
 # run BEFORE the bare-method ones, or `getAttachedWindow().getInputHandler()` is half-rewritten.
 
 RULES = [
+    # -- IMPORTS FIRST, or the bare type rules below rewrite the PACKAGE too -------------------
+    #
+    # `\bUIElement\b -> UINode` turns `import com.crystalgui.ui.UIElement;` into an import of
+    # `com.crystalgui.ui.UINode`, which does not exist -- the new types are in `ui.dom` and `ui.box`.
+    # It fails the compile rather than passing silently, but it fails it once per widget with a
+    # message that points at the import instead of at the rule, so it is worth spending four lines
+    # here than seventeen manual repairs. `UIText` is a rename as well as a move (D15: it merges into
+    # the engine's own text node), which is why it is listed with the packages rather than as a type.
+    (r'import com\.crystalgui\.ui\.UIElement;', 'import com.crystalgui.ui.dom.UINode;', 'import'),
+    (r'import com\.crystalgui\.ui\.UIWindow;', 'import com.crystalgui.ui.dom.UIDocument;', 'import'),
+    (r'import com\.crystalgui\.ui\.elements\.UIText;', 'import com.crystalgui.ui.box.TextNode;', 'import'),
+
     # -- The base classes and the document -----------------------------------------------------
     (r'\bextends UIElement\b', 'extends UINode', 'base class'),
     (r'\bUIElement\b', 'UINode', 'element type'),
     (r'\bUIWindow\b', 'UIDocument', 'window type'),
+    (r'\bUIText\b', 'TextNode', 'text node'),
 
     # -- Receivers, longest first ---------------------------------------------------------------
     (r'getAttachedWindow\(\)\.getInputHandler\(\)\.getDragController\(\)', 'DRAG_CONTROLLER', 'drag receiver'),
@@ -175,9 +188,16 @@ def ledger_rows(batch, only):
     return rows
 
 
-def transform(text):
+def transform(text, path=''):
     applied = {}
     for pattern, replacement, name in RULES:
+        # A rule that RENAMES a class must not fire on the file declaring that class. Only the
+        # UIText -> TextNode pair is in that position: D15 merges the two the other way round (the
+        # merged class keeps UIText's name and its `text` tag), so the rename here is the INTERIM
+        # spelling every consumer needs until the merge lands -- and applied to UIText's own port it
+        # would silently rewrite the declaration to `class TextNode` in a file called UIText.java.
+        if name == 'text node' and path.endswith('/UIText'):
+            continue
         text, n = re.subn(pattern, replacement, text, flags=re.M)
         if n:
             applied[name] = applied.get(name, 0) + n
@@ -229,7 +249,7 @@ def main():
             print('  MOVE (do this in the IDE) %-44s -> %s' % (path, dest))
             continue
 
-        out, applied = transform(text)
+        out, applied = transform(text, path)
         out = re.sub(r'^package [\w.]+;', 'package com.crystalgui.' + dest.replace('/', '.') + ';', out, count=1, flags=re.M)
         for name, n in applied.items():
             total_applied[name] = total_applied.get(name, 0) + n

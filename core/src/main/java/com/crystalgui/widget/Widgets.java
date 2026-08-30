@@ -3,6 +3,7 @@ package com.crystalgui.widget;
 import com.crystalgui.ui.dom.NodeKinds;
 import com.crystalgui.ui.dom.UINodeRegistry;
 import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.control.Checkbox;
 
 /**
  * <b>The widget library's kinds</b> — every {@code widget.*} node a description can decode into.
@@ -30,5 +31,6 @@ public final class Widgets implements NodeKinds {
     @Override
     public void register() {
         UINodeRegistry.register(Button.NAME, Button::new, Button.CONTRACT);
+        UINodeRegistry.register(Checkbox.NAME, Checkbox::new, Checkbox.CONTRACT);
     }
 }
