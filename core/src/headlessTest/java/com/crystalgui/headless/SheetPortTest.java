@@ -102,7 +102,7 @@ public class SheetPortTest {
         Set<String> ledgered = new LinkedHashSet<>();
         for (String line : Files.readAllLines(repoRoot().resolve("tools/port/port-ledger.tsv"),
                 StandardCharsets.UTF_8)) {
-            if (line.startsWith("PART\t")) ledgered.add(line.split("\t")[1]);
+            if (line.startsWith("PART\t")) ledgered.add(line.split("\t")[2]);
         }
         Set<String> unledgered = new LinkedHashSet<>();
         for (String sel : selectors()) {
