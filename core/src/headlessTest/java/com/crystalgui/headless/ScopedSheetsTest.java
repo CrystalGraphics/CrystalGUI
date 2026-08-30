@@ -28,17 +28,42 @@ public class ScopedSheetsTest {
         assertTrue(scope, scope.matches("__ui-[a-z0-9-]+__"));
     }
 
+    /**
+     * <b>Both readings, because CSS has no "this element or below".</b>
+     *
+     * <p>The prefix alone was wrong in the case that matters most: the scope class is carried by the
+     * panel ROOT, so {@code .s .machine-panel} — a descendant selector — stopped matching the very
+     * element that gives the window its width. The panel collapsed to its content and opened as a
+     * sliver in the corner, with nothing failing anywhere.</p>
+     */
     @Test
-    public void everySelectorIsPrefixed() {
-        String out = ScopedSheets.scope("button { color: red }", "s");
-        assertEquals(".s button { color: red }", out.trim());
+    public void aSelectorMatchesTheScopeRootAsWellAsBelowIt() {
+        String out = ScopedSheets.scope("button { color: red }", "s").trim();
+        assertTrue("under the root: " + out, out.contains(".s button"));
+        assertTrue("AND the root itself: " + out, out.contains("button.s"));
+    }
+
+    /** The root form attaches to the FIRST compound, which is what matches the root. */
+    @Test
+    public void aDescendantSelectorScopesItsFirstCompound() {
+        String out = ScopedSheets.scope(".row .label { a: 1 }", "s").trim();
+        assertTrue(out, out.contains(".s .row .label"));
+        assertTrue("the root case anchors the first part: " + out, out.contains(".row.s .label"));
+    }
+
+    /** Before a pseudo-class, never after: `.a.s:hover`, so the pseudo keeps its place. */
+    @Test
+    public void theScopeGoesBeforeAPseudoClass() {
+        String out = ScopedSheets.scope("button:hover { a: 1 }", "s").trim();
+        assertTrue(out, out.contains("button.s:hover"));
     }
 
     /** Each of a comma-separated list, or the ones after the first would still escape. */
     @Test
     public void aSelectorListIsPrefixedThroughout() {
         String out = ScopedSheets.scope("button, text { color: red }", "s").trim();
-        assertEquals(".s button, .s text { color: red }", out);
+        assertTrue(out, out.contains(".s button") && out.contains("button.s"));
+        assertTrue(out, out.contains(".s text") && out.contains("text.s"));
     }
 
     @Test
