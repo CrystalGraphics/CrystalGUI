@@ -1,5 +1,6 @@
 package com.crystalgui.ui.dom;
 
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.ComputedStyle;
 import com.crystalgui.style.ElementStyle;
 import com.crystalgui.style.StyleEngine;
@@ -706,6 +707,20 @@ public class Node implements EventTarget, Styleable {
     /** The box tree's, and nobody else's. */
     public final void setBox(@Nullable Box box) {
         this.box = box;
+    }
+
+    /**
+     * Custom drawing beyond the box model, called by the box painter after this node's background
+     * and before its children -- what a text run, an icon or a canvas overrides. The box model
+     * itself (background, border, overlay, outline, clip, opacity) is the PAINTER's and needs no
+     * override; geometry comes from {@code box}, in the box's own space (the origin is this box's
+     * top-left corner).
+     */
+    public void paintContent(CgUiPaintContext ctx, Box box) {
+    }
+
+    /** As {@link #paintContent}, after the children and before {@code overlay}/{@code outline}. */
+    public void paintDecoration(CgUiPaintContext ctx, Box box) {
     }
 
     /** Tells the document's box tree that the composed structure moved. */
