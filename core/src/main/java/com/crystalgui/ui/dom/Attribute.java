@@ -47,6 +47,47 @@ public final class Attribute<T> {
     /** The {@code ::part()} name a node inside a shadow tree is exposed under; empty for none. */
     public static final Attribute<String> PART = of("part", String.class, "");
 
+    /**
+     * Not on screen and taking no space — HTML's own {@code hidden}, with {@code [hidden] &#123;
+     * display: none &#125;} in the user-agent sheet doing the work.
+     *
+     * <p>This replaces the old engine's {@code setDisplayed}, which wrote {@code display} at
+     * {@code IMPORTANT} origin from 74 call sites — the single largest family of engine writes into
+     * the cascade, and a family the boundary scan now forbids outright. An attribute says the same
+     * thing without outranking anything: a sheet can still restyle a hidden node, and a theme that
+     * wanted {@code visibility} or a collapse animation instead can say so, which an
+     * {@code !important} display could not be argued with.</p>
+     *
+     * <p>Deliberately NOT the same question as {@link com.crystalgui.ui.service.Lifecycle#freeze}: a
+     * hidden node still matches selectors, still runs its hooks and still holds a box's worth of
+     * state, it merely lays out to nothing. Freezing is what stops a subtree working.</p>
+     */
+    public static final Attribute<Boolean> HIDDEN = of("hidden", Boolean.class, false);
+
+    /**
+     * This box does not move with what it is hosted in — a scrollbar, a gutter, a find bar.
+     *
+     * <p>The old engine's {@code setScrollExempt}, and the one 5.4 gap the census found: without it a
+     * scroller's own bars scroll away with the content they are for. Read by {@code BoxTree}'s
+     * composition, which is the only place a host's scroll offset is applied.</p>
+     */
+    public static final Attribute<Boolean> SCROLL_EXEMPT = of("scroll-exempt", Boolean.class, false);
+
+    /**
+     * Which of this node's kind's events a session has asked to hear about — space-separated, like
+     * HTML's own {@code class} and {@code part}.
+     *
+     * <p>An attribute rather than a field because it is the last piece of per-INSTANCE description
+     * the mirror still carried specially: M2's note said {@code reportedEvents} stayed a field "only
+     * because the encoder that writes it is a context-free {@code Codec<UIElement>}", and a carried
+     * attribute needs no encoder of its own.</p>
+     *
+     * <p>Space-separated rather than a {@code Set}: only the four scalar types and enums cross the
+     * wire ({@link #isCarried()}), and inventing a fifth for one key would be a codec everything else
+     * pays to know about. It is also what the DOM does with every multi-valued attribute it has.</p>
+     */
+    public static final Attribute<String> REPORTS = of("reports", String.class, "");
+
     private final String name;
     private final Class<T> type;
     private final T initial;

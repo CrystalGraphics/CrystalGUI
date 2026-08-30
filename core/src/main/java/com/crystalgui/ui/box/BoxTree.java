@@ -215,6 +215,7 @@ public final class BoxTree {
                     TaffySize.of(AvailableSpace.definite(width), AvailableSpace.definite(height)));
             layoutPasses++;
             read(root);
+            clampScrolls(root);
             transformsDirty = true;
         }
         if (transformsDirty) {
@@ -254,6 +255,33 @@ public final class BoxTree {
                 box.hostedSequence = 0;
             }
         }
+        // THE DOCUMENT'S PROMOTIONS, re-applied on every sync. Recorded on the node rather than
+        // written onto a box (@see UIDocument#promote), because a box is rebuilt whenever its
+        // subtree is hidden or restructured -- so a host written onto one is lost, and a popup
+        // hidden and reshown would come back unpromoted.
+        Box topLayer = boxes.get(document.topLayerNodeIfPresent());
+        if (topLayer != null) {
+            topLayer.setStacksByInsertion(true);
+            // BOTH DIRECTIONS, and the withdrawal is the half that is easy to miss: this pass is the
+            // only writer of a top-layer override, so it must also be the only eraser. Applying
+            // promotions alone leaves a demoted box hosted where the LAST sync put it -- demote()
+            // would appear to do nothing, and only for a node that had been promoted before.
+            // Scoped to overrides pointing at the top layer, so a mirror's or an owned window's
+            // host -- set through Box.setHost, which is still the general mechanism -- is untouched.
+            for (Box box : inOrder) {
+                if (box.hostOverride == topLayer && !document.isPromoted(box.node)) {
+                    box.hostOverride = null;
+                    box.hostedSequence = 0;
+                }
+            }
+            int sequence = 0;
+            for (UINode node : document.promotedNodes()) {
+                Box box = boxes.get(node);
+                if (box == null || box == topLayer) continue;
+                box.hostOverride = topLayer;
+                box.hostedSequence = ++sequence;
+            }
+        }
         // Hosting: natural children first in document order, then overrides in the order declared.
         for (Box box : inOrder) {
             box.hosted.clear();
@@ -284,6 +312,12 @@ public final class BoxTree {
         if (node != document && node.computedStyle().get(LayoutProperties.DISPLAY) == TaffyDisplay.NONE) {
             return null;
         }
+        // `hidden` is the SAME answer through a different door, and it is structural rather than a
+        // stylesheet rule because this selector engine has no attribute selectors -- HTML's own
+        // `[hidden] { display: none }` cannot be written here. It is also what the old engine
+        // effectively did: `setDisplayed` wrote `display` at IMPORTANT origin from 74 sites, which no
+        // author sheet could override either. @see com.crystalgui.ui.dom.Attribute#HIDDEN
+        if (node != document && !node.isDisplayed()) return null;
         if (node.isFrozen()) return null;
         Box box = realm.get(node);
         if (box == null) {
@@ -306,6 +340,18 @@ public final class BoxTree {
     }
 
     private void destroy(Box box) {
+        // THE HOST THAT LOST A CHILD MUST BE RE-LAID OUT, and nothing else says so.
+        //
+        // `TaffyTree.remove` takes the node out of its parent's child list and marks NOTHING dirty
+        // (unlike `setChildren`, which marks the parent) -- and because it has already updated the
+        // list, the `sameChildren` check below skips the `setChildren` that would have. So a subtree
+        // that goes away leaves its former siblings exactly where they were until something
+        // unrelated dirties layout: a row removed from a list leaves a gap, a hidden panel keeps its
+        // space, and both correct themselves the next time anything else moves, which is what makes
+        // it read as intermittent. Found by the first `hidden` test in M6.0; it was equally true of
+        // an ordinary `remove()` since 5.3 and nothing had removed a node between two layouts.
+        Box host = box.host();
+        if (host != null && taffy.containsNode(host.taffyId)) taffy.markDirty(host.taffyId);
         if (box.mirror) {
             for (Mirror mirror : mirrors) mirror.realm.remove(box.node, box);
         } else {
@@ -365,6 +411,22 @@ public final class BoxTree {
 
     // ── Read + compose ───────────────────────────────────────────────────────
 
+    /**
+     * Re-clamps every box's scroll against the content it has just laid out.
+     *
+     * <p>Runs after the read and before composition, which is the only order that works: the clamp
+     * needs the settled content size, and composition bakes the offset into the world matrices. A
+     * folder collapsing, a list filtering, a panel narrowing all shrink content under an offset that
+     * was legal a frame ago — without this the view sits past its own end, showing a strip of the
+     * last rows against a screenful of nothing, with the scrollbar gone.</p>
+     *
+     * <p>Free when nothing is out of range: {@link Box#clampScroll} compares before it writes.</p>
+     */
+    private void clampScrolls(Box box) {
+        box.clampScroll();
+        for (Box child : box.hosted) clampScrolls(child);
+    }
+
     private void read(Box box) {
         Layout layout = taffy.getLayout(box.taffyId);
         box.x = layout.location().x;
@@ -379,6 +441,15 @@ public final class BoxTree {
     }
 
     private void compose(Box box, Matrix4f hostWorld, float hostScrollLeft, float hostScrollTop) {
+        // SCROLL-EXEMPT: this box does not move with what hosts it. A scroller's own bars, an
+        // editor's gutter and its find bar are all children of the thing that scrolls, and without
+        // this they scroll away with the content they are for. It is applied HERE because this is
+        // the only place a host's offset is ever applied -- an element that wanted to opt out any
+        // further down would be undoing an offset already baked into its parent's matrix.
+        if (box.node.isScrollExempt()) {
+            hostScrollLeft = 0f;
+            hostScrollTop = 0f;
+        }
         box.localToWorld.set(hostWorld).translate(box.x - hostScrollLeft, box.y - hostScrollTop, 0f);
         UITransform transform = box.transform();
         if (!transform.isIdentity()) {
@@ -399,7 +470,8 @@ public final class BoxTree {
         structureDirty = true;
     }
 
-    void transformsChanged() {
+    /** Public because a node's {@code scroll-exempt} changes composition without changing layout. */
+    public void transformsChanged() {
         transformsDirty = true;
     }
 

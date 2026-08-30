@@ -2,6 +2,7 @@ package com.crystalgui.ui.service;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgMouseCodes;
+import com.crystalgui.ui.UITransform;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.event.DragEvent;
@@ -75,6 +76,9 @@ public final class Drag implements InputMode {
     private final float startY;
 
     private boolean activated;
+    private @Nullable UINode ghost;
+    private @Nullable Box ghostBox;
+    private float ghostOffsetX, ghostOffsetY;
     private @Nullable UINode dropTarget;
     private boolean dropAccepted;
     private boolean live = true;
@@ -125,6 +129,70 @@ public final class Drag implements InputMode {
         return "drag";
     }
 
+    // ── The ghost ────────────────────────────────────────────────────────────
+
+    /**
+     * The thing that follows the cursor for this drag's duration — promoted to the top layer, moved
+     * each frame, and let go of when the drag ends.
+     *
+     * <p><b>Per drag, never once.</b> The old controller dropped its ghost reference at the end of
+     * every drag on purpose, and a retained one once outlived its drag and reappeared on unrelated
+     * screens. Here it is a field of the gesture, so there is nothing to retain: a ghost belongs to
+     * a drag the way a drop target does.</p>
+     *
+     * <p>The node must already be IN the tree — promotion is a re-host of a box, and a node with no
+     * box has nothing to promote. Its own position is not written: the ghost is hosted in the top
+     * layer, whose containing block is the document, and a transform moves it. That is what keeps
+     * this free of the "only AnchoredPlacement writes left/top" rule and of any layout at all.</p>
+     *
+     * @param offsetX where the cursor sits within the ghost, in the ghost's own space
+     */
+    public Drag withGhost(UINode ghost, float offsetX, float offsetY) {
+        this.ghost = ghost;
+        this.ghostOffsetX = offsetX;
+        this.ghostOffsetY = offsetY;
+        Box box = ghost.box();
+        Box top = ghost.document() == null ? null : ghost.document().topLayer();
+        if (box != null && top != null) {
+            box.setHost(top);
+            // Unhittable for the gesture's life: it is under the cursor by construction, so a
+            // hittable ghost is a ghost that answers every drop query with itself.
+            ghost.setHitTest(false);
+            ghostBox = box;
+            moveGhost(pressSurfaceX, pressSurfaceY);
+        }
+        return this;
+    }
+
+    @Nullable
+    public UINode ghost() {
+        return ghost;
+    }
+
+    private void moveGhost(float surfaceX, float surfaceY) {
+        Box box = ghostBox;
+        if (box == null) return;
+        Box top = box.host();
+        if (top == null) return;
+        // Surface pixels into the top layer's own space: the ghost is hosted there, so that is the
+        // space its transform is applied in. The layer is at the document's origin, so this is the
+        // root transform's inverse and nothing more -- but going through the matrix is what keeps it
+        // right when uiScale moves.
+        org.joml.Vector4f p = new org.joml.Vector4f(surfaceX, surfaceY, 0f, 1f).mul(top.worldToLocal());
+        box.setTransform(UITransform.translate(p.x - ghostOffsetX, p.y - ghostOffsetY));
+    }
+
+    private void releaseGhost() {
+        Box box = ghostBox;
+        if (box != null) {
+            box.setTransform(null);
+            box.setHost(null);
+        }
+        if (ghost != null) ghost.setHitTest(true);
+        ghost = null;
+        ghostBox = null;
+    }
+
     public boolean isActivated() {
         return activated;
     }
@@ -172,6 +240,7 @@ public final class Drag implements InputMode {
             if (dx * dx + dy * dy < threshold * threshold) return true;
             activated = true;
         }
+        moveGhost(x, y);
         float[] local = toLocal(source, x, y);
         listener.onDragUpdate(local[0], local[1], startX, startY, local[0] - startX, local[1] - startY);
         if (payload != null) updateDropTarget(x, y);
@@ -223,8 +292,10 @@ public final class Drag implements InputMode {
     @Override
     public void ended() {
         // Popped by someone else -- a teardown, a mode stack being cleared. Nothing to report; the
-        // two paths that DO report (end and cancel) pop themselves first.
+        // two paths that DO report (end and cancel) pop themselves first. The ghost is released HERE
+        // rather than in end()/cancel(), because this is the one path every ending goes through.
         live = false;
+        releaseGhost();
     }
 
     // ── Drop targeting ───────────────────────────────────────────────────────
