@@ -64,7 +64,11 @@ public class Button extends UINode {
     public static final Name NAME = Name.of("button");
     public static final String LABEL_PART = "label";
 
-    static { UINodeRegistry.register(NAME, Button::new, UINodeRegistry.plain(NAME, false)); }
+    // NO static { register(...) } BLOCK -- see the warning below.
+    public static final State<Button, String> TEXT = ...;
+    public static final WidgetContract<Button> CONTRACT = ...;
+
+    public static final String LABEL_PART = "label";
 
     private final TextNode label;
 
@@ -86,11 +90,30 @@ Everything the four old mechanisms bought falls out of one: light children a cal
 shadow tree, so they cannot collide with the parts; an outer rule cannot match a part at all; and the
 part is styleable from outside **only** through the name the widget chose to expose.
 
-> **⚠ found by the paper port.** `Name` must be declared and REGISTERED, or the node's tag is the
-> lowercased class name and no sheet rule matches it — the old engine's *"`tagName()` is an
-> EXACT-CLASS lookup"* row, which cost a tool window its entire appearance. Register in a static
-> initializer next to the `Name`, the way `TextNode` does, so a class that exists is a class the
-> codec can decode.
+> **⚠⚠ CORRECTED BY THE FIRST REAL PORT, and this is the one to read twice.** The guide said to
+> register from a `static {}` block next to the `Name`. **That is wrong, and the old engine already
+> knew it**: `ElementRegistry`'s own javadoc says a widget registering itself that way makes the
+> registry's contents *"a function of which widgets a given JVM had happened to touch… harmless for a
+> local UI and **actively wrong** for a serialized one: the same description would decode to a real
+> `Slider` on a client that had shown one earlier and to a bare element on one that hadn't, with no
+> error either way."* `Button` shipped with the block for exactly one commit.
+>
+> A kind is declared by its **LAYER**, through a `NodeKinds` service the registry discovers and runs
+> once on the first question anybody asks it:
+>
+> ```java
+> public final class Widgets implements NodeKinds {
+>     @Override public void register() {
+>         UINodeRegistry.register(Button.NAME, Button::new, Button.CONTRACT);
+>     }
+> }
+> ```
+>
+> plus a line in `META-INF/services/com.crystalgui.ui.dom.NodeKinds`. **A service rather than the old
+> engine's one central `bootstrapBuiltins()` because of the layering**: `ui.dom` is the engine and
+> `widget`/`chrome`/`desktop`/`workbench` are above it, so a registry importing a `Button` is the
+> upward reference `LayeringTest` refuses. `NodeKindsCoverageTest` fails on any class declaring a
+> `NAME` that no service registers — a list is safe exactly as long as something checks it.
 
 > **⚠ found by the paper port.** The registry's factory is a `Supplier<? extends UINode>`, so
 > `Button::new` needs a **no-argument constructor** — a widget whose only constructor takes its text
@@ -229,9 +252,15 @@ node.events.getGroup(MouseEvent.Up.class).attachListener((n, e) -> {
 
 ## 7. The order to do it in
 
-1. `Name` + `UINodeRegistry.register` in a static initializer. **The `NAME` constant goes on the
-   widget's own class** (`Name.of("button")` — the overload is the default namespace); a mod uses
-   `Name.of(namespace, local)`. Never a constant on `Name`, which would be a second registry.
+1. **`Name` on the widget's own class** (`Name.of("button")` — the overload is the default
+   namespace); a mod uses `Name.of(namespace, local)`. Never a constant on `Name`, which would be a
+   second registry. Then add a line to the layer's `NodeKinds` service — **never a `static {}` block
+   on the widget**, per the warning in §2.
+
+   **Field order is `NAME`, then state/events/`CONTRACT`, then the `*_PART` strings.** The
+   declaration order is the reading order: what this kind IS, then what it SAYS to a peer, then the
+   pieces it is built from. A reader arriving at a widget wants the first two; the part names matter
+   only once they are reading the constructor or writing a rule.
 2. Constructor: parts into a shadow root, each with `part=`; `setFocusPolicy`.
 3. The sheet: `.widget .__part__` → `widget::part(part)`.
 4. Geometry: every `importantPipeline` call becomes a `Measurable`, a box call, or an animation.

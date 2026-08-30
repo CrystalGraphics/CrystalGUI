@@ -1,0 +1,9 @@
+# Each LAYER declares its own kinds; the registry runs them once, lazily, on the first question
+# anybody asks it. @see com.crystalgui.ui.dom.NodeKinds for why this is not a static block per widget.
+#
+# One line per layer, added when that layer's first widget is ported:
+#   6.1  com.crystalgui.widget.Widgets
+#   6.3  com.crystalgui.chrome.ChromeKinds
+#   6.6  com.crystalgui.desktop.DesktopKinds
+#   6.7  com.crystalgui.workbench.WorkbenchKinds
+com.crystalgui.widget.Widgets

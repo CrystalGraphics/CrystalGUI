@@ -1,6 +1,8 @@
 package com.crystalgui.ui.dom;
 
+import com.crystalgui.core.CrystalGuiCore;
 import java.util.Map;
+import java.util.ServiceLoader;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -51,6 +53,43 @@ public final class UINodeRegistry {
         register(UIDocument.NAME, UIDocument::new, plain(UIDocument.NAME, true));
     }
 
+    /** Whether the {@link NodeKinds} services have been run. @see #bootstrap() */
+    private static volatile boolean bootstrapped;
+
+    /**
+     * Runs every {@link NodeKinds} service once — what makes the registry's contents a function of
+     * the CLASSPATH rather than of what this JVM happened to touch.
+     *
+     * <p>Called at the top of every read below, which is the old {@code ElementRegistry}'s own
+     * arrangement and the reason it is correct without a host remembering anything: a client
+     * decoding {@code <crystalgui:button>} has, by construction, asked the registry a question.</p>
+     *
+     * <p><b>Loaded with THIS class's loader, never the context one.</b> On 1.7.10 the context
+     * classloader during a network read is whatever the host left there, and LaunchWrapper's is not
+     * the one that defined these classes — a {@code ServiceLoader} pointed at it finds nothing, or
+     * finds a second copy of everything. The defining loader is the only one guaranteed to see the
+     * jar this interface came from.</p>
+     *
+     * <p>A service that throws is reported and skipped rather than taking the registry down with it:
+     * one mod's broken widget must not make every other kind unresolvable, and a decode that finds
+     * an unknown name already throws with a message naming what IS registered.</p>
+     */
+    private static void bootstrap() {
+        if (bootstrapped) return;
+        synchronized (UINodeRegistry.class) {
+            if (bootstrapped) return;
+            bootstrapped = true;
+            for (NodeKinds kinds : ServiceLoader.load(NodeKinds.class, UINodeRegistry.class.getClassLoader())) {
+                try {
+                    kinds.register();
+                } catch (RuntimeException | LinkageError e) {
+                    CrystalGuiCore.LOGGER.error("A NodeKinds service failed to register its kinds: {}",
+                            kinds.getClass().getName(), e);
+                }
+            }
+        }
+    }
+
     private UINodeRegistry() {
     }
 
@@ -62,11 +101,13 @@ public final class UINodeRegistry {
     }
 
     public static boolean isRegistered(Name name) {
+        bootstrap();
         return ENTRIES.containsKey(name);
     }
 
     /** A fresh node of the named kind. Throws for a name nothing registered. */
     public static UINode create(Name name) {
+        bootstrap();
         Entry entry = ENTRIES.get(name);
         if (entry == null) {
             throw new IllegalArgumentException("No node kind is registered as <" + name + ">; registered: "
@@ -77,11 +118,13 @@ public final class UINodeRegistry {
 
     /** The contract for a kind — the registered one, or a plain container's for a name nothing registered. */
     public static NodeContract contractFor(Name name) {
+        bootstrap();
         Entry entry = ENTRIES.get(name);
         return entry != null ? entry.contract() : plain(name, true);
     }
 
     public static Set<Name> names() {
+        bootstrap();
         return Set.copyOf(ENTRIES.keySet());
     }
 
