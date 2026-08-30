@@ -724,7 +724,7 @@ lambdas in `InsertionMarker` ×10, `TextEditor` ×10, `RegionDropOverlay` ×6, `
 Sizes as in `plan_m5.md`: S ≤ a day, M a few days, L a week or two, XL more. Each row names what it
 ports, what accepts it, which invariant rows it owns, and the hazards specific to it.
 
-### 6.0 — Machinery, ledger, fixtures · **L** · after: M5
+### 6.0 — Machinery, ledger, fixtures · **L** · after: M5 · **SHIPPED 2026-08-31**
 
 **Contents.** Everything in §2: `Dismiss`, the ghost, `scrollExempt`, transitions on the frame
 clock, the pre-bound groups, the query API, scroll extents and smooth scroll, `HIDDEN`, `Box.NONE`,
@@ -744,6 +744,49 @@ fixture twin, the governance twins, the ledger.
 **Hazards.** The ledger is the whole risk: a part misclassified as A that is really B costs a
 rewrite of every rule under it when the mistake is found. The census's 401 and 99 are the cross-check
 — any name that appears under another part, or above a tag, is B until read.
+
+#### 6.0 — what shipped, and the four things it found
+
+Shipped in three commits: the engine gaps (§2.1, §2.2), the ledger and its two governance tests
+(§2.4, §2.5), the codemod (§2.7), plus `LayeringTest` (§2.8) and the fixture twin (§2.3).
+`tools/port/ledger.py` and `tools/port/codemod.py` are the two commands; headless went 1691 → 1720.
+
+**Four things the work found, none of them visible from the plan:**
+
+- **`Attribute.HIDDEN` cannot be a stylesheet rule.** D5 assumed HTML's own
+  `[hidden] { display: none }`, and **this selector engine has no attribute selectors** —
+  `AGENTS.md` lists them with `:nth-child` and the sibling combinators as deliberately absent. So
+  hiding is STRUCTURAL: the box tree gives a hidden node no box, exactly as it gives none to
+  `display: none`. Smaller than teaching the parser a selector kind for one rule, and closer to what
+  the old engine did anyway, whose `IMPORTANT`-origin `display` no theme could override either.
+- **Promotion has to be recorded on the NODE, not written onto a box.** A box is destroyed and
+  rebuilt whenever its subtree is hidden, frozen or restructured, so `box.setHost(topLayer)` is lost
+  on the next sync — a popup hidden and reshown would come back UNPROMOTED, clipped by its scroller
+  again, and only ever after having been closed once. `UIDocument.promote` records it and the box
+  tree re-applies it per sync; the pass owns BOTH directions, because applying promotions alone
+  leaves a demoted box hosted where the last sync put it.
+- **A 5.3 bug the first test found: `TaffyTree.remove` marks nothing dirty.** It takes the node out
+  of its parent's child list — and because the list is then already correct, `sameChildren` skips the
+  `setChildren` that would have marked the parent. So a subtree that goes away leaves its former
+  siblings exactly where they were until something unrelated dirties layout: a removed row leaves a
+  gap, a hidden panel keeps its space, both correcting themselves later. True of any `remove()` since
+  5.3; nothing had removed a node between two layouts. `destroy()` dirties the host now.
+- **`EngineBoundaryTest`'s class list was inverted**, having broken twice in one session and silently
+  both times — a rename does not touch a string literal, and adding one class to `ui.dom` failed it
+  again. It lists the SEAM now (four types that exist to be stable) and treats everything else in the
+  package as new engine. The half that does not grow is the half that does not rot.
+
+**And two the ledger's first run found**, which is what the confirmation column is for: the obvious
+part heuristic — B if a name is selected UNDER another part — called `thumb`, `mark`, `label`,
+`track` and `fill` light structure. Those are the archetypal parts of Slider, Checkbox, Button and
+Scroller, wrong because a sheet SCOPES them through a container
+(`colorselector .__channel-row__ slider .__thumb__`). Being scoped BY an ancestor says nothing about
+whether you hold anything; being selected THROUGH says you do. With that one signal the split is
+**354 A / 114 B / 42 C** and every spot check is right.
+
+**Deliberately not built.** `exportparts` (nothing needs it before 6.2's nested parts), the
+generalised parity spec (6.1's first widget is what shapes it), and D16's four desktop bands — the
+top layer alone is what 6.1 and 6.2 need, and the windows/pinned bands are 6.6's.
 
 ### 6.1 — Leaf widgets · **M** · after: 6.0
 
