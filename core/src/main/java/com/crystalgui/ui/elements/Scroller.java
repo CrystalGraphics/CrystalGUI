@@ -114,7 +114,7 @@ public class Scroller extends UIElement implements com.crystalgui.ui.UIFrameTick
 
         this.events.getGroup(MouseEvent.Down.class).attachListener((el, event) -> {
             if (!isEnabled()) return;
-            var target = event.getTarget();
+            var target = ((UIElement) event.getTarget());
             if (target == thumb) {
                 beginDrag(event.getPosition().x(), event.getPosition().y());
             } else if (target == head) {

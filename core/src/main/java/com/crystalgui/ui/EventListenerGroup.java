@@ -1,34 +1,40 @@
 package com.crystalgui.ui;
 
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.ui.event.EventTarget;
 import com.crystalgui.ui.event.UIEvent;
 
 import java.util.HashMap;
 
-public final class EventListenerGroup<T extends UIEvent> {
-    private final Signal.Pair<UIElement, T> capture = new Signal.Pair<>();
-    private final Signal.Pair<UIElement, T> target = new Signal.Pair<>();
-    private final Signal.Pair<UIElement, T> bubble = new Signal.Pair<>();
+public final class EventListenerGroup<E extends EventTarget, T extends UIEvent> {
 
-    private final Signal.Pair<UIElement, T> defaultEvents = new Signal.Pair<>();
+    private final Signal.Pair<E, T> capture = new Signal.Pair<>();
+    private final Signal.Pair<E, T> target = new Signal.Pair<>();
+    private final Signal.Pair<E, T> bubble = new Signal.Pair<>();
+    private final Signal.Pair<E, T> defaultEvents = new Signal.Pair<>();
 
+    /** What the listeners were attached to, handed to each of them as {@code thisElement}. */
+    private final E element;
 
-    private final UIElement element;
-    public EventListenerGroup(UIElement element) {
+    public EventListenerGroup(E element) {
         this.element = element;
     }
 
-    void attachDefaultListener(UIEvent.Listener<T> listener) {
+    void attachDefaultListener(UIEvent.Listener<E, T> listener) {
         defaultEvents.connect(listener);
     }
 
-    public UIElement attachListener(UIEvent.Listener<T> listener, boolean capture, boolean bubble) {
+    /**
+     * Subscribes. <b>Always the target phase</b>; the two booleans are additive, not a mode selector —
+     * {@code (false, false)} is target-only, so a container hears nothing a descendant was targeted
+     * with.
+     */
+    public E attachListener(UIEvent.Listener<E, T> listener, boolean capture, boolean bubble) {
         this.target.connect(listener);
         if (bubble)
             this.bubble.connect(listener);
         if (capture)
             this.capture.connect(listener);
-
         return element;
     }
 
@@ -52,17 +58,18 @@ public final class EventListenerGroup<T extends UIEvent> {
             this.bubble.disconnectAll();
     }
 
-    public static final class Map {
-        private final HashMap<Class<? extends UIEvent>, EventListenerGroup<?>> lookupMap = new HashMap<>();
-        private final UIElement element;
+    /** One group per event type, created on first use. */
+    public static final class Map<E extends EventTarget> {
+        private final HashMap<Class<? extends UIEvent>, EventListenerGroup<E, ?>> lookupMap = new HashMap<>();
+        private final E element;
 
-        public Map(UIElement element) {
+        public Map(E element) {
             this.element = element;
         }
 
         @SuppressWarnings("unchecked")
-        public <T extends UIEvent> EventListenerGroup<T> getGroup(Class<T> clazz) {
-            return (EventListenerGroup<T>) lookupMap.computeIfAbsent(clazz, c -> new EventListenerGroup<T>(element));
+        public <T extends UIEvent> EventListenerGroup<E, T> getGroup(Class<T> clazz) {
+            return (EventListenerGroup<E, T>) lookupMap.computeIfAbsent(clazz, c -> new EventListenerGroup<E, T>(element));
         }
 
         public void emitToGroup(UIEvent event) {
@@ -70,7 +77,7 @@ public final class EventListenerGroup<T extends UIEvent> {
             var group = lookupMap.get(event.getClass());
             if (group != null) {
                 //noinspection unchecked
-                ((EventListenerGroup<UIEvent>) group).emitTarget(event);
+                ((EventListenerGroup<E, UIEvent>) group).emitTarget(event);
             }
         }
     }

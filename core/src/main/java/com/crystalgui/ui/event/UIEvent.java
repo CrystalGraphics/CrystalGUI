@@ -1,13 +1,12 @@
 package com.crystalgui.ui.event;
 
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.ui.UIElement;
 import lombok.Getter;
 
 public abstract class UIEvent {
 
     @Getter
-    private final UIElement target;
+    private final EventTarget target;
     @Getter
     private final boolean bubbles;
 
@@ -27,7 +26,7 @@ public abstract class UIEvent {
         return this;
     }
 
-    protected UIEvent(UIElement target, boolean bubbles) {
+    protected UIEvent(EventTarget target, boolean bubbles) {
         this.target = target;
         this.bubbles = bubbles;
     }
@@ -54,7 +53,11 @@ public abstract class UIEvent {
      * Redefined {@link Signal.Pair.Listener} so you get proper hints with the IDE.
      * @param <T>
      */
-    public interface Listener<T extends UIEvent> extends Signal.Pair.Listener<UIElement, T> {
-        void accept(UIElement thisElement, T event);
+    /**
+     * @param <E> what the listener was attached to — the element on the old engine, the node on the
+     *            new one; {@code thisElement} is that, never the event's target
+     */
+    public interface Listener<E extends EventTarget, T extends UIEvent> extends Signal.Pair.Listener<E, T> {
+        void accept(E thisElement, T event);
     }
 }

@@ -130,8 +130,8 @@ final class ExplorerDragAndDrop {
             // the more useful signal: an outline that appears only over valid targets leaves you unable to
             // tell "this cannot take it" from "the drag is not tracking me at all". The refusal is carried
             // by the cursor, which is what a cursor is for.
-            markDropTarget(tree.rowElementFor(event.getTarget()));
-            if (dropTargetFor(event.getTarget()) != null) {
+            markDropTarget(tree.rowElementFor(((UIElement) event.getTarget())));
+            if (dropTargetFor(((UIElement) event.getTarget())) != null) {
                 // ACCEPTING is preventDefault. Re-read every frame, so a drag that wanders over
                 // something invalid stops being accepted without anything having to un-latch it.
                 event.preventDefault();
@@ -146,7 +146,7 @@ final class ExplorerDragAndDrop {
         tree.treeView().events.getGroup(DragEvent.Drop.class).attachListener((element, event) -> {
             markDropTarget(null);
             if (!(event.getPayload() instanceof DragPayload payload)) return;
-            CgPath destination = dropTargetFor(event.getTarget());
+            CgPath destination = dropTargetFor(((UIElement) event.getTarget()));
             if (destination == null) return;
             // The modifier means COPY, matching every file manager. Read at DROP time rather than at
             // press time, because the decision is made while dragging -- you pick the folder first and

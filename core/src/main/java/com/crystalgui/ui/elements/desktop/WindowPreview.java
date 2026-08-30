@@ -113,7 +113,7 @@ public class WindowPreview extends UIElement {
         // press on the button itself is that button's -- the two booleans are additive, and target-only
         // would never hear a press that landed on a child at all.
         events.getGroup(MouseEvent.Down.class).attachListener((element, event) -> {
-            if (isWithin(event.getTarget(), close)) return;
+            if (isWithin(((UIElement) event.getTarget()), close)) return;
             onActivated.emit();
         }, false, true);
     }

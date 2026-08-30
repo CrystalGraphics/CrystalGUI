@@ -1,7 +1,6 @@
 package com.crystalgui.ui.event;
 
 import com.crystalgui.core.data.ReadOnlyVec2f;
-import com.crystalgui.ui.UIElement;
 import lombok.Getter;
 
 import javax.annotation.Nullable;
@@ -43,15 +42,15 @@ public abstract class DragEvent extends UIEvent {
     private final ReadOnlyVec2f position;
 
     /** The element the drag started from. Never null while a drag is active. */
-    private final UIElement source;
+    private final EventTarget source;
 
     /** Caller-supplied payload, or {@code null} for a positional drag that carries no data (which is
      * what Slider, Scroller and SplitView do). */
     @Nullable
     private final Object payload;
 
-    protected DragEvent(UIElement target, boolean bubbles, ReadOnlyVec2f pos,
-                        UIElement source, @Nullable Object payload) {
+    protected DragEvent(EventTarget target, boolean bubbles, ReadOnlyVec2f pos,
+                        EventTarget source, @Nullable Object payload) {
         super(target, bubbles);
         this.position = pos;
         this.source = source;
@@ -60,14 +59,14 @@ public abstract class DragEvent extends UIEvent {
 
     /** The drag has entered this element. Fired once per element entered, outermost first. */
     public static final class Enter extends DragEvent {
-        public Enter(UIElement target, ReadOnlyVec2f pos, UIElement source, @Nullable Object payload) {
+        public Enter(EventTarget target, ReadOnlyVec2f pos, EventTarget source, @Nullable Object payload) {
             super(target, false, pos, source, payload);
         }
     }
 
     /** The drag has left this element. Fired once per element left, innermost first. */
     public static final class Leave extends DragEvent {
-        public Leave(UIElement target, ReadOnlyVec2f pos, UIElement source, @Nullable Object payload) {
+        public Leave(EventTarget target, ReadOnlyVec2f pos, EventTarget source, @Nullable Object payload) {
             super(target, false, pos, source, payload);
         }
     }
@@ -81,14 +80,14 @@ public abstract class DragEvent extends UIEvent {
      * cannot silently become a drop target.</p>
      */
     public static final class Over extends DragEvent {
-        public Over(UIElement target, ReadOnlyVec2f pos, UIElement source, @Nullable Object payload) {
+        public Over(EventTarget target, ReadOnlyVec2f pos, EventTarget source, @Nullable Object payload) {
             super(target, true, pos, source, payload);
         }
     }
 
     /** The drag was released over this element, and it had accepted the drop. */
     public static final class Drop extends DragEvent {
-        public Drop(UIElement target, ReadOnlyVec2f pos, UIElement source, @Nullable Object payload) {
+        public Drop(EventTarget target, ReadOnlyVec2f pos, EventTarget source, @Nullable Object payload) {
             super(target, true, pos, source, payload);
         }
     }
@@ -100,7 +99,7 @@ public abstract class DragEvent extends UIEvent {
      * every listener inventing its own idea of "the drag didn't finish".</p>
      */
     public static final class Cancel extends DragEvent {
-        public Cancel(UIElement target, ReadOnlyVec2f pos, UIElement source, @Nullable Object payload) {
+        public Cancel(EventTarget target, ReadOnlyVec2f pos, EventTarget source, @Nullable Object payload) {
             super(target, false, pos, source, payload);
         }
     }

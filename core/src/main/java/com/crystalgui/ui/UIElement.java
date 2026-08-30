@@ -41,6 +41,7 @@ import com.crystalgui.ui.event.FocusEvent;
 import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
+import com.crystalgui.ui.event.EventTarget;
 import com.crystalgui.ui.event.UIEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.input.keymap.Keymap;
@@ -73,7 +74,7 @@ import static com.crystalgui.ui.UIWindow.EMPTY_LAYOUT;
  * like an HTML {@code <div>}).
  */
 @Accessors(chain = true)
-public class UIElement implements SettingsScope, DataProvider {
+public class UIElement implements EventTarget, SettingsScope, DataProvider {
     private static final Comparator<UIElement> Z_INDEX_DESCENDING = (a, b) -> Integer.compare(b.style.generalGroup.zIndex(), a.style.generalGroup.zIndex());
 
     // ── Core state ───────────────────────────────────────────────────────────
@@ -141,34 +142,34 @@ public class UIElement implements SettingsScope, DataProvider {
 
     // ── Events ───────────────────────────────────────────────────────────────
 
-    public final EventListenerGroup.Map events = new EventListenerGroup.Map(this);
+    public final EventListenerGroup.Map<UIElement> events = new EventListenerGroup.Map<>(this);
 
     // Mouse
-    public final EventListenerGroup<MouseEvent.Down> onMouseDown = events.getGroup(MouseEvent.Down.class);
-    public final EventListenerGroup<MouseEvent.Up> onMouseUp = events.getGroup(MouseEvent.Up.class);
-    public final EventListenerGroup<MouseEvent.Scroll> onMouseScroll = events.getGroup(MouseEvent.Scroll.class);
-    public final EventListenerGroup<MouseEvent.Move> onMouseMove = events.getGroup(MouseEvent.Move.class);
-    public final EventListenerGroup<MouseEvent.Enter> onMouseEnter = events.getGroup(MouseEvent.Enter.class);
-    public final EventListenerGroup<MouseEvent.Leave> onMouseLeave = events.getGroup(MouseEvent.Leave.class);
+    public final EventListenerGroup<UIElement, MouseEvent.Down> onMouseDown = events.getGroup(MouseEvent.Down.class);
+    public final EventListenerGroup<UIElement, MouseEvent.Up> onMouseUp = events.getGroup(MouseEvent.Up.class);
+    public final EventListenerGroup<UIElement, MouseEvent.Scroll> onMouseScroll = events.getGroup(MouseEvent.Scroll.class);
+    public final EventListenerGroup<UIElement, MouseEvent.Move> onMouseMove = events.getGroup(MouseEvent.Move.class);
+    public final EventListenerGroup<UIElement, MouseEvent.Enter> onMouseEnter = events.getGroup(MouseEvent.Enter.class);
+    public final EventListenerGroup<UIElement, MouseEvent.Leave> onMouseLeave = events.getGroup(MouseEvent.Leave.class);
 
     /** Keyboard, dispatched to the focused element and bubbled — so an ancestor can implement a
      * shortcut (a dialog closing on Escape) without the focused child knowing about it. */
-    public final EventListenerGroup<KeyboardEvent.Down> onKeyDown = events.getGroup(KeyboardEvent.Down.class);
-    public final EventListenerGroup<KeyboardEvent.Up> onKeyUp = events.getGroup(KeyboardEvent.Up.class);
+    public final EventListenerGroup<UIElement, KeyboardEvent.Down> onKeyDown = events.getGroup(KeyboardEvent.Down.class);
+    public final EventListenerGroup<UIElement, KeyboardEvent.Up> onKeyUp = events.getGroup(KeyboardEvent.Up.class);
 
     /** Drag-and-drop, dispatched to whatever is under the pointer — <b>not</b> to the drag source,
      * which pointer capture keeps every {@link MouseEvent} pinned to. See {@link DragEvent}. */
-    public final EventListenerGroup<DragEvent.Enter> onDragEnter = events.getGroup(DragEvent.Enter.class);
-    public final EventListenerGroup<DragEvent.Leave> onDragLeave = events.getGroup(DragEvent.Leave.class);
+    public final EventListenerGroup<UIElement, DragEvent.Enter> onDragEnter = events.getGroup(DragEvent.Enter.class);
+    public final EventListenerGroup<UIElement, DragEvent.Leave> onDragLeave = events.getGroup(DragEvent.Leave.class);
     /** Fired every frame the drag stays over this element. {@code preventDefault()} accepts the drop. */
-    public final EventListenerGroup<DragEvent.Over> onDragOver = events.getGroup(DragEvent.Over.class);
-    public final EventListenerGroup<DragEvent.Drop> onDrop = events.getGroup(DragEvent.Drop.class);
+    public final EventListenerGroup<UIElement, DragEvent.Over> onDragOver = events.getGroup(DragEvent.Over.class);
+    public final EventListenerGroup<UIElement, DragEvent.Drop> onDrop = events.getGroup(DragEvent.Drop.class);
     /** Fired on the drag <em>source</em> when a drag is aborted rather than dropped. */
-    public final EventListenerGroup<DragEvent.Cancel> onDragCancel = events.getGroup(DragEvent.Cancel.class);
+    public final EventListenerGroup<UIElement, DragEvent.Cancel> onDragCancel = events.getGroup(DragEvent.Cancel.class);
 
     // Focus
-    public final EventListenerGroup<FocusEvent.Focus> onFocus = events.getGroup(FocusEvent.Focus.class);
-    public final EventListenerGroup<FocusEvent.Blur> onBlur = events.getGroup(FocusEvent.Blur.class);
+    public final EventListenerGroup<UIElement, FocusEvent.Focus> onFocus = events.getGroup(FocusEvent.Focus.class);
+    public final EventListenerGroup<UIElement, FocusEvent.Blur> onBlur = events.getGroup(FocusEvent.Blur.class);
 
     public UIElement() {
 //        onFocus.attachDefaultListener(((thisElement, event) -> style.generalGroup.overlay(CgUiDrawable.EMPTY).color(0xFFFF8888)));
@@ -2374,7 +2375,7 @@ public class UIElement implements SettingsScope, DataProvider {
         return (outsideLen - 1f) * Math.min(rx, ry) + Math.min(Math.max(qx, qy), 0f);
     }
 
-    protected <T extends UIEvent> void attachDefaultListener(EventListenerGroup<T> handler, UIEvent.Listener<T> defaultAction) {
+    protected <T extends UIEvent> void attachDefaultListener(EventListenerGroup<UIElement, T> handler, UIEvent.Listener<UIElement, T> defaultAction) {
         handler.attachDefaultListener(defaultAction);
     }
 

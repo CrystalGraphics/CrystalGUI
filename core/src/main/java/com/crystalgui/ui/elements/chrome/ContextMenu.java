@@ -245,7 +245,7 @@ public final class ContextMenu {
             if (event.getButtonId() != CgMouseCodes.RIGHT_BUTTON) return;
             UIWindow window = on.getAttachedWindow();
             if (window == null) return;
-            UIElement target = event.getTarget() == null ? on : event.getTarget();
+            UIElement target = ((UIElement) event.getTarget()) == null ? on : ((UIElement) event.getTarget());
             // A press landing ON THE OPEN MENU is not a request for a menu about the menu. Without this,
             // the second right-click resolved its target inside the popup that discard() was about to
             // detach -- so both the command context and the host were computed from an element no longer

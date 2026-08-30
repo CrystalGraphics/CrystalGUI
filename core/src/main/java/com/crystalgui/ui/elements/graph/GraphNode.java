@@ -211,7 +211,7 @@ public class GraphNode extends UIElement {
 
         this.events.getGroup(MouseEvent.Down.class).attachListener((el, event) -> {
             if (!isEnabled() || event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
-            if (isInsideControls(event.getTarget())) return;
+            if (isInsideControls(((UIElement) event.getTarget()))) return;
 
             GraphView view = graphView();
             if (view != null) {
