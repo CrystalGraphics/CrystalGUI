@@ -531,7 +531,35 @@ in every context, per-connection refusal counter with a threshold, per-viewer vi
 and counted, two-viewer attribution, the seven tear-out behaviours re-pinned as plain reparent
 tests (they pass because M2 made reparenting free — no `Detached`).
 
-### M4 — Windows, view commands, client-initiated open, sheets, limits · M · after: M2, M3
+### M4 — Windows, view commands, client-initiated open, sheets, limits · M · after: M2, M3 · **SHIPPED 2026-08-30**
+
+#### What shipped
+
+| | |
+|---|---|
+| View commands | `net/ViewCommand` (closed vocabulary), `ui/view`, `net/window/ViewCommands`, typed API on `ServerScope` |
+| Close veto (D8) | `Networked.requestClose()`, `ui/requestClose` as a request, unanimity across viewers, wired to `WindowFrame.setDiscardGuard` |
+| Sheets | `ScopedSheets` — selector rewrite scoped by type id, refcounted, released on close; `SheetSupply` pairs apply with release |
+| Caps | `net/UiLimits` — windows, elements, description bytes, sheet size and count, inbound rate |
+| Eviction | reports `RETENTION` rather than `CLIENT` |
+| Visibility | reported when the whole compositor is suspended, which no window's own `onHidden` covers |
+| **Client-initiated open (N10)** | `ServerWindows.openable(TYPE, resolver)` + `ClientWindows.requestOpen(TYPE, args, onGranted)`; the Machine example migrated off its hand-rolled notify |
+
+All three N10 decisions implemented as taken: a **request** rather than a notify, openability declared
+**server-at-registration** rather than on the type, and the reply carrying **success only** so the
+window still arrives through the ordinary open path.
+
+#### Two things deliberately not done, with the evidence
+
+- **`WindowMount` keeps `contentReplaced`.** The spec listed it under *Deletes*; it is now **more**
+  load-bearing than when that was written. Per-viewer visibility made a re-describe reachable — a
+  returning viewer is re-served the live description — and without this the host keeps showing the tree
+  that was replaced.
+- **`openedBy` → `setOwnerWindow`**: `openedBy` exists nowhere in the codebase. Nothing to rename.
+
+#### The original M4 specification
+
+
 
 #### Client-initiated open (audit N10) — decided 2026-08-29
 

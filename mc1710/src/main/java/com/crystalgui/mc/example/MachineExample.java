@@ -4,7 +4,6 @@ import com.crystalgui.example.machine.MachineModel;
 import com.crystalgui.example.machine.MachineTrace;
 import com.crystalgui.example.machine.ui.MachinePanel;
 import com.crystalgui.net.window.ServerWindows;
-import com.crystalgui.net.protocol.Protocols;
 
 import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
@@ -26,9 +25,6 @@ import cpw.mods.fml.common.gameevent.TickEvent;
  */
 public final class MachineExample {
 
-    /** What the client sends to ask for a panel. On the connection, not a window: there is no window yet. */
-    public static final String OPEN = "machine/open";
-
     /** ONE machine for the whole server. Every viewer's window mirrors the same object. */
     private static final MachineModel MACHINE = new MachineModel();
 
@@ -37,12 +33,24 @@ public final class MachineExample {
 
     /** Called from {@code CommonProxy.init()}, after {@code WindowProtocol.register()}. */
     public static void registerCommon() {
-        Protocols.server("machine", wire ->
-                wire.onNotify(OPEN, payload -> {
-                    MachineTrace.log(MachineTrace.SERVER, "the client asked for a panel");
-                    // One call. Asking twice brings the existing window forward: the panel names a key.
-                    ServerWindows.of(wire).open(MachinePanel.TYPE, MACHINE);
-                }));
+        /*
+         * DECLARED OPENABLE, rather than a hand-rolled notification.
+         *
+         * This used to be `wire.onNotify("machine/open", ...)`, with a comment saying the window
+         * arriving IS the answer. True while it always succeeded -- and indistinguishable from a lost
+         * packet when it did not, which is the whole problem: the player presses F8 and nothing
+         * happens, forever, with nothing to look at.
+         *
+         * The resolver is the authority. It gets the viewer and may answer null, which is an ordinary
+         * refusal rather than an error. This one grants unconditionally because there is exactly one
+         * machine on the server and everybody may see it; a real mod reads a position out of `args`
+         * and RE-DERIVES from it -- checking the block is loaded and the player is near it -- because
+         * anything a client sends is a claim rather than a fact.
+         */
+        ServerWindows.openable(MachinePanel.TYPE, (viewer, args) -> {
+            MachineTrace.log(MachineTrace.SERVER, "a client asked for a panel");
+            return MACHINE;
+        });
         FMLCommonHandler.instance().bus().register(new ServerHandler());
     }
 

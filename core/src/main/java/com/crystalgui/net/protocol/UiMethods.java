@@ -132,6 +132,18 @@ public final class UiMethods {
      * is the server stating and the client following; here the client knows something the server cannot:
      * whether there is half-typed text, an unsaved edit, a confirmation still on screen.</p>
      */
+    /**
+     * <b>A client asking for a window</b> — a REQUEST, because the answer is the point.
+     *
+     * <p>A notification would be indistinguishable from a lost packet when it is refused: the player
+     * presses the key and nothing happens, forever, with nothing to look at. The reply says only
+     * whether it was granted; the window itself arrives through the ordinary {@link #OPEN_WINDOW} path,
+     * so there is exactly <b>one</b> code path for "a window appeared" no matter who asked.</p>
+     *
+     * <p>Connection-level rather than window-level: there is no window yet.</p>
+     */
+    public static final String REQUEST_OPEN = "ui/requestOpen";
+
     public static final String REQUEST_CLOSE = "ui/requestClose";
 
     public static final String VIEW = "ui/view";

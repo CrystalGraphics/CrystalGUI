@@ -3,6 +3,8 @@ package com.crystalgui.mc.example;
 import org.lwjgl.input.Keyboard;
 
 import com.crystalgui.example.machine.MachineTrace;
+import com.crystalgui.net.window.ClientWindows;
+import com.crystalgui.example.machine.ui.MachinePanel;
 import com.crystalgui.mc.client.CgUiScreen;
 import com.crystalgui.mc.net.CgUiConnections;
 import com.crystalgui.net.protocol.ProtocolConnection;
@@ -53,8 +55,14 @@ public final class MachineExampleClient {
             }
 
             MachineTrace.log(MachineTrace.CLIENT, "F8 -- asking the server for a panel");
-            // A notification: nobody waits. The window arriving IS the answer.
-            connection.notify(MachineExample.OPEN, null);
+            // A REQUEST, so a refusal is something we hear rather than something we wait for. The
+            // window itself still arrives through the ordinary mount path -- `granted` says only
+            // whether one is coming, and is not where to look for the tree.
+            ClientWindows.of(connection).requestOpen(MachinePanel.TYPE, null, granted ->
+                    MachineTrace.log(MachineTrace.CLIENT,
+                            granted ? "the server is opening one" : "the server said no"));
+            // The desktop is opened either way: it is where the window WILL land, and a screen that
+            // appears only on success would flicker for anyone who is refused.
             CgUiScreen.openDesktop();
         }
     }

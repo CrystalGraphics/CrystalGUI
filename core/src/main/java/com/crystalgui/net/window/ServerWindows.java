@@ -13,6 +13,7 @@ import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.net.UiLimits;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.UiMethods;
+import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;
 
 /**
@@ -81,15 +82,124 @@ public final class ServerWindows {
 
     private ServerWindows(ProtocolConnection<Object> connection) {
         this.connection = connection;
+        connection.router().onRequest(UiMethods.REQUEST_OPEN, (payload, respond) -> {
+            StateMap<Object> in = payload == null
+                    ? new StateMap<>(connection.ops()) : new StateMap<>(connection.ops(), payload);
+            respond.ok(requestOpen(in).encode());
+        });
         // AFTER the drain, so a window's tick runs against messages that have already arrived rather
         // than against the previous tick's. @see ProtocolConnection#onTick
         connection.onTick(this::tick);
         connection.onClosed(this::onConnectionClosed);
     }
 
+    /**
+     * What a client on ANY connection is allowed to ask for, by type id.
+     *
+     * <p>Static because it is a statement about this deployment rather than about one player's
+     * connection: a mod declares once, at registration, what its clients may open. Per-connection
+     * differences are the resolver's to make — it is handed the viewer.</p>
+     */
+    private static final Map<String, Openable<?, ?>> OPENABLE = new LinkedHashMap<>();
+
+    /** A declared type and the authority that decides each request for it. */
+    private record Openable<P extends UIElement & Networked<M>, M>(UiType<P, M> type,
+                                                                   OpenResolver<M> resolver) {
+    }
+
+    /**
+     * <b>Lets clients ask for this window.</b> Nothing is openable by a client until this is called.
+     *
+     * <p>The default is refusal, and deliberately: a client able to open any registered type could open
+     * a panel over a block it is nowhere near, or one a mod only ever means to show from its own code.
+     * Declaring is one line and the absence of it is safe.</p>
+     *
+     * <pre>{@code
+     * ServerWindows.openable(FurnacePanel.TYPE, (viewer, args) -> {
+     *     BlockPos pos = readPos(args);                   // UNTRUSTED -- re-derive, never dereference
+     *     if (!world.isBlockLoaded(pos)) return null;     // null is a refusal, not an error
+     *     return furnaceAt(pos);
+     * });
+     * }</pre>
+     *
+     * <p><b>Asking twice does not open twice</b>, and needs no second mechanism: a panel that names a
+     * {@code key} brings its existing window forward instead, which is the same rule a server-side
+     * {@code open} already follows.</p>
+     *
+     * <p>Idempotent per type — re-declaring replaces the resolver, so a reload can re-register without
+     * a duplicate refusal.</p>
+     */
+    public static <P extends UIElement & Networked<M>, M> void openable(UiType<P, M> type,
+                                                                        OpenResolver<M> resolver) {
+        OPENABLE.put(type.id(), new Openable<>(type, resolver));
+    }
+
+    /** Forgets every declaration. For tests, which share statics. */
+    public static void resetOpenableForTesting() {
+        OPENABLE.clear();
+    }
+
     /** The host for this connection, created on first use. */
     public static ServerWindows of(ProtocolConnection<Object> connection) {
         return connection.attachment(ServerWindows.class, ServerWindows::new);
+    }
+
+    /**
+     * Answers a client's request for a window.
+     *
+     * <p>The reply says whether it was granted and nothing else. The window, if there is one, arrives
+     * through the ordinary open path — so a client has exactly one place that learns a window appeared,
+     * whether it asked for it or the server decided on its own.</p>
+     *
+     * <p>A refusal is deliberately <b>unelaborated</b>. Saying which check failed tells a client
+     * probing for windows exactly what to change; "no" is the whole answer a legitimate caller needs,
+     * and the server's log has the detail for whoever is actually debugging it.</p>
+     */
+    private StateMap<Object> requestOpen(StateMap<Object> in) {
+        StateMap<Object> out = new StateMap<>(connection.ops());
+        String typeId = in.getString(UiMethods.TYPE, "");
+        Openable<?, ?> declared = OPENABLE.get(typeId);
+        if (declared == null) {
+            // NOT DECLARED is not the same as refused, and is worth its own log line: a refusal is the
+            // resolver doing its job, and this is a client asking for something no mod ever offered --
+            // either a version skew or somebody trying ids to see what sticks.
+            CrystalGuiCore.LOGGER.warn("A client asked to open <{}>, which is not declared openable",
+                    typeId);
+            out.putBool("ok", false);
+            return out;
+        }
+        boolean opened = grant(declared, in);
+        out.putBool("ok", opened);
+        return out;
+    }
+
+    @SuppressWarnings("unchecked")
+    private <P extends UIElement & Networked<M>, M> boolean grant(Openable<P, M> declared,
+                                                                  StateMap<Object> in) {
+        // Never null, so a resolver need not check: a client that sends nothing sends an empty map.
+        Object raw = in.getRaw("args");
+        StateMap<Object> args = raw == null
+                ? new StateMap<>(connection.ops()) : new StateMap<>(connection.ops(), raw);
+        M model;
+        try {
+            model = declared.resolver().resolve(connection.peer(), args);
+        } catch (RuntimeException failed) {
+            // A BROKEN resolver is a refusal, not a crash. It runs on whatever thread the connection
+            // ticks on, and letting it out would take the connection down over one player's request.
+            CrystalGuiCore.LOGGER.error("The resolver for <{}> failed; refusing: {}",
+                    declared.type().id(), failed.getMessage(), failed);
+            return false;
+        }
+        if (model == null) return false;   // an ordinary answer
+
+        try {
+            open(declared.type(), model);
+            return true;
+        } catch (RuntimeException failed) {
+            CrystalGuiCore.LOGGER.error("Could not open <{}> for a client that asked: {}",
+                    declared.type().id(), failed.getMessage(), failed);
+            return false;
+        }
     }
 
     /** Builds the host so its tick and close hooks are installed. @see WindowProtocol */

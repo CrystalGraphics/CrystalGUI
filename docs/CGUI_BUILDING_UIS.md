@@ -467,6 +467,54 @@ this is `CgUiConnections.client()`, which is `null` when you are not in a world.
 Opening two windows for the same subject is handled by `key(model)`: give the panel a key and a
 second `open` brings the existing window forward instead of building another.
 
+### Letting the client ask for a window
+
+Everything above has the server deciding when a window appears. Often you want the other way round —
+the player presses a key, or clicks a block, and *asks*.
+
+**On the server, say what may be asked for.** Nothing is openable by a client until you do:
+
+```java
+ServerWindows.openable(FurnacePanel.TYPE, (viewer, args) -> {
+    BlockPos pos = readPos(args);                        // a CLAIM from the client
+    if (!world.isBlockLoaded(pos)) return null;          // null = "no"
+    if (player(viewer).getDistanceSq(pos) > 64) return null;
+    return furnaceAt(pos);                               // the model to open with
+});
+```
+
+**On the client, ask:**
+
+```java
+StateMap<Object> args = new StateMap<>(connection.ops());
+args.putInt("x", pos.getX());   // …y, z
+ClientWindows.of(connection).requestOpen(FurnacePanel.TYPE, args, granted -> {
+    if (!granted) player.addChatMessage(new ChatComponentText("You are too far away."));
+});
+```
+
+Four things worth knowing:
+
+- **`granted` is not where the window arrives.** It says only whether one is coming. The window itself
+  turns up through the ordinary mount path, so you have exactly one place that handles "a window
+  appeared" whether you asked for it or the server decided.
+- **`args` is untrusted on the server.** It came from a client, so it is a claim. Re-derive your model
+  from it — look up the position, resolve the id — and never treat it as a reference. The resolver above
+  is the pattern: read, check, look up.
+- **Returning `null` is an ordinary refusal**, not an error. A client asking for something it may not
+  have is expected traffic.
+- **Asking twice does not open twice.** Give the panel a `key(model)` and the second request brings the
+  existing window forward, which is the same rule a server-side open already follows.
+
+> **⚠️ The single-player trap.** Asking for a window almost always means opening a `GuiScreen`, and one
+> whose `doesGuiPauseGame()` returns `true` **stops the integrated server ticking**. The connection is
+> then never pumped, your request is never answered, and it dies at its timeout — so the window simply
+> never opens, with nothing in the log.
+>
+> **Return `false` from `doesGuiPauseGame()` for any screen that talks to the server.** This is
+> invisible on a dedicated server, which is the configuration nobody tests the wire in, and it presents
+> as "it works in multiplayer but not single-player".
+
 ### What runs where
 
 | Hook | Runs | For |
