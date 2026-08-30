@@ -31,7 +31,7 @@ the audit's numbers (§1 there: ~26,700 lines replaced, of which the engine's ow
 | 5.3 | The box tree and one-pass layout | L | 5.2 | Layout of the gallery's trees runs to completion in **one** pass; hit-testing is correct before any paint | **shipped 2026-08-30** — see §4.3 notes |
 | 5.4 | Paint and hit-test through boxes, in the harness | M | 5.3 | A fixed tree renders pixel-identically on both engines; the harness runs either | **shipped 2026-08-30** — see §4.4 notes |
 | 5.5 | The services: input, focus, motion, lifecycle | L | 5.3 | The 38 focus rows and the 20 hit-test rows are tests, and pass; a frozen window costs nothing | **shipped 2026-08-30** — see §4.5 notes |
-| 5.6 | Acceptance, the porting guide, the M6 handoff | S | 5.4, 5.5 | Every M5 acceptance criterion in one run; M6's first step is written down | planned |
+| 5.6 | Acceptance, the porting guide, the M6 handoff | S | 5.4, 5.5 | Every M5 acceptance criterion in one run; M6's first step is written down | **shipped 2026-08-30** — see §4.6 notes |
 
 5.4 and 5.5 are independent of each other and both depend on 5.3. Everything else is a chain.
 
@@ -509,6 +509,28 @@ sink is exactly what `UIWindow` avoided, and for the same reason.
 
 **Touches the old engine:** no. **Acceptance:** the run green; the guide reviewed against one widget.
 **Proves:** M5 is done by its own definition, and M6 has a first step.
+
+#### 5.6 — what shipped, and the one deviation
+
+Shipped: **`./gradlew :core:m5Acceptance`** (98 tests over 14 classes — the seam suite on both
+trees, the boundary scan, the box tree, the services, one-pass layout on both engines, and the
+engine-parity comparison, which SKIPS with instructions when no GL run has written its PNGs);
+`docs/CGUI_ENGINE_PORTING.md`; twelve `AGENTS.md` rows marked `(M5: no counterpart.)` with one
+explanation at the head of the table rather than twelve parentheticals; and
+`plan_ui_rewrite.md`'s M5 row updated the way M0's was.
+
+- **The guide is its own file, not a section of `docs/CGUI_WIDGETS.md`.** That document describes
+  widgets that outlive the port; a guide whose entire subject is the difference between two engines
+  rots the moment one of them goes. It is indexed from `AGENTS.md` and deleted whole at M8.
+- **The paper port changed the guide five times**, which is what the exercise is for. The sharpest:
+  the registry's factory is a `Supplier<? extends Node>`, so a widget whose only constructor takes
+  its text does not compile as `Button::new` and the codec has nothing to build it with — the same
+  no-arg requirement `ElementRegistry` always had, in a place nobody would look for it.
+- **The rows are MARKED, never deleted.** The old engine ships until M8 and its readers still need
+  every one of them; M8 needs the list of what it may take with it.
+- The acceptance run is two `Test` tasks rather than one because M5's tests genuinely span two
+  source sets — the box tree's two-engine comparison and the shaped-text measure need fonts and CSS,
+  and everything else must keep proving it does not.
 
 ---
 
