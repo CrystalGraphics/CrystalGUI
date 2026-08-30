@@ -5,6 +5,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
@@ -107,14 +108,18 @@ public class UiThemeParseTest {
      * unsupported-selector list), which is what makes it a valid stand-in.</p>
      */
     @Test
-    public void poisonedCssIsRefusedAtRegistration() {
-        assertFalse(ThemeRegistry.registerSource("""
+    public void aBadSelectorCostsOneRuleAndNotTheTheme() {
+        // WAS "poisonedCssIsRefusedAtRegistration". The whole-sheet refusal it pinned was the defect
+        // (audit §5 S3: one unknown pseudo-class took six unrelated panels down); since M5's 5.2 a
+        // selector that will not parse drops ITS rule, warns, and the rest of the sheet applies -- the
+        // CSS rule. So the theme registers, is offered, and simply lacks the row it could not read.
+        assertTrue(ThemeRegistry.registerSource("""
                 /* @theme Poisoned
                  * @id    test:poisoned
                  * @kind  dark */
                 :nth-child(2) { opacity: 0.5; }
                 """));
-        assertNull("a refused theme must not be offered", ThemeRegistry.get("test:poisoned"));
+        assertNotNull("one bad rule does not refuse the theme", ThemeRegistry.get("test:poisoned"));
     }
 
     // ── the registry ────────────────────────────────────────────────────────────────────────────

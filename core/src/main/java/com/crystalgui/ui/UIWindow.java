@@ -70,7 +70,7 @@ public final class UIWindow {
     private final UIInputHandler inputHandler = new UIInputHandler(this);
 
     @Getter
-    private final StyleEngine styleEngine = new StyleEngine(this);
+    private final StyleEngine styleEngine = new StyleEngine(this::getElements);
     private long lastFrameNanos = System.nanoTime();
 
     private final List<UIElement> elements = new ArrayList<>();

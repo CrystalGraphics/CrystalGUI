@@ -1,7 +1,14 @@
 package com.crystalgui.ui.dom;
 
+import com.crystalgui.style.ComputedStyle;
+import com.crystalgui.style.ElementStyle;
+import com.crystalgui.style.StyleEngine;
+import com.crystalgui.style.Styleable;
+import com.crystalgui.style.property.StyleProperty;
+import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.EventListenerGroup;
 import com.crystalgui.ui.event.EventTarget;
+import java.util.Collection;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -47,7 +54,7 @@ import javax.annotation.Nullable;
  * lifecycle callback is an ordinary new mutation. A reparent is one {@code moved}, which the old tree
  * could not spell (M2).</p>
  */
-public class Node implements EventTarget {
+public class Node implements EventTarget, Styleable {
 
     private final Name name;
 
@@ -80,6 +87,17 @@ public class Node implements EventTarget {
 
     private boolean frozen;
 
+    /** The cascade's store for this node, created on first use. */
+    @Nullable
+    private ElementStyle style;
+    /** Interaction state the services set and the pseudo-classes read. Not attributes: nobody authors these. */
+    private boolean hovered;
+    private boolean pressed;
+    private boolean focused;
+    private boolean focusVisible;
+    private boolean focusWithin;
+    private boolean fontRelativeStyles;
+
     /** The listener groups, one per event type, created on first use. */
     public final EventListenerGroup.Map<Node> events = new EventListenerGroup.Map<>(this);
 
@@ -110,6 +128,7 @@ public class Node implements EventTarget {
             if (doc != null) doc.unindex(this);
             this.id = value;
             if (doc != null) doc.index(this);
+            invalidateStyleMatch();
             m.observe(() -> TreeObserver.Dispatch.attributeChanged(observer, this));
         } finally {
             m.end();
@@ -130,6 +149,7 @@ public class Node implements EventTarget {
         Mutation m = beginMutation("adding a class");
         try {
             classes.add(className);
+            invalidateStyleMatch();
             m.observe(() -> TreeObserver.Dispatch.attributeChanged(observer, this));
         } finally {
             m.end();
@@ -142,6 +162,7 @@ public class Node implements EventTarget {
         Mutation m = beginMutation("removing a class");
         try {
             classes.remove(className);
+            invalidateStyleMatch();
             m.observe(() -> TreeObserver.Dispatch.attributeChanged(observer, this));
         } finally {
             m.end();
@@ -176,6 +197,7 @@ public class Node implements EventTarget {
             if (Objects.equals(value, key.initial())) attributes.remove(key);
             else attributes.put(key, value);
             if (key == Attribute.SLOT) slotsChanged(parent);
+            invalidateStyleMatch();
             m.observe(() -> TreeObserver.Dispatch.attributeChanged(observer, this));
         } finally {
             m.end();
@@ -531,6 +553,182 @@ public class Node implements EventTarget {
         this.frozen = frozen;
     }
 
+    // ── Styleable: what the cascade asks (plan_m5.md D5.2) ───────────────────
+
+    @Override
+    public final String getId() {
+        return id;
+    }
+
+    @Override
+    public final Collection<String> getClasses() {
+        return classesView;
+    }
+
+    /** The qualified name, {@code namespace:local}. */
+    @Override
+    public final String tagName() {
+        return name.toString();
+    }
+
+    /** A type selector may spell a default-namespace kind bare: {@code button} matches {@code crystalgui:button}. */
+    @Override
+    public final boolean matchesType(String identity) {
+        return name.toString().equals(identity)
+                || (name.namespace().equals(Name.DEFAULT_NAMESPACE) && name.local().equals(identity));
+    }
+
+    @Override
+    public final Collection<String> typeKeys() {
+        return name.namespace().equals(Name.DEFAULT_NAMESPACE)
+                ? List.of(name.toString(), name.local()) : List.of(name.toString());
+    }
+
+    /** The light parent: what a combinator walks. Null at a document and at a shadow root. */
+    @Override
+    @Nullable
+    public final Styleable getParent() {
+        return parent;
+    }
+
+    /** The composed parent: what an inherited value comes from, which crosses into a shadow tree. */
+    @Override
+    @Nullable
+    public Styleable inheritsFrom() {
+        return composedParent();
+    }
+
+    @Override
+    @Nullable
+    public final Styleable shadowHost() {
+        ShadowRoot root = containingShadowRoot();
+        return root == null ? null : root.host();
+    }
+
+    @Override
+    @Nullable
+    public final String partName() {
+        String part = get(Attribute.PART);
+        return part.isEmpty() ? null : part;
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return get(Attribute.ENABLED);
+    }
+
+    /** A widget's own; a plain node is never checked. */
+    @Override
+    public boolean isChecked() {
+        return false;
+    }
+
+    @Override
+    public boolean isBlank() {
+        return false;
+    }
+
+    @Override
+    public boolean isInvalid() {
+        return false;
+    }
+
+    @Override
+    public final boolean isHovered() {
+        return hovered;
+    }
+
+    @Override
+    public final boolean isPressed() {
+        return pressed;
+    }
+
+    @Override
+    public final boolean isFocused() {
+        return focused;
+    }
+
+    @Override
+    public final boolean isFocusVisible() {
+        return focusVisible;
+    }
+
+    @Override
+    public final boolean isFocusWithin() {
+        return focusWithin;
+    }
+
+    /** The store: every candidate at every origin. An author writes inline through it; the engine never writes. */
+    @Override
+    public final ElementStyle getStyle() {
+        if (style == null) style = new ElementStyle(this);
+        return style;
+    }
+
+    /** The cascade's frozen answer for this node — what the box tree and the paint pass read. */
+    public final ComputedStyle computedStyle() {
+        return getStyle().computed();
+    }
+
+    @Override
+    @Nullable
+    public final StyleEngine styleEngine() {
+        return document == null ? null : document.styles();
+    }
+
+    @Override
+    public void onStyleChanged() {
+    }
+
+    /** A layout-affecting value changed. The box tree's hook, from 5.3. */
+    @Override
+    public void markTreeDirty() {
+    }
+
+    @Override
+    public final void setHasFontRelativeStyles(boolean value) {
+        fontRelativeStyles = value;
+    }
+
+    /**
+     * A font-size change re-matches this subtree, because an {@code em} anywhere under it was
+     * resolved against a size that has moved. The old engine does this with a listener on the property;
+     * here it is the host's own business.
+     */
+    @Override
+    public void computedChanged(StyleProperty<?> property, @Nullable Object oldValue, @Nullable Object newValue) {
+        if (property == StylePropertyRegistry.FONT_SIZE) {
+            for (Node node : composedSubtree()) node.invalidateStyleMatch();
+        }
+    }
+
+    /** Asks the engine to re-run selector matching for this node on the next style pass. */
+    protected final void invalidateStyleMatch() {
+        StyleEngine engine = styleEngine();
+        if (engine != null) engine.markDirty(this);
+    }
+
+    // the services set these (5.5); a change is a pseudo-class change, so it re-matches
+    void setHovered(boolean value) {
+        if (hovered != value) { hovered = value; invalidateStyleMatch(); }
+    }
+
+    void setPressed(boolean value) {
+        if (pressed != value) { pressed = value; invalidateStyleMatch(); }
+    }
+
+    void setFocused(boolean value) {
+        if (focused != value) { focused = value; invalidateStyleMatch(); }
+    }
+
+    void setFocusVisible(boolean value) {
+        if (focusVisible != value) { focusVisible = value; invalidateStyleMatch(); }
+    }
+
+    void setFocusWithin(boolean value) {
+        if (focusWithin != value) { focusWithin = value; invalidateStyleMatch(); }
+    }
+
     // ── Wiring: document, observer, shadow flag ──────────────────────────────
 
     /** This node was linked under {@code parent}: take its document, its shadowness, its observer. */
@@ -560,7 +758,10 @@ public class Node implements EventTarget {
         boolean joining = doc != null && document == null;
         document = doc;
         if (doc != null && !id.isEmpty()) doc.index(this);
-        if (joining) doc.queue(this::connected);
+        if (joining) {
+            doc.styles().markDirty(this);
+            doc.queue(this::connected);
+        }
         for (Node child : children) child.propagate(doc, shadow, observer);
         if (shadowRoot != null) shadowRoot.propagate(doc, true, null);
     }
@@ -577,6 +778,7 @@ public class Node implements EventTarget {
         Document doc = document;
         if (doc != null) {
             doc.unindex(this);
+            doc.styles().onElementDetached(this);
             doc.queue(this::disconnected);
         }
         document = null;

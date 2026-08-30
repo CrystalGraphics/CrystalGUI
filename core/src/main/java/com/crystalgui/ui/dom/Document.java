@@ -1,6 +1,7 @@
 package com.crystalgui.ui.dom;
 
 import com.crystalgui.core.async.UiThread;
+import com.crystalgui.style.StyleEngine;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -40,6 +41,9 @@ public final class Document extends Node {
 
     private final Map<String, Node> byId = new HashMap<>();
 
+    /** The cascade over this tree. Sheets are installed here, for the whole tree or for a subtree. */
+    private final StyleEngine styles = new StyleEngine(this::allNodes);
+
     private int depth;
     private boolean notifying;
     private boolean draining;
@@ -67,6 +71,32 @@ public final class Document extends Node {
     /** Refuses a caller on any thread but the frame thread, once one has been claimed. */
     public void require(String what) {
         UiThread.require(what, frameThread);
+    }
+
+    // ── Style ────────────────────────────────────────────────────────────────
+
+    public StyleEngine styles() {
+        return styles;
+    }
+
+    /** Runs the style pass: re-matches what is dirty, ticks transitions. */
+    public void calculateStyle(float deltaSeconds) {
+        require("the style pass");
+        styles.calculateStyle(deltaSeconds);
+    }
+
+    /** Every connected node, light and shadow — what a sheet change has to re-match. */
+    public List<Node> allNodes() {
+        List<Node> out = new ArrayList<>();
+        collect(this, out);
+        return out;
+    }
+
+    private static void collect(Node at, List<Node> into) {
+        into.add(at);
+        for (Node child : at.children()) collect(child, into);
+        ShadowRoot shadow = at.shadowRoot();
+        if (shadow != null) collect(shadow, into);
     }
 
     // ── Ids ──────────────────────────────────────────────────────────────────

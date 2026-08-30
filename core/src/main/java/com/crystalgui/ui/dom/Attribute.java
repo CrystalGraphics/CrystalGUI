@@ -34,6 +34,8 @@ public final class Attribute<T> {
     public static final Attribute<Boolean> HIT_TEST = of("hit-test", Boolean.class, true);
     /** The name of the slot a light child asks to be placed in; empty for the default slot. */
     public static final Attribute<String> SLOT = of("slot", String.class, "");
+    /** The {@code ::part()} name a node inside a shadow tree is exposed under; empty for none. */
+    public static final Attribute<String> PART = of("part", String.class, "");
 
     private final String name;
     private final Class<T> type;
