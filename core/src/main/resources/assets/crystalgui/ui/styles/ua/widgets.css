@@ -97,23 +97,27 @@ checkbox {
     align-items: center;
     text-shadow: false;
 }
-checkbox .__mark__ {
+checkbox .__mark__,
+checkbox::part(mark) {
     width: 12px;
     height: 12px;
     background: var(--checkbox-mark-bg, #9A9A9A);
     border-radius: 2px;
 }
-checkbox:hover .__mark__ {
+checkbox:hover .__mark__,
+checkbox:hover::part(mark) {
     background: var(--checkbox-mark-hover-bg, #B4B4B4);
 }
-checkbox:checked .__mark__ {
+checkbox:checked .__mark__,
+checkbox:checked::part(mark) {
     background: var(--checkbox-checked-bg, #3C8527);
     /* A real vector checkmark, not a texture asset — default.css has no image assets to lean on and
        previously drew nothing here at all beyond the colour change. shape("checkmark") needs no font
        glyph and no sprite pack, so it works with literally nothing else loaded. */
     overlay: shape("checkmark");
 }
-checkbox:disabled .__mark__ {
+checkbox:disabled .__mark__,
+checkbox:disabled::part(mark) {
     background: var(--checkbox-disabled-bg, #6E6E6E);
 }
 

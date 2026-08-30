@@ -65,6 +65,11 @@ public class TextNode extends UINode implements Measurable {
         if (next.equals(this.text)) return this;
         this.text = next;
         markTreeDirty();
+        // The text IS state, so it has to be reported -- and notifyStateChanged walks out of every
+        // enclosing shadow tree, so a composite's label dirties the composite (whose contract carries
+        // the text) rather than a node no peer has heard of. Guarded on the value above, which is what
+        // lets a panel mirror its model every tick without sending a delta per tick.
+        notifyStateChanged();
         return this;
     }
 

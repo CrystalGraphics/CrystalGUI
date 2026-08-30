@@ -46,8 +46,8 @@ CLASS	net/window/ViewCommands	119	net/window	6.8	copy	pending
 CLASS	net/window/WindowMount	74	net/window	6.8	copy	pending
 CLASS	net/window/WindowProtocol	57	net/window	6.8	move	pending
 CLASS	ui/elements/Button	208	widget/control	6.1	copy	ported
-CLASS	ui/elements/Checkbox	156	widget/control	6.1	copy	pending
-CLASS	ui/elements/CheckboxGroup	58	widget/control	6.1	copy	pending
+CLASS	ui/elements/Checkbox	156	widget/control	6.1	copy	ported
+CLASS	ui/elements/CheckboxGroup	58	widget/control	6.1	copy	ported
 CLASS	ui/elements/ColorSelector	767	widget/control	6.1	copy	pending
 CLASS	ui/elements/Dialog	605	widget/overlay	6.2	copy	pending
 CLASS	ui/elements/DialogManager	144	widget/overlay	6.2	copy	pending
@@ -363,7 +363,7 @@ PART	CategoryHeader	arrow	A	4	proposed	leaf in every rule, scoped by an ancestor
 PART	CategoryHeader	category	A	0	proposed	leaf in every rule
 PART	CategoryHeader	collapsed	C	4	proposed	state adjective
 PART	CategoryHeader	name	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	Checkbox	mark	A	0	proposed	leaf in every rule
+PART	Checkbox	mark	A	0	confirmed	leaf in every rule
 PART	ColorControl	alpha-bar	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	ColorControl	alpha-fill	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	ColorControl	color	B	4	proposed	a rule selects through it (4)
