@@ -31,10 +31,33 @@ beside this file. Nothing here assumes you have read them.
 |---|---|---|
 | A settings screen, a HUD, a tool panel — nothing another player needs to see | **client-only** | the client |
 | A machine, a shop, a shared control panel — a server owns the truth | **networked** | both, from one class |
+| The client already has the data, but pressing a button must reach the server | **client-only, plus your own messages** | the client — see [§6](#6-sending-your-own-messages) |
 
-The rule of thumb: **who owns the data?** If the answer is "the client, and nobody else cares", build
-a client-only UI — it is less machinery and there is no wire to think about. If a server owns it, or
-two players must see the same thing, build a networked one.
+Two questions decide it, and Minecraft has already answered both for you.
+
+### Does the client already have the data?
+
+Open a chest and there is a short pause before the screen appears: the server has to tell you what is
+inside, so the window cannot open sooner than its contents arrive. Press `E` and your inventory appears
+instantly — the client already had it.
+
+That pause is about 50ms in singleplayer, more on a server. It is not overhead you can optimise away.
+**It is the delivery.** So if a server owns the data, build a networked UI and let the round trip do its
+job; if the client already has it, build a client-only one and open instantly.
+
+### Then: who owns the effect?
+
+Your inventory opens locally, and every click still goes to the server. The client is in charge of
+*showing*; the server is in charge of *doing*. That is the third row — you keep the instant open and
+send your own messages for the actions.
+
+One thing to know before choosing it. In a networked UI the server holds the widgets, so it can clamp a
+slider value against that slider's own range with nothing written by you. A client-only UI leaves the
+server holding nothing, so **you validate by hand** against your own model.
+
+Reach for the third row when the action is easy to check on its own — a coordinate, an id the server
+looks up, one of a fixed set of choices. Reach for the second when checking it means knowing what was
+on screen.
 
 You can mix them freely. A networked panel can sit inside a client-only screen.
 
@@ -719,6 +742,43 @@ You never namespace these. `io.onCall("history", …)` and `io.call("history", �
 `furnace/history` on the wire if this panel is a field named `furnace` — both sides derive the same
 prefix from the same tree.
 
+### If your UI is client-only
+
+Everything above belongs to a networked panel's session. A client-only UI has no session — but the
+connection underneath is public, so it can send anyway. This is the third row of
+[§1](#1-which-kind-of-ui-do-i-want): open instantly, act on the server.
+
+```java
+ProtocolConnection<Object> io = CgUiConnections.client();          // client side
+ProtocolConnection<Object> io = CgUiConnections.forPlayer(player); // server side
+
+io.notify("mymod:setThroughput", args);          // fire and forget
+io.onNotify("mymod:setThroughput", args -> ...); // the other end
+io.call("mymod:history", null, reply -> ...);    // if you need an answer
+```
+
+**Rate-limit what a drag sends.** A networked panel gets this for free; here you do it yourself, or a
+slider sends a packet on every frame you hold it. `RateGate` is the same gate the session uses:
+
+```java
+RateGate<Float> gate = new RateGate<>((widget, kind, value) -> {
+    StateMap<Object> args = new StateMap<>(io.ops());
+    args.putFloat("value", value);
+    io.notify("mymod:setThroughput", args);
+});
+
+gate.attach(throughput, Slider.VALUE_CHANGED);   // takes the widget's own rate: 20/s while dragging
+io.onTick(gate::flush);                          // a held value needs something to let it go
+```
+
+That last line matters. A throttle clears itself while the user keeps moving, but a **debounce** — what
+a text field uses — holds the last value until something flushes it. With nothing driving `flush()`, the
+last thing typed into a search box is never sent at all.
+
+And the server has no widget to check the value against, so treat what arrives as a claim: look the
+subject up rather than trusting an id, clamp against your own model, and refuse what a real gesture
+could not have produced.
+
 ---
 
 ## 7. Nesting panels
@@ -1002,6 +1062,12 @@ client(io)     → widget.attachListener(...)          client, on mount AND
 
 ServerWindows.of(connection).open(TYPE, model);
 
+// ── client-only, but the server does the work ──────────────────────────────
+ProtocolConnection<Object> io = CgUiConnections.client();
+RateGate<Float> gate = new RateGate<>((w, kind, v) -> io.notify("mymod:set", args(v)));
+gate.attach(slider, Slider.VALUE_CHANGED);       // the widget's own rate
+io.onTick(gate::flush);                          // or a held value never leaves
+
 // ── layout ─────────────────────────────────────────────────────────────────
 l.widthPercent(100f).height(0).flexGrow(1f)      // fill the parent
 l.flexDirection(FlexDirection.ROW).gapAll(8)     // a row
@@ -1017,3 +1083,5 @@ l.flexDirection(FlexDirection.ROW).gapAll(8)     // a row
 | Nothing on screen ever updates | no projections at all, or you wrote a `tick` that copies and expected the engine to call something else |
 | Listeners stop working after an update | they were attached somewhere other than `client(io)`, which is the only thing re-run when the tree is rebuilt |
 | A widget arrives blank over the wire | it has no contract — see §10 |
+| A client-only UI floods the server while you drag | no `RateGate` — a networked panel has one, this does not |
+| The last thing typed never arrives | nothing is driving `RateGate.flush()`; a debounce holds until something lets it go |
