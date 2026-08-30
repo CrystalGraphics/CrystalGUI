@@ -1,8 +1,8 @@
 # Porting a widget to the new engine
 
 **Status: current, and deliberately short-lived.** This describes how a `UIElement` composite becomes
-a `ui.dom.Node` on the M5 engine. It is written from the API that exists — every call below is real
-as of M5 5.6 — and it dies with M8, when the old engine goes and there is nothing left to port.
+a `ui.dom.UINode` on the M5 engine. It is written from the API that exists — every call below is
+real as of 2026-08-31 — and it dies with M8, when the old engine goes and there is nothing left to port.
 
 > **Why it is not a section of `docs/CGUI_WIDGETS.md`**, which `plan_m5.md` originally suggested:
 > that document describes widgets that still exist and will outlive the port. A guide whose whole
@@ -19,7 +19,7 @@ the port hit something the guide did not say. Five things changed that way; each
 
 | Old engine | New engine |
 |---|---|
-| `class Button extends UIElement` | `class Button extends Node` |
+| `class Button extends UIElement` | `class Button extends UINode` |
 | a private field per part, added with `addInternalChild` | the same fields, added to a **shadow root** |
 | `markAsInternal()` / `acceptsPublicChildren() == false` | nothing — a shadow root IS the encapsulation |
 | `__label__` class on the part | `part="label"` on the part |
@@ -60,11 +60,11 @@ public class Button extends UIElement {
 }
 
 // New
-public class Button extends Node {
-    public static final Name NAME = Name.of("crystalgui", "button");
+public class Button extends UINode {
+    public static final Name NAME = Name.of("button");
     public static final String LABEL_PART = "label";
 
-    static { NodeRegistry.register(NAME, Button::new, NodeRegistry.plain(NAME, false)); }
+    static { UINodeRegistry.register(NAME, Button::new, UINodeRegistry.plain(NAME, false)); }
 
     private final TextNode label;
 
@@ -92,7 +92,7 @@ part is styleable from outside **only** through the name the widget chose to exp
 > initializer next to the `Name`, the way `TextNode` does, so a class that exists is a class the
 > codec can decode.
 
-> **⚠ found by the paper port.** The registry's factory is a `Supplier<? extends Node>`, so
+> **⚠ found by the paper port.** The registry's factory is a `Supplier<? extends UINode>`, so
 > `Button::new` needs a **no-argument constructor** — a widget whose only constructor takes its text
 > does not compile as a method reference, and the codec has nothing to build the node with when a
 > description arrives. Give it the no-arg constructor delegating to the real one; the old
@@ -105,10 +105,10 @@ part is styleable from outside **only** through the name the widget chose to exp
 ### Slots, for content a caller supplies
 
 `Tab.content()`, `SplitView`'s panes and `ScrollerView`'s viewport all exist because a composite
-needed one place a caller may add to. That is a `Slot`:
+needed one place a caller may add to. That is a `UISlot`:
 
 ```java
-Slot content = new Slot();          // the default slot
+UISlot content = new UISlot();      // the default slot
 attachShadow().append(chrome).append(content);
 // a caller's addChild(x) now lands in `content`, composed, without the widget writing a method
 ```
@@ -229,7 +229,9 @@ node.events.getGroup(MouseEvent.Up.class).attachListener((n, e) -> {
 
 ## 7. The order to do it in
 
-1. `Name` + `NodeRegistry.register` in a static initializer.
+1. `Name` + `UINodeRegistry.register` in a static initializer. **The `NAME` constant goes on the
+   widget's own class** (`Name.of("button")` — the overload is the default namespace); a mod uses
+   `Name.of(namespace, local)`. Never a constant on `Name`, which would be a second registry.
 2. Constructor: parts into a shadow root, each with `part=`; `setFocusPolicy`.
 3. The sheet: `.widget .__part__` → `widget::part(part)`.
 4. Geometry: every `importantPipeline` call becomes a `Measurable`, a box call, or an animation.
@@ -237,3 +239,8 @@ node.events.getGroup(MouseEvent.Up.class).attachListener((n, e) -> {
    the box's own origin.
 6. Tickers, drags and hide/show.
 7. Delete `markAsInternal`, `addInternalChild`, `acceptsPublicChildren` and the `__part__` constants.
+
+> **The destination package is the ledger's, not the old file's** — `plan_m6.md` §2.6. A ported class
+> is a COPY into `widget.*`, `chrome.*`, `desktop.*` or `workbench.*`; the old file stays until M6.9,
+> which is what keeps the game running on the old engine throughout. §2.7's codemod does the copy and
+> the mechanical two thousand of the 2,670 sites; this guide is for the 443 that need a reading.

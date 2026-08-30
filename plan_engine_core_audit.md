@@ -287,7 +287,7 @@ What follows is the shape, drawn against Blink, Flutter and WPF, sized to this e
 
 ### 12.1 Node tree — `ui.dom`
 
-A `Node` is **identity, attributes, children, shadow root, events**. Nothing else.
+A `UINode` is **identity, attributes, children, shadow root, events**. Nothing else.
 
 - Fields: parent, children (light DOM), `shadowRoot`, `assignedSlot`, name (registered, namespaced),
   id, classes, attributes (`enabled`, `inert`, `hit-test`, `focus-policy`, arbitrary data keys), the
