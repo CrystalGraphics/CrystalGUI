@@ -1,5 +1,10 @@
 package com.crystalgui.ui.elements.desktop;
 
+import com.crystalgui.style.sheet.StyleSheet;
+import com.crystalgui.testsupport.UiTestBase;
+import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.Ui;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -16,7 +21,22 @@ import static org.junit.Assert.assertTrue;
  * something else swaps its class rather than accumulating — a recycled element wearing two hues is the
  * {@code filetype-*} bug from the explorer, one widget over.</p>
  */
-public class WindowIconTest {
+public class WindowIconTest extends UiTestBase {
+
+    private static UIWindow host() {
+        UIElement root = new UIElement().layout(l -> l.width(800).height(600));
+        UIWindow window = new UIWindow(Ui.of(root));
+        window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
+        window.init(800, 600);
+        return window;
+    }
+
+    /** Settles layout and measures the caption's slot: a hidden one is display: none and measures 0. */
+    private static boolean captionTileShown(UIWindow window, WindowFrame frame) {
+        for (int i = 0; i < 3; i++) window.updateWithoutPainting();
+        return frame.icon().getRuntimeCache().getHeight() > 0f;
+    }
+
 
     @Test
     public void anIconWearsAPaletteTileAndNoLetter() {
@@ -36,6 +56,39 @@ public class WindowIconTest {
      * tile in the strip, the preview and the switcher — one window with two appearances, differing only
      * in which of them had been written first.</p>
      */
+    /**
+     * The commonest window declares no icon at all -- a server's -- and its caption must still agree
+     * with its taskbar entry, which draws a monogram on a coloured tile for exactly that case.
+     */
+    @Test
+    public void aCaptionWithNoDeclaredIconShowsTheStripsMonogram() {
+        UIWindow window = host();
+        WindowFrame frame = window.openWindow(new WindowFrame("Machine control"));
+        WindowIcon inStrip = new WindowIcon().show(null, "Machine control");
+
+        assertTrue("the slot is shown", captionTileShown(window, frame));
+        assertEquals("M", frame.icon().monogram());
+        assertEquals("on the same tile the strip uses", inStrip.tileClass(), frame.icon().tileClass());
+
+        frame.setTitle("Engine");
+        assertEquals("the monogram follows the title", "E", frame.icon().monogram());
+    }
+
+    /** A tool window has no taskbar entry to agree with, and its caption is its panel's own header. */
+    @Test
+    public void aToolWindowsCaptionShowsOnlyADeclaredIcon() {
+        UIWindow window = host();
+        WindowFrame frame = window.openWindow(new WindowFrame("Inspector").setToolWindow(true));
+        assertFalse("no square on a panel header", captionTileShown(window, frame));
+
+        frame.setIcon("crystalgui:code");
+        assertTrue("a declared icon still shows", captionTileShown(window, frame));
+        assertEquals("", frame.icon().monogram());
+
+        frame.setIcon(null);
+        assertFalse("and withdrawing it hides the slot again", captionTileShown(window, frame));
+    }
+
     @Test
     public void aCaptionShowsTheSameTileAsTheStrip() {
         WindowFrame frame = new WindowFrame("Geometry").setIcon("crystalgui:code");
