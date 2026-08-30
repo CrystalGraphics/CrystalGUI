@@ -17,6 +17,9 @@ import javax.annotation.Nullable;
  */
 public class UISlot extends UINode {
 
+    /** Where a host's light children appear inside its shadow tree. */
+    public static final Name NAME = Name.of("slot");
+
     private String slotName;
     private final List<UINode> assigned = new ArrayList<>();
     private final List<UINode> assignedView = Collections.unmodifiableList(assigned);
@@ -27,7 +30,7 @@ public class UISlot extends UINode {
     }
 
     public UISlot(String slotName) {
-        super(Name.SLOT);
+        super(NAME);
         this.slotName = slotName == null ? "" : slotName;
     }
 

@@ -27,6 +27,9 @@ import javax.annotation.Nullable;
  */
 public final class ShadowRoot extends UINode {
 
+    /** A shadow root: never a light child, never described, never styled from outside. */
+    public static final Name NAME = Name.of("shadow-root");
+
     private final UINode host;
     private final boolean delegatesFocus;
 
@@ -34,7 +37,7 @@ public final class ShadowRoot extends UINode {
     private List<UISlot> slots = List.of();
 
     ShadowRoot(UINode host, boolean delegatesFocus) {
-        super(Name.SHADOW_ROOT);
+        super(NAME);
         this.host = host;
         this.delegatesFocus = delegatesFocus;
         this.inShadow = true;

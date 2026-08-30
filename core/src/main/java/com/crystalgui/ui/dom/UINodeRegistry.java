@@ -12,20 +12,43 @@ import java.util.function.Supplier;
  * <p>The engine's {@code customElements.define}: a description saying {@code <mymod:machine>} decodes
  * into the class registered under that name, and a peer asking what a kind can report is answered
  * from the contract registered beside it. Unknown names <b>throw</b> on {@link #create}, as the old
- * {@code ElementRegistry} does — a typo must not become a styleless container. The four built-in
- * kinds register themselves; widgets register in M6, and a {@code UiType} registers its panel.</p>
+ * {@code ElementRegistry} does — a typo must not become a styleless container. The three built-in
+ * kinds are registered below; widgets register from their own class initialisers in M6, and a
+ * {@code UiType} registers its panel.</p>
  */
 public final class UINodeRegistry {
 
+    /**
+     * <b>Declared above the static block, and it has to be.</b> That block reads {@code UINode.NAME},
+     * which initialises {@link UINode} — and a widget's own class initialiser registers itself here
+     * ({@link com.crystalgui.ui.box.TextNode} is the shipped example, and every widget M6 ports will
+     * be another), so the moment any of these classes gains one, initialisation re-enters this class
+     * while it is still being initialised. The JVM lets a thread straight through its own in-progress
+     * init rather than deadlocking, so that is safe <em>only</em> while this map already exists.
+     * Moving it below the block turns every built-in registration into a
+     * {@link NullPointerException} on a class that plainly declares it.
+     */
     private static final Map<Name, Entry> ENTRIES = new ConcurrentHashMap<>();
 
     private record Entry(Supplier<? extends UINode> factory, NodeContract contract) {
     }
 
+    /**
+     * The built-ins, registered from here rather than from each class's own initialiser.
+     *
+     * <p>Self-registration is the pattern for a widget and the wrong one for these three, because of
+     * <b>who is asked first</b>: {@link #create} is the decode path, and a client decoding a
+     * description before it has constructed anything would find {@code element} unregistered — a
+     * class nothing has touched has not initialised, so its static block has not run. Naming them
+     * here means the registry cannot be asked before they are in it.</p>
+     *
+     * <p>{@code shadow-root} is deliberately absent: a shadow root is never described, so it has a
+     * name for the cascade and nothing to build from the wire.</p>
+     */
     static {
-        register(Name.ELEMENT, UINode::new, plain(Name.ELEMENT, true));
-        register(Name.SLOT, UISlot::new, plain(Name.SLOT, true));
-        register(Name.DOCUMENT, UIDocument::new, plain(Name.DOCUMENT, true));
+        register(UINode.NAME, UINode::new, plain(UINode.NAME, true));
+        register(UISlot.NAME, UISlot::new, plain(UISlot.NAME, true));
+        register(UIDocument.NAME, UIDocument::new, plain(UIDocument.NAME, true));
     }
 
     private UINodeRegistry() {
