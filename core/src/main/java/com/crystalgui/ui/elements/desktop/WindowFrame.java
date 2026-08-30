@@ -588,11 +588,23 @@ public class WindowFrame extends UIElement implements Disposable {
      */
     private void installActivation() {
         onMouseDown.attachListener((element, event) -> {
+            // A PRESS IN THE CONTENT HAS ALREADY DECIDED WHERE FOCUS GOES. emitMouseDown blurred what
+            // was focused and focused what was hit -- a control, or this frame when the press landed on
+            // nothing focusable -- before this listener ran. That is the engine's rule everywhere
+            // (clicking bare background deselects), and restoring the window's focus MEMORY on top of
+            // it undid it: typing in a field, clicking the panel beside it to leave, and the field
+            // committed on the blur and then took focus straight back, caret and ring and all, unless
+            // the click had happened to land on another control. A press on CHROME -- the caption, a
+            // resize edge, the slot's own scrollbar -- is the case the memory exists for: dragging a
+            // window by its title bar must not lose the field you were typing in.
+            boolean inContent = pressedInContent(event.getTarget());
+            if (inContent) rememberFocusChosenByPress();
             Desktop desktop = desktop();
             if (desktop != null) {
-                desktop.activate(this);
+                desktop.activate(this, false, !inContent);
                 return;
             }
+            if (inContent) return;
             // AN OWNED WINDOW HAS NO DESKTOP TO ACTIVATE AGAINST, and pressing one must still focus it.
             //
             // attachOwned parents a frame into its owner's overlay slot and deliberately does NOT make it
@@ -624,6 +636,37 @@ public class WindowFrame extends UIElement implements Disposable {
     }
 
     /** A window owns its chrome; put content in {@link #content()}. */
+    /**
+     * A content press that landed on nothing focusable is the user choosing nothing in particular —
+     * and THAT is now what this window last had.
+     *
+     * <p>Without this the memory still named the field the user had just clicked away from, so the next
+     * press on the caption — to drag the window — restored it, caret and ring and all. Recorded here
+     * rather than by the focus listener below, which must never record the frame: a caption press
+     * focuses the frame too, through the same click-focus walk, and that one must not forget the
+     * field. The two presses are told apart by where they landed, which only this listener knows.</p>
+     */
+    private void rememberFocusChosenByPress() {
+        UIWindow window = getAttachedWindow();
+        if (window != null && window.getInputHandler().getFocusedElement() == this) lastFocused = this;
+    }
+
+    /**
+     * Whether a press landed in the window's CONTENT rather than on its chrome.
+     *
+     * <p>Content is the slot and anything under it, except the slot's own internal parts: a
+     * {@link ScrollerView}'s bars are chrome in every browser, and a press on one must not cost the
+     * field its caret. The frame, the caption and the resize handles are chrome.</p>
+     */
+    private boolean pressedInContent(@Nullable UIElement target) {
+        if (target == null || target == this) return false;
+        for (UIElement at = target; at != null; at = at.getParent()) {
+            if (at == content) return true;
+            if (at.getParent() == content && at.isInternalUI()) return false;
+        }
+        return false;
+    }
+
     @Override
     public boolean acceptsPublicChildren() {
         return false;

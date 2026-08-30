@@ -357,6 +357,16 @@ public class Desktop extends UIElement implements DataProvider {
 
     /** @param programmatic see {@link WindowFrame#restoreFocus} — it decides whether focus rings. */
     public void activate(WindowFrame frame, boolean programmatic) {
+        activate(frame, programmatic, true);
+    }
+
+    /**
+     * @param restoreFocus whether to put focus back where this window last had it. False for a press in
+     *                     the window's content, which has already decided where focus goes -- see
+     *                     {@code WindowFrame.installActivation}; true for everything else, which is
+     *                     what activation has always meant.
+     */
+    void activate(WindowFrame frame, boolean programmatic, boolean restoreFocus) {
         if (frame == null || frame.desktop() != this) return;
         // ACTIVATING A HIDDEN WINDOW RESTORES IT, which is what a taskbar entry does (W4) and what a
         // switcher does (W10) -- both of them "activate", and a minimised window has to come back for
@@ -384,7 +394,7 @@ public class Desktop extends UIElement implements DataProvider {
         // model -- so announcing while `activeWindow` still points at the previous window highlights the
         // wrong entry until the next unrelated change happens to correct it.
         registry.activated(frame);
-        frame.restoreFocus(programmatic);
+        if (restoreFocus) frame.restoreFocus(programmatic);
     }
 
     /**
@@ -477,7 +487,14 @@ public class Desktop extends UIElement implements DataProvider {
                 // command -- each of which calls activate directly. This one is incidental by
                 // construction, so it is the one that must not.
                 if (((WindowFrame) walk).state() != WindowState.VISIBLE) return;
-                activate((WindowFrame) walk);
+                // FOLLOWING FOCUS, NEVER OVERRULING IT. Focus has just moved, so something has already
+                // decided where it goes; activation here brings the window forward and must not then
+                // consult the window's focus memory on top of that decision. It did, and the "frame
+                // itself does not count as focused-inside" exception in restoreFocus turned every press on
+                // bare content -- which click-focus lands on the frame -- into a restore: a field you had
+                // just clicked away from took focus straight back. The one route that legitimately
+                // restores is a press on CHROME, and the frame's own press listener does that itself.
+                activate((WindowFrame) walk, false, false);
                 return;
             }
         }

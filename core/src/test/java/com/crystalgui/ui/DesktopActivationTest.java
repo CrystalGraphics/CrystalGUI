@@ -14,6 +14,7 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
@@ -70,9 +71,26 @@ public class DesktopActivationTest extends UiTestBase {
         return (Button) frame.content().describedChildren().get(0);
     }
 
+    private float lastPressX, lastPressY;
+
     private void press(float x, float y) {
+        lastPressX = x;
+        lastPressY = y;
         input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
                 Math.round(x * 2f), Math.round(y * 2f), 0, 0, 0, true, 0f, 1L));
+        input.beginFrame();
+        input.endFrame();
+    }
+
+    /**
+     * Lets the button go where it was pressed. A test that presses more than once needs this between
+     * presses: a second down while the button is still held is swallowed ({@code UIInputHandler}
+     * refuses a press on an already-pressed button), so without it the later presses never happen and
+     * the test asserts against the first one.
+     */
+    private void releaseLast() {
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                Math.round(lastPressX * 2f), Math.round(lastPressY * 2f), 0, 0, 0, false, 0f, 2L));
         input.beginFrame();
         input.endFrame();
     }
@@ -102,6 +120,13 @@ public class DesktopActivationTest extends UiTestBase {
      * where you would drag it", so press a quarter across, which is background for any caption that has
      * room to be dragged at all.</p>
      */
+    /** The slot's lower right: clear of the button at the top and of the resize handles at the edges. */
+    private void pressBareContentOf(WindowFrame frame) {
+        UIElement slot = frame.content();
+        press(slot.getRuntimeCache().getX() + slot.getRuntimeCache().getWidth() - 16f,
+                slot.getRuntimeCache().getY() + slot.getRuntimeCache().getHeight() - 16f);
+    }
+
     private void pressTitleBarOf(WindowFrame frame) {
         UIElement bar = frame.titleBar();
         press(bar.getRuntimeCache().getX() + bar.getRuntimeCache().getWidth() * 0.25f,
@@ -260,6 +285,66 @@ public class DesktopActivationTest extends UiTestBase {
      * window with a control in it never comes to rest holding focus <em>itself</em> is the point — the
      * frame is where focus lands for the width of one dispatch and then moves on.</p>
      */
+    /**
+     * <b>A press on bare content leaves focus where the click put it.</b>
+     *
+     * <p>{@code emitMouseDown} blurs what was focused and focuses what was hit -- the frame, when the
+     * press landed on nothing focusable -- and that is the engine's rule everywhere. Activation used to
+     * restore the window's focus memory on top of it: type in a field, click the panel beside it, and
+     * the field committed on the blur and then took focus straight back, unless the click happened to
+     * land on another control. The caption press above is the counter-assertion: chrome restores.</p>
+     */
+    @Test
+    public void aPressOnBareContentLeavesFocusWhereTheClickPutIt() {
+        build();
+        WindowFrame frame = open("One", 20, 20);
+        Button field = buttonIn(frame);
+        input.requestFocus(field);
+        assertSame(field, input.getFocusedElement());
+
+        pressBareContentOf(frame);
+        settle();
+
+        assertSame("the window is still the active one", frame, desktop.activeWindow());
+        assertNotSame("but the click took focus off the control, as it does everywhere else",
+                field, input.getFocusedElement());
+        assertSame("and the frame holds it, which is what CLICK_NOT_TABBABLE is for",
+                frame, input.getFocusedElement());
+    }
+
+    /**
+     * <b>Leaving a field is remembered as a choice.</b> A caption press restores where the window last
+     * had focus — and after the user clicked away from a field onto nothing, that is nothing in
+     * particular, not the field. The second half is the counter-assertion: a control taken again is
+     * remembered again, so the caption keeps bringing back what the user is actually using.
+     */
+    @Test
+    public void aCaptionPressDoesNotBringBackAFieldTheUserLeft() {
+        build();
+        WindowFrame frame = open("One", 20, 20);
+        Button field = buttonIn(frame);
+        input.requestFocus(field);
+        pressBareContentOf(frame);
+        releaseLast();
+        settle();
+        assertSame(frame, input.getFocusedElement());
+
+        pressTitleBarOf(frame);
+        releaseLast();
+        settle();
+        assertSame("chrome restores what the window last had, which is nothing in particular",
+                frame, input.getFocusedElement());
+
+        pressCentreOf(field);
+        releaseLast();
+        settle();
+        assertSame("the fixture's press took the control", field, input.getFocusedElement());
+        pressTitleBarOf(frame);
+        releaseLast();
+        settle();
+        assertSame("and a control taken again is remembered again", field, input.getFocusedElement());
+    }
+
     @Test
     public void aCaptionPressPutsFocusInsideTheWindow() {
         build();
