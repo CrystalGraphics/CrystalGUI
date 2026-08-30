@@ -15,8 +15,8 @@ import static org.junit.Assert.assertTrue;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.ui.dom.Attribute;
-import com.crystalgui.ui.dom.Document;
-import com.crystalgui.ui.dom.Node;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.dom.ShadowRoot;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
@@ -39,9 +39,9 @@ public class InputServiceTest {
 
     @Test
     public void enterAndLeaveReachEveryNodeInTheChainThoughNeitherBubbles() {
-        Document document = new Document();
-        Node row = at("row", 0, 0, 200, 100);
-        Node label = at("label", 10, 10, 100, 50);
+        UIDocument document = new UIDocument();
+        UINode row = at("row", 0, 0, 200, 100);
+        UINode label = at("label", 10, 10, 100, 50);
         row.append(label);
         document.append(row);
         List<String> log = new ArrayList<>();
@@ -66,9 +66,9 @@ public class InputServiceTest {
 
     @Test
     public void hoverStateFollowsTheSameChainTheEventsDo() {
-        Document document = new Document();
-        Node row = at("row", 0, 0, 200, 100);
-        Node label = at("label", 10, 10, 100, 50);
+        UIDocument document = new UIDocument();
+        UINode row = at("row", 0, 0, 200, 100);
+        UINode label = at("label", 10, 10, 100, 50);
         row.append(label);
         document.append(row);
 
@@ -87,9 +87,9 @@ public class InputServiceTest {
 
     @Test
     public void aReflowUnderAStillPointerUpdatesHover() {
-        Document document = new Document();
-        Node a = at("a", 0, 0, 100, 100);
-        Node b = at("b", 0, 0, 100, 100);
+        UIDocument document = new UIDocument();
+        UINode a = at("a", 0, 0, 100, 100);
+        UINode b = at("b", 0, 0, 100, 100);
         document.append(a).append(b);
         move(document, 50, 50);
         frame(document);
@@ -106,9 +106,9 @@ public class InputServiceTest {
 
     @Test
     public void aCaptureSubstitutesTheHitTestAndFiresNoBoundaryEvents() {
-        Document document = new Document();
-        Node source = at("source", 0, 0, 100, 100);
-        Node other = at("other", 200, 0, 100, 100);
+        UIDocument document = new UIDocument();
+        UINode source = at("source", 0, 0, 100, 100);
+        UINode other = at("other", 200, 0, 100, 100);
         document.append(source).append(other);
         frame(document);
         List<String> log = new ArrayList<>();
@@ -134,8 +134,8 @@ public class InputServiceTest {
 
     @Test
     public void aCaptureWithNoButtonHeldIsRefused() {
-        Document document = new Document();
-        Node source = at("source", 0, 0, 100, 100);
+        UIDocument document = new UIDocument();
+        UINode source = at("source", 0, 0, 100, 100);
         document.append(source);
         frame(document);
         document.input().setPointerCapture(source);
@@ -147,9 +147,9 @@ public class InputServiceTest {
 
     @Test
     public void theThreePhasesRunRootToTargetToRoot() {
-        Document document = new Document();
-        Node outer = at("outer", 0, 0, 200, 200);
-        Node inner = at("inner", 10, 10, 100, 100);
+        UIDocument document = new UIDocument();
+        UINode outer = at("outer", 0, 0, 200, 200);
+        UINode inner = at("inner", 10, 10, 100, 100);
         outer.append(inner);
         document.append(outer);
         frame(document);
@@ -164,20 +164,20 @@ public class InputServiceTest {
 
     @Test
     public void aListenerOutsideAShadowTreeIsToldTheHostAndNeverThePart() {
-        Document document = new Document();
-        Node host = at("host", 0, 0, 200, 200);
+        UIDocument document = new UIDocument();
+        UINode host = at("host", 0, 0, 200, 200);
         ShadowRoot shadow = host.attachShadow();
-        Node part = at("part", 10, 10, 100, 100);
+        UINode part = at("part", 10, 10, 100, 100);
         shadow.append(part);
         document.append(host);
         frame(document);
-        List<Node> outside = new ArrayList<>();
-        List<Node> inside = new ArrayList<>();
+        List<UINode> outside = new ArrayList<>();
+        List<UINode> inside = new ArrayList<>();
         // Bubble only: a listener in EVERY phase hears a descendant's press twice, once on the way
         // down and once on the way up, which is the DOM and is not what this test is about.
         document.events.getGroup(MouseEvent.Down.class)
-                .attachListener((n, e) -> outside.add((Node) e.getTarget()), false, true);
-        on(part, MouseEvent.Down.class, (n, e) -> inside.add((Node) e.getTarget()));
+                .attachListener((n, e) -> outside.add((UINode) e.getTarget()), false, true);
+        on(part, MouseEvent.Down.class, (n, e) -> inside.add((UINode) e.getTarget()));
 
         press(document, 50, 50);
         assertEquals(1, outside.size());
@@ -190,9 +190,9 @@ public class InputServiceTest {
 
     @Test
     public void anUpKnowsWhetherItLandedOnWhatWasPressed() {
-        Document document = new Document();
-        Node a = at("a", 0, 0, 100, 100);
-        Node b = at("b", 200, 0, 100, 100);
+        UIDocument document = new UIDocument();
+        UINode a = at("a", 0, 0, 100, 100);
+        UINode b = at("b", 200, 0, 100, 100);
         document.append(a).append(b);
         frame(document);
         List<Boolean> onA = new ArrayList<>();
@@ -210,8 +210,8 @@ public class InputServiceTest {
 
     @Test
     public void spaceOverAFocusedNodeSynthesizesTheSameClickAMouseWould() {
-        Document document = new Document();
-        Node button = at("button", 0, 0, 100, 100);
+        UIDocument document = new UIDocument();
+        UINode button = at("button", 0, 0, 100, 100);
         button.setFocusPolicy(FocusPolicy.CLICK);
         document.append(button);
         frame(document);
@@ -230,8 +230,8 @@ public class InputServiceTest {
 
     @Test
     public void aTextInputTakesSpaceAsACharacterAndIsNotActivated() {
-        Document document = new Document();
-        Node field = new Node() {
+        UIDocument document = new UIDocument();
+        UINode field = new UINode() {
             @Override
             public boolean consumesTextInput() {
                 return true;
@@ -254,8 +254,8 @@ public class InputServiceTest {
 
     @Test
     public void aConsumedKeystrokeIsReportedToTheHost() {
-        Document document = new Document();
-        Node node = at("node", 0, 0, 100, 100);
+        UIDocument document = new UIDocument();
+        UINode node = at("node", 0, 0, 100, 100);
         node.setFocusPolicy(FocusPolicy.FOCUSABLE);
         document.append(node);
         frame(document);
@@ -273,9 +273,9 @@ public class InputServiceTest {
 
     @Test
     public void anInertSubtreeFallsThroughToWhatIsBehindIt() {
-        Document document = new Document();
-        Node behind = at("behind", 0, 0, 200, 200);
-        Node front = at("front", 0, 0, 200, 200);
+        UIDocument document = new UIDocument();
+        UINode behind = at("behind", 0, 0, 200, 200);
+        UINode front = at("front", 0, 0, 200, 200);
         document.append(behind).append(front);
         frame(document);
         assertSame(front, document.input().hoverTarget());
@@ -290,8 +290,8 @@ public class InputServiceTest {
 
     @Test
     public void aNodeThatLeavesTheTreeIsForgotten() {
-        Document document = new Document();
-        Node node = at("node", 0, 0, 100, 100);
+        UIDocument document = new UIDocument();
+        UINode node = at("node", 0, 0, 100, 100);
         document.append(node);
         press(document, 50, 50);
         frame(document);

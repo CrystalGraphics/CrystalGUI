@@ -5,8 +5,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import com.crystalgui.style.easing.Easing;
-import com.crystalgui.ui.dom.Document;
-import com.crystalgui.ui.dom.Node;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UINode;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.Test;
@@ -115,8 +115,8 @@ public class AnimationTest {
 
     @Test
     public void aHookIsDroppedWhenItsOwnerLeavesTheTree() {
-        Document document = new Document();
-        Node node = ServiceFixtures.at("node", 0, 0, 100, 100);
+        UIDocument document = new UIDocument();
+        UINode node = ServiceFixtures.at("node", 0, 0, 100, 100);
         document.append(node);
         List<String> log = new ArrayList<>();
         document.animation().every(node, delta -> {
@@ -136,8 +136,8 @@ public class AnimationTest {
 
     @Test
     public void aHookThatReturnsFalseStops() {
-        Document document = new Document();
-        Node node = ServiceFixtures.at("node", 0, 0, 100, 100);
+        UIDocument document = new UIDocument();
+        UINode node = ServiceFixtures.at("node", 0, 0, 100, 100);
         document.append(node);
         List<String> log = new ArrayList<>();
         document.animation().every(node, delta -> {

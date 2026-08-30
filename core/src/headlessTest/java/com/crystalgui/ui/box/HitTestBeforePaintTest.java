@@ -10,8 +10,8 @@ import static org.junit.Assert.assertSame;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.ui.UITransform;
 import com.crystalgui.ui.dom.Attribute;
-import com.crystalgui.ui.dom.Document;
-import com.crystalgui.ui.dom.Node;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UINode;
 import org.junit.Test;
 
 /**
@@ -26,11 +26,11 @@ public class HitTestBeforePaintTest {
 
     @Test
     public void theTopmostBoxIsFoundInReversePaintOrder() {
-        Document document = new Document();
-        Node a = absolute(10, 10, 100, 100);
-        Node inner = absolute(25, 25, 50, 50);
+        UIDocument document = new UIDocument();
+        UINode a = absolute(10, 10, 100, 100);
+        UINode inner = absolute(25, 25, 50, 50);
         a.append(inner);
-        Node b = absolute(50, 50, 100, 100);
+        UINode b = absolute(50, 50, 100, 100);
         document.append(a).append(b);
         document.update(800, 600);
 
@@ -42,9 +42,9 @@ public class HitTestBeforePaintTest {
 
     @Test
     public void zIndexReordersWhatIsOnTop() {
-        Document document = new Document();
-        Node a = absolute(10, 10, 100, 100);
-        Node b = absolute(50, 50, 100, 100);
+        UIDocument document = new UIDocument();
+        UINode a = absolute(10, 10, 100, 100);
+        UINode b = absolute(50, 50, 100, 100);
         document.append(a).append(b);
         general(a, g -> g.zIndex(1));
         document.update(800, 600);
@@ -57,10 +57,10 @@ public class HitTestBeforePaintTest {
 
     @Test
     public void scrollingMovesWhatIsUnderThePointer() {
-        Document document = new Document();
-        Node container = absolute(0, 0, 100, 100);
+        UIDocument document = new UIDocument();
+        UINode container = absolute(0, 0, 100, 100);
         general(container, g -> g.overflow(Overflow.HIDDEN));
-        Node tall = absolute(0, 0, 100, 300);
+        UINode tall = absolute(0, 0, 100, 300);
         container.append(tall);
         document.append(container);
         document.update(800, 600);
@@ -75,8 +75,8 @@ public class HitTestBeforePaintTest {
 
     @Test
     public void aTransformMovesTheHitWithTheDrawing() {
-        Document document = new Document();
-        Node node = absolute(0, 0, 50, 50);
+        UIDocument document = new UIDocument();
+        UINode node = absolute(0, 0, 50, 50);
         general(node, g -> g.transform(UITransform.translate(100, 0)));
         document.append(node);
         document.update(800, 600);
@@ -92,9 +92,9 @@ public class HitTestBeforePaintTest {
 
     @Test
     public void hitTestOffPassesOverTheWholeSubtree() {
-        Document document = new Document();
-        Node a = absolute(0, 0, 100, 100);
-        Node inner = absolute(0, 0, 50, 50);
+        UIDocument document = new UIDocument();
+        UINode a = absolute(0, 0, 100, 100);
+        UINode inner = absolute(0, 0, 50, 50);
         a.append(inner);
         document.append(a);
         a.set(Attribute.HIT_TEST, false);

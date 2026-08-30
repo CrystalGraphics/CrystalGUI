@@ -15,23 +15,23 @@ import java.util.function.Supplier;
  * {@code ElementRegistry} does — a typo must not become a styleless container. The four built-in
  * kinds register themselves; widgets register in M6, and a {@code UiType} registers its panel.</p>
  */
-public final class NodeRegistry {
+public final class UINodeRegistry {
 
     private static final Map<Name, Entry> ENTRIES = new ConcurrentHashMap<>();
 
-    private record Entry(Supplier<? extends Node> factory, NodeContract contract) {
+    private record Entry(Supplier<? extends UINode> factory, NodeContract contract) {
     }
 
     static {
-        register(Name.ELEMENT, Node::new, plain(Name.ELEMENT, true));
-        register(Name.SLOT, Slot::new, plain(Name.SLOT, true));
-        register(Name.DOCUMENT, Document::new, plain(Name.DOCUMENT, true));
+        register(Name.ELEMENT, UINode::new, plain(Name.ELEMENT, true));
+        register(Name.SLOT, UISlot::new, plain(Name.SLOT, true));
+        register(Name.DOCUMENT, UIDocument::new, plain(Name.DOCUMENT, true));
     }
 
-    private NodeRegistry() {
+    private UINodeRegistry() {
     }
 
-    public static void register(Name name, Supplier<? extends Node> factory, NodeContract contract) {
+    public static void register(Name name, Supplier<? extends UINode> factory, NodeContract contract) {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(factory, "factory");
         Objects.requireNonNull(contract, "contract");
@@ -43,7 +43,7 @@ public final class NodeRegistry {
     }
 
     /** A fresh node of the named kind. Throws for a name nothing registered. */
-    public static Node create(Name name) {
+    public static UINode create(Name name) {
         Entry entry = ENTRIES.get(name);
         if (entry == null) {
             throw new IllegalArgumentException("No node kind is registered as <" + name + ">; registered: "

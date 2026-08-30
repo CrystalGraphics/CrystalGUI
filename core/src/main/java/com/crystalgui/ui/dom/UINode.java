@@ -42,7 +42,7 @@ import javax.annotation.Nullable;
  * <p>The <b>light tree</b> is {@link #parent()} and {@link #children()}: what authors build, what the
  * codec describes and what the mirror observes. A composite builds its parts into a
  * {@link #attachShadow() shadow root} instead, and its content is placed in the shadow tree's
- * {@link Slot}s. The <b>composed tree</b> — {@link #composedParent()}, {@link #composedChildren()} —
+ * {@link UISlot}s. The <b>composed tree</b> — {@link #composedParent()}, {@link #composedChildren()} —
  * is light and shadow flattened through the slots, and is what layout, paint and hit-testing walk.
  * Nothing inside a shadow tree is ever described or observed; nothing outside it can reach in with a
  * selector. {@code describedChildren}, {@code markAsInternal} and the rest of the internal-child
@@ -58,19 +58,19 @@ import javax.annotation.Nullable;
  * lifecycle callback is an ordinary new mutation. A reparent is one {@code moved}, which the old tree
  * could not spell (M2).</p>
  */
-public class Node implements EventTarget, Styleable {
+public class UINode implements EventTarget, Styleable {
 
     private final Name name;
 
     @Nullable
-    private Node parent;
-    private final List<Node> children = new ArrayList<>();
-    private final List<Node> childrenView = Collections.unmodifiableList(children);
+    private UINode parent;
+    private final List<UINode> children = new ArrayList<>();
+    private final List<UINode> childrenView = Collections.unmodifiableList(children);
 
     @Nullable
     private ShadowRoot shadowRoot;
     @Nullable
-    Slot assignedSlot;
+    UISlot assignedSlot;
 
     private String id = "";
 
@@ -83,15 +83,15 @@ public class Node implements EventTarget, Styleable {
 
     /** The document this node is connected to, or null while detached. A document is its own. */
     @Nullable
-    Document document;
+    UIDocument document;
     /** Whether an ancestor link crosses into a shadow tree — such a node is never observed. */
     boolean inShadow;
     /** An observer installed on THIS node by a source over it. */
     @Nullable
-    private TreeObserver<Node> ownObserver;
+    private TreeObserver<UINode> ownObserver;
     /** The observer this node reports to: its own, or the nearest ancestor's. Null in shadow. */
     @Nullable
-    TreeObserver<Node> observer;
+    TreeObserver<UINode> observer;
 
     private boolean frozen;
     private float scrollLeft;
@@ -109,13 +109,13 @@ public class Node implements EventTarget, Styleable {
     private boolean fontRelativeStyles;
 
     /** The listener groups, one per event type, created on first use. */
-    public final EventListenerGroup.Map<Node> events = new EventListenerGroup.Map<>(this);
+    public final EventListenerGroup.Map<UINode> events = new EventListenerGroup.Map<>(this);
 
-    public Node() {
+    public UINode() {
         this(Name.ELEMENT);
     }
 
-    public Node(Name name) {
+    public UINode(Name name) {
         this.name = Objects.requireNonNull(name, "name");
     }
 
@@ -129,12 +129,12 @@ public class Node implements EventTarget, Styleable {
         return id;
     }
 
-    public Node setId(String id) {
+    public UINode setId(String id) {
         String value = id == null ? "" : id;
         if (value.equals(this.id)) return this;
         Mutation m = beginMutation("setting an id");
         try {
-            Document doc = document;
+            UIDocument doc = document;
             if (doc != null) doc.unindex(this);
             this.id = value;
             if (doc != null) doc.index(this);
@@ -154,7 +154,7 @@ public class Node implements EventTarget, Styleable {
         return classes.contains(className);
     }
 
-    public Node addClass(String className) {
+    public UINode addClass(String className) {
         if (className == null || className.isEmpty() || classes.contains(className)) return this;
         Mutation m = beginMutation("adding a class");
         try {
@@ -167,7 +167,7 @@ public class Node implements EventTarget, Styleable {
         return this;
     }
 
-    public Node removeClass(String className) {
+    public UINode removeClass(String className) {
         if (!classes.contains(className)) return this;
         Mutation m = beginMutation("removing a class");
         try {
@@ -180,7 +180,7 @@ public class Node implements EventTarget, Styleable {
         return this;
     }
 
-    public Node toggleClass(String className, boolean on) {
+    public UINode toggleClass(String className, boolean on) {
         return on ? addClass(className) : removeClass(className);
     }
 
@@ -198,7 +198,7 @@ public class Node implements EventTarget, Styleable {
     }
 
     /** Sets, reporting one {@code attributeChanged}; a value equal to the current one reports nothing. */
-    public <T> Node set(Attribute<T> key, T value) {
+    public <T> UINode set(Attribute<T> key, T value) {
         Objects.requireNonNull(key, "key");
         Object current = attributes.containsKey(key) ? attributes.get(key) : key.initial();
         if (Objects.equals(current, value)) return this;
@@ -226,12 +226,12 @@ public class Node implements EventTarget, Styleable {
     // ── Light tree ───────────────────────────────────────────────────────────
 
     @Nullable
-    public final Node parent() {
+    public final UINode parent() {
         return parent;
     }
 
     /** The light children — what authors, the codec and the mirror see. Read-only. */
-    public final List<Node> children() {
+    public final List<UINode> children() {
         return childrenView;
     }
 
@@ -239,13 +239,13 @@ public class Node implements EventTarget, Styleable {
         return children.size();
     }
 
-    public final int indexOf(Node child) {
+    public final int indexOf(UINode child) {
         return children.indexOf(child);
     }
 
     /** The document this node is connected to, or null. */
     @Nullable
-    public final Document document() {
+    public final UIDocument document() {
         return document;
     }
 
@@ -254,26 +254,26 @@ public class Node implements EventTarget, Styleable {
     }
 
     /** Whether {@code other} is this node or a light-tree descendant of it. */
-    public final boolean contains(@Nullable Node other) {
-        for (Node at = other; at != null; at = at.parent) {
+    public final boolean contains(@Nullable UINode other) {
+        for (UINode at = other; at != null; at = at.parent) {
             if (at == this) return true;
         }
         return false;
     }
 
     /** The top of the light-parent chain: a document, a shadow root, or a detached subtree's root. */
-    public final Node root() {
-        Node at = this;
+    public final UINode root() {
+        UINode at = this;
         while (at.parent != null) at = at.parent;
         return at;
     }
 
-    public final Node append(Node child) {
+    public final UINode append(UINode child) {
         return insertAt(children.size(), child);
     }
 
-    public final Node append(Node... nodes) {
-        for (Node child : nodes) append(child);
+    public final UINode append(UINode... nodes) {
+        for (UINode child : nodes) append(child);
         return this;
     }
 
@@ -282,7 +282,7 @@ public class Node implements EventTarget, Styleable {
      * the DOM's {@code insertBefore} does and what keeps the observer's stream one {@code moved}
      * rather than a {@code removed} followed by an {@code inserted}.
      */
-    public Node insertAt(int index, Node child) {
+    public UINode insertAt(int index, UINode child) {
         Objects.requireNonNull(child, "child");
         if (child.parent != null) {
             child.moveTo(this, index);
@@ -305,13 +305,13 @@ public class Node implements EventTarget, Styleable {
     }
 
     /** Removes a light child. False if it was not one. */
-    public boolean remove(Node child) {
+    public boolean remove(UINode child) {
         if (child == null || child.parent != this) return false;
         Mutation m = beginMutation("removing <" + child.name + ">");
         try {
             // REPORTED BEFORE THE LINK IS CLEARED: the receiver anchors the change on the parent, which
             // has to be nameable while the change is being reported.
-            TreeObserver<Node> to = child.observer;
+            TreeObserver<UINode> to = child.observer;
             m.observe(() -> TreeObserver.Dispatch.removed(to, child, this));
             children.remove(child);
             child.parent = null;
@@ -341,7 +341,7 @@ public class Node implements EventTarget, Styleable {
      * with no parent is inserted rather than moved. Crossing a shadow boundary is a {@code removed} or
      * an {@code inserted} as seen from the light tree, because that is what the light tree saw.</p>
      */
-    public Node moveTo(Node newParent, int index) {
+    public UINode moveTo(UINode newParent, int index) {
         Objects.requireNonNull(newParent, "parent");
         if (parent == null) {
             newParent.insertAt(index, this);
@@ -350,14 +350,14 @@ public class Node implements EventTarget, Styleable {
         newParent.refuseAsChild(this);
         Mutation m = beginMutation("moving <" + name + ">");
         try {
-            Node old = parent;
-            TreeObserver<Node> before = observer;
-            Document oldDocument = document;
+            UINode old = parent;
+            TreeObserver<UINode> before = observer;
+            UIDocument oldDocument = document;
             old.children.remove(this);
             int at = clampIndex(index, newParent.children.size());
             newParent.children.add(at, this);
             parent = newParent;
-            Document newDocument = newParent.document();
+            UIDocument newDocument = newParent.document();
             if (oldDocument != newDocument) {
                 if (oldDocument != null) detachedKeepingParent();
                 attachedTo(newParent);
@@ -368,8 +368,8 @@ public class Node implements EventTarget, Styleable {
             slotsChanged(newParent);
             if (oldDocument != null && oldDocument != document) oldDocument.fireStructureChanged();
             structureChanged();
-            TreeObserver<Node> after = observer;
-            Node self = this;
+            TreeObserver<UINode> after = observer;
+            UINode self = this;
             if (before != null && after == before) {
                 m.observe(() -> TreeObserver.Dispatch.moved(before, self, newParent, at));
             } else {
@@ -388,18 +388,18 @@ public class Node implements EventTarget, Styleable {
      * already heard of. Each node reports to its own effective observer, which is the grafted root's
      * unless a source was installed lower down.
      */
-    private static void reportInserted(Node node, Node parent, int index, Mutation m) {
-        TreeObserver<Node> to = node.observer;
+    private static void reportInserted(UINode node, UINode parent, int index, Mutation m) {
+        TreeObserver<UINode> to = node.observer;
         if (to != null) m.observe(() -> TreeObserver.Dispatch.inserted(to, node, parent, index));
-        List<Node> kids = node.children;
+        List<UINode> kids = node.children;
         for (int i = 0; i < kids.size(); i++) reportInserted(kids.get(i), node, i, m);
     }
 
-    private void refuseAsChild(Node child) {
+    private void refuseAsChild(UINode child) {
         if (child == this || child.contains(this)) {
             throw new IllegalArgumentException("A node cannot contain itself");
         }
-        if (child instanceof Document) throw new IllegalArgumentException("A document is a root, never a child");
+        if (child instanceof UIDocument) throw new IllegalArgumentException("A document is a root, never a child");
         if (child instanceof ShadowRoot) {
             throw new IllegalArgumentException("A shadow root belongs to its host; attach one with attachShadow()");
         }
@@ -442,7 +442,7 @@ public class Node implements EventTarget, Styleable {
 
     /** The slot this node is assigned to inside its parent's shadow tree, or null. */
     @Nullable
-    public final Slot assignedSlot() {
+    public final UISlot assignedSlot() {
         if (parent != null && parent.shadowRoot != null) parent.shadowRoot.ensureAssigned();
         return assignedSlot;
     }
@@ -455,7 +455,7 @@ public class Node implements EventTarget, Styleable {
     /** The shadow root this node is inside, or null. */
     @Nullable
     public final ShadowRoot containingShadowRoot() {
-        for (Node at = this; at != null; at = at.parent) {
+        for (UINode at = this; at != null; at = at.parent) {
             if (at instanceof ShadowRoot) return (ShadowRoot) at;
         }
         return null;
@@ -468,8 +468,8 @@ public class Node implements EventTarget, Styleable {
      * child; null for a light child that its parent's shadow tree slots nowhere (it is not rendered).
      */
     @Nullable
-    public Node composedParent() {
-        Slot slot = assignedSlot();
+    public UINode composedParent() {
+        UISlot slot = assignedSlot();
         if (slot != null) return slot;
         if (parent == null) return null;
         if (parent instanceof ShadowRoot) return ((ShadowRoot) parent).host();
@@ -479,25 +479,25 @@ public class Node implements EventTarget, Styleable {
 
     /**
      * The children in the flat tree: the shadow tree's children when this node has one (the shadow
-     * root itself is transparent), otherwise the light children. A {@link Slot} answers its assigned
+     * root itself is transparent), otherwise the light children. A {@link UISlot} answers its assigned
      * nodes, or its fallback.
      */
-    public List<Node> composedChildren() {
+    public List<UINode> composedChildren() {
         if (shadowRoot != null) return shadowRoot.children();
         return childrenView;
     }
 
     /** This node and every composed descendant, depth-first, parents before children. */
-    public final Iterable<Node> composedSubtree() {
-        return () -> new Iterator<Node>() {
-            private final Deque<Node> pending = new ArrayDeque<>();
+    public final Iterable<UINode> composedSubtree() {
+        return () -> new Iterator<UINode>() {
+            private final Deque<UINode> pending = new ArrayDeque<>();
 
             {
-                pending.push(Node.this);
+                pending.push(UINode.this);
             }
 
-            private void push(Node node) {
-                List<Node> kids = node.composedChildren();
+            private void push(UINode node) {
+                List<UINode> kids = node.composedChildren();
                 for (int i = kids.size() - 1; i >= 0; i--) pending.push(kids.get(i));
             }
 
@@ -507,9 +507,9 @@ public class Node implements EventTarget, Styleable {
             }
 
             @Override
-            public Node next() {
+            public UINode next() {
                 if (pending.isEmpty()) throw new NoSuchElementException();
-                Node next = pending.pop();
+                UINode next = pending.pop();
                 push(next);
                 return next;
             }
@@ -521,10 +521,10 @@ public class Node implements EventTarget, Styleable {
      * shadow root that {@code relativeTo} is not inside, the target is that root's host. What an
      * event's target and a focus query answer from outside a composite — the spec's algorithm.
      */
-    public static Node retarget(Node target, @Nullable Node relativeTo) {
-        Node at = target;
+    public static UINode retarget(UINode target, @Nullable UINode relativeTo) {
+        UINode at = target;
         while (true) {
-            Node root = at.root();
+            UINode root = at.root();
             if (!(root instanceof ShadowRoot)) return at;
             if (relativeTo != null && isShadowIncludingInclusiveAncestor(root, relativeTo)) return at;
             at = ((ShadowRoot) root).host();
@@ -532,15 +532,15 @@ public class Node implements EventTarget, Styleable {
     }
 
     /** Whether {@code ancestor} is {@code node} or above it, crossing from a shadow root to its host. */
-    public static boolean isShadowIncludingInclusiveAncestor(Node ancestor, Node node) {
-        for (Node at = node; at != null; at = at.shadowIncludingParent()) {
+    public static boolean isShadowIncludingInclusiveAncestor(UINode ancestor, UINode node) {
+        for (UINode at = node; at != null; at = at.shadowIncludingParent()) {
             if (at == ancestor) return true;
         }
         return false;
     }
 
     @Nullable
-    private Node shadowIncludingParent() {
+    private UINode shadowIncludingParent() {
         if (parent != null) return parent;
         return this instanceof ShadowRoot ? ((ShadowRoot) this).host() : null;
     }
@@ -744,7 +744,7 @@ public class Node implements EventTarget, Styleable {
 
     /** Tells the document's box tree that the composed structure moved. */
     final void structureChanged() {
-        Document doc = document;
+        UIDocument doc = document;
         if (doc != null) doc.fireStructureChanged();
     }
 
@@ -767,7 +767,7 @@ public class Node implements EventTarget, Styleable {
     @Override
     public void computedChanged(StyleProperty<?> property, @Nullable Object oldValue, @Nullable Object newValue) {
         if (property == StylePropertyRegistry.FONT_SIZE) {
-            for (Node node : composedSubtree()) node.invalidateStyleMatch();
+            for (UINode node : composedSubtree()) node.invalidateStyleMatch();
         }
         // display: none is a structural fact -- a box exists or it does not.
         if (property == LayoutProperties.DISPLAY) structureChanged();
@@ -827,7 +827,7 @@ public class Node implements EventTarget, Styleable {
         return get(Attribute.FOCUS_POLICY);
     }
 
-    public final Node setFocusPolicy(FocusPolicy policy) {
+    public final UINode setFocusPolicy(FocusPolicy policy) {
         return set(Attribute.FOCUS_POLICY, policy);
     }
 
@@ -877,27 +877,27 @@ public class Node implements EventTarget, Styleable {
     // ── Wiring: document, observer, shadow flag ──────────────────────────────
 
     /** This node was linked under {@code parent}: take its document, its shadowness, its observer. */
-    void attachedTo(Node parent) {
+    void attachedTo(UINode parent) {
         boolean shadow = parent.inShadow || parent instanceof ShadowRoot;
-        TreeObserver<Node> inherited = shadow ? null : parent.observer;
+        TreeObserver<UINode> inherited = shadow ? null : parent.observer;
         propagate(parent.document(), shadow, inherited);
     }
 
     /** This node moved within one document: re-derive shadowness and observer, no lifecycle. */
-    void relinked(Node parent) {
+    void relinked(UINode parent) {
         boolean shadow = parent.inShadow || parent instanceof ShadowRoot;
-        TreeObserver<Node> inherited = shadow ? null : parent.observer;
+        TreeObserver<UINode> inherited = shadow ? null : parent.observer;
         rewire(shadow, inherited);
     }
 
-    void rewire(boolean shadow, @Nullable TreeObserver<Node> inherited) {
+    void rewire(boolean shadow, @Nullable TreeObserver<UINode> inherited) {
         inShadow = shadow;
         observer = ownObserver != null && !shadow ? ownObserver : inherited;
-        for (Node child : children) child.rewire(shadow, observer);
+        for (UINode child : children) child.rewire(shadow, observer);
         if (shadowRoot != null) shadowRoot.rewire(true, null);
     }
 
-    void propagate(@Nullable Document doc, boolean shadow, @Nullable TreeObserver<Node> inherited) {
+    void propagate(@Nullable UIDocument doc, boolean shadow, @Nullable TreeObserver<UINode> inherited) {
         inShadow = shadow;
         observer = ownObserver != null && !shadow ? ownObserver : inherited;
         boolean joining = doc != null && document == null;
@@ -907,7 +907,7 @@ public class Node implements EventTarget, Styleable {
             doc.styles().markDirty(this);
             doc.queue(this::connected);
         }
-        for (Node child : children) child.propagate(doc, shadow, observer);
+        for (UINode child : children) child.propagate(doc, shadow, observer);
         if (shadowRoot != null) shadowRoot.propagate(doc, true, null);
     }
 
@@ -918,9 +918,9 @@ public class Node implements EventTarget, Styleable {
     }
 
     void detachedKeepingParent() {
-        for (Node child : children) child.detachedKeepingParent();
+        for (UINode child : children) child.detachedKeepingParent();
         if (shadowRoot != null) shadowRoot.detachedKeepingParent();
-        Document doc = document;
+        UIDocument doc = document;
         if (doc != null) {
             doc.unindex(this);
             doc.styles().onElementDetached(this);
@@ -930,16 +930,16 @@ public class Node implements EventTarget, Styleable {
     }
 
     /** Installs the observer a source over this node reports to; propagates down the light tree. */
-    void setObserver(@Nullable TreeObserver<Node> observer) {
+    void setObserver(@Nullable TreeObserver<UINode> observer) {
         this.ownObserver = observer;
-        TreeObserver<Node> inherited = parent == null || inShadow ? null : parent.observer;
+        TreeObserver<UINode> inherited = parent == null || inShadow ? null : parent.observer;
         rewire(inShadow, inherited);
     }
 
     // ── Mutation bookkeeping ─────────────────────────────────────────────────
 
     /** The shadow context whose slot assignment a change under {@code where} may have moved. */
-    private static void slotsChanged(@Nullable Node where) {
+    private static void slotsChanged(@Nullable UINode where) {
         if (where == null) return;
         if (where.shadowRoot != null) where.shadowRoot.markSlotsDirty();
         ShadowRoot enclosing = where.containingShadowRoot();
@@ -947,7 +947,7 @@ public class Node implements EventTarget, Styleable {
     }
 
     Mutation beginMutation(String what) {
-        Document doc = document;
+        UIDocument doc = document;
         if (doc != null) {
             doc.require(what);
             doc.enter();
@@ -958,9 +958,9 @@ public class Node implements EventTarget, Styleable {
     /** One mutation: observer notifications run at once under the re-entrancy guard; callbacks after. */
     static final class Mutation {
         @Nullable
-        private final Document document;
+        private final UIDocument document;
 
-        Mutation(@Nullable Document document) {
+        Mutation(@Nullable UIDocument document) {
             this.document = document;
         }
 

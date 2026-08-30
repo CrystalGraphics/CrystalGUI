@@ -7,8 +7,9 @@ import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.Node;
-import com.crystalgui.ui.dom.NodeRegistry;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UINodeRegistry;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -29,12 +30,12 @@ import javax.annotation.Nullable;
  * on a resize; the family is reference-compared because {@code FontFamilyCache.resolve} caches by
  * {@code (paths, targetPx)}. Painting arrives with 5.4; this is the measure half.</p>
  */
-public class TextNode extends Node implements Measurable {
+public class TextNode extends UINode implements Measurable {
 
     public static final Name NAME = Name.of("crystalgui", "text");
 
     static {
-        NodeRegistry.register(NAME, TextNode::new, NodeRegistry.plain(NAME, false));
+        UINodeRegistry.register(NAME, TextNode::new, UINodeRegistry.plain(NAME, false));
     }
 
     /** Narrow enough that every break opportunity breaks; the widest unbreakable run is the answer. */

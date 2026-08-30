@@ -3,7 +3,7 @@ package com.crystalgui.ui.service;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.dom.Node;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.event.DragEvent;
 import java.util.ArrayList;
 import java.util.List;
@@ -11,7 +11,7 @@ import javax.annotation.Nullable;
 import org.joml.Vector4f;
 
 /**
- * A drag, as a {@link Mode}: pointer capture plus an optional payload, an activation threshold, drop
+ * A drag, as a {@link InputMode}: pointer capture plus an optional payload, an activation threshold, drop
  * targeting, and an Escape that cancels — ported from {@code UIDragController} with its semantics
  * intact and its two couplings removed (it is no longer a field on the input handler, and Escape is
  * no longer a hard-coded rung above the close watchers).
@@ -41,7 +41,7 @@ import org.joml.Vector4f;
  * an ABSOLUTE layout coordinate that does not subtract the source's origin, and reading that as
  * "relative to the source" cost two separate bugs in opposite directions.</p>
  */
-public final class Drag implements Mode {
+public final class Drag implements InputMode {
 
     /**
      * How far the pointer must travel before a payload drag begins.
@@ -64,7 +64,7 @@ public final class Drag implements Mode {
     }
 
     private final Input input;
-    private final Node source;
+    private final UINode source;
     private final Listener listener;
     private final @Nullable Object payload;
     private final int button;
@@ -75,11 +75,11 @@ public final class Drag implements Mode {
     private final float startY;
 
     private boolean activated;
-    private @Nullable Node dropTarget;
+    private @Nullable UINode dropTarget;
     private boolean dropAccepted;
     private boolean live = true;
 
-    private Drag(Input input, Node source, float surfaceX, float surfaceY, int button,
+    private Drag(Input input, UINode source, float surfaceX, float surfaceY, int button,
                  @Nullable Object payload, float threshold, Listener listener) {
         this.input = input;
         this.source = source;
@@ -96,12 +96,12 @@ public final class Drag implements Mode {
     }
 
     /** A positional drag: no payload, no threshold, live from the first movement. */
-    public static Drag start(Node source, float surfaceX, float surfaceY, Listener listener) {
+    public static Drag start(UINode source, float surfaceX, float surfaceY, Listener listener) {
         return start(source, surfaceX, surfaceY, CgMouseCodes.LEFT_BUTTON, null, 0f, listener);
     }
 
     /** A payload drag at the default threshold: nothing fires until the pointer has really moved. */
-    public static Drag startWithPayload(Node source, float surfaceX, float surfaceY,
+    public static Drag startWithPayload(UINode source, float surfaceX, float surfaceY,
                                         Object payload, Listener listener) {
         return start(source, surfaceX, surfaceY, CgMouseCodes.LEFT_BUTTON, payload,
                 DEFAULT_THRESHOLD_PX, listener);
@@ -111,7 +111,7 @@ public final class Drag implements Mode {
      * Begins a drag and pushes it as the innermost mode. Takes pointer capture, so every pointer
      * event reaches the source however far the pointer travels, and {@code :hover} stays pinned.
      */
-    public static Drag start(Node source, float surfaceX, float surfaceY, int button,
+    public static Drag start(UINode source, float surfaceX, float surfaceY, int button,
                              @Nullable Object payload, float thresholdPx, Listener listener) {
         Input input = source.document().input();
         Drag drag = new Drag(input, source, surfaceX, surfaceY, button, payload, thresholdPx, listener);
@@ -129,7 +129,7 @@ public final class Drag implements Mode {
         return activated;
     }
 
-    public Node source() {
+    public UINode source() {
         return source;
     }
 
@@ -144,7 +144,7 @@ public final class Drag implements Mode {
 
     /** What the pointer is over and would drop onto, or null. */
     @Nullable
-    public Node dropTarget() {
+    public UINode dropTarget() {
         return dropTarget;
     }
 
@@ -193,7 +193,7 @@ public final class Drag implements Mode {
     public void end(float x, float y) {
         if (!live) return;
         live = false;
-        Node dropOn = dropAccepted ? dropTarget : null;
+        UINode dropOn = dropAccepted ? dropTarget : null;
         input.popMode(this);
         if (dropOn != null && payload != null) {
             input.send(dropOn, new DragEvent.Drop(dropOn, input.pointer(), source, payload));
@@ -206,12 +206,12 @@ public final class Drag implements Mode {
     public void cancel() {
         if (!live) return;
         live = false;
-        Node staleTarget = dropTarget;
+        UINode staleTarget = dropTarget;
         dropTarget = null;
         dropAccepted = false;
         input.popMode(this);
         if (staleTarget != null) {
-            for (Node at = staleTarget; at != null; at = at.composedParent()) {
+            for (UINode at = staleTarget; at != null; at = at.composedParent()) {
                 input.send(at, new DragEvent.Leave(at, input.pointer(), source, payload));
             }
         }
@@ -232,20 +232,20 @@ public final class Drag implements Mode {
     private void updateDropTarget(float x, float y) {
         Focus focus = source.document().focus();
         Box box = source.document().boxes().hitTest(x, y, b -> focus.isInert(b.node()));
-        Node under = box == null ? null : box.node();
+        UINode under = box == null ? null : box.node();
         if (isSelfOrInsideSource(under)) under = null;
 
         if (under != dropTarget) {
-            Node common = commonAncestor(dropTarget, under);
+            UINode common = commonAncestor(dropTarget, under);
             // Innermost first on the way out, outermost first on the way in -- the same order the
             // mouse pair uses, so a target and its ancestors never disagree about what is entered.
-            for (Node at = dropTarget; at != null && at != common; at = at.composedParent()) {
+            for (UINode at = dropTarget; at != null && at != common; at = at.composedParent()) {
                 input.send(at, new DragEvent.Leave(at, input.pointer(), source, payload));
             }
-            List<Node> entered = new ArrayList<>();
-            for (Node at = under; at != null && at != common; at = at.composedParent()) entered.add(at);
+            List<UINode> entered = new ArrayList<>();
+            for (UINode at = under; at != null && at != common; at = at.composedParent()) entered.add(at);
             for (int i = entered.size() - 1; i >= 0; i--) {
-                Node at = entered.get(i);
+                UINode at = entered.get(i);
                 input.send(at, new DragEvent.Enter(at, input.pointer(), source, payload));
             }
             dropTarget = under;
@@ -260,18 +260,18 @@ public final class Drag implements Mode {
         dropAccepted = over.isDefaultPrevented();
     }
 
-    private boolean isSelfOrInsideSource(@Nullable Node candidate) {
-        for (Node at = candidate; at != null; at = at.composedParent()) {
+    private boolean isSelfOrInsideSource(@Nullable UINode candidate) {
+        for (UINode at = candidate; at != null; at = at.composedParent()) {
             if (at == source) return true;
         }
         return false;
     }
 
     @Nullable
-    private static Node commonAncestor(@Nullable Node a, @Nullable Node b) {
+    private static UINode commonAncestor(@Nullable UINode a, @Nullable UINode b) {
         if (a == null || b == null) return null;
-        for (Node up = a; up != null; up = up.composedParent()) {
-            for (Node down = b; down != null; down = down.composedParent()) {
+        for (UINode up = a; up != null; up = up.composedParent()) {
+            for (UINode down = b; down != null; down = down.composedParent()) {
                 if (up == down) return up;
             }
         }
@@ -279,7 +279,7 @@ public final class Drag implements Mode {
     }
 
     /** Surface pixels into a box's own space, through the matrix layout composed. */
-    private static float[] toLocal(Node node, float surfaceX, float surfaceY) {
+    private static float[] toLocal(UINode node, float surfaceX, float surfaceY) {
         Box box = node.box();
         if (box == null) return new float[]{surfaceX, surfaceY};
         Vector4f point = new Vector4f(surfaceX, surfaceY, 0f, 1f);

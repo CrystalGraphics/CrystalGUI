@@ -10,8 +10,8 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.Ui;
-import com.crystalgui.ui.dom.Document;
-import com.crystalgui.ui.dom.Node;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UINode;
 import dev.vfyjxf.taffy.style.AlignContent;
 import dev.vfyjxf.taffy.style.AlignItems;
 import dev.vfyjxf.taffy.style.FlexDirection;
@@ -88,32 +88,32 @@ public class OnePassLayoutTest extends com.crystalgui.testsupport.UiTestBase {
         for (UIElement child : element.getChildren()) collectOld(child, into);
     }
 
-    private static Document newEngine(Spec spec, Node[] rootOut) {
-        Document document = new Document();
-        Node root = buildNew(spec);
+    private static UIDocument newEngine(Spec spec, UINode[] rootOut) {
+        UIDocument document = new UIDocument();
+        UINode root = buildNew(spec);
         document.append(root);
         document.update(800, 600);
         rootOut[0] = root;
         return document;
     }
 
-    private static Node buildNew(Spec spec) {
-        Node node = new Node();
+    private static UINode buildNew(Spec spec) {
+        UINode node = new UINode();
         layout(node, spec.style);
         for (Spec child : spec.children) node.append(buildNew(child));
         return node;
     }
 
-    private static void collectNew(Node node, List<Geometry> into) {
+    private static void collectNew(UINode node, List<Geometry> into) {
         Box b = box(node);
         into.add(new Geometry(b.worldX(), b.worldY(), b.width(), b.height()));
-        for (Node child : node.children()) collectNew(child, into);
+        for (UINode child : node.children()) collectNew(child, into);
     }
 
     private static void assertSameLayout(Spec spec) {
         List<Geometry> old = oldEngine(spec);
-        Node[] root = new Node[1];
-        Document document = newEngine(spec, root);
+        UINode[] root = new UINode[1];
+        UIDocument document = newEngine(spec, root);
         List<Geometry> fresh = new ArrayList<>();
         collectNew(root[0], fresh);
         assertEquals("same number of boxes", old.size(), fresh.size());
@@ -197,9 +197,9 @@ public class OnePassLayoutTest extends com.crystalgui.testsupport.UiTestBase {
 
     @Test
     public void anUnchangedTreeIsNotLaidOutAgainAndAChangeCostsOnePass() {
-        Document document = new Document();
-        Node a = sized(100, 100);
-        Node b = sized(100, 100);
+        UIDocument document = new UIDocument();
+        UINode a = sized(100, 100);
+        UINode b = sized(100, 100);
         document.append(a).append(b);
         document.update(800, 600);
         assertEquals(1, document.boxes().layoutPasses());
@@ -225,18 +225,18 @@ public class OnePassLayoutTest extends com.crystalgui.testsupport.UiTestBase {
 
     @Test
     public void theDefaultsAreCssDefaults() {
-        Document document = new Document();
-        Node row = sized(800, 100);
-        Node first = sized(100, 100);
-        Node second = sized(100, 100);
+        UIDocument document = new UIDocument();
+        UINode row = sized(800, 100);
+        UINode first = sized(100, 100);
+        UINode second = sized(100, 100);
         row.append(first).append(second);
         document.append(row);
         document.update(800, 600);
         assertEquals("flex-direction: row -- the second child sits beside the first", 100f, box(second).x(), 0.001f);
         assertEquals(0f, box(second).y(), 0.001f);
 
-        Node tooWide = sized(1000, 50);
-        Node container = sized(800, 100);
+        UINode tooWide = sized(1000, 50);
+        UINode container = sized(800, 100);
         container.append(tooWide);
         document.append(container);
         document.update(800, 600);

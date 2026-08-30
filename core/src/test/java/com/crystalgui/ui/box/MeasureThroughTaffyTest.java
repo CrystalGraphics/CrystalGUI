@@ -9,8 +9,8 @@ import com.crystalgraphics.api.text.CgTextLayout;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.testsupport.UiTestBase;
-import com.crystalgui.ui.dom.Document;
-import com.crystalgui.ui.dom.Node;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UINode;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.FlexWrap;
 import org.junit.Test;
@@ -39,9 +39,9 @@ public class MeasureThroughTaffyTest extends UiTestBase {
         return node;
     }
 
-    private static Document rowOfTwo(FlexWrap wrap, TextNode[] out) {
-        Document document = new Document();
-        Node row = new Node();
+    private static UIDocument rowOfTwo(FlexWrap wrap, TextNode[] out) {
+        UIDocument document = new UIDocument();
+        UINode row = new UINode();
         StyleGroup.inlinePipeline(row.getStyle().getLayoutGroup(), l -> {
             l.width(200);
             l.flexDirection(FlexDirection.ROW);
@@ -60,7 +60,7 @@ public class MeasureThroughTaffyTest extends UiTestBase {
     @Test
     public void aTextNodeIsMeasuredAtItsUsedWidthUnderWrap() {
         TextNode[] wrapped = new TextNode[2];
-        Document document = rowOfTwo(FlexWrap.WRAP, wrapped);
+        UIDocument document = rowOfTwo(FlexWrap.WRAP, wrapped);
         TextNode[] plain = new TextNode[2];
         rowOfTwo(FlexWrap.NO_WRAP, plain);
 
@@ -98,7 +98,7 @@ public class MeasureThroughTaffyTest extends UiTestBase {
     @Test
     public void changingTheTextIsOneMorePassAndNoWalk() {
         TextNode[] nodes = new TextNode[2];
-        Document document = rowOfTwo(FlexWrap.WRAP, nodes);
+        UIDocument document = rowOfTwo(FlexWrap.WRAP, nodes);
         float before = nodes[0].box().height();
         int syncs = document.boxes().syncPasses();
 

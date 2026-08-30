@@ -21,7 +21,7 @@ package com.crystalgui.ui.service;
  * way out. Windows ends its keyboard-move mode on the next unrelated action and lets that keystroke
  * through; so should anything written here.</p>
  */
-public interface Mode {
+public interface InputMode {
 
     /** What this mode is, for a diagnostic. Never matched on. */
     String name();

@@ -5,11 +5,10 @@ import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.dom.Attribute;
-import com.crystalgui.ui.dom.Document;
-import com.crystalgui.ui.dom.Node;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.dom.ShadowRoot;
 import com.crystalgui.ui.event.FocusEvent;
-import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.input.FocusSource;
 import java.util.ArrayList;
 import java.util.List;
@@ -46,13 +45,13 @@ import javax.annotation.Nullable;
  */
 public final class Focus {
 
-    private final Document document;
-    private final List<Node> modals = new ArrayList<>();
+    private final UIDocument document;
+    private final List<UINode> modals = new ArrayList<>();
 
     @Nullable
-    private Node focused;
+    private UINode focused;
     @Nullable
-    private Node announced;
+    private UINode announced;
 
     /**
      * <b>The focus owner changed.</b> Carries the new one, or null. {@code FocusEvent} answers "did
@@ -60,27 +59,27 @@ public final class Focus {
      * inspector, a context-sensitive toolbar and a status line each need. Deduplicated, so the
      * blur-then-focus pair one click produces announces two states and never the same one twice.
      */
-    public final Signal.Value<Node> onDidChangeFocus = new Signal.Value<>();
+    public final Signal.Value<UINode> onDidChangeFocus = new Signal.Value<>();
 
-    public Focus(Document document) {
+    public Focus(UIDocument document) {
         this.document = document;
     }
 
     @Nullable
-    public Node focused() {
+    public UINode focused() {
         return focused;
     }
 
     /** What an observer at {@code relativeTo} is told holds focus — retargeted out of shadow trees. */
     @Nullable
-    public Node focusedFor(@Nullable Node relativeTo) {
-        return focused == null ? null : Node.retarget(focused, relativeTo);
+    public UINode focusedFor(@Nullable UINode relativeTo) {
+        return focused == null ? null : UINode.retarget(focused, relativeTo);
     }
 
     // ── Predicates ───────────────────────────────────────────────────────────
 
     /** May this node hold focus at all? A superset of {@link #tabbable}. */
-    public boolean focusable(@Nullable Node node) {
+    public boolean focusable(@Nullable UINode node) {
         if (node == null || !node.isConnected() || node.isFrozen()) return false;
         if (!node.focusPolicy().isFocusable() || !node.isEnabled()) return false;
         // Not rendered is not focusable -- the DOM's rule for `display: none`, asked of the box tree,
@@ -91,7 +90,7 @@ public final class Focus {
     }
 
     /** Is this node in the Tab sequence? {@code CLICK_NOT_TABBABLE} is focusable and is not. */
-    public boolean tabbable(@Nullable Node node) {
+    public boolean tabbable(@Nullable UINode node) {
         return focusable(node) && node.focusPolicy().isTabbable();
     }
 
@@ -99,9 +98,9 @@ public final class Focus {
      * The spec's full predicate: this node or a composed ancestor carries {@code inert}, OR a modal
      * over this node's scope is open and this node is not inside it.
      */
-    public boolean isInert(@Nullable Node node) {
+    public boolean isInert(@Nullable UINode node) {
         if (node == null) return false;
-        for (Node at = node; at != null; at = at.composedParent()) {
+        for (UINode at = node; at != null; at = at.composedParent()) {
             if (at.get(Attribute.INERT)) return true;
         }
         return blockingModal(node) != null;
@@ -115,10 +114,10 @@ public final class Focus {
      * than saying nothing, because it points somewhere.</p>
      */
     @Nullable
-    public Node blockingModal(@Nullable Node node) {
+    public UINode blockingModal(@Nullable UINode node) {
         if (node == null) return null;
         for (int i = modals.size() - 1; i >= 0; i--) {
-            Node modal = modals.get(i);
+            UINode modal = modals.get(i);
             if (!modal.isConnected()) continue;
             // The first modal whose scope contains this node decides -- a modal in another window's
             // scope is not this node's business, which is the whole point of scoping it.
@@ -135,8 +134,8 @@ public final class Focus {
     // ── Scopes and modality ──────────────────────────────────────────────────
 
     /** The nearest enclosing focus navigation scope: a scope node, a delegating shadow root, or the document. */
-    public Node scopeOf(@Nullable Node node) {
-        for (Node at = node; at != null; at = at.composedParent()) {
+    public UINode scopeOf(@Nullable UINode node) {
+        for (UINode at = node; at != null; at = at.composedParent()) {
             if (at.get(Attribute.FOCUS_SCOPE)) return at;
             if (at instanceof ShadowRoot && ((ShadowRoot) at).delegatesFocus()) return at;
         }
@@ -147,13 +146,13 @@ public final class Focus {
      * Opens {@code modal}: everything in its scope that is not inside it becomes inert, and Tab is
      * trapped within it. Nesting works and unwinds in order.
      */
-    public void pushModal(Node modal) {
+    public void pushModal(UINode modal) {
         if (modals.contains(modal)) return;
         modals.add(modal);
         modalityChanged();
     }
 
-    public void popModal(Node modal) {
+    public void popModal(UINode modal) {
         if (modals.remove(modal)) modalityChanged();
     }
 
@@ -168,18 +167,18 @@ public final class Focus {
     }
 
     /** The open modals, in the order they were opened. */
-    public List<Node> modals() {
+    public List<UINode> modals() {
         return List.copyOf(modals);
     }
 
     /** The scope a modal makes inert: the nearest one ABOVE it. */
-    private Node blockedScopeOf(Node modal) {
-        Node above = modal.composedParent();
+    private UINode blockedScopeOf(UINode modal) {
+        UINode above = modal.composedParent();
         return above == null ? document : scopeOf(above);
     }
 
-    private static boolean contains(Node ancestor, Node node) {
-        return Node.isShadowIncludingInclusiveAncestor(ancestor, node);
+    private static boolean contains(UINode ancestor, UINode node) {
+        return UINode.isShadowIncludingInclusiveAncestor(ancestor, node);
     }
 
     // ── Moving focus ─────────────────────────────────────────────────────────
@@ -188,7 +187,7 @@ public final class Focus {
      * The DOM's {@code element.focus()} — programmatic, so it rings and scrolls its target into
      * view. Focus that lands somewhere invisible is focus the user cannot see.
      */
-    public void requestFocus(@Nullable Node node) {
+    public void requestFocus(@Nullable UINode node) {
         moveTo(node, FocusSource.PROGRAMMATIC);
     }
 
@@ -198,12 +197,12 @@ public final class Focus {
      * draw a ring on whatever the mouse passed over, which is the noise {@code :focus-visible} exists
      * to remove.
      */
-    public void requestPointerFocus(@Nullable Node node) {
+    public void requestPointerFocus(@Nullable UINode node) {
         moveTo(node, FocusSource.POINTER);
     }
 
-    private void moveTo(@Nullable Node node, FocusSource source) {
-        Node target = delegate(node);
+    private void moveTo(@Nullable UINode node, FocusSource source) {
+        UINode target = delegate(node);
         if (target == null) return;
         if (!focusable(target)) return;
         if (focused == target) return;
@@ -213,11 +212,11 @@ public final class Focus {
 
     /** A host that delegates focus hands it to the first focusable thing inside its shadow tree. */
     @Nullable
-    private Node delegate(@Nullable Node node) {
+    private UINode delegate(@Nullable UINode node) {
         if (node == null) return null;
         ShadowRoot shadow = node.shadowRoot();
         if (shadow == null || !shadow.delegatesFocus()) return node;
-        Node inside = firstFocusableIn(shadow);
+        UINode inside = firstFocusableIn(shadow);
         return inside != null ? inside : node;
     }
 
@@ -227,11 +226,11 @@ public final class Focus {
     }
 
     /** Drops focus if — and only if — this node holds it. */
-    public void blurIfFocused(@Nullable Node node) {
+    public void blurIfFocused(@Nullable UINode node) {
         if (node != null && focused == node) blur(node);
     }
 
-    private void focus(Node target, FocusSource source) {
+    private void focus(UINode target, FocusSource source) {
         focused = target;
         // A focused text field rings however it was focused: a caret alone is a weak affordance and
         // the field is where typing goes. Everything else stays unringed after a click.
@@ -240,21 +239,21 @@ public final class Focus {
         // user cannot see. A click cannot need it -- you clicked what you could already see -- and
         // scrolling there would pull the content out from under the cursor.
         if (source.scrollsIntoView() && target.box() != null) target.box().scrollIntoView();
-        for (Node at = target.composedParent(); at != null; at = at.composedParent()) at.setFocusWithin(true);
+        for (UINode at = target.composedParent(); at != null; at = at.composedParent()) at.setFocusWithin(true);
         send(target, new FocusEvent.Focus(target));
         announce();
     }
 
-    private void blur(Node target) {
+    private void blur(UINode target) {
         focused = null;
         target.setFocused(false, false);
         target.setPressed(false);
-        for (Node at = target.composedParent(); at != null; at = at.composedParent()) at.setFocusWithin(false);
+        for (UINode at = target.composedParent(); at != null; at = at.composedParent()) at.setFocusWithin(false);
         send(target, new FocusEvent.Blur(target));
         announce();
     }
 
-    private void send(Node target, FocusEvent event) {
+    private void send(UINode target, FocusEvent event) {
         document.input().send(target, event);
     }
 
@@ -279,14 +278,14 @@ public final class Focus {
      * choose it — and a list that drives its selection from focus would otherwise have its selection
      * destroyed by the menu opened over it.</p>
      */
-    void pressed(@Nullable Node target, int button) {
+    void pressed(@Nullable UINode target, int button) {
         if (button != CgMouseCodes.LEFT_BUTTON) return;
         // A press that hit nothing normally blurs, as a browser does. But while a modal is open, "hit
         // nothing" can mean inertness ATE the press, and dropping the caret out of a dialog's field
         // when its backdrop is clicked is what no dialog anywhere does.
         if (target == null && blockingModal(document) != null) return;
 
-        Node focusTarget = target;
+        UINode focusTarget = target;
         while (focusTarget != null && !focusTarget.focusPolicy().focusesOnClick()) {
             focusTarget = focusTarget.composedParent();
         }
@@ -305,10 +304,10 @@ public final class Focus {
     public boolean moveTabFocus(int key, int modifiers) {
         if (key != CgKeyCodes.KEY_TAB) return false;
         boolean reverse = CgModifiers.hasShift(modifiers);
-        Node modal = blockingModal(focused == null ? document : focused);
-        Node scope = modal != null ? modal : scopeOf(focused);
+        UINode modal = blockingModal(focused == null ? document : focused);
+        UINode scope = modal != null ? modal : scopeOf(focused);
 
-        Node next;
+        UINode next;
         if (focused == null) {
             next = reverse ? lastTabbableIn(scope) : firstTabbableIn(scope);
         } else {
@@ -323,42 +322,42 @@ public final class Focus {
 
     /** The first thing under {@code scope} that may hold focus — what a dialog hands focus to. */
     @Nullable
-    public Node firstFocusableIn(Node scope) {
-        for (Node node : order(scope)) {
+    public UINode firstFocusableIn(UINode scope) {
+        for (UINode node : order(scope)) {
             if (node != scope && focusable(node)) return node;
         }
         return null;
     }
 
     @Nullable
-    public Node lastFocusableIn(Node scope) {
-        Node last = null;
-        for (Node node : order(scope)) {
+    public UINode lastFocusableIn(UINode scope) {
+        UINode last = null;
+        for (UINode node : order(scope)) {
             if (node != scope && focusable(node)) last = node;
         }
         return last;
     }
 
     @Nullable
-    public Node firstTabbableIn(Node scope) {
-        for (Node node : order(scope)) {
+    public UINode firstTabbableIn(UINode scope) {
+        for (UINode node : order(scope)) {
             if (node != scope && tabbable(node)) return node;
         }
         return null;
     }
 
     @Nullable
-    public Node lastTabbableIn(Node scope) {
-        Node last = null;
-        for (Node node : order(scope)) {
+    public UINode lastTabbableIn(UINode scope) {
+        UINode last = null;
+        for (UINode node : order(scope)) {
             if (node != scope && tabbable(node)) last = node;
         }
         return last;
     }
 
     @Nullable
-    public Node nextTabbable(Node from, Node scope) {
-        List<Node> order = order(scope);
+    public UINode nextTabbable(UINode from, UINode scope) {
+        List<UINode> order = order(scope);
         int at = order.indexOf(from);
         for (int i = at + 1; i < order.size(); i++) {
             if (tabbable(order.get(i))) return order.get(i);
@@ -367,8 +366,8 @@ public final class Focus {
     }
 
     @Nullable
-    public Node previousTabbable(Node from, Node scope) {
-        List<Node> order = order(scope);
+    public UINode previousTabbable(UINode from, UINode scope) {
+        List<UINode> order = order(scope);
         int at = order.indexOf(from);
         if (at < 0) at = order.size();
         for (int i = at - 1; i >= 0; i--) {
@@ -385,9 +384,9 @@ public final class Focus {
      * cache whose invalidation has to track enablement, inertness and modality is a much larger
      * liability than the walk it saves.</p>
      */
-    private static List<Node> order(Node scope) {
-        List<Node> out = new ArrayList<>();
-        for (Node node : scope.composedSubtree()) out.add(node);
+    private static List<UINode> order(UINode scope) {
+        List<UINode> out = new ArrayList<>();
+        for (UINode node : scope.composedSubtree()) out.add(node);
         return out;
     }
 
@@ -398,8 +397,8 @@ public final class Focus {
      * must be popped — the old engine's worst leak, because a modal that left without closing kept
      * the whole window inert with nothing to interact with.
      */
-    public void forget(Node node) {
-        for (Node at : node.composedSubtree()) {
+    public void forget(UINode node) {
+        for (UINode at : node.composedSubtree()) {
             modals.remove(at);
             if (focused == at) blur(at);
             at.setFocusWithin(false);

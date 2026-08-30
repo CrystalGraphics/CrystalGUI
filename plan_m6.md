@@ -14,7 +14,7 @@ would have discovered each correction as a surprise mid-port. Nothing here is im
 the machinery that has to exist before the first widget moves, and it does not exist today.
 
 > **The one-sentence answer to "how is this orchestrated".** The unit of work is not a widget, it is a
-> **closed tree** — a harness scene, or a test fixture — because a `Node` cannot be a child of a
+> **closed tree** — a harness scene, or a test fixture — because a `UINode` cannot be a child of a
 > `UIElement` and no adapter is built to pretend otherwise (§3). Scenes are already dependency-ordered
 > by what they construct (§0.6), so the batches in §5 are the scene list, and the game stays on the old
 > engine until the last batch flips `CgUiScreen`.
@@ -76,7 +76,7 @@ A census over the 308 files above. **Files / call sites.** The full per-file mat
 | `getAttachedWindow()` | 73 | 194 | `document()`, and mostly for `getInputHandler()` |
 | `setHitTest(false)` | 68 | 171 | `set(Attribute.HIT_TEST, false)` |
 | `getInputHandler().X` | 51 | 106 | `document().input()` / `.focus()` — drag controller ×29, `requestFocus` ×21, `requestPointerFocus` ×20, `getFocusedElement` ×15, `pointerPosition` ×7 |
-| pre-bound event fields (`.onMouseDown` ×53, `.onMouseUp` ×8, `.onKeyDown` ×7 …) | — | 82 | the same fields on `Node` (a gap today; §2) |
+| pre-bound event fields (`.onMouseDown` ×53, `.onMouseUp` ×8, `.onKeyDown` ×7 …) | — | 82 | the same fields on `UINode` (a gap today; §2) |
 | `stopPropagation()` | 43 | 80 | unchanged spelling, **DOM semantics** — each site re-read (§4.4) |
 | `getRuntimeCache().X` | 43 | 185 | `box().width()` ×45, `.height()` ×31, `.x()` ×27, `.y()` ×24, `localToWorld` ×1, `getDepth` ×1 |
 | `importantPipeline` / `StyleOrigin.IMPORTANT` | 42 / 4 | 117 / 7 | forbidden on the new engine — every site classified in §4.5 |
@@ -89,31 +89,31 @@ A census over the 308 files above. **Files / call sites.** The full per-file mat
 | `startDrag(` | 22 | 22 | `Drag.start` — coordinates change space (§4.4) |
 | `void onLayoutChanged` | 22 | 23 | the box tree's post-layout callback; **half of them are geometry feedback that becomes `Measurable`** |
 | `Tooltip.attach` | 18 | 37 | unchanged, once `Tooltip` is ported |
-| `invalidateStyleMatch()` | 18 | 21 | unchanged (public on `Node`) |
+| `invalidateStyleMatch()` | 18 | 21 | unchanged (public on `UINode`) |
 | `setDisplayed(` | 17 | 74 | `Attribute.HIDDEN` + a UA rule (**D5**) |
 | `insertInternalChildAt` / `removeInternalChild` | 17 | 40 | shadow-tree `insertAt` / `remove` — the **dynamic** restructure sites, each read |
 | `swapPrefixedClass` | 7 | 18 | `toggleClass` pair; trivial |
 | `setScrollExempt` | 11 | 16 | a 5.4 gap: the painter must honour it (§2) |
 | scroll API (`setScroll*`, `getScrollWidth/Height`, `getClient*`, `getMaxScroll*`, `clampScroll`) | 12 + 11 | 37 + 69 | `Box.setScroll` + **scroll extents the box does not expose yet** (§2) |
 | `TopLayer` / `addToTopLayer` | 10 | 23 | `box().setHost(document.topLayer())` |
-| `overlayHost` / `addOverlay` | 10 | 15 | `Document.overlayHost(near)` — the algorithm ported as is (**D8**) |
+| `overlayHost` / `addOverlay` | 10 | 15 | `UIDocument.overlayHost(near)` — the algorithm ported as is (**D8**) |
 | `AnchoredPlacement.` | 10 | 25 | ported; writes INLINE, not IMPORTANT (**D4**) |
-| `pushCloseWatcher` / `requestClose` | 10 | 27 | the `Dismiss` service + `Node.requestClose()` (**D7**) |
+| `pushCloseWatcher` / `requestClose` | 10 | 27 | the `Dismiss` service + `UINode.requestClose()` (**D7**) |
 | `preventDefault()` | 9 | 10 | unchanged |
 | `Keymap` / `KeymapResolver` / `KeyBinding` | 9 | 15 | retyped walks (**D12**) |
 | `ContextMenu.attach` | 8 | 13 | unchanged once ported |
 | `UIResizer` + the seven resize hooks | 8 + 7 | 16 + 27 | `resize:` re-hosted (**D6**) |
 | `Disposer` / `Disposable` | 8 | 18 | keyed on nodes; `Lifecycle.destroy` runs it (**D18**) |
 | `DragGhost` | 8 | 29 | ported as a widget; the controller's ghost seam is a `Drag` field |
-| `attachDefaultListener` | 7 | 9 | the group's `defaultEvents` — a helper on `Node` |
+| `attachDefaultListener` | 7 | 9 | the group's `defaultEvents` — a helper on `UINode` |
 | paint overrides (`paintSelf` / `paintOverlay` / `paintOutline` / `paintChildren`) | 7 | 14 | `paintContent` / `paintDecoration`; **`paintChildren` has no counterpart** — the three overriders are read in §4.4 |
-| `querySelector` / `find` / `require` | 7 | 10 | a `Node` query API (gap; §2) |
-| `registerCommands` / `bindKeys` | 5 | 8 | the same hooks on `Node`, with the instance-initialiser trap removed |
+| `querySelector` / `find` / `require` | 7 | 10 | a `UINode` query API (gap; §2) |
+| `registerCommands` / `bindKeys` | 5 | 8 | the same hooks on `UINode`, with the instance-initialiser trap removed |
 | `pushAutoPopover` / `lightDismiss` / `popoverInvoker` | 5 | 14 | the `Dismiss` service |
 | `TransitionEngine` / `isAnimating` / `Easing` | 5 + 5 | 9 + 22 | `Animation` timelines; transitions become the cascade's client of the same clock |
 | `ctx.mirroring` / `mirrored` / `WindowSnapshot` | 4 | 11 | `BoxTree.mirror`; `WindowSnapshot` **stays** (§4.4) |
 | `pushModal` / `isModalBlocked` / `modalScopeOf` | 4 | 5 | `focus().pushModal` / `isInert` / `scopeOf` |
-| `keymap()` / `settings()` | 4 / 3 | 4 / 5 | the same accessors on `Node` |
+| `keymap()` / `settings()` | 4 / 3 | 4 / 5 | the same accessors on `UINode` |
 | `HighlightRegistry` | 3 | 12 | `TextNode.highlights()`; `StyleEngine.highlightStyle(Styleable, name)` already takes the seam |
 | `setPointerCapture` | 1 | 1 | `input().setPointerCapture` |
 | `setInert(` | 1 | 1 | `set(Attribute.INERT, true)` |
@@ -197,7 +197,7 @@ which is what makes starting with them safe rather than merely convenient.
 | `cgui-slot` | `ScrollerView`, `ItemSlot`, `FluidSlot` (from `native-content-slots`, not on master) | 6.2 — **needs the branch reconciled** |
 | `cgui-dock` | `CrystalEditor`, the workspace | 6.7 |
 | `cgui-workspace` | `ServerUiSession`, `ClientUiSession`, `TextEditor`, `TreeView`, `SplitView`, `TabView` | 6.8 |
-| `cgui-engine-parity` | `Document`, `Node`, `TextNode` beside `UIText` | the pattern every batch copies |
+| `cgui-engine-parity` | `UIDocument`, `UINode`, `TextNode` beside `UIText` | the pattern every batch copies |
 | `cgui-desktop` (documented, not at the pointer) | `Desktop`, `WindowFrame`, the taskbar, the switcher | 6.6 |
 
 ---
@@ -242,16 +242,16 @@ Four packages outside it extend `UIElement` (§0.1: `graph/shader`, `language/�
 | `core/command` — `CommandContext(UIElement source)`, `CommandRegistry` | the command system's *source* | D12 |
 | `core/data` — `DataContext.from(UIElement)`, walks `getParent()`; `DataProvider` | the context walk every command resolves through | D12 |
 | `core/undo` — `UndoScope.nearest(UIElement)` | the undo stack walk | D12 |
-| `ui/input/keymap` — `Keymap.acceleratorFor(UIElement)`, `KeymapResolver.resolve(UIElement focused, …)` | the whole keymap resolution walk | D12; `Input.Chords` already takes a `Node` and a host fills it |
+| `ui/input/keymap` — `Keymap.acceleratorFor(UIElement)`, `KeymapResolver.resolve(UIElement focused, …)` | the whole keymap resolution walk | D12; `Input.Chords` already takes a `UINode` and a host fills it |
 | `ui/contract` — `State<W extends UIElement, V>`, `Event<W extends UIElement, P>`, `WidgetContract<W extends UIElement>`, `WidgetContracts.of(UIElement)`, `RateGate` | **every one of the 87 contracts** | D11 — the bound loosens; nothing in a contract needs the element type |
 | `ui/projection` — `AutoProjection`, `Projections` | reflection walk stops at `UIElement` | retype the stop class |
-| `serialization` — `UIDescriptionCodec` (`Codec<UIElement>`, `encodeLive`, `decodeLive`), `InlineStyleCodec` | the description format | `DomNodeMirror` already describes a `Node`; the codec is retired at 6.8 |
+| `serialization` — `UIDescriptionCodec` (`Codec<UIElement>`, `encodeLive`, `decodeLive`), `InlineStyleCodec` | the description format | `UINodeMirror` already describes a `UINode`; the codec is retired at 6.8 |
 | `net` — `ServerUiSession` (1,457 lines, `UIElement root`), `ClientUiSession` (903), `ElementNodeMirror` | **hard-typed** to `UIElement` while the mirrors under them are generic | D11 — generic `<N>`; on M6's critical path, see 1.3 |
 | `net/window` — nine files | `Networked` panels `extends UIElement`, `UiType<P extends UIElement & Networked<M>>` | retype at 6.8 |
 | `style` — `StyleProperty.notifyListeners(UIElement, …)`, `Listener.onComputedChange(UIElement, …)` | the property listener seam | retype to `Styleable` (both engines implement it) |
 | `render` — `CgUiPaintContext.warmGlyphs(UIWindow.DEFAULT_UI_SCALE)` | one constant | trivial |
-| `lifecycle` — `CgUiLifecycle.onDestroy → UIWindow.shutdownAll()` | the shutdown sweep | `Document` needs the registry |
-| `core/async/UiThread` | per-tree owner asked of the attached window | `Document.require` already exists |
+| `lifecycle` — `CgUiLifecycle.onDestroy → UIWindow.shutdownAll()` | the shutdown sweep | `UIDocument` needs the registry |
+| `core/async/UiThread` | per-tree owner asked of the attached window | `UIDocument.require` already exists |
 | `mc1710` — eight files (`CgUiScreen` 720 lines, `CgUiWindowMount`, `CgUiHud`, `CgUiInput`, `CgUiOverlayInput`, `Mc1710Workspace`, two probes) | `UIWindow.init/paint/presentation/desktop/enterHudMode/suspendDesktop/openWindow`, `getInputHandler().consume*` | the host flip at 6.9 |
 
 ### 1.3 Networking is on M6's critical path, not M7's
@@ -285,17 +285,17 @@ registers 23. The other 32 — `texteditor`, `graphnode`, `graphview`, `listview
 `notificationsview`, `breadcrumbs`, `pagestack`, `searchfield`, `canvasview`, `nodeport`,
 `nodecreationmenu`, `crystaleditor`, `runpanel`, `shadergrapheditor`, `shadergraphinspector`,
 `shadergraphsettingspanel`, `shadernodeinspector`, and the dead `floatingdock` — match through
-`tagName()`'s **lowercased-class-name fallback**. The porting guide's *"⚠ `Name` must be declared and
+`tagName()`'s **lowercased-class-name fallback**. The porting guide's *"⚠ `TagName` must be declared and
 REGISTERED"* therefore applies to 32 more classes than the guide's example suggests, and a port that
 registers only the 23 turns thirty-two widgets unstyled in one commit. 6.0's sheet checker fails on
-any tag a sheet names that no `NodeRegistry` entry answers.
+any tag a sheet names that no `UINodeRegistry` entry answers.
 
 ---
 
 ## 2. What has to exist before the first widget moves — the machinery (6.0)
 
 Everything M5 deliberately left for M6, plus everything the census found the widgets reaching for that
-`Node`, `Box`, `Document` and the services do not yet offer. **None of this is a widget**; all of it
+`UINode`, `Box`, `UIDocument` and the services do not yet offer. **None of this is a widget**; all of it
 is what a widget port would otherwise have to invent on the spot, and a thing invented at widget #12
 is a thing widgets #1–11 did differently.
 
@@ -303,10 +303,10 @@ is a thing widgets #1–11 did differently.
 
 | Missing | Old engine | New home | Notes |
 |---|---|---|---|
-| **Close watchers** | `UIWindow.pushCloseWatcher/popCloseWatcher/getTopCloseWatcher`, `UIElement.requestClose()` | `ui.service.Dismiss` + `Node.requestClose()` (D7) | the cascade order is load-bearing and stays: live modes (drag, switcher, keyboard move) → the **active window's** watchers → the document's. A frame registers as its own last watcher |
-| **Light dismiss** | `UIWindow.lightDismiss(target, shownBefore)`, `pushAutoPopover`, `popoverShowSeq`, `Popover.getLastShownSeq`, `UIElement.popoverInvoker` | `Dismiss` | after the mouse-down dispatch; considers the popovers open **before** the dispatch (the counter, not a snapshot); the invoker counts as part of its popover; `Node` gets `popoverInvoker` |
+| **Close watchers** | `UIWindow.pushCloseWatcher/popCloseWatcher/getTopCloseWatcher`, `UIElement.requestClose()` | `ui.service.Dismiss` + `UINode.requestClose()` (D7) | the cascade order is load-bearing and stays: live modes (drag, switcher, keyboard move) → the **active window's** watchers → the document's. A frame registers as its own last watcher |
+| **Light dismiss** | `UIWindow.lightDismiss(target, shownBefore)`, `pushAutoPopover`, `popoverShowSeq`, `Popover.getLastShownSeq`, `UIElement.popoverInvoker` | `Dismiss` | after the mouse-down dispatch; considers the popovers open **before** the dispatch (the counter, not a snapshot); the invoker counts as part of its popover; `UINode` gets `popoverInvoker` |
 | **`Dialog.pulse` on a blocked press** | `UIWindow.modalBlockingAt` → `Dialog.pulse()` | `Focus.blockingModal` already answers per scope; the pulse is `Dialog`'s | ask the hit's own scope — one modal makes every lookup look correct |
-| **The drag ghost** | `UIDragController.setGhost(element, anchor)`, promoted per drag, dropped at drag end | `Drag` gains `ghost(Node, Anchor)`; the ghost's box is hosted in the top layer for the drag's life | the three rules in `DragGhost`'s javadoc survive; rule 2 (write out-of-flow at IMPORTANT) becomes an attribute + UA rule |
+| **The drag ghost** | `UIDragController.setGhost(element, anchor)`, promoted per drag, dropped at drag end | `Drag` gains `ghost(UINode, Anchor)`; the ghost's box is hosted in the top layer for the drag's life | the three rules in `DragGhost`'s javadoc survive; rule 2 (write out-of-flow at IMPORTANT) becomes an attribute + UA rule |
 | **`TransitionEngine` as the motion service's client** | its own `System.nanoTime()` clock | `Animation` hands transitions the frame delta | what makes a transition steppable in a test for the first time |
 | **`scrollExempt` in the painter** | `UIElement.setScrollExempt` — a child that does not move with its parent's scroll (scrollbars, gutters, find bars, the editor's viewport layers; 11 files) | `Attribute.SCROLL_EXEMPT`, read by `BoxTree.compose` when composing the child's matrix | the 5.4 gap; a scrollbar scrolls away with its content until it is closed |
 
@@ -314,25 +314,25 @@ is a thing widgets #1–11 did differently.
 
 | Gap | Sites | What to add |
 |---|---|---|
-| pre-bound event groups on `Node` | 82 | `onMouseDown` … `onBlur` fields, exactly as `UIElement` declares them — a field per group over `events` |
-| `Node` query API | 10 in widgets, 29 in tests | `querySelector` / `querySelectorAll` / `getElementById` / `getElementsByClassName` / `find` / `require` over the **light** tree; the selector engine already matches `Styleable`, so this is `UITreeTraversal` retyped |
-| scroll extents on `Box` | 69 | `scrollWidth()`, `scrollHeight()`, `clientWidth()`, `clientHeight()`, `maxScrollLeft()`, `maxScrollTop()`; `ListView` and `TextEditor` **override** `getScrollHeight` to answer from a model — so the extent is a `Node` question the box asks (`Node.scrollExtent()`), not a box field |
-| smooth scroll | `scroll-behavior: smooth`, `scroll-duration`, `UIWindow.tickScrollAnimations` | `Node.scrollTo(left, top)` honouring the behaviour through an `Animation` timeline; `Box.setScroll` stays immediate; `scrollIntoView` stays immediate (D9). The exponential ease is frame-rate independent and retargets mid-flight — port the formula |
+| pre-bound event groups on `UINode` | 82 | `onMouseDown` … `onBlur` fields, exactly as `UIElement` declares them — a field per group over `events` |
+| `UINode` query API | 10 in widgets, 29 in tests | `querySelector` / `querySelectorAll` / `getElementById` / `getElementsByClassName` / `find` / `require` over the **light** tree; the selector engine already matches `Styleable`, so this is `UITreeTraversal` retyped |
+| scroll extents on `Box` | 69 | `scrollWidth()`, `scrollHeight()`, `clientWidth()`, `clientHeight()`, `maxScrollLeft()`, `maxScrollTop()`; `ListView` and `TextEditor` **override** `getScrollHeight` to answer from a model — so the extent is a `UINode` question the box asks (`UINode.scrollExtent()`), not a box field |
+| smooth scroll | `scroll-behavior: smooth`, `scroll-duration`, `UIWindow.tickScrollAnimations` | `UINode.scrollTo(left, top)` honouring the behaviour through an `Animation` timeline; `Box.setScroll` stays immediate; `scrollIntoView` stays immediate (D9). The exponential ease is frame-rate independent and retargets mid-flight — port the formula |
 | `Attribute.HIDDEN` | 74 `setDisplayed` sites | plus `[hidden] { display: none }` in `core.css` — HTML's own answer, and what removes the largest single family of IMPORTANT writes (D5) |
 | `Box.NONE` | 185 `getRuntimeCache()` reads, some before the first layout | a zero box a node answers before it has been laid out, so `box().width()` on a fresh node reads 0 rather than throwing — the same shape `UIWindow.EMPTY_LAYOUT` has today |
-| `Node.setOnlyChild`, `toggleClass`-pair for `swapPrefixedClass`, `attachDefaultListener` | 15 + 18 + 9 | trivial helpers; add them once |
-| `Node.registerCommands(CommandRegistry)` / `bindKeys()` | 5 | the same two hooks, **called from `connected()` on the first attach rather than from the instance initialiser**, which removes the row *"`registerCommands` runs from `UIElement`'s INSTANCE INITIALISER, so a per-instance registration placed there passes `null`"* |
-| `Node.keymap()` / `settings()` / `getData(DataKey)` | 4 + 5 + 92 | the accessors; the walks are D12 |
-| reported events per instance | the M2 note *"still a field on the element only because the encoder … is a context-free `Codec<UIElement>`"* | `Attribute.REPORTS` (a `Set<String>`), carried by `DomNodeMirror` like any attribute; the contract stays the answer to "can this report" |
-| `Document.overlayHost(near)` / `addOverlay` / a window-owned overlay layer | 15 | D8 — the algorithm ported verbatim, including the frame's overlay slot first |
-| `Document.desktop()` / `desktopIfPresent()` / `suspendDesktop` / `resumeDesktop` / `enterHudMode` / `exitHudMode` / `screenOverlay()` / `presentation(…)` / `paint(presentation, w, h)` / `openWindow` / `openWindowInBackground` / `hasPinnedWindows` / `isHudMode` / `addDataProvider` / `shutdownAll` / `sessionState` | the host surface | the band model as document-level hosts (D16); ported at 6.6 but the **hooks** exist at 6.0 so 6.1–6.5 can be accepted without a desktop |
-| `Document.setUiScale` and root centring | `UIWindow.getRootTransform`, `resolveRootAvailableSpace`, the centring offset (`RootPlacementTest`) | `BoxTree.setRootTransform` exists; the percentage-root / content-sized-root-centred rule is `Document.layout`'s (D21) |
+| `UINode.setOnlyChild`, `toggleClass`-pair for `swapPrefixedClass`, `attachDefaultListener` | 15 + 18 + 9 | trivial helpers; add them once |
+| `UINode.registerCommands(CommandRegistry)` / `bindKeys()` | 5 | the same two hooks, **called from `connected()` on the first attach rather than from the instance initialiser**, which removes the row *"`registerCommands` runs from `UIElement`'s INSTANCE INITIALISER, so a per-instance registration placed there passes `null`"* |
+| `UINode.keymap()` / `settings()` / `getData(DataKey)` | 4 + 5 + 92 | the accessors; the walks are D12 |
+| reported events per instance | the M2 note *"still a field on the element only because the encoder … is a context-free `Codec<UIElement>`"* | `Attribute.REPORTS` (a `Set<String>`), carried by `UINodeMirror` like any attribute; the contract stays the answer to "can this report" |
+| `UIDocument.overlayHost(near)` / `addOverlay` / a window-owned overlay layer | 15 | D8 — the algorithm ported verbatim, including the frame's overlay slot first |
+| `UIDocument.desktop()` / `desktopIfPresent()` / `suspendDesktop` / `resumeDesktop` / `enterHudMode` / `exitHudMode` / `screenOverlay()` / `presentation(…)` / `paint(presentation, w, h)` / `openWindow` / `openWindowInBackground` / `hasPinnedWindows` / `isHudMode` / `addDataProvider` / `shutdownAll` / `sessionState` | the host surface | the band model as document-level hosts (D16); ported at 6.6 but the **hooks** exist at 6.0 so 6.1–6.5 can be accepted without a desktop |
+| `UIDocument.setUiScale` and root centring | `UIWindow.getRootTransform`, `resolveRootAvailableSpace`, the centring offset (`RootPlacementTest`) | `BoxTree.setRootTransform` exists; the percentage-root / content-sized-root-centred rule is `UIDocument.layout`'s (D21) |
 | `exportparts` | 401 nested part rules, the fraction that stays kind A | the selector engine gains it beside `::part` (D3); indexed under the host's keys exactly as `::part` is |
-| `Node.paintChildren` override | 3 overriders (`TextField`, `WindowFrame`, `WindowThumbnail`) | **no counterpart on purpose** — each of the three is read in §4.4 and has a different answer |
+| `UINode.paintChildren` override | 3 overriders (`TextField`, `WindowFrame`, `WindowThumbnail`) | **no counterpart on purpose** — each of the three is read in §4.4 and has a different answer |
 
 ### 2.3 The test fixture twin
 
-`UiTestBase` gains a `Document`-backed sibling with the **same verbs**: build, layout, frame, move,
+`UiTestBase` gains a `UIDocument`-backed sibling with the **same verbs**: build, layout, frame, move,
 press, release, wheel, key, `at`, `allWithClass`, `renderedLines`, `countOf`, the clipboard and modifier
 stubs, animations-off. `ServiceFixtures` (5.5) is the seed. A test moves engines by changing its base
 class and its element types, and nothing else — which is the only shape under which 214 files can be
@@ -345,19 +345,141 @@ same through `document.input().consumeMouseEvent`.
 | Old | New-engine twin | What it fails on |
 |---|---|---|
 | `EngineBoundaryTest` | itself, **inverted per batch**: a ported class moves from the OLD list to the NEW list, and a NEW class naming any OLD class fails | a widget reaching back |
-| `WidgetContractCoverageTest` (walks `UIElement` subclasses) | walks `Node` subclasses too, then only them | a ported widget whose contract was dropped |
-| `ElementStateCoverageTest` (23 tags) | `NodeRegistry.names()` — **every** registered name answers the state question | a registered kind nobody classified |
-| `ElementRegistryTest` | `NodeRegistryTest` (bijective, no-arg factory, contract per name) | the `Button::new` trap the paper port found |
-| — | **`SheetPortTest`**: every `__x__` still referenced by any sheet is in the ledger as A, B or C with the widget that owns it; every tag a sheet names is a registered `Name`; no rule contains `::part(a)::part(b)` | the 401 and the 32 |
-| — | **`PortLedgerTest`**: a checked-in `port-ledger.txt` of `class → pending / ported / deleted`; a class extending `UIElement` listed as ported, or extending `Node` listed as pending, fails | "how far are we" as a query |
+| `WidgetContractCoverageTest` (walks `UIElement` subclasses) | walks `UINode` subclasses too, then only them | a ported widget whose contract was dropped |
+| `ElementStateCoverageTest` (23 tags) | `UINodeRegistry.names()` — **every** registered name answers the state question | a registered kind nobody classified |
+| `ElementRegistryTest` | `UINodeRegistryTest` (bijective, no-arg factory, contract per name) | the `Button::new` trap the paper port found |
+| — | **`SheetPortTest`**: every `__x__` still referenced by any sheet is in the ledger as A, B or C with the widget that owns it; every tag a sheet names is a registered `TagName`; no rule contains `::part(a)::part(b)` | the 401 and the 32 |
+| — | **`PortLedgerTest`**: a checked-in `port-ledger.txt` of `class → pending / ported / deleted`; a class extending `UIElement` listed as ported, or extending `UINode` listed as pending, fails | "how far are we" as a query |
 | `cgui-engine-parity` (one hard-coded tree) | takes a **spec** — a scene supplies a builder for each engine and a stylesheet; adding a widget to the PNG diff is ~15 lines | the visual net every batch runs |
 
 ### 2.5 The ledger
 
 A file, `port-ledger.txt`, checked in at 6.0 and read by `PortLedgerTest` and `SheetPortTest`: one row
-per class (303) and one per part name (497) with its kind and its owner. It is written **before**
+per class (303) — status, **destination package** (§2.6) — and one per part name (497) with its kind
+and its owner. It is written **before**
 6.1, in full, from Appendix A and the census — which is the point: the classification is done once,
 reviewed once, and every later batch executes it rather than re-deciding it.
+
+### 2.6 The package map — where each copy lands
+
+The strangler line forces this: the old `ui.elements.Button` runs the game until 6.9, so the new one
+cannot share its package. Every ported class is therefore a **copy into a new package**, and since
+the tree is being re-homed anyway it is re-homed properly — by *kind of thing* first and by *layer*
+second. `ui.elements` had 28 files at its root spanning a `Button` and a `MarkupView`; `desktop`,
+`workbench`, `editor` and `chrome` were flat at 24–38 files each.
+
+```
+com.crystalgui.ui                     THE ENGINE, unchanged: dom, box, service, event, input (+keymap), text, contract, projection
+  .box                                + AnchoredPlacement (geometry over boxes; every overlay and the taskbar use it)
+
+com.crystalgui.widget                 THE LIBRARY: general-purpose, knows nothing above it
+  .control       Button, Checkbox, CheckboxGroup, Switch, Slider, ProgressBar, TextField, SearchField, Dropdown, ColorSelector, SymbolIcon
+  .text          UIText (D15), MarkupView
+  .scroll        Scroller, ScrollerView
+  .layout        SplitView, TabView, Tab, PageStack
+  .overlay       Popover, Menu, MenuItem, Tooltip, Dialog, DialogManager, InputDialog, ContextMenu, MenuBuilder
+  .dnd           DragGhost, InsertionMarker
+  .collection    .list (ListView, strategies, ListRenderer) · .tree (TreeView, TreeSearch, sources, TreeRenderer, TreeRow) · .table (TableView, TableColumn, TableCellRenderer, SortOrder)
+  .form          ConfigControl, ValueControl, Configurator, ConfiguratorGroup, ConfiguratorPanel, SettingsConfigurator, descriptors
+                 .field (the thirteen controls) · .inspector (Inspector, InspectorForm, InspectorRegistry, InspectorSection)
+  .canvas        CanvasView, CanvasOverlayMove, WorldRect
+  .graph         GraphView, GraphNode, NodePort, NodeWireLayer, PortDefaultEditor, NodeCreationMenu, GraphSelection, GraphCommands, port types, field binder/widgets
+  .editor        TextEditor, EditorCommands, EditorFolding, EditorDiagnostics, EditorLanguageFeatures, DiagnosticActions, DiffDecorations
+                 .view (EditorViewPart, the ten parts, DecorationPool) · .suggest (CompletionPopup, CompletionSession, CompletionRanking, CompletionRecency, EditorSuggest)
+                 .doc (DocumentationPopup, HoverDocumentation) · .find (SearchReplaceBar, EditorFind)
+
+com.crystalgui.chrome                 THE SHELL'S OWN WIDGETS: may use widget; may not use desktop or workbench
+  .menu          MenuBarView, MainMenuCommands, ChromeCommands, Breadcrumbs
+  .palette       CommandPalette, QuickPick, QuickPickItem, QuickPickEntry, QuickPickSource
+  .status        StatusBarView, ProgressStatusItem, ProcessesPopover
+  .notification  NotificationsView, NotificationCard, NotificationBalloons
+  .problems      ProblemsPanel, ProblemNode, ProblemsCommands, ProblemsTreeSource
+  .preferences   Preferences, NavigatorView
+
+com.crystalgui.desktop                CRYSTALOS: may use widget and chrome
+  (root)         Desktop, DesktopCommands, DesktopPresentation, DesktopSession, ScreenOverlay, WindowRegistry
+  .window        WindowFrame, WindowState, WindowPolicy, WindowChrome, WindowIcon, WindowCommands, SystemMenu, WindowMove, WindowKeyboardMove, SnapZones
+  .motion        WindowAnimator, WindowAnimation, WindowGeometryAnimation, WindowMotion
+  .taskbar       Taskbar, TaskbarEntryMotion, TaskbarPreviews, TaskbarDesigner, WindowPreview, WindowThumbnail, WindowSnapshot
+  .switcher      WindowSwitcher
+
+com.crystalgui.workbench              THE PROJECT EDITOR: may use everything above
+  (root)         Workbench, WorkbenchRegions, WorkbenchSession, WorkbenchSettings, WorkbenchMenus, RegionHost, RegionDropOverlay, RegionDropZones, SplitFill
+  .dock          the 29, as they are
+  .toolwindow    ToolWindowFrame, ToolWindowManager, ToolWindowState, ToolWindowLayout, ToolWindowType, ViewContainer, ViewContainerRegistry, StripeView, StripeRail
+  .explorer      ProjectFileTree, FilesRenderer, ExplorerDragAndDrop, ExplorerEditing, ExplorerFind, ExplorerCommands, ExplorerClipboard, WorkspaceTreeSource, GoToFile, ProjectIndex, RecentFiles, QueryLocation
+  .document      OpenDocuments, FileDocument, TextFileDocument, DocumentType, DocumentViewState, HeaderContributor
+  .diff          DiffView, MergeView, ConflictDialog
+  .decoration    as it is
+
+com.crystalgui.editor                 the application root, as it is
+com.crystalgui.graph.shader           as it is; split into .panel / .preview / .property in its batch
+com.crystalgui.language.run.view      as it is
+```
+
+**The layering rule**: engine < widget < chrome < desktop < workbench < applications, and inside
+`widget`: `control`/`text`/`scroll` at the bottom, `overlay`/`layout`/`dnd` above them,
+`collection`/`form`/`canvas`/`graph`/`editor` above those. Nothing references upward. `ui.*` means
+the engine and nothing else, which is why the library sits beside it rather than under it.
+
+**Copied or moved.** A class that extends `UIElement`, or reaches the old engine's API, is **copied**
+by the codemod (§2.7) and the old file stays until 6.9. A class that is engine-neutral — the dock
+model, the tree sources, `DragScrub`, the descriptors, the commands once D12 has retyped their
+context — is **moved** in the IDE, whose Move refactor fixes both engines' imports at no cost.
+
+### 2.7 The codemod — the port is copied and transformed, never written
+
+The census is exact enough to script. `tools/port/codemod.py --batch 6.N` copies each of the
+batch's files to its destination package, applies the transformations below, and prints what is left
+as `file:line kind` — the reading list for that batch. It is written once at 6.0, tested on 6.1
+(the best-covered code in the repository), and run per batch by whoever is porting.
+
+| Transformation | Sites | Mechanical? |
+|---|---|---|
+| `extends UIElement` → `extends UINode`; `UIWindow` → `UIDocument` in signatures; imports | 87 classes | yes |
+| `getRuntimeCache().getX/getY/getWidth/getHeight()` → `box().x/y/width/height()` | 127 | yes |
+| `getAttachedWindow()` → `document()`; `.getInputHandler().requestFocus/requestPointerFocus/getFocusedElement/pointerPosition/onDidChangeFocus/blurIfFocused/setPointerCapture` → `.focus()…` / `.input()…` | 194 + 106 | yes |
+| `getDragController().startDrag(…)` → `Drag.start(…)`; `isDragging/isActivated/isDropAccepted/setGhost` → the `Drag` accessors | 30 | yes |
+| `addInternalChild(x)` whose `x` carries `addClass("__p__")` → `shadow().append(x)` + `x.set(Attribute.PART, "p")` for kind A, `append(x)` + `x.addClass("p")` for kind B — **driven by the ledger** | 210 | yes, per kind |
+| `markAsInternal()` and `acceptsPublicChildren()` overrides deleted | 65 + 64 | yes |
+| `"__x__"` constants → part names or plain class names per kind | 497 | yes |
+| `registerTicker(this)` + `implements UIFrameTicker` → `document().animation().every(this, this::tickFrame)` | 52 | yes |
+| `addToTopLayer/removeFromTopLayer/isInTopLayer` → `box().setHost(…)` | 23 | yes |
+| `pushCloseWatcher/popCloseWatcher/pushAutoPopover/popAutoPopover/lightDismiss/popoverShowSeq` → `document().dismiss()…` | 41 | yes |
+| `setScrollExempt(b)` → `set(Attribute.SCROLL_EXEMPT, b)` | 16 | yes |
+| `onWindowChanged(prev, cur)` → `connected()` / `disconnected()` with the body split on the null test | 12 | yes |
+| tests: base class → the twin, `new UIWindow(Ui.of(root))` → the fixture, the reads above | 164 files | yes |
+| sheets: `.__x__` → `host::part(x)` / `.x` per kind, `exportparts` where the ledger says a nested part is exported | 1,048 selectors | yes, per kind |
+| **`importantPipeline`** — a `Measurable`, a box override, an INLINE write or a class, per §4.5 | **117** | no |
+| **`screenToLocal` / `containsScreenPoint`** — the origin subtraction changes (§4.4) | **57** | no |
+| **`stopPropagation()`** — read for the pre-empt case; most stay | **80** | read |
+| **`insertInternalChildAt` / `removeInternalChild`** — dynamic restructure | **40** | no |
+| **the resize hooks** | **43** | no |
+| **`onLayoutChanged` bodies** | **23** | no |
+| **paint overrides** | **14** | no |
+| **`ctx.mirroring` / `WindowSnapshot`** | **11** | no |
+
+**`UINode` keeps every surviving name.** `setEnabled`, `setHitTest`, `setInert`, `setDisplayed`,
+`addClass`/`removeClass`/`hasClass`/`swapPrefixedClass`, `requestClose`, `scrollIntoView`,
+`setScrollTop`/`setScrollLeft`/`getScrollWidth`/`getScrollHeight`, `querySelector`/`find`/`require`,
+the sixteen event fields, `attachDefaultListener`, `keymap()`, `settings()`, `getData`,
+`isChecked`/`isBlank`/`isInvalid`, `consumesTextInput`, `setFocusPolicy`, `registerCommands`,
+`bindKeys`, `tickFrame` — each is the right API *and* a hundred sites the script never touches. The
+attribute is the storage; the method is the door.
+
+**The budget.** 95,316 lines in the matrix (plus `language`'s 3,400), 2,670 engine sites of which
+**2,227 are mechanical and 443 are hand-edited** — per batch, 38 to 87. The residual is edited with
+targeted replacements, never by rewriting a file, and never by re-reading a file the census has
+already located the line in. Written from scratch: 6.0's machinery and nothing else. The one
+honest exception is 6.5's D22, budgeted as XL for that reason and not for `TextEditor`'s length.
+
+### 2.8 `LayeringTest`
+
+A constant-pool scan beside `EngineBoundaryTest` and `RunShellIsEngineNeutralTest`: every class under
+`widget.control`/`.text`/`.scroll` names nothing in the packages above it; `widget.*` names nothing in
+`chrome`, `desktop` or `workbench`; `chrome` names no `desktop` or `workbench`; `desktop` names no
+`workbench`. Written at 6.0, green trivially, and what stops a `Button` learning about a
+`WindowFrame` again.
 
 ---
 
@@ -365,8 +487,8 @@ reviewed once, and every later batch executes it rather than re-deciding it.
 
 1. **The strangler line holds until 6.9.** `EngineBoundaryTest` runs on every commit and its two lists
    move per batch. A widget is either wholly on one engine or wholly on the other.
-2. **No adapter.** A `Node` is never hosted under a `UIElement` and a `UIElement` never under a
-   `Node`. The temptation arrives at the first composite whose leaves are ported and whose container is
+2. **No adapter.** A `UINode` is never hosted under a `UIElement` and a `UIElement` never under a
+   `UINode`. The temptation arrives at the first composite whose leaves are ported and whose container is
    not; the answer is that the unit of work is a closed tree (§5), not a widget.
 3. **The widget's public API survives the port.** Signals, `Property` bindings, accessors, `CONTRACT`
    constants, `DataKey`s, command ids, class-name constants for kinds B and C. Callers — the workbench,
@@ -384,6 +506,13 @@ reviewed once, and every later batch executes it rather than re-deciding it.
    `plan_m5.md`'s were.
 8. The memory rules: no worktrees, no inline FQNs, don't commit until asked, test the spine, never
    run the unfiltered suite.
+9. **Copied and transformed, never written.** Every ported file is the codemod's copy of the old one
+   (§2.7); the diff is the port. No ported file is written whole, and the only new code is 6.0's.
+10. **The census is the reading list.** The codemod prints the residual as `file:line kind`; those
+    sites are edited in place and nothing else in the file is read unless the site needs it. The
+    per-batch budget line in §5 is the number to hold each batch to.
+11. **`UINode` keeps the surviving names** (§2.7). A port that renames a method that still means the
+    same thing has made a hundred sites cost tokens for nothing.
 
 ---
 
@@ -398,40 +527,40 @@ each row says what it becomes, or names the gap and the decision (§4.6, §2).
 |---|---|---|---|
 | **Tree** | `addChild`, `addChildAt`, `addChildren`, `removeChild`, `removeSelf`, `clearAllChildren`, `hasChild`, `getSiblingIndex`, `setOnlyChild` | `append`, `insertAt`, `remove`, `removeSelf`, `removeAll`, `contains`, `indexOf`, `moveTo`; `setOnlyChild` added | `removeChild` **refusing an internal child** and `clearAllChildren` **skipping** them have no counterpart: a shadow child is not in `children()` at all. `MarkupView`'s note ("blocks are PUBLIC children because `clearAllChildren` skips internal ones") is exactly a kind-B case |
 | **Internal children** | `markAsInternal`, `addInternalChild`, `insertInternalChildAt`, `removeInternalChild`, `isInternalUI`, `describedChildren`, `acceptsPublicChildren`, `acceptsDescribedChildren` | `attachShadow()`, `shadowRoot().append/insertAt/remove`; light children ARE the described children; `NodeContract.acceptsDescribedChildren` | the recursion trap, the re-add trap and the selector-subject trap all go — three rows marked at 5.6 |
-| **Slots** | `Tab.content()`, `SplitView.first()/second()`, `ScrollerView` "your children are direct children" | `Slot`, `Slot.of(node)`, `assignedSlot()` | a composite that accepted public children keeps doing so through a default slot |
-| **Identity** | `setId`, `addClass`, `removeClass`, `hasClass`, `swapPrefixedClass`, `removeClassWithoutRematchingSubtree`, `tagName()` (exact-class lookup + lowercase fallback) | `setId`, `addClass`, `removeClass`, `toggleClass`, `hasClass`, `classes()`, `name()`, `tagName()` from the `Name` | **the fallback is gone** — §1.5 |
+| **Slots** | `Tab.content()`, `SplitView.first()/second()`, `ScrollerView` "your children are direct children" | `UISlot`, `UISlot.of(node)`, `assignedSlot()` | a composite that accepted public children keeps doing so through a default slot |
+| **Identity** | `setId`, `addClass`, `removeClass`, `hasClass`, `swapPrefixedClass`, `removeClassWithoutRematchingSubtree`, `tagName()` (exact-class lookup + lowercase fallback) | `setId`, `addClass`, `removeClass`, `toggleClass`, `hasClass`, `classes()`, `name()`, `tagName()` from the `TagName` | **the fallback is gone** — §1.5 |
 | **State flags** | `setEnabled`, `setPressed`, `setFocused(_, visible)`, `setHovered`, `isFocusWithin`, `isChecked`/`isBlank`/`isInvalid` (overridable), `consumesTextInput` | `set(Attribute.ENABLED)`, `setPressed`, `setFocused(_, visible)`, `setHovered`, `setFocusWithin`, `setFocusVisible`, the same three overridable getters, `consumesTextInput`, `claimsChord` | `isFocusWithin` is written by `Focus` now rather than derived |
 | **Focus** | `setFocusPolicy`, `focusable()`, `tabbable()`, `invalidateFocusableChain`, `requestPointerFocus` | `setFocusPolicy`/`focusPolicy()` (an attribute), `focus().focusable(node)`/`tabbable(node)`, `focus().requestPointerFocus` | `hasFocusableDescendant` cache has no counterpart; `Focus.order(scope)` walks the composed subtree — **measure on the gallery before assuming it is free** |
 | **Hit testing** | `setHitTest`, `isHitTest`, `containsScreenPoint`, `screenToLocal` | `set(Attribute.HIT_TEST)`, `box().hitTest(x, y)`, `box().worldToLocal()` | `screenToLocal` answered an ABSOLUTE layout coordinate (the row *"a drag callback's coordinates are ALREADY CONVERTED"*); `worldToLocal` answers the box's OWN space with origin at its top-left — **every one of the 57 sites changes meaning by the box's origin** (§4.4) |
 | **Inertness** | `setInert`, `isInertAttribute`, `isInert()` (attribute OR modal-blocked) | `set(Attribute.INERT)`, `focus().isInert(node)` | one predicate |
-| **Close** | `requestClose()` (close-watcher hook, returns *handled*) | `Node.requestClose()` via `Dismiss` (D7) | the row about `Networked.mayClose` colliding with this name stands — check the name |
+| **Close** | `requestClose()` (close-watcher hook, returns *handled*) | `UINode.requestClose()` via `Dismiss` (D7) | the row about `Networked.mayClose` colliding with this name stands — check the name |
 | **Transform** | `getTransform`, `setTransform`, `invalidatePoseCachesRecursively` | the cascaded `transform` property, or `box().setTransform` for a compositor override | `CanvasView` (zoom) and `WindowAnimation` are the two writers; both become box overrides driven by `Animation` |
 | **User sizing / `resize:`** | `isUserSizedWidth/Height`, `clearUserSizing`, `USER_SIZED_*_CLASS`, `RESIZER_CLASS`, `onResizeModeChanged`, `canMoveResizeOrigin`, `resizeContainingBlock`, `onPositionModeChanged`, `resizeOriginLeft/Top`, `applyResizeOrigin`, `onUserResize` | D6 | seven overriders (`Dialog`, `Popover`, `CanvasOverlayMove`, `QuickPick`, `WindowFrame`, `NodeCreationMenu`, `NodePort`) |
-| **Keymap / settings / commands** | `keymap()`, `keymapOrNull()`, `settings()`, `settingsOrNull()`, `settingsParent()`, `registerCommands`, `bindKeys` | same accessors on `Node`; hooks from `connected()` | D12 |
+| **Keymap / settings / commands** | `keymap()`, `keymapOrNull()`, `settings()`, `settingsOrNull()`, `settingsParent()`, `registerCommands`, `bindKeys` | same accessors on `UINode`; hooks from `connected()` | D12 |
 | **Top layer** | `isInTopLayer`, `addToTopLayer`, `removeFromTopLayer` | `box().setHost(document.topLayer())` / `setHost(null)` | insertion-order stacking in the top layer is the HOST's child order; `z-index` irrelevant there (per spec) — `Box.children()` sorts by z, so the top-layer host box **must ignore z** (a gap: `Box.setHost` needs a host that orders by insertion) |
-| **Scrolling** | `setScrollExempt`, `isScrollContainer`, `allowsUserScrolling`, `getScrollWidth/Height`, `getClientWidth/Height`, `getMaxScrollLeft/Top`, `setScrollLeft/Top/Scroll`, `setScrollImmediate`, `clampScroll`, `scrollIntoView`, `targetScrollLeft/Top` | `Node.scrollLeft/Top/setScrollOffsets`, `Box.setScroll`, `Box.scrollIntoView` + §2.2's extents and smooth scroll | `allowsUserScrolling` (wheel opts in only for a scroll VIEW — `ListView`'s note) is a `Node` predicate the wheel default consults |
+| **Scrolling** | `setScrollExempt`, `isScrollContainer`, `allowsUserScrolling`, `getScrollWidth/Height`, `getClientWidth/Height`, `getMaxScrollLeft/Top`, `setScrollLeft/Top/Scroll`, `setScrollImmediate`, `clampScroll`, `scrollIntoView`, `targetScrollLeft/Top` | `UINode.scrollLeft/Top/setScrollOffsets`, `Box.setScroll`, `Box.scrollIntoView` + §2.2's extents and smooth scroll | `allowsUserScrolling` (wheel opts in only for a scroll VIEW — `ListView`'s note) is a `UINode` predicate the wheel default consults |
 | **Querying** | `querySelector`, `querySelectorAll`, `getElementById`, `getElementsByClassName`, `find`, `require` | §2.2 | light tree only, as on the web |
 | **Events** | `events`, sixteen pre-bound groups, `attachDefaultListener` | `events`, the same groups (§2.2) | `stopPropagation` semantics differ — §4.4 |
 | **Style** | `style(…)`, `layout(…)`, `generalStyle(…)`, `moveInlineAsDefault`, `onStyleChanged`, `invalidateStateMatch`, `invalidateStyleMatch`, `shadowHost`, `partName`, `styleEngine`, `computedChanged`, `setHasFontRelativeStyles`, `invalidateFontRelativeStyles` | `getStyle()`, `computedStyle()`, `onStyleChanged`, `invalidateStyleMatch`, `shadowHost`, `partName`, `styleEngine`, `computedChanged`, `setHasFontRelativeStyles` | `style(…)`/`layout(…)` fluent writers at INLINE are legitimate author writes and stay; `moveInlineAsDefault` has no callers in the widget layer |
-| **Layout hooks** | `initScreen`, `clearLayoutCache`, `onLayoutChanged(boolean)`, `onLayoutChanged()`, `getTaffyLayout`, `getWindowX/Y`, `getLayoutX/Y`, `measureFunc`, `getTaffyTree`, `markTreeDirty` | `Measurable.measure(Constraints)`, a post-layout callback on `Node` (needed: 22 overriders, §4.4), `box().x()/y()/worldX()/worldY()`, `markTreeDirty` | the two coordinate chains collapse into `Box.localToWorld`; `getWindowX/Y` (3 files) and `localToWorld` (6) both become `worldX/Y` |
+| **Layout hooks** | `initScreen`, `clearLayoutCache`, `onLayoutChanged(boolean)`, `onLayoutChanged()`, `getTaffyLayout`, `getWindowX/Y`, `getLayoutX/Y`, `measureFunc`, `getTaffyTree`, `markTreeDirty` | `Measurable.measure(Constraints)`, a post-layout callback on `UINode` (needed: 22 overriders, §4.4), `box().x()/y()/worldX()/worldY()`, `markTreeDirty` | the two coordinate chains collapse into `Box.localToWorld`; `getWindowX/Y` (3 files) and `localToWorld` (6) both become `worldX/Y` |
 | **Painting** | `drawSubtree` (final), `paintSelf`, `paintOverlay`, `paintOutline`, `paintChildren` | `paintContent`, `paintDecoration`; the box model is `BoxPainter`'s | §4.4 for the seven overriders |
-| **Serialization** | `writeState`/`readState`, `writeStateTo`/`readStateFrom`, `describedChildrenFor`, `addDescribedChildFrom/At`, `moveDescribedChildTo`, `clearDescribedChildrenFor`, `getReportableEvents`, `addReportedEvent`, `getReportedEvents`, `getDomObserver`/`setDomObserver`, `notifyStateChanged`, `notifyInlineStyleChanged` | the contract (state), `NodeTreeSource` + `Document`'s observer (structure), `Attribute.REPORTS` | `moveDescribedChildTo` — the `move` op — is `Node.moveTo` |
-| **Window** | `getAttachedWindow`, `setAttachedWindow`, `onWindowChanged` | `document()`, `connected()`/`disconnected()` | the 12 `onWindowChanged`/`onAttached`/`onDetached` overriders become `connected`/`disconnected`; **the row *"an attach is not a moment to build things in"* is now structural** — `Document` queues lifecycle callbacks until the mutation ends |
+| **Serialization** | `writeState`/`readState`, `writeStateTo`/`readStateFrom`, `describedChildrenFor`, `addDescribedChildFrom/At`, `moveDescribedChildTo`, `clearDescribedChildrenFor`, `getReportableEvents`, `addReportedEvent`, `getReportedEvents`, `getDomObserver`/`setDomObserver`, `notifyStateChanged`, `notifyInlineStyleChanged` | the contract (state), `UINodeTreeSource` + `UIDocument`'s observer (structure), `Attribute.REPORTS` | `moveDescribedChildTo` — the `move` op — is `UINode.moveTo` |
+| **Window** | `getAttachedWindow`, `setAttachedWindow`, `onWindowChanged` | `document()`, `connected()`/`disconnected()` | the 12 `onWindowChanged`/`onAttached`/`onDetached` overriders become `connected`/`disconnected`; **the row *"an attach is not a moment to build things in"* is now structural** — `UIDocument` queues lifecycle callbacks until the mutation ends |
 | **`RuntimeCache`** | `sortedChildren`, `localToWorld`, `worldToLocal`, `depth`, `hasFocusableDescendant`, `getX/Y/Width/Height`, `resetPoseCache` | `Box` | the user's earlier question — the reasoning stands: a box is rebuilt from a one-pass layout, so there is no dirty flag to memoise against |
 
 ### 4.2 `UIWindow` — 67 members
 
 | Concern | Old | New |
 |---|---|---|
-| lifecycle | `init(w,h)`, `shutdown`, `shutdownAll`, `frameThread`, `updateWithoutPainting`, `paintFrame`, `paint(presentation, w, h)` | `Document.layout/update/frame/paint`, `markFrameThread`, `require`; `shutdownAll` and the per-document registry are a gap (§2.2) |
+| lifecycle | `init(w,h)`, `shutdown`, `shutdownAll`, `frameThread`, `updateWithoutPainting`, `paintFrame`, `paint(presentation, w, h)` | `UIDocument.layout/update/frame/paint`, `markFrameThread`, `require`; `shutdownAll` and the per-document registry are a gap (§2.2) |
 | registration | `registerElement`, `unregisterElement`, `getElements` | `connected`/`disconnected`, `allNodes()` |
 | layout | `isLayoutDirty`, `MAX_LAYOUT_PASSES`, the settle loop | one pass — `BoxTree.layoutPasses()` is the acceptance metric |
 | scale | `getRootTransform`, `setUiScale`, `DEFAULT_UI_SCALE = 2f`, root centring | `BoxTree.setRootTransform`; D21 |
 | motion | `registerTicker`, `tickAnimations`, `tickScrollAnimations`, `registerScrollAnimation` | `Animation.every`, `tick`; smooth scroll §2.2 |
-| queries | `querySelector*`, `getElementById`, `getElementsByClassName` (root included) | `Document.getElementById` exists; the rest §2.2 |
+| queries | `querySelector*`, `getElementById`, `getElementsByClassName` (root included) | `UIDocument.getElementById` exists; the rest §2.2 |
 | hit test | `getHoveredElement`, `overlayHitTest`, `modalBlockingAt` | `Input.hoverTarget`, `BoxTree.hitTest`, `Focus.blockingModal` |
 | modality | `getActiveModal`, `getActiveModal(scope)`, `modalScopeOf`, `isModalBlocked`, `pushModal`, `popModal` | `Focus.modals/scopeOf/isInert/pushModal/popModal` |
-| close watchers, popovers, key routing | `pushCloseWatcher`, `popCloseWatcher`, `getTopCloseWatcher`, `routeKeyToWindowSwitcher`, `routeKeyToKeyboardMove`, `getAutoPopovers`, `pushAutoPopover`, `popAutoPopover`, `lightDismiss` ×2, `popoverShowSeq`, `nextPopoverShowSeq` | `Dismiss` (D7); the two key routes are `Mode`s the desktop pushes |
+| close watchers, popovers, key routing | `pushCloseWatcher`, `popCloseWatcher`, `getTopCloseWatcher`, `routeKeyToWindowSwitcher`, `routeKeyToKeyboardMove`, `getAutoPopovers`, `pushAutoPopover`, `popAutoPopover`, `lightDismiss` ×2, `popoverShowSeq`, `nextPopoverShowSeq` | `Dismiss` (D7); the two key routes are `InputMode`s the desktop pushes |
 | overlays | `overlayHost`, `addOverlay`, `windowOverlayLayer` | D8 |
 | desktop and host | `desktop`, `desktopIfPresent`, `suspendDesktop`, `resumeDesktop`, `isDesktopSuspended`, `onDesktopSuspendedChanged`, `enterHudMode`, `exitHudMode`, `isHudMode`, `screenOverlay`, `hasPinnedWindows`, `presentation`, `openWindow`, `openWindowInBackground`, `getDataProviders`, `addDataProvider`, `removeDataProvider`, `sessionState` | D16; ported at 6.6 |
 
@@ -447,7 +576,7 @@ each row says what it becomes, or names the gap and the decision (§4.6, §2).
 | `AnchoredPlacement` — `Side`, `Rect`, `place`, `placeAtPoint`, `placeInRect`, `resolve` (flip on the main axis, clamp on the cross), `anchorRectInRoot` (from the TRANSFORM chain), `pointerToRoot` | ported; reads `box().localToWorld()`; writes INLINE `left`/`top` (D4) | *"only `AnchoredPlacement` writes `left`/`top` on an anchored popup"*; **left-aligns, never centres** — the taskbar preview centres itself |
 | `UITreeTraversal` — `pathToRoot`, `commonAncestor` (null, never throws), `first/lastFocusableIn`, `first/lastTabbableIn`, `next/previousTabbable`, `querySelector*` | `Focus` (traversal) + §2.2 (queries) | Tab wraps at both ends |
 | `keymap/` — `Keymap.bind/bindAll/unbind/load/clear/bindings/chordFor/acceleratorFor/acceleratorsFrom/conflicts`, `KeyBinding.on/allowWhileTyping/withArgs`, `KeyChord`, `KeyStroke` (wheel strokes, `hasNonShiftModifier`, `isFunctionKey`, `isBareModifier`), `KeymapResolver.resolve/pending/cancelPending/onPendingChanged` (chords, typing, release), `KeymapSheet.parse/load/applyTo` | unchanged except the two walks (D12); `Input.Chords` is the seam a host wires `KeymapResolver` into | `allowWhileTyping` and *"a menu MNEMONIC must not fire while a text field has focus"* |
-| `ElementRegistry` — 23 tags, bijective, factory per tag, unknown tag THROWS on decode | `NodeRegistry` — 55 names (§1.5), `register(Name, Supplier, NodeContract)`, `plain(name, acceptsChildren)` | `UiType` and `PortTypeRegistry` also register tags |
+| `ElementRegistry` — 23 tags, bijective, factory per tag, unknown tag THROWS on decode | `UINodeRegistry` — 55 names (§1.5), `register(TagName, Supplier, NodeContract)`, `plain(name, acceptsChildren)` | `UiType` and `PortTypeRegistry` also register tags |
 | `EventListenerGroup` — `attachListener(l, capture, bubble)` additive, `defaultEvents` fire in TARGET only if not default-prevented, `emitTarget` vs `emitTargetDom` | `emitTargetDom` becomes the only path at 6.9 | the old `emitTarget` is deleted with the old engine |
 | `UIFrameTicker` — one-way registration, `HashSet`-backed, return `false` to drop | `Animation.every(node, hook)` — owned, dropped on freeze/disconnect | D10 |
 | `UITransform` — ordered op list, `IDENTITY` (empty list — snaps against anything), `applyTo`, no `matrix()` | unchanged | the row *"`UITransform.IDENTITY` … SNAPS at the halfway point"* survives untouched |
@@ -549,24 +678,24 @@ lambdas in `InsertionMarker` ×10, `TextEditor` ×10, `RegionDropOverlay` ×6, `
 | **D4** | Persistent geometry (a window's `left`/`top`/size, a popup's placement, a resized panel) | **INLINE author style on the node**, exactly what a browser does with `element.style.left` — it is state, it is what the desktop record persists, and an author's `!important` can still pin it. The boundary test forbids IMPORTANT only. Transient motion is a `Box` override driven by `Animation` |
 | **D5** | Visibility toggled from Java | `Attribute.HIDDEN` + `[hidden] { display: none }` in `core.css` (HTML's `hidden`); `display` in a sheet stays for sheet-driven cases. Removes 74 IMPORTANT writes and the *"a closed `Dialog` is `display: none`, so every box in it measures 0"* row is unchanged |
 | **D6** | `resize:` | a **`Resize` mode over an edge band**: the box's border band is hit-tested by the mode, the affordance is drawn by `BoxPainter` from the `resize` value, no handle nodes exist. It is how every window manager resizes and it removes eight internal children per resizable element. Cost: per-handle CSS (`.__resizer-top-left__`) is gone — the eight handles' geometry becomes two UA lengths (`--resize-band`, `--resize-corner`). The alternative (handles in a UA-owned shadow root) collides with any widget that has a shadow root of its own |
-| **D7** | Where the close-watcher / light-dismiss / popover stack lives | `ui.service.Dismiss`, named for what it does and naming no widget: `pushCloseWatcher(node)`, `popCloseWatcher`, `topCloseWatcher(activeScope)`, `pushAutoPopover`, `lightDismiss(target, shownBefore)`, `showSeq()`; `Node.requestClose()` is the hook. `ModeStackTest`'s constant-pool assertion extends to it |
-| **D8** | Overlay hosting | `Document.overlayHost(near)` with the same algorithm: the nearest `WindowFrame`'s overlay slot first, then the nearest ancestor accepting children, then the document's own overlay layer (a kind-B node the document owns, zero-sized, absolute). `OverlayHostTest` is the acceptance and it already forbids `root.addChild` for overlays |
-| **D9** | Smooth scroll | `Node.scrollTo(left, top)` honours `scroll-behavior` via an `Animation` timeline with the exponential ease; `Box.setScroll` is immediate; `scrollIntoView` immediate; a scrollbar thumb drag calls the immediate one (the `Slider`/`SplitView` refusal to animate a drag) |
+| **D7** | Where the close-watcher / light-dismiss / popover stack lives | `ui.service.Dismiss`, named for what it does and naming no widget: `pushCloseWatcher(node)`, `popCloseWatcher`, `topCloseWatcher(activeScope)`, `pushAutoPopover`, `lightDismiss(target, shownBefore)`, `showSeq()`; `UINode.requestClose()` is the hook. `ModeStackTest`'s constant-pool assertion extends to it |
+| **D8** | Overlay hosting | `UIDocument.overlayHost(near)` with the same algorithm: the nearest `WindowFrame`'s overlay slot first, then the nearest ancestor accepting children, then the document's own overlay layer (a kind-B node the document owns, zero-sized, absolute). `OverlayHostTest` is the acceptance and it already forbids `root.addChild` for overlays |
+| **D9** | Smooth scroll | `UINode.scrollTo(left, top)` honours `scroll-behavior` via an `Animation` timeline with the exponential ease; `Box.setScroll` is immediate; `scrollIntoView` immediate; a scrollbar thumb drag calls the immediate one (the `Slider`/`SplitView` refusal to animate a drag) |
 | **D10** | Hooks after a thaw | the widget re-registers in `thawed()`; `Animation` does not remember. The freeze contract is *"a hidden thing must stop working"* and a hook that came back by itself is the hidden editor compiling again |
 | **D11** | The sessions and contracts | `ServerUiSession<N,T>` / `ClientUiSession<N,T>` generic over `TreeSource<N>` + `NodeMirror<N,T>`; `State<W,V>`, `Event<W,P>`, `WidgetContract<W>` lose the `UIElement` bound (nothing in a contract needs it — `WidgetContracts.of` is a class lookup); `RateGate` keys on `Object`. Generic rather than retyped because **both engines run during M6** and the game is on the old one |
-| **D12** | The context walks (`DataContext`, `Keymap`, `KeymapResolver`, `UndoScope`, `Settings`, `CommandContext.source`) | over the **composed** chain (`Styleable.inheritsFrom()`), starting from the retargeted focus — S2's finding that retargeting *"stops a `DataContext` walk starting inside a widget's internals"* is only true if the walk crosses the shadow boundary to the host. `DataProvider`, `UndoScope`, `SettingsScope` and the keymap holder become interfaces a `Node` may implement; the walkers take `Styleable` |
+| **D12** | The context walks (`DataContext`, `Keymap`, `KeymapResolver`, `UndoScope`, `Settings`, `CommandContext.source`) | over the **composed** chain (`Styleable.inheritsFrom()`), starting from the retargeted focus — S2's finding that retargeting *"stops a `DataContext` walk starting inside a widget's internals"* is only true if the walk crosses the shadow boundary to the host. `DataProvider`, `UndoScope`, `SettingsScope` and the keymap holder become interfaces a `UINode` may implement; the walkers take `Styleable` |
 | **D13** | The test fixture | one twin base class (§2.3); tests move by base class and element types, per batch |
 | **D14** | Reads before layout | `Box.NONE` answering zeros |
-| **D15** | `UIText` vs `TextNode` | **merge into `TextNode`** — ellipsis (`…` or `...` by font), `displayedText()`, `HighlightRegistry` + `::highlight` bands, `text-overflow`, `white-space`, `text-align`, `forceSelfSizeWidth`, `__syntax__` (kind C) — with `Measurable` answering min/max content honestly. The *"a `width: 0` basis on a `UIText` latches it as does-not-size-itself, permanently"* row and `DragGhost`'s rule 2 both describe the latch, and the latch is deleted: min-content is a question the engine asks, not a flag the first layout sets |
-| **D16** | Where the desktop lives | four document-owned kind-B layers under the document node, in band order — `content` (the application root), `windows`, `pinned`, `overlays` — each a registered `Name` so `desktop { }` still matches, zero-sized until used (the desktop's own rule), hosted by `Box.setHost` so the top layer is a host and not a special case. `Document.desktop()` builds the compositor into the `windows` layer on first use |
+| **D15** | `UIText` vs `TextNode` | **merge into `UIText`** — the old one is deleted in the same batch, so the merged class takes its name and its `text` tag — ellipsis (`…` or `...` by font), `displayedText()`, `HighlightRegistry` + `::highlight` bands, `text-overflow`, `white-space`, `text-align`, `forceSelfSizeWidth`, `__syntax__` (kind C) — with `Measurable` answering min/max content honestly. The *"a `width: 0` basis on a `UIText` latches it as does-not-size-itself, permanently"* row and `DragGhost`'s rule 2 both describe the latch, and the latch is deleted: min-content is a question the engine asks, not a flag the first layout sets |
+| **D16** | Where the desktop lives | four document-owned kind-B layers under the document node, in band order — `content` (the application root), `windows`, `pinned`, `overlays` — each a registered `TagName` so `desktop { }` still matches, zero-sized until used (the desktop's own rule), hosted by `Box.setHost` so the top layer is a host and not a special case. `UIDocument.desktop()` builds the compositor into the `windows` layer on first use |
 | **D17** | Thumbnails and snapshots | live: `BoxTree.mirror`; frozen: `WindowSnapshot` stays — a frozen subtree has no boxes |
 | **D18** | `Disposer` | keep the API, key it on nodes: `Lifecycle.destroy(node)` runs `Disposer.dispose` over the composed subtree; non-node disposables (documents, analyses, GL snapshots) register against their owning node. The master plan's *"`Disposer` as a second ownership tree"* is deleted in the sense that the tree is the node tree |
 | **D19** | Per-instance reported events | `Attribute.REPORTS` |
 | **D20** | The S2 spike | deleted at 6.1 with `Button`, scene and all |
-| **D21** | Root sizing and centring | `Document.layout` keeps `UIWindow`'s rule (a percentage root gets definite space; a content-sized root is centred) — `RootPlacementTest` covers it and the parity scene compared relative-to-root because of it |
+| **D21** | Root sizing and centring | `UIDocument.layout` keeps `UIWindow`'s rule (a percentage root gets definite space; a content-sized root is centred) — `RootPlacementTest` covers it and the parity scene compared relative-to-root because of it |
 | **D22** | Virtualised rows (`ListView`, `TableView`, `TextEditor`, `TreeView`) | rows are positioned by **`box().setTransform(translate)`**, not by insets — a compositor-style placement that writes no style and re-runs no layout per scroll frame. The old engine placed them at IMPORTANT `top` and re-laid out; the one-pass metric would otherwise count a layout per scrolled frame |
-| **D23** | Where `Networked` panels' `extends UIElement` goes | `extends Node`; `UiType<P extends Node & Networked<M>>`; the `mayClose`/`requestClose` name collision row is re-checked against `Node`'s surface |
-| **D24** | The 32 unregistered tags | every one registers a `Name` in a static initializer beside its class, and `SheetPortTest` refuses a sheet tag no name answers |
+| **D23** | Where `Networked` panels' `extends UIElement` goes | `extends UINode`; `UiType<P extends UINode & Networked<M>>`; the `mayClose`/`requestClose` name collision row is re-checked against `UINode`'s surface |
+| **D24** | The 32 unregistered tags | every one registers a `TagName` in a static initializer beside its class, and `SheetPortTest` refuses a sheet tag no name answers |
 
 ---
 
@@ -581,13 +710,16 @@ ports, what accepts it, which invariant rows it owns, and the hazards specific t
 clock, the pre-bound groups, the query API, scroll extents and smooth scroll, `HIDDEN`, `Box.NONE`,
 the helpers, the hooks from `connected()`, `Attribute.REPORTS`, `overlayHost`, the document-level host
 hooks for D16, `exportparts`, the fixture twin, the six governance twins, the generalised parity
-scene, and **the ledger — written in full**. Plus `NodeRegistry` registrations for the 55 names,
+scene, and **the ledger — written in full**. Plus `UINodeRegistry` registrations for the 55 names,
 each beside its (still old-engine) class so the names exist before the classes move.
 
 **Touches the old engine:** no. **Acceptance:** the ledger complete with every one of 303 classes and
 497 parts classified; `SheetPortTest` and `PortLedgerTest` green against a ledger in which everything
 is *pending*; the M5 acceptance run unchanged; `ModeStackTest`'s constant-pool assertion covering
 `Dismiss`. **Proves:** a widget can be ported without inventing anything.
+
+**Budget.** The one batch written from scratch: the services and helpers in §2, the codemod, the
+fixture twin, the governance twins, the ledger.
 
 **Hazards.** The ledger is the whole risk: a part misclassified as A that is really B costs a
 rewrite of every rule under it when the mistake is found. The census's 401 and 99 are the cross-check
@@ -596,7 +728,7 @@ rewrite of every rule under it when the mistake is found. The census's 401 and 9
 ### 6.1 — Leaf widgets · **M** · after: 6.0
 
 **Ports.** `Button` (the paper port made real; `ShadowButton` and `cgui-shadow-parts` deleted),
-`Checkbox` + `CheckboxGroup`, `Switch`, `Slider`, `ProgressBar`, **`UIText` → `TextNode`** (D15),
+`Checkbox` + `CheckboxGroup`, `Switch`, `Slider`, `ProgressBar`, **`TextNode` → `UIText`** (D15),
 `TextField`, `Scroller`, `ScrollerView`, `Tooltip`, `SymbolIcon`, `DragGhost`, `InsertionMarker`,
 `SearchField`, `WindowIcon`. Sheets: `widgets.css`, `core.css`, the leaf half of `overlays.css` and
 `search.css`; `ore.css`'s 101 part references.
@@ -611,13 +743,21 @@ rewrite of every rule under it when the mistake is found. The census's 401 and 9
 `Inert`, `PointerCapture`, `StateInvalidation`, `KeyConsumptionReported`, `CompositeTabStop`);
 `WidgetContractCoverageTest` walking both hierarchies.
 
+**Destination.** `widget.control` (Button, Checkbox, CheckboxGroup, Switch, Slider, ProgressBar,
+TextField, SearchField, SymbolIcon), `widget.text` (UIText), `widget.scroll` (Scroller, ScrollerView),
+`widget.overlay` (Tooltip), `widget.dnd` (DragGhost, InsertionMarker), `desktop.window` (WindowIcon).
+
+**Budget.** 17 files / 6,495 lines copied; 301 mechanical sites; **60 hand sites** (imp 30 · conv 9 ·
+stopp 6 · idyn 8 · layout 3 · paint 4). Also the codemod's own test: one file per transformation is
+diffed by eye before the rest of the batch runs.
+
 **Rows it owns.** `UIText`'s whole section; *"`text-overflow` does not inherit"*; the ellipsis
 fallback; *"`font-size` does not inherit"* and the two `em` rows (unchanged — cascade facts); *"a
 `TextField` must refuse ALT chords"* (becomes `claimsChord`); *"a `Button` activates on the LEFT
 button only"*; *"restore focus on the mouse-DOWN"*; *"a paint method may skip the DRAW, never the
 METHOD"* (the scissor is the painter's now — mark); *"a flex item with `flex-shrink: 1` contributes
 ZERO … a `width: 0` basis latches"* (mark — D15); *"`getScrollWidth()`/`getScrollHeight()` measure
-direct children only"* (re-state for `Node.scrollExtent`); `Scroller`'s percentage thumb;
+direct children only"* (re-state for `UINode.scrollExtent`); `Scroller`'s percentage thumb;
 `ScrollerView`'s bars as scroll-exempt children.
 
 **Hazards.** `TextField.paintChildren` is the first paint override with no counterpart — the scissor
@@ -642,6 +782,13 @@ gallery's dialog, menus, config and inspector pages as parity specs; `Dialog` 21
 `ConfiguratorPanelLifetime`, `ColorSelector*`, `MarkupView`, `ModalDialog`, `DesktopModality`'s
 non-desktop half, `PromotedPopoverHit`, `PickerInPromotedDialog`, `TopLayer*`, `AnchoredPlacement`,
 `Resize`, `NumberControlScrub`, `ScrubUndo`, `StatusBarView`, `NotificationsView`, `ProgressChrome`.
+
+**Destination.** `widget.layout`, `widget.overlay`, `widget.control` (Dropdown, ColorSelector),
+`widget.text` (MarkupView), `widget.form` + `.field` + `.inspector`, `chrome.menu` (Breadcrumbs),
+`chrome.status` (StatusBarView, ProgressStatusItem), `chrome.notification`.
+
+**Budget.** 47 files / 11,798 lines; 402 mechanical; **68 hand sites** (imp 13 · conv 12 · stopp 17 ·
+idyn 13 · resize 8 · layout 4 · paint 1).
 
 **Rows it owns.** The popover and modality rows: *"the popover stack and the close-watcher stack are
 separate"*; *"light dismiss runs after the mouse-down dispatch, and spares the invoker"*; *"light
@@ -674,6 +821,13 @@ retyped only), `TableView` + `TableColumn`/`TableCellRenderer`, `NavigatorView`,
 `CommandPalette`, `QuickPickQueryRetention`, `QuickPickResize`, `MenuBarView`, `ProblemsPanel`,
 `ProblemsMenu`, `ProblemBandPrimary`, `Preferences`, `PreferencesKey`, `AppearanceSettings`,
 `ContextMenu`, `ElementSettings`, `Keymap`, `ShippedKeymapDefaults`.
+
+**Destination.** `widget.collection.list/.tree/.table`, `chrome.palette`, `chrome.menu` (MenuBarView,
+MainMenuCommands, ChromeCommands), `chrome.problems`, `chrome.preferences`, `chrome.status`
+(ProcessesPopover). The tree sources, strategies and renderers are **moved**, not copied.
+
+**Budget.** 32 files / 9,061 lines; 209 mechanical; **46 hand sites** (imp 16 · stopp 19 · idyn 3 ·
+resize 4 · layout 4).
 
 **Rows it owns.** The whole list/tree/search cluster: *"a list restoring focus to a row must never
 take it from a CONTROL INSIDE one"*; *"a blur raised by ROW RECYCLING is not a user gesture"*; *"a
@@ -711,6 +865,13 @@ mostly kind C.
 `NodePortInlineEditor`, `CanvasView`, `CanvasOverlay`, `CanvasResize`, `ShaderGraphEditor`,
 `ShaderGraphCommands`, `ShaderGraphBridge`, `MainPreviewPanel`, `SemanticOverlay`.
 
+**Destination.** `widget.canvas`, `widget.graph`, `graph.shader.panel/.preview/.property`. The graph
+model (`GraphDocument`, codecs, node types — 18 files, 2,577 lines) is **moved**.
+
+**Budget.** 53 files / 15,532 lines of which ~13,000 port; 358 mechanical; **87 hand sites** (imp 13 ·
+conv 14 · stopp 23 · idyn 11 · resize 15 · layout 5 · paint 6) — the highest of any batch, because the
+shader graph's panels resize, anchor and drag.
+
 **Rows it owns.** The canvas/graph rows: *"the canvas culls with `opacity: 0`, not `display:
 none`"* (box opacity, D4/§4.5); *"the plane's `transform-origin` is pinned to `0 0`"*; *"a pan drag's
 source is the viewport"*; *"a positive `Scroll` notch means the wheel rolled down"*; *"a drag ends
@@ -744,6 +905,11 @@ reads, 10 IMPORTANT writes, 8 `setHitTest`, 7 `HighlightRegistry` uses, the one 
 `DiagnosticTracking`, `SyntaxColours`, `UnnecessaryTag`, `MirroredGutter`, `HoverActionBand`,
 `SemanticOverGrammar`); **`EditorFrameCostTest` must not regress** — the 151ms open-frame targets in
 memory are the standing goal.
+
+**Destination.** `widget.editor` + `.view` + `.suggest` + `.doc` + `.find`.
+
+**Budget.** 34 files / 15,427 lines; 341 mechanical; **64 hand sites** (imp 22 · conv 6 · stopp 19 ·
+idyn 1 · resize 12 · layout 2 · paint 2) — plus D22, which is the batch's real cost.
 
 **Rows it owns.** Every `TextEditor` row: *"the ERROR STRIPE is the one part that is honestly
 O(document)"*; *"a NaN poisons a whole layout silently"*; *"semantic tokens REPLACE grammar
@@ -779,13 +945,19 @@ retention with the dirty exemption), `WindowState`, `WindowPolicy`, `Taskbar`, `
 `WindowSwitcher`, `WindowAnimator` + `WindowAnimation` + `WindowGeometryAnimation` + `WindowMotion`,
 `WindowMove`, `WindowKeyboardMove`, `SnapZones`, `SystemMenu`, `WindowChrome`, `WindowCommands`,
 `DesktopCommands`, `DesktopPresentation`, `DesktopSession`, `ScreenOverlay`; and `UIWindow`'s host
-surface onto `Document` (§4.2's last row). Sheet: `desktop.css` (108 rules, 74 parts).
+surface onto `UIDocument` (§4.2's last row). Sheet: `desktop.css` (108 rules, 74 parts).
 
 **Accepts.** `cgui-desktop` (**needs the harness pointer reconciled** — it is not at `b5a2219`),
 `cgui-snapshot-probe`; the 20 desktop tests plus `DesktopActivation`, `DesktopLifecycle`,
 `DesktopMaximise`, `DesktopModality`, `DesktopTaskbar`, `DesktopWindow`, `WindowAnimation`,
 `WindowCaptionChrome`, `ToolWindowFloat`, `ToolWindowIsNotACitizen`, `ToolWindowPlacement`
 (`WindowFrame` 352, `Desktop` 246, `WindowState` 192).
+
+**Destination.** `desktop`, `desktop.window`, `desktop.motion`, `desktop.taskbar`, `desktop.switcher`.
+
+**Budget.** 27 files / 10,498 lines; 295 mechanical; **80 hand sites** (imp 17 · conv 7 · stopp 7 ·
+idyn 2 · resize 21 · layout 2 · paint 12 · mirror 12) — every paint and mirror site in the port is
+here or in 6.4.
 
 **Rows it owns.** The ~65 compositor rows. Structural ones that change meaning: **hide is freeze**
 (*"HIDE IS DETACH"* in every row that says it — `WindowState.HIDDEN`'s javadoc is rewritten:
@@ -857,6 +1029,14 @@ rules, 162 parts — the largest), `runpanel`'s rules wherever they live.
 `Viewer`), `CrystalEditorPanels`, `DiffView`, `MergeView`, `GoToFile`, `ProjectIndex`, `ExternalChange`,
 `UndoWiring`, `FrameThreadOwnership`, `StyleSettlesWithinTheFrame`, the `language/` run-view tests.
 
+**Destination.** `workbench` + `.dock` + `.toolwindow` + `.explorer` + `.document` + `.diff` +
+`.decoration`; `editor` and `example.machine` and `language.run.view` as they are. The dock model
+(25 files) and the sessions/settings/tree-source classes are **moved**.
+
+**Budget.** 83 files / 23,038 lines of which ~11,000 port; 313 mechanical; **38 hand sites** (imp 13 ·
+conv 12 · idyn 7 · layout 5 · stopp 1) — the largest batch by lines and the smallest by hand work,
+because the workbench is mostly logic over widgets it does not draw.
+
 **Rows it owns.** The ~45 workbench/dock rows: *"the HOST is the truth about which region half holds
 a panel"*; *"a tool window's MODE lives on its placement record"*; *"the tear-out zone is the
 workbench's MIDDLE"*; *"content with its own top bar goes in a window's CAPTION"* (`WindowChrome` as a
@@ -864,13 +1044,13 @@ slot move — D-§4.4); *"a drop must activate and focus what it received, in `p
 never completes a click, so the thing being dragged is never SELECTED"*; *"the thing being dragged
 leaves the list … `InsertionMarker.withdraw`/`restore`"*; *"a band derived from a hideable element
 vanishes with it"*; *"going into a FRAME is leaving the region"*; *"a windowed thing asked for before
-the tree HAS a window fails silently"* (`Document` exists from construction — re-read);
+the tree HAS a window fails silently"* (`UIDocument` exists from construction — re-read);
 *"a rebind nothing RE-ASKS FOR"*; *"a client-side memo of what the SERVER was told"*; *"a reconnect
 repairs the PROTOCOL immediately and the VIEW on the frame the view comes back"* (freeze/thaw);
 *"a focusable CONTAINER is a wall"* (marked — `delegatesFocus`); *"a window is activated a frame
 BEFORE content that builds on a deferred rebuild exists"*; *"adding a child from inside
 `onWindowChanged` … inserts a Taffy node into a parent whose children are still being registered"*
-(structural now — `Document` queues); *"`registerCommands` runs from the INSTANCE INITIALISER"*
+(structural now — `UIDocument` queues); *"`registerCommands` runs from the INSTANCE INITIALISER"*
 (gone — §2.2); *"a bound method reference on a MUTABLE field captures the value"*; *"a torn-out editor
 window is in NEITHER record"*; *"a window that is not a descendant of anything cannot be attributed
 by WALKING"*; *"a tool window's frame is built per show and DESTROYED per hide"*; *"ONE FACT, ONE
@@ -888,33 +1068,39 @@ module and its tests run under `:language:test` with natives — skip cleanly th
 ### 6.8 — Networking on the new engine · **L** · after: 6.7
 
 **Ports.** `ServerUiSession<N,T>`, `ClientUiSession<N,T>`, `ClientUiSessions`, `UiWindowMux` over
-`TreeSource<N>` + `NodeMirror<N,T>` (D11); `DomNodeMirror` as the only mirror; `ElementNodeMirror`,
+`TreeSource<N>` + `NodeMirror<N,T>` (D11); `UINodeMirror` as the only mirror; `ElementNodeMirror`,
 `ElementTreeSource` and `UIDescriptionCodec` retired; `net/window/` retyped (D23); `ScopedSheets`'s
 selector rewrite replaced by native `@scope` (M4's own note); `SheetSupply` unchanged;
 `Attribute.REPORTS` on the wire; the contracts' bounds loosened; `ui/projection` retyped;
 `CgUiWindowMount` retyped; `ViewCommands` retyped. D4 (the master plan's row) applied with its
 governance test.
 
-**Accepts.** `cgui-workspace`; the seam suite unchanged on `NodeTreeSource`;
+**Accepts.** `cgui-workspace`; the seam suite unchanged on `UINodeTreeSource`;
 `MirrorIsEngineAgnosticTest`; every `net/` and `net/window/` test; `WidgetContractRoundTripTest`;
 `ScopedSheetParseTest` (now asserting `@scope`); the two-viewer fixtures; `serverSmoke`.
+
+**Destination.** `net.window` as it is; the sessions in `net` as they are.
+
+**Budget.** 15 files / 3,467 lines; 8 mechanical; **0 hand sites in the matrix** — the work is the
+generic retype of two files (`ServerUiSession` 1,457 lines, `ClientUiSession` 903), which is a
+reading of thirty `UIElement` references rather than a codemod.
 
 **Rows it owns.** The networking rows are untouched in substance — they are about the mirror, which
 M2 made engine-agnostic for exactly this day. Three change spelling: *"a SCOPING PREFIX is a
 descendant combinator"* (native `@scope` has "this element or below" — the row's whole problem
 disappears, mark it); *"a COMMENT between two rules is not the next rule's selector"* (the rewrite
 that mis-parsed it is deleted); *"a NETWORKED ELEMENT'S IDENTITY IS NO LONGER ITS POSITION"*
-(unchanged — `NodeTreeSource` allocates the same way).
+(unchanged — `UINodeTreeSource` allocates the same way).
 
-**Hazards.** The description format changes from `UIDescriptionCodec`'s to `DomNodeMirror`'s;
+**Hazards.** The description format changes from `UIDescriptionCodec`'s to `UINodeMirror`'s;
 `ContentHash` keys change; no mixed-engine wire exists (one jar) so nothing has to interoperate, but
 every recorded fixture in `net/` tests that embeds a description is regenerated. `Networked`'s
-`mayClose` vs `Node.requestClose` — D23.
+`mayClose` vs `UINode.requestClose` — D23.
 
 ### 6.9 — Cutover and deletion · **M** · after: 6.8
 
 **Contents.** The harness defaults to `--engine=new`; `CgUiScreen`, `CgUiHud`, `CgUiInput`,
-`CgUiOverlayInput`, `Mc1710Workspace` and the probes on `Document` (the F6 flag row, the pause row
+`CgUiOverlayInput`, `Mc1710Workspace` and the probes on `UIDocument` (the F6 flag row, the pause row
 and the two-process rows are the in-game acceptance); `serverSmoke`. Then the deletion, in the order
 the master plan's ledger names: the old `ui/` core (`UIElement`, `UIWindow`, `TopLayer`, `Ui`,
 `UIResizer`, `AnchoredPlacement`'s old half, `UIInputHandler`, `UIDragController`,
@@ -973,7 +1159,7 @@ named as a fix in a batch's row list. The `taffy/` fastutil replacement. Anythin
 | `__part__` names in sheets | 497 | 0 (kind A → `::part`, B and C → plain classes) |
 | `importantPipeline` sites in the widget layer | 117 | 0 |
 | `getRuntimeCache()` sites | 185 | 0 |
-| Tags a sheet names without a registered `Name` | 32 | 0 |
+| Tags a sheet names without a registered `TagName` | 32 | 0 |
 | Selectors of the form `a::part(x)::part(y)` | — | 0, asserted |
 | Test files on the old fixture | 164 | 0 |
 | Scenes green on `--engine=new` | 1 (parity) | all, including `cgui-desktop` |
@@ -981,6 +1167,9 @@ named as a fix in a batch's row list. The `taffy/` fastutil replacement. Anythin
 | Invariant rows marked or describing nothing | 12 | pruned to 0 (the count of remaining rows is reported) |
 | `computeLayout` per scrolled frame in the editor | 1 + (a re-place per scroll) | 0 re-places (D22) |
 | The game | old engine | new engine, `serverSmoke` green |
+| Ported files written from scratch | — | **0** — every one is the codemod's copy; 6.0's machinery is the only new code |
+| Hand-edited sites | — | ≈443 (§2.7), held per batch to the budget line in §5 |
+| Upward references across the layering (§2.6) | untested | 0, asserted by `LayeringTest` |
 
 ---
 
@@ -991,7 +1180,7 @@ named as a fix in a batch's row list. The `taffy/` fastutil replacement. Anythin
    expensive at 6.7 — which is why the ledger is complete before 6.1.
 2. **`Focus.order(scope)` over the composed subtree is too slow on the gallery.** The old engine
    memoised `hasFocusableDescendant`; the new one walks. Measured at 6.1 on the gallery's node count;
-   the answer is a per-scope cache invalidated by structure changes, which `Document` already reports.
+   the answer is a per-scope cache invalidated by structure changes, which `UIDocument` already reports.
 3. **The top-layer host box orders by z.** `Box.children()` sorts by z-index; the top layer stacks by
    insertion. Found by `TopLayerTest` at 6.1 (`Tooltip`). The fix is a host flag, at 6.0.
 4. **D22 changes editor row placement and something reads a row's `top`.** `EditorViewTest` and
@@ -1012,8 +1201,12 @@ named as a fix in a batch's row list. The `taffy/` fastutil replacement. Anythin
    have pinned.
 9. **The session retype leaks the old engine back in.** `ServerUiSession` at 1,457 lines has thirty
    `UIElement` references; a generic `N` that accidentally requires `getChildren()` from `N` is a
-   `UIElement` bound by another name. `MirrorIsEngineAgnosticTest`'s twelve-line `Node` is the
+   `UIElement` bound by another name. `MirrorIsEngineAgnosticTest`'s twelve-line `UINode` is the
    counter-fixture — the sessions must compile against it.
+10. **A codemod that is wrong once is wrong two hundred times.** Found on the first batch, which
+    is why 6.1 is the best-covered code in the repository and why one file per transformation is
+    diffed by eye before the rest runs. The structural mistakes — a copy reaching the old engine,
+    an upward reference — are caught by `EngineBoundaryTest` and `LayeringTest` on the same commit.
 
 ---
 
