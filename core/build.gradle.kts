@@ -176,6 +176,9 @@ val headlessTest: SourceSet by sourceSets.creating {
 
 dependencies {
     "headlessTestImplementation"("junit:junit:4.13.2")
+    // For EngineBoundaryTest's bytecode scan of the strangler line (plan_m5.md §2), nothing else.
+    // Test-only: the mod jar's ASM is language/'s, relocated, and this must not become a second copy.
+    "headlessTestImplementation"("org.ow2.asm:asm:${rootProject.properties["asmVersion"]}")
     "headlessTestImplementation"("com.crystalgraphics:platform:1.0.0")
     "headlessTestImplementation"("org.apache.logging.log4j:log4j-core:2.26.1")
     "headlessTestImplementation"("com.google.code.gson:gson:2.11.0")
