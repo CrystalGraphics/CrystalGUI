@@ -29,7 +29,7 @@ the audit's numbers (§1 there: ~26,700 lines replaced, of which the engine's ow
 | 5.1 | The node tree | L | 5.0 | The seam suite passes on a tree that has never heard of `UIElement` | **shipped 2026-08-30** — see §4.1 notes |
 | 5.2 | The style pass, re-hosted and scoped | M | 5.1 | The cascade is host-agnostic; scopes and `:root` inheritance work; the engine writes nothing into it | **shipped 2026-08-30** — see §4.2 notes |
 | 5.3 | The box tree and one-pass layout | L | 5.2 | Layout of the gallery's trees runs to completion in **one** pass; hit-testing is correct before any paint | **shipped 2026-08-30** — see §4.3 notes |
-| 5.4 | Paint and hit-test through boxes, in the harness | M | 5.3 | A fixed tree renders pixel-identically on both engines; the harness runs either | planned |
+| 5.4 | Paint and hit-test through boxes, in the harness | M | 5.3 | A fixed tree renders pixel-identically on both engines; the harness runs either | **shipped 2026-08-30** — see §4.4 notes |
 | 5.5 | The services: input, focus, motion, lifecycle | L | 5.3 | The 38 focus rows and the 20 hit-test rows are tests, and pass; a frozen window costs nothing | planned |
 | 5.6 | Acceptance, the porting guide, the M6 handoff | S | 5.4, 5.5 | Every M5 acceptance criterion in one run; M6's first step is written down | planned |
 
@@ -383,6 +383,29 @@ switch honoured by every UI scene (an old-engine scene on `--engine=new` says so
 than drawing the old tree); the scissor-balance assertion holding across the new paint pass.
 **Proves:** the same picture from a tree that never wrote a matrix during paint, and a harness that
 can run either engine — the row's stated condition.
+
+#### 5.4 — what shipped, and where the plan was wrong
+
+Shipped: `BoxPainter` — the pass over the box tree (background/rounded wrap/mask/overlay/outline
+ported against `ComputedStyle`, layer-FBO opacity and mask through the same paint context, a square
+clip as a scissor in box-local space), `Node.paintContent`/`paintDecoration` (the skin hooks; the
+box model is the painter's), `TextNode.paintContent` through `CgTextRenderer` (5.3's measurable is
+the first thing on screen), `BoxTree.paint(ctx)`/`Document.paint(ctx)`, the harness's
+`cgui-engine-parity` scene (one spec + one stylesheet built on BOTH engines, alternating every 2s,
+PNGs on frames 4/5), and `EngineParityTest` comparing the PNGs within tolerance — skipped with a
+message when no GL run has written them, gating on the ENVIRONMENT and never the answer. Notes:
+
+- **Each box paints with the pose set to `base × localToWorld`** — the matrix layout composed, so
+  the picture and the hit test read one definition of where a box is, and `reconcileWorldMatrix`
+  has no counterpart. A mirror paints exactly like any hosted box; `ctx.mirrored` is unused here.
+- **The harness's `crystalgui` branch is entangled with core's `native-content-slots` branch**
+  (`CgUiSlotScene`/`PlatformServiceHarness` import `ui.elements.slot`, which master's core does not
+  have), so `:gl-debug-harness:compileJava` does not run against this tree. The parity scene was
+  compiled in isolation with `javac` against core's classes to prove it is correct; running the
+  scene and `EngineParityTest`'s comparison wait for the submodule reconciliation.
+- **Promotion and a thumbnail are not in the parity scene** — the old engine's top-layer and
+  `mirrored` paths would need scene-side plumbing of their own; hosting and mirrors are covered by
+  `HostTest`'s hit-testing, and the visual half joins the scene at 5.6.
 
 ### 5.5 — The services: input, focus, motion, lifecycle · L · after: 5.3
 

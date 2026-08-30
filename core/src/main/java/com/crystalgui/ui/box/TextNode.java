@@ -2,6 +2,8 @@ package com.crystalgui.ui.box;
 
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.api.text.CgTextLayout;
+import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.Node;
@@ -69,6 +71,44 @@ public class TextNode extends Node implements Measurable {
         return Collections.unmodifiableList(measuredAt);
     }
 
+    /**
+     * 5.3's measurable is also the first thing on screen (5.4): the same retained paragraph the
+     * measure shaped, laid out at the content width layout settled on, drawn through the backend's
+     * text renderer with the pose the painter set. {@code color} is inherited, so a theme's text
+     * colour reaches a run with no rule naming it.
+     */
+    @Override
+    public void paintContent(CgUiPaintContext ctx, Box box) {
+        if (text.isEmpty()) return;
+        CgFontFamily family = resolveFamily();
+        ensureShaped(family);
+        float contentX = box.border().left + box.padding().left;
+        float contentY = box.border().top + box.padding().top;
+        float contentWidth = Math.max(0f,
+                box.width() - contentX - box.border().right - box.padding().right);
+        CgTextLayout laid = paragraph.layout(contentWidth, 0f);
+        Integer color = computedStyle().get(StylePropertyRegistry.COLOR);
+        ctx.text().draw().layout(laid).family(family)
+                .at(contentX, contentY)
+                .color(color == null ? 0xFFFFFFFF : color)
+                .pose(ctx.getPoseStack())
+                .submit();
+    }
+
+    private CgFontFamily resolveFamily() {
+        return FontFamilyCache.resolve(
+                getStyle().getGeneralGroup().fontFamily(),
+                Math.round(getStyle().getGeneralGroup().fontSize()));
+    }
+
+    private void ensureShaped(CgFontFamily family) {
+        if (paragraph == null || family != shapedWith || !text.equals(shapedText)) {
+            paragraph = CgTextLayout.of(text, family).shape();
+            shapedWith = family;
+            shapedText = text;
+        }
+    }
+
     @Override
     public Size measure(Constraints constraints) {
         // NaN is "no definite width". Max-content is one line however long, which CrystalGraphics
@@ -78,14 +118,8 @@ public class TextNode extends Node implements Measurable {
         measuredAt.add(width);
         if (text.isEmpty()) return Size.ZERO;
 
-        CgFontFamily family = FontFamilyCache.resolve(
-                getStyle().getGeneralGroup().fontFamily(),
-                Math.round(getStyle().getGeneralGroup().fontSize()));
-        if (paragraph == null || family != shapedWith || !text.equals(shapedText)) {
-            paragraph = CgTextLayout.of(text, family).shape();
-            shapedWith = family;
-            shapedText = text;
-        }
+        CgFontFamily family = resolveFamily();
+        ensureShaped(family);
         CgTextLayout laid = paragraph.layout(width, 0f);
         return new Size(laid.totalWidth(), laid.totalHeight());
     }

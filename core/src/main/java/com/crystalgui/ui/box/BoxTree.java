@@ -1,5 +1,6 @@
 package com.crystalgui.ui.box;
 
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.ComputedStyle;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.layout.LayoutProperties;
@@ -198,6 +199,14 @@ public final class BoxTree {
     }
 
     private static final Matrix4f IDENTITY = new Matrix4f();
+
+    /**
+     * Paints the tree through the shared paint context, with whatever pose is on the stack as the
+     * surface transform. Layout first -- the painter draws what {@link #layout} composed.
+     */
+    public void paint(CgUiPaintContext ctx) {
+        BoxPainter.paint(this, ctx);
+    }
 
     // ── Sync ─────────────────────────────────────────────────────────────────
 

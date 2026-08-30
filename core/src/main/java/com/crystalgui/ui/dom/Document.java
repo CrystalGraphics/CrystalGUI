@@ -1,6 +1,7 @@
 package com.crystalgui.ui.dom;
 
 import com.crystalgui.core.async.UiThread;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgui.ui.box.BoxTree;
 import java.util.ArrayDeque;
@@ -98,6 +99,11 @@ public final class Document extends Node {
     public void update(float width, float height) {
         calculateStyle(0f);
         layout(width, height);
+    }
+
+    /** Paints the laid-out document through the shared paint context (5.4). */
+    public void paint(CgUiPaintContext ctx) {
+        boxes().paint(ctx);
     }
 
     /**
