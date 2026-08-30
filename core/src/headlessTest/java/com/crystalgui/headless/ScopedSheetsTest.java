@@ -1,6 +1,7 @@
 package com.crystalgui.headless;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import com.crystalgui.net.window.ScopedSheets;
@@ -11,8 +12,8 @@ import org.junit.Test;
  *
  * <p>Only the rewrite and the refcount are exercised here: parsing a sheet needs {@code CgIO}, which is
  * deliberately absent from this source set — {@code StyleSheet.DEFAULT} reads {@code default.css} at
- * class-init, so the whole class is unloadable on a server. The parse itself is covered in
- * {@code core/src/test}.</p>
+ * class-init, so the whole class is unloadable on a server. The parse itself is covered by
+ * {@code ScopedSheetParseTest} in {@code core/src/test}, over the real {@code machine.css}.</p>
  */
 public class ScopedSheetsTest {
 
@@ -78,6 +79,34 @@ public class ScopedSheetsTest {
     public void aDeclarationBodyIsLeftAlone() {
         String out = ScopedSheets.scope("text { background: url(a{b) }", "s");
         assertTrue(out, out.contains("url(a{b)"));
+    }
+
+    /**
+     * A comment between two rules is not part of the next selector.
+     *
+     * <p>Everything between a {@code }} and the next {@code {} used to be taken as the selector, and a
+     * comment is exactly where prose lives — full of commas to split on and colons to mistake for a
+     * pseudo-class. {@code machine.css} shipped that way and was refused whole: <i>Unparseable selector
+     * fragment near '.' in 'that.'</i>, the window opening with no styling and nothing else wrong.</p>
+     */
+    @Test
+    public void aCommentBetweenRulesIsNotASelector() {
+        String css = "/* HIDDEN, and this: that. */ .x { a: 1 } /* b, c */ .y { b: 2 }";
+        String out = ScopedSheets.scope(css, "s");
+        assertTrue(out, out.contains(".s .x"));
+        assertTrue(out, out.contains(".x.s"));
+        assertTrue(out, out.contains(".s .y"));
+        assertTrue(out, out.contains(".y.s"));
+        assertFalse("prose is not a selector: " + out, out.contains("HIDDEN"));
+        assertFalse(out, out.contains("that"));
+    }
+
+    /** A brace inside a comment must not be taken for the start or end of a block. */
+    @Test
+    public void aBraceInsideACommentIsNotABlock() {
+        String out = ScopedSheets.scope(".x { /* { */ a: 1 } .y { b: 2 }", "s");
+        assertTrue(out, out.contains("a: 1"));
+        assertTrue(out, out.contains(".s .y"));
     }
 
     /**
