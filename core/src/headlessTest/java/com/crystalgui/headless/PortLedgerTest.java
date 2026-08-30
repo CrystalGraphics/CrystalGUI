@@ -39,8 +39,17 @@ public class PortLedgerTest {
     private record ClassRow(String path, String destination, String batch, String how, String status) {
     }
 
-    /** One row of the PART table. */
-    private record PartRow(String name, String kind, String source) {
+    /**
+     * One row of the PART table, keyed by (OWNER, name).
+     *
+     * <p>Not by name alone, and the first widget ported proved why: {@code __pre-icon__} is declared
+     * by four classes and its kind differs between them — Button's own icon slot is a part (A), while
+     * a window preview's holds a whole {@code WindowIcon} and has a rule reaching through it to the
+     * monogram (B). {@code __label__}, {@code __content__}, {@code __icon__} and {@code __title__}
+     * are shared the same way, and {@code .__content__} claimed by three unrelated widgets is a
+     * standing invariant row — a table keyed by name reproduces exactly that mistake.</p>
+     */
+    private record PartRow(String owner, String name, String kind, String source) {
     }
 
     private static Path repoRoot() {
@@ -75,7 +84,7 @@ public class PortLedgerTest {
         List<PartRow> out = new ArrayList<>();
         for (String line : rows("PART")) {
             String[] f = line.split("\t");
-            out.add(new PartRow(f[1], f[2], f[4]));
+            out.add(new PartRow(f[1], f[2], f[3], f[5]));
         }
         return out;
     }
@@ -138,7 +147,9 @@ public class PortLedgerTest {
         if (!anythingPorted) return;
         List<String> unconfirmed = new ArrayList<>();
         for (PartRow part : parts()) {
-            if (!"confirmed".equals(part.source())) unconfirmed.add(part.name() + " (" + part.kind() + ")");
+            if (!"confirmed".equals(part.source())) {
+                unconfirmed.add(part.owner() + "/" + part.name() + " (" + part.kind() + ")");
+            }
         }
         assertTrue("the port has begun and these part kinds are still the generator's guess:\n"
                 + String.join("\n", unconfirmed), unconfirmed.isEmpty());
@@ -149,7 +160,9 @@ public class PortLedgerTest {
     public void everyRowIsWellFormed() throws IOException {
         List<String> bad = new ArrayList<>();
         for (PartRow part : parts()) {
-            if (!List.of("A", "B", "C").contains(part.kind())) bad.add("part " + part.name() + ": " + part.kind());
+            if (!List.of("A", "B", "C").contains(part.kind())) {
+                bad.add("part " + part.owner() + "/" + part.name() + ": " + part.kind());
+            }
         }
         Map<String, Integer> perBatch = new LinkedHashMap<>();
         for (ClassRow row : classes()) {

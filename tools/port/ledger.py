@@ -118,8 +118,31 @@ STATE_NAMES = {
 }
 
 
+def part_owners():
+    """Which class declares each `__x__` name — a name may have several owners, and usually does."""
+    owners = {}
+    for base in (SRC, LANGUAGE):
+        for dirpath, _dirs, files in os.walk(base):
+            for f in sorted(files):
+                if not f.endswith('.java'):
+                    continue
+                text = io.open(os.path.join(dirpath, f), encoding='utf-8', errors='replace').read()
+                for name in set(re.findall(r'"__([a-z0-9-]+)__"', text)):
+                    owners.setdefault(name, set()).add(f[:-5])
+    return owners
+
+
 def classify_parts():
-    """Every `__part__` name in the sheets, with a proposed kind and the evidence for it."""
+    """Every (owner, name) pair, with a proposed kind and the evidence for it.
+
+    KEYED BY OWNER, NOT BY NAME, and the first widget ported proved why. `__pre-icon__` is declared
+    by SIX classes -- Button, Tab, DragGhost, WindowPreview, ProjectFileTree, StripeView -- and its
+    kind is not the same for all of them: it is Button's own icon slot (A) and the slot a window
+    preview puts a whole WindowIcon widget into (B, because a rule reaches through it to the
+    monogram). `__label__`, `__content__`, `__icon__`, `__title__`, `__close__` and `__header__` are
+    all shared the same way; `.__content__` being claimed by three unrelated widgets is a standing
+    invariant row, and a table keyed by name alone reproduces exactly that mistake.
+    """
     selectors = []
     for dirpath, _dirs, files in os.walk(SHEETS):
         for f in sorted(files):
@@ -133,25 +156,72 @@ def classify_parts():
                     if sel and not sel.startswith('@'):
                         selectors.append(sel)
 
+    owners = part_owners()
+    # Which names each class declares, and the tag it answers -- how a selector is attributed.
+    declares = {}
+    for name, who in owners.items():
+        for cls in who:
+            declares.setdefault(cls, set()).add(name)
+
+    def owns(cls, sel_before, name):
+        """Whether `cls` is plausibly the subject of a selector whose prefix is `sel_before`.
+
+        A selector counts toward an owner when it names that owner's TAG or one of the owner's OTHER
+        parts before reaching this one -- `taskbar .__entry__ .__icon__` is the taskbar's, not
+        Button's, even though both declare `__icon__`. An UNSCOPED rule (`.__thumb__ { }`) counts for
+        every owner, which is right: it really does reach all of them, and that is the bug the port
+        exists to remove.
+        """
+        # A name NO literal declares -- built by concatenation, like MarkupView's `__markup-h` + level
+        # + `__` and the region names assembled from an enum. Nothing can attribute it, so every rule
+        # mentioning it is evidence about it, and it still needs a kind: the port has to know whether
+        # to write `part=` or a class, and a name the scan cannot see is exactly the one that would
+        # otherwise be discovered by a rule silently not matching.
+        if cls == '(unowned)':
+            return True
+        if not sel_before.strip():
+            return True
+        tag = cls.lower()
+        if re.search(r'(^|[\s>]) *' + re.escape(tag) + r'', ' ' + sel_before):
+            return True
+        mine = declares.get(cls, set()) - {name}
+        for other in re.findall(r'__([a-z0-9-]+)__', sel_before):
+            if other in mine:
+                return True
+        return False
+
     names = {}
     for sel in selectors:
         compounds = [c for c in re.split(r'\s*>\s*|\s+', sel) if c]
         part_compounds = [i for i, c in enumerate(compounds) if '__' in c]
         for i in part_compounds:
+            before = ' '.join(compounds[:i])
             for name in re.findall(r'__([a-z0-9-]+)__', compounds[i]):
-                info = names.setdefault(name, {'uses': 0, 'under_part': 0, 'above': 0, 'leaf_only': True})
-                info['uses'] += 1
-                # A part with another part ABOVE it in the same selector.
-                if any(j < i for j in part_compounds):
-                    info['under_part'] += 1
-                # Something selected BENEATH this compound -- a tag or a part.
-                if i < len(compounds) - 1:
-                    info['above'] += 1
-                    info['leaf_only'] = False
+                for cls in owners.get(name, {'(unowned)'}):
+                    if not owns(cls, before, name):
+                        continue
+                    info = names.setdefault((cls, name),
+                                            {'uses': 0, 'under_part': 0, 'above': 0})
+                    info['uses'] += 1
+                    if any(j < i for j in part_compounds):
+                        info['under_part'] += 1
+                    if i < len(compounds) - 1:
+                        info['above'] += 1
 
     rows = []
-    for name in sorted(names):
-        info = names[name]
+    for (owner, name) in sorted(names):
+        rows.append(propose(owner, name, names[(owner, name)]))
+    # A pair no attributable rule mentions still has to be classified: the port must know whether to
+    # write `part=` or a class, and "no rule names it" is not "it does not exist".
+    seen = set(names)
+    for name in sorted(owners):
+        for owner in sorted(owners[name]):
+            if (owner, name) not in seen:
+                rows.append(propose(owner, name, {'uses': 0, 'under_part': 0, 'above': 0}))
+    return rows
+
+
+def propose(owner, name, info):
         if name in STATE_NAMES:
             kind, why = 'C', 'state adjective'
         elif info['above']:
@@ -168,8 +238,7 @@ def classify_parts():
             kind = 'A'
             why = ('leaf in every rule%s'
                    % ('' if not info['under_part'] else ', scoped by an ancestor in %d' % info['under_part']))
-        rows.append((name, kind, info['uses'], why))
-    return rows
+        return (owner, name, kind, info['uses'], why)
 
 
 def destination(rel, stem):
@@ -228,13 +297,14 @@ def render():
     classes = classify_classes()
     for path, lines, dest, batch, how, status in classes:
         out.write('CLASS\t%s\t%d\t%s\t%s\t%s\t%s\n' % (path, lines, dest, batch, how, status))
-    out.write('#\n# PART\tname\tkind\tuses\tsource\twhy\n')
-    parts = classify_parts()
+    out.write('#\n# PART\towner\tname\tkind\tuses\tsource\twhy\n')
+    parts = sorted(classify_parts())
     confirmed = existing_confirmations()
-    for name, kind, uses, why in parts:
-        source = 'confirmed' if name in confirmed else 'proposed'
-        kind = confirmed.get(name, kind)
-        out.write('PART\t%s\t%s\t%d\t%s\t%s\n' % (name, kind, uses, source, why))
+    for owner, name, kind, uses, why in parts:
+        key = owner + '/' + name
+        source = 'confirmed' if key in confirmed else 'proposed'
+        kind = confirmed.get(key, kind)
+        out.write('PART\t%s\t%s\t%s\t%d\t%s\t%s\n' % (owner, name, kind, uses, source, why))
     return out.getvalue(), len(classes), len(parts)
 
 
@@ -245,8 +315,8 @@ def existing_confirmations():
     confirmed = {}
     for line in io.open(LEDGER, encoding='utf-8'):
         parts = line.rstrip('\n').split('\t')
-        if len(parts) >= 5 and parts[0] == 'PART' and parts[4] == 'confirmed':
-            confirmed[parts[1]] = parts[2]
+        if len(parts) >= 6 and parts[0] == 'PART' and parts[5] == 'confirmed':
+            confirmed[parts[1] + '/' + parts[2]] = parts[3]
     return confirmed
 
 

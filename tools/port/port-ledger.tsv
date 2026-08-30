@@ -302,514 +302,678 @@ CLASS	language/run/view/RunRail	353	language/run/view	6.7	copy	pending
 CLASS	language/run/view/ScriptWorkbench	567	language/run/view	6.7	move	pending
 CLASS	language/run/view/TailFollow	127	language/run/view	6.7	copy	pending
 #
-# PART	name	kind	uses	source	why
-PART	accelerator	A	1	proposed	leaf in every rule
-PART	action	A	5	proposed	leaf in every rule, scoped by an ancestor in 5
-PART	action-secondary	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	actions	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	active	C	7	proposed	state adjective
-PART	activity-bar	B	7	proposed	a rule selects through it (6)
-PART	activity-item	B	7	proposed	a rule selects through it (1)
-PART	add	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	alpha-bar	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	alpha-fill	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	animating	C	1	proposed	state adjective
-PART	array	B	10	proposed	a rule selects through it (9)
-PART	arrow	A	5	proposed	leaf in every rule, scoped by an ancestor in 5
-PART	asset	B	3	proposed	a rule selects through it (2)
-PART	attention	C	2	proposed	state adjective
-PART	axis	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	backdrop	A	1	proposed	leaf in every rule
-PART	badge	A	8	proposed	leaf in every rule, scoped by an ancestor in 8
-PART	balloon	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	balloons	B	6	proposed	a rule selects through it (5)
-PART	blackboard	B	25	proposed	a rule selects through it (22)
-PART	body	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	boolean	B	9	proposed	a rule selects through it (8)
-PART	branded	C	1	proposed	state adjective
-PART	browse	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	burger	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	burger-bar	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	busy	C	1	proposed	state adjective
-PART	cancel	A	6	proposed	leaf in every rule, scoped by an ancestor in 6
-PART	cancelling	B	2	proposed	a rule selects through it (2)
-PART	capsule	A	6	proposed	leaf in every rule, scoped by an ancestor in 6
-PART	caption-adopted	C	2	proposed	state adjective
-PART	caption-chrome	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	caret	A	1	proposed	leaf in every rule
-PART	category	B	8	proposed	a rule selects through it (7)
-PART	category-segment	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	category-separator	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	cell	A	1	proposed	leaf in every rule
-PART	channel-row	B	22	proposed	a rule selects through it (21)
-PART	channels	A	1	proposed	leaf in every rule
-PART	checkable	B	1	proposed	a rule selects through it (1)
-PART	chevron	A	1	proposed	leaf in every rule
-PART	clear	A	5	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	clickable	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	close	B	13	proposed	a rule selects through it (1)
-PART	code-actions	B	1	proposed	a rule selects through it (1)
-PART	collapse	A	6	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	collapsed	C	8	proposed	state adjective
-PART	color	B	8	proposed	a rule selects through it (7)
-PART	color-bar	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	completion-deprecated	B	2	proposed	a rule selects through it (2)
-PART	completion-detail	A	1	proposed	leaf in every rule
-PART	completion-hint	A	1	proposed	leaf in every rule
-PART	completion-hint-text	A	1	proposed	leaf in every rule
-PART	completion-icon	A	2	proposed	leaf in every rule
-PART	completion-inherited	B	1	proposed	a rule selects through it (1)
-PART	completion-label	A	3	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	completion-mark-final	A	2	proposed	leaf in every rule
-PART	completion-mark-static	A	2	proposed	leaf in every rule
-PART	completion-options	A	2	proposed	leaf in every rule
-PART	completion-params	A	2	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	completion-row	A	2	proposed	leaf in every rule
-PART	config-control	B	74	proposed	a rule selects through it (59)
-PART	configurator	B	10	proposed	a rule selects through it (9)
-PART	configurator-group	B	18	proposed	a rule selects through it (17)
-PART	configurator-panel	A	2	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	conflict	B	4	proposed	a rule selects through it (3)
-PART	conflict-actions	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	conflict-message	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	conflict-who	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	content	B	12	proposed	a rule selects through it (5)
-PART	control-row	B	21	proposed	a rule selects through it (18)
-PART	controls	B	5	proposed	a rule selects through it (1)
-PART	corner	A	7	proposed	leaf in every rule
-PART	count	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	crumb	A	3	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	crumb-current	A	1	proposed	leaf in every rule
-PART	crumb-icon	A	1	proposed	leaf in every rule
-PART	crumb-sep	A	1	proposed	leaf in every rule
-PART	current-line	A	1	proposed	leaf in every rule
-PART	designer	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	designer-actions	A	1	proposed	leaf in every rule
-PART	designer-body	A	1	proposed	leaf in every rule
-PART	designer-heading	A	2	proposed	leaf in every rule
-PART	designer-label	A	3	proposed	leaf in every rule
-PART	designer-note	A	2	proposed	leaf in every rule
-PART	designer-readout	A	1	proposed	leaf in every rule
-PART	designer-row	A	1	proposed	leaf in every rule
-PART	designer-slider	A	1	proposed	leaf in every rule
-PART	designer-value	A	2	proposed	leaf in every rule
-PART	detail	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	dialog-actions	A	1	proposed	leaf in every rule
-PART	diff	B	8	proposed	a rule selects through it (7)
-PART	diff-actions	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	diff-added	A	3	proposed	leaf in every rule
-PART	diff-band	A	7	proposed	leaf in every rule
-PART	diff-changed	A	3	proposed	leaf in every rule
-PART	diff-chevron	A	1	proposed	leaf in every rule
-PART	diff-editor	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	diff-mark	A	4	proposed	leaf in every rule
-PART	diff-pane	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	diff-pane-title	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	diff-panes	B	4	proposed	a rule selects through it (3)
-PART	diff-removed	A	3	proposed	leaf in every rule
-PART	diff-status	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	diff-thin	A	3	proposed	leaf in every rule
-PART	diff-toolbar	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	dimmed	C	1	proposed	state adjective
-PART	divider	A	25	proposed	leaf in every rule, scoped by an ancestor in 12
-PART	doc-body	A	1	proposed	leaf in every rule
-PART	doc-definition	A	4	proposed	leaf in every rule
-PART	doc-definition-box	A	1	proposed	leaf in every rule
-PART	doc-footer	A	1	proposed	leaf in every rule
-PART	doc-footer-edit	A	1	proposed	leaf in every rule
-PART	doc-footer-icon	A	1	proposed	leaf in every rule
-PART	doc-footer-text	A	1	proposed	leaf in every rule
-PART	doc-owner	A	1	proposed	leaf in every rule
-PART	doc-owner-icon	A	1	proposed	leaf in every rule
-PART	doc-owner-text	A	2	proposed	leaf in every rule
-PART	doc-problem	A	3	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	doc-problem-action	A	2	proposed	leaf in every rule
-PART	doc-problem-actions	A	1	proposed	leaf in every rule
-PART	doc-problem-message	A	1	proposed	leaf in every rule
-PART	doc-problem-shortcut	A	1	proposed	leaf in every rule
-PART	doc-scroll	A	2	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	doc-separator	A	1	proposed	leaf in every rule
-PART	dock	A	4	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	dock-banner	B	6	proposed	a rule selects through it (2)
-PART	dock-bannered	C	1	proposed	state adjective
-PART	dock-window	B	1	proposed	a rule selects through it (1)
-PART	dot	A	21	proposed	leaf in every rule, scoped by an ancestor in 4
-PART	dot-core	A	32	proposed	leaf in every rule
-PART	drag-ghost	B	8	proposed	a rule selects through it (6)
-PART	dragging	C	2	proposed	state adjective
-PART	drop-line	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	drop-overlay	A	1	proposed	leaf in every rule
-PART	drop-target	A	1	proposed	leaf in every rule
-PART	dropdown-gutter	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	edge	A	1	proposed	leaf in every rule
-PART	editing	C	1	proposed	state adjective
-PART	editor	B	13	proposed	a rule selects through it (10)
-PART	editor-content	A	1	proposed	leaf in every rule
-PART	editor-dot	A	1	proposed	leaf in every rule
-PART	editor-dot-core	A	1	proposed	leaf in every rule
-PART	editor-dot-ring	A	1	proposed	leaf in every rule
-PART	editor-find	B	4	proposed	a rule selects through it (3)
-PART	editor-label	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	empty	C	8	proposed	state adjective
-PART	empty-collapsed	C	2	proposed	state adjective
-PART	entries	A	1	proposed	leaf in every rule
-PART	entry	B	26	proposed	a rule selects through it (16)
-PART	entry-category	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	entry-head	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	error	A	1	proposed	leaf in every rule
-PART	error-stripe	A	1	proposed	leaf in every rule
-PART	error-stripe-error	A	1	proposed	leaf in every rule
-PART	error-stripe-information	A	1	proposed	leaf in every rule
-PART	error-stripe-warning	A	1	proposed	leaf in every rule
-PART	expanded	C	5	proposed	state adjective
-PART	exposed-dot	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	field	A	4	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	file-editor	A	1	proposed	leaf in every rule
-PART	fill	A	9	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	find-action	B	6	proposed	a rule selects through it (2)
-PART	find-bar	B	33	proposed	a rule selects through it (31)
-PART	find-chevron	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	find-close	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	find-count	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	find-input	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	find-mode	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
-PART	find-next	A	5	proposed	leaf in every rule, scoped by an ancestor in 5
-PART	find-prev	A	5	proposed	leaf in every rule, scoped by an ancestor in 5
-PART	find-row	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	find-rows	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	find-trailing	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	flipped	C	1	proposed	state adjective
-PART	focused	C	2	proposed	state adjective
-PART	fold	A	3	proposed	leaf in every rule
-PART	fold-column	A	1	proposed	leaf in every rule
-PART	fold-placeholder	A	2	proposed	leaf in every rule
-PART	foot	B	2	proposed	a rule selects through it (1)
-PART	full-width	C	1	proposed	state adjective
-PART	fullscreen	C	1	proposed	state adjective
-PART	ghost	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	glow	A	3	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	gutter	A	1	proposed	leaf in every rule
-PART	gutter-edge	A	1	proposed	leaf in every rule
-PART	h-scroll	B	4	proposed	a rule selects through it (4)
-PART	h-scroller	A	3	proposed	leaf in every rule
-PART	has-checkable	C	3	proposed	state adjective
-PART	head	B	22	proposed	a rule selects through it (8)
-PART	header	B	5	proposed	a rule selects through it (2)
-PART	header-cell	A	1	proposed	leaf in every rule
-PART	hex-row	B	7	proposed	a rule selects through it (6)
-PART	hidden	C	3	proposed	state adjective
-PART	hide	B	6	proposed	a rule selects through it (1)
-PART	icon	B	7	proposed	a rule selects through it (2)
-PART	indent-guide	A	2	proposed	leaf in every rule
-PART	indicator	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
-PART	info	B	3	proposed	a rule selects through it (1)
-PART	inline	C	4	proposed	state adjective
-PART	input	A	2	proposed	leaf in every rule
-PART	inputs	A	6	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	insertion	A	2	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	inspection	A	2	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	inspection-clean	B	2	proposed	a rule selects through it (2)
-PART	inspection-count	B	7	proposed	a rule selects through it (6)
-PART	inspection-icon	A	4	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	inspection-next	A	5	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	inspection-number	A	4	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	inspection-ok	A	1	proposed	leaf in every rule
-PART	inspection-previous	A	5	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	inspector	A	1	proposed	leaf in every rule
-PART	inspector-scroll	A	1	proposed	leaf in every rule
-PART	items	A	2	proposed	leaf in every rule
-PART	jump-list	A	2	proposed	leaf in every rule
-PART	knob	A	8	proposed	leaf in every rule
-PART	label	A	23	proposed	leaf in every rule, scoped by an ancestor in 20
-PART	leaf	C	3	proposed	state adjective
-PART	left	B	6	proposed	a rule selects through it (4)
-PART	line	A	3	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	line-number	A	1	proposed	leaf in every rule
-PART	main-preview	B	8	proposed	a rule selects through it (6)
-PART	mark	A	31	proposed	leaf in every rule, scoped by an ancestor in 16
-PART	markup-bullet	A	3	proposed	leaf in every rule
-PART	markup-caption	A	1	proposed	leaf in every rule
-PART	markup-cell	A	1	proposed	leaf in every rule
-PART	markup-code	B	3	proposed	a rule selects through it (2)
-PART	markup-definition	A	1	proposed	leaf in every rule
-PART	markup-definitions	A	1	proposed	leaf in every rule
-PART	markup-detail	A	1	proposed	leaf in every rule
-PART	markup-h1	A	1	proposed	leaf in every rule
-PART	markup-h2	A	1	proposed	leaf in every rule
-PART	markup-h3	A	1	proposed	leaf in every rule
-PART	markup-h4	A	1	proposed	leaf in every rule
-PART	markup-h5	A	1	proposed	leaf in every rule
-PART	markup-h6	A	1	proposed	leaf in every rule
-PART	markup-header-cell	A	1	proposed	leaf in every rule
-PART	markup-heading	A	4	proposed	leaf in every rule
-PART	markup-item	A	1	proposed	leaf in every rule
-PART	markup-item-body	A	1	proposed	leaf in every rule
-PART	markup-link-hover	A	1	proposed	leaf in every rule
-PART	markup-list	A	1	proposed	leaf in every rule
-PART	markup-paragraph	A	7	proposed	leaf in every rule
-PART	markup-quote	A	1	proposed	leaf in every rule
-PART	markup-quote-rule	A	1	proposed	leaf in every rule
-PART	markup-row	A	1	proposed	leaf in every rule
-PART	markup-table	A	2	proposed	leaf in every rule
-PART	markup-term	A	1	proposed	leaf in every rule
-PART	marquee	A	2	proposed	leaf in every rule
-PART	mask	B	6	proposed	a rule selects through it (6)
-PART	mask-panel	B	1	proposed	a rule selects through it (1)
-PART	mask-row	B	5	proposed	a rule selects through it (4)
-PART	match	C	2	proposed	state adjective
-PART	matrix	B	3	proposed	a rule selects through it (2)
-PART	matrix-cell	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	matrix-row	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	maximize	A	5	proposed	leaf in every rule, scoped by an ancestor in 5
-PART	maximized	C	2	proposed	state adjective
-PART	menu	B	8	proposed	a rule selects through it (5)
-PART	menu-bar	B	9	proposed	a rule selects through it (7)
-PART	menu-title	B	4	proposed	a rule selects through it (1)
-PART	merge	B	8	proposed	a rule selects through it (7)
-PART	merge-actions	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	merge-editor	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	merge-pane	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	merge-pane-title	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	merge-panes	B	4	proposed	a rule selects through it (3)
-PART	merge-status	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	merge-toolbar	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	message	A	8	proposed	leaf in every rule, scoped by an ancestor in 8
-PART	minimize	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	missing	C	1	proposed	state adjective
-PART	monogram	A	6	proposed	leaf in every rule, scoped by an ancestor in 6
-PART	name	A	5	proposed	leaf in every rule, scoped by an ancestor in 5
-PART	nav-arrow	A	3	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	nav-back	A	1	proposed	leaf in every rule
-PART	nav-detail	A	1	proposed	leaf in every rule
-PART	nav-forward	A	1	proposed	leaf in every rule
-PART	nav-header	B	2	proposed	a rule selects through it (1)
-PART	nav-label	A	1	proposed	leaf in every rule
-PART	nav-node	B	3	proposed	a rule selects through it (2)
-PART	nav-search	B	2	proposed	a rule selects through it (1)
-PART	nav-sidebar	B	2	proposed	a rule selects through it (1)
-PART	no-input-gap	C	1	proposed	state adjective
-PART	no-inputs	C	1	proposed	state adjective
-PART	no-message	C	1	proposed	state adjective
-PART	not-found	B	2	proposed	a rule selects through it (1)
-PART	notification	B	18	proposed	a rule selects through it (16)
-PART	notification-list	A	1	proposed	leaf in every rule
-PART	notifications-empty	A	1	proposed	leaf in every rule
-PART	number	B	5	proposed	a rule selects through it (1)
-PART	off	C	2	proposed	state adjective
-PART	on	C	4	proposed	state adjective
-PART	open	C	5	proposed	state adjective
-PART	option-match-case	A	1	proposed	leaf in every rule
-PART	option-preserve-case	A	1	proposed	leaf in every rule
-PART	option-regex	A	1	proposed	leaf in every rule
-PART	option-words	A	1	proposed	leaf in every rule
-PART	options	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	orbiting	B	1	proposed	a rule selects through it (1)
-PART	output	B	3	proposed	a rule selects through it (1)
-PART	outputs	A	6	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	over-link	A	1	proposed	leaf in every rule
-PART	overlays	A	1	proposed	leaf in every rule
-PART	page	A	1	proposed	leaf in every rule
-PART	page-placeholder	A	1	proposed	leaf in every rule
-PART	pane	B	3	proposed	a rule selects through it (2)
-PART	panel-focused	C	2	proposed	state adjective
-PART	panel-header	B	5	proposed	a rule selects through it (4)
-PART	panes	A	4	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	panning	C	2	proposed	state adjective
-PART	picker	A	1	proposed	leaf in every rule
-PART	pin	A	5	proposed	leaf in every rule, scoped by an ancestor in 5
-PART	pinned	C	1	proposed	state adjective
-PART	placeholder	B	4	proposed	a rule selects through it (2)
-PART	ports	A	6	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	ports-empty	C	1	proposed	state adjective
-PART	pre-icon	B	7	proposed	a rule selects through it (1)
-PART	preferences	B	4	proposed	a rule selects through it (2)
-PART	preferred-action	C	1	proposed	state adjective
-PART	preview	B	4	proposed	a rule selects through it (1)
-PART	preview-close	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	preview-header	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	preview-image	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	preview-title	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	problem	B	21	proposed	a rule selects through it (15)
-PART	problem-count	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	problem-file	B	1	proposed	a rule selects through it (1)
-PART	problem-list	A	2	proposed	leaf in every rule
-PART	problem-only	C	2	proposed	state adjective
-PART	problem-tab	B	8	proposed	a rule selects through it (2)
-PART	problem-tabs	A	1	proposed	leaf in every rule
-PART	problems-body	B	2	proposed	a rule selects through it (1)
-PART	problems-empty	A	1	proposed	leaf in every rule
-PART	problems-head	A	1	proposed	leaf in every rule
-PART	process-row	B	8	proposed	a rule selects through it (7)
-PART	processes	B	12	proposed	a rule selects through it (11)
-PART	progress	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	progress-item	B	7	proposed	a rule selects through it (5)
-PART	project-row	B	18	proposed	a rule selects through it (12)
-PART	project-tree	A	1	proposed	leaf in every rule
-PART	prompt	B	3	proposed	a rule selects through it (2)
-PART	prompt-caption	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	property-linked	A	4	proposed	leaf in every rule
-PART	property-node	B	20	proposed	a rule selects through it (14)
-PART	property-pill	B	16	proposed	a rule selects through it (15)
-PART	pulse	A	1	proposed	leaf in every rule
-PART	qp-accelerator	A	1	proposed	leaf in every rule
-PART	qp-category	A	1	proposed	leaf in every rule
-PART	qp-description	A	1	proposed	leaf in every rule
-PART	qp-disabled	A	1	proposed	leaf in every rule
-PART	qp-file-icon	A	1	proposed	leaf in every rule
-PART	qp-header	A	1	proposed	leaf in every rule
-PART	qp-header-spacer	A	1	proposed	leaf in every rule
-PART	qp-icon	A	1	proposed	leaf in every rule
-PART	qp-key	B	6	proposed	a rule selects through it (3)
-PART	qp-key-sep	A	1	proposed	leaf in every rule
-PART	qp-label	A	1	proposed	leaf in every rule
-PART	qp-spacer	A	1	proposed	leaf in every rule
-PART	qp-title	A	1	proposed	leaf in every rule
-PART	qp-truncated	A	1	proposed	leaf in every rule
-PART	quick-fix-bulb	A	1	proposed	leaf in every rule
-PART	rail	A	7	proposed	leaf in every rule, scoped by an ancestor in 6
-PART	region-auxiliary	A	1	proposed	leaf in every rule
-PART	region-drop-overlay	A	1	proposed	leaf in every rule
-PART	region-drop-preview	A	1	proposed	leaf in every rule
-PART	region-half	A	2	proposed	leaf in every rule
-PART	region-host	A	2	proposed	leaf in every rule
-PART	region-panel	A	1	proposed	leaf in every rule
-PART	region-sidebar	A	1	proposed	leaf in every rule
-PART	region-split	A	1	proposed	leaf in every rule
-PART	rename	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	renaming	B	2	proposed	a rule selects through it (2)
-PART	resizer	A	1	proposed	leaf in every rule
-PART	resizer-bottom	A	3	proposed	leaf in every rule
-PART	resizer-bottom-left	A	3	proposed	leaf in every rule
-PART	resizer-bottom-right	A	4	proposed	leaf in every rule
-PART	resizer-left	A	3	proposed	leaf in every rule
-PART	resizer-right	A	3	proposed	leaf in every rule
-PART	resizer-top	A	3	proposed	leaf in every rule
-PART	resizer-top-left	A	3	proposed	leaf in every rule
-PART	resizer-top-right	A	3	proposed	leaf in every rule
-PART	results	A	1	proposed	leaf in every rule
-PART	right	B	3	proposed	a rule selects through it (2)
-PART	ring	A	1	proposed	leaf in every rule
-PART	ring-handle	A	2	proposed	leaf in every rule
-PART	rising	C	1	proposed	state adjective
-PART	row	B	15	proposed	a rule selects through it (4)
-PART	row-editor	A	1	proposed	leaf in every rule
-PART	ruler	A	1	proposed	leaf in every rule
-PART	run-action	A	5	proposed	leaf in every rule
-PART	run-bar	A	1	proposed	leaf in every rule
-PART	run-body	B	2	proposed	a rule selects through it (1)
-PART	run-clear	A	1	proposed	leaf in every rule
-PART	run-console	B	6	proposed	a rule selects through it (4)
-PART	run-empty	A	1	proposed	leaf in every rule
-PART	run-empty-head	A	1	proposed	leaf in every rule
-PART	run-empty-line	A	1	proposed	leaf in every rule
-PART	run-empty-lines	A	1	proposed	leaf in every rule
-PART	run-end	A	1	proposed	leaf in every rule
-PART	run-input	A	1	proposed	leaf in every rule
-PART	run-left	A	1	proposed	leaf in every rule
-PART	run-notice	A	1	proposed	leaf in every rule
-PART	run-rail	B	17	proposed	a rule selects through it (16)
-PART	run-rail-glyph	A	10	proposed	leaf in every rule, scoped by an ancestor in 10
-PART	run-rail-name	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	run-rail-time	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	run-rerun	A	2	proposed	leaf in every rule
-PART	run-sep	A	1	proposed	leaf in every rule
-PART	run-stop	A	2	proposed	leaf in every rule
-PART	run-stripe	A	1	proposed	leaf in every rule
-PART	run-wrap	A	1	proposed	leaf in every rule
-PART	running	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	scroll-layer	A	1	proposed	leaf in every rule
-PART	scrub-handle	A	1	proposed	leaf in every rule
-PART	search	B	5	proposed	a rule selects through it (2)
-PART	search-field	B	8	proposed	a rule selects through it (6)
-PART	search-option	A	4	proposed	leaf in every rule
-PART	select	B	2	proposed	a rule selects through it (1)
-PART	selected	C	22	proposed	state adjective
-PART	selection	A	1	proposed	leaf in every rule
-PART	separator	A	1	proposed	leaf in every rule
-PART	severity	A	8	proposed	leaf in every rule, scoped by an ancestor in 8
-PART	shader-content	A	1	proposed	leaf in every rule
-PART	shader-graph	A	1	proposed	leaf in every rule
-PART	shader-source	A	1	proposed	leaf in every rule
-PART	shown	C	1	proposed	state adjective
-PART	side	B	8	proposed	a rule selects through it (7)
-PART	slider	B	5	proposed	a rule selects through it (4)
-PART	snap-preview	A	1	proposed	leaf in every rule
-PART	spacer	A	10	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	split-pane	A	1	proposed	leaf in every rule
-PART	square	A	1	proposed	leaf in every rule
-PART	square-handle	A	2	proposed	leaf in every rule
-PART	squiggle	A	1	proposed	leaf in every rule
-PART	squiggle-error	A	1	proposed	leaf in every rule
-PART	squiggle-information	A	1	proposed	leaf in every rule
-PART	squiggle-warning	A	1	proposed	leaf in every rule
-PART	status-bar	B	5	proposed	a rule selects through it (5)
-PART	status-item	A	5	proposed	leaf in every rule, scoped by an ancestor in 4
-PART	status-sep	A	1	proposed	leaf in every rule
-PART	strip	B	12	proposed	a rule selects through it (5)
-PART	strip-bar	B	7	proposed	a rule selects through it (3)
-PART	stripe-separator	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	stripe-spacer	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	submenu-arrow	A	1	proposed	leaf in every rule
-PART	subtitle	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	surface	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	swatch	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
-PART	swatch-new	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	swatch-original	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	swatches	B	5	proposed	a rule selects through it (3)
-PART	switcher-close	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
-PART	switcher-entry	B	13	proposed	a rule selects through it (10)
-PART	switcher-header	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	switcher-panel	B	2	proposed	a rule selects through it (1)
-PART	switcher-title	A	1	proposed	leaf in every rule
-PART	syntax	A	57	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	tab-count	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	tab-ghost	B	3	proposed	a rule selects through it (2)
-PART	tail	A	5	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	taskbar-designer	B	1	proposed	a rule selects through it (1)
-PART	text	B	2	proposed	a rule selects through it (1)
-PART	text-viewport	A	1	proposed	leaf in every rule
-PART	thumb	A	29	proposed	leaf in every rule, scoped by an ancestor in 11
-PART	thumbnail	B	6	proposed	a rule selects through it (4)
-PART	tile-1	A	1	proposed	leaf in every rule
-PART	tile-2	A	1	proposed	leaf in every rule
-PART	tile-3	A	1	proposed	leaf in every rule
-PART	tile-4	A	1	proposed	leaf in every rule
-PART	tile-5	A	1	proposed	leaf in every rule
-PART	tile-6	A	1	proposed	leaf in every rule
-PART	tile-mono	A	1	proposed	leaf in every rule
-PART	time	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	title	A	12	proposed	leaf in every rule, scoped by an ancestor in 9
-PART	title-bar	B	40	proposed	a rule selects through it (28)
-PART	titles	B	5	proposed	a rule selects through it (4)
-PART	toggle	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	tool-window	B	10	proposed	a rule selects through it (9)
-PART	track	A	4	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	tree-content	A	1	proposed	leaf in every rule
-PART	twisty	A	13	proposed	leaf in every rule, scoped by an ancestor in 11
-PART	type	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	unlabelled	C	1	proposed	state adjective
-PART	user-sized-height	B	1	proposed	a rule selects through it (1)
-PART	user-sized-width	A	1	proposed	leaf in every rule
-PART	v-scroller	A	3	proposed	leaf in every rule
-PART	value	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	vector	B	8	proposed	a rule selects through it (5)
-PART	vector-cell	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	vertical	C	11	proposed	state adjective
-PART	view-container	B	4	proposed	a rule selects through it (3)
-PART	view-content	B	6	proposed	a rule selects through it (4)
-PART	view-options	B	4	proposed	a rule selects through it (2)
-PART	warning	A	1	proposed	leaf in every rule
-PART	wheel	A	1	proposed	leaf in every rule
-PART	whitespace	A	1	proposed	leaf in every rule
-PART	window-icon	B	10	proposed	a rule selects through it (1)
-PART	window-preview	B	12	proposed	a rule selects through it (11)
-PART	window-switcher	B	2	proposed	a rule selects through it (1)
-PART	windows	A	1	proposed	leaf in every rule
-PART	wire-layer	A	1	proposed	leaf in every rule
-PART	workbench-centre	A	1	proposed	leaf in every rule
-PART	workbench-content	A	1	proposed	leaf in every rule
-PART	workbench-regions	A	1	proposed	leaf in every rule
-PART	workbench-split	A	1	proposed	leaf in every rule
-PART	zoom-indicator	A	3	proposed	leaf in every rule
-PART	zoom-label	A	1	proposed	leaf in every rule
-PART	zoom-reset	A	6	proposed	leaf in every rule
+# PART	owner	name	kind	uses	source	why
+PART	(unowned)	error	A	1	proposed	leaf in every rule
+PART	(unowned)	markup-h1	A	1	proposed	leaf in every rule
+PART	(unowned)	markup-h2	A	1	proposed	leaf in every rule
+PART	(unowned)	markup-h3	A	1	proposed	leaf in every rule
+PART	(unowned)	markup-h4	A	1	proposed	leaf in every rule
+PART	(unowned)	markup-h5	A	1	proposed	leaf in every rule
+PART	(unowned)	markup-h6	A	1	proposed	leaf in every rule
+PART	(unowned)	region-auxiliary	A	1	proposed	leaf in every rule
+PART	(unowned)	region-panel	A	1	proposed	leaf in every rule
+PART	(unowned)	region-sidebar	A	1	proposed	leaf in every rule
+PART	(unowned)	resizer-bottom	A	3	proposed	leaf in every rule
+PART	(unowned)	resizer-bottom-left	A	3	proposed	leaf in every rule
+PART	(unowned)	resizer-bottom-right	A	4	proposed	leaf in every rule
+PART	(unowned)	resizer-left	A	3	proposed	leaf in every rule
+PART	(unowned)	resizer-right	A	3	proposed	leaf in every rule
+PART	(unowned)	resizer-top	A	3	proposed	leaf in every rule
+PART	(unowned)	resizer-top-left	A	3	proposed	leaf in every rule
+PART	(unowned)	resizer-top-right	A	3	proposed	leaf in every rule
+PART	(unowned)	tile-1	A	1	proposed	leaf in every rule
+PART	(unowned)	tile-2	A	1	proposed	leaf in every rule
+PART	(unowned)	tile-3	A	1	proposed	leaf in every rule
+PART	(unowned)	tile-4	A	1	proposed	leaf in every rule
+PART	(unowned)	tile-5	A	1	proposed	leaf in every rule
+PART	(unowned)	tile-6	A	1	proposed	leaf in every rule
+PART	(unowned)	warning	A	1	proposed	leaf in every rule
+PART	ArrayControl	add	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	ArrayControl	array	B	10	proposed	a rule selects through it (9)
+PART	ArrayControl	body	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	ArrayControl	empty	C	3	proposed	state adjective
+PART	ArrayControl	entry	B	2	proposed	a rule selects through it (1)
+PART	ArrayControl	foot	B	2	proposed	a rule selects through it (1)
+PART	ArrayControl	head	B	2	proposed	a rule selects through it (1)
+PART	ArrayControl	remove	A	0	proposed	leaf in every rule
+PART	AssetControl	asset	B	3	proposed	a rule selects through it (2)
+PART	AssetControl	browse	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	AssetControl	field	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	BlackboardPanel	active	C	4	proposed	state adjective
+PART	BlackboardPanel	add	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	BlackboardPanel	blackboard	B	25	proposed	a rule selects through it (22)
+PART	BlackboardPanel	body	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	BlackboardPanel	drop-line	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
+PART	BlackboardPanel	empty	C	4	proposed	state adjective
+PART	BlackboardPanel	head	B	4	proposed	a rule selects through it (2)
+PART	BlackboardPanel	subtitle	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	BlackboardPanel	title	A	5	proposed	leaf in every rule, scoped by an ancestor in 5
+PART	BlackboardPanel	titles	B	5	proposed	a rule selects through it (4)
+PART	BooleanControl	boolean	B	7	proposed	a rule selects through it (6)
+PART	Breadcrumbs	crumb	A	0	proposed	leaf in every rule
+PART	Breadcrumbs	crumb-current	A	0	proposed	leaf in every rule
+PART	Breadcrumbs	crumb-icon	A	0	proposed	leaf in every rule
+PART	Breadcrumbs	crumb-sep	A	0	proposed	leaf in every rule
+PART	Button	post-icon	A	0	proposed	leaf in every rule
+PART	Button	pre-icon	A	0	proposed	leaf in every rule
+PART	Button	underlay	A	0	proposed	leaf in every rule
+PART	CanvasView	content	A	0	proposed	leaf in every rule
+PART	CanvasView	panning	C	2	proposed	state adjective
+PART	CategoryHeader	arrow	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
+PART	CategoryHeader	category	A	0	proposed	leaf in every rule
+PART	CategoryHeader	collapsed	C	4	proposed	state adjective
+PART	CategoryHeader	name	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
+PART	Checkbox	mark	A	0	proposed	leaf in every rule
+PART	ColorControl	alpha-bar	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	ColorControl	alpha-fill	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	ColorControl	color	B	4	proposed	a rule selects through it (4)
+PART	ColorControl	color-bar	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	ColorControl	picker	A	1	proposed	leaf in every rule
+PART	ColorControl	swatch	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
+PART	ColorSelector	channel-row	A	0	proposed	leaf in every rule
+PART	ColorSelector	channels	A	0	proposed	leaf in every rule
+PART	ColorSelector	hex-row	A	0	proposed	leaf in every rule
+PART	ColorSelector	left	B	2	proposed	a rule selects through it (2)
+PART	ColorSelector	ring	A	0	proposed	leaf in every rule
+PART	ColorSelector	ring-handle	A	0	proposed	leaf in every rule
+PART	ColorSelector	side	A	0	proposed	leaf in every rule
+PART	ColorSelector	square	A	0	proposed	leaf in every rule
+PART	ColorSelector	square-handle	A	0	proposed	leaf in every rule
+PART	ColorSelector	swatch-new	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	ColorSelector	swatch-original	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	ColorSelector	swatches	A	0	proposed	leaf in every rule
+PART	ColorSelector	wheel	A	0	proposed	leaf in every rule
+PART	CompletionPopup	completion	A	0	proposed	leaf in every rule
+PART	CompletionPopup	completion-deprecated	B	2	proposed	a rule selects through it (2)
+PART	CompletionPopup	completion-detail	A	1	proposed	leaf in every rule
+PART	CompletionPopup	completion-hint	A	1	proposed	leaf in every rule
+PART	CompletionPopup	completion-hint-text	A	1	proposed	leaf in every rule
+PART	CompletionPopup	completion-icon	A	2	proposed	leaf in every rule
+PART	CompletionPopup	completion-inherited	B	1	proposed	a rule selects through it (1)
+PART	CompletionPopup	completion-label	A	3	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	CompletionPopup	completion-mark-final	A	2	proposed	leaf in every rule
+PART	CompletionPopup	completion-mark-static	A	2	proposed	leaf in every rule
+PART	CompletionPopup	completion-options	A	2	proposed	leaf in every rule
+PART	CompletionPopup	completion-params	A	2	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	CompletionPopup	completion-row	A	2	proposed	leaf in every rule
+PART	ConfigControl	config-control	B	65	proposed	a rule selects through it (55)
+PART	Configurator	configurator	B	6	proposed	a rule selects through it (5)
+PART	Configurator	inline	C	4	proposed	state adjective
+PART	Configurator	label	A	5	proposed	leaf in every rule, scoped by an ancestor in 5
+PART	ConfiguratorGroup	arrow	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	ConfiguratorGroup	collapsed	C	4	proposed	state adjective
+PART	ConfiguratorGroup	configurator-group	B	14	proposed	a rule selects through it (13)
+PART	ConfiguratorGroup	content	B	7	proposed	a rule selects through it (5)
+PART	ConfiguratorGroup	head	B	6	proposed	a rule selects through it (3)
+PART	ConfiguratorGroup	title	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
+PART	ConfiguratorPanel	configurator-panel	A	1	proposed	leaf in every rule
+PART	ConflictDialog	conflict	B	4	proposed	a rule selects through it (3)
+PART	ConflictDialog	conflict-actions	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	ConflictDialog	conflict-message	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	ConflictDialog	conflict-who	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	CrystalEditor	content	A	0	proposed	leaf in every rule
+PART	CrystalEditor	editor-content	A	0	proposed	leaf in every rule
+PART	Desktop	snap-preview	A	1	proposed	leaf in every rule
+PART	Desktop	windows	A	0	proposed	leaf in every rule
+PART	Dialog	backdrop	A	0	proposed	leaf in every rule
+PART	Dialog	close	B	7	proposed	a rule selects through it (1)
+PART	Dialog	content	A	0	proposed	leaf in every rule
+PART	Dialog	label	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
+PART	Dialog	open	C	3	proposed	state adjective
+PART	Dialog	pulse	A	1	proposed	leaf in every rule
+PART	Dialog	title-bar	A	0	proposed	leaf in every rule
+PART	DiffView	diff	B	8	proposed	a rule selects through it (7)
+PART	DiffView	diff-actions	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	DiffView	diff-editor	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	DiffView	diff-pane	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	DiffView	diff-pane-title	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	DiffView	diff-panes	B	4	proposed	a rule selects through it (3)
+PART	DiffView	diff-status	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	DiffView	diff-toolbar	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	DockArea	dock-dragging	C	0	proposed	state adjective
+PART	DockArea	tab-ghost	B	3	proposed	a rule selects through it (2)
+PART	DockBannerBar	action	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	DockBannerBar	dock-banner	B	6	proposed	a rule selects through it (2)
+PART	DockBannerBar	message	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	DockGroup	active	C	3	proposed	state adjective
+PART	DockGroup	dock-bannered	C	1	proposed	state adjective
+PART	DockGroup	drop-overlay	A	0	proposed	leaf in every rule
+PART	DockGroup	empty	C	2	proposed	state adjective
+PART	DockGroup	missing	C	0	proposed	state adjective
+PART	DockGroup	pane-host	A	0	proposed	leaf in every rule
+PART	DockWindow	dock-window	B	1	proposed	a rule selects through it (1)
+PART	DocumentationPopup	doc-body	A	0	proposed	leaf in every rule
+PART	DocumentationPopup	doc-definition	A	0	proposed	leaf in every rule
+PART	DocumentationPopup	doc-definition-box	A	0	proposed	leaf in every rule
+PART	DocumentationPopup	doc-footer	A	0	proposed	leaf in every rule
+PART	DocumentationPopup	doc-footer-edit	A	0	proposed	leaf in every rule
+PART	DocumentationPopup	doc-footer-icon	A	0	proposed	leaf in every rule
+PART	DocumentationPopup	doc-footer-text	A	0	proposed	leaf in every rule
+PART	DocumentationPopup	doc-owner	A	0	proposed	leaf in every rule
+PART	DocumentationPopup	doc-owner-icon	A	0	proposed	leaf in every rule
+PART	DocumentationPopup	doc-owner-text	A	0	proposed	leaf in every rule
+PART	DocumentationPopup	doc-problem	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	DocumentationPopup	doc-problem-action	A	0	proposed	leaf in every rule
+PART	DocumentationPopup	doc-problem-actions	A	0	proposed	leaf in every rule
+PART	DocumentationPopup	doc-problem-message	A	0	proposed	leaf in every rule
+PART	DocumentationPopup	doc-problem-shortcut	A	0	proposed	leaf in every rule
+PART	DocumentationPopup	doc-scroll	A	0	proposed	leaf in every rule
+PART	DocumentationPopup	doc-separator	A	0	proposed	leaf in every rule
+PART	DocumentationPopup	documentation	A	0	proposed	leaf in every rule
+PART	DocumentationPopup	no-message	C	0	proposed	state adjective
+PART	DocumentationPopup	pinned	C	1	proposed	state adjective
+PART	DocumentationPopup	problem-only	C	2	proposed	state adjective
+PART	DragGhost	drag-ghost	B	8	proposed	a rule selects through it (6)
+PART	DragGhost	flipped	C	1	proposed	state adjective
+PART	DragGhost	label	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
+PART	DragGhost	pre-icon	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	DragGhost	unlabelled	C	1	proposed	state adjective
+PART	Dropdown	chevron	A	0	proposed	leaf in every rule
+PART	Dropdown	menu	A	0	proposed	leaf in every rule
+PART	EditorFind	editor-find	B	4	proposed	a rule selects through it (3)
+PART	ErrorStripePart	error-stripe	A	1	proposed	leaf in every rule
+PART	ErrorStripePart	error-stripe-error	A	1	proposed	leaf in every rule
+PART	ErrorStripePart	error-stripe-information	A	1	proposed	leaf in every rule
+PART	ErrorStripePart	error-stripe-warning	A	1	proposed	leaf in every rule
+PART	GraphNode	collapse	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	GraphNode	collapsed	C	4	proposed	state adjective
+PART	GraphNode	control-row	A	0	proposed	leaf in every rule
+PART	GraphNode	controls	B	1	proposed	a rule selects through it (1)
+PART	GraphNode	empty-collapsed	C	0	proposed	state adjective
+PART	GraphNode	full-width	C	1	proposed	state adjective
+PART	GraphNode	inputs	A	0	proposed	leaf in every rule
+PART	GraphNode	moving	C	0	proposed	state adjective
+PART	GraphNode	no-input-gap	C	0	proposed	state adjective
+PART	GraphNode	no-inputs	C	0	proposed	state adjective
+PART	GraphNode	outputs	A	0	proposed	leaf in every rule
+PART	GraphNode	ports	A	0	proposed	leaf in every rule
+PART	GraphNode	ports-empty	C	0	proposed	state adjective
+PART	GraphNode	preview	A	0	proposed	leaf in every rule
+PART	GraphNode	title	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	GraphNode	title-bar	A	0	proposed	leaf in every rule
+PART	GraphView	marquee	A	0	proposed	leaf in every rule
+PART	HeaderControl	header	B	2	proposed	a rule selects through it (1)
+PART	HeaderControl	title	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	InfoControl	info	B	2	proposed	a rule selects through it (1)
+PART	InfoControl	value	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	InputDialog	prompt	B	3	proposed	a rule selects through it (2)
+PART	InputDialog	prompt-caption	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	InsertionMarker	insertion	A	1	proposed	leaf in every rule
+PART	InspectionWidgetPart	inspection	A	1	proposed	leaf in every rule
+PART	InspectionWidgetPart	inspection-clean	B	2	proposed	a rule selects through it (2)
+PART	InspectionWidgetPart	inspection-count	B	7	proposed	a rule selects through it (6)
+PART	InspectionWidgetPart	inspection-errors	A	0	proposed	leaf in every rule
+PART	InspectionWidgetPart	inspection-icon	A	4	proposed	leaf in every rule, scoped by an ancestor in 3
+PART	InspectionWidgetPart	inspection-next	A	5	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	InspectionWidgetPart	inspection-number	A	4	proposed	leaf in every rule, scoped by an ancestor in 3
+PART	InspectionWidgetPart	inspection-ok	A	1	proposed	leaf in every rule
+PART	InspectionWidgetPart	inspection-previous	A	5	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	InspectionWidgetPart	inspection-warnings	A	0	proposed	leaf in every rule
+PART	Inspector	inspector	A	1	proposed	leaf in every rule
+PART	Inspector	inspector-empty	A	0	proposed	leaf in every rule
+PART	Inspector	inspector-scroll	A	1	proposed	leaf in every rule
+PART	ListView	focused	C	1	proposed	state adjective
+PART	ListView	h-scroll	A	0	proposed	leaf in every rule
+PART	ListView	row	A	0	proposed	leaf in every rule
+PART	ListView	selected	C	8	proposed	state adjective
+PART	MainPreviewPanel	head	B	3	proposed	a rule selects through it (1)
+PART	MainPreviewPanel	main-preview	B	8	proposed	a rule selects through it (6)
+PART	MainPreviewPanel	orbiting	B	1	proposed	a rule selects through it (1)
+PART	MainPreviewPanel	surface	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
+PART	MainPreviewPanel	title	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
+PART	MarkupView	markup-bullet	A	0	proposed	leaf in every rule
+PART	MarkupView	markup-caption	A	0	proposed	leaf in every rule
+PART	MarkupView	markup-cell	A	0	proposed	leaf in every rule
+PART	MarkupView	markup-code	A	0	proposed	leaf in every rule
+PART	MarkupView	markup-definition	A	0	proposed	leaf in every rule
+PART	MarkupView	markup-definitions	A	0	proposed	leaf in every rule
+PART	MarkupView	markup-detail	A	0	proposed	leaf in every rule
+PART	MarkupView	markup-header-cell	A	0	proposed	leaf in every rule
+PART	MarkupView	markup-heading	A	0	proposed	leaf in every rule
+PART	MarkupView	markup-item	A	0	proposed	leaf in every rule
+PART	MarkupView	markup-item-body	A	0	proposed	leaf in every rule
+PART	MarkupView	markup-link-hover	A	0	proposed	leaf in every rule
+PART	MarkupView	markup-list	A	0	proposed	leaf in every rule
+PART	MarkupView	markup-paragraph	A	0	proposed	leaf in every rule
+PART	MarkupView	markup-quote	A	0	proposed	leaf in every rule
+PART	MarkupView	markup-quote-rule	A	0	proposed	leaf in every rule
+PART	MarkupView	markup-row	A	0	proposed	leaf in every rule
+PART	MarkupView	markup-table	A	0	proposed	leaf in every rule
+PART	MarkupView	markup-term	A	0	proposed	leaf in every rule
+PART	MaskControl	chevron	A	0	proposed	leaf in every rule
+PART	MaskControl	mask	B	6	proposed	a rule selects through it (6)
+PART	MaskControl	mask-panel	B	1	proposed	a rule selects through it (1)
+PART	MaskControl	mask-row	B	5	proposed	a rule selects through it (4)
+PART	MaskControl	toggle	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	MatrixControl	matrix	B	3	proposed	a rule selects through it (2)
+PART	MatrixControl	matrix-cell	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	MatrixControl	matrix-row	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	Menu	has-checkable	C	3	proposed	state adjective
+PART	Menu	items	A	0	proposed	leaf in every rule
+PART	Menu	separator	A	0	proposed	leaf in every rule
+PART	MenuBarView	burger	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	MenuBarView	burger-bar	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	MenuBarView	collapsed	C	4	proposed	state adjective
+PART	MenuBarView	menu-bar	B	9	proposed	a rule selects through it (7)
+PART	MenuBarView	menu-title	B	4	proposed	a rule selects through it (1)
+PART	MenuBarView	open	C	4	proposed	state adjective
+PART	MenuItem	accelerator	A	0	proposed	leaf in every rule
+PART	MenuItem	checkable	A	0	proposed	leaf in every rule
+PART	MenuItem	has-submenu	C	0	proposed	state adjective
+PART	MenuItem	mark	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	MenuItem	submenu-arrow	A	0	proposed	leaf in every rule
+PART	MergeView	dialog-actions	A	1	proposed	leaf in every rule
+PART	MergeView	merge	B	8	proposed	a rule selects through it (7)
+PART	MergeView	merge-actions	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	MergeView	merge-editor	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	MergeView	merge-pane	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	MergeView	merge-pane-title	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	MergeView	merge-panes	B	4	proposed	a rule selects through it (3)
+PART	MergeView	merge-status	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	MergeView	merge-toolbar	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	NavigatorView	nav-arrow	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	NavigatorView	nav-back	A	0	proposed	leaf in every rule
+PART	NavigatorView	nav-detail	A	0	proposed	leaf in every rule
+PART	NavigatorView	nav-forward	A	0	proposed	leaf in every rule
+PART	NavigatorView	nav-header	A	0	proposed	leaf in every rule
+PART	NavigatorView	nav-label	A	0	proposed	leaf in every rule
+PART	NavigatorView	nav-node	A	0	proposed	leaf in every rule
+PART	NavigatorView	nav-search	A	0	proposed	leaf in every rule
+PART	NavigatorView	nav-sidebar	A	0	proposed	leaf in every rule
+PART	NodeCreationMenu	category	A	0	proposed	leaf in every rule
+PART	NodeCreationMenu	category-segment	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	NodeCreationMenu	category-separator	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	NodeCreationMenu	empty	C	2	proposed	state adjective
+PART	NodeCreationMenu	entry	A	0	proposed	leaf in every rule
+PART	NodeCreationMenu	entry-category	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	NodeCreationMenu	items	A	0	proposed	leaf in every rule
+PART	NodeCreationMenu	label	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
+PART	NodeCreationMenu	search	A	0	proposed	leaf in every rule
+PART	NodeCreationMenu	title	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	NodeCreationMenu	title-bar	A	0	proposed	leaf in every rule
+PART	NodeCreationMenu	twisty	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	NodePort	dot	A	0	proposed	leaf in every rule
+PART	NodePort	dot-core	A	0	proposed	leaf in every rule
+PART	NodePort	editor	A	0	proposed	leaf in every rule
+PART	NodePort	editor-dot	A	0	proposed	leaf in every rule
+PART	NodePort	editor-dot-core	A	0	proposed	leaf in every rule
+PART	NodePort	editor-dot-ring	A	0	proposed	leaf in every rule
+PART	NodePort	editor-label	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	NodePort	input	A	2	proposed	leaf in every rule
+PART	NodePort	label	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	NodePort	output	B	3	proposed	a rule selects through it (1)
+PART	NodeWidgetFactory	unknown-type	C	0	proposed	state adjective
+PART	NodeWireLayer	wire-layer	A	0	proposed	leaf in every rule
+PART	NotificationBalloons	balloon	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
+PART	NotificationBalloons	balloons	B	6	proposed	a rule selects through it (5)
+PART	NotificationBalloons	hidden	C	1	proposed	state adjective
+PART	NotificationsView	action	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
+PART	NotificationsView	action-secondary	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	NotificationsView	actions	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	NotificationsView	clear	A	0	proposed	leaf in every rule
+PART	NotificationsView	close	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	NotificationsView	detail	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	NotificationsView	entry-head	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	NotificationsView	head	A	0	proposed	leaf in every rule
+PART	NotificationsView	message	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	NotificationsView	notification	B	17	proposed	a rule selects through it (15)
+PART	NotificationsView	notification-list	A	0	proposed	leaf in every rule
+PART	NotificationsView	notifications	A	0	proposed	leaf in every rule
+PART	NotificationsView	notifications-empty	A	0	proposed	leaf in every rule
+PART	NotificationsView	severity	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
+PART	NotificationsView	time	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	NotificationsView	title	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
+PART	NumberControl	number	B	2	proposed	a rule selects through it (1)
+PART	NumberControl	scrub-handle	A	1	proposed	leaf in every rule
+PART	NumberControl	scrubbing	A	0	proposed	leaf in every rule
+PART	PageStack	page	A	0	proposed	leaf in every rule
+PART	PageStack	page-placeholder	A	0	proposed	leaf in every rule
+PART	Popover	open	C	3	proposed	state adjective
+PART	Preferences	preferences	B	4	proposed	a rule selects through it (2)
+PART	Preferences	preferences-panel	A	0	proposed	leaf in every rule
+PART	ProblemsPanel	content	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	ProblemsPanel	dropdown-gutter	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	ProblemsPanel	line	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	ProblemsPanel	message	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
+PART	ProblemsPanel	problem	B	1	proposed	a rule selects through it (1)
+PART	ProblemsPanel	problem-count	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	ProblemsPanel	problem-file	A	0	proposed	leaf in every rule
+PART	ProblemsPanel	problem-list	A	0	proposed	leaf in every rule
+PART	ProblemsPanel	problem-tab	B	6	proposed	a rule selects through it (2)
+PART	ProblemsPanel	problem-tabs	A	1	proposed	leaf in every rule
+PART	ProblemsPanel	problems	A	0	proposed	leaf in every rule
+PART	ProblemsPanel	problems-body	A	0	proposed	leaf in every rule
+PART	ProblemsPanel	problems-empty	A	0	proposed	leaf in every rule
+PART	ProblemsPanel	problems-head	A	0	proposed	leaf in every rule
+PART	ProblemsPanel	selected	C	7	proposed	state adjective
+PART	ProblemsPanel	severity	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
+PART	ProblemsPanel	tab-count	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	ProblemsPanel	twisty	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
+PART	ProblemsPanel	view-options	A	0	proposed	leaf in every rule
+PART	ProcessesPopover	cancel	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
+PART	ProcessesPopover	cancelling	B	2	proposed	a rule selects through it (2)
+PART	ProcessesPopover	detail	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	ProcessesPopover	hide	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	ProcessesPopover	label	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	ProcessesPopover	process-row	B	8	proposed	a rule selects through it (7)
+PART	ProcessesPopover	processes	B	12	proposed	a rule selects through it (11)
+PART	ProcessesPopover	title	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	ProgressBar	fill	A	0	proposed	leaf in every rule
+PART	ProgressBar	indeterminate	A	0	proposed	leaf in every rule
+PART	ProgressStatusItem	cancel	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
+PART	ProgressStatusItem	count	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	ProgressStatusItem	label	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	ProgressStatusItem	progress-item	B	7	proposed	a rule selects through it (5)
+PART	ProjectFileTree	badge	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
+PART	ProjectFileTree	content	A	0	proposed	leaf in every rule
+PART	ProjectFileTree	drop-target	A	0	proposed	leaf in every rule
+PART	ProjectFileTree	editing	C	0	proposed	state adjective
+PART	ProjectFileTree	pre-icon	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	ProjectFileTree	project-row	B	1	proposed	a rule selects through it (1)
+PART	ProjectFileTree	project-tree	A	0	proposed	leaf in every rule
+PART	ProjectFileTree	row-editor	A	0	proposed	leaf in every rule
+PART	ProjectFileTree	tree-content	A	0	proposed	leaf in every rule
+PART	ProjectFileTree	twisty	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
+PART	PropertyPill	capsule	A	6	proposed	leaf in every rule, scoped by an ancestor in 6
+PART	PropertyPill	dot	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	PropertyPill	ghost	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	PropertyPill	name	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	PropertyPill	property-pill	B	16	proposed	a rule selects through it (15)
+PART	PropertyPill	rename	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	PropertyPill	renaming	B	2	proposed	a rule selects through it (2)
+PART	PropertyPill	selected	C	7	proposed	state adjective
+PART	PropertyPill	type	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
+PART	QuickFixBulbPart	quick-fix-bulb	A	0	proposed	leaf in every rule
+PART	QuickPick	content	A	0	proposed	leaf in every rule
+PART	QuickPick	qp-accelerator	A	0	proposed	leaf in every rule
+PART	QuickPick	qp-category	A	0	proposed	leaf in every rule
+PART	QuickPick	qp-description	A	0	proposed	leaf in every rule
+PART	QuickPick	qp-disabled	A	0	proposed	leaf in every rule
+PART	QuickPick	qp-empty	A	0	proposed	leaf in every rule
+PART	QuickPick	qp-file-icon	A	0	proposed	leaf in every rule
+PART	QuickPick	qp-header	A	0	proposed	leaf in every rule
+PART	QuickPick	qp-header-spacer	A	0	proposed	leaf in every rule
+PART	QuickPick	qp-icon	A	0	proposed	leaf in every rule
+PART	QuickPick	qp-key	A	0	proposed	leaf in every rule
+PART	QuickPick	qp-key-sep	A	0	proposed	leaf in every rule
+PART	QuickPick	qp-label	A	0	proposed	leaf in every rule
+PART	QuickPick	qp-spacer	A	0	proposed	leaf in every rule
+PART	QuickPick	qp-title	A	0	proposed	leaf in every rule
+PART	QuickPick	qp-truncated	A	0	proposed	leaf in every rule
+PART	QuickPick	results	A	0	proposed	leaf in every rule
+PART	QuickPick	search	A	0	proposed	leaf in every rule
+PART	RegionDropOverlay	region-drop-overlay	A	1	proposed	leaf in every rule
+PART	RegionDropOverlay	region-drop-preview	A	1	proposed	leaf in every rule
+PART	RegionHost	region-half	A	2	proposed	leaf in every rule
+PART	RegionHost	region-host	A	2	proposed	leaf in every rule
+PART	RegionHost	region-primary	A	0	proposed	leaf in every rule
+PART	RegionHost	region-secondary	A	0	proposed	leaf in every rule
+PART	RegionHost	region-split	A	1	proposed	leaf in every rule
+PART	RunConsoleView	over-link	A	0	proposed	leaf in every rule
+PART	RunConsoleView	run-console	A	0	proposed	leaf in every rule
+PART	RunIndicators	running	A	0	proposed	leaf in every rule
+PART	RunPanel	on	C	2	proposed	state adjective
+PART	RunPanel	run-action	A	0	proposed	leaf in every rule
+PART	RunPanel	run-bar	A	0	proposed	leaf in every rule
+PART	RunPanel	run-body	A	0	proposed	leaf in every rule
+PART	RunPanel	run-clear	A	0	proposed	leaf in every rule
+PART	RunPanel	run-empty	A	0	proposed	leaf in every rule
+PART	RunPanel	run-empty-head	A	0	proposed	leaf in every rule
+PART	RunPanel	run-empty-line	A	0	proposed	leaf in every rule
+PART	RunPanel	run-empty-lines	A	0	proposed	leaf in every rule
+PART	RunPanel	run-end	A	0	proposed	leaf in every rule
+PART	RunPanel	run-input	A	0	proposed	leaf in every rule
+PART	RunPanel	run-left	A	0	proposed	leaf in every rule
+PART	RunPanel	run-notice	A	0	proposed	leaf in every rule
+PART	RunPanel	run-rerun	A	0	proposed	leaf in every rule
+PART	RunPanel	run-sep	A	0	proposed	leaf in every rule
+PART	RunPanel	run-stop	A	0	proposed	leaf in every rule
+PART	RunPanel	run-stripe	A	0	proposed	leaf in every rule
+PART	RunPanel	run-wrap	A	0	proposed	leaf in every rule
+PART	RunRail	run-rail	A	0	proposed	leaf in every rule
+PART	RunRail	run-rail-glyph	A	10	proposed	leaf in every rule, scoped by an ancestor in 10
+PART	RunRail	run-rail-name	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	RunRail	run-rail-time	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	Scroller	head	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	Scroller	tail	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	Scroller	thumb	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	Scroller	track	A	0	proposed	leaf in every rule
+PART	Scroller	vertical	C	8	proposed	state adjective
+PART	ScrollerView	corner	A	0	proposed	leaf in every rule
+PART	ScrollerView	h-scroller	A	1	proposed	leaf in every rule
+PART	ScrollerView	v-scroller	A	1	proposed	leaf in every rule
+PART	SearchField	clear	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	SearchField	field	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	SearchField	focused	C	1	proposed	state adjective
+PART	SearchField	icon	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	SearchField	not-found	B	1	proposed	a rule selects through it (1)
+PART	SearchField	on	C	2	proposed	state adjective
+PART	SearchField	options	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	SearchField	search-field	B	8	proposed	a rule selects through it (6)
+PART	SearchField	search-option	A	4	proposed	leaf in every rule
+PART	SearchReplaceBar	expanded	C	1	proposed	state adjective
+PART	SearchReplaceBar	find-action	B	6	proposed	a rule selects through it (2)
+PART	SearchReplaceBar	find-bar	B	32	proposed	a rule selects through it (31)
+PART	SearchReplaceBar	find-chevron	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
+PART	SearchReplaceBar	find-close	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	SearchReplaceBar	find-count	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	SearchReplaceBar	find-input	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	SearchReplaceBar	find-next	A	5	proposed	leaf in every rule, scoped by an ancestor in 5
+PART	SearchReplaceBar	find-prev	A	5	proposed	leaf in every rule, scoped by an ancestor in 5
+PART	SearchReplaceBar	find-row	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	SearchReplaceBar	find-rows	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	SearchReplaceBar	find-trailing	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	SearchReplaceBar	off	C	2	proposed	state adjective
+PART	SearchReplaceBar	option-match-case	A	1	proposed	leaf in every rule
+PART	SearchReplaceBar	option-preserve-case	A	1	proposed	leaf in every rule
+PART	SearchReplaceBar	option-regex	A	1	proposed	leaf in every rule
+PART	SearchReplaceBar	option-words	A	1	proposed	leaf in every rule
+PART	SelectControl	select	B	2	proposed	a rule selects through it (1)
+PART	ShaderGraphEditor	content	A	0	proposed	leaf in every rule
+PART	ShaderGraphEditor	shader-content	A	0	proposed	leaf in every rule
+PART	ShaderGraphEditor	shader-graph	A	0	proposed	leaf in every rule
+PART	ShaderGraphEditor	shader-source	A	1	proposed	leaf in every rule
+PART	ShaderNodePreview	preview-image	A	0	proposed	leaf in every rule
+PART	ShaderPropertyNodes	exposed-dot	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	ShaderPropertyNodes	property-linked	A	4	proposed	leaf in every rule
+PART	ShaderPropertyNodes	property-node	B	20	proposed	a rule selects through it (14)
+PART	Slider	fill	A	0	proposed	leaf in every rule
+PART	Slider	spacer	A	0	proposed	leaf in every rule
+PART	Slider	thumb	A	0	proposed	leaf in every rule
+PART	SliderControl	slider	B	5	proposed	a rule selects through it (4)
+PART	SplitView	divider	A	6	proposed	leaf in every rule, scoped by an ancestor in 6
+PART	SplitView	dragging	C	2	proposed	state adjective
+PART	SplitView	first	C	0	proposed	state adjective
+PART	SplitView	second	C	0	proposed	state adjective
+PART	SplitView	split-pane	A	0	proposed	leaf in every rule
+PART	SplitView	vertical	C	8	proposed	state adjective
+PART	SquigglesPart	squiggle	A	1	proposed	leaf in every rule
+PART	SquigglesPart	squiggle-error	A	1	proposed	leaf in every rule
+PART	SquigglesPart	squiggle-information	A	1	proposed	leaf in every rule
+PART	SquigglesPart	squiggle-warning	A	1	proposed	leaf in every rule
+PART	StatusBarView	clickable	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	StatusBarView	first	C	0	proposed	state adjective
+PART	StatusBarView	left	B	2	proposed	a rule selects through it (2)
+PART	StatusBarView	right	B	2	proposed	a rule selects through it (2)
+PART	StatusBarView	spacer	A	0	proposed	leaf in every rule
+PART	StatusBarView	status-bar	B	5	proposed	a rule selects through it (5)
+PART	StatusBarView	status-item	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
+PART	StatusBarView	status-sep	A	0	proposed	leaf in every rule
+PART	StripeView	activity-bar	B	4	proposed	a rule selects through it (4)
+PART	StripeView	activity-item	A	0	proposed	leaf in every rule
+PART	StripeView	badge	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
+PART	StripeView	dot	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	StripeView	panel-focused	C	0	proposed	state adjective
+PART	StripeView	stripe-left	A	0	proposed	leaf in every rule
+PART	StripeView	stripe-right	A	0	proposed	leaf in every rule
+PART	StripeView	stripe-separator	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	StripeView	stripe-spacer	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	SvgGradient	tag	A	0	proposed	leaf in every rule
+PART	SvgResolver	tag	A	0	proposed	leaf in every rule
+PART	Switch	knob	A	0	proposed	leaf in every rule
+PART	Switch	spacer	A	0	proposed	leaf in every rule
+PART	SymbolIcon	completion-icon	A	2	proposed	leaf in every rule
+PART	SymbolIcon	completion-mark-final	A	2	proposed	leaf in every rule
+PART	SymbolIcon	completion-mark-static	A	2	proposed	leaf in every rule
+PART	SystemMenu	jump-list	A	2	proposed	leaf in every rule
+PART	SystemMenu	rising	C	1	proposed	state adjective
+PART	Tab	close	A	0	proposed	leaf in every rule
+PART	Tab	pane	A	0	proposed	leaf in every rule
+PART	TabView	bottom	A	0	proposed	leaf in every rule
+PART	TabView	empty	C	2	proposed	state adjective
+PART	TabView	left	B	2	proposed	a rule selects through it (2)
+PART	TabView	panes	A	0	proposed	leaf in every rule
+PART	TabView	rail	A	6	proposed	leaf in every rule, scoped by an ancestor in 6
+PART	TabView	right	B	2	proposed	a rule selects through it (2)
+PART	TabView	strip	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	TabView	strip-bar	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
+PART	TabView	top	A	0	proposed	leaf in every rule
+PART	TableView	cell	A	0	proposed	leaf in every rule
+PART	TableView	divider	A	0	proposed	leaf in every rule
+PART	TableView	header	B	2	proposed	a rule selects through it (1)
+PART	TableView	header-cell	A	0	proposed	leaf in every rule
+PART	TableView	sorted-asc	C	0	proposed	state adjective
+PART	TableView	sorted-desc	C	0	proposed	state adjective
+PART	Taskbar	active	C	3	proposed	state adjective
+PART	Taskbar	animating	C	0	proposed	state adjective
+PART	Taskbar	attention	C	0	proposed	state adjective
+PART	Taskbar	badge	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	Taskbar	busy	C	0	proposed	state adjective
+PART	Taskbar	edge	A	0	proposed	leaf in every rule
+PART	Taskbar	entries	A	0	proposed	leaf in every rule
+PART	Taskbar	entry	A	0	proposed	leaf in every rule
+PART	Taskbar	exiting	C	0	proposed	state adjective
+PART	Taskbar	glow	A	0	proposed	leaf in every rule
+PART	Taskbar	hidden	C	0	proposed	state adjective
+PART	Taskbar	icon	B	2	proposed	a rule selects through it (1)
+PART	Taskbar	indicator	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
+PART	Taskbar	progress	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	TaskbarDesigner	designer	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	TaskbarDesigner	designer-actions	A	1	proposed	leaf in every rule
+PART	TaskbarDesigner	designer-body	A	1	proposed	leaf in every rule
+PART	TaskbarDesigner	designer-heading	A	2	proposed	leaf in every rule
+PART	TaskbarDesigner	designer-label	A	3	proposed	leaf in every rule
+PART	TaskbarDesigner	designer-note	A	2	proposed	leaf in every rule
+PART	TaskbarDesigner	designer-readout	A	1	proposed	leaf in every rule
+PART	TaskbarDesigner	designer-row	A	1	proposed	leaf in every rule
+PART	TaskbarDesigner	designer-slider	A	1	proposed	leaf in every rule
+PART	TaskbarDesigner	designer-tint	A	0	proposed	leaf in every rule
+PART	TaskbarDesigner	designer-value	A	2	proposed	leaf in every rule
+PART	TaskbarDesigner	taskbar-designer	B	1	proposed	a rule selects through it (1)
+PART	TextControl	text	B	2	proposed	a rule selects through it (1)
+PART	TextEditor	active	C	3	proposed	state adjective
+PART	TextEditor	caret	A	0	proposed	leaf in every rule
+PART	TextEditor	code-actions	B	1	proposed	a rule selects through it (1)
+PART	TextEditor	collapsed	C	4	proposed	state adjective
+PART	TextEditor	current-line	A	0	proposed	leaf in every rule
+PART	TextEditor	diff-added	A	3	proposed	leaf in every rule
+PART	TextEditor	diff-band	A	7	proposed	leaf in every rule
+PART	TextEditor	diff-changed	A	3	proposed	leaf in every rule
+PART	TextEditor	diff-chevron	A	1	proposed	leaf in every rule
+PART	TextEditor	diff-mark	A	4	proposed	leaf in every rule
+PART	TextEditor	diff-removed	A	3	proposed	leaf in every rule
+PART	TextEditor	diff-thin	A	3	proposed	leaf in every rule
+PART	TextEditor	fold	A	0	proposed	leaf in every rule
+PART	TextEditor	fold-column	A	0	proposed	leaf in every rule
+PART	TextEditor	fold-placeholder	A	0	proposed	leaf in every rule
+PART	TextEditor	gutter	A	0	proposed	leaf in every rule
+PART	TextEditor	gutter-edge	A	0	proposed	leaf in every rule
+PART	TextEditor	gutter-right	A	0	proposed	leaf in every rule
+PART	TextEditor	indent-guide	A	0	proposed	leaf in every rule
+PART	TextEditor	line	A	0	proposed	leaf in every rule
+PART	TextEditor	line-number	A	0	proposed	leaf in every rule
+PART	TextEditor	preferred-action	C	1	proposed	state adjective
+PART	TextEditor	ruler	A	0	proposed	leaf in every rule
+PART	TextEditor	scroll-layer	A	0	proposed	leaf in every rule
+PART	TextEditor	selection	A	0	proposed	leaf in every rule
+PART	TextEditor	shown	C	0	proposed	state adjective
+PART	TextEditor	text-viewport	A	0	proposed	leaf in every rule
+PART	TextEditor	whitespace	A	0	proposed	leaf in every rule
+PART	TextEditor	zoom-indicator	A	0	proposed	leaf in every rule
+PART	TextEditor	zoom-label	A	0	proposed	leaf in every rule
+PART	TextEditor	zoom-reset	A	0	proposed	leaf in every rule
+PART	ToolWindowFrame	dock	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	ToolWindowFrame	floating	C	0	proposed	state adjective
+PART	ToolWindowFrame	tool-window	B	10	proposed	a rule selects through it (9)
+PART	ToolWindowFrame	windowed	C	0	proposed	state adjective
+PART	Tooltip	label	A	0	proposed	leaf in every rule
+PART	TreeSearch	dimmed	C	1	proposed	state adjective
+PART	TreeSearch	find-bar	B	32	proposed	a rule selects through it (31)
+PART	TreeSearch	find-close	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	TreeSearch	find-count	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	TreeSearch	find-input	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	TreeSearch	find-mode	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
+PART	TreeSearch	find-next	A	5	proposed	leaf in every rule, scoped by an ancestor in 5
+PART	TreeSearch	find-prev	A	5	proposed	leaf in every rule, scoped by an ancestor in 5
+PART	TreeSearch	match	C	2	proposed	state adjective
+PART	TreeSearch	off	C	2	proposed	state adjective
+PART	TreeSearch	on	C	3	proposed	state adjective
+PART	TreeSearch	option-match-case	A	1	proposed	leaf in every rule
+PART	TreeSearch	option-regex	A	1	proposed	leaf in every rule
+PART	TreeSearch	option-words	A	1	proposed	leaf in every rule
+PART	TreeSearch	search-option	A	4	proposed	leaf in every rule
+PART	TreeSearch	searching	C	0	proposed	state adjective
+PART	TreeView	collapsed	C	4	proposed	state adjective
+PART	TreeView	expanded	C	0	proposed	state adjective
+PART	TreeView	leaf	C	0	proposed	state adjective
+PART	UIElement	resizer	A	1	proposed	leaf in every rule
+PART	UIElement	user-sized-height	B	1	proposed	a rule selects through it (1)
+PART	UIElement	user-sized-width	A	1	proposed	leaf in every rule
+PART	UIText	syntax	A	54	proposed	leaf in every rule
+PART	UIWindow	overlays	A	0	proposed	leaf in every rule
+PART	VectorControl	axis	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	VectorControl	vector	B	4	proposed	a rule selects through it (3)
+PART	VectorControl	vector-cell	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	ViewContainer	content	A	0	proposed	leaf in every rule
+PART	ViewContainer	header	B	3	proposed	a rule selects through it (2)
+PART	ViewContainer	hide	B	4	proposed	a rule selects through it (1)
+PART	ViewContainer	panel-header	B	5	proposed	a rule selects through it (4)
+PART	ViewContainer	title	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	ViewContainer	view-container	B	4	proposed	a rule selects through it (3)
+PART	ViewContainer	view-content	B	6	proposed	a rule selects through it (4)
+PART	WindowFrame	active	C	3	proposed	state adjective
+PART	WindowFrame	caption-adopted	C	2	proposed	state adjective
+PART	WindowFrame	caption-chrome	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	WindowFrame	close	B	7	proposed	a rule selects through it (1)
+PART	WindowFrame	content	A	0	proposed	leaf in every rule
+PART	WindowFrame	controls	B	1	proposed	a rule selects through it (1)
+PART	WindowFrame	fullscreen	C	1	proposed	state adjective
+PART	WindowFrame	hud	C	0	proposed	state adjective
+PART	WindowFrame	icon	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	WindowFrame	maximize	A	5	proposed	leaf in every rule, scoped by an ancestor in 5
+PART	WindowFrame	maximized	C	2	proposed	state adjective
+PART	WindowFrame	minimize	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
+PART	WindowFrame	overlays	A	0	proposed	leaf in every rule
+PART	WindowFrame	pin	A	5	proposed	leaf in every rule, scoped by an ancestor in 5
+PART	WindowFrame	pinned	C	1	proposed	state adjective
+PART	WindowFrame	title	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	WindowFrame	title-bar	B	4	proposed	a rule selects through it (2)
+PART	WindowIcon	branded	C	1	proposed	state adjective
+PART	WindowIcon	monogram	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	WindowIcon	tile-mono	A	1	proposed	leaf in every rule
+PART	WindowIcon	window-icon	B	10	proposed	a rule selects through it (1)
+PART	WindowKeyboardMove	keyboard-moving	C	0	proposed	state adjective
+PART	WindowPreview	pre-icon	B	2	proposed	a rule selects through it (1)
+PART	WindowPreview	preview-close	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
+PART	WindowPreview	preview-header	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	WindowPreview	preview-title	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	WindowPreview	window-preview	B	12	proposed	a rule selects through it (11)
+PART	WindowSwitcher	icon	B	2	proposed	a rule selects through it (1)
+PART	WindowSwitcher	selected	C	7	proposed	state adjective
+PART	WindowSwitcher	switcher-close	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
+PART	WindowSwitcher	switcher-entry	B	13	proposed	a rule selects through it (10)
+PART	WindowSwitcher	switcher-header	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	WindowSwitcher	switcher-panel	B	2	proposed	a rule selects through it (1)
+PART	WindowSwitcher	switcher-title	A	1	proposed	leaf in every rule
+PART	WindowSwitcher	window-switcher	B	2	proposed	a rule selects through it (1)
+PART	WindowThumbnail	placeholder	B	4	proposed	a rule selects through it (2)
+PART	WindowThumbnail	thumbnail	A	0	proposed	leaf in every rule
+PART	Workbench	content	A	0	proposed	leaf in every rule
+PART	Workbench	dock	A	0	proposed	leaf in every rule
+PART	Workbench	file-editor	A	1	proposed	leaf in every rule
+PART	Workbench	missing	C	0	proposed	state adjective
+PART	Workbench	viewer	A	0	proposed	leaf in every rule
+PART	Workbench	workbench-content	A	0	proposed	leaf in every rule
+PART	WorkbenchRegions	workbench-centre	A	1	proposed	leaf in every rule
+PART	WorkbenchRegions	workbench-regions	A	0	proposed	leaf in every rule
+PART	WorkbenchRegions	workbench-split	A	1	proposed	leaf in every rule
