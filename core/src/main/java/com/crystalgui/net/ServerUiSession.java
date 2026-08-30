@@ -11,6 +11,9 @@ import com.crystalgui.serialization.ContentHash;
 import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.UIDescriptionCodec;
+import com.crystalgui.ui.contract.State;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.net.mirror.ElementNodeMirror;
@@ -775,8 +778,12 @@ public final class ServerUiSession<T> {
         // SANITIZED BY THE WIDGET, not by the session: what makes a payload safe is a question about
         // the widget's own configuration -- a slider's bounds and step, a field's maximum length -- and
         // nothing outside the widget class knows those.
-        return on(element, event.kind(),
-                ctx -> handler.accept(ctx, event.sanitize(element, event.decode(ctx.payload()))));
+        return on(element, event.kind(), ctx -> {
+            P value = event.sanitize(element, event.decode(ctx.payload()));
+            handler.accept(ctx, value);
+            // WHO made this what it is, so the flush does not read it back to them. @see #suppressedFor
+            noteEcho(element, ctx.viewer(), value);
+        });
     }
 
     /**
@@ -863,14 +870,90 @@ public final class ServerUiSession<T> {
     private void flush() {
         if (!anyViewerVisible()) return;
         flushStructure();
-        StateMap<T> state = mirror.drainState();
-        if (state == null) return;
-        state.putInt(UiMethods.WINDOW, windowId);
-        T encoded = state.encode();
-        for (Viewer<T> viewer : viewers) {
-            if (viewer.visible) viewer.router.notify(UiMethods.STATE_DELTA, encoded);
-            else viewer.missedState = true;
+        Map<UIElement, StateMap<T>> entries = mirror.drainState();
+        if (entries == null || entries.isEmpty()) {
+            echoes.clear();
+            return;
         }
+
+        /*
+         * A VIEWER IS NOT TOLD WHAT IT JUST TOLD US.
+         *
+         * The value came FROM that viewer, so the message carries nothing it does not already have --
+         * and by the time it lands the viewer has usually moved past it, so applying it drags the
+         * control BACKWARDS to a value from a round trip ago. Under a drag that is continuous: measured
+         * at ~110ms of lag, the knob was hauled back to 0.51, 0.58, 0.67 and 0.74 while the user held it
+         * at 0.79, and on release -- with no more local movement to correct it -- the remaining echoes
+         * played out in order as a visible walk.
+         *
+         * It is suppressed only while the state still MATCHES what that viewer sent. A server that
+         * clamped the value, refused it, or had something else move it has genuinely new information,
+         * and that is exactly when the viewer must hear it. Everyone else is told regardless: to them
+         * this is ordinary news.
+         */
+        Map<UIElement, StateMap<T>> common = entries;
+        StateMap<T> shared = null;
+        for (Viewer<T> viewer : viewers) {
+            if (!viewer.visible) {
+                viewer.missedState = true;
+                continue;
+            }
+            List<UIElement> skip = suppressedFor(viewer, entries);
+            T encoded;
+            if (skip.isEmpty()) {
+                if (shared == null) {
+                    shared = mirror.pack(common.values());
+                    shared.putInt(UiMethods.WINDOW, windowId);
+                }
+                encoded = shared.encode();
+            } else {
+                Map<UIElement, StateMap<T>> mine = new LinkedHashMap<>(entries);
+                for (UIElement element : skip) mine.remove(element);
+                if (mine.isEmpty()) continue;      // nothing left worth a packet
+                StateMap<T> out = mirror.pack(mine.values());
+                out.putInt(UiMethods.WINDOW, windowId);
+                encoded = out.encode();
+            }
+            viewer.router.notify(UiMethods.STATE_DELTA, encoded);
+        }
+        echoes.clear();
+    }
+
+    /**
+     * Which of this batch's elements this viewer already knows about, because it is what it sent.
+     *
+     * <p>Compared through the widget's {@link WidgetContract#primary()} — the one slot that IS the
+     * widget — against the value the viewer's own event carried. A widget with no primary, or an event
+     * whose payload is not that slot (a button's press), simply never matches and is sent, which is the
+     * safe direction: the cost of an unnecessary echo is a wasted packet, and the cost of a missing one
+     * is a control that disagrees with the server.</p>
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private List<UIElement> suppressedFor(Viewer<T> viewer, Map<UIElement, StateMap<T>> entries) {
+        if (echoes.isEmpty()) return List.of();
+        List<UIElement> skip = new ArrayList<>(1);
+        for (UIElement element : entries.keySet()) {
+            Echo echo = echoes.get(element);
+            if (echo == null || !java.util.Objects.equals(echo.viewer, viewer.peer)) continue;
+            WidgetContract contract = WidgetContracts.of(element);
+            if (contract == null) continue;
+            State primary = contract.primary();
+            if (primary == null) continue;
+            if (java.util.Objects.equals(primary.read(element), echo.value)) skip.add(element);
+        }
+        return skip;
+    }
+
+    /** What one viewer's event most recently made an element's value. @see #suppressedFor */
+    private record Echo(@Nullable Object viewer, @Nullable Object value) {
+    }
+
+    /** Cleared every flush: it describes THIS tick's traffic, never a standing fact. */
+    private final Map<UIElement, Echo> echoes = new LinkedHashMap<>();
+
+    /** Records that {@code viewer} is the reason {@code element} now holds {@code value}. */
+    void noteEcho(UIElement element, @Nullable Object viewer, @Nullable Object value) {
+        echoes.put(element, new Echo(viewer, value));
     }
 
     /** Whether anyone at all is watching. What gates the drain, and the projections above it. */

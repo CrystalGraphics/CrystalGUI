@@ -299,8 +299,8 @@ public class MirrorIsEngineAgnosticTest {
     }
 
     private void pumpState() {
-        StateMap<Object> delta = server.drainState();
-        if (delta != null) client.applyState(delta, null);
+        java.util.Map<Node, StateMap<Object>> entries = server.drainState();
+        if (entries != null) client.applyState(server.pack(entries.values()), null);
     }
 
     private Node serverRootWith(String... labels) {

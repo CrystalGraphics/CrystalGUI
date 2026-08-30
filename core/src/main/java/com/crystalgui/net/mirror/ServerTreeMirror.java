@@ -5,6 +5,7 @@ import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.dom.TreeObserver;
 import com.crystalgui.ui.dom.TreeSource;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -176,7 +177,7 @@ public final class ServerTreeMirror<N, T> implements TreeObserver<N> {
      * the described tree, so there is nothing on the far side to address.</p>
      */
     @Nullable
-    public StateMap<T> drainState() {
+    public Map<N, StateMap<T>> drainState() {
         if (!live || (dirtyState.isEmpty() && dirtyIdentity.isEmpty())) return null;
 
         Map<N, StateMap<T>> entries = new LinkedHashMap<>();
@@ -197,11 +198,22 @@ public final class ServerTreeMirror<N, T> implements TreeObserver<N> {
         dirtyIdentity.clear();
         if (entries.isEmpty()) return null;
 
-        List<T> encoded = new ArrayList<>(entries.size());
         for (Map.Entry<N, StateMap<T>> entry : entries.entrySet()) {
             entry.getValue().putInt("nid", source.idOf(entry.getKey()));
-            encoded.add(entry.getValue().encode());
         }
+        return entries;
+    }
+
+    /**
+     * Packs entries into one message.
+     *
+     * <p>Separate from draining them because <b>who gets which entry is not the mirror's question</b>:
+     * a viewer may be owed everything except the one element it just changed itself, and the mirror
+     * knows nothing about viewers. It hands back what changed; the session decides who hears about it.</p>
+     */
+    public StateMap<T> pack(Collection<StateMap<T>> entries) {
+        List<T> encoded = new ArrayList<>(entries.size());
+        for (StateMap<T> entry : entries) encoded.add(entry.encode());
         StateMap<T> out = new StateMap<>(ops);
         out.putRaw("entries", ops.createList(encoded));
         return out;
