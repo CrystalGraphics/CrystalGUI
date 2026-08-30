@@ -488,13 +488,16 @@ ServerWindows.openable(FurnacePanel.TYPE, (viewer, args) -> {
 ```java
 StateMap<Object> args = new StateMap<>(connection.ops());
 args.putInt("x", pos.getX());   // …y, z
-ClientWindows.of(connection).requestOpen(FurnacePanel.TYPE, args, granted -> {
+ClientWindows.requestOpen(FurnacePanel.TYPE, args, granted -> {
     if (!granted) player.addChatMessage(new ChatComponentText("You are too far away."));
 });
 ```
 
 Four things worth knowing:
 
+- **No connection argument**, because there is only one it could mean: a client has one connection, to
+  the server it is playing on. (Asked before you are connected to anything, it answers `false` rather
+  than throwing — a key bound to this can be pressed on a title screen.)
 - **`granted` is not where the window arrives.** It says only whether one is coming. The window itself
   turns up through the ordinary mount path, so you have exactly one place that handles "a window
   appeared" whether you asked for it or the server decided.

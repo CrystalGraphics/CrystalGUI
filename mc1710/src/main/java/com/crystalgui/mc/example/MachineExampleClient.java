@@ -58,7 +58,7 @@ public final class MachineExampleClient {
             // A REQUEST, so a refusal is something we hear rather than something we wait for. The
             // window itself still arrives through the ordinary mount path -- `granted` says only
             // whether one is coming, and is not where to look for the tree.
-            ClientWindows.of(connection).requestOpen(MachinePanel.TYPE, null, granted ->
+            ClientWindows.requestOpen(MachinePanel.TYPE, null, granted ->
                     MachineTrace.log(MachineTrace.CLIENT,
                             granted ? "the server is opening one" : "the server said no"));
             // The desktop is opened either way: it is where the window WILL land, and a screen that

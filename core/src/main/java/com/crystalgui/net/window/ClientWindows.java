@@ -93,6 +93,22 @@ public final class ClientWindows {
         connection.onClosed(this::onConnectionClosed);
     }
 
+    /**
+     * The client's own window host, or {@code null} before it has connected to anything.
+     *
+     * <p>There is exactly one on a client — one process, one connection to one server — which is what
+     * makes {@link #requestOpen} static. Cleared when that connection closes, so a stale one is never
+     * handed out after a disconnect; a reconnect installs the next one over it.</p>
+     */
+    @Nullable
+    private static ClientWindows CLIENT;
+
+    /** @see #CLIENT */
+    @Nullable
+    public static ClientWindows client() {
+        return CLIENT;
+    }
+
     /** The host for this connection, created on first use. */
     public static ClientWindows of(ProtocolConnection<Object> connection) {
         return connection.attachment(ClientWindows.class, ClientWindows::new);
@@ -100,7 +116,14 @@ public final class ClientWindows {
 
     /** Builds the host so it starts listening for windows. @see WindowProtocol */
     static void install(ProtocolConnection<Object> connection) {
-        of(connection);
+        ClientWindows windows = of(connection);
+        // RECORDED, and this is the one place it can be: Protocols.client binds only where a connection
+        // has no peer, which is the client's own end. So whatever arrives here IS the client's
+        // connection, and nothing has to be told which one that is.
+        CLIENT = windows;
+        connection.onClosed(reason -> {
+            if (CLIENT == windows) CLIENT = null;
+        });
     }
 
     // ── Panel classes, from the wire ────────────────────────────────────────
@@ -154,33 +177,52 @@ public final class ClientWindows {
     /**
      * <b>Asks the server for a window.</b>
      *
-     * <p>A request, so a refusal is something you learn rather than something you wait for. The old
-     * idiom was a notification whose comment said "the window arriving IS the answer" — fine while it
-     * always succeeded, and indistinguishable from a lost packet when it did not: the player presses
-     * the key and nothing happens, forever, with nothing to look at.</p>
+     * <p>A request, so a refusal is something you learn rather than something you wait for. A
+     * notification's failure is silence, and silence is what a lost packet looks like too — the player
+     * presses the key and nothing happens, forever, with no way to tell a rule from a fault.</p>
      *
-     * <p>The reply says only <b>whether</b> it was granted. The window, if there is one, arrives through
-     * the ordinary mount path, so there is exactly one place that learns a window appeared no matter who
-     * asked for it — and {@code onGranted} is not where you should look for the tree.</p>
+     * <p>The reply says only <b>whether</b> one is coming. The window itself arrives through the
+     * ordinary mount path, so there is one place that handles "a window appeared" no matter who asked —
+     * {@code onGranted} is not where to look for the tree. It costs nothing in time either: the server
+     * queues the window before it answers, so both leave in the same flush.</p>
      *
      * <pre>{@code
-     * StateMap<Object> args = new StateMap<>(connection.ops());
+     * StateMap<Object> args = new StateMap<>(PlainOps.INSTANCE);
      * args.putInt("x", pos.getX());   // a CLAIM; the server re-derives from it
-     * ClientWindows.of(connection).requestOpen(FurnacePanel.TYPE, args, granted -> {
-     *     if (!granted) player.addChatMessage("You are too far away.");
+     * ClientWindows.requestOpen(FurnacePanel.TYPE, args, granted -> {
+     *     if (!granted) player.addChatMessage(new ChatComponentText("You are too far away."));
      * });
      * }</pre>
      *
-     * <p><b>The single-player trap.</b> Asking for a window almost always means opening a
-     * {@code GuiScreen}, and one whose {@code doesGuiPauseGame()} returns {@code true} stops the
-     * integrated server ticking — so the connection is never pumped, this request is never answered, and
-     * it dies at its timeout. It is invisible on a dedicated server, which is the configuration nobody
-     * tests the wire in, and it presents as "the window never opens in single-player".</p>
+     * <p><b>Static, and takes no connection</b>, because there is only one it could mean: a client has
+     * one connection, to the server it is playing on. Asking to open a window on somebody else's
+     * connection is not a thing a client does — that is the server's side of this exchange.</p>
      *
-     * @param args    what the server should re-derive the model from. Untrusted on the far side
-     * @param onGranted told {@code true} if a window was opened, {@code false} if refused or unanswered
+     * <p><b>⚠ The single-player trap.</b> Asking for a window almost always means opening a
+     * {@code GuiScreen}, and one whose {@code doesGuiPauseGame()} returns {@code true} stops the
+     * integrated server ticking — so the connection is never pumped, this request is never answered,
+     * and it dies at its timeout. It is invisible on a dedicated server, which is the configuration
+     * nobody tests the wire in, and presents as "it works in multiplayer but not single-player".</p>
+     *
+     * @param args      what the server should re-derive its model from. <b>Untrusted</b> on the far side
+     * @param onGranted told {@code true} if a window was opened, {@code false} if it was refused,
+     *                  unanswered, or this client is not connected to anything
      */
-    public <P extends UIElement & Networked<M>, M> void requestOpen(
+    public static <P extends UIElement & Networked<M>, M> void requestOpen(
+            UiType<P, M> type, @Nullable StateMap<Object> args,
+            @Nullable java.util.function.Consumer<Boolean> onGranted) {
+        ClientWindows windows = CLIENT;
+        if (windows == null) {
+            // NOT CONNECTED is answered rather than thrown: a key bound to this can be pressed on a
+            // title screen, and that is not a programming error.
+            CrystalGuiCore.LOGGER.warn("Asked to open <{}> with no connection to a server", type.id());
+            if (onGranted != null) onGranted.accept(false);
+            return;
+        }
+        windows.ask(type, args, onGranted);
+    }
+
+    private <P extends UIElement & Networked<M>, M> void ask(
             UiType<P, M> type, @Nullable StateMap<Object> args,
             @Nullable java.util.function.Consumer<Boolean> onGranted) {
         StateMap<Object> out = new StateMap<>(connection.ops());
