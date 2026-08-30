@@ -25,6 +25,15 @@ public enum CloseReason {
         CONNECTION_LOST,
 
     /**
+     * The CLIENT discarded it to stay under its retention cap — nobody asked for it.
+     *
+     * <p>Deliberately not {@code CLIENT}: that means a person decided, and a server may reasonably write
+     * a decision down. An eviction is the client running out of room, and recording it as a decision is
+     * how a workspace comes back missing the panels somebody had open.</p>
+     */
+    RETENTION,
+
+    /**
      * A code this build does not know.
      *
      * <p>Only reachable across a version gap — a newer server naming a reason an older client has never

@@ -203,6 +203,9 @@ public final class WindowRegistry {
             // while nobody is looking. It stays over the cap, which is the honest outcome: the cap is a
             // budget, not a promise.
             if (!frame.canDiscard()) continue;
+            // MARKED, so anything listening can tell this from a close somebody asked for. Both end in
+            // destroy(); only the flag separates "the cap ran out" from "the user decided".
+            frame.markEvicting();
             frame.destroy();
             over--;
         }

@@ -12,6 +12,7 @@ import javax.annotation.Nullable;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.SheetRef;
+import com.crystalgui.net.UiLimits;
 
 /**
  * Turns the {@link SheetRef}s a window names into <b>CSS a host can actually apply</b>.
@@ -66,10 +67,24 @@ public final class SheetSupply {
     private final BiConsumer<ClientWindowContext, List<String>> apply;
 
     /**
+     * Undoes {@link #apply}. Paired here rather than left to the host, for the reason the mirror's own
+     * codec seam records: an acquire with no matching release is a leak nothing reports, and on one
+     * type the omission is a compile error rather than a discovery.
+     */
+    private final BiConsumer<ClientWindowContext, List<String>> release;
+
+    /**
      * @param apply what a host does with resolved CSS — parse it and add it to a style engine. Called
      *              on the thread that ticked the connection, which is the thread that owns the tree.
      */
     public SheetSupply(BiConsumer<ClientWindowContext, List<String>> apply) {
+        this(apply, (window, css) -> { });
+    }
+
+    /** @param release called with exactly what {@code apply} was given, when the window ends */
+    public SheetSupply(BiConsumer<ClientWindowContext, List<String>> apply,
+                       BiConsumer<ClientWindowContext, List<String>> release) {
+        this.release = release;
         if (apply == null) throw new IllegalArgumentException("apply is null");
         this.apply = apply;
     }
@@ -94,6 +109,22 @@ public final class SheetSupply {
         return cache.size();
     }
 
+    /** What each live window was given, so it can be given back. */
+    private final java.util.Map<ClientWindowContext, List<String>> applied =
+            new java.util.LinkedHashMap<>();
+
+    /** The window has ended: hand its sheets back. Silent if it never had any. */
+    void released(ClientWindowContext window) {
+        List<String> css = applied.remove(window);
+        if (css == null) return;
+        try {
+            release.accept(window, css);
+        } catch (RuntimeException failed) {
+            CrystalGuiCore.LOGGER.error("Releasing sheets for <{}> failed: {}",
+                    window.type(), failed.getMessage(), failed);
+        }
+    }
+
     /**
      * Resolves every ref for one window, then applies them together.
      *
@@ -101,6 +132,13 @@ public final class SheetSupply {
      * again on a re-describe.</p>
      */
     void resolve(ClientUiSession<Object> session, List<SheetRef> refs, ClientWindowContext window) {
+        if (refs.size() > UiLimits.MAX_SHEETS_PER_WINDOW) {
+            // The EXCESS is dropped rather than the window: a plain window is a usable one, and a
+            // server naming seventeen sheets is not describing a UI anybody can see the difference in.
+            CrystalGuiCore.LOGGER.warn("<{}> names {} sheets; taking the first {}",
+                    window.type(), refs.size(), UiLimits.MAX_SHEETS_PER_WINDOW);
+            refs = refs.subList(0, UiLimits.MAX_SHEETS_PER_WINDOW);
+        }
         int total = refs.size();
         String[] resolved = new String[total];
         boolean[] settled = new boolean[total];
@@ -170,9 +208,18 @@ public final class SheetSupply {
     private void deliver(ClientWindowContext window, String[] resolved, boolean[] settled) {
         List<String> css = new ArrayList<>(resolved.length);
         for (int i = 0; i < resolved.length; i++) {
-            if (settled[i] && resolved[i] != null) css.add(resolved[i]);
+            if (!settled[i] || resolved[i] == null) continue;
+            if (resolved[i].length() > UiLimits.MAX_SHEET_BYTES) {
+                // Skipped WHOLE, never truncated: half a stylesheet parses to a different stylesheet,
+                // and one that ends mid-rule is a window styled by an accident.
+                CrystalGuiCore.LOGGER.warn("<{}> sent a {}-character sheet; the cap is {}. Skipping it.",
+                        window.type(), resolved[i].length(), UiLimits.MAX_SHEET_BYTES);
+                continue;
+            }
+            css.add(resolved[i]);
         }
         if (css.isEmpty()) return;
+        applied.put(window, css);
         try {
             apply.accept(window, css);
         } catch (RuntimeException failed) {

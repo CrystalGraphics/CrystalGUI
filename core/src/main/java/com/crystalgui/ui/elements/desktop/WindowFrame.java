@@ -402,6 +402,26 @@ public class WindowFrame extends UIElement implements Disposable {
     /** @see #setDiscardGuard */
     private BooleanSupplier discardGuard = () -> true;
 
+    /**
+     * Set while the retention cap is discarding this window, so a listener can tell that apart from a
+     * close somebody asked for.
+     *
+     * <p>Both end in {@code destroy()} and {@code onDestroyed}, so without this a listener sees one
+     * event and has to guess — and guessing "the user closed it" for an eviction is how a server comes
+     * to record a decision nobody made.</p>
+     */
+    private boolean evicting;
+
+    /** Called by {@code WindowRegistry} just before it discards this window. @see #evicting */
+    void markEvicting() {
+        this.evicting = true;
+    }
+
+    /** @see #evicting */
+    public boolean isBeingEvicted() {
+        return evicting;
+    }
+
     /** Which of the live owned windows are modal — the only ones that give the slot a box. */
     private final Set<UIElement> blockers = new LinkedHashSet<>();
 

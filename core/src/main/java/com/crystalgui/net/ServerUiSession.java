@@ -163,6 +163,10 @@ public final class ServerUiSession<T> {
         /** Reports refused from this viewer. @see #refuse */
         int refusals;
 
+        /** The second this viewer's inbound count applies to, and the count. @see #withinRate */
+        long rateSecond;
+        int rateCount;
+
         /** Set once {@link #refusalThreshold} is reached: this viewer is no longer listened to. */
         boolean refused;
 
@@ -577,6 +581,42 @@ public final class ServerUiSession<T> {
      * <p>Stamped with the window on the way out, so the far side's mux can route it and a second window
      * of the same application hears nothing of it.</p>
      */
+    /** This element's network id, or -1 if the client has not been described it. */
+    public int idOf(UIElement element) {
+        return ids.peekId(element);
+    }
+
+    /**
+     * Asks the view to do something. @see ViewCommand
+     *
+     * <p><b>Dropped for a viewer that is not watching, never queued.</b> A focus request held while a
+     * window was minimised and delivered on the way back would move the caret out from under whoever
+     * had since started typing somewhere else — and it is asking about a moment that has passed.</p>
+     */
+    public void view(String command, @Nullable StateMap<T> args) {
+        if (!open) return;
+        StateMap<T> out = args == null ? new StateMap<>(ops) : args;
+        out.putString(ViewCommand.CMD, command);
+        out.putInt(UiMethods.WINDOW, windowId);
+        T encoded = out.encode();
+        for (Viewer<T> viewer : viewers) {
+            if (viewer.visible) viewer.router.notify(UiMethods.VIEW, encoded);
+        }
+    }
+
+    /** As {@link #view}, aimed at one element. */
+    public void viewOn(String command, UIElement element, @Nullable StateMap<T> args) {
+        int nid = ids.peekId(element);
+        if (nid < 0) {
+            CrystalGuiCore.LOGGER.warn("Session {}: '{}' names an element the client has not been "
+                    + "described", windowId, command);
+            return;
+        }
+        StateMap<T> out = args == null ? new StateMap<>(ops) : args;
+        out.putInt(ViewCommand.NID, nid);
+        view(command, out);
+    }
+
     public void notify(String method, @Nullable StateMap<T> payload) {
         notifyClient(method, payload == null ? new StateMap<>(ops) : payload);
     }
@@ -595,6 +635,22 @@ public final class ServerUiSession<T> {
                     + " viewers — use callViewer(peer, …) and name one");
         }
         request(viewers.get(0), method, args, onResult, onError);
+    }
+
+    /**
+     * Asks <b>every</b> viewer the same question, answering once per viewer.
+     *
+     * <p>For the questions that are about the window rather than about a person — may this close? — where
+     * one answer is not enough and the first answer is not the answer. The callbacks fire once per
+     * viewer, so a caller counts them; a viewer that has gone answers through {@code onError}, which is
+     * still an answer.</p>
+     */
+    public void callEveryViewer(String method, @Nullable StateMap<T> args,
+                                @Nullable Consumer<StateMap<T>> onResult,
+                                @Nullable Consumer<String> onError) {
+        for (Viewer<T> viewer : new ArrayList<>(viewers)) {
+            request(viewer, method, args, onResult, onError);
+        }
     }
 
     /** Calls a client-side method on one named viewer. */
@@ -1063,6 +1119,7 @@ public final class ServerUiSession<T> {
 
         bindNotify(viewer, UiMethods.EVENT, payload -> {
             if (viewer.refused) return;
+            if (!withinRate(viewer)) return;
             StateMap<T> in = read(payload);
             if (!mine(in)) return;
             int nid = in.getInt("nid", -1);
@@ -1109,6 +1166,29 @@ public final class ServerUiSession<T> {
             handler.accept(new UiEventContext<>(this, viewer.peer, element,
                     carried == null ? new StateMap<>(ops) : new StateMap<>(ops, carried)));
         });
+    }
+
+    /**
+     * Whether this viewer is still inside its inbound budget for the current second.
+     *
+     * <p>Above any real interaction by an order of magnitude — a drag reports at frame rate, so tens a
+     * second — and low enough that a loop is stopped inside the second it starts. Over it, the message
+     * is <b>refused rather than queued</b>: a rate limit that buffers is a slower way to run out of
+     * memory, and the sender is by definition not waiting for these.</p>
+     *
+     * <p>Whole seconds rather than a sliding window, deliberately: a sliding window costs a timestamp
+     * per message, and what is being bounded is a peer in a loop, which a coarse bucket catches just as
+     * well as a fine one.</p>
+     */
+    private boolean withinRate(Viewer<T> viewer) {
+        long second = System.currentTimeMillis() / 1000L;
+        if (viewer.rateSecond != second) {
+            viewer.rateSecond = second;
+            viewer.rateCount = 0;
+        }
+        if (++viewer.rateCount <= UiLimits.MAX_INBOUND_PER_SECOND) return true;
+        refuse(viewer, "more than " + UiLimits.MAX_INBOUND_PER_SECOND + " messages in one second");
+        return false;
     }
 
     /**

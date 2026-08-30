@@ -5,6 +5,7 @@ import javax.annotation.Nullable;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.net.window.ClientWindows;
 import com.crystalgui.net.window.ClientWindowContext;
+import com.crystalgui.net.window.ScopedSheets;
 import com.crystalgui.net.window.SheetSupply;
 import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.net.protocol.ProtocolConnection;
@@ -83,21 +84,37 @@ public final class CgUiWindowMount implements WindowMount {
      * server-safe class may not do — {@code StyleSheet}'s class initialiser reads {@code default.css}
      * through {@code CgIO}, so the whole class is unloadable on a dedicated server.</p>
      */
-    static SheetSupply sheetSupply() {
-        return new SheetSupply((window, css) -> {
+    /**
+     * Where a window's own sheets are held, refcounted and scoped.
+     *
+     * <p>Static because the style engine they go into is: one {@code UIWindow} hosts every window on
+     * this client, so "is this sheet already installed" is a question about the client and not about
+     * any one window.</p>
+     */
+    private static final ScopedSheets SHEETS = new ScopedSheets(new ScopedSheets.Host() {
+        @Override
+        public void add(StyleSheet sheet) {
             UIWindow host = CgUiScreen.window();
-            if (host == null) return;
-            for (String sheet : css) {
-                try {
-                    host.getStyleEngine().addStylesheet(StyleSheet.parse(sheet));
-                } catch (RuntimeException malformed) {
-                    // A theme that will not parse is a plain window, never a missing one.
-                    CrystalGuiCore.LOGGER.warn("[cgui-ui] a server sheet for <{}> would not parse: {}",
-                            window.type(), malformed.getMessage());
-                }
-            }
-        });
+            if (host != null) host.getStyleEngine().addStylesheet(sheet);
+        }
+
+        @Override
+        public void remove(StyleSheet sheet) {
+            UIWindow host = CgUiScreen.window();
+            if (host != null) host.getStyleEngine().removeStylesheet(sheet);
+        }
+    });
+
+    static SheetSupply sheetSupply() {
+        return new SheetSupply(
+                (window, css) -> {
+                    for (String sheet : css) SHEETS.acquire(window.type(), sheet);
+                },
+                (window, css) -> {
+                    for (String sheet : css) SHEETS.release(window.type(), sheet);
+                });
     }
+
 
     @Override
     public MountedWindow mount(ClientWindowContext context) {
@@ -114,15 +131,26 @@ public final class CgUiWindowMount implements WindowMount {
         // travelled, a client had to invent one, which meant every mod's windows shared a namespace
         // nobody was maintaining.
         if (context.key() != null) frame.setKey(context.key());
+        // THE CONTENT'S ANSWER, on both routes that can take this window away: the caption's close
+        // button, and the retention cap evicting it while it is hidden. Wiring one guard is what makes
+        // "there is unsaved work here" mean the same thing to the user, to the compositor and to the
+        // server -- which asks the very same panels before closing a window itself.
+        frame.setDiscardGuard(context::mayClose);
         frame.setContent(context.root());
         host.openWindowInBackground(frame);
 
         Mounted mounted = new Mounted(frame, context);
+
         frame.onDestroyed.connect(mounted::onFrameDestroyed);
         // HIDING IS NOT CLOSING. A minimised window is retained and detached, and the server should
         // stop describing a tree nobody is drawing. @see com.crystalgui.net.protocol.UiMethods#VISIBILITY
         frame.onHidden.connect(() -> context.visibilityChanged(false));
         frame.onShown.connect(persisted -> context.visibilityChanged(true));
+        // AND THE WHOLE COMPOSITOR going away, which no individual window's onHidden reports: suspending
+        // takes the desktop off the tree without touching any window, so a server would otherwise go on
+        // describing a tree nobody is drawing for as long as the screen is closed.
+        mounted.desktopWatch = host.onDesktopSuspendedChanged.connect(
+                shown -> context.visibilityChanged(shown && frame.state() == WindowState.VISIBLE));
         return mounted;
     }
 
@@ -138,6 +166,10 @@ public final class CgUiWindowMount implements WindowMount {
     private static final class Mounted implements MountedWindow {
 
         private final WindowFrame frame;
+
+        /** Undone when the window goes, or the compositor keeps a dead window's report alive. */
+        @Nullable
+        private com.crystalgui.core.signal.Connection desktopWatch;
         private final ClientWindowContext context;
 
         /** Set while the SERVER is taking this window down, so the frame's own teardown stays quiet. */
@@ -149,11 +181,19 @@ public final class CgUiWindowMount implements WindowMount {
         }
 
         void onFrameDestroyed() {
+            if (desktopWatch != null) {
+                desktopWatch.disconnect();
+                desktopWatch = null;
+            }
             // THE USER, unless we are the ones destroying it. Without the guard a server-driven close
             // would come straight back as a ui/close -- an echo, and on a dead connection a write into
             // a socket that has gone.
             if (closingFromServer) return;
-            context.userClosed();
+            // WHY, not merely THAT. The retention cap discarding a hidden window is the client running
+            // out of room, and telling a server "the user closed it" is how a workspace comes back
+            // missing the panels somebody had open.
+            if (frame.isBeingEvicted()) context.evicted();
+            else context.userClosed();
         }
 
         @Override

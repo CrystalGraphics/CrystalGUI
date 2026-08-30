@@ -21,6 +21,7 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import com.crystalgui.ui.projection.Projections;
 import java.util.Objects;
+import com.crystalgui.net.ViewCommand;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.contract.Event;
 
@@ -211,6 +212,122 @@ public final class ServerScope {
     /** This panel's own set. @see ServerWindow#projectionsFor */
     private Projections projections() {
         return window.projectionsFor(this);
+    }
+
+    // ── Asking the view to do something ─────────────────────────────────────
+    //
+    // Not state. These say what should HAPPEN rather than what the UI is, so they are never part of a
+    // description, are never replayed, and are dropped for a viewer that is not watching -- a focus
+    // request held while a window was minimised and delivered on the way back would move the caret out
+    // from under whoever had since started typing somewhere else. @see ViewCommand
+
+    /**
+     * Puts keyboard focus on a widget.
+     *
+     * <p>Focus that rings, deliberately: {@code :focus-visible} marks focus the user did not place with
+     * a pointer, and focus arriving from a server is the clearest case there is.</p>
+     */
+    public ServerScope focus(UIElement widget) {
+        session.viewOn(ViewCommand.FOCUS, widget, null);
+        return this;
+    }
+
+    /** Scrolls a widget into view, honouring whatever scroll behaviour the sheet asked for. */
+    public ServerScope scrollIntoView(UIElement widget) {
+        session.viewOn(ViewCommand.SCROLL_INTO_VIEW, widget, null);
+        return this;
+    }
+
+    /** Shows a {@code Dialog} that is already in the tree. Modal or not is the dialog's own business. */
+    public ServerScope showDialog(UIElement dialog) {
+        session.viewOn(ViewCommand.SHOW_DIALOG, dialog, null);
+        return this;
+    }
+
+    /** Hides it again. Silent if it was not showing. */
+    public ServerScope hideDialog(UIElement dialog) {
+        session.viewOn(ViewCommand.HIDE_DIALOG, dialog, null);
+        return this;
+    }
+
+    /**
+     * Opens a {@code Popover} or {@code Menu} against something.
+     *
+     * <p>The anchor is required rather than optional: a popover exists relative to something, and one
+     * opened at no position lands wherever the layout happened to leave it.</p>
+     */
+    public ServerScope openMenu(UIElement menu, UIElement anchor) {
+        StateMap<Object> args = newMap();
+        args.putInt(ViewCommand.ANCHOR, session.idOf(anchor));
+        session.viewOn(ViewCommand.OPEN_MENU, menu, args);
+        return this;
+    }
+
+    /**
+     * Shows a tooltip on a widget.
+     *
+     * <p>Text, not a subtree — a tooltip is a sentence about a control, and a server able to graft an
+     * arbitrary tree at a screen position would be a different feature with a different threat model.</p>
+     */
+    public ServerScope tooltip(UIElement widget, String text) {
+        StateMap<Object> args = newMap();
+        args.putString(ViewCommand.TEXT, text);
+        session.viewOn(ViewCommand.TOOLTIP, widget, args);
+        return this;
+    }
+
+    // ── About the window rather than the tree ───────────────────────────────
+
+    /** Renames the window: what a caption shows and what a taskbar entry reads. */
+    public ServerScope setTitle(String title) {
+        StateMap<Object> args = newMap();
+        args.putString(ViewCommand.TEXT, title);
+        session.view(ViewCommand.SET_TITLE, args);
+        return this;
+    }
+
+    /** Changes the window's icon, named as a sprite is: {@code "namespace:name"}. */
+    public ServerScope setIcon(String icon) {
+        StateMap<Object> args = newMap();
+        args.putString(ViewCommand.TEXT, icon);
+        session.view(ViewCommand.SET_ICON, args);
+        return this;
+    }
+
+    /**
+     * Suggests a size. A <b>hint</b>, and named so.
+     *
+     * <p>Where a window goes and how big it is belongs to the client's compositor and to the person
+     * using it — a server that could place windows could also cover the screen with one. A host is free
+     * to clamp it, ignore it, or apply it only on first open.</p>
+     */
+    public ServerScope geometryHint(int width, int height) {
+        StateMap<Object> args = newMap();
+        args.putInt(ViewCommand.WIDTH, width);
+        args.putInt(ViewCommand.HEIGHT, height);
+        session.view(ViewCommand.GEOMETRY_HINT, args);
+        return this;
+    }
+
+    /**
+     * Says something to the user that is not part of the window.
+     *
+     * <p>Goes to the host's own notification surface, so it survives the window closing and needs no
+     * place in the layout to exist.</p>
+     *
+     * @param level one of {@code ViewCommand.LEVEL_INFO}, {@code LEVEL_WARN}, {@code LEVEL_ERROR}
+     */
+    public ServerScope notifyUser(String message, String level) {
+        StateMap<Object> args = newMap();
+        args.putString(ViewCommand.TEXT, message);
+        args.putString(ViewCommand.LEVEL, level);
+        session.view(ViewCommand.NOTIFY, args);
+        return this;
+    }
+
+    /** As {@link #notifyUser(String, String)} at {@code info}. */
+    public ServerScope notifyUser(String message) {
+        return notifyUser(message, ViewCommand.LEVEL_INFO);
     }
 
     // ── Widget events ───────────────────────────────────────────────────────
