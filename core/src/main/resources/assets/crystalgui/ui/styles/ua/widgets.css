@@ -50,7 +50,20 @@ button, dropdown {
  * "clips the glyphs the ellipsis stands in for, on exactly the box it measured against." A dropdown
  * whose value text is longer than its row showed a near-invisible sliver of background with ghost
  * text escaping past the node's edge — the box was right, the paint wasn't clipped to it. */
-button text, dropdown text {
+button text, dropdown text,
+/* THE SAME RULE FOR THE PORTED BUTTON, and both spellings stand until M6.9.
+ *
+ * `button text` reaches the label by TAG because the old Button gives it no class (the note above
+ * says so outright) -- and a tag selector cannot reach into a shadow tree, which is the whole point
+ * of one. The ported Button exposes it as `part="label"` instead, so the rule that finds it is
+ * `button::part(label)`.
+ *
+ * BOTH ENGINES RUN UNTIL THE CUTOVER and share this one sheet, so the twin sits beside the original
+ * rather than replacing it: a selector that matches nothing costs nothing, and deleting the old one
+ * now would unstyle every Button in the running application. The host rules above (`button`,
+ * `button:hover`) need no twin at all -- the TAG is `button` on either engine, which is what makes
+ * the port a widget at a time rather than a sheet at a time. */
+button::part(label), dropdown::part(label) {
     flex-shrink: 1;
     min-width: 0;
     white-space: nowrap;

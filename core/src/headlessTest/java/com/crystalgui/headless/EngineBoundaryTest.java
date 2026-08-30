@@ -35,7 +35,16 @@ public class EngineBoundaryTest {
     /** The new engine. */
     private static final List<String> NEW_PACKAGES = List.of(
             "com/crystalgui/ui/box/",
-            "com/crystalgui/ui/service/");
+            "com/crystalgui/ui/service/",
+            // THE PORT'S DESTINATIONS (plan_m6.md §2.6). Listed from 6.1, before three of the four
+            // exist: they only ever hold ported code, so admitting them early costs nothing and
+            // means the first class to land in one is not also the commit that discovers the list
+            // needed updating. The OLD widget layer keeps its own prefix
+            // (`com/crystalgui/ui/elements/`) in OLD_ENGINE below, so the two never overlap.
+            "com/crystalgui/widget/",
+            "com/crystalgui/chrome/",
+            "com/crystalgui/desktop/",
+            "com/crystalgui/workbench/");
 
     /**
      * The classes in {@code ui/dom} that are the SEAM rather than the node tree — everything else in

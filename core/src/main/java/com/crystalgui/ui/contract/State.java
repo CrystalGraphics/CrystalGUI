@@ -41,7 +41,7 @@ import com.crystalgui.ui.UIElement;
  * @param <W> the widget type
  * @param <V> the value type
  */
-public final class State<W extends UIElement, V> {
+public final class State<W, V> {
 
     private final String key;
     private final StateType<V> type;
@@ -72,7 +72,7 @@ public final class State<W extends UIElement, V> {
      * @param fallback what {@link #read} uses when the key is absent, which is also what a decoder sees
      *                 for a widget written by an older peer that did not have this slot
      */
-    public static <W extends UIElement, V> State<W, V> of(
+    public static <W, V> State<W, V> of(
             String key, StateType<V> type, Function<W, V> getter, BiConsumer<W, V> setter, V fallback) {
         return new State<>(key, type, getter, setter, fallback, null, null);
     }

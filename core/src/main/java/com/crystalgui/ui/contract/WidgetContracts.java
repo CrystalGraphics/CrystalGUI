@@ -55,7 +55,7 @@ public final class WidgetContracts {
      * does. Re-registering the same class is refused rather than silently replacing it — two contracts
      * for one widget means whichever class-initialises last decides what the widget is.</p>
      */
-    public static <W extends UIElement> WidgetContract<W> register(WidgetContract<W> contract) {
+    public static <W> WidgetContract<W> register(WidgetContract<W> contract) {
         Class<?> type = contract.type();
         WidgetContract<?> existing = CONTRACTS.get(type);
         if (existing != null && existing != contract) {
@@ -76,7 +76,7 @@ public final class WidgetContracts {
      *
      * @param reason read by a human in a test failure. Say what KIND of not-travelling this is
      */
-    public static void localOnly(Class<? extends UIElement> type, String reason) {
+    public static void localOnly(Class<?> type, String reason) {
         if (reason == null || reason.trim().isEmpty()) {
             throw new IllegalArgumentException(
                     type.getName() + " was marked local-only with no reason. The reason is the whole "
@@ -92,7 +92,7 @@ public final class WidgetContracts {
     /** The contract for {@code type}, or null if it has none. Exact class, never a supertype's. */
     @SuppressWarnings("unchecked")
     @Nullable
-    public static <W extends UIElement> WidgetContract<W> of(Class<?> type) {
+    public static <W> WidgetContract<W> of(Class<?> type) {
         return (WidgetContract<W>) CONTRACTS.get(type);
     }
 

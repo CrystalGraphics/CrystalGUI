@@ -295,7 +295,9 @@ def render():
     out.write('#\n')
     out.write('# CLASS\tpath\tlines\tdestination\tbatch\thow\tstatus\n')
     classes = classify_classes()
+    statuses = existing_statuses()
     for path, lines, dest, batch, how, status in classes:
+        status = statuses.get(path, status)
         out.write('CLASS\t%s\t%d\t%s\t%s\t%s\t%s\n' % (path, lines, dest, batch, how, status))
     out.write('#\n# PART\towner\tname\tkind\tuses\tsource\twhy\n')
     parts = sorted(classify_parts())
@@ -306,6 +308,18 @@ def render():
         kind = confirmed.get(key, kind)
         out.write('PART\t%s\t%s\t%s\t%d\t%s\t%s\n' % (owner, name, kind, uses, source, why))
     return out.getvalue(), len(classes), len(parts)
+
+
+def existing_statuses():
+    """Which classes have been ported, so regenerating never silently un-ports one."""
+    if not os.path.exists(LEDGER):
+        return {}
+    statuses = {}
+    for line in io.open(LEDGER, encoding='utf-8'):
+        parts = line.rstrip('\n').split('\t')
+        if len(parts) >= 7 and parts[0] == 'CLASS':
+            statuses[parts[1]] = parts[6]
+    return statuses
 
 
 def existing_confirmations():
