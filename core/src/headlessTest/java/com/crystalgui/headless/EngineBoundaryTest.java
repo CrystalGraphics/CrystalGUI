@@ -45,13 +45,15 @@ public class EngineBoundaryTest {
     private static final List<String> NEW_DOM_CLASSES = List.of(
             "com/crystalgui/ui/dom/Node",
             "com/crystalgui/ui/dom/Document",
-            "com/crystalgui/ui/dom/ShadowTree",
+            "com/crystalgui/ui/dom/ShadowRoot",
             "com/crystalgui/ui/dom/Slot",
             "com/crystalgui/ui/dom/Name",
             "com/crystalgui/ui/dom/Attribute",
             "com/crystalgui/ui/dom/NodeTreeSource",
             "com/crystalgui/ui/dom/NodeRegistry",
-            "com/crystalgui/ui/dom/Lifecycle");
+            // The mirror is written once against the seam and has one implementation per engine;
+            // this is the node tree's, beside ElementNodeMirror, and it is new-engine code.
+            "com/crystalgui/net/mirror/DomNodeMirror");
 
     /** What the new engine must never name. */
     private static final List<String> OLD_ENGINE = List.of(
@@ -61,7 +63,8 @@ public class EngineBoundaryTest {
             "com/crystalgui/ui/Ui",
             "com/crystalgui/ui/UIResizer",
             "com/crystalgui/ui/AnchoredPlacement",
-            "com/crystalgui/ui/EventListenerGroup",
+            // NOT EventListenerGroup or ui.event: D5.6 made them generic in what a listener is
+            // attached to, so both engines share one set of event types and one listener group.
             "com/crystalgui/ui/ElementRegistry",
             "com/crystalgui/ui/input/",
             "com/crystalgui/ui/elements/",
