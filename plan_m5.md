@@ -28,7 +28,7 @@ the audit's numbers (§1 there: ~26,700 lines replaced, of which the engine's ow
 | 5.0 | The strangler line and the second engine's skeleton | S | — | The two engines cannot reach each other, and a test says so | **shipped 2026-08-30** — `8f6090fc` + harness `8f04e46` |
 | 5.1 | The node tree | L | 5.0 | The seam suite passes on a tree that has never heard of `UIElement` | **shipped 2026-08-30** — see §4.1 notes |
 | 5.2 | The style pass, re-hosted and scoped | M | 5.1 | The cascade is host-agnostic; scopes and `:root` inheritance work; the engine writes nothing into it | **shipped 2026-08-30** — see §4.2 notes |
-| 5.3 | The box tree and one-pass layout | L | 5.2 | Layout of the gallery's trees runs to completion in **one** pass; hit-testing is correct before any paint | planned |
+| 5.3 | The box tree and one-pass layout | L | 5.2 | Layout of the gallery's trees runs to completion in **one** pass; hit-testing is correct before any paint | **shipped 2026-08-30** — see §4.3 notes |
 | 5.4 | Paint and hit-test through boxes, in the harness | M | 5.3 | A fixed tree renders pixel-identically on both engines; the harness runs either | planned |
 | 5.5 | The services: input, focus, motion, lifecycle | L | 5.3 | The 38 focus rows and the 20 hit-test rows are tests, and pass; a frozen window costs nothing | planned |
 | 5.6 | Acceptance, the porting guide, the M6 handoff | S | 5.4, 5.5 | Every M5 acceptance criterion in one run; M6's first step is written down | planned |
@@ -119,9 +119,9 @@ than during it. **Decisions taken 2026-08-30 as recommended unless the status co
 | D5.5 | **Slots.** How much of the slot spec | Named slots and one default slot, `slot=` assignment by name, fallback children when nothing is assigned, `assignedSlot` on the node, `assignedNodes()` on the slot, `slotchange` as a lifecycle callback. **Not** `manual` slot assignment — nothing in the 54 composites needs it | Composed-tree iteration is written against it in 5.1 and the box tree walks it in 5.3 | recommended |
 | D5.6 | **Events.** `ui.event` is 8 files (365 lines + `EventListenerGroup`) and every type holds a `UIElement target` | **Generalise in place** over an `EventTarget` interface (`UIElement` and `Node` both implement); listener groups keyed on it. Duplicating the eight types would leave the drag controller, the keymap and every handler written twice | 5.1's retargeting and 5.5's dispatch need the types; this is old-engine touch #1 and must be a pure retype | **done** (`e2019d35`): 21 readers cast, one field retyped, every lambda unchanged |
 | D5.7 | **Scope model for stylesheets** | CSS `@scope`: a sheet is installed *for* a subtree (a document, a window, a shadow root) with a root and an optional lower boundary; scoping proximity ranks between specificity and source order, per the spec. M4's `ScopedSheets` selector rewrite becomes a scope with the window's root as its root, and its dual-form emission (root + descendants) disappears because a scope root matches itself | 5.2 writes the cascade ordering once; adding proximity later re-sorts every candidate comparison | **done**: `StyleEngine.addStylesheet(sheet, root)`, proximity on `StyleSlot` |
-| D5.8 | **CSS defaults in the box tree** — D4 says "adopt at M6 while every UA sheet is being ported" | **The box tree is written CSS-correct from its first line**: `flex-direction: row`, `flex-shrink: 1`, `min-size: auto`, `align-content: stretch`, `box-sizing: border-box`. There is no old sheet under the new engine to break, so the divergence rows never exist there; M6's port pays the sheet cost D4 already budgeted. Deciding otherwise means writing the defaults twice | 5.3's `BoxStyle` defaults and every layout test after it | recommended |
-| D5.9 | **One Taffy tree per document, or per host** | One per document; a host is a *parent choice* when the box is inserted into the Taffy tree, not a second tree. Promotion, owned attachment, tear-out and thumbnails are all "this box's Taffy parent is that box's" — one `insertChildAtIndex`. A per-host tree would reintroduce the two coordinate chains as two layout results | 5.3's `Box.host` and every world-matrix computation | recommended |
-| D5.10 | **What the first `Measurable` is** | A minimal `TextNode` — shaped text under a measure function, painted as a run — written in 5.3 and painted in 5.4. It is the only way to prove the measure protocol against real shaping (the `MeasureFuncUnderFlexWrapTest` shape), and it is the seed M6's `UIText` port grows from | Without a real measurable, one-pass layout is proven against boxes with explicit sizes, which proves nothing about the loop that was removed | recommended |
+| D5.8 | **CSS defaults in the box tree** — D4 says "adopt at M6 while every UA sheet is being ported" | **The box tree is written CSS-correct from its first line**: `flex-direction: row`, `flex-shrink: 1`, `min-size: auto`, `align-content: stretch`, `box-sizing: border-box`. There is no old sheet under the new engine to break, so the divergence rows never exist there; M6's port pays the sheet cost D4 already budgeted. Deciding otherwise means writing the defaults twice | 5.3's `BoxStyle` defaults and every layout test after it | **done**: `BoxStyle` writes the engine's defaults for anything unset — and had to for margin, padding and border too, whose registry initial is `auto` |
+| D5.9 | **One Taffy tree per document, or per host** | One per document; a host is a *parent choice* when the box is inserted into the Taffy tree, not a second tree. Promotion, owned attachment, tear-out and thumbnails are all "this box's Taffy parent is that box's" — one `insertChildAtIndex`. A per-host tree would reintroduce the two coordinate chains as two layout results | 5.3's `Box.host` and every world-matrix computation | **done**: one `TaffyTree` per `Document`; `Box.setHost` is a parent choice; a mirror is a second box, not a second tree |
+| D5.10 | **What the first `Measurable` is** | A minimal `TextNode` — shaped text under a measure function, painted as a run — written in 5.3 and painted in 5.4. It is the only way to prove the measure protocol against real shaping (the `MeasureFuncUnderFlexWrapTest` shape), and it is the seed M6's `UIText` port grows from | Without a real measurable, one-pass layout is proven against boxes with explicit sizes, which proves nothing about the loop that was removed | **done**: `TextNode implements Measurable`, shaped through `CgTextLayout`; `Measurable.Fit` distinguishes the min-content ask, which the old measure function never saw |
 
 ---
 
@@ -323,6 +323,40 @@ a transform, with a scroll offset, and for a second box hosting the same subtree
 promotion, owned attachment, tear-out and thumbnail as four calls to one method, containing block
 following the host; `DisplayNoneHasNoBoxTest`. **Proves:** layout runs in one pass on real trees, and
 hit-testing does not depend on having painted.
+
+#### 5.3 — what shipped, and where the plan was wrong
+
+Shipped: `ui.box` — `Box` (geometry, host, scroll, z/opacity/transform overrides, `localToWorld`,
+`hitTest`), `BoxTree` (one Taffy tree per document; sync on a REPORTED structure change; restyle
+by `ComputedStyle` identity; `computeLayout` once; read; compose), `BoxStyle` (the one mapper),
+`Measurable` (+`Constraints`, `Size`, `Fit`), `TextNode` (the first measurable, shaped through
+`CgTextLayout`), `Document.boxes()/layout()/update()/addStructureListener()`, `Node.box()` and a
+`structureChanged()` call at every mutator. Twenty-one tests: `OnePassLayoutTest` (five trees on
+both engines, geometry identical to 0.01px, one pass, no walk on an unchanged frame),
+`HitTestBeforePaintTest`, `HostTest` (promotion, owned slot, stacking order, mirrors, `display:
+none`, cross-tree refusal), `MeasureThroughTaffyTest` (a text leaf under `wrap` measured at 100 in
+a 200 row, box as tall as the text wrapped at that width). `EngineBoundaryTest` now admits
+`TaffyBridge` — its value conversions are what `BoxStyle` reuses; the listener path stays old-engine.
+Four corrections to the plan:
+
+- **The registry's initial values are not CSS's, and it is not only the five bridge defaults.**
+  `MARGIN_*`, `PADDING_*` and `BORDER_*` all carry `LengthPercentageAuto.AUTO` as their initial —
+  the old engine never noticed because its listener fires only for a candidate, so the bridge's own
+  `ZERO` stood. Read through `ComputedStyle.get`, an unset margin came back `auto`, and an auto
+  margin on an absolutely positioned box CENTRES it in its free space: every popup, panel and
+  thumbnail in the first run landed somewhere plausible and wrong (a panel asked for `left: 200`
+  laid out at 450). `BoxStyle` states CSS's initial for every one of them. D5.8's list was the
+  bridge's divergences; the registry's are a second list, and the mapper is where both are settled.
+- **The document's box is a BLOCK container, not a flex row.** CSS defaults made every node a flex
+  row, the root included, and a root that is a flex row stretches each child to the viewport's
+  height. The root is `display: block` unless a sheet says otherwise — which is what `<html>` is.
+- **A measure function is asked two different questions, and the old one answered both the same
+  way.** Taffy asks for min-content (the widest thing that cannot break) as well as max-content, and
+  `MeasureFunc`'s `AvailableSpace` carries which. Answering min-content with one unbroken line makes
+  a text leaf's minimum its whole line, so it can never shrink below it. `Measurable.Constraints`
+  carries the `Fit`; `TextNode` wraps at 1px for it.
+- **`Document.structureChanged()` could not be named that** — `Document extends Node` and the
+  node's own hook is final. `fireStructureChanged` on the document, `structureChanged` on the node.
 
 ### 5.4 — Paint and hit-test through boxes, in the harness · M · after: 5.3
 

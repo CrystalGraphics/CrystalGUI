@@ -69,10 +69,11 @@ public class EngineBoundaryTest {
             "com/crystalgui/ui/input/",
             "com/crystalgui/ui/elements/",
             "com/crystalgui/ui/shadow/",
-            "com/crystalgui/ui/dom/ElementTreeSource",
             // NOT ElementStyle: D5.2 shares the cascade's store between engines behind Styleable.
-            // TaffyBridge stays forbidden -- it is the old engine's layout listener path.
-            "com/crystalgui/style/TaffyBridge");
+            // NOT TaffyBridge: 5.3's BoxStyle reuses its VALUE CONVERSIONS. The old engine's listener
+            // path into it (LayoutProperties.createSetter) is what stays old-engine, and that is a
+            // method, not a type -- the box tree maps a ComputedStyle in one call and never listens.
+            "com/crystalgui/ui/dom/ElementTreeSource");
 
     private static boolean isNewEngine(String relativeClassPath) {
         for (String prefix : NEW_PACKAGES) {
