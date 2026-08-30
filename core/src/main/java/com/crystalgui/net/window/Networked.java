@@ -215,23 +215,30 @@ public interface Networked<M> {
     /**
      * <b>May this window close?</b> Answered on the CLIENT, where the unsaved work is.
      *
-     * <p>Return {@code false} to refuse. The server asks before closing a window it owns, and the host
-     * asks before the user's own close button takes one away, so one answer covers both routes.</p>
+     * <p>Return {@code false} to refuse. Asked before the server closes a window it owns, and before
+     * the user's own close button takes one away, so one answer covers both routes.</p>
      *
      * <p>Refusing is a promise to do something about it: put a confirmation on screen, and close the
-     * window yourself when the user says so. A panel that returns {@code false} forever is a window
-     * nobody can get rid of.</p>
+     * window yourself when the user says so. A panel that refuses forever is a window nobody can get
+     * rid of.</p>
      *
      * <pre>{@code
      * @Override
-     * public boolean requestClose() {
+     * public boolean mayClose() {
      *     if (!edited) return true;
      *     confirm.show();          // and confirm's OK button calls io.close()
      *     return false;
      * }
      * }</pre>
+     *
+     * <p><b>Not called {@code requestClose}</b>, and that is load-bearing rather than taste:
+     * {@code UIElement.requestClose()} already exists as the close-watcher hook, where {@code false}
+     * means "I did not handle this" — the <em>opposite</em> sense. A panel is
+     * {@code extends UIElement implements Networked}, and a concrete class method beats an interface
+     * default, so a hook of that name would be answered by {@code UIElement} for every panel that did
+     * not override it: every window would veto its own close, and the X would silently do nothing.</p>
      */
-    default boolean requestClose() {
+    default boolean mayClose() {
         return true;
     }
 
