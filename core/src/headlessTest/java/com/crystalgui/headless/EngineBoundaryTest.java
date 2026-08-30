@@ -66,7 +66,14 @@ public class EngineBoundaryTest {
             // NOT EventListenerGroup or ui.event: D5.6 made them generic in what a listener is
             // attached to, so both engines share one set of event types and one listener group.
             "com/crystalgui/ui/ElementRegistry",
-            "com/crystalgui/ui/input/",
+            // NOT all of ui/input/: FocusPolicy and FocusSource are pure enums with no element in
+            // them, and ButtonState is multi-click arithmetic. The new focus service is written
+            // against the SAME FocusPolicy deliberately -- two copies of an enum whose four values
+            // are documented at length is exactly how two definitions drift.
+            "com/crystalgui/ui/input/UIInputHandler",
+            "com/crystalgui/ui/input/UIDragController",
+            "com/crystalgui/ui/input/DragScrub",
+            "com/crystalgui/ui/input/keymap/",
             "com/crystalgui/ui/elements/",
             "com/crystalgui/ui/shadow/",
             // NOT ElementStyle: D5.2 shares the cascade's store between engines behind Styleable.

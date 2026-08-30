@@ -4,7 +4,6 @@ import com.crystalgui.style.ComputedStyle;
 import com.crystalgui.style.TaffyBridge;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.layout.LayoutProperties;
-import com.crystalgui.style.property.visual.Overflow;
 import dev.vfyjxf.taffy.style.AlignContent;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
@@ -39,7 +38,7 @@ public final class BoxStyle {
     /** Writes every layout-facing value of {@code computed} into {@code bridge}'s style. */
     public static void apply(TaffyBridge bridge, ComputedStyle c) {
         bridge.setDisplay(c.get(LayoutProperties.DISPLAY));
-        bridge.setOverflow(toTaffy(c.get(StylePropertyRegistry.OVERFLOW)));
+        bridge.setOverflow(StylePropertyRegistry.toTaffyOverflow(c.get(StylePropertyRegistry.OVERFLOW)));
         bridge.setDirection(c.get(LayoutProperties.LAYOUT_DIRECTION));
         bridge.setPosition(c.get(LayoutProperties.POSITION));
         bridge.setBoxSizing(c.get(LayoutProperties.BOX_SIZING));
@@ -109,18 +108,4 @@ public final class BoxStyle {
         if (c.isSet(LayoutProperties.GRID_COLUMN)) bridge.setGridColumn(c.get(LayoutProperties.GRID_COLUMN));
     }
 
-    /**
-     * Our CSS-facing overflow onto the engine's layout-facing one. {@code AUTO} is {@code HIDDEN} rather
-     * than {@code SCROLL} because the engine reserves a scrollbar gutter only for {@code SCROLL}, and
-     * this engine's bars overlay the content.
-     */
-    static dev.vfyjxf.taffy.style.Overflow toTaffy(Overflow overflow) {
-        switch (overflow) {
-            case CLIP: return dev.vfyjxf.taffy.style.Overflow.CLIP;
-            case HIDDEN:
-            case AUTO: return dev.vfyjxf.taffy.style.Overflow.HIDDEN;
-            case SCROLL: return dev.vfyjxf.taffy.style.Overflow.SCROLL;
-            default: return dev.vfyjxf.taffy.style.Overflow.VISIBLE;
-        }
-    }
 }

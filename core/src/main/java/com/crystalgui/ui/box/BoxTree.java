@@ -22,6 +22,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 import javax.annotation.Nullable;
 import org.joml.Matrix4f;
 
@@ -78,6 +79,7 @@ public final class BoxTree {
     private int layoutPasses;
     private int syncPasses;
     private float viewportWidth, viewportHeight;
+    private final Matrix4f rootTransform = new Matrix4f();
 
     /** A subtree laid out again under another host. */
     private static final class Mirror {
@@ -123,6 +125,29 @@ public final class BoxTree {
     /** The topmost hit-testable box at a world point, or null over nothing. */
     public @Nullable Box hitTest(float worldX, float worldY) {
         return root == null ? null : root.hitTest(worldX, worldY);
+    }
+
+    /** As above, passing over what {@code skip} admits — inertness, which the focus service answers. */
+    public @Nullable Box hitTest(float worldX, float worldY, Predicate<Box> skip) {
+        return root == null ? null : root.hitTest(worldX, worldY, skip);
+    }
+
+    /**
+     * The transform from the document's own space to the SURFACE — the one definition of what
+     * {@code uiScale} means here.
+     *
+     * <p>It seeds {@link Box#localToWorld}, so painting and hit-testing both pick it up by reading
+     * the matrix they already read: there is no second place a scale can be applied and no window in
+     * which the two can disagree. The old engine kept it on the window and had to invalidate every
+     * cached transform when it moved.</p>
+     */
+    public void setRootTransform(Matrix4f transform) {
+        rootTransform.set(transform);
+        transformsDirty = true;
+    }
+
+    public Matrix4f rootTransform() {
+        return new Matrix4f(rootTransform);
     }
 
     // ── Mirrors ──────────────────────────────────────────────────────────────
@@ -193,12 +218,10 @@ public final class BoxTree {
             transformsDirty = true;
         }
         if (transformsDirty) {
-            compose(root, IDENTITY, 0f, 0f);
+            compose(root, rootTransform, 0f, 0f);
             transformsDirty = false;
         }
     }
-
-    private static final Matrix4f IDENTITY = new Matrix4f();
 
     /**
      * Paints the tree through the shared paint context, with whatever pose is on the stack as the
@@ -255,9 +278,13 @@ public final class BoxTree {
 
     private @Nullable Box syncNode(Node node, @Nullable Box naturalHost, Map<Node, Box> realm,
                                    boolean mirror, Set<Box> live, List<Box> inOrder) {
+        // No box, and none below it -- reaped with everything else not walked to. A FROZEN subtree is
+        // the same answer for a different reason: it is still in the tree and is not live, so it lays
+        // out nothing, paints nothing and hit-tests nothing until it is thawed.
         if (node != document && node.computedStyle().get(LayoutProperties.DISPLAY) == TaffyDisplay.NONE) {
-            return null;    // no box, and none below it -- reaped with everything else not walked to
+            return null;
         }
+        if (node.isFrozen()) return null;
         Box box = realm.get(node);
         if (box == null) {
             box = new Box(this, node, mirror);

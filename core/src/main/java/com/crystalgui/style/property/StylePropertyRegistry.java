@@ -215,7 +215,7 @@ public class StylePropertyRegistry {
      * enum. {@code AUTO} collapses to {@code HIDDEN} rather than {@code SCROLL} because Taffy reserves
      * a scrollbar gutter only for {@code SCROLL}, and our scrollbars overlay the content instead of
      * displacing it. */
-    private static dev.vfyjxf.taffy.style.Overflow toTaffyOverflow(Overflow overflow) {
+    public static dev.vfyjxf.taffy.style.Overflow toTaffyOverflow(Overflow overflow) {
         return switch (overflow) {
             case VISIBLE -> dev.vfyjxf.taffy.style.Overflow.VISIBLE;
             case CLIP -> dev.vfyjxf.taffy.style.Overflow.CLIP;

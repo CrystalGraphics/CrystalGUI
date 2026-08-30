@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.function.Predicate;
 import javax.annotation.Nullable;
 import org.joml.Matrix4f;
 import org.joml.Vector4f;
@@ -60,8 +61,8 @@ public final class Box {
     FloatRect border = new FloatRect(0f, 0f, 0f, 0f);
     FloatRect padding = new FloatRect(0f, 0f, 0f, 0f);
 
-    // Per-box state that is not style: what the user scrolled to, what the compositor is animating.
-    private float scrollLeft, scrollTop;
+    // Per-box state that is not style: what the compositor is animating. The SCROLL is the node's,
+    // so it survives a freeze with nothing captured and a mirror shows the same offset.
     private @Nullable Integer zIndexOverride;
     private @Nullable Float opacityOverride;
     private @Nullable UITransform transformOverride;
@@ -186,20 +187,19 @@ public final class Box {
     // ── Per-box state ────────────────────────────────────────────────────────
 
     public float scrollLeft() {
-        return scrollLeft;
+        return node.scrollLeft();
     }
 
     public float scrollTop() {
-        return scrollTop;
+        return node.scrollTop();
     }
 
     /** Scrolls what this box hosts. Clamped to the content on the next layout read. */
     public void setScroll(float left, float top) {
         left = clamp(left, 0f, Math.max(0f, contentWidth - width));
         top = clamp(top, 0f, Math.max(0f, contentHeight - height));
-        if (left == scrollLeft && top == scrollTop) return;
-        scrollLeft = left;
-        scrollTop = top;
+        if (left == node.scrollLeft() && top == node.scrollTop()) return;
+        node.setScrollOffsets(left, top);
         tree.transformsChanged();
     }
 
@@ -247,6 +247,45 @@ public final class Box {
         return overflow != null && overflow != Overflow.VISIBLE;
     }
 
+    /**
+     * Scrolls every clipping ancestor just far enough to reveal this box.
+     *
+     * <p>Instant, never eased: this is what a Tab press and a programmatic focus do, and easing it
+     * would leave focus somewhere the user cannot see for the length of the animation.</p>
+     *
+     * <p>Walks innermost-outward tracking what it has already moved: scrolling an ancestor moves
+     * this box relative to EVERY ancestor above it by the same amount, and none of them move, so one
+     * running offset is exact and no re-composition is needed part way.</p>
+     */
+    public void scrollIntoView() {
+        float shiftX = 0f, shiftY = 0f;
+        for (Box ancestor = host(); ancestor != null; ancestor = ancestor.host()) {
+            if (!ancestor.clips()) continue;
+            FloatRect b = ancestor.border();
+            float viewLeft = ancestor.worldX() + b.left;
+            float viewTop = ancestor.worldY() + b.top;
+            float viewRight = viewLeft + Math.max(0f, ancestor.width() - b.left - b.right);
+            float viewBottom = viewTop + Math.max(0f, ancestor.height() - b.top - b.bottom);
+
+            float left = worldX() + shiftX;
+            float top = worldY() + shiftY;
+            float right = left + width;
+            float bottom = top + height;
+
+            float dx = 0f, dy = 0f;
+            if (right > viewRight) dx = right - viewRight;
+            if (left - dx < viewLeft) dx = left - viewLeft;    // a box taller than the view aligns to its start
+            if (bottom > viewBottom) dy = bottom - viewBottom;
+            if (top - dy < viewTop) dy = top - viewTop;
+            if (dx == 0f && dy == 0f) continue;
+
+            float beforeX = ancestor.scrollLeft(), beforeY = ancestor.scrollTop();
+            ancestor.setScroll(beforeX + dx, beforeY + dy);
+            shiftX -= ancestor.scrollLeft() - beforeX;
+            shiftY -= ancestor.scrollTop() - beforeY;
+        }
+    }
+
     /** Says the layout under this box must be recomputed. The node's style calls it; so may a skin. */
     public void markLayoutDirty() {
         tree.markDirty(this);
@@ -261,6 +300,16 @@ public final class Box {
      * to have happened.
      */
     public @Nullable Box hitTest(float worldX, float worldY) {
+        return hitTest(worldX, worldY, box -> false);
+    }
+
+    /**
+     * As {@link #hitTest(float, float)}, passing over every box {@code skip} admits — how INERTNESS
+     * reaches hit-testing without the box tree having to know what inert means. An inert subtree
+     * falls THROUGH to what is behind it: {@code pointer-events: none} passes the pointer over a
+     * node, it does not punch a hole in the document.
+     */
+    public @Nullable Box hitTest(float worldX, float worldY, Predicate<Box> skip) {
         if (!hitTestable()) return null;
         Vector4f p = new Vector4f(worldX, worldY, 0f, 1f);
         worldToLocal.transform(p);
@@ -268,10 +317,15 @@ public final class Box {
         if (!inside && clips()) return null;
         List<Box> order = children();
         for (int i = order.size() - 1; i >= 0; i--) {
-            Box hit = order.get(i).hitTest(worldX, worldY);
+            Box hit = order.get(i).hitTest(worldX, worldY, skip);
             if (hit != null) return hit;
         }
-        return inside ? this : null;
+        // SKIPPED means "not the answer", never "nor anything inside me". An inert node's children
+        // are inert too when the reason is the ATTRIBUTE, so a subtree still falls through whole --
+        // but when the reason is a MODAL, the one box the pointer may still reach is inside the box
+        // that is blocked, and skipping wholesale would put the modal out of reach as well.
+        // `hit-test` is the property that IS subtree-wide, and it is checked above.
+        return inside && !skip.test(this) ? this : null;
     }
 
     private static float clamp(float v, float lo, float hi) {

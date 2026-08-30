@@ -1,0 +1,165 @@
+package com.crystalgui.ui.service;
+
+import com.crystalgui.style.easing.Easing;
+import com.crystalgui.ui.dom.Node;
+import java.util.ArrayList;
+import java.util.List;
+import javax.annotation.Nullable;
+
+/**
+ * The motion service: one timeline mechanism, and the per-frame hooks a tree is allowed to have.
+ *
+ * <h3>Why a timeline rather than the cascade</h3>
+ *
+ * <p>The window animations were CSS transitions first, and every one of the four ways that failed was
+ * silent. A compositor animation moves several properties that must change TOGETHER and the cascade
+ * resolves them independently: {@code transition} is itself a property resolved in the same pass, so
+ * lifting a suppression and changing a value in one frame could resolve the value first and apply it
+ * instantly; an {@code INLINE} cleanup value written to end one animation outranks the class used to
+ * start the next; {@code transform-origin} is not interpolable and must be pinned for the
+ * animation's whole life; and completion could only be discovered by polling. The answer is the shape
+ * every real compositor uses — {@code CABasicAnimation}, {@code ValueAnimator}, {@code
+ * AnimationController}: from, to, duration, curve, a per-frame tick, a completion callback.</p>
+ *
+ * <h3>The clock</h3>
+ *
+ * <p>There isn't one. The host hands {@link #tick} the frame delta, so "the clock starts on its first
+ * tick, never at construction" is structural rather than remembered — the row that cost a session
+ * when a window opened outside the frame loop and its whole 150ms elapsed before anything was drawn.
+ * A gap longer than {@link #MAX_STEP} advances nothing, because it is time nobody saw; that is
+ * bounded at {@link #MAX_HELD_FRAMES} so a host that never settles still finishes.</p>
+ *
+ * <p>The START value is written when the timeline is created, not on the first tick: one frame
+ * between "asked for" and "showing its first value" is one frame of the END state.</p>
+ */
+public final class Animation {
+
+    /** A frame gap longer than this is a stall nobody rendered, and advances the timeline by nothing. */
+    public static final float MAX_STEP = 0.1f;
+
+    /** ...but only this many in a row, so a host that never settles still finishes. */
+    public static final int MAX_HELD_FRAMES = 10;
+
+    /** What a timeline writes, given its eased progress. Transform, opacity, scroll, a layout value. */
+    public interface Body {
+        void apply(float easedProgress);
+    }
+
+    /** A per-frame hook owned by a node. Returns false to stop. */
+    public interface Hook {
+        boolean frame(float deltaSeconds);
+    }
+
+    /** One running animation. */
+    public final class Timeline {
+        private final float duration;
+        private final Easing easing;
+        private final Body body;
+        private final @Nullable Runnable onDone;
+        private float elapsed;
+        private int held;
+        private boolean running = true;
+
+        private Timeline(float duration, Easing easing, Body body, @Nullable Runnable onDone) {
+            this.duration = Math.max(0f, duration);
+            this.easing = easing;
+            this.body = body;
+            this.onDone = onDone;
+            body.apply(0f);
+        }
+
+        public boolean isRunning() {
+            return running;
+        }
+
+        public float progress() {
+            return duration <= 0f ? 1f : Math.min(1f, elapsed / duration);
+        }
+
+        /** Runs to the end value and reports completion — what a caller waiting on it must go through. */
+        public void finish() {
+            if (!running) return;
+            running = false;
+            elapsed = duration;
+            body.apply((float) easing.ease(1.0));
+            timelines.remove(this);
+            if (onDone != null) onDone.run();
+        }
+
+        /** Stops where it is: no end value, no completion callback. */
+        public void cancel() {
+            if (!running) return;
+            running = false;
+            timelines.remove(this);
+        }
+
+        private void advance(float delta) {
+            if (delta > MAX_STEP && held < MAX_HELD_FRAMES) {
+                held++;
+                return;
+            }
+            held = 0;
+            elapsed += Math.min(delta, MAX_STEP);
+            if (elapsed >= duration) {
+                finish();
+                return;
+            }
+            body.apply((float) easing.ease(elapsed / duration));
+        }
+    }
+
+    private record OwnedHook(Node owner, Hook hook) {
+    }
+
+    private final List<Timeline> timelines = new ArrayList<>();
+    private final List<OwnedHook> hooks = new ArrayList<>();
+
+    /** Starts a timeline, writing its start value now. */
+    public Timeline start(float durationSeconds, Easing easing, Body body, @Nullable Runnable onDone) {
+        Timeline timeline = new Timeline(durationSeconds, easing, body, onDone);
+        if (timeline.running) timelines.add(timeline);
+        return timeline;
+    }
+
+    /** Whether anything is animating — the one assertion that separates "playing" from "applied instantly". */
+    public boolean isAnimating() {
+        return !timelines.isEmpty();
+    }
+
+    public int running() {
+        return timelines.size();
+    }
+
+    /**
+     * A per-frame hook OWNED by a node, dropped when the node is frozen or leaves the tree.
+     *
+     * <p>The old {@code UIFrameTicker} was registered one-way and stopped only by returning false, so
+     * the one thing that carried on running in a hidden window was a ticker — the "hidden editor that
+     * keeps compiling". Ownership makes that structural: hiding is freezing, and freezing drops the
+     * hooks.</p>
+     */
+    public void every(Node owner, Hook hook) {
+        hooks.add(new OwnedHook(owner, hook));
+    }
+
+    public int hookCount() {
+        return hooks.size();
+    }
+
+    /** Advances every timeline and runs every live hook. Called once per frame by the host. */
+    public void tick(float deltaSeconds) {
+        for (Timeline timeline : new ArrayList<>(timelines)) timeline.advance(deltaSeconds);
+        for (OwnedHook owned : new ArrayList<>(hooks)) {
+            if (!owned.owner().isConnected() || owned.owner().isFrozen()) {
+                hooks.remove(owned);
+                continue;
+            }
+            if (!owned.hook().frame(deltaSeconds)) hooks.remove(owned);
+        }
+    }
+
+    /** Drops the hooks a subtree owns — the lifecycle service, freezing or destroying it. */
+    public void forget(Node node) {
+        hooks.removeIf(owned -> Node.isShadowIncludingInclusiveAncestor(node, owned.owner()));
+    }
+}
