@@ -144,7 +144,7 @@ public class Dialog extends UIElement {
 
     /** The spec's cancelable {@code cancel} event — Escape on a modal. {@code preventDefault()} keeps
      * the dialog open. Never fires for a modeless dialog, which establishes no close watcher. */
-    public final EventListenerGroup<CloseEvent.Cancel> onCancel = events.getGroup(CloseEvent.Cancel.class);
+    public final EventListenerGroup<UIElement, CloseEvent.Cancel> onCancel = events.getGroup(CloseEvent.Cancel.class);
 
     private final UIElement titleBar;
     private final Button closeButton;

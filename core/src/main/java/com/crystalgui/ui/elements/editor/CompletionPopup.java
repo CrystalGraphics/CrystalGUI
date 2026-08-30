@@ -472,7 +472,7 @@ public final class CompletionPopup extends Popover {
         hint.events.getGroup(MouseEvent.Down.class).attachListener((element, event) -> {
             // The strip's own controls come first: a press on the options button must open the menu, not
             // start dragging the window. Filtering on the target is what SplitView's divider does.
-            if (event.getTarget() != hint) return;
+            if (((UIElement) event.getTarget()) != hint) return;
             UIWindow window = getAttachedWindow();
             UIElement host = getParent();
             if (window == null || host == null) return;

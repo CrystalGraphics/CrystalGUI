@@ -215,7 +215,7 @@ public class SplitView extends UIElement {
             // Resolved from the event, never captured: dividers are inserted and removed as panes come
             // and go, so an index closed over at construction would move the wrong one the moment the
             // layout changed. Same rule the pooled gutter arrows already document.
-            int index = dividers.indexOf(event.getTarget());
+            int index = dividers.indexOf(((UIElement) event.getTarget()));
             if (index < 0) return;
             beginDrag(index, event.getPosition().x(), event.getPosition().y());
         }, false, true);

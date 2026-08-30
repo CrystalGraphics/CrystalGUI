@@ -107,7 +107,7 @@ final class WindowMove {
             // button on a title bar. The engine's own note on startDrag records the same hazard from
             // the middle-button side.
             if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
-            if (captionPressIsAControl(event.getTarget())) return;
+            if (captionPressIsAControl(((UIElement) event.getTarget()))) return;
             // ON THE BAR, and this guard belongs HERE rather than inside beginMove.
             //
             // A synthesized activation press (Space/Enter on a focused element) carries the cursor's

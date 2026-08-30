@@ -148,7 +148,7 @@ public class CanvasView extends UIElement implements UIFrameTicker {
         // i.e. everywhere except where you actually want to grab.
         this.events.getGroup(MouseEvent.Down.class).attachListener((el, event) -> {
             if (!panEnabled || !isEnabled()) return;
-            if (isBackgroundGestureExempt(event.getTarget())) return;
+            if (isBackgroundGestureExempt(((UIElement) event.getTarget()))) return;
             if (!isPanTrigger(event)) return;
             event.stopPropagation();
             beginPan(event.getPosition().x(), event.getPosition().y(), event.getButtonId());
@@ -162,7 +162,7 @@ public class CanvasView extends UIElement implements UIFrameTicker {
             // only claims the wheel while it actually scrolls -- deliberately, so a list at its end chains
             // outward -- so a menu whose list is short or already at the bottom hands the wheel straight
             // to this handler, and the graph zooms under an open menu. That is never what was meant.
-            if (isBackgroundGestureExempt(event.getTarget())) return;
+            if (isBackgroundGestureExempt(((UIElement) event.getTarget()))) return;
             float notches = event.getScroll();
             if (notches == 0f) return;
             // NEGATED, and the sign is not guessable: in this engine a POSITIVE notch means the wheel

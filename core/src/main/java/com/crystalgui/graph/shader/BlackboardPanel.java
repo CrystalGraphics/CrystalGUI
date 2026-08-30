@@ -334,7 +334,7 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
         // closes the rename. Clicking into the box you are typing in shut it, which reads as the field
         // refusing to be clicked rather than as a focus fight two elements apart.
         onMouseDown.attachListener((element, event) -> {
-            UIElement target = event.getTarget();
+            UIElement target = ((UIElement) event.getTarget());
             if (target != null && target.consumesTextInput()) return;
             focusSelf();
         }, false, true);

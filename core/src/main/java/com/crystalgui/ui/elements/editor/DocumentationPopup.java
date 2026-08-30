@@ -461,7 +461,7 @@ public final class DocumentationPopup extends Popover {
             // Only the MOVE is excluded below -- the pin is about intent, the move is about which gesture.
             pinned = true;
             addClass(PINNED_CLASS);
-            if (ownsItsOwnPress(event.getTarget())) return;
+            if (ownsItsOwnPress(((UIElement) event.getTarget()))) return;
             beginMove(rawX, rawY);
         }, false, true);
 

@@ -453,7 +453,7 @@ public class MenuBarView extends UIElement implements UIFrameTicker {
         current.ui.rootElement.events.getGroup(FocusEvent.Focus.class)
                 .attachListener((element, event) -> {
                     if (getAttachedWindow() != current) return;
-                    UIElement target = event.getTarget();
+                    UIElement target = ((UIElement) event.getTarget());
                     if (isUsableSource(target)) lastFocused = target;
                 }, true, false);
         // LEFT/RIGHT ACROSS THE BAR, in the BUBBLE phase -- the opposite of the two above, and the

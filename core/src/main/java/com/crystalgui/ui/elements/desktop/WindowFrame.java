@@ -597,7 +597,7 @@ public class WindowFrame extends UIElement implements Disposable {
             // the click had happened to land on another control. A press on CHROME -- the caption, a
             // resize edge, the slot's own scrollbar -- is the case the memory exists for: dragging a
             // window by its title bar must not lose the field you were typing in.
-            boolean inContent = pressedInContent(event.getTarget());
+            boolean inContent = pressedInContent(((UIElement) event.getTarget()));
             if (inContent) rememberFocusChosenByPress();
             Desktop desktop = desktop();
             if (desktop != null) {
@@ -631,7 +631,7 @@ public class WindowFrame extends UIElement implements Disposable {
         // record the frame ITSELF: a press on the title bar focuses the frame (the ancestor walk above),
         // so recording that would let dragging a window forget the field you were typing in.
         onFocus.attachListener((element, event) -> {
-            if (event.getTarget() != null && event.getTarget() != this) lastFocused = event.getTarget();
+            if (((UIElement) event.getTarget()) != null && ((UIElement) event.getTarget()) != this) lastFocused = ((UIElement) event.getTarget());
         }, false, true);
     }
 

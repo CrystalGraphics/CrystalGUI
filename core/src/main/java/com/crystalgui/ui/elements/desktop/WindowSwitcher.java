@@ -581,7 +581,7 @@ public class WindowSwitcher extends UIElement {
             // AND A PRESS ACTIVATES -- on the DOWN, because a switcher is dismissed by the press itself,
             // so waiting for the release would mean waiting for a click that lands on nothing.
             onMouseDown.attachListener((element, event) -> {
-                if (isWithinClose(event.getTarget())) return;
+                if (isWithinClose(((UIElement) event.getTarget()))) return;
                 activateTile(this);
             }, false, true);
         }

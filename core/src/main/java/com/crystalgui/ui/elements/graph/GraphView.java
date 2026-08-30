@@ -316,7 +316,7 @@ public class GraphView extends CanvasView implements UndoScope {
             // A press that reached the graph itself landed on empty canvas: a node claims its own press
             // in the capture phase, and a port claims one before that. So this is the marquee's press —
             // unless a wire is under it, which is the only thing here that is drawn but not an element.
-            if (isBackgroundGestureExempt(event.getTarget())) return;
+            if (isBackgroundGestureExempt(((UIElement) event.getTarget()))) return;
             // A press inside a NODE is never the canvas's, even when the node did not claim it.
             //
             // GraphNode stops propagation only for presses it turns into a move-drag; a press on its
@@ -329,7 +329,7 @@ public class GraphView extends CanvasView implements UndoScope {
             // Asking about the target rather than relying on every node to stop propagation is the
             // robust half: a widget that legitimately wants a press to pass through should not have to
             // know that letting it through starts a rubber band three levels up.
-            if (isInsideNode(event.getTarget())) return;
+            if (isInsideNode(((UIElement) event.getTarget()))) return;
             if (beginMarqueeOrPickWire(event.getPosition().x(), event.getPosition().y())) {
                 event.stopPropagation();
             }
@@ -340,7 +340,7 @@ public class GraphView extends CanvasView implements UndoScope {
         // pointer position has to be re-tested against the curves each time it moves.
         this.events.getGroup(MouseEvent.Move.class).attachListener((el, event) -> {
             GraphConnection was = hoveredWire;
-            hoveredWire = isBackgroundGestureExempt(event.getTarget())
+            hoveredWire = isBackgroundGestureExempt(((UIElement) event.getTarget()))
                     ? null
                     : wireAt(event.getPosition().x(), event.getPosition().y());
             // Nothing to invalidate — the layer repaints every frame and reads this directly. Kept as a
