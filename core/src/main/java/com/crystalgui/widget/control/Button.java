@@ -14,7 +14,6 @@ import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.ShadowRoot;
 import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UINodeRegistry;
 import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import javax.annotation.Nullable;
@@ -47,6 +46,36 @@ public class Button extends UINode {
 
     public static final Name NAME = Name.of("button");
 
+    public static final State<Button, String> TEXT =
+            State.<Button, String>of("text", StateTypes.STRING, Button::getText, Button::setText, "")
+                    .omittedWhen("");
+
+    /** The user pressed it. The one gesture; anything else asks for its own event. */
+    public static final Event<Button, Void> ACTIVATE =
+            Event.signal("activate", (button, sink) -> button.onPressed.connect(sink));
+
+    /**
+     * <b>Registered by {@link com.crystalgui.widget.Widgets}, not by a static block here.</b>
+     *
+     * <p>A widget registering itself from its own initialiser is registered only once something has
+     * loaded the class, so the registry's contents become a function of what a given JVM happened to
+     * touch — the old {@code ElementRegistry}'s javadoc calls that "actively wrong for a serialized
+     * one", and this class had it for exactly one commit. The kind is declared by the LAYER, which
+     * the registry discovers as a {@link com.crystalgui.ui.dom.NodeKinds} service.</p>
+     */
+    public static final WidgetContract<Button> CONTRACT = WidgetContracts.register(
+            WidgetContract.of(Button.class, "button")
+                    .state(TEXT)
+                    .event(ACTIVATE)
+                    .build());
+
+    // ── The parts, after the identity ────────────────────────────────────────
+    //
+    // The declaration order is the reading order: WHAT this kind is (its name), then WHAT IT SAYS
+    // (its state and its events, which is the whole of its contract with a peer), then the pieces it
+    // is built out of. A reader arriving at a widget wants the first two; the part names matter only
+    // once they are reading the constructor or writing a rule.
+
     /** The label's part name. {@code button::part(label)} in a sheet. */
     public static final String LABEL_PART = "label";
     /** The icon slot before the label. */
@@ -56,32 +85,6 @@ public class Button extends UINode {
     /** What {@link #setUnderlay} was given — drawn behind the label. */
     public static final String UNDERLAY_PART = "underlay";
 
-    public static final State<Button, String> TEXT =
-            State.<Button, String>of("text", StateTypes.STRING, Button::getText, Button::setText, "")
-                    .omittedWhen("");
-
-    /** The user pressed it. The one gesture; anything else asks for its own event. */
-    public static final Event<Button, Void> ACTIVATE =
-            Event.signal("activate", (button, sink) -> button.onPressed.connect(sink));
-
-    public static final WidgetContract<Button> CONTRACT = WidgetContracts.register(
-            WidgetContract.of(Button.class, "button")
-                    .state(TEXT)
-                    .event(ACTIVATE)
-                    .build());
-
-    /**
-     * The kind, registered with the CONTRACT as its {@link com.crystalgui.ui.dom.NodeContract}.
-     *
-     * <p><b>Textually after {@code CONTRACT}, and it has to be.</b> Static fields and static blocks
-     * run in source order, so a block placed above the contract reads a null — and
-     * {@code UINodeRegistry.register} would refuse it, which is at least loud. Registering the
-     * contract itself rather than a plain one is what makes a peer's "what can this report" answer
-     * come from the same declaration the state does.</p>
-     */
-    static {
-        UINodeRegistry.register(NAME, Button::new, CONTRACT);
-    }
 
     public final Signal.Action onPressed = new Signal.Action();
 
