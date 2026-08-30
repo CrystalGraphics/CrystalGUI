@@ -66,7 +66,8 @@ public class DesktopActivationTest extends UiTestBase {
     }
 
     private Button buttonIn(WindowFrame frame) {
-        return (Button) frame.content().getChildren().get(0);
+        // The slot is a scroll view whose bars come first in the raw list; ask for the CONTENT.
+        return (Button) frame.content().describedChildren().get(0);
     }
 
     private void press(float x, float y) {

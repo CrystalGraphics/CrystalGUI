@@ -1193,13 +1193,24 @@ public class Desktop extends UIElement implements DataProvider {
             return;
         }
 
+        // CENTRED, and cascading FROM the centre. Every GuiContainer in Minecraft opens centred, and a
+        // window in the top-left corner reads as unplaced -- because that is exactly where an unplaced
+        // one is drawn, so the two were indistinguishable on screen. Win32's CW_USEDEFAULT cascades
+        // from the corner; macOS and KDE centre; the game this runs inside has already decided.
+        //
+        // ALONE ON THE DESKTOP, THERE IS NOTHING TO CASCADE FROM. The counter only ever grew, so a
+        // window closed and reopened landed one step away from where it had been, and a third open one
+        // step further -- drifting across the screen a caption at a time, once per reopen.
+        if (windows.frames().size() <= 1) cascadeStep = 0;
+        float centreLeft = (areaWidth - frameWidth) / 2f;
+        float centreTop = (areaHeight - frameHeight) / 2f;
         float offset = cascadeStep * step;
-        if (offset + frameWidth > areaWidth || offset + frameHeight > areaHeight) {
+        if (centreLeft + offset + frameWidth > areaWidth || centreTop + offset + frameHeight > areaHeight) {
             cascadeStep = 0;
             offset = 0f;
         }
         cascadeStep++;
-        frame.moveTo(offset, offset);
+        frame.moveTo(Math.max(0f, centreLeft + offset), Math.max(0f, centreTop + offset));
     }
 
     /**
