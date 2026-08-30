@@ -678,6 +678,15 @@ gallery's trees.
 
 ### M6 — The port · XL · after: M5
 
+> **Broken into minor milestones 6.0–6.9 in `plan_m6.md` (2026-08-31), after measuring the whole old
+> engine.** Five corrections to the paragraph below are recorded there and should be read first: the
+> sheet rewrite is a CLASSIFICATION (401 of 1,048 part selectors select a part under a part, which
+> `::part()` cannot express — §1.1); the scope is ~96,500 lines, not `ui/elements` alone (§1.2); the
+> networking sessions are on M6's critical path, not M7's (§1.3); 164 test files move with the widgets
+> (§1.4); 32 tags match by the lowercase-class fallback and must register a `Name` (§1.5). The
+> paragraph is kept as the row was written.
+
+
 In dependency order, each step keeping the game runnable on the old engine until the last:
 leaf widgets (Button, Checkbox, Switch, Slider, ProgressBar, UIText, TextField) as node + skin;
 composites (ScrollerView, SplitView, TabView, Dialog, Popover/Menu/Dropdown, Tooltip,
