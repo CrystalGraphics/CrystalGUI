@@ -200,6 +200,49 @@ val headlessTestTask = tasks.register<Test>("headlessTest") {
 tasks.named("check") { dependsOn(headlessTestTask) }
 
 
+// -- M5 acceptance ------------------------------------------------------------
+// The new engine's own definition of done, as ONE invocation: `./gradlew :core:m5Acceptance`.
+//
+// Named rather than left as a list somebody retypes, because the point of the list is that it is
+// the SAME list every time -- the seam suite over both trees, the strangler boundary read out of
+// the constant pool, one-pass layout compared against the old engine, hit-testing with no paint
+// having happened, the focus and hit-test rows, and the engine-parity comparison (which SKIPS with
+// instructions when no GL run has produced its PNGs -- an environment gate, never an answer gate).
+val m5Headless = tasks.register<Test>("m5AcceptanceHeadless") {
+    description = "M5's headless half: the seam, the boundary, the box tree, the services."
+    group = "verification"
+    testClassesDirs = headlessTest.output.classesDirs
+    classpath = headlessTest.runtimeClasspath
+    useJUnit()
+    filter {
+        includeTestsMatching("com.crystalgui.ui.dom.*")
+        includeTestsMatching("com.crystalgui.ui.box.*")
+        includeTestsMatching("com.crystalgui.ui.service.*")
+        includeTestsMatching("com.crystalgui.headless.EngineBoundaryTest")
+        includeTestsMatching("com.crystalgui.net.mirror.*")
+    }
+}
+
+val m5Fonted = tasks.register<Test>("m5AcceptanceFonted") {
+    description = "M5's half that needs fonts and CSS: one-pass layout on both engines, shaped text."
+    group = "verification"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnit()
+    filter {
+        includeTestsMatching("com.crystalgui.ui.box.*")
+        includeTestsMatching("com.crystalgui.ui.dom.*")
+        includeTestsMatching("com.crystalgui.ui.service.*")
+    }
+}
+
+tasks.register("m5Acceptance") {
+    description = "M5 is done by its own definition: run this."
+    group = "verification"
+    dependsOn(m5Headless, m5Fonted)
+}
+
+
 // -- Import guard -------------------------------------------------------------
 // Fails the build if any core/ source imports MC, Forge, or LWJGL classes.
 // Runs as a doLast hook on compileJava — same pattern as CrystalGraphics/core/.

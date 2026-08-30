@@ -627,6 +627,28 @@ opened by a client at all, and a resolver that re-derives from `args` is not foo
 
 ### M5 — The three-tree engine core · XL · after: M0 (S1, S2), D2–D4
 
+> **SHIPPED 2026-08-30, in seven minor milestones — see `plan_m5.md` §4 for what each one found.**
+> `ui.dom` (node tree, shadow roots, slots, retargeting, lifecycle, thread affinity per tree),
+> the cascade SHARED behind `Styleable` with `@scope` proximity and an immutable `ComputedStyle`,
+> `ui.box` (one Taffy tree per document, one-pass layout, hosts, mirrors, `Measurable`, world
+> matrices composed never painted), `BoxPainter`, and `ui.service` (input with a mode stack and DOM
+> propagation, one focus algorithm over navigation scopes, one motion service, freeze-not-detach).
+> **`./gradlew :core:m5Acceptance`** is the run. Headless went 1622 → 1691.
+>
+> What it found, and none of it was visible from a design: the registry's initial for a margin, a
+> padding and a border is `auto` (an auto margin CENTRES an absolutely positioned box, so every
+> popup landed somewhere plausible and wrong); the document's box is a BLOCK container or a flex-row
+> root stretches every child to the viewport; Taffy asks a measure function for MIN-content as well
+> as max-content; a modal blocks the scope CONTAINING it, not its own; a skipped box is not a
+> candidate but its children still are; and opening a modal changes what is hittable with no
+> pointer movement and no frame. The last three were found by the focus and hit-test rows being
+> written as tests, which is what that acceptance criterion was for.
+>
+> **Deliberately not ported, and named so it is not mistaken for done:** close watchers, light
+> dismiss, `Dialog.pulse`, the drag ghost and `TransitionEngine` as the motion service's client —
+> all widget-layer, all M6. The paragraph below is kept as the row was written.
+
+
 > **Broken into seven minor milestones in `plan_m5.md` (2026-08-30) — read that, not this paragraph,
 > before starting.** 5.0 the strangler line and skeleton · 5.1 the node tree · 5.2 the style pass
 > re-hosted and scoped · 5.3 the box tree and one-pass layout · 5.4 paint and hit-test through boxes,
