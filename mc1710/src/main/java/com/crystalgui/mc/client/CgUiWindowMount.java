@@ -3,12 +3,14 @@ package com.crystalgui.mc.client;
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.net.ViewCommand;
 import com.crystalgui.net.window.ClientWindows;
 import com.crystalgui.net.window.ClientWindowContext;
 import com.crystalgui.net.window.ScopedSheets;
 import com.crystalgui.net.window.SheetSupply;
 import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.net.protocol.ProtocolConnection;
+import com.crystalgui.serialization.StateMap;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
@@ -213,6 +215,34 @@ public final class CgUiWindowMount implements WindowMount {
             if (host == null || frame.state() == WindowState.DESTROYED) return;
             if (frame.state() == WindowState.HIDDEN) frame.show(false);
             host.desktop().activate(frame);
+        }
+
+        /**
+         * What a server may ask of the WINDOW rather than the tree, applied to the frame it got.
+         *
+         * <p>This was the default no-op for a release, so {@code io.setIcon}, {@code io.setTitle} and
+         * {@code io.notifyUser} were shipped on the server side and dropped here — every one of them
+         * looked wired up from the panel's end. The geometry hint stays unapplied on purpose: a record
+         * the user made outranks a hint, and nothing here yet knows whether one was applied.</p>
+         */
+        @Override
+        public void viewCommand(String command, StateMap<Object> args) {
+            if (frame.state() == WindowState.DESTROYED) return;
+            switch (command) {
+                case ViewCommand.SET_TITLE:
+                    frame.setTitle(args.getString(ViewCommand.TEXT, frame.getTitle()));
+                    break;
+                case ViewCommand.SET_ICON: {
+                    String icon = args.getString(ViewCommand.TEXT, "");
+                    frame.setIcon(icon.isEmpty() ? null : icon);
+                    break;
+                }
+                case ViewCommand.NOTIFY:
+                    frame.requestAttention();
+                    break;
+                default:
+                    break;
+            }
         }
 
         @Override

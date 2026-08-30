@@ -162,7 +162,11 @@ public class WindowFrame extends UIElement implements Disposable {
     public static final String RESTORE_TOOLTIP = "Restore Down";
     public static final String CLOSE_TOOLTIP = "Close";
 
-    /** The window's icon slot, hidden until {@link #setIcon} gives it something to draw. */
+    /**
+     * The window's icon slot: the icon this window declares, or the same monogram tile the taskbar draws
+     * for it when it declares none. Hidden only on a tool window, which has no taskbar entry to agree
+     * with. @see #refreshIcon
+     */
     public static final String ICON_CLASS = "__icon__";
 
     /** The maximise affordance. Its glyph swaps to "restore" while {@link #MAXIMIZED_CLASS} is on. */
@@ -507,7 +511,7 @@ public class WindowFrame extends UIElement implements Disposable {
         // is `window > .__title-bar__ > .__icon__`.
         icon = new WindowIcon();
         icon.addClass(ICON_CLASS);
-        icon.setDisplayed(false);
+        refreshIcon();
 
         // AFTER the icon and BEFORE the title, which is where IntelliJ's New UI and VS Code's custom
         // title bar both put an application's menu: hard against the left, with the title taking
@@ -743,6 +747,32 @@ public class WindowFrame extends UIElement implements Disposable {
     }
 
     /**
+     * THE CAPTION SHOWS WHATEVER THE TASKBAR SHOWS FOR THIS WINDOW.
+     *
+     * <p>One window, one appearance: the strip, the hover preview and the switcher all draw this window
+     * as a tile — its icon, or its title's initial on a coloured square when it declares none. The
+     * caption used to show a tile only for a declared icon, which left the commonest window of all — a
+     * server's, which declares nothing — with a caption that disagreed with its own taskbar entry: a red
+     * "M" in the strip, and nothing beside the title it stood for. Same fallback, keyed the same way
+     * ({@link WindowIcon#show} decides both), so the two cannot drift.</p>
+     *
+     * <p>The exception is the one the old rule was protecting. A <b>tool window</b> has no taskbar entry
+     * to agree with, and its caption IS its panel's header, adopted from the panel — a filled square
+     * there is noise on something the taskbar does not consider a window. It shows a declared icon and
+     * nothing otherwise. An icon that names artwork nothing can load falls back to the monogram, as the
+     * strip's does, rather than to whatever was drawn before.</p>
+     */
+    private void refreshIcon() {
+        boolean declared = iconName != null && CgUiSvg.ofIcon(iconName) != null;
+        if (!declared && toolWindow) {
+            icon.setDisplayed(false);
+            return;
+        }
+        icon.show(declared ? iconName : null, getTitle());
+        icon.setDisplayed(true);
+    }
+
+    /**
      * Declares the window's icon — {@code "namespace:name"}, the way a file type does.
      *
      * <p>Drawn in <b>two</b> places, the title bar and the taskbar entry, which is why this is a name on
@@ -755,17 +785,7 @@ public class WindowFrame extends UIElement implements Disposable {
      */
     public WindowFrame setIcon(@Nullable String namespacedIcon) {
         this.iconName = namespacedIcon;
-        if (namespacedIcon == null) {
-            icon.setDisplayed(false);
-            return this;
-        }
-        if (CgUiSvg.ofIcon(namespacedIcon) == null) return this;
-        // SHOWN ONLY WHEN THERE IS AN ICON, which is where the caption still differs from the strip on
-        // purpose: WindowIcon's other consumers fall back to a monogram tile, and a caption that grew one
-        // would put a filled square on every dialog and tool window that has never declared an icon. The
-        // title is passed anyway so the fallback is one argument away if that is wanted.
-        icon.show(namespacedIcon, getTitle());
-        icon.setDisplayed(true);
+        refreshIcon();
         Desktop desktop = owner;
         if (desktop != null) desktop.registry().changed();
         return this;
@@ -773,6 +793,9 @@ public class WindowFrame extends UIElement implements Disposable {
 
     public WindowFrame setTitle(String title) {
         titleLabel.setText(title == null ? "" : title);
+        // The monogram is the title's initial, and the taskbar entry carries the title too.
+        refreshIcon();
+        if (owner != null) owner.registry().changed();
         return this;
     }
 
@@ -941,6 +964,8 @@ public class WindowFrame extends UIElement implements Disposable {
     public WindowFrame setToolWindow(boolean nowToolWindow) {
         if (toolWindow == nowToolWindow) return this;
         this.toolWindow = nowToolWindow;
+        // Whether the caption falls back to a monogram is decided by this. @see #refreshIcon
+        refreshIcon();
         // The taskbar and the switcher are built from filtered views, so flipping this changes what they
         // should be showing and nothing else would tell them.
         if (owner != null) owner.registry().changed();
