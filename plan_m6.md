@@ -467,11 +467,29 @@ the sixteen event fields, `attachDefaultListener`, `keymap()`, `settings()`, `ge
 `bindKeys`, `tickFrame` — each is the right API *and* a hundred sites the script never touches. The
 attribute is the storage; the method is the door.
 
-**The budget.** 95,316 lines in the matrix (plus `language`'s 3,400), 2,670 engine sites of which
-**2,227 are mechanical and 443 are hand-edited** — per batch, 38 to 87. The residual is edited with
-targeted replacements, never by rewriting a file, and never by re-reading a file the census has
-already located the line in. Written from scratch: 6.0's machinery and nothing else. The one
-honest exception is 6.5's D22, budgeted as XL for that reason and not for `TextEditor`'s length.
+**The budget, as the tool measures it** rather than as the census estimated it. Across 6.1–6.8:
+**189 files copied, 100 moved, 3,249 mechanical rewrites and 432 hand sites** — per batch 35 to 85.
+The residual is edited with targeted replacements, never by rewriting a file, and never by re-reading
+a file the codemod has already located the line in. Written from scratch: 6.0's machinery and nothing
+else. The one honest exception is 6.5's D22, budgeted as XL for that reason and not for
+`TextEditor`'s length.
+
+| Batch | copied | moved | mechanical | hand sites |
+|---|---|---|---|---|
+| 6.1 | 18 | 0 | 364 | 80 |
+| 6.2 | 26 | 13 | 506 | 47 |
+| 6.3 | 21 | 17 | 474 | 59 |
+| 6.4 | 26 | 9 | 445 | 85 |
+| 6.5 | 26 | 8 | 394 | 77 |
+| 6.6 | 19 | 8 | 409 | 49 |
+| 6.7 | 44 | 39 | 566 | 35 |
+| 6.8 | 9 | 6 | 91 | 0 |
+
+The estimate the census produced was 443 hand sites; the tool finds 432, and the per-batch split moved
+— 6.1 is 80 rather than 60 (the census did not count `getTaffyLayout` reads or internal children as
+readings) and 6.7 is 35 rather than 38. Close enough to have been worth estimating, and the reason
+the numbers are now generated: an estimate is a thing to check, and a check that is a command is one
+nobody has to remember to run.
 
 ### 2.8 `LayeringTest`
 
@@ -749,9 +767,11 @@ rewrite of every rule under it when the mistake is found. The census's 401 and 9
 TextField, SearchField, SymbolIcon), `widget.text` (UIText), `widget.scroll` (Scroller, ScrollerView),
 `widget.overlay` (Tooltip), `widget.dnd` (DragGhost, InsertionMarker), `desktop.window` (WindowIcon).
 
-**Budget.** 17 files / 6,495 lines copied; 301 mechanical sites; **60 hand sites** (imp 30 · conv 9 ·
-stopp 6 · idyn 8 · layout 3 · paint 4). Also the codemod's own test: one file per transformation is
-diffed by eye before the rest of the batch runs.
+**Budget, measured** (`python tools/port/codemod.py --batch 6.1 --dry-run`): **18 copied, 0 moved,
+364 mechanical rewrites, 80 hand sites** — IMPORTANT writes 29, internal children 12, layout
+internals 10, coordinate conversions 8, dynamic restructures 7, `stopPropagation` 7, paint
+overrides 3, post-layout callbacks 3, the drag ghost 1. Also the codemod's own test: one file per
+transformation is diffed by eye before the rest of the batch runs.
 
 **Rows it owns.** `UIText`'s whole section; *"`text-overflow` does not inherit"*; the ellipsis
 fallback; *"`font-size` does not inherit"* and the two `em` rows (unchanged — cascade facts); *"a
@@ -789,8 +809,8 @@ non-desktop half, `PromotedPopoverHit`, `PickerInPromotedDialog`, `TopLayer*`, `
 `widget.text` (MarkupView), `widget.form` + `.field` + `.inspector`, `chrome.menu` (Breadcrumbs),
 `chrome.status` (StatusBarView, ProgressStatusItem), `chrome.notification`.
 
-**Budget.** 47 files / 11,798 lines; 402 mechanical; **68 hand sites** (imp 13 · conv 12 · stopp 17 ·
-idyn 13 · resize 8 · layout 4 · paint 1).
+**Budget, measured:** **26 copied, 13 moved, 506 mechanical, 47 hand sites.** The moves are the
+config kit's descriptors and the inspector's registry — engine-neutral, so the IDE does them.
 
 **Rows it owns.** The popover and modality rows: *"the popover stack and the close-watcher stack are
 separate"*; *"light dismiss runs after the mouse-down dispatch, and spares the invoker"*; *"light
@@ -828,8 +848,9 @@ retyped only), `TableView` + `TableColumn`/`TableCellRenderer`, `NavigatorView`,
 MainMenuCommands, ChromeCommands), `chrome.problems`, `chrome.preferences`, `chrome.status`
 (ProcessesPopover). The tree sources, strategies and renderers are **moved**, not copied.
 
-**Budget.** 32 files / 9,061 lines; 209 mechanical; **46 hand sites** (imp 16 · stopp 19 · idyn 3 ·
-resize 4 · layout 4).
+**Budget, measured:** **21 copied, 17 moved, 474 mechanical, 59 hand sites.** Nearly half the batch
+is a move: the tree sources, the strategies, the renderers and the palette's sources are all
+headless.
 
 **Rows it owns.** The whole list/tree/search cluster: *"a list restoring focus to a row must never
 take it from a CONTROL INSIDE one"*; *"a blur raised by ROW RECYCLING is not a user gesture"*; *"a
@@ -870,9 +891,8 @@ mostly kind C.
 **Destination.** `widget.canvas`, `widget.graph`, `graph.shader.panel/.preview/.property`. The graph
 model (`GraphDocument`, codecs, node types — 18 files, 2,577 lines) is **moved**.
 
-**Budget.** 53 files / 15,532 lines of which ~13,000 port; 358 mechanical; **87 hand sites** (imp 13 ·
-conv 14 · stopp 23 · idyn 11 · resize 15 · layout 5 · paint 6) — the highest of any batch, because the
-shader graph's panels resize, anchor and drag.
+**Budget, measured:** **26 copied, 9 moved, 445 mechanical, 85 hand sites** — the highest of any
+batch, because the shader graph's panels resize, anchor and drag.
 
 **Rows it owns.** The canvas/graph rows: *"the canvas culls with `opacity: 0`, not `display:
 none`"* (box opacity, D4/§4.5); *"the plane's `transform-origin` is pinned to `0 0`"*; *"a pan drag's
@@ -910,8 +930,8 @@ memory are the standing goal.
 
 **Destination.** `widget.editor` + `.view` + `.suggest` + `.doc` + `.find`.
 
-**Budget.** 34 files / 15,427 lines; 341 mechanical; **64 hand sites** (imp 22 · conv 6 · stopp 19 ·
-idyn 1 · resize 12 · layout 2 · paint 2) — plus D22, which is the batch's real cost.
+**Budget, measured:** **26 copied, 8 moved, 394 mechanical, 77 hand sites** — plus D22, which is the
+batch's real cost and appears in no count.
 
 **Rows it owns.** Every `TextEditor` row: *"the ERROR STRIPE is the one part that is honestly
 O(document)"*; *"a NaN poisons a whole layout silently"*; *"semantic tokens REPLACE grammar
@@ -957,9 +977,8 @@ surface onto `UIDocument` (§4.2's last row). Sheet: `desktop.css` (108 rules, 7
 
 **Destination.** `desktop`, `desktop.window`, `desktop.motion`, `desktop.taskbar`, `desktop.switcher`.
 
-**Budget.** 27 files / 10,498 lines; 295 mechanical; **80 hand sites** (imp 17 · conv 7 · stopp 7 ·
-idyn 2 · resize 21 · layout 2 · paint 12 · mirror 12) — every paint and mirror site in the port is
-here or in 6.4.
+**Budget, measured:** **19 copied, 8 moved, 409 mechanical, 49 hand sites** — every paint and mirror
+site in the port is here or in 6.4, and freeze-replacing-detach appears in none of them.
 
 **Rows it owns.** The ~65 compositor rows. Structural ones that change meaning: **hide is freeze**
 (*"HIDE IS DETACH"* in every row that says it — `WindowState.HIDDEN`'s javadoc is rewritten:
@@ -1035,9 +1054,9 @@ rules, 162 parts — the largest), `runpanel`'s rules wherever they live.
 `.decoration`; `editor` and `example.machine` and `language.run.view` as they are. The dock model
 (25 files) and the sessions/settings/tree-source classes are **moved**.
 
-**Budget.** 83 files / 23,038 lines of which ~11,000 port; 313 mechanical; **38 hand sites** (imp 13 ·
-conv 12 · idyn 7 · layout 5 · stopp 1) — the largest batch by lines and the smallest by hand work,
-because the workbench is mostly logic over widgets it does not draw.
+**Budget, measured:** **44 copied, 39 moved, 566 mechanical, 35 hand sites** — the largest batch by
+lines and the smallest by hand work, because the workbench is mostly logic over widgets it does not
+draw, and half of it is engine-neutral enough to move rather than copy.
 
 **Rows it owns.** The ~45 workbench/dock rows: *"the HOST is the truth about which region half holds
 a panel"*; *"a tool window's MODE lives on its placement record"*; *"the tear-out zone is the
@@ -1083,9 +1102,10 @@ governance test.
 
 **Destination.** `net.window` as it is; the sessions in `net` as they are.
 
-**Budget.** 15 files / 3,467 lines; 8 mechanical; **0 hand sites in the matrix** — the work is the
-generic retype of two files (`ServerUiSession` 1,457 lines, `ClientUiSession` 903), which is a
-reading of thirty `UIElement` references rather than a codemod.
+**Budget, measured:** **9 copied, 6 moved, 91 mechanical, 0 hand sites** — and the count is
+misleading, because the work is the generic retype of two files the codemod does not touch
+(`ServerUiSession` 1,457 lines, `ClientUiSession` 903), which is a reading of thirty `UIElement`
+references rather than a rewrite.
 
 **Rows it owns.** The networking rows are untouched in substance — they are about the mirror, which
 M2 made engine-agnostic for exactly this day. Three change spelling: *"a SCOPING PREFIX is a
