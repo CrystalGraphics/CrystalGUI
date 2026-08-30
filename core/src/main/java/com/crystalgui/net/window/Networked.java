@@ -213,6 +213,29 @@ public interface Networked<M> {
     }
 
     /**
+     * <b>May this window close?</b> Answered on the CLIENT, where the unsaved work is.
+     *
+     * <p>Return {@code false} to refuse. The server asks before closing a window it owns, and the host
+     * asks before the user's own close button takes one away, so one answer covers both routes.</p>
+     *
+     * <p>Refusing is a promise to do something about it: put a confirmation on screen, and close the
+     * window yourself when the user says so. A panel that returns {@code false} forever is a window
+     * nobody can get rid of.</p>
+     *
+     * <pre>{@code
+     * @Override
+     * public boolean requestClose() {
+     *     if (!edited) return true;
+     *     confirm.show();          // and confirm's OK button calls io.close()
+     *     return false;
+     * }
+     * }</pre>
+     */
+    default boolean requestClose() {
+        return true;
+    }
+
+    /**
      * Told when the window ends, on whichever side this instance is — <b>with the same answer on both</b>.
      *
      * <p>It was a {@code String} and the two sides disagreed about what was in it: the server got a

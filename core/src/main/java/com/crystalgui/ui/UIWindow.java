@@ -402,6 +402,19 @@ public final class UIWindow {
     private boolean desktopSuspended;
 
     /**
+     * <b>The compositor went away, or came back</b> — {@code true} when it is on screen again.
+     *
+     * <p>Suspending takes the whole desktop off the tree without touching any individual window, which
+     * is the point: a resume has to put everything back exactly as it was, and hiding each window would
+     * lose which of them were showing. The cost is that <b>no window's own {@code onHidden} fires</b>,
+     * so anything watching a single window sees nothing at all — and a server on the other end of one
+     * goes on describing a tree nobody is drawing, which is precisely what the visibility report exists
+     * to stop.</p>
+     */
+    public final com.crystalgui.core.signal.Signal.Value<Boolean> onDesktopSuspendedChanged =
+            new com.crystalgui.core.signal.Signal.Value<>();
+
+    /**
      * Takes the whole compositor off the screen, <b>retaining every window exactly as it is</b>.
      *
      * <p>What a host calls when its screen closes. The desktop element leaves the tree, which is the
@@ -417,7 +430,9 @@ public final class UIWindow {
      * the thing a resume has to know.</p>
      */
     public void suspendDesktop() {
+        if (desktopSuspended) return;
         desktopSuspended = true;
+        onDesktopSuspendedChanged.emit(false);
         // DETACHED WITHOUT GIVING UP ITS INTERNAL STATUS, which is the whole difference between this and
         // removeInternalChild. That one clears the flag, so resuming has to re-declare the desktop
         // internal -- and markAsInternal() RECURSES, so it marked every WINDOW that had arrived since.
@@ -430,8 +445,10 @@ public final class UIWindow {
 
     /** Puts the compositor back. @see #suspendDesktop() */
     public void resumeDesktop() {
+        if (!desktopSuspended) return;
         desktopSuspended = false;
         desktop();
+        onDesktopSuspendedChanged.emit(true);
     }
 
     public boolean isDesktopSuspended() {

@@ -1,5 +1,6 @@
 package com.crystalgui.net.window;
 
+import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;
 
 /**
@@ -57,5 +58,17 @@ public interface WindowMount {
          * showing a tree nothing is updating any more.</p>
          */
         void contentReplaced(UIElement newRoot);
+
+        /**
+         * A {@link com.crystalgui.net.ViewCommand} about the WINDOW rather than the tree — its title,
+         * its icon, a size hint, a message to show outside it.
+         *
+         * <p>Default: <b>do nothing</b>, and that is a real answer rather than a stub. A host with no
+         * windows — one panel filling a screen — has no caption to set and no taskbar to rename, and
+         * saying so by ignoring it is better than making every host implement four methods it has no
+         * surface for. The keys are on {@code ViewCommand}.</p>
+         */
+        default void viewCommand(String command, StateMap<Object> args) {
+        }
     }
 }

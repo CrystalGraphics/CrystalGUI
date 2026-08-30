@@ -10,6 +10,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.net.ServerUiSession;
+import com.crystalgui.net.UiLimits;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.ui.UIElement;
@@ -152,6 +153,22 @@ public final class ServerWindows {
         String title = panel.title(model);
         if (title == null) title = type.id();
 
+        if (windows.size() >= UiLimits.MAX_WINDOWS_PER_CONNECTION) {
+            /*
+             * REFUSED, and loudly, because the alternative is worse in both directions.
+             *
+             * Opening anyway costs the client a session, a mirror, an id table and a tree per window,
+             * with nothing bounding how many -- a server looping on open() is a memory attack the
+             * transport is perfectly happy to carry, since each message is small.
+             *
+             * Throwing rather than answering null: this is a programming error on the server's own
+             * side, in its own process, and a mod that opens sixty-five windows wants to know rather
+             * than to have the sixty-fifth silently missing.
+             */
+            throw new IllegalStateException("this connection already has "
+                    + UiLimits.MAX_WINDOWS_PER_CONNECTION + " windows open, which is the cap — see "
+                    + "UiLimits.MAX_WINDOWS_PER_CONNECTION");
+        }
         int id = nextWindowId++;
         ServerUiSession<Object> session = new ServerUiSession<>(id, panel, connection)
                 .setType(type.id())

@@ -16,6 +16,9 @@ import com.crystalgui.net.ClientUiSessions;
 import com.crystalgui.net.SheetRef;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.ui.ElementRegistry;
+import com.crystalgui.net.protocol.UiMethods;
+import com.crystalgui.serialization.PlainOps;
+import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.UIElement;
 
 /**
@@ -179,6 +182,16 @@ public final class ClientWindows {
     private void adopt(ClientUiSession<Object> session) {
         session.onWindowOpened(root -> present(session));
         session.onWindowClosed((code, detail) -> closedByServer(session, code, detail));
+        session.onCall(UiMethods.REQUEST_CLOSE, (args, respond) -> {
+            StateMap<Object> out = new StateMap<>(PlainOps.INSTANCE);
+            out.putBool("ok", mayClose(session));
+            respond.ok(out);
+        });
+        session.onViewCommand((command, args) -> {
+            Mounted live = mounted.get(session);
+            if (live == null || live.root == null) return;
+            ViewCommands.apply(command, args, session.ids(), live.root, live.handle);
+        });
         session.onFocusRequested(() -> {
             Mounted live = mounted.get(session);
             if (live != null && live.handle != null) live.handle.focus();
@@ -221,6 +234,10 @@ public final class ClientWindows {
             return;
         }
 
+        // THE SCOPE CLASS, so a server's rules reach its own windows and nothing else. Added before
+        // the mount so the very first layout already matches; a class added afterwards would leave one
+        // frame styled by the client's sheets alone, which reads as a flash of the wrong theme.
+        root.addClass(ScopedSheets.scopeClass(session.type()));
         Mounted fresh = new Mounted(session, root);
         mounted.put(session, fresh);
         try {
@@ -249,6 +266,30 @@ public final class ClientWindows {
         SheetSupply supply = sheets;
         if (supply == null || window.sheets().isEmpty()) return;
         supply.resolve(window.session, window.sheets(), window);
+    }
+
+    /**
+     * Asks every panel in a window whether it may close. <b>One refusal is enough.</b>
+     *
+     * <p>Unanimity rather than a majority or the root's opinion alone, because what is being protected
+     * is somebody's unsaved work: a nested panel holding a half-typed field has as much right to stop
+     * the window as the panel containing it, and there is no sensible way to close "most of" a window.</p>
+     *
+     * <p>A panel that throws is taken to have consented. Refusing on its behalf would make a bug in one
+     * panel into a window nobody can shut.</p>
+     */
+    private boolean mayClose(ClientUiSession<Object> session) {
+        Mounted live = mounted.get(session);
+        if (live == null) return true;
+        for (Networked<?> panel : live.panels) {
+            try {
+                if (!panel.requestClose()) return false;
+            } catch (RuntimeException failed) {
+                CrystalGuiCore.LOGGER.error("<{}>.requestClose failed; taking that as consent: {}",
+                        live.type(), failed.getMessage(), failed);
+            }
+        }
+        return true;
     }
 
     /**
@@ -354,6 +395,11 @@ public final class ClientWindows {
         }
 
         @Override
+        public boolean mayClose() {
+            return ClientWindows.this.mayClose(session);
+        }
+
+        @Override
         public UIElement root() {
             return root;
         }
@@ -403,6 +449,14 @@ public final class ClientWindows {
         }
 
         @Override
+        public void evicted() {
+            if (ended) return;
+            mounted.remove(session);
+            session.closeFromClient("evicted to stay under the retention cap");
+            finish("evicted to stay under the retention cap", CloseReason.RETENTION.name(), true);
+        }
+
+        @Override
         public void visibilityChanged(boolean nowVisible) {
             if (ended || visible == nowVisible) return;
             visible = nowVisible;
@@ -418,6 +472,9 @@ public final class ClientWindows {
         void finish(String detail, String code, boolean userDriven) {
             if (ended) return;
             ended = true;
+            // Its sheets go with it. Before the callbacks, so a host tearing down its frame is not
+            // briefly showing a window whose styling has already been withdrawn.
+            if (sheets != null) sheets.released(this);
             if (!userDriven && handle != null) {
                 try {
                     handle.closedByServer(detail);

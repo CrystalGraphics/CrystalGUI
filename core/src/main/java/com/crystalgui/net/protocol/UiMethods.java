@@ -119,6 +119,23 @@ public final class UiMethods {
     public static final String SHEET = "ui/sheet";
 
     /** Client → server: the user did something to an element. Notification. */
+    /**
+     * <b>Do something to the view</b> — focus, scroll, show a dialog, retitle the window.
+     *
+     * <p>Its own message rather than part of a description, because these are not state: they are not
+     * idempotent, have no resting value, and must never be replayed. @see com.crystalgui.net.ViewCommand
+     */
+    /**
+     * <b>May this window close?</b> — a REQUEST, because the answer is the point.
+     *
+     * <p>The one thing a server asks the client that it must wait for. Everything else in this protocol
+     * is the server stating and the client following; here the client knows something the server cannot:
+     * whether there is half-typed text, an unsaved edit, a confirmation still on screen.</p>
+     */
+    public static final String REQUEST_CLOSE = "ui/requestClose";
+
+    public static final String VIEW = "ui/view";
+
     public static final String EVENT = "ui/event";
 
     /** {@code ui/openWindow}: the window's <b>type</b> — what a client dispatches local behaviour on. */

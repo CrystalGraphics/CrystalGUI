@@ -369,6 +369,21 @@ public final class ClientUiSession<T> {
         // and whatever is half-typed all stay, and only the compositor is asked to do something. A
         // re-sent ui/openWindow would work and would throw away exactly the state the window was kept
         // for. @see UiMethods#FOCUS_WINDOW
+        bindNotify(UiMethods.VIEW, payload -> {
+            StateMap<T> in = read(payload);
+            if (in.getInt(UiMethods.WINDOW, windowId) != windowId || root == null) return;
+            String command = in.getString(ViewCommand.CMD, "");
+            if (!ViewCommand.ALL.contains(command)) {
+                // A closed vocabulary, and this is where that is enforced. A server naming a method the
+                // client would then look up is the shape that turns a remote UI into a remote-code
+                // surface.
+                CrystalGuiCore.LOGGER.warn("Window {}: refusing an unknown view command '{}'",
+                        windowId, command);
+                return;
+            }
+            if (onViewCommand != null) onViewCommand.accept(command, in);
+        });
+
         bindNotify(UiMethods.FOCUS_WINDOW, payload -> {
             StateMap<T> in = read(payload);
             if (in.getInt(UiMethods.WINDOW, windowId) != windowId || root == null) return;
@@ -399,6 +414,34 @@ public final class ClientUiSession<T> {
     }
 
     /** @see #registerWindowMethods */
+    /**
+     * Told about each {@link ViewCommand} that arrives, already checked against the vocabulary.
+     *
+     * <p>The session carries them and does not act on them: focusing an element, showing a dialog and
+     * retitling a window are UI-layer operations, and {@code net} deliberately does not reach into
+     * {@code ui.elements}. {@code ClientWindows} installs the applier.</p>
+     */
+    @Nullable
+    private java.util.function.BiConsumer<String, StateMap<T>> onViewCommand;
+
+    /**
+     * This window's id table, for a caller that has to resolve an id the server sent.
+     *
+     * <p>Null before a window opens. Read-only in practice — allocating or releasing here would put a
+     * second numbering beside the mirror's.</p>
+     */
+    @Nullable
+    public com.crystalgui.ui.dom.TreeSource<UIElement> ids() {
+        return ids;
+    }
+
+    /** @see #onViewCommand */
+    public ClientUiSession<T> onViewCommand(
+            @Nullable java.util.function.BiConsumer<String, StateMap<T>> handler) {
+        this.onViewCommand = handler;
+        return this;
+    }
+
     /**
      * True only while {@link #applyStateDelta} is running — the one window in which a widget's change
      * signal is the server's doing rather than the user's.
@@ -560,6 +603,23 @@ public final class ClientUiSession<T> {
      * <p>The mirror is rebuilt with the source, both being about <em>this</em> tree.</p>
      */
     private void buildFrom(T encoded) {
+        /*
+         * CHECKED BEFORE ANYTHING IS BUILT.
+         *
+         * The count the server states is checked against what was decoded further down -- that is an
+         * integrity check between two honest peers. This is the other question: whether to decode it at
+         * all. A description naming a million elements is refused for the cost of reading the number,
+         * where trusting it and counting afterwards means having already built the tree.
+         */
+        if (expectedElementCount > UiLimits.MAX_ELEMENTS_PER_WINDOW) {
+            CrystalGuiCore.LOGGER.error("Refusing window {}: it describes {} elements, and the cap is "
+                    + "{}. A UI this large wants streamed rows rather than a bigger tree.",
+                    windowId, expectedElementCount, UiLimits.MAX_ELEMENTS_PER_WINDOW);
+            windowId = -1;
+            deferred.clear();
+            return;
+        }
+
         Map<UIElement, Integer> carried = new java.util.LinkedHashMap<>();
         UIElement rebuilt = nodes.decodeLive(encoded, carried::put);
         ElementTreeSource rebuiltIds = new ElementTreeSource(rebuilt);

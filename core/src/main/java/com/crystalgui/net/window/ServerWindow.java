@@ -12,6 +12,7 @@ import java.util.function.Predicate;
 import javax.annotation.Nullable;
 
 import com.crystalgui.net.ServerUiSession;
+import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.projection.Projections;
 
@@ -129,6 +130,16 @@ public final class ServerWindow<P extends UIElement> {
 
     boolean live;
 
+    /**
+     * Whether this window still exists.
+     *
+     * <p>False once it has closed, for whatever reason — the host, a failed {@code stillValid}, the
+     * connection dying. A closed window is not reopened; {@code ServerWindows.open} makes a new one.</p>
+     */
+    public boolean isLive() {
+        return live;
+    }
+
     ServerWindow(UiType<?, ?> uiType, P panel, Consumer<ServerScope> binder, Runnable ticker,
                  Predicate<Object> validity, Consumer<CloseReason> closer,
                  String title, @Nullable String key) {
@@ -188,6 +199,59 @@ public final class ServerWindow<P extends UIElement> {
     /** Whether this window is currently being served. */
     public boolean isOpen() {
         return live;
+    }
+
+    /**
+     * <b>Asks before closing</b>, and closes only if every viewer's content agrees.
+     *
+     * <p>The one thing the server has to wait for. Everything else here is the server stating and the
+     * client following; this is the client knowing something the server cannot — whether there is
+     * half-typed text or an unsaved edit behind the window it is about to take away.</p>
+     *
+     * <p><b>Unanimity, and one refusal is enough.</b> Ten players may be watching one window and the
+     * work being protected belongs to whichever of them has it; there is no sensible way to close it
+     * for some of them.</p>
+     *
+     * <p>A viewer that does not answer — gone, or too slow — is <b>taken to have consented</b>, or a
+     * dead connection would keep a window open for good. That is the opposite default from a panel
+     * that throws, which is also consent: both err toward the window being closeable, because the
+     * failure of the other direction is a window nobody can get rid of.</p>
+     *
+     * @param onDecided told {@code true} if it closed, {@code false} if somebody refused
+     */
+    public void requestClose(String reason, @Nullable java.util.function.Consumer<Boolean> onDecided) {
+        ServerUiSession<Object> live = session;
+        if (live == null || !live.isOpen()) {
+            if (onDecided != null) onDecided.accept(true);
+            return;
+        }
+        int viewers = live.viewerCount();
+        if (viewers == 0) {
+            close(reason);
+            if (onDecided != null) onDecided.accept(true);
+            return;
+        }
+
+        // A vote per viewer, and the window closes only once they are all in and all agree.
+        boolean[] refused = { false };
+        int[] answered = { 0 };
+        live.callEveryViewer(UiMethods.REQUEST_CLOSE, null,
+                answer -> {
+                    if (!answer.getBool("ok", true)) refused[0] = true;
+                    if (++answered[0] < viewers) return;
+                    decide(refused[0], reason, onDecided);
+                },
+                error -> {
+                    // No answer is consent: a dead or slow viewer must not hold a window open.
+                    if (++answered[0] < viewers) return;
+                    decide(refused[0], reason, onDecided);
+                });
+    }
+
+    private void decide(boolean refused, String reason,
+                        @Nullable java.util.function.Consumer<Boolean> onDecided) {
+        if (!refused) close(reason);
+        if (onDecided != null) onDecided.accept(!refused);
     }
 
     /** Asks the host to end this window. Safe on one that has already ended. */

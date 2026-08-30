@@ -51,6 +51,33 @@ public interface ClientWindowContext {
     ProtocolConnection<Object> connection();
 
     /**
+     * <b>May this window be taken away?</b> — the content's answer, for a host that is about to.
+     *
+     * <p>Asks every panel in the window and takes one refusal as a no. The same answer the server gets
+     * when it asks before closing, so <b>the user's own close button and a server-side close agree</b>
+     * rather than each deciding for itself — which is what makes "there is unsaved work here" mean one
+     * thing.</p>
+     *
+     * <p>A host should wire this to whatever it uses to guard a discard: on the desktop that is
+     * {@code WindowFrame.setDiscardGuard}, which covers the close button AND the retention cap
+     * evicting a hidden window, so unsaved work is not quietly evaporated while nobody is looking.</p>
+     */
+    boolean mayClose();
+
+    /**
+     * The client is discarding this window to stay under its retention cap — <b>not</b> because anybody
+     * asked for it.
+     *
+     * <p>A separate route from {@link #userClosed()} because the two mean opposite things to a server.
+     * "The user closed it" is a decision, and a server may reasonably write it down: the panel is shut,
+     * do not reopen it, record that in the session. An eviction is the client running out of room for
+     * hidden windows, and recording THAT as a decision is how a workspace comes back missing the panels
+     * somebody had open — the same failure {@code ToolWindowManager} paid for when a minimise was read
+     * as a close.</p>
+     */
+    void evicted();
+
+    /**
      * <b>The user closed this window.</b> The one thing a mount owes the host.
      *
      * <p>Sends {@code ui/close}, ends the session locally and tells the behaviour. Idempotent, and
