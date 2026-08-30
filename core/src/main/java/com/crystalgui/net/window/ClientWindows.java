@@ -152,6 +152,58 @@ public final class ClientWindows {
     }
 
     /**
+     * <b>Asks the server for a window.</b>
+     *
+     * <p>A request, so a refusal is something you learn rather than something you wait for. The old
+     * idiom was a notification whose comment said "the window arriving IS the answer" — fine while it
+     * always succeeded, and indistinguishable from a lost packet when it did not: the player presses
+     * the key and nothing happens, forever, with nothing to look at.</p>
+     *
+     * <p>The reply says only <b>whether</b> it was granted. The window, if there is one, arrives through
+     * the ordinary mount path, so there is exactly one place that learns a window appeared no matter who
+     * asked for it — and {@code onGranted} is not where you should look for the tree.</p>
+     *
+     * <pre>{@code
+     * StateMap<Object> args = new StateMap<>(connection.ops());
+     * args.putInt("x", pos.getX());   // a CLAIM; the server re-derives from it
+     * ClientWindows.of(connection).requestOpen(FurnacePanel.TYPE, args, granted -> {
+     *     if (!granted) player.addChatMessage("You are too far away.");
+     * });
+     * }</pre>
+     *
+     * <p><b>The single-player trap.</b> Asking for a window almost always means opening a
+     * {@code GuiScreen}, and one whose {@code doesGuiPauseGame()} returns {@code true} stops the
+     * integrated server ticking — so the connection is never pumped, this request is never answered, and
+     * it dies at its timeout. It is invisible on a dedicated server, which is the configuration nobody
+     * tests the wire in, and it presents as "the window never opens in single-player".</p>
+     *
+     * @param args    what the server should re-derive the model from. Untrusted on the far side
+     * @param onGranted told {@code true} if a window was opened, {@code false} if refused or unanswered
+     */
+    public <P extends UIElement & Networked<M>, M> void requestOpen(
+            UiType<P, M> type, @Nullable StateMap<Object> args,
+            @Nullable java.util.function.Consumer<Boolean> onGranted) {
+        StateMap<Object> out = new StateMap<>(connection.ops());
+        out.putString(UiMethods.TYPE, type.id());
+        if (args != null) out.putRaw("args", args.encode());
+        connection.router().request(UiMethods.REQUEST_OPEN, out.encode(),
+                answer -> {
+                    if (onGranted == null) return;
+                    StateMap<Object> in = answer == null
+                            ? new StateMap<>(connection.ops())
+                            : new StateMap<>(connection.ops(), answer);
+                    onGranted.accept(in.getBool("ok", false));
+                },
+                error -> {
+                    // A TIMEOUT IS NOT A REFUSAL, and the caller is told the same thing for both --
+                    // because from where it stands they are the same: no window. What separates them is
+                    // a log line, which is where somebody debugging should look.
+                    CrystalGuiCore.LOGGER.warn("Asking to open <{}> failed: {}", type.id(), error);
+                    if (onGranted != null) onGranted.accept(false);
+                });
+    }
+
+    /**
      * Where stylesheets a window names come from.
      *
      * <p>Optional. Without one, sheets are simply not applied and the window renders on the user-agent
