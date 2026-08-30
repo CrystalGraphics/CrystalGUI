@@ -6,7 +6,9 @@ import com.crystalgui.style.StyleEngine;
 import com.crystalgui.style.Styleable;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.ui.EventListenerGroup;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.event.EventTarget;
 import java.util.Collection;
 import java.util.ArrayDeque;
@@ -69,6 +71,10 @@ public class Node implements EventTarget, Styleable {
     Slot assignedSlot;
 
     private String id = "";
+
+    /** The box tree's hook: this node's own box, or null when it has none (5.3). */
+    @Nullable
+    private Box box;
     private final Set<String> classes = new LinkedHashSet<>();
     private final Set<String> classesView = Collections.unmodifiableSet(classes);
     private final Map<Attribute<?>, Object> attributes = new HashMap<>();
@@ -196,7 +202,10 @@ public class Node implements EventTarget, Styleable {
         try {
             if (Objects.equals(value, key.initial())) attributes.remove(key);
             else attributes.put(key, value);
-            if (key == Attribute.SLOT) slotsChanged(parent);
+            if (key == Attribute.SLOT) {
+                slotsChanged(parent);
+                structureChanged();
+            }
             invalidateStyleMatch();
             m.observe(() -> TreeObserver.Dispatch.attributeChanged(observer, this));
         } finally {
@@ -283,6 +292,7 @@ public class Node implements EventTarget, Styleable {
             child.parent = this;
             child.attachedTo(this);
             slotsChanged(this);
+            structureChanged();
             reportInserted(child, this, at, m);
         } finally {
             m.end();
@@ -303,6 +313,7 @@ public class Node implements EventTarget, Styleable {
             child.parent = null;
             child.detached();
             slotsChanged(this);
+            structureChanged();
         } finally {
             m.end();
         }
@@ -351,6 +362,8 @@ public class Node implements EventTarget, Styleable {
             }
             slotsChanged(old);
             slotsChanged(newParent);
+            if (oldDocument != null && oldDocument != document) oldDocument.fireStructureChanged();
+            structureChanged();
             TreeObserver<Node> after = observer;
             Node self = this;
             if (before != null && after == before) {
@@ -411,6 +424,7 @@ public class Node implements EventTarget, Styleable {
             shadowRoot = root;
             root.propagate(document, true, null);
             root.markSlotsDirty();
+            structureChanged();
         } finally {
             m.end();
         }
@@ -680,9 +694,30 @@ public class Node implements EventTarget, Styleable {
     public void onStyleChanged() {
     }
 
-    /** A layout-affecting value changed. The box tree's hook, from 5.3. */
+    /**
+     * This node's own box, or null when it has none: off the tree, or {@code display: none}. Set by
+     * the document's box tree during its sync; a mirror (a thumbnail's second box) is never it.
+     */
+    @Nullable
+    public final Box box() {
+        return box;
+    }
+
+    /** The box tree's, and nobody else's. */
+    public final void setBox(@Nullable Box box) {
+        this.box = box;
+    }
+
+    /** Tells the document's box tree that the composed structure moved. */
+    final void structureChanged() {
+        Document doc = document;
+        if (doc != null) doc.fireStructureChanged();
+    }
+
+    /** A layout-affecting value changed: the box under it must be laid out again. */
     @Override
     public void markTreeDirty() {
+        if (box != null) box.markLayoutDirty();
     }
 
     @Override
@@ -700,6 +735,8 @@ public class Node implements EventTarget, Styleable {
         if (property == StylePropertyRegistry.FONT_SIZE) {
             for (Node node : composedSubtree()) node.invalidateStyleMatch();
         }
+        // display: none is a structural fact -- a box exists or it does not.
+        if (property == LayoutProperties.DISPLAY) structureChanged();
     }
 
     /** Asks the engine to re-run selector matching for this node on the next style pass. */

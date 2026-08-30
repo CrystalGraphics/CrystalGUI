@@ -2,6 +2,7 @@ package com.crystalgui.ui.dom;
 
 import com.crystalgui.core.async.UiThread;
 import com.crystalgui.style.StyleEngine;
+import com.crystalgui.ui.box.BoxTree;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -49,6 +50,9 @@ public final class Document extends Node {
     private boolean draining;
     private final ArrayDeque<Runnable> callbacks = new ArrayDeque<>();
     private final Set<ShadowRoot> dirtyShadowRoots = new LinkedHashSet<>();
+    private final List<Runnable> structureListeners = new ArrayList<>();
+    @Nullable
+    private BoxTree boxes;
 
     public Document() {
         super(Name.DOCUMENT);
@@ -77,6 +81,36 @@ public final class Document extends Node {
 
     public StyleEngine styles() {
         return styles;
+    }
+
+    /** The document's box tree, built on first use: layout, world matrices, hit-testing (5.3). */
+    public BoxTree boxes() {
+        if (boxes == null) boxes = new BoxTree(this);
+        return boxes;
+    }
+
+    /** Lays the document out at the viewport size -- the box tree's one pass. Run style first. */
+    public void layout(float width, float height) {
+        boxes().layout(width, height);
+    }
+
+    /** A frame's worth of work with nothing drawn: style, then layout. */
+    public void update(float width, float height) {
+        calculateStyle(0f);
+        layout(width, height);
+    }
+
+    /**
+     * Hears every change to the COMPOSED structure -- an insert, a remove, a move, a shadow root
+     * attached, a slot reassigned, a {@code display} toggled -- so a consumer that derives a tree
+     * from this one (the box tree) walks it only on frames where something moved.
+     */
+    public void addStructureListener(Runnable listener) {
+        structureListeners.add(listener);
+    }
+
+    void fireStructureChanged() {
+        for (Runnable listener : structureListeners) listener.run();
     }
 
     /** Runs the style pass: re-matches what is dirty, ticks transitions. */
