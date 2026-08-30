@@ -7,6 +7,7 @@ import com.crystalgui.net.mirror.NodeMirror;
 import com.crystalgui.net.protocol.*;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.StateMap;
+import com.crystalgui.ui.contract.RateGate;
 import com.crystalgui.ui.contract.RatePolicy;
 import java.util.LinkedHashMap;
 import com.crystalgui.ui.UIElement;
@@ -719,99 +720,43 @@ public final class ClientUiSession<T> {
     }
 
     /**
-     * A report waiting for its policy to let it go.
+     * A widget's own {@link RatePolicy}, applied on the way out.
      *
-     * @param at   when the value arrived, for a debounce
-     * @param sent when this (element, kind) last actually went, for a throttle
+     * <p>Driven by the connection's tick, so a value held by a debounce still leaves when nothing else
+     * is happening — a throttle clears itself only while the user keeps moving.</p>
      */
-    private static final class Pending<T> {
-        @Nullable StateMap<T> payload;
-        long at;
-        long sent;
-        RatePolicy policy = RatePolicy.IMMEDIATE;
-    }
-
-    private final Map<UIElement, Map<String, Pending<T>>> pending = new LinkedHashMap<>();
+    private final RateGate<StateMap<T>> rates = new RateGate<>(this::report);
 
     /**
-     * Where "now" comes from, for the rate policies.
-     *
-     * <p>Wall clock, because this is rate limiting rather than animation — a held report leaving a few
-     * milliseconds late is invisible, and nothing here interpolates. Replaceable so a test can step it
-     * rather than sleep, and so a host that already has a tick clock can hand it over.</p>
+     * Where "now" comes from, for the rate policies. Replaceable so a test can step it rather than
+     * sleep, and so a host that already has a tick clock can hand that over.
      */
-    private java.util.function.LongSupplier clock = System::currentTimeMillis;
-
-    /** @see #clock */
     public ClientUiSession<T> setClock(java.util.function.LongSupplier clock) {
-        this.clock = java.util.Objects.requireNonNull(clock, "clock");
+        rates.setClock(clock);
         return this;
     }
 
     /**
-     * Applies the event's own {@link RatePolicy} on the way out.
+     * Reports at the rate the widget asked for.
      *
-     * <p>The rate belongs to the WIDGET rather than to the handler, because the right answer is a
-     * property of the interaction: a text field fires per keystroke and a slider per pixel of drag, so
-     * a server-side panel that simply forwarded them would send a packet per keystroke — and the
-     * handler's author has no way to know that without reading the widget. Phoenix LiveView puts
-     * {@code phx-debounce}/{@code phx-throttle} in the markup for the same reason.</p>
-     *
-     * <p><b>Dropping intermediate values is fine; dropping the LAST one is data loss.</b> So a held
-     * value is never discarded — it is always eventually sent, which is what makes a slider released
-     * between ticks report where it actually ended up rather than where it was passing through.</p>
+     * <p>The {@code applyingDelta} guard is this session's own and does not belong in the gate: a write
+     * the server just handed us is not a user gesture, and only a session knows that. The gate decides
+     * WHEN a report leaves; this decides whether it is a report at all.</p>
      */
     private void reportRated(UIElement element, String kind, RatePolicy policy,
                              @Nullable StateMap<T> payload) {
         if (applyingDelta) return;
-        if (policy == null || policy.isImmediate()) {
-            report(element, kind, payload);
-            return;
-        }
-        Pending<T> slot = pending.computeIfAbsent(element, e -> new LinkedHashMap<>())
-                .computeIfAbsent(kind, k -> new Pending<>());
-        slot.payload = payload;
-        slot.at = clock.getAsLong();
-        slot.policy = policy;
-        flushRates();
+        rates.offer(element, kind, policy, payload);
     }
 
-    /**
-     * Sends whatever has waited long enough. Driven by the connection's tick, so a value held by a
-     * debounce still leaves even when nothing else happens.
-     */
+    /** @see RateGate#flush() */
     void flushRates() {
-        if (pending.isEmpty()) return;
-        long now = clock.getAsLong();
-        for (Map.Entry<UIElement, Map<String, Pending<T>>> byElement : pending.entrySet()) {
-            for (Map.Entry<String, Pending<T>> entry : byElement.getValue().entrySet()) {
-                Pending<T> slot = entry.getValue();
-                if (slot.payload == null && slot.at == 0L) continue;
-                RatePolicy policy = slot.policy;
-                boolean due = policy.debounceMillis() > 0
-                        ? now - slot.at >= policy.debounceMillis()
-                        : now - slot.sent >= policy.throttleMillis();
-                if (!due) continue;
-                report(byElement.getKey(), entry.getKey(), slot.payload);
-                slot.payload = null;
-                slot.at = 0L;
-                slot.sent = now;
-            }
-        }
+        rates.flush();
     }
 
     /** Sends everything held, whatever its policy says. What a close does, so nothing is lost. */
     private void commitRates() {
-        for (Map.Entry<UIElement, Map<String, Pending<T>>> byElement : pending.entrySet()) {
-            for (Map.Entry<String, Pending<T>> entry : byElement.getValue().entrySet()) {
-                Pending<T> slot = entry.getValue();
-                if (slot.payload == null && slot.at == 0L) continue;
-                report(byElement.getKey(), entry.getKey(), slot.payload);
-                slot.payload = null;
-                slot.at = 0L;
-            }
-        }
-        pending.clear();
+        rates.commit();
     }
 
     private void report(UIElement element, String kind, @Nullable StateMap<T> payload) {
