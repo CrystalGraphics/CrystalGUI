@@ -7,10 +7,17 @@ import com.crystalgui.style.StyleEngine;
 import com.crystalgui.style.Styleable;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.easing.ProgressFunctions;
 import com.crystalgui.style.property.layout.LayoutProperties;
+import com.crystalgui.style.property.visual.ScrollBehavior;
+import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.ui.EventListenerGroup;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.event.EventTarget;
+import com.crystalgui.ui.event.FocusEvent;
+import com.crystalgui.ui.event.KeyboardEvent;
+import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import java.util.Collection;
 import java.util.ArrayDeque;
@@ -25,6 +32,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import javax.annotation.Nullable;
 
 /**
@@ -110,6 +118,32 @@ public class UINode implements EventTarget, Styleable {
 
     /** The listener groups, one per event type, created on first use. */
     public final EventListenerGroup.Map<UINode> events = new EventListenerGroup.Map<>(this);
+
+    // ── The pre-bound groups ─────────────────────────────────────────────────
+    //
+    // The same sixteen fields UIElement declares, with the same names, because 82 call sites across
+    // the widget layer read them (`.onMouseDown` alone is 53) and every one kept is a site the M6
+    // codemod never has to touch. A field is also how a reader finds out what a node can be told:
+    // `events.getGroup(MouseEvent.Down.class)` is discoverable only if you already know the answer.
+
+    public final EventListenerGroup<UINode, MouseEvent.Down> onMouseDown = events.getGroup(MouseEvent.Down.class);
+    public final EventListenerGroup<UINode, MouseEvent.Up> onMouseUp = events.getGroup(MouseEvent.Up.class);
+    public final EventListenerGroup<UINode, MouseEvent.Scroll> onMouseScroll = events.getGroup(MouseEvent.Scroll.class);
+    public final EventListenerGroup<UINode, MouseEvent.Move> onMouseMove = events.getGroup(MouseEvent.Move.class);
+    public final EventListenerGroup<UINode, MouseEvent.Enter> onMouseEnter = events.getGroup(MouseEvent.Enter.class);
+    public final EventListenerGroup<UINode, MouseEvent.Leave> onMouseLeave = events.getGroup(MouseEvent.Leave.class);
+
+    public final EventListenerGroup<UINode, KeyboardEvent.Down> onKeyDown = events.getGroup(KeyboardEvent.Down.class);
+    public final EventListenerGroup<UINode, KeyboardEvent.Up> onKeyUp = events.getGroup(KeyboardEvent.Up.class);
+
+    public final EventListenerGroup<UINode, DragEvent.Enter> onDragEnter = events.getGroup(DragEvent.Enter.class);
+    public final EventListenerGroup<UINode, DragEvent.Leave> onDragLeave = events.getGroup(DragEvent.Leave.class);
+    public final EventListenerGroup<UINode, DragEvent.Over> onDragOver = events.getGroup(DragEvent.Over.class);
+    public final EventListenerGroup<UINode, DragEvent.Drop> onDrop = events.getGroup(DragEvent.Drop.class);
+    public final EventListenerGroup<UINode, DragEvent.Cancel> onDragCancel = events.getGroup(DragEvent.Cancel.class);
+
+    public final EventListenerGroup<UINode, FocusEvent.Focus> onFocus = events.getGroup(FocusEvent.Focus.class);
+    public final EventListenerGroup<UINode, FocusEvent.Blur> onBlur = events.getGroup(FocusEvent.Blur.class);
 
     /**
      * A plain container — the {@code <div>} of this engine, and what the no-argument constructor
@@ -220,6 +254,14 @@ public class UINode implements EventTarget, Styleable {
                 slotsChanged(parent);
                 structureChanged();
             }
+            // HIDDEN decides whether a box EXISTS, so it is a structural fact in exactly the way
+            // `display: none` is -- and the box tree only walks the composed tree on frames the node
+            // tree reported a change, so without this a hidden node keeps its box until something
+            // unrelated dirties the structure.
+            if (key == Attribute.HIDDEN) structureChanged();
+            // SCROLL_EXEMPT is read while world matrices are composed, and changes none of the
+            // geometry -- so it is a transform invalidation and not a relayout.
+            if (key == Attribute.SCROLL_EXEMPT && box != null) box.tree().transformsChanged();
             invalidateStyleMatch();
             m.observe(() -> TreeObserver.Dispatch.attributeChanged(observer, this));
         } finally {
@@ -862,6 +904,195 @@ public class UINode implements EventTarget, Styleable {
         return false;
     }
 
+    // ── The attribute-backed state, under the names the widget layer already uses ──
+    //
+    // Each is one line over `set`, and each keeps a family of call sites mechanical for M6: 171 for
+    // hit-test, 74 for `setDisplayed`, and every `setEnabled` in the layer. The attribute is the
+    // storage and the method is the door -- a widget should not have to know which key it is.
+
+    /** {@code :disabled} when false, and the input service refuses it. */
+    public UINode setEnabled(boolean enabled) {
+        return set(Attribute.ENABLED, enabled);
+    }
+
+    /** Whether hit-testing may land here. Subtree-wide, like {@code pointer-events: none}. */
+    public UINode setHitTest(boolean hitTest) {
+        return set(Attribute.HIT_TEST, hitTest);
+    }
+
+    public final boolean isHitTest() {
+        return get(Attribute.HIT_TEST);
+    }
+
+    /** The HTML {@code inert} attribute: keeps its box, stops being interactive. Subtree-wide. */
+    public UINode setInert(boolean inert) {
+        return set(Attribute.INERT, inert);
+    }
+
+    public final boolean isInertAttribute() {
+        return get(Attribute.INERT);
+    }
+
+    /**
+     * Shown or not — the old engine's {@code setDisplayed}, which wrote {@code display} at
+     * {@code IMPORTANT} from 74 sites. @see Attribute#HIDDEN
+     */
+    public UINode setDisplayed(boolean displayed) {
+        return set(Attribute.HIDDEN, !displayed);
+    }
+
+    public final boolean isDisplayed() {
+        return !get(Attribute.HIDDEN);
+    }
+
+    /** @see Attribute#SCROLL_EXEMPT */
+    public UINode setScrollExempt(boolean exempt) {
+        return set(Attribute.SCROLL_EXEMPT, exempt);
+    }
+
+    public final boolean isScrollExempt() {
+        return get(Attribute.SCROLL_EXEMPT);
+    }
+
+    // ── Class helpers ────────────────────────────────────────────────────────
+
+    /**
+     * Swaps whichever class starting with {@code prefix} is present for {@code next} (or none).
+     *
+     * <p>The recycled-row rule as a method: a template is a different row every time a view reuses
+     * it, so ADDING {@code filetype-java} without removing {@code filetype-md} leaves both on the
+     * node and the cascade resolves whichever happens to win — which reads as a random colour rather
+     * than a stale class.</p>
+     */
+    public final UINode swapPrefixedClass(String prefix, @Nullable String next) {
+        List<String> stale = new ArrayList<>(1);
+        for (String c : classes()) {
+            if (c.startsWith(prefix) && !c.equals(next)) stale.add(c);
+        }
+        for (String c : stale) removeClass(c);
+        if (next != null) addClass(next);
+        return this;
+    }
+
+    /**
+     * Makes {@code wanted} this node's only light child, doing nothing if it already is.
+     *
+     * <p>The point is the no-op: a container that rebuilds its content on every refresh would
+     * otherwise detach and re-attach the same node, which is a removal and an insertion on the wire
+     * and a lifecycle round trip for a tree nothing changed about.</p>
+     */
+    public final UINode setOnlyChild(@Nullable UINode wanted) {
+        if (childCount() == 1 && children().get(0) == wanted) return this;
+        removeAll();
+        if (wanted != null) append(wanted);
+        return this;
+    }
+
+    // ── Querying: the light tree, as on the web ──────────────────────────────
+
+    /** The first light descendant matching {@code selector}, in document order, or null. */
+    @Nullable
+    public final UINode querySelector(String selector) {
+        return NodeQueries.querySelector(this, selector, false);
+    }
+
+    /** Every light descendant matching {@code selector}, in document order. */
+    public final List<UINode> querySelectorAll(String selector) {
+        return NodeQueries.querySelectorAll(this, selector, false);
+    }
+
+    /**
+     * The first light descendant with this exact id, or null.
+     *
+     * <p>Not final: {@link UIDocument} answers it from its id INDEX instead, which is a map lookup
+     * where this is a walk — and a document is where the question is nearly always asked.</p>
+     */
+    @Nullable
+    public UINode getElementById(String id) {
+        return NodeQueries.getElementById(this, id, false);
+    }
+
+    public final List<UINode> getElementsByClassName(String className) {
+        return NodeQueries.getElementsByClassName(this, className, false);
+    }
+
+    /** {@link #querySelector} typed, or null when nothing matched or the match is another kind. */
+    @Nullable
+    public final <T extends UINode> T find(String selector, Class<T> type) {
+        UINode found = querySelector(selector);
+        return type.isInstance(found) ? type.cast(found) : null;
+    }
+
+    /** {@link #find}, but a miss is a programming error rather than a null to carry around. */
+    public final <T extends UINode> T require(String selector, Class<T> type) {
+        T found = find(selector, type);
+        if (found == null) {
+            throw new IllegalStateException("No " + type.getSimpleName() + " matches '" + selector + "' under " + this);
+        }
+        return found;
+    }
+
+    // ── Commands and keys ────────────────────────────────────────────────────
+
+    /**
+     * This KIND's named actions, registered once for the class the first time one joins a document.
+     *
+     * <p><b>Statics only.</b> The old engine ran this from {@code UIElement}'s instance initialiser,
+     * where fields are not assigned yet — so a widget contributing a per-instance thing passed null
+     * and the whole feature was dead on arrival with nothing logged, because "no provider" and "a
+     * provider that knows nothing" look identical from outside. Running it from
+     * {@link #connected()} instead means the node is built, but it is still once per CLASS: register
+     * per-instance things in the constructor.</p>
+     */
+    protected void registerCommands(CommandRegistry registry) {
+    }
+
+    /** This INSTANCE's chords, element-scoped. Runs on the first attach, after {@link #registerCommands}. */
+    protected void bindKeys() {
+    }
+
+    /** Every class that has had {@link #registerCommands} run for it. */
+    private static final Set<Class<?>> COMMANDS_REGISTERED = ConcurrentHashMap.newKeySet();
+
+    void runCommandHooks() {
+        if (COMMANDS_REGISTERED.add(getClass())) registerCommands(CommandRegistry.global());
+        bindKeys();
+    }
+
+    // ── Dismissal ────────────────────────────────────────────────────────────
+
+    /**
+     * The <b>close-watcher</b> hook: something asked this node to close. Returns whether it did.
+     *
+     * <p>A general node hook rather than something wired only to a dialog, because the web's
+     * {@code CloseWatcher} is a general primitive — a modal, a popover, a window frame and a mode all
+     * answer it, and the cascade in {@link com.crystalgui.ui.service.Dismiss} asks whichever is on
+     * top. Returning false means "not mine", and Escape carries on down the stack.</p>
+     */
+    public boolean requestClose() {
+        return false;
+    }
+
+    /**
+     * What opened this popover, if anything — read by light dismiss.
+     *
+     * <p>On the node rather than on a widget class because light dismiss has to consult it for ANY
+     * promoted node, and it is the one piece of popover-ness that genuinely must be node-level: the
+     * invoker counts as part of its popover, or a dropdown button dies on its own press.</p>
+     */
+    @Nullable
+    public final UINode popoverInvoker() {
+        return popoverInvoker;
+    }
+
+    public final UINode setPopoverInvoker(@Nullable UINode invoker) {
+        this.popoverInvoker = invoker;
+        return this;
+    }
+
+    @Nullable
+    private UINode popoverInvoker;
+
     // ── Scroll: per NODE, not per box ────────────────────────────────────────
 
     /**
@@ -882,6 +1113,55 @@ public class UINode implements EventTarget, Styleable {
     public final void setScrollOffsets(float left, float top) {
         this.scrollLeft = left;
         this.scrollTop = top;
+    }
+
+    /**
+     * How far this node's content extends, when the LAID-OUT content is not the answer — a negative
+     * return means "read the box", which is the default and what every ordinary node wants.
+     *
+     * <p>This exists for one shape and it is not an optimisation: a VIRTUALISED view realises a
+     * dozen rows of ten thousand, so the boxes under it describe the window rather than the content.
+     * A list overrides this with {@code model.size() * rowHeight}, and its scrollbar thumb, its
+     * maximum offset and its wheel travel are all correct with nothing else to wire — the old engine
+     * spelled the same thing as a {@code getScrollHeight} override and its javadoc says exactly why
+     * the children cannot be asked.</p>
+     *
+     * @param horizontal the width when true, the height when false
+     */
+    public float scrollExtent(boolean horizontal) {
+        return -1f;
+    }
+
+    /**
+     * Scrolls this node's content, honouring {@code scroll-behavior}.
+     *
+     * <p>The behaviour is why this is on the node and {@link Box#setScroll} is not: {@code smooth}
+     * means a timeline, a timeline needs the document's animation service, and a box should not have
+     * to reach for one. A wheel notch and a keyboard page come through here; a scrollbar thumb drag
+     * calls the box directly, because easing toward a thumb the hand is already holding makes it lag
+     * by the animation's duration.</p>
+     */
+    public final void scrollTo(float left, float top) {
+        Box b = box();
+        if (b == null) return;
+        UIDocument doc = document();
+        ScrollBehavior behaviour = computedStyle().get(StylePropertyRegistry.SCROLL_BEHAVIOR);
+        if (doc == null || behaviour != ScrollBehavior.SMOOTH) {
+            b.setScroll(left, top);
+            return;
+        }
+        float targetLeft = Math.max(0f, Math.min(b.maxScrollLeft(), left));
+        float targetTop = Math.max(0f, Math.min(b.maxScrollTop(), top));
+        float fromLeft = scrollLeft;
+        float fromTop = scrollTop;
+        if (targetLeft == fromLeft && targetTop == fromTop) return;
+        float duration = Math.max(0.01f, computedStyle().get(StylePropertyRegistry.SCROLL_DURATION));
+        doc.animation().start(duration, ProgressFunctions.Premade.LINEAR, t -> {
+            Box live = box();
+            if (live != null) {
+                live.setScroll(fromLeft + (targetLeft - fromLeft) * t, fromTop + (targetTop - fromTop) * t);
+            }
+        }, null);
     }
 
     // ── Wiring: document, observer, shadow flag ──────────────────────────────
@@ -915,6 +1195,11 @@ public class UINode implements EventTarget, Styleable {
         if (doc != null && !id.isEmpty()) doc.index(this);
         if (joining) {
             doc.styles().markDirty(this);
+            // BEFORE connected(), and queued rather than run here: a command's `enabledWhen` may be
+            // asked the moment the node is on screen, and a chord bound after the first key press is
+            // a chord that did nothing once. Both run in the same drain, so a widget's own
+            // connected() sees its commands already registered.
+            doc.queue(this::runCommandHooks);
             doc.queue(this::connected);
         }
         for (UINode child : children) child.propagate(doc, shadow, observer);

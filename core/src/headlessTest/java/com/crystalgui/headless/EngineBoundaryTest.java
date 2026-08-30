@@ -38,21 +38,30 @@ public class EngineBoundaryTest {
             "com/crystalgui/ui/service/");
 
     /**
-     * The node tree's classes inside {@code ui/dom}, beside the seam. Listed by name because the seam
-     * interfaces in the same directory are shared by design; a package prefix would forbid the wrong
-     * thing.
+     * The classes in {@code ui/dom} that are the SEAM rather than the node tree — everything else in
+     * that package is new engine.
+     *
+     * <p><b>Listed the other way round on purpose, and it was a list of the node tree's classes
+     * until M6.0.</b> That list broke twice in one session and was silent both times: a rename does
+     * not touch a string literal, so every renamed class fell out of it and was reclassified as OLD
+     * engine, and the scan failed naming its own subjects; then adding one class to the package
+     * failed it again. The seam is four types that exist to be stable — this is the half that does
+     * not grow, so listing it is the half that does not rot.</p>
      */
-    private static final List<String> NEW_DOM_CLASSES = List.of(
-            "com/crystalgui/ui/dom/UINode",
-            "com/crystalgui/ui/dom/UIDocument",
-            "com/crystalgui/ui/dom/ShadowRoot",
-            "com/crystalgui/ui/dom/UISlot",
-            "com/crystalgui/ui/dom/Name",
-            "com/crystalgui/ui/dom/Attribute",
-            "com/crystalgui/ui/dom/UINodeTreeSource",
-            "com/crystalgui/ui/dom/UINodeRegistry",
-            // The mirror is written once against the seam and has one implementation per engine;
-            // this is the node tree's, beside ElementNodeMirror, and it is new-engine code.
+    private static final List<String> DOM_SEAM_CLASSES = List.of(
+            "com/crystalgui/ui/dom/TreeSource",
+            "com/crystalgui/ui/dom/TreeObserver",
+            "com/crystalgui/ui/dom/NodeContract",
+            // The old engine's implementation of the seam, over UIElement. Deleted at M6.9.
+            "com/crystalgui/ui/dom/ElementTreeSource");
+
+    /**
+     * New-engine classes OUTSIDE {@code ui/dom} that are not covered by a package prefix.
+     *
+     * <p>One entry: the mirror is written once against the seam and has one implementation per
+     * engine, so the node tree's sits in {@code net/mirror} beside the old engine's.</p>
+     */
+    private static final List<String> NEW_CLASSES = List.of(
             "com/crystalgui/net/mirror/UINodeMirror");
 
     /** What the new engine must never name. */
@@ -86,12 +95,22 @@ public class EngineBoundaryTest {
         for (String prefix : NEW_PACKAGES) {
             if (relativeClassPath.startsWith(prefix)) return true;
         }
-        for (String name : NEW_DOM_CLASSES) {
-            if (relativeClassPath.equals(name + ".class") || relativeClassPath.startsWith(name + "$")) {
-                return true;
+        for (String name : NEW_CLASSES) {
+            if (named(relativeClassPath, name)) return true;
+        }
+        // Everything in ui/dom is the node tree EXCEPT the seam, which both engines share.
+        if (relativeClassPath.startsWith("com/crystalgui/ui/dom/")) {
+            for (String seam : DOM_SEAM_CLASSES) {
+                if (named(relativeClassPath, seam)) return false;
             }
+            return true;
         }
         return false;
+    }
+
+    /** Whether a class file is {@code name}, or one of its nested classes. */
+    private static boolean named(String relativeClassPath, String name) {
+        return relativeClassPath.equals(name + ".class") || relativeClassPath.startsWith(name + "$");
     }
 
     @Test
@@ -114,7 +133,8 @@ public class EngineBoundaryTest {
     public void theOldEngineNamesNothingOfTheNew() throws IOException {
         Path root = ClassReferences.mainClassesRoot(EngineBoundaryTest.class);
         List<String> forbidden = new java.util.ArrayList<>(NEW_PACKAGES);
-        forbidden.addAll(NEW_DOM_CLASSES);
+        forbidden.add("com/crystalgui/ui/dom/UI");
+        forbidden.addAll(NEW_CLASSES);
         List<String> offences = ClassReferences.offences(
                 root, root.resolve("com/crystalgui"), path -> !isNewEngine(path), forbidden);
         assertTrue("the old engine reaches into the new one:\n" + String.join("\n", offences),

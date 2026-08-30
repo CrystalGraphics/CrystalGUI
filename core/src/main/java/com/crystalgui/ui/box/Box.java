@@ -120,10 +120,31 @@ public final class Box {
         List<Box> order = paintOrder;
         if (order == null) {
             order = new ArrayList<>(hosted);
-            order.sort(Comparator.comparingInt(Box::zIndex));
+            if (!stacksByInsertion) order.sort(Comparator.comparingInt(Box::zIndex));
             paintOrder = order = Collections.unmodifiableList(order);
         }
         return order;
+    }
+
+    private boolean stacksByInsertion;
+
+    /**
+     * Whether what this box hosts stacks purely by INSERTION, ignoring {@code z-index}.
+     *
+     * <p>The top layer's rule, and it is the spec's: CSS Position 4 says "the last element in the top
+     * layer is rendered on top of everything else", and {@code z-index} is <em>irrelevant</em>
+     * between two promoted elements. So a tooltip shown after a menu is above it whatever either
+     * declares — which is what makes "raise this popup" one idempotent re-host rather than a number
+     * every caller has to pick without knowing what else is open.</p>
+     */
+    public void setStacksByInsertion(boolean stacksByInsertion) {
+        if (this.stacksByInsertion == stacksByInsertion) return;
+        this.stacksByInsertion = stacksByInsertion;
+        invalidatePaintOrder();
+    }
+
+    public boolean stacksByInsertion() {
+        return stacksByInsertion;
     }
 
     void invalidatePaintOrder() {
@@ -196,11 +217,80 @@ public final class Box {
 
     /** Scrolls what this box hosts. Clamped to the content on the next layout read. */
     public void setScroll(float left, float top) {
-        left = clamp(left, 0f, Math.max(0f, contentWidth - width));
-        top = clamp(top, 0f, Math.max(0f, contentHeight - height));
+        left = clamp(left, 0f, maxScrollLeft());
+        top = clamp(top, 0f, maxScrollTop());
         if (left == node.scrollLeft() && top == node.scrollTop()) return;
         node.setScrollOffsets(left, top);
         tree.transformsChanged();
+    }
+
+    // ── Scroll extents ───────────────────────────────────────────────────────
+
+    /**
+     * How wide the content is — laid out, or whatever the node says instead.
+     *
+     * <p>{@link UINode#scrollExtent} is what makes a VIRTUALISED view work: a list realises a dozen
+     * rows of ten thousand, so its laid-out content is the dozen and its scroll extent is the model.
+     * Asking the node rather than reading the box is the difference between a scrollbar thumb sized
+     * for what is on screen and one sized for the document.</p>
+     */
+    public float scrollWidth() {
+        float declared = node.scrollExtent(true);
+        return declared >= 0f ? declared : contentWidth;
+    }
+
+    public float scrollHeight() {
+        float declared = node.scrollExtent(false);
+        return declared >= 0f ? declared : contentHeight;
+    }
+
+    /** The visible width — the padding box, which is what content scrolls within. */
+    public float clientWidth() {
+        return Math.max(0f, width - border.left - border.right);
+    }
+
+    public float clientHeight() {
+        return Math.max(0f, height - border.top - border.bottom);
+    }
+
+    /**
+     * The furthest this can scroll, never negative and never {@code NaN}.
+     *
+     * <p>{@code Math.max(0, x)} PROPAGATES NaN, so the obvious spelling of "never negative" does not
+     * make the guarantee it looks like: an extent computed from an unmeasured box or a font that has
+     * not resolved comes straight back out of the clamp, is stored as the offset, and then poisons
+     * every position that subtracts it — a whole document stacking its rows at one y, with nothing
+     * thrown. A scroll extent is never legitimately NaN, so answering zero is the same answer as
+     * "there is nothing to scroll".</p>
+     */
+    public float maxScrollLeft() {
+        return atLeastZero(scrollWidth() - clientWidth());
+    }
+
+    public float maxScrollTop() {
+        return atLeastZero(scrollHeight() - clientHeight());
+    }
+
+    private static float atLeastZero(float value) {
+        return value > 0f ? value : 0f;
+    }
+
+    /**
+     * Re-applies the clamp against the current content, so a shrinking child cannot leave the view
+     * scrolled past the end.
+     *
+     * <p><b>Clamped, never sent home.</b> Collapsing a folder that made a tree scrollable leaves the
+     * offset past the new end: a strip of the last rows against a screenful of nothing. Scrolling to
+     * the top would fix the picture and lose the reader's place, which is why every tree and every
+     * browser clamps — the content comes to rest against the bottom and the rows you were looking at
+     * stay on screen. Free when nothing is out of range, which is what lets layout call it
+     * unconditionally.</p>
+     */
+    public void clampScroll() {
+        float left = node.scrollLeft();
+        float top = node.scrollTop();
+        if (left >= 0f && top >= 0f && left <= maxScrollLeft() && top <= maxScrollTop()) return;
+        setScroll(left, top);
     }
 
     public int zIndex() {

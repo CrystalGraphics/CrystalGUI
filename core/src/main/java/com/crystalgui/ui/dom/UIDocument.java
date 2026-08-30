@@ -3,8 +3,10 @@ package com.crystalgui.ui.dom;
 import com.crystalgui.core.async.UiThread;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleEngine;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.box.BoxTree;
 import com.crystalgui.ui.service.Animation;
+import com.crystalgui.ui.service.Dismiss;
 import com.crystalgui.ui.service.Focus;
 import com.crystalgui.ui.service.Input;
 import com.crystalgui.ui.service.Lifecycle;
@@ -14,6 +16,7 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import javax.annotation.Nullable;
 
@@ -69,6 +72,8 @@ public final class UIDocument extends UINode {
     private Animation animation;
     @Nullable
     private Lifecycle lifecycle;
+    @Nullable
+    private Dismiss dismiss;
 
     public UIDocument() {
         super(NAME);
@@ -126,6 +131,136 @@ public final class UIDocument extends UINode {
     }
 
     /** Freeze, thaw, destroy. */
+    // ── The top layer ────────────────────────────────────────────────────────
+
+    /** @see #topLayer() */
+    public static final Name TOP_LAYER = Name.of("top-layer");
+
+    @Nullable
+    private UINode topLayerNode;
+
+    /** Nodes promoted to the top layer, in the order they were promoted. */
+    private final java.util.LinkedHashSet<UINode> promoted = new java.util.LinkedHashSet<>();
+
+    /**
+     * Promotes {@code node} into the top layer — or RAISES it if already promoted.
+     *
+     * <p><b>Promotion is recorded on the NODE, not written onto its box</b>, and that is the whole
+     * reason this method exists beside {@link Box#setHost}. A box is destroyed and rebuilt whenever
+     * its subtree is hidden, frozen or restructured, so a host written onto one is lost on the next
+     * sync: a popup hidden and reshown would silently come back UNPROMOTED — clipped by its
+     * scroller again, and only for a popup that had been closed once, which is the shape of bug that
+     * reads as intermittent. The box tree re-applies this set on every sync instead.</p>
+     *
+     * <p>Imperative rather than a declaration, exactly as the web promotes with
+     * {@code showPopover()} and {@code showModal()}: CSS's own {@code overlay} property is set by the
+     * UA as a side effect so transitions can observe promotion, and is not the trigger. Re-promoting
+     * removes and re-appends, which is the spec's own add algorithm — so "raise this popup" is one
+     * idempotent call rather than a remove/add dance every caller has to get right.</p>
+     */
+    public void promote(UINode node) {
+        Objects.requireNonNull(node, "node");
+        if (node == this) throw new IllegalArgumentException("the document cannot be promoted");
+        topLayerNode();
+        promoted.remove(node);
+        promoted.add(node);
+        fireStructureChanged();
+    }
+
+    /** Takes {@code node} out of the top layer, restoring ordinary layout, paint and hit-testing. */
+    public void demote(UINode node) {
+        if (promoted.remove(node)) fireStructureChanged();
+    }
+
+    public boolean isPromoted(UINode node) {
+        return promoted.contains(node);
+    }
+
+    /** What is promoted, bottom-most first. The box tree's, on every sync. */
+    public java.util.Collection<UINode> promotedNodes() {
+        return java.util.Collections.unmodifiableCollection(promoted);
+    }
+
+    /** The layer's node if one has been built, never building it. The box tree's, per sync. */
+    @Nullable
+    public UINode topLayerNodeIfPresent() {
+        return topLayerNode;
+    }
+
+    /** The layer's node, built on first use. The box tree resolves its box. */
+    public UINode topLayerNode() {
+        if (topLayerNode == null) {
+            topLayerNode = new UINode(TOP_LAYER);
+            append(topLayerNode);
+        }
+        return topLayerNode;
+    }
+
+    /**
+     * The <b>top layer</b> — CSS Position 4's, and what lets a tooltip escape an
+     * {@code overflow: hidden} ancestor.
+     *
+     * <p>Promote by hosting: {@code node.box().setHost(document.topLayer())}. It is imperative rather
+     * than a declaration for the same reason the web promotes with {@code showPopover()} and
+     * {@code showModal()} rather than a property — CSS's own {@code overlay} is set by the UA as a
+     * side effect so transitions can observe promotion, not as the trigger. Demote with
+     * {@code setHost(null)}.</p>
+     *
+     * <p><b>Order is the whole stacking model here</b>: the box stacks what it hosts by INSERTION and
+     * ignores {@code z-index}, per spec, so re-hosting something already promoted RAISES it and
+     * "raise this popup" is one idempotent call. @see Box#setStacksByInsertion</p>
+     *
+     * <p>The layer is a light child of the document and takes NO space — {@code ua/core.css}'s
+     * {@code top-layer} rule makes it a zero-sized out-of-flow box. That is not a detail: a full-size
+     * layer over the document hit-tests across the whole surface and eats every click that misses a
+     * popup, which is the compositor's own rule one level up and this codebase's most-repeated
+     * failure. Built on first use, so a document that never promotes anything pays a null field.</p>
+     *
+     * @return the host box, or null before the first layout has given the layer one
+     */
+    @Nullable
+    public Box topLayer() {
+        Box box = boxes().boxOf(topLayerNode());
+        if (box != null) box.setStacksByInsertion(true);
+        return box;
+    }
+
+    /** Whether anything is promoted. Never BUILDS the layer, so a query cannot create one. */
+    public boolean hasTopLayerContent() {
+        if (topLayerNode == null) return false;
+        Box box = boxes().boxOf(topLayerNode);
+        return box != null && !box.children().isEmpty();
+    }
+
+    /**
+     * Where an overlay belongs in the NODE tree — the nearest ancestor of {@code near} that accepts
+     * children, or the document.
+     *
+     * <p>Hosting decides where a promoted thing is DRAWN; this decides where it LIVES, and the two
+     * are different questions with different answers. The node parent still settles cascade
+     * inheritance (an overlay inherits the colours of the panel it belongs to) and lifetime (it goes
+     * away when that panel does) — which is why a context menu passes the thing that was clicked and
+     * a command palette passes null.</p>
+     */
+    public UINode overlayHost(@Nullable UINode near) {
+        for (UINode node = near; node != null; node = node.parent()) {
+            if (UINodeRegistry.contractFor(node.name()).acceptsDescribedChildren()) return node;
+        }
+        return this;
+    }
+
+    /** Parents an overlay somewhere legal and returns it. Use this rather than a bare append. */
+    public <T extends UINode> T addOverlay(T overlay, @Nullable UINode near) {
+        if (overlay.parent() == null) overlayHost(near).append(overlay);
+        return overlay;
+    }
+
+    /** How a thing on top goes away: Escape's stack and light dismiss's. Created on first use. */
+    public Dismiss dismiss() {
+        if (dismiss == null) dismiss = new Dismiss(this);
+        return dismiss;
+    }
+
     public Lifecycle lifecycle() {
         if (lifecycle == null) lifecycle = new Lifecycle(this);
         return lifecycle;
@@ -198,7 +333,16 @@ public final class UIDocument extends UINode {
 
     // ── Ids ──────────────────────────────────────────────────────────────────
 
-    /** The connected node with this id, or null. The first to claim an id keeps it. */
+    /**
+     * The connected node with this id, or null. The first to claim an id keeps it.
+     *
+     * <p>Overrides {@link UINode#getElementById} with the INDEX rather than the walk — every node
+     * that joins registers its id here, so this is O(1) where a subtree query is O(n), and a document
+     * is where the question is nearly always asked. It also reaches nodes inside shadow trees, which
+     * the light-tree walk deliberately does not: the index is the engine's own bookkeeping rather
+     * than a query an author makes, and the mount paths use it to find what they just built.</p>
+     */
+    @Override
     @Nullable
     public UINode getElementById(String id) {
         return byId.get(id);
