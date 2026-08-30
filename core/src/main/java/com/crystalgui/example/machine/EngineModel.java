@@ -29,10 +29,9 @@ package com.crystalgui.example.machine;
  *
  * <h3>Read the import list</h3>
  *
- * <p>There isn't one, for the same reason {@link MachineModel} has none. And note this class has no
- * listener list of its own: it announces through the {@link Runnable} its owner handed it, so a
- * change to the engine marks the machine's watchers dirty and there is exactly one subscription
- * mechanism in the domain rather than one per object.</p>
+ * <p>There isn't one, for the same reason {@link MachineModel} has none. And no listeners, for the
+ * same reason too: a panel projects the engine, reading it on the tick, so the engine never learns a
+ * window exists.</p>
  */
 public final class EngineModel {
 
@@ -45,9 +44,6 @@ public final class EngineModel {
     /** How hot a restart leaves it. Never a reset — a restarted engine is still a hot one. */
     private static final float RESTART_TEMPERATURE = 0.6f;
 
-    /** {@link MachineModel}'s own announcement. @see the class javadoc */
-    private final Runnable changed;
-
     /** 0..1 — how hard the operator is driving it. Faster cycles, hotter engine. */
     private float load = 0.4f;
 
@@ -57,8 +53,7 @@ public final class EngineModel {
     private boolean stalled;
 
     /** Package-private: an engine belongs to a machine, and is made by one. */
-    EngineModel(Runnable changed) {
-        this.changed = changed;
+    EngineModel() {
     }
 
     public float load() {
@@ -86,7 +81,6 @@ public final class EngineModel {
         float clamped = Math.max(0f, Math.min(1f, value));
         if (clamped == load) return;
         load = clamped;
-        changed.run();
     }
 
     /**
@@ -97,23 +91,15 @@ public final class EngineModel {
         if (!stalled) return;
         stalled = false;
         temperature = Math.min(temperature, RESTART_TEMPERATURE);
-        changed.run();
     }
 
     /**
-     * One world tick. Package-private, and driven by {@link MachineModel#tick()}.
-     *
-     * <p>Announces <b>only when something actually moved</b>, which is the same rule the machine's
-     * own tick follows and for the same reason: this runs forever, and a model that reported a change
-     * every time would hand the session a dirty set on every tick and turn a quiet panel into
-     * constant traffic. A cooling engine settles at zero and goes silent on its own.</p>
+     * One world tick. Package-private, and driven by {@link MachineModel#tick()}. A cooling engine
+     * settles at zero on its own.
      *
      * @param driving whether the machine is currently drawing on it
      */
     void tick(boolean driving) {
-        float before = temperature;
-        boolean wasStalled = stalled;
-
         if (driving && !stalled) {
             temperature = Math.min(1f, temperature + HEAT_PER_TICK * (0.2f + load));
             if (temperature >= 1f) stalled = true;
@@ -121,7 +107,5 @@ public final class EngineModel {
             // A stalled engine cools too -- that is what makes a restart worth waiting for.
             temperature = Math.max(0f, temperature - COOL_PER_TICK);
         }
-
-        if (temperature != before || stalled != wasStalled) changed.run();
     }
 }
