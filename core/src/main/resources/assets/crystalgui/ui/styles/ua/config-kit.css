@@ -1022,7 +1022,8 @@ colorselector .__side__ dropdown {
  * parent changes nothing at all and the text goes on clipping ("RGB 0-2"). Smaller because the longest
  * label is nine characters in a box sized for six digits, and the box matches the hex field by design,
  * so the text is what gives. */
-colorselector .__side__ dropdown text {
+colorselector .__side__ dropdown text,
+colorselector .__side__ dropdown::part(label) {
     font-size: 6;
     text-align: center;
 }
@@ -1217,6 +1218,7 @@ colorselector .__side__ dropdown .__menu__ menuitem {
 }
 /* On the item's own text, for the same reason the button's label needs it: `* { font-size: 10 }` gives
  * every element a specified size, so setting it on an ancestor changes nothing. */
-colorselector .__side__ dropdown .__menu__ menuitem text {
+colorselector .__side__ dropdown .__menu__ menuitem text,
+colorselector .__side__ dropdown .__menu__ menuitem::part(label) {
     font-size: 6;
 }
