@@ -130,21 +130,41 @@ public class Scroller extends UINode {
         setOrientation(Orientation.VERTICAL);
         applyThumb();
 
+        // PER PART, NEVER AN IDENTITY TEST ON THE HOST'S OWN TARGET. This was one listener on the
+        // scroller comparing `event.getTarget()` against thumb/head/tail/track, which is what the old
+        // engine needed and what this engine makes impossible: the parts live in a SHADOW TREE, and a
+        // listener attached to the host is outside it, so every event from inside is RETARGETED to the
+        // host before the listener runs. `target == thumb` could therefore never be true, the chain
+        // fell through to `target == this`, and a press on the thumb "jumped" the thumb to where it
+        // already was -- a bar that highlights under the pointer and refuses to move, with no error
+        // anywhere. Attaching inside the shadow tree stops the retarget, because the listener is then
+        // a shadow-including ancestor of what it is listening for.
+        thumb.onMouseDown.attachListener((el, event) -> {
+            if (!isEnabled()) return;
+            beginDrag(event.getPosition().x(), event.getPosition().y());
+            // Or the press bubbles on to the track and jumps the thumb out from under the drag that
+            // just started.
+            event.stopPropagation();
+        }, false, false);
+        head.onMouseDown.attachListener((el, event) -> {
+            if (!isEnabled()) return;
+            beginRepeat(-1f);
+            event.stopPropagation();
+        }, false, false);
+        tail.onMouseDown.attachListener((el, event) -> {
+            if (!isEnabled()) return;
+            beginRepeat(1f);
+            event.stopPropagation();
+        }, false, false);
+        // The track and the scroller's own body both mean "jump to here": one listener, on the host,
+        // reached by a press on the track that nothing above consumed and by a press on the scroller
+        // outside the track.
         this.events.getGroup(MouseEvent.Down.class).attachListener((el, event) -> {
             if (!isEnabled()) return;
-            var target = ((UINode) event.getTarget());
-            if (target == thumb) {
-                beginDrag(event.getPosition().x(), event.getPosition().y());
-            } else if (target == head) {
-                beginRepeat(-1f);
-            } else if (target == tail) {
-                beginRepeat(1f);
-            } else if (target == track || target == this) {
-                // Jump to where you clicked, centring the thumb there, rather than paging by a
-                // screenful. Absolute rather than relative on purpose: setValue routes through the
-                // container's normal (eased) path, so the thumb glides to the spot.
-                setValue(valueForThumbCentredAt(event));
-            }
+            // Jump to where you clicked, centring the thumb there, rather than paging by a
+            // screenful. Absolute rather than relative on purpose: setValue routes through the
+            // container's normal (eased) path, so the thumb glides to the spot.
+            setValue(valueForThumbCentredAt(event));
         }, false, true);
     }
 
