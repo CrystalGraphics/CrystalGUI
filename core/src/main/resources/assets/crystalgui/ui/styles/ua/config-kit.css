@@ -734,7 +734,8 @@ searchfield .__field__ {
     flex-grow: 1;
     flex-shrink: 1;
 }
-searchfield .__clear__ {
+searchfield .__clear__,
+searchfield::part(clear) {
     width: 9px;
     height: 9px;
     flex-shrink: 0;
@@ -1168,7 +1169,8 @@ colorselector .__channel-row__ textfield {
     flex-grow: 0;
 }
 
-colorselector .__hex-row__ {
+colorselector .__hex-row__,
+colorselector::part(hex-row) {
     width: 100%;
     flex-direction: row;
     align-items: center;

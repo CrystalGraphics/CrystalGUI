@@ -874,7 +874,8 @@ tableview .__cell__ {
     --scrollbar-radius: 3px;
 }
 
-scroller .__track__ {
+scroller .__track__,
+scroller::part(track) {
     background: var(--scrollbar-track, #00000000);
 }
 /* Only the CROSS axis is set here. The main axis (length + position) is written from Java at
@@ -888,24 +889,33 @@ scroller .__thumb__ {
      * lozenge with flat sides. Both now come from --scrollbar-size. */
     border-radius: var(--scrollbar-radius, 3px);
 }
-scroller.__vertical__ .__thumb__ {
+scroller.__vertical__ .__thumb__,
+scroller.__vertical__::part(thumb) {
     width: 100%;
 }
-scroller .__thumb__:hover {
+scroller .__thumb__:hover,
+scroller::part(thumb):hover {
     background: var(--scrollbar-thumb-hover, #8C8C8C);
 }
-scroller .__thumb__:active {
+scroller .__thumb__:active,
+scroller::part(thumb):active {
     background: var(--scrollbar-thumb-pressed, #B4B4B4);
 }
 
 /* Step buttons. Hidden by default — that's what every modern desktop UI does, and it's what Ore
- * chose too (`.__scroller_head_button__ { display: none }`). They are fully wired regardless, so a
+ * chose too (`.__scroller_head_button__ { display: none }`). They are fully wired regardless,
+so a
  * theme turns them on with nothing but CSS:
- *     scroller .__head__, scroller .__tail__ { display: flex; }
- * Because they're flex items, hiding them lets __track__ take the whole bar, so the geometry with
+ *     scroller .__head__,
+scroller .__tail__,
+scroller::part(tail) { display: flex; }
+ * Because they're flex items,
+hiding them lets __track__ take the whole bar,
+so the geometry with
  * buttons off is identical to not having them at all. */
 scroller .__head__,
-scroller .__tail__ {
+scroller .__tail__,
+scroller::part(tail) {
     display: none;
     background: var(--scrollbar-tail, #4A4A4A);
     /* Sized along the bar's MAIN axis, filling the cross axis. A horizontal bar's buttons are 8px
@@ -917,12 +927,16 @@ scroller .__tail__ {
     height: 100%;
 }
 scroller.__vertical__ .__head__,
-scroller.__vertical__ .__tail__ {
+scroller.__vertical__ .__tail__,
+scroller.__vertical__::part(head),
+scroller.__vertical__::part(tail) {
     width: 100%;
     height: 8px;
 }
 scroller .__head__:hover,
-scroller .__tail__:hover {
+scroller .__tail__:hover,
+scroller::part(head):hover,
+scroller::part(tail):hover {
     background: var(--scrollbar-tail-hover, #6E6E6E);
 }
 

@@ -56,6 +56,8 @@ RULES = [
     (r'import com\.crystalgui\.ui\.UIElement;', 'import com.crystalgui.ui.dom.UINode;', 'import'),
     (r'import com\.crystalgui\.ui\.UIWindow;', 'import com.crystalgui.ui.dom.UIDocument;', 'import'),
     (r'import com\.crystalgui\.ui\.elements\.UIText;', 'import com.crystalgui.ui.box.TextNode;', 'import'),
+    (r'import com\.crystalgui\.ui\.UIFrameTicker;', 'import com.crystalgui.ui.service.Animation;', 'import'),
+    (r'import com\.crystalgui\.ui\.AnchoredPlacement;', 'import com.crystalgui.ui.service.AnchoredPlacement;', 'import'),
 
     # -- The base classes and the document -----------------------------------------------------
     (r'\bextends UIElement\b', 'extends UINode', 'base class'),
@@ -81,6 +83,18 @@ RULES = [
     (r'getInputHandler\(\)', 'input()', 'input receiver'),
     (r'getAttachedWindow\(\)', 'document()', 'document receiver'),
 
+    # -- Coordinates and the layout rect ---------------------------------------------------------
+    #
+    # `screenToLocal` becomes `toLocal`, and the ORIGIN MOVES: the old one did not subtract the
+    # element's own origin, so its answer was an absolute layout coordinate. Any call site that then
+    # added the origin back has to LOSE that addition -- which is why these two land in the reading
+    # list as well (see RESIDUAL), rather than being trusted as a pure rename.
+    (r'screenToLocal\(', 'toLocal(', 'coordinates'),
+    (r'containsScreenPoint\(', 'containsSurfacePoint(', 'coordinates'),
+    (r'getTaffyLayout\(\)\.contentBoxWidth\(\)', 'box().contentWidth()', 'geometry'),
+    (r'getTaffyLayout\(\)\.contentBoxHeight\(\)', 'box().contentHeight()', 'geometry'),
+    (r'getTaffyLayout\(\)', 'box()', 'geometry'),
+
     # -- Geometry: the runtime cache becomes the box --------------------------------------------
     (r'getRuntimeCache\(\)\.getWidth\(\)', 'box().width()', 'geometry'),
     (r'getRuntimeCache\(\)\.getHeight\(\)', 'box().height()', 'geometry'),
@@ -100,6 +114,9 @@ RULES = [
     (r'\.getClasses\(\)', '.classes()', 'identity'),
 
     # -- Tickers become owned hooks --------------------------------------------------------------
+    # The FQN spelling too -- two widgets write `implements com.crystalgui.ui.UIFrameTicker` inline
+    # rather than importing it, and the bare rule below turns that into a package that does not exist.
+    (r'\bcom\.crystalgui\.ui\.UIFrameTicker\b', 'com.crystalgui.ui.service.Animation.Hook', 'ticker type'),
     (r'\bimplements UIFrameTicker\b', '', 'ticker interface'),
     (r',\s*UIFrameTicker\b', '', 'ticker interface'),
     (r'\bUIFrameTicker\b', 'Animation.Hook', 'ticker type'),
@@ -108,7 +125,11 @@ RULES = [
 
     # -- Drag ------------------------------------------------------------------------------------
     (r'DRAG_CONTROLLER\.startDrag\(', 'Drag.start(', 'drag'),
-    (r'DRAG_CONTROLLER\.isDragging\(\)', 'input().hasMode(Drag.class)', 'drag'),
+    # Drag is STATIC now, so the receiver the rule above leaves behind has to go: `window.Drag.start`
+    # is a field access on a variable, and it compiles as nothing at all.
+    (r'(?:window|doc|document\(\))\.Drag\.', 'Drag.', 'drag'),
+    # hasMode takes an INSTANCE; a caller with only a class asks mode(Class) instead.
+    (r'DRAG_CONTROLLER\.isDragging\(\)', 'input().mode(Drag.class) != null', 'drag'),
     (r'DRAG_CONTROLLER\.', 'Drag.', 'drag receiver'),
 
     # -- The top layer ---------------------------------------------------------------------------

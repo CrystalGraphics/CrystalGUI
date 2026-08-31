@@ -138,14 +138,17 @@ switch {
 switch:checked {
     background: var(--switch-checked-bg, #3C8527);
 }
-switch .__spacer__ {
+switch .__spacer__,
+switch::part(spacer) {
     flex-grow: 0;
     transition: flex-grow 150ms ease;
 }
-switch:checked .__spacer__ {
+switch:checked .__spacer__,
+switch:checked::part(spacer) {
     flex-grow: 1;
 }
-switch .__knob__ {
+switch .__knob__,
+switch::part(knob) {
     height: 100%;
     aspect-rate: 1;
     background: var(--switch-knob, #D0D1D4);
@@ -153,7 +156,8 @@ switch .__knob__ {
      * how big the switch gets — which is why this isn't a px value like the track's. */
     border-radius: 50%;
 }
-switch:disabled .__knob__ {
+switch:disabled .__knob__,
+switch:disabled::part(knob) {
     background: var(--switch-disabled-knob, #8C8C8C);
 }
 
@@ -182,12 +186,14 @@ slider .__fill__ {
     background: var(--slider-fill, #3C8527);
     border-radius: 3px;
 }
-slider .__spacer__ {
+slider .__spacer__,
+slider::part(spacer) {
     height: 6px;
     background: var(--slider-track, #6E6E6E);
     border-radius: 3px;
 }
-slider .__thumb__ {
+slider .__thumb__,
+slider::part(thumb) {
     width: 10px;
     height: 10px;
     margin-left: -5px;
@@ -206,13 +212,16 @@ slider .__thumb__ {
     border-width: 2px;
     border-color: var(--slider-thumb-ring, #FFFFFF);
 }
-slider:hover .__thumb__ {
+slider:hover .__thumb__,
+slider:hover::part(thumb) {
     background: var(--slider-thumb-hover, #E4E5E8);
 }
-slider:disabled .__fill__ {
+slider:disabled .__fill__,
+slider:disabled::part(fill) {
     background: var(--slider-disabled-fill, #5A6E5A);
 }
-slider:disabled .__thumb__ {
+slider:disabled .__thumb__,
+slider:disabled::part(thumb) {
     background: var(--slider-disabled-thumb, #8C8C8C);
 }
 

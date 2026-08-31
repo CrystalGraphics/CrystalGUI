@@ -1,6 +1,8 @@
 package com.crystalgui.ui.dom;
 
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.style.GeneralGroup;
+import com.crystalgui.style.LayoutGroup;
 import com.crystalgui.style.ComputedStyle;
 import com.crystalgui.style.ElementStyle;
 import com.crystalgui.style.StyleEngine;
@@ -11,6 +13,7 @@ import com.crystalgui.style.easing.ProgressFunctions;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.ScrollBehavior;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.ui.EventListenerGroup;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.event.DragEvent;
@@ -34,7 +37,9 @@ import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 import javax.annotation.Nullable;
+import org.joml.Vector2f;
 
 /**
  * A node of the new engine's tree: <b>identity, attributes, children, a shadow root, events</b> — and
@@ -300,6 +305,20 @@ public class UINode implements EventTarget, Styleable {
     @Nullable
     public final UIDocument document() {
         return document;
+    }
+
+    /**
+     * How many links up the COMPOSED tree the document is — the document itself is 0.
+     *
+     * <p>Composed rather than light, because it answers "which of these is innermost", and a part
+     * inside a widget is innermost even though the light tree stops at the widget. The old engine
+     * memoised this in a cache cell; the walk is a handful of pointer follows and the widgets that
+     * ask do so once per frame at most.</p>
+     */
+    public final int depth() {
+        int depth = 0;
+        for (UINode at = composedParent(); at != null; at = at.composedParent()) depth++;
+        return depth;
     }
 
     public final boolean isConnected() {
@@ -1212,6 +1231,85 @@ public class UINode implements EventTarget, Styleable {
                 live.setScroll(fromLeft + (targetLeft - fromLeft) * t, fromTop + (targetTop - fromTop) * t);
             }
         }, null);
+    }
+
+    // ── The fluent style writers ─────────────────────────────────────────────
+
+    /**
+     * Configures this node's layout group, writing at whatever origin the group is currently on
+     * (INLINE unless a pipeline says otherwise) — {@code node.layout(l -> l.width(100f))}.
+     *
+     * <p>Kept from {@code UIElement} with the same name and the same shape because 185 call sites in
+     * the widget layer read it, and because it is the ordinary way a widget states geometry it owns.
+     * It is <b>not</b> a way for a widget to state its own SIZE from measured content — that is what
+     * {@link com.crystalgui.ui.box.Measurable} is for, and writing a measured height back into the
+     * cascade is exactly the feedback loop the three-tree design removes.</p>
+     */
+    public UINode layout(Consumer<LayoutGroup> configurator) {
+        configurator.accept(getStyle().getLayoutGroup());
+        return this;
+    }
+
+    /** As {@link #layout}, for the visual group — {@code background}, {@code opacity}, {@code color}. */
+    public UINode generalStyle(Consumer<GeneralGroup> configurator) {
+        configurator.accept(getStyle().getGeneralGroup());
+        return this;
+    }
+
+    /** As {@link #layout}, for the whole store, when a caller needs both groups. */
+    public UINode style(Consumer<ElementStyle> configurator) {
+        configurator.accept(getStyle());
+        return this;
+    }
+
+    // ── Coordinates ──────────────────────────────────────────────────────────
+
+    /**
+     * Converts a point in <b>surface</b> pixels — what the platform reports and what a
+     * {@code MouseEvent} carries — into this node's own space, with <b>this box's origin at
+     * {@code (0, 0)}</b>.
+     *
+     * <p>Through the box's world matrix, so every transform and every ancestor's scroll is applied.
+     * Returns the point unchanged when the node has no box yet, which is the honest answer for a node
+     * nothing has laid out: the alternative is a plausible number computed from an identity matrix.</p>
+     *
+     * <h3>The origin is at zero, and the old engine's was not</h3>
+     *
+     * <p>{@code screenToLocal} converted out of surface pixels into the element's layout space and did
+     * <em>not</em> subtract the element's own origin, so its answer was an absolute layout coordinate
+     * comparable to {@code getRuntimeCache().getX()}. That is a genuinely useful thing and it is also
+     * the single most reliably-misread method in the old engine: read as "relative to the element" — as
+     * its own name says — it invites adding the origin back, which is what {@code snapZoneAt} did, so
+     * the snap zone a drag reported was displaced by however far along the desktop the window was and
+     * armed at roughly double speed. It never presents as a conversion, because it is wrong by a
+     * different amount every time.</p>
+     *
+     * <p>Putting the origin at zero removes the question. A caller wanting the absolute coordinate adds
+     * {@code box().x()} deliberately, and one wanting the offset within the node — which is nearly
+     * everybody: a caret index, a slider fraction, a drag delta — needs nothing.</p>
+     */
+    public final Vector2f toLocal(float surfaceX, float surfaceY) {
+        Box b = box;
+        if (b == null) return new Vector2f(surfaceX, surfaceY);
+        return Transform2D.apply(b.worldToLocal(), surfaceX, surfaceY);
+    }
+
+    /**
+     * Whether a point in <b>surface</b> pixels lands inside this node's border box.
+     *
+     * <p>Geometry only: it says nothing about whether a press would actually be <em>delivered</em>
+     * here — {@code hit-test: none}, an inert subtree, a modal in another scope and anything painted
+     * over the top all make this true and the hit false. That is what it is for. A slider discarding
+     * a synthesized keyboard press whose coordinates are wherever the mouse happens to be is asking
+     * "is the pointer over me", not "would the pointer reach me".</p>
+     *
+     * <p>False for a node with no box, which is a node nothing has laid out — no point is over it.</p>
+     */
+    public final boolean containsSurfacePoint(float surfaceX, float surfaceY) {
+        Box b = box;
+        if (b == null) return false;
+        Vector2f local = Transform2D.apply(b.worldToLocal(), surfaceX, surfaceY);
+        return local.x() >= 0f && local.y() >= 0f && local.x() <= b.width() && local.y() <= b.height();
     }
 
     // ── Reporting a state change ─────────────────────────────────────────────

@@ -128,6 +128,22 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         return modes.contains(mode);
     }
 
+    /**
+     * The innermost live mode of {@code type}, or null.
+     *
+     * <p>What "is a drag running, and which one" is asked with. {@link #hasMode} takes an INSTANCE and
+     * answers a different question — whether <em>this</em> mode is still live, which is what a mode
+     * asks about itself. A caller that only has a class has no instance to pass.</p>
+     */
+    @Nullable
+    public <M extends InputMode> M mode(Class<M> type) {
+        for (int i = modes.size() - 1; i >= 0; i--) {
+            InputMode mode = modes.get(i);
+            if (type.isInstance(mode)) return type.cast(mode);
+        }
+        return null;
+    }
+
     /** The live modes, innermost first — what is asked, in the order it is asked. */
     public List<InputMode> modes() {
         List<InputMode> topFirst = new ArrayList<>(modes);

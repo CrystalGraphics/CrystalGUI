@@ -278,6 +278,9 @@ public final class UIDocument extends UINode {
         animation().tick(deltaSeconds);
         calculateStyle(deltaSeconds);
         layout(width, height);
+        // AFTER layout, for the hooks that READ geometry -- see Animation.afterLayout. Before
+        // endFrame, so a placement made here is what the hover diff and the paint both see.
+        animation().tickAfterLayout(deltaSeconds);
         input().endFrame();
     }
 
