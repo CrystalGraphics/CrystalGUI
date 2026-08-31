@@ -20,13 +20,27 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
  * style at once, after the style pass, and writes the whole layout style: there is no listener to
  * forget.</p>
  *
- * <h3>CSS defaults, from the first line (D5.8)</h3>
+ * <h3>The PROJECT's defaults, not CSS's — D5.8 reversed at M6.1</h3>
  *
- * <p>The old bridge's defaults diverged from CSS in five places — {@code flex-direction: column},
- * {@code flex-shrink: 0}, {@code min-size: 0}, {@code align-content: flex-start} — and thirteen
- * invariant rows are sessions re-learning them. The layout engine's own defaults ARE CSS's, so a
- * property nothing set is written as the engine's default rather than as the old initial value. The
- * sheets that relied on the divergences are the old engine's and are ported at M6 (D4).</p>
+ * <p>This wrote CSS's initial for anything unset, on the reasoning that the old bridge's five
+ * divergences ({@code flex-direction: column}, {@code flex-shrink: 0}, {@code min-size: 0},
+ * {@code align-content: flex-start}) are a standing source of surprise, and that the sheets relying
+ * on them would be ported at M6. <b>The bill came due at M6.1 and could not be paid.</b></p>
+ *
+ * <p>A default is not a property a sheet sets — it is the answer for every rule that does not mention
+ * it, which in a 6,200-line user-agent sheet is nearly all of them. Flipping {@code flex-direction}
+ * turns every unstated column into a row, and the failure is silent in the worst way: {@code menu}
+ * states no direction, so its item column became a row, {@code align-items: stretch} stretched the
+ * items container across the menu's height, and a three-row menu drew 166px tall with its rows in the
+ * top 43. Nothing errored; the menu simply looked wrong in a way that reads as bad CSS. The gallery
+ * scene met the same thing three times in one sitting, and each looked like a different bug.</p>
+ *
+ * <p>So the defaults are the registry's, which is what the OLD engine writes and what every shipped
+ * sheet was authored against. The divergences are documented in {@code AGENTS.md} with their
+ * reasoning — {@code border-box} matching the common UI-framework convention, {@code flex-shrink: 0}
+ * so content is not compressed below its own size — and they are project decisions rather than
+ * accidents. <b>Both engines now answer the same question the same way</b>, which is what makes a
+ * geometry difference between them a defect rather than a default.</p>
  *
  * <p>The bridge is reused for its value conversions (our {@code LengthPercentageAuto} into the
  * engine's {@code LengthPercentage}, our grid types into track lists), not for its defaults.</p>
@@ -67,9 +81,8 @@ public final class BoxStyle {
         bridge.setBoxSizing(c.get(LayoutProperties.BOX_SIZING));
 
         // Flex -- the two divergent defaults go back to CSS's when nothing set them.
-        bridge.setFlexDirection(c.isSet(LayoutProperties.FLEX_DIRECTION)
-                ? c.get(LayoutProperties.FLEX_DIRECTION) : FlexDirection.ROW);
-        bridge.setFlexShrink(c.isSet(LayoutProperties.FLEX_SHRINK) ? c.get(LayoutProperties.FLEX_SHRINK) : 1f);
+        bridge.setFlexDirection(c.get(LayoutProperties.FLEX_DIRECTION));
+        bridge.setFlexShrink(c.get(LayoutProperties.FLEX_SHRINK));
         bridge.setFlexWrap(c.get(LayoutProperties.FLEX_WRAP));
         bridge.setFlexBasis(c.get(LayoutProperties.FLEX_BASIS));
         bridge.setFlexGrow(c.get(LayoutProperties.FLEX_GROW));
@@ -78,8 +91,7 @@ public final class BoxStyle {
         // Alignment -- align-content back to CSS's `normal`.
         bridge.setAlignItems(c.get(LayoutProperties.ALIGN_ITEMS));
         bridge.setAlignSelf(c.get(LayoutProperties.ALIGN_SELF));
-        bridge.setAlignContent(c.isSet(LayoutProperties.ALIGN_CONTENT)
-                ? c.get(LayoutProperties.ALIGN_CONTENT) : AlignContent.AUTO);
+        bridge.setAlignContent(c.get(LayoutProperties.ALIGN_CONTENT));
         bridge.setJustifyItems(c.get(LayoutProperties.JUSTIFY_ITEMS));
         bridge.setJustifySelf(c.get(LayoutProperties.JUSTIFY_SELF));
         bridge.setJustifyContent(c.get(LayoutProperties.JUSTIFY_CONTENT));
@@ -92,8 +104,8 @@ public final class BoxStyle {
         bridge.setBottom(c.get(LayoutProperties.BOTTOM));
         bridge.setWidth(c.get(LayoutProperties.WIDTH));
         bridge.setHeight(c.get(LayoutProperties.HEIGHT));
-        bridge.setMinWidth(c.isSet(LayoutProperties.MIN_WIDTH) ? c.get(LayoutProperties.MIN_WIDTH) : TaffyDimension.AUTO);
-        bridge.setMinHeight(c.isSet(LayoutProperties.MIN_HEIGHT) ? c.get(LayoutProperties.MIN_HEIGHT) : TaffyDimension.AUTO);
+        bridge.setMinWidth(c.get(LayoutProperties.MIN_WIDTH));
+        bridge.setMinHeight(c.get(LayoutProperties.MIN_HEIGHT));
         bridge.setMaxWidth(c.get(LayoutProperties.MAX_WIDTH));
         bridge.setMaxHeight(c.get(LayoutProperties.MAX_HEIGHT));
         // The registry's initial for a margin, a padding and a border is `auto`, which is not CSS's (0) -- and an auto margin on

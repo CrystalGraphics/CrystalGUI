@@ -419,9 +419,20 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
 
         if (event.state()) {
             pressTarget = target;
+            // THE POPOVER STACK AS IT STOOD BEFORE DISPATCH, read now and acted on after.
+            //
+            // A popover opened FROM a mouse-down handler must not be closed by the very press that
+            // opened it -- it would appear never to open at all -- so light dismiss judges against the
+            // stack as it was when the press landed, not as it is once the press has been delivered.
+            int shownBefore = document.dismiss().showSeq();
             if (target != null && ordinal == 0) target.setPressed(true);
             document.focus().pressed(target, ordinal);
             send(target, new MouseEvent.Down(target, pointer, ordinal, detail));
+            // AFTER the dispatch, which is the spec's order and browsers': dismissing first tears down
+            // the tree under an undelivered event, so the press would never reach what it landed on.
+            // On press rather than the spec's press/release pair -- that pairing exists for
+            // text-selection drags, which this engine has no equivalent of.
+            document.dismiss().lightDismiss(target, shownBefore);
         } else {
             boolean wasPressTarget = target == pressTarget;
             if (pressTarget != null && ordinal == 0) pressTarget.setPressed(false);
