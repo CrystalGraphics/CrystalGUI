@@ -235,7 +235,7 @@ dropdown::part(menu) {
      * `color: #222222`, which on this surface renders as barely-legible grey. Colour is inheritable, so the
      * fix belongs at the top of the popover rather than repeated on each item. */
     color: var(--menu-fg, #DDDDDD);
-    /* Transparent while closed, opaque once `__open__` lands — see the rule below. The pair is what gives the
+    /* Transparent while closed, opaque once `:open` holds — see the rule below. The pair is what gives the
      * transition a real value to start from; a popover coming out of `display: none` otherwise has no previous
      * opacity to interpolate from, which is the problem `@starting-style` exists to solve on the web.
      *
@@ -256,7 +256,21 @@ dropdown::part(menu) {
  * how wide its items wanted to be and collapsed to `min-width` — clipping every label. Letting the default
  * `align-items: stretch` do the work instead means the menu sizes to its widest item and the items then
  * fill it, which is the standard CSS idiom for exactly this and the reason the idiom exists. */
-popover.__open__, menu.__open__, dropdown .__menu__.__open__ {
+/* `:open` AND NOT A CLASS, and the difference is what a shadow tree makes of it.
+ *
+ * This was `popover.__open__, menu.__open__, dropdown .__menu__.__open__`, which works for a popover in
+ * the light tree and cannot work for one inside a shadow tree: a class does not cross that boundary. A
+ * Dropdown's menu therefore matched the base rule above through `::part(menu)` -- picking up its
+ * `opacity: 0` -- and matched nothing that lifted it again, so the menu opened, promoted, placed itself
+ * correctly and drew at zero alpha. Every observable said it was open; the screen said nothing had
+ * happened.
+ *
+ * A pseudo-class is legal after `::part()` where a class is not, which is exactly why the web spells
+ * this one `:popover-open`. The class is still flipped by the widget for any theme that reads it; this
+ * rule no longer depends on it. */
+popover:open,
+menu:open,
+dropdown::part(menu):open {
     opacity: 1;
 }
 
@@ -528,7 +542,7 @@ dropdown {
  * depending on room, so there is no "open" direction for the glyph to point at (see
  * AnchoredPlacement's flip). */
 dropdown .__chevron__,
-dropdown::part(chevron) {
+dropdown::part(post-icon) {
     width: 8px;
     height: 8px;
     flex-grow: 0;

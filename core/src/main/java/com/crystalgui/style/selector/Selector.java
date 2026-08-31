@@ -63,6 +63,14 @@ public record Selector(List<CompoundSelector> compounds, List<Combinator> combin
      * <p>Identical to {@link #matches} except that a trailing pseudo-element is ignored rather than
      * disqualifying. This is what {@code .code text::highlight(keyword)} is matched with.</p>
      */
+    /**
+     * Whether the parts after the pseudo-element describe {@code part} — @see
+     * CompoundSelector#matchesAfterPseudoElement.
+     */
+    public boolean matchesAfterPseudoElement(Styleable part) {
+        return compounds.get(compounds.size() - 1).matchesAfterPseudoElement(part);
+    }
+
     public boolean matchesOriginating(Styleable element) {
         int lastIndex = compounds.size() - 1;
         if (!compounds.get(lastIndex).matchesOriginating(element)) return false;

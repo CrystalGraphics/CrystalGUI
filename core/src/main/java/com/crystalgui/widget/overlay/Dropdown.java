@@ -104,8 +104,15 @@ public class Dropdown extends Button {
 
     /** The options menu. {@code dropdown::part(menu)} in a sheet. */
     public static final String MENU_PART = "menu";
-    /** The disclosure arrow. */
-    public static final String CHEVRON_PART = "chevron";
+    /**
+     * The disclosure arrow — {@code dropdown::part(post-icon)} in a sheet, not {@code ::part(chevron)}.
+     *
+     * <p>It goes in through {@link Button#setPostIcon}, which names what it holds: a dropdown's
+     * chevron IS its post-icon, and the slot's name is the honest one. Naming it {@code chevron} here
+     * and letting {@code setPostIcon} rename it to {@code post-icon} gave the sheet a name nothing
+     * carried, so every chevron rule matched nothing and the arrow was a 0x0 box.</p>
+     */
+    public static final String CHEVRON_PART = Button.POST_ICON_PART;
 
     /** Fires with the newly selected index. Never fires for a re-selection of the same index. */
     public final Signal.Value<Integer> onSelectionChanged = new Signal.Value<>();
@@ -139,7 +146,6 @@ public class Dropdown extends Button {
         // and a text field differed only by face colour. `overlay: shape("chevron-down")` in CSS draws
         // it — this constructor only claims the slot.
         UINode chevron = new UINode();
-        chevron.set(Attribute.PART, CHEVRON_PART);
         setPostIcon(chevron);
 
         // Toggle rather than open: pressing the button of an open dropdown should shut it. Light dismiss

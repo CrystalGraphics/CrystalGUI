@@ -39,6 +39,7 @@ public enum PseudoClasses {
      */
     FOCUS_WITHIN(Styleable::isFocusWithin),
     /** The top of a tree: a document, or a detached subtree's root. Where a UA sheet sets its font size. */
+    OPEN(Styleable::isOpen),
     ROOT(Styleable::isRoot);
 
     final Predicate<Styleable> elementPredicate;

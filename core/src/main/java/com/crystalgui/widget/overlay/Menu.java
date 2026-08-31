@@ -23,6 +23,9 @@ import java.util.Collections;
 import java.util.List;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.dom.UISlot;
+import dev.vfyjxf.taffy.style.FlexDirection;
+import com.crystalgui.style.StyleGroup;
 
 /**
  * A menu — ARIA's {@code role="menu"}, and the widget behind both a dropdown list and a context menu.
@@ -120,6 +123,21 @@ public class Menu extends Popover {
         this.items = new UINode();
         
         this.items.set(Attribute.PART, ITEMS_PART);
+        // THE ITEMS ARE CONTENT, NOT PARTS, so they go in a SLOT and stay light children.
+        //
+        // They were appended straight into `items`, which is inside this menu's shadow root -- so
+        // every `menuitem` rule in every sheet is an outer rule that cannot reach them, and a menu
+        // drew its rows with no padding, no hover bar and no focus bar. The same reasoning as
+        // ScrollerView's viewport: a widget's own structure is a part, and what a CALLER puts in is
+        // content. `addItem` appends to the menu; the slot renders them here, in order.
+        UISlot itemSlot = new UISlot();
+        // FULL WIDTH and a column, or the rows size to their own text inside a menu that is wider --
+        // and the focus bar, which is the row's own background, stops short of the menu's edge. The
+        // slot is a real box between the menu and its rows, so `align-items: stretch` on the menu
+        // reaches the SLOT and stops there.
+        StyleGroup.defaultPipeline(itemSlot.getStyle().getLayoutGroup(),
+                l -> l.widthPercent(100f).flexDirection(FlexDirection.COLUMN));
+        this.items.append(itemSlot);
         shadow().append(this.items);
 
         // CLICK_NOT_TABBABLE, not FOCUSABLE: this is a real focus target now (see onOpened below), but
@@ -209,7 +227,7 @@ public class Menu extends Popover {
         UINode separator = new UINode();
         separator.set(Attribute.PART, SEPARATOR_PART);
         separator.setHitTest(false);
-        items.append(separator);
+        append(separator);
         return separator;
     }
 
@@ -226,24 +244,30 @@ public class Menu extends Popover {
      * @return whether a separator was removed
      */
     public boolean removeLastSeparator() {
-        List<UINode> children = items.children();
+        List<UINode> children = children();
         if (children.isEmpty()) return false;
         UINode last = children.get(children.size() - 1);
         if (!last.hasClass(SEPARATOR_PART)) return false;
-        items.remove(last);
+        remove(last);
         return true;
     }
 
     public MenuItem addItemAt(MenuItem item, int index) {
         int at = Math.max(0, Math.min(itemList.size(), index));
-        // The item's index is NOT its child index once separators exist: separators are children of
-        // `items` without being in `itemList`, so appending at `itemList.size()` would insert an item
-        // BEFORE any trailing separator. Resolved against the element actually occupying that slot.
+        // The item's index is NOT its child index once separators exist: a separator is a child
+        // without being in `itemList`, so appending at `itemList.size()` would insert an item BEFORE
+        // any trailing separator. Resolved against the element actually occupying that slot.
+        //
+        // A LIGHT child of the menu, rendered through the slot in `items`. They were put straight into
+        // `items`, which is inside this menu's shadow root -- so every `menuitem` rule in every sheet
+        // was an outer rule that could not reach them, and a row had no padding and no focus bar. The
+        // items are CONTENT; `items` is the menu's own structure. Same split as ScrollerView's
+        // viewport.
         int childIndex = at < itemList.size()
-                ? items.children().indexOf(itemList.get(at))
-                : items.children().size();
+                ? indexOf(itemList.get(at))
+                : children().size();
         itemList.add(at, item);
-        items.insertAt(childIndex, item);
+        insertAt(childIndex, item);
         // Activation closes the menu, which is what a menu is for — UNLESS the item owns a submenu, in
         // which case closing would dismiss the parent and strand the child. That was an earlier bug:
         // pressing a submenu item opened the child and shut the menu it belonged to in the same breath, so
@@ -405,7 +429,7 @@ public class Menu extends Popover {
 
     public boolean removeItem(MenuItem item) {
         if (!itemList.remove(item)) return false;
-        items.remove(item);
+        remove(item);
         return true;
     }
 
@@ -414,8 +438,8 @@ public class Menu extends Popover {
         for (MenuItem item : new ArrayList<>(itemList)) removeItem(item);
         // Separators are not in itemList, so the loop above cannot reach them. Rebuilding a menu without
         // this leaves the old rules stacked up with no items between them.
-        for (UINode child : new ArrayList<>(items.children())) {
-            if (child.hasClass(SEPARATOR_PART)) items.remove(child);
+        for (UINode child : new ArrayList<>(children())) {
+            if (child.hasClass(SEPARATOR_PART)) remove(child);
         }
     }
 

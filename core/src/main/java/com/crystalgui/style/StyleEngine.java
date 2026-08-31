@@ -527,7 +527,9 @@ public final class StyleEngine {
                         // is exposed under that part name AND the compound describes its host.
                         if (partRulesReach
                                 && pseudo.argument().equals(element.partName())
-                                && rule.selector().matchesOriginating(shadowHost)) {
+                                && rule.selector().matchesOriginating(shadowHost)
+                                // ...and whatever follows `::part()` is about the PART, not the host.
+                                && rule.selector().matchesAfterPseudoElement(element)) {
                             int partSpecificity = rule.selector().specificity();
                             var partDecls = rule.declarations();
                             for (int i = 0; i < partDecls.size(); i++) {
