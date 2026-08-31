@@ -117,31 +117,31 @@ CLASS	ui/elements/config/control/SelectControl	68	widget/config/control	6.2	move
 CLASS	ui/elements/config/control/SliderControl	92	widget/config/control	6.2	move	ported
 CLASS	ui/elements/config/control/TextControl	87	widget/config/control	6.2	move	ported
 CLASS	ui/elements/config/control/VectorControl	123	widget/config/control	6.2	copy	ported
-CLASS	ui/elements/desktop/Desktop	1360	desktop	6.6	copy	pending
-CLASS	ui/elements/desktop/DesktopCommands	158	desktop	6.6	copy	pending
-CLASS	ui/elements/desktop/DesktopSession	245	desktop	6.6	copy	pending
-CLASS	ui/elements/desktop/ScreenOverlay	156	desktop	6.6	copy	pending
-CLASS	ui/elements/desktop/SnapZones	257	desktop	6.6	copy	pending
-CLASS	ui/elements/desktop/SystemMenu	251	desktop	6.6	copy	pending
-CLASS	ui/elements/desktop/Taskbar	567	desktop/taskbar	6.6	copy	pending
-CLASS	ui/elements/desktop/TaskbarDesigner	586	desktop/taskbar	6.6	copy	pending
-CLASS	ui/elements/desktop/TaskbarEntryMotion	268	desktop/taskbar	6.6	copy	pending
-CLASS	ui/elements/desktop/TaskbarPreviews	540	desktop/taskbar	6.6	copy	pending
-CLASS	ui/elements/desktop/WindowAnimation	291	desktop	6.6	copy	pending
-CLASS	ui/elements/desktop/WindowAnimator	515	desktop	6.6	copy	pending
-CLASS	ui/elements/desktop/WindowChrome	55	desktop	6.6	copy	pending
-CLASS	ui/elements/desktop/WindowCommands	284	desktop	6.6	copy	pending
-CLASS	ui/elements/desktop/WindowFrame	2426	desktop	6.6	copy	pending
-CLASS	ui/elements/desktop/WindowGeometryAnimation	156	desktop	6.6	copy	pending
-CLASS	ui/elements/desktop/WindowIcon	164	desktop	6.1	copy	ported
-CLASS	ui/elements/desktop/WindowKeyboardMove	183	desktop	6.6	copy	pending
-CLASS	ui/elements/desktop/WindowMotion	21	desktop	6.6	copy	pending
-CLASS	ui/elements/desktop/WindowMove	411	desktop	6.6	copy	pending
-CLASS	ui/elements/desktop/WindowPreview	236	desktop/taskbar	6.6	copy	pending
-CLASS	ui/elements/desktop/WindowRegistry	214	desktop	6.6	copy	pending
-CLASS	ui/elements/desktop/WindowSnapshot	210	desktop	6.6	copy	pending
-CLASS	ui/elements/desktop/WindowSwitcher	628	desktop/switcher	6.6	copy	pending
-CLASS	ui/elements/desktop/WindowThumbnail	337	desktop/taskbar	6.6	copy	pending
+CLASS	ui/elements/desktop/Desktop	1360	desktop	6.6	copy	ported
+CLASS	ui/elements/desktop/DesktopCommands	158	desktop	6.6	copy	ported
+CLASS	ui/elements/desktop/DesktopSession	245	desktop	6.6	copy	ported
+CLASS	ui/elements/desktop/ScreenOverlay	156	desktop/host	6.6	copy	ported
+CLASS	ui/elements/desktop/SnapZones	257	desktop/window	6.6	copy	ported
+CLASS	ui/elements/desktop/SystemMenu	251	desktop/window	6.6	copy	ported
+CLASS	ui/elements/desktop/Taskbar	567	desktop/taskbar	6.6	copy	ported
+CLASS	ui/elements/desktop/TaskbarDesigner	586	desktop/taskbar	6.6	copy	ported
+CLASS	ui/elements/desktop/TaskbarEntryMotion	268	desktop/taskbar	6.6	copy	ported
+CLASS	ui/elements/desktop/TaskbarPreviews	540	desktop/taskbar	6.6	copy	ported
+CLASS	ui/elements/desktop/WindowAnimation	291	desktop/motion	6.6	copy	ported
+CLASS	ui/elements/desktop/WindowAnimator	515	desktop/motion	6.6	copy	ported
+CLASS	ui/elements/desktop/WindowChrome	55	desktop/window	6.6	copy	ported
+CLASS	ui/elements/desktop/WindowCommands	284	desktop/window	6.6	copy	ported
+CLASS	ui/elements/desktop/WindowFrame	2426	desktop/window	6.6	copy	ported
+CLASS	ui/elements/desktop/WindowGeometryAnimation	156	desktop/motion	6.6	copy	ported
+CLASS	ui/elements/desktop/WindowIcon	164	desktop/window	6.1	copy	ported
+CLASS	ui/elements/desktop/WindowKeyboardMove	183	desktop/window	6.6	copy	ported
+CLASS	ui/elements/desktop/WindowMotion	21	desktop/motion	6.6	copy	ported
+CLASS	ui/elements/desktop/WindowMove	411	desktop/window	6.6	copy	ported
+CLASS	ui/elements/desktop/WindowPreview	236	desktop/taskbar	6.6	copy	ported
+CLASS	ui/elements/desktop/WindowRegistry	214	desktop/window	6.6	copy	ported
+CLASS	ui/elements/desktop/WindowSnapshot	210	desktop/window	6.6	copy	ported
+CLASS	ui/elements/desktop/WindowSwitcher	628	desktop/switcher	6.6	copy	ported
+CLASS	ui/elements/desktop/WindowThumbnail	337	desktop/taskbar	6.6	copy	ported
 CLASS	ui/elements/dock/DockArea	1192	workbench/dock	6.7	copy	pending
 CLASS	ui/elements/dock/DockBannerBar	56	workbench/dock	6.7	copy	pending
 CLASS	ui/elements/dock/DockBannerProvider	43	workbench/dock	6.7	move	pending
@@ -394,8 +394,8 @@ PART	ConflictDialog	conflict-who	A	1	proposed	leaf in every rule, scoped by an a
 PART	CrystalEditor	content	A	0	proposed	leaf in every rule
 PART	CrystalEditor	editor-content	A	0	proposed	leaf in every rule
 PART	Desktop	live	C	1	confirmed	state adjective
-PART	Desktop	snap-preview	A	1	proposed	leaf in every rule
-PART	Desktop	windows	A	0	proposed	leaf in every rule
+PART	Desktop	snap-preview	B	1	confirmed	leaf in every rule
+PART	Desktop	windows	B	0	confirmed	leaf in every rule
 PART	Dialog	backdrop	B	0	confirmed	leaf in every rule
 PART	Dialog	close	B	7	confirmed	a rule selects through it (1)
 PART	Dialog	content	B	0	confirmed	leaf in every rule
@@ -477,7 +477,7 @@ PART	HeaderControl	header	B	2	confirmed	a rule selects through it (1)
 PART	HeaderControl	title	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	InfoControl	info	B	2	confirmed	a rule selects through it (1)
 PART	InfoControl	value	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
-PART	InputDialog	placing	C	3	confirmed	leaf in every rule
+PART	InputDialog	placing	C	3	confirmed	state adjective
 PART	InputDialog	prompt	B	4	confirmed	a rule selects through it (2)
 PART	InputDialog	prompt-caption	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	InsertionMarker	insertion	A	1	confirmed	leaf in every rule
@@ -562,18 +562,18 @@ PART	NavigatorView	nav-label	B	0	confirmed	leaf in every rule
 PART	NavigatorView	nav-node	B	0	confirmed	leaf in every rule
 PART	NavigatorView	nav-search	B	0	confirmed	leaf in every rule
 PART	NavigatorView	nav-sidebar	B	0	confirmed	leaf in every rule
-PART	NodeCreationMenu	category	B	0	confirmed	the widget is LIGHT (D1), so every name it uses is light structure
-PART	NodeCreationMenu	category-segment	B	1	confirmed	the widget is LIGHT (D1), so every name it uses is light structure
-PART	NodeCreationMenu	category-separator	B	1	confirmed	the widget is LIGHT (D1), so every name it uses is light structure
+PART	NodeCreationMenu	category	B	0	confirmed	leaf in every rule
+PART	NodeCreationMenu	category-segment	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	NodeCreationMenu	category-separator	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	NodeCreationMenu	empty	C	2	confirmed	state adjective
-PART	NodeCreationMenu	entry	B	0	confirmed	the widget is LIGHT (D1), so every name it uses is light structure
-PART	NodeCreationMenu	entry-category	B	1	confirmed	the widget is LIGHT (D1), so every name it uses is light structure
-PART	NodeCreationMenu	items	B	0	confirmed	the widget is LIGHT (D1), so every name it uses is light structure
-PART	NodeCreationMenu	label	B	3	confirmed	the widget is LIGHT (D1), so every name it uses is light structure
-PART	NodeCreationMenu	search	B	0	confirmed	the widget is LIGHT (D1), so every name it uses is light structure
-PART	NodeCreationMenu	title	B	1	confirmed	the widget is LIGHT (D1), so every name it uses is light structure
-PART	NodeCreationMenu	title-bar	B	0	confirmed	the widget is LIGHT (D1), so every name it uses is light structure
-PART	NodeCreationMenu	twisty	B	1	confirmed	the widget is LIGHT (D1), so every name it uses is light structure
+PART	NodeCreationMenu	entry	B	0	confirmed	leaf in every rule
+PART	NodeCreationMenu	entry-category	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	NodeCreationMenu	items	B	0	confirmed	leaf in every rule
+PART	NodeCreationMenu	label	B	3	confirmed	leaf in every rule, scoped by an ancestor in 3
+PART	NodeCreationMenu	search	B	0	confirmed	leaf in every rule
+PART	NodeCreationMenu	title	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	NodeCreationMenu	title-bar	B	0	confirmed	leaf in every rule
+PART	NodeCreationMenu	twisty	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	NodePort	dot	B	0	confirmed	leaf in every rule
 PART	NodePort	dot-core	B	0	confirmed	leaf in every rule
 PART	NodePort	editor	B	0	confirmed	leaf in every rule
@@ -757,9 +757,9 @@ PART	ShaderGraphEditor	shader-content	A	0	proposed	leaf in every rule
 PART	ShaderGraphEditor	shader-graph	A	0	proposed	leaf in every rule
 PART	ShaderGraphEditor	shader-source	A	1	proposed	leaf in every rule
 PART	ShaderNodePreview	preview-image	B	0	confirmed	leaf in every rule
-PART	ShaderPropertyNodes	exposed-dot	B	1	confirmed	the widget is LIGHT (D1), so every name it uses is light structure
-PART	ShaderPropertyNodes	property-linked	B	4	confirmed	the widget is LIGHT (D1), so every name it uses is light structure
-PART	ShaderPropertyNodes	property-node	B	20	confirmed	the widget is LIGHT (D1), so every name it uses is light structure
+PART	ShaderPropertyNodes	exposed-dot	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	ShaderPropertyNodes	property-linked	B	4	confirmed	leaf in every rule
+PART	ShaderPropertyNodes	property-node	B	20	confirmed	a rule selects through it (14)
 PART	Slider	fill	A	0	confirmed	leaf in every rule
 PART	Slider	spacer	A	0	confirmed	leaf in every rule
 PART	Slider	thumb	A	0	confirmed	leaf in every rule
@@ -798,8 +798,8 @@ PART	Switch	spacer	A	0	confirmed	leaf in every rule
 PART	SymbolIcon	completion-icon	A	2	confirmed	leaf in every rule
 PART	SymbolIcon	completion-mark-final	A	2	confirmed	leaf in every rule
 PART	SymbolIcon	completion-mark-static	A	2	confirmed	leaf in every rule
-PART	SystemMenu	jump-list	A	2	proposed	leaf in every rule
-PART	SystemMenu	rising	C	1	proposed	state adjective
+PART	SystemMenu	jump-list	B	2	confirmed	leaf in every rule
+PART	SystemMenu	rising	C	1	confirmed	state adjective
 PART	Tab	close	A	0	confirmed	leaf in every rule
 PART	Tab	pane	B	0	confirmed	leaf in every rule
 PART	TabView	bottom	C	0	confirmed	leaf in every rule
@@ -817,33 +817,33 @@ PART	TableView	header	B	2	confirmed	a rule selects through it (1)
 PART	TableView	header-cell	B	0	confirmed	leaf in every rule
 PART	TableView	sorted-asc	C	0	confirmed	state adjective
 PART	TableView	sorted-desc	C	0	confirmed	state adjective
-PART	Taskbar	active	C	3	proposed	state adjective
-PART	Taskbar	animating	C	0	proposed	state adjective
-PART	Taskbar	attention	C	0	proposed	state adjective
-PART	Taskbar	badge	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	Taskbar	busy	C	0	proposed	state adjective
-PART	Taskbar	edge	A	0	proposed	leaf in every rule
-PART	Taskbar	entries	A	0	proposed	leaf in every rule
-PART	Taskbar	entry	A	0	proposed	leaf in every rule
-PART	Taskbar	exiting	C	0	proposed	state adjective
-PART	Taskbar	glow	A	0	proposed	leaf in every rule
-PART	Taskbar	hidden	C	0	proposed	state adjective
-PART	Taskbar	icon	B	2	proposed	a rule selects through it (1)
-PART	Taskbar	indicator	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
-PART	Taskbar	progress	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	TaskbarDesigner	designer	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	TaskbarDesigner	designer-actions	A	1	proposed	leaf in every rule
-PART	TaskbarDesigner	designer-body	A	1	proposed	leaf in every rule
-PART	TaskbarDesigner	designer-heading	A	2	proposed	leaf in every rule
-PART	TaskbarDesigner	designer-label	A	3	proposed	leaf in every rule
-PART	TaskbarDesigner	designer-note	A	2	proposed	leaf in every rule
-PART	TaskbarDesigner	designer-readout	A	1	proposed	leaf in every rule
-PART	TaskbarDesigner	designer-row	A	1	proposed	leaf in every rule
-PART	TaskbarDesigner	designer-slider	A	1	proposed	leaf in every rule
-PART	TaskbarDesigner	designer-tint	A	0	proposed	leaf in every rule
-PART	TaskbarDesigner	designer-value	A	2	proposed	leaf in every rule
-PART	TaskbarDesigner	taskbar-designer	B	1	proposed	a rule selects through it (1)
-PART	TaskbarPreviews	placing	A	3	proposed	leaf in every rule
+PART	Taskbar	active	C	3	confirmed	state adjective
+PART	Taskbar	animating	C	0	confirmed	state adjective
+PART	Taskbar	attention	C	0	confirmed	state adjective
+PART	Taskbar	badge	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	Taskbar	busy	C	0	confirmed	state adjective
+PART	Taskbar	edge	B	0	confirmed	leaf in every rule
+PART	Taskbar	entries	B	0	confirmed	leaf in every rule
+PART	Taskbar	entry	B	0	confirmed	leaf in every rule
+PART	Taskbar	exiting	C	0	confirmed	state adjective
+PART	Taskbar	glow	B	0	confirmed	leaf in every rule
+PART	Taskbar	hidden	C	0	confirmed	state adjective
+PART	Taskbar	icon	B	2	confirmed	a rule selects through it (1)
+PART	Taskbar	indicator	B	4	confirmed	leaf in every rule, scoped by an ancestor in 4
+PART	Taskbar	progress	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	TaskbarDesigner	designer	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	TaskbarDesigner	designer-actions	B	1	confirmed	leaf in every rule
+PART	TaskbarDesigner	designer-body	B	1	confirmed	leaf in every rule
+PART	TaskbarDesigner	designer-heading	B	2	confirmed	leaf in every rule
+PART	TaskbarDesigner	designer-label	B	3	confirmed	leaf in every rule
+PART	TaskbarDesigner	designer-note	B	2	confirmed	leaf in every rule
+PART	TaskbarDesigner	designer-readout	B	1	confirmed	leaf in every rule
+PART	TaskbarDesigner	designer-row	B	1	confirmed	leaf in every rule
+PART	TaskbarDesigner	designer-slider	B	1	confirmed	leaf in every rule
+PART	TaskbarDesigner	designer-tint	B	0	confirmed	leaf in every rule
+PART	TaskbarDesigner	designer-value	B	2	confirmed	leaf in every rule
+PART	TaskbarDesigner	taskbar-designer	B	1	confirmed	a rule selects through it (1)
+PART	TaskbarPreviews	placing	C	3	confirmed	state adjective
 PART	TextControl	text	B	2	confirmed	a rule selects through it (1)
 PART	TextEditor	active	C	3	proposed	state adjective
 PART	TextEditor	caret	A	0	proposed	leaf in every rule
@@ -915,44 +915,44 @@ PART	ViewContainer	panel-header	B	5	proposed	a rule selects through it (4)
 PART	ViewContainer	title	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
 PART	ViewContainer	view-container	B	4	proposed	a rule selects through it (3)
 PART	ViewContainer	view-content	B	6	proposed	a rule selects through it (4)
-PART	WindowFrame	active	C	3	proposed	state adjective
-PART	WindowFrame	caption-adopted	C	2	proposed	state adjective
-PART	WindowFrame	caption-chrome	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	WindowFrame	close	B	7	proposed	a rule selects through it (1)
-PART	WindowFrame	content	A	0	proposed	leaf in every rule
-PART	WindowFrame	controls	B	1	proposed	a rule selects through it (1)
-PART	WindowFrame	fullscreen	C	1	proposed	state adjective
-PART	WindowFrame	hud	C	0	proposed	state adjective
-PART	WindowFrame	icon	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	WindowFrame	maximize	A	5	proposed	leaf in every rule, scoped by an ancestor in 5
-PART	WindowFrame	maximized	C	2	proposed	state adjective
-PART	WindowFrame	minimize	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
+PART	WindowFrame	active	C	3	confirmed	state adjective
+PART	WindowFrame	caption-adopted	C	2	confirmed	state adjective
+PART	WindowFrame	caption-chrome	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
+PART	WindowFrame	close	B	7	confirmed	a rule selects through it (1)
+PART	WindowFrame	content	B	0	confirmed	leaf in every rule
+PART	WindowFrame	controls	B	1	confirmed	a rule selects through it (1)
+PART	WindowFrame	fullscreen	C	1	confirmed	state adjective
+PART	WindowFrame	hud	C	0	confirmed	state adjective
+PART	WindowFrame	icon	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	WindowFrame	maximize	B	5	confirmed	leaf in every rule, scoped by an ancestor in 5
+PART	WindowFrame	maximized	C	2	confirmed	state adjective
+PART	WindowFrame	minimize	B	3	confirmed	leaf in every rule, scoped by an ancestor in 3
 PART	WindowFrame	occupied	C	0	confirmed	state adjective
-PART	WindowFrame	overlays	A	0	proposed	leaf in every rule
-PART	WindowFrame	pin	A	5	proposed	leaf in every rule, scoped by an ancestor in 5
-PART	WindowFrame	pinned	C	1	proposed	state adjective
-PART	WindowFrame	title	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	WindowFrame	title-bar	B	4	proposed	a rule selects through it (2)
+PART	WindowFrame	overlays	B	0	confirmed	leaf in every rule
+PART	WindowFrame	pin	B	5	confirmed	leaf in every rule, scoped by an ancestor in 5
+PART	WindowFrame	pinned	C	1	confirmed	state adjective
+PART	WindowFrame	title	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	WindowFrame	title-bar	B	4	confirmed	a rule selects through it (2)
 PART	WindowIcon	branded	C	1	confirmed	state adjective
 PART	WindowIcon	monogram	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	WindowIcon	tile-mono	A	1	confirmed	leaf in every rule
 PART	WindowIcon	window-icon	B	11	confirmed	a rule selects through it (1)
-PART	WindowKeyboardMove	keyboard-moving	C	0	proposed	state adjective
-PART	WindowPreview	pre-icon	B	2	proposed	a rule selects through it (1)
-PART	WindowPreview	preview-close	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	WindowPreview	preview-header	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	WindowPreview	preview-title	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	WindowPreview	window-preview	B	13	proposed	a rule selects through it (11)
-PART	WindowSwitcher	icon	B	2	proposed	a rule selects through it (1)
-PART	WindowSwitcher	selected	C	7	proposed	state adjective
-PART	WindowSwitcher	switcher-close	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
-PART	WindowSwitcher	switcher-entry	B	13	proposed	a rule selects through it (10)
-PART	WindowSwitcher	switcher-header	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	WindowSwitcher	switcher-panel	B	2	proposed	a rule selects through it (1)
-PART	WindowSwitcher	switcher-title	A	1	proposed	leaf in every rule
-PART	WindowSwitcher	window-switcher	B	2	proposed	a rule selects through it (1)
-PART	WindowThumbnail	placeholder	B	4	proposed	a rule selects through it (2)
-PART	WindowThumbnail	thumbnail	A	0	proposed	leaf in every rule
+PART	WindowKeyboardMove	keyboard-moving	C	0	confirmed	state adjective
+PART	WindowPreview	pre-icon	B	2	confirmed	a rule selects through it (1)
+PART	WindowPreview	preview-close	B	3	confirmed	leaf in every rule, scoped by an ancestor in 3
+PART	WindowPreview	preview-header	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	WindowPreview	preview-title	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	WindowPreview	window-preview	B	13	confirmed	a rule selects through it (11)
+PART	WindowSwitcher	icon	B	2	confirmed	a rule selects through it (1)
+PART	WindowSwitcher	selected	C	7	confirmed	state adjective
+PART	WindowSwitcher	switcher-close	B	4	confirmed	leaf in every rule, scoped by an ancestor in 4
+PART	WindowSwitcher	switcher-entry	B	13	confirmed	a rule selects through it (10)
+PART	WindowSwitcher	switcher-header	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	WindowSwitcher	switcher-panel	B	2	confirmed	a rule selects through it (1)
+PART	WindowSwitcher	switcher-title	B	1	confirmed	leaf in every rule
+PART	WindowSwitcher	window-switcher	B	2	confirmed	a rule selects through it (1)
+PART	WindowThumbnail	placeholder	B	4	confirmed	a rule selects through it (2)
+PART	WindowThumbnail	thumbnail	B	0	confirmed	leaf in every rule
 PART	Workbench	content	A	0	proposed	leaf in every rule
 PART	Workbench	dock	A	0	proposed	leaf in every rule
 PART	Workbench	file-editor	A	1	proposed	leaf in every rule

@@ -115,12 +115,25 @@ BY_NAME = {
     # by nobody -- so it is the one thing a split can take, and it belongs beside CompletionItem
     # rather than inside a widget. @see plan_m6.md 6.5
     'CompletionRecency': 'text/lang',
-    # The taskbar and the switcher, which are what 6.6's price table says are worth taking: 31 and 6
-    # package-private call sites against `.window`'s 97. Everything else desktop stays in the root.
+    # 6.6's FIVE sub-packages, and the price table above them was wrong by a factor of two. It quoted
+    # `.window` at 97 published call sites and `.motion` at 24 and recommended taking neither; taken
+    # TOGETHER the whole partition cost 52 members and 4 types, because most of those 97 are pairs a
+    # split keeps on the SAME side. Measure the partition, never a package -- and measure it by
+    # compiling. Four classes stay at the layer root, which is the whole of what a layer root is for.
     'Taskbar': 'desktop/taskbar', 'TaskbarEntryMotion': 'desktop/taskbar',
     'TaskbarPreviews': 'desktop/taskbar', 'TaskbarDesigner': 'desktop/taskbar',
     'WindowPreview': 'desktop/taskbar', 'WindowThumbnail': 'desktop/taskbar',
     'WindowSwitcher': 'desktop/switcher',
+    'WindowFrame': 'desktop/window', 'WindowChrome': 'desktop/window',
+    'WindowCommands': 'desktop/window', 'WindowRegistry': 'desktop/window',
+    'WindowMove': 'desktop/window', 'WindowKeyboardMove': 'desktop/window',
+    'SnapZones': 'desktop/window', 'SystemMenu': 'desktop/window',
+    'WindowSnapshot': 'desktop/window',
+    'WindowAnimator': 'desktop/motion', 'WindowAnimation': 'desktop/motion',
+    'WindowGeometryAnimation': 'desktop/motion', 'WindowMotion': 'desktop/motion',
+    # The ONE class a loader talks to, and the only reason this is a package rather than a fifth root
+    # class. It is NOT neutral -- it holds a document and reads its focus owner.
+    'ScreenOverlay': 'desktop/host',
     # An enum, a policy record and a presentation enum -- named by BOTH engines, so a package both
     # may name. ScreenOverlay was the plan's fourth candidate and does NOT qualify: it holds a
     # `UIWindow` and reads its focus owner, so it is a facade over the engine rather than an SPI a
@@ -159,13 +172,17 @@ BY_NAME = {
     # price table refused `.window` outright (97 published call sites, 57 on WindowFrame alone). A
     # package holding one leaf while the eleven classes it belongs with stay behind is a directory,
     # not a boundary -- the same argument that refused `.motion`.
-    'WindowIcon': 'desktop',
+    'WindowIcon': 'desktop/window',
 }
 
 # Which BATCH ports each destination (plan_m6.md section 5).
 BATCH = [
     ('widget/control', '6.1'), ('widget/text', '6.1'), ('widget/scroll', '6.1'),
-    ('widget/dnd', '6.1'), ('desktop/window', '6.1'),
+    ('widget/dnd', '6.1'),
+    # `desktop/window` is 6.6's, and WindowIcon -- which landed there at 6.1 as the taskbar's leaf
+    # widget -- keeps its own BATCH_OVERRIDE. A destination decides where a class GOES, never when
+    # it went, and the two are only ever the same while a destination holds one batch's work.
+    ('desktop/window', '6.6'),
     ('widget/layout', '6.2'), ('widget/overlay', '6.2'), ('widget/form', '6.2'),
     # THE CONFIG KIT, and this table is the second half of the correction 6.4 made to BY_DIR. Renaming
     # the destination from `widget/form` to `widget/config` left no batch prefix matching it, so all
@@ -178,6 +195,7 @@ BATCH = [
     ('widget/canvas', '6.4'), ('widget/graph', '6.4'), ('graph/shader', '6.4'),
     ('graph/port', '6.4'), ('app/shadergraph', '6.4'), ('widget/graph/node', '6.4'),
     ('desktop/taskbar', '6.6'), ('desktop/switcher', '6.6'), ('core/window', '6.6'),
+    ('desktop/motion', '6.6'), ('desktop/host', '6.6'),
     ('text/lang', '6.5'),
     ('widget/editor', '6.5'),
     ('desktop', '6.6'),
@@ -205,7 +223,7 @@ STATE_NAMES = {
     # 6.6: the two IMPORTANT writes that became classes -- the compositor's own presence and a
     # window's overlay slot. Both are state a widget flips from its own bookkeeping, which is what
     # a state adjective IS, and both have the SAFE answer as the base rule.
-    'live', 'occupied',
+    'live', 'occupied', 'placing',
 }
 
 
