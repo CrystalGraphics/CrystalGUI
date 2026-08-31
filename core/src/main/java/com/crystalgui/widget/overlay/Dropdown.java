@@ -17,6 +17,7 @@ import java.util.Collections;
 import java.util.List;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.dom.Attribute;
 
 /**
  * A select-style control: a button showing the current choice, which opens a {@link Menu} of options —
@@ -101,8 +102,10 @@ public class Dropdown extends Button {
                     .primary(SELECTED)
                     .build());
 
-    public static final String MENU_CLASS = "__menu__";
-    public static final String CHEVRON_CLASS = "__chevron__";
+    /** The options menu. {@code dropdown::part(menu)} in a sheet. */
+    public static final String MENU_PART = "menu";
+    /** The disclosure arrow. */
+    public static final String CHEVRON_PART = "chevron";
 
     /** Fires with the newly selected index. Never fires for a re-selection of the same index. */
     public final Signal.Value<Integer> onSelectionChanged = new Signal.Value<>();
@@ -126,9 +129,9 @@ public class Dropdown extends Button {
         super(NAME, placeholder == null ? "" : placeholder);
         this.placeholder = placeholder == null ? "" : placeholder;
 
-        menu.addClass(MENU_CLASS);
         // In the SHADOW tree: the menu is the dropdown's own structure, not content a caller
         // supplies, and it promotes itself to the top layer when it opens.
+        menu.set(Attribute.PART, MENU_PART);
         shadow().append(menu);
 
         // The closed-state marker, via Button's post-icon slot: `dropdown { justify-content:
@@ -136,7 +139,7 @@ public class Dropdown extends Button {
         // and a text field differed only by face colour. `overlay: shape("chevron-down")` in CSS draws
         // it — this constructor only claims the slot.
         UINode chevron = new UINode();
-        chevron.addClass(CHEVRON_CLASS);
+        chevron.set(Attribute.PART, CHEVRON_PART);
         setPostIcon(chevron);
 
         // Toggle rather than open: pressing the button of an open dropdown should shut it. Light dismiss

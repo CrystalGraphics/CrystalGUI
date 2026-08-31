@@ -228,9 +228,20 @@ public class Tooltip extends UINode {
     public static Tooltip attach(UINode anchor, String text) {
         Objects.requireNonNull(anchor, "anchor");
         Tooltip tooltip = new Tooltip(text);
-        // A LIGHT child of the anchor: the tooltip belongs to whoever attached it, and the
-        // anchor has no idea it is there.
-        anchor.append(tooltip);
+        // NOT A CHILD OF THE ANCHOR, which is what the old engine did and what this engine cannot.
+        //
+        // A tooltip was an internal child of the thing it describes, so the cascade gave it colour and
+        // font for free. Here nearly every anchor worth a tooltip is a composite with a SHADOW ROOT
+        // and no slot -- a Button, a taskbar entry, a rail button -- and a light child of such a node
+        // is never composed at all: no box, no paint, no promotion, and nothing anywhere reporting a
+        // problem. It reads as the tooltip never firing.
+        //
+        // The document is where it goes instead. It is promoted to the top layer the moment it shows,
+        // so its parent was never what positioned it; what is genuinely lost is the inherited colour
+        // and font, which `ua/overlays.css` states on `tooltip` outright -- and the sheet was already
+        // fighting that inheritance for `white-space`, on the argument that a tooltip is not part of
+        // its anchor's text flow. It is a little more so now.
+        tooltip.joinDocumentOf(anchor);
 
         // Listeners are attached exactly once, here, against a tooltip that is created in the same
         // breath. The earlier UINode.setTooltip could be called repeatedly — and a
@@ -401,6 +412,7 @@ public class Tooltip extends UINode {
     public Tooltip showFor(UINode anchor) {
         if (anchor == null || anchor.document() == null) return this;
         if (dragIsLive(anchor)) return hide();
+        joinDocumentOf(anchor);
         // Whatever was being waited for, this supersedes it -- including the ordinary case where the
         // ticker itself is the caller.
         cancelPendingShow();
@@ -466,6 +478,21 @@ public class Tooltip extends UINode {
             else delayTickerRunning = false;
         }
         return this;
+    }
+
+    /**
+     * Puts this tooltip in {@code anchor}'s document, if it is not already somewhere.
+     *
+     * <p>Called from BOTH {@link #attach} and {@link #showFor}, because {@code attach} is routinely
+     * called while a screen is still being built and the anchor is in no document yet — every widget
+     * that tooltips itself does so in its own constructor. Doing it only at attach time means every
+     * such tooltip is silently never shown; doing it only at show time means one that COULD have been
+     * placed early is not. Both, and the second is a no-op whenever the first worked.</p>
+     */
+    private void joinDocumentOf(UINode anchor) {
+        if (parent() != null) return;
+        UIDocument host = anchor.document();
+        if (host != null) host.append(this);
     }
 
     /**
