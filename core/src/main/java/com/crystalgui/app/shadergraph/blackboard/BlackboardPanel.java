@@ -783,26 +783,30 @@ public class BlackboardPanel extends UINode implements DataProvider {
      * its layout position minus the parent's scroll — so the arithmetic version is correct only until
      * someone scrolls, which is precisely when a long list needs reordering. The transform chain already
      * knows, and asking it cannot drift.</p>
+     *
+     * <p>{@code toLocal} answers in the row's OWN space, origin at zero, so the threshold is a bare
+     * half-height. See {@code InsertionMarker.indexFor} for the same walk written in the CONTAINER's
+     * space — either is right, and mixing them is what this method did.</p>
      */
     int dropIndexAt(float screenX, float screenY) {
         for (int i = 0; i < rows.size(); i++) {
             UINode row = rows.get(i).element();
             // ABOVE THIS ROW'S MIDPOINT MEANS "BEFORE IT", so the first row that passes is the slot.
             //
-            // screenToLocal does NOT return a position relative to the row's own top-left, and reading
-            // it that way is what broke this. UINode.localToWorld composes the parent chain, scroll
-            // and the element's own `transform` -- but never its layout offset -- so "local" here is
-            // ABSOLUTE LOGICAL SPACE: the same space box().y() is in, which is exactly
-            // why isMouseOverElement compares against getX()/getY() rather than against zero. The only
-            // work it does for us is undoing uiScale and any transform, and that is the whole point of
-            // using it rather than dividing by the scale by hand.
+            // A BARE HALF-HEIGHT, because `toLocal` puts the row's OWN origin at zero (M6.1) -- and
+            // the paragraph that used to stand here said the exact opposite, correctly, about the old
+            // engine: `screenToLocal` there did not subtract the element's layout offset, so the
+            // answer was an absolute logical coordinate and had to be compared against
+            // `box().y() + height / 2`. That comparison survived the port unchanged and inverted the
+            // bug it was written to fix. It now adds the row's offset within the list to the
+            // threshold, so every row past the first reads as "the pointer is above my midpoint" and
+            // a dragged pill lands at the top of the list wherever it is dropped.
             //
-            // Comparing it against a bare half-height instead read every row as being at the origin, so
-            // no row ever matched and this returned rows.size() for every position on the panel. Which
-            // is why dragging a pill DOWN appeared to work perfectly -- "the end of the list" is where a
-            // downward drag was going anyway -- and dragging one back up did nothing at all.
+            // A pointer ABOVE the row converts to a negative y and passes, which is what makes the
+            // walk work: the first row whose midpoint the pointer has not reached is the slot.
             Box cache = row.box();
-            if (row.toLocal(screenX, screenY).y < cache.y() + cache.height() * 0.5f) {
+            if (cache == null) continue;
+            if (row.toLocal(screenX, screenY).y < cache.height() * 0.5f) {
                 return i;
             }
         }
