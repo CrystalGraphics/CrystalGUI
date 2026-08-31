@@ -109,6 +109,20 @@ BY_NAME = {
     # holds a `TextEditor` field, the other IS the registration with the dock and the workbench.
     'ShaderGraphEditor': 'app/shadergraph',
     'ShaderGraphContribution': 'app/shadergraph',
+    # ── 6.5 / 6.6 ──────────────────────────────────────────────────────────────────────────────
+    # CompletionRecency is an LRU of what was recently accepted, keyed by string. It is the ONE class
+    # in the editor package that reaches no sibling's package-private surface and whose own is reached
+    # by nobody -- so it is the one thing a split can take, and it belongs beside CompletionItem
+    # rather than inside a widget. @see plan_m6.md 6.5
+    'CompletionRecency': 'text/lang',
+    # The taskbar and the switcher, which are what 6.6's price table says are worth taking: 31 and 6
+    # package-private call sites against `.window`'s 97. Everything else desktop stays in the root.
+    'Taskbar': 'desktop/taskbar', 'TaskbarEntryMotion': 'desktop/taskbar',
+    'TaskbarPreviews': 'desktop/taskbar', 'TaskbarDesigner': 'desktop/taskbar',
+    'WindowPreview': 'desktop/taskbar', 'WindowThumbnail': 'desktop/taskbar',
+    'WindowSwitcher': 'desktop/switcher',
+    # An enum, a policy record and a host SPI -- named by BOTH engines, so a package both may name.
+    'WindowState': 'core/window', 'WindowPolicy': 'core/window', 'ScreenOverlay': 'core/window',
     # `widget.graph.node` is the four that reach nothing package-private. GraphNode, NodePort and
     # PortDefaultEditor CANNOT be here: they share package-private members with GraphView by design,
     # and Java has no sub-package visibility, so moving them means publishing ten "only the view may
@@ -155,6 +169,8 @@ BATCH = [
     ('widget/collection', '6.3'), ('chrome', '6.3'),
     ('widget/canvas', '6.4'), ('widget/graph', '6.4'), ('graph/shader', '6.4'),
     ('graph/port', '6.4'), ('app/shadergraph', '6.4'), ('widget/graph/node', '6.4'),
+    ('desktop/taskbar', '6.6'), ('desktop/switcher', '6.6'), ('core/window', '6.6'),
+    ('text/lang', '6.5'),
     ('widget/editor', '6.5'),
     ('desktop', '6.6'),
     ('workbench', '6.7'), ('editor', '6.7'), ('example/machine', '6.7'),
