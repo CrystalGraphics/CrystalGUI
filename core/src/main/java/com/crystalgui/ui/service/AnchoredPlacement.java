@@ -6,6 +6,7 @@ import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UINode;
 import javax.annotation.Nullable;
 import org.joml.Vector2f;
+import com.crystalgui.core.data.Transform2D;
 
 /**
  * Places a <b>hosted</b> node next to an anchor — the useful subset of CSS Anchor Positioning
@@ -187,14 +188,25 @@ public final class AnchoredPlacement {
         Box box = anchor.box();
         Box root = document.box();
         if (box == null || root == null) return null;
-        return new Rect(box.worldX() - root.worldX(), box.worldY() - root.worldY(),
-                box.width(), box.height());
+        // THROUGH THE ROOT'S INVERSE, not by subtracting its origin.
+        //
+        // `worldX()` is in SURFACE pixels with the root transform baked in -- uiScale included --
+        // while `left`/`top` are LOGICAL and are scaled again on the way back out. Subtracting the
+        // root's own origin cancels its translation and leaves its SCALE, so every popup was placed
+        // at uiScale times its anchor's distance down the page: a popover anchored halfway down
+        // landed off the bottom of the screen. The old engine records the same trap from the other
+        // side -- position a popup from the layout chain, never from `localToWorld` -- and the
+        // resolution here is neither: convert THROUGH the containing block's inverse, which undoes
+        // the scale and every ancestor transform and scroll in one step, and is the only reading that
+        // stays right at any uiScale.
+        Vector2f inRoot = Transform2D.apply(root.worldToLocal(), box.worldX(), box.worldY());
+        return new Rect(inRoot.x(), inRoot.y(), box.width(), box.height());
     }
 
     /** Converts a pointer position (surface px, as input reports it) into document space. */
     public static Vector2f pointerToRoot(UIDocument document, float pointerX, float pointerY) {
         Box root = document.box();
         if (root == null) return new Vector2f(pointerX, pointerY);
-        return new Vector2f(pointerX - root.worldX(), pointerY - root.worldY());
+        return Transform2D.apply(root.worldToLocal(), pointerX, pointerY);
     }
 }
