@@ -190,11 +190,12 @@ which is what makes starting with them safe rather than merely convenient.
 | `cgui-switch`, `cgui-slider`, `cgui-text`, `cgui-text-stress`, `cgui-textfield` | one leaf each + `UIText` | 6.1 |
 | `cgui-scroller` | `ScrollerView`, `UIText` | 6.1 |
 | `cgui-nineslice`, `cgui-styling`, `cgui-visual-layers`, `cgui-test`, `cgui-svg-icon`, `cgui-ore-theme` | drawables, sprites, one or two leaves | 6.1 |
-| `cgui-shadow-parts` | `Button`, `ShadowButton` | **deleted** with the spike at 6.1 |
+| `cgui-shadow-parts` | `Button`, `ShadowButton` | **still on disk** — 6.1 owed this deletion and did not pay it; it is 6.2's first commit |
 | `cgui-splitview`, `cgui-tabview` | `SplitView`; `TabView` + `Button`, `Checkbox`, `Slider` | 6.2 |
 | `cgui-gallery` | everything: `ColorSelector`, `ConfiguratorGroup/Panel`, `Dialog`, `DialogManager`, `Dropdown`, `GraphNode`, `GraphView`, `ListView`, `Menu`, … | the running total — green only when 6.4 lands |
+| `cgui-new-gallery` | every ported widget at once, in one scroller | **built at 6.1** — new-engine only; grows with each batch |
 | `cgui-completion` | `TextEditor` | 6.5 |
-| `cgui-slot` | `ScrollerView`, `ItemSlot`, `FluidSlot` (from `native-content-slots`, not on master) | 6.2 — **needs the branch reconciled** |
+| ~~`cgui-slot`~~ | `ScrollerView`, `ItemSlot`, `FluidSlot` | **deleted at 6.1** — the branch was never reconciled and `cgui-new-gallery` covers slots through `ScrollerView`, `Menu` and `Button` |
 | `cgui-dock` | `CrystalEditor`, the workspace | 6.7 |
 | `cgui-workspace` | `ServerUiSession`, `ClientUiSession`, `TextEditor`, `TreeView`, `SplitView`, `TabView` | 6.8 |
 | `cgui-engine-parity` | `UIDocument`, `UINode`, `TextNode` beside `UIText` | the pattern every batch copies |
@@ -474,22 +475,24 @@ a file the codemod has already located the line in. Written from scratch: 6.0's 
 else. The one honest exception is 6.5's D22, budgeted as XL for that reason and not for
 `TextEditor`'s length.
 
-| Batch | copied | moved | mechanical | hand sites |
-|---|---|---|---|---|
-| 6.1 | 18 | 0 | 364 | 80 |
-| 6.2 | 26 | 13 | 506 | 47 |
-| 6.3 | 21 | 17 | 474 | 59 |
-| 6.4 | 26 | 9 | 445 | 85 |
-| 6.5 | 26 | 8 | 394 | 77 |
-| 6.6 | 19 | 8 | 409 | 49 |
-| 6.7 | 44 | 39 | 566 | 35 |
-| 6.8 | 9 | 6 | 91 | 0 |
+| Batch | copied | moved | mechanical | hand sites | |
+|---|---|---|---|---|---|
+| 6.1 | 18 | 0 | 364 | 80 | *(shipped: 22 classes, the four overlays pulled forward)* |
+| 6.2 | 25 | 10 | 390 | 35 | *(re-measured after those four left the batch)* |
+| 6.3 | 21 | 17 | 474 | 59 | |
+| 6.4 | 26 | 9 | 445 | 85 | |
+| 6.5 | 26 | 8 | 394 | 77 | |
+| 6.6 | 19 | 8 | 409 | 49 | |
+| 6.7 | 44 | 39 | 566 | 35 | |
+| 6.8 | 9 | 6 | 91 | 0 | |
 
-The estimate the census produced was 443 hand sites; the tool finds 432, and the per-batch split moved
+The estimate the census produced was 443 hand sites; the tool found 432, and the per-batch split moved
 — 6.1 is 80 rather than 60 (the census did not count `getTaffyLayout` reads or internal children as
-readings) and 6.7 is 35 rather than 38. Close enough to have been worth estimating, and the reason
-the numbers are now generated: an estimate is a thing to check, and a check that is a command is one
-nobody has to remember to run.
+readings) and 6.7 is 35 rather than 38. **6.2's 47 became 35 when the four overlay widgets left the
+batch for 6.1**, which is the number moving for the right reason: the work went with them. All of it
+is close enough to have been worth estimating, and all of it is the reason the numbers are now
+generated rather than written down: an estimate is a thing to check, and a check that is a command is
+one nobody has to remember to run.
 
 ### 2.8 `LayeringTest`
 
@@ -884,7 +887,7 @@ whether you hold anything; being selected THROUGH says you do. With that one sig
 generalised parity spec (6.1's first widget is what shapes it), and D16's four desktop bands — the
 top layer alone is what 6.1 and 6.2 need, and the windows/pinned bands are 6.6's.
 
-### 6.1 — Leaf widgets · **M** · after: 6.0
+### 6.1 — Leaf widgets · **M** · after: 6.0 · **SHIPPED 2026-08-31**
 
 **Ports.** `Button` (the paper port made real; `ShadowButton` and `cgui-shadow-parts` deleted),
 `Checkbox` + `CheckboxGroup`, `Switch`, `Slider`, `ProgressBar`, **`TextNode` → `UIText`** (D15),
@@ -926,47 +929,283 @@ was the widget's and is the box's. `Tooltip` is the first top-layer widget and t
 `AnchoredPlacement` consumer; `TooltipTest` and *"a tooltip must never show while a drag is live"*
 are its net. `Scroller`'s `setScrollExempt` is the 5.4 gap's first real consumer.
 
-### 6.2 — Composites and the overlay family · **L** · after: 6.1
+#### 6.1 — what shipped, and the one lesson underneath all of it
 
-**Ports.** `SplitView` (n-ary, `NestedSplitDividerTest`, `SplitPaneGrowChainTest`,
-`SplitViewNAryTest`), `TabView` + `Tab` (`TabViewRailLeakTest`, `TabCloseAndRevealTest`),
-`Popover`, `Menu`, `MenuItem`, `Dropdown`, `ContextMenu`, `MenuBuilder`, `Dialog`, `DialogManager`,
-`InputDialog`, `ColorSelector`, `MarkupView`, the config kit (`ConfigControl`, `ValueControl`,
-`Configurator`, `ConfiguratorGroup`, `ConfiguratorPanel`, `SettingsConfigurator`, thirteen
-controls), `Inspector` + `InspectorForm/Registry/Section`, `PageStack`, `Breadcrumbs`,
-`StatusBarView`, `ProgressStatusItem`, `NotificationsView/Card/Balloons`. Sheets: the rest of
-`overlays.css`, `config-kit.css`, `inspector.css`, half of `panels.css`.
+**Shipped.** 22 classes: the 18 the batch named, plus `Menu`, `MenuItem`, `Popover` and `Tooltip`
+pulled forward out of 6.2 because `Dropdown` and `SearchField` compose them. 7,676 old-engine lines
+became a 24-file, ~9,960-line `widget.*` + `desktop.window` tree. Every scene the row named is on
+`--engine=new`, and `cgui-new-gallery` — one scroller holding every ported widget at once — was
+built to see them together, which is what found most of what follows.
 
-**Accepts.** `cgui-splitview`, `cgui-tabview`, `cgui-slot` (once the branch is reconciled); the
-gallery's dialog, menus, config and inspector pages as parity specs; `Dialog` 211, `Menu` 199,
-`MenuItem` 216, `Popover` 164, `SplitView` 200, `TabView` 185, `Inspector` 130, `ConfigKit`,
-`ConfiguratorPanelLifetime`, `ColorSelector*`, `MarkupView`, `ModalDialog`, `DesktopModality`'s
-non-desktop half, `PromotedPopoverHit`, `PickerInPromotedDialog`, `TopLayer*`, `AnchoredPlacement`,
-`Resize`, `NumberControlScrub`, `ScrubUndo`, `StatusBarView`, `NotificationsView`, `ProgressChrome`.
+**Two decisions were reversed, both by contact with a real sheet.**
 
-**Destination.** `widget.layout`, `widget.overlay`, `widget.control` (Dropdown, ColorSelector),
-`widget.text` (MarkupView), `widget.form` + `.field` + `.inspector`, `chrome.menu` (Breadcrumbs),
-`chrome.status` (StatusBarView, ProgressStatusItem), `chrome.notification`.
+**D5.8** said `BoxStyle` should write CSS's initial values for anything unset, on the argument that
+the old bridge's five divergences are a standing source of surprise. The bill came due here and
+could not be paid: in a 6,200-line user-agent sheet nearly every rule leaves `flex-direction`
+unstated, so flipping it to `row` turns every unstated column into a row — and the failure is
+silent. `menu` states no direction, so its item column became a row, `align-items: stretch`
+stretched the items container across the menu's height, and a three-row menu drew **166px tall with
+its rows in the top 43**. The gallery met the same divergence three times in one sitting and each
+read as a different bug. Both engines answer the same question the same way now, which is what makes
+a geometry difference between them a defect rather than a default.
 
-**Budget, measured:** **26 copied, 13 moved, 506 mechanical, 47 hand sites.** The moves are the
-config kit's descriptors and the inspector's registry — engine-neutral, so the IDE does them.
+**D1** asked how to classify a `__x__` NAME. Wrong unit: encapsulation belongs to a WIDGET, so the
+question is which widgets may host a shadow root, and the shipped sheets already answer it.
+`tools/port/classify.py` measures it — **23 can, 21 cannot, 220 rules have no `::part()` spelling at
+all**, `colorselector` alone accounting for 51. §4.7 is the full argument. The practical effect is
+that the master plan's one-line "every `__part__` → `::part()`" is a per-widget reading, and the
+batch paid for it eleven times in sixteen widgets before the tool existed.
 
-**Rows it owns.** The popover and modality rows: *"the popover stack and the close-watcher stack are
-separate"*; *"light dismiss runs after the mouse-down dispatch, and spares the invoker"*; *"light
-dismiss considers the popovers open BEFORE the dispatch"*; *"Escape asks the topmost close
-watcher"*; *"`inert` keeps its box"*; *"hit-testing an inert subtree FALLS THROUGH"*; *"a detached
-modal must be popped"*; *"exactly one tab in a `TabView` strip is tabbable"*; *"click-focus tests
-`focusesOnClick()`"*; *"a `SplitView` divider must clamp against the pane's CSS `min-width`"* and the
-*"cannot go below two panes"* row; *"`flex-grow` summing to less than 1"*; the `Dropdown extends
-Button` tag identity; *"a menu bar must REMEMBER the focus owner"* (6.3); *"transitioning INTO view
-needs a resting value in the sheet"* (`Popover.OPEN_CLASS` — kind C, unchanged).
+**Three services were finished and had no caller.** `Dismiss` was written at 6.0 with the whole spec
+algorithm — the popover stack, the invoker carve-out, the `shownBefore` counter, the close-watcher
+cascade — and `Input`, written at 5.5, invoked **none** of it: light dismiss and Escape were both
+complete and unreachable, so a menu could be opened and closed by nothing. The detach path was the
+same shape from the other end: the old `unregisterElement` told five things a node had gone, and the
+new tree told nobody. And `topWatcherIn` compared a watcher's scope against a bare `null` while
+`Focus.scopeOf` answers the DOCUMENT, so every watcher outside a window frame was unreachable —
+which is all of them in an application with no desktop. None of this is visible to a unit test of the
+service, which passes whether or not anything calls it, nor to a widget test, which drives the
+widget's API rather than the platform's. `ServiceWiringTest` now asserts each seam through the entry
+points a HOST calls, and a new seam gets a case there in the same commit.
 
-**Hazards.** `Dialog` is the first `resize:` consumer (D6), the first modal, the first
-`attachOwned` target, and it moves by INLINE insets (D4) — four decisions land on one widget.
-`Menu`'s keyboard pattern relies on bubble-phase listeners on the menu with a focused item CHILD
-(`Menu`'s note) — under DOM propagation that still works, but re-read. `ColorSelector` (767 lines,
-13 parts, 11 geometry reads) is the largest pure widget and a good proxy for the config kit.
-`MarkupView`'s blocks are kind B by its own javadoc.
+**Seven engine gaps the widgets found, each silent.** Hosting did not imply out-of-flow, so a
+promoted popover arrived in the top layer as an ordinary flex item and was compressed to nothing —
+measured at a `60x4` parent around a `56x52` child. `Box.contentWidth()` and Taffy's
+`contentBoxWidth()` are different questions and the codemod mapped one onto the other, giving
+`TextField` a zero-width scissor that clipped its own text away. A widget that paints its own content
+must be `Measurable` or it measures zero — `TextField` laid out `215x0`, present and styled and
+unclickable. A `::part` rule is indexed under the HOST, so a host's re-match must re-match its
+exposed parts, or a checkbox toggles with its mark still drawing unchecked. `notifyStateChanged` had
+to walk out of every enclosing shadow tree — nested, in a loop — or a composite's state change is
+attributed to a node no peer has heard of. `AnchoredPlacement` read an anchor as `worldX() -
+root.worldX()`, which is right at `uiScale: 1` and wrong by exactly the scale everywhere else.
+And a tooltip can no longer be a child of its anchor, because a light child of a shadow-rooted node
+with no slot is never composed at all.
+
+**D15 shipped with the batch.** `ui.box.TextNode` and `ui.elements.UIText` merged into
+`widget.text.UIText`: 777 lines for the 1,244 it replaces plus TextNode's. It implements
+`Measurable`, so ~400 lines of workaround for a question the engine could not be asked went with it
+— `selfSizesWidth` and its latch, the two escape hatches, `invalidateMeasurement()` and the deadlock
+it is named for, and four static property listeners in place of one `computedChanged` hook.
+
+**Two tooling findings.** The twin generator has to be comment-safe and idempotent: the sheets put a
+comment on the line above the rule it explains, so a scan splitting on `}` reads
+`/* … */ slider .__fill__` as one selector and skips the rule — 94 rules were silently passed over,
+and the identical bug is already an invariant row for `ScopedSheets.scope`. And `classify.py` is
+**tag-keyed**, which is a gap 6.2 walks straight into (below).
+
+**The lesson underneath all of it is an ordering one.** Every defect in this batch was an engine gap,
+not a widget one; the widgets were copied faithfully and what they landed on was unfinished, and each
+gap was found by eye, one screenshot at a time. The fix is not to port more carefully — the codemod
+was fine. It is that **a milestone which builds machinery must run something real on it before
+calling itself done**, and `cgui-engine-parity` (one tree, both engines, two PNGs, diffed) was built
+at 5.4 and never extended to the widgets, which is the mechanical check every one of these would have
+failed.
+
+**Left owing.** The row said `ShadowButton` and `cgui-shadow-parts` are deleted with `Button`'s port
+and they are not: `ui/shadow/` and `CgUiShadowPartsScene` are still on disk. Deleting them is 6.2's
+first commit, not a loose end to carry to 6.9.
+
+### 6.2 — Dialogs, the layout composites, and the config kit · **L** · after: 6.1
+
+*Retitled. The overlay family — `Popover`, `Menu`, `MenuItem`, `Tooltip` — shipped in 6.1, pulled
+forward because `Dropdown` and `SearchField` compose them; `ColorSelector` and `MarkupView` were 6.1
+rows in the ledger all along and the old prose here listed them by mistake. What is left is three
+unrelated things that happen to share a batch: the dialogs, the two layout composites, and the config
+kit with the inspector over it. `Breadcrumbs`, `StatusBarView`, `ProgressStatusItem` and the
+notifications are **6.3** rows and were never 6.2's — the old prose listed those too.*
+
+**Scope, from the ledger:** 35 files, **7,847 old-engine lines** — the largest batch so far by line
+count and by file count both.
+
+| Group | The files | Files | Lines | Destination |
+|---|---|---:|---:|---|
+| Dialogs | `Dialog` 605 · `DialogManager` 144 · `InputDialog` 178 | 3 | 927 | `widget.overlay` |
+| Menus over the 6.1 base | `ContextMenu` 309 · `MenuBuilder` 231 | 2 | 540 | `widget.overlay` |
+| Layout composites | `SplitView` 877 · `TabView` 605 · `Tab` 247 · `PageStack` 149 | 4 | 1,878 | `widget.layout` |
+| The config kit | `ConfigDescriptor` 262 · `ConfigControl` 242 · `ConfiguratorPanel` 194 · `SettingsConfigurator` 172 · `ConfiguratorGroup` 125 · `ConfigControlContracts` 93 · `ValueControl` 84 · `ConfigControls` 82 · `Configurator` 81 | 9 | 1,335 | `widget.form` |
+| The thirteen controls | `NumberControl` 295 · `MaskControl` 159 · `ArrayControl` 155 · `ColorControl` 151 · `VectorControl` 123 · `MatrixControl` 109 · `SliderControl` 92 · `TextControl` 87 · `AssetControl` 80 · `SelectControl` 68 · `InfoControl` 69 · `HeaderControl` 55 · `BooleanControl` 54 | 13 | 1,497 | `widget.form.field` |
+| The inspector | `Inspector` 447 · `InspectorForm` 129 · `InspectorSection` 92 · `InspectorRegistry` 75 | 4 | 743 | `widget.form.inspector` |
+
+**Budget, measured** (`python tools/port/codemod.py --batch 6.2 --dry-run`): **25 copied, 10 moved,
+390 mechanical rewrites, 35 hand sites.** The ten moves are engine-neutral — the descriptors, the
+contracts, the registry, and the six controls that hold no geometry — so the IDE does them.
+
+Mechanical, by kind: element type 151 · tree 56 · import 37 · window type 26 · document receiver 24 ·
+text node 17 · focus 12 · geometry 10 · identity 10 · internal flag 10 · scroll 9 · base class 8 ·
+`acceptsPublicChildren` 7 · top layer 4 · drag receiver 3 · ticker 3 · input receiver 1.
+
+Hand sites, by kind: dynamic restructure 10 · `stopPropagation` 8 · IMPORTANT write 7 · resize hook 4
+· coordinate conversion 4 · post-layout callback 2.
+
+**Ratio, and what it says.** 390 mechanical to 35 hand is the cleanest of any batch measured —
+6.1 was 364 to 80. Two things drive that and both are worth knowing before the batch starts: there
+are **zero paint overrides** in the whole of 6.2 (6.1 had three, and `TextField.paintChildren` was
+one of the batch's named hazards), and the config kit is 22 of the 35 files while accounting for
+only 6 of the hand sites. **The work is concentrated in four files** — `Dialog`, `SplitView`,
+`TabView` and `NumberControl` carry 27 of the 35.
+
+#### D1 — and the tool cannot answer for two thirds of this batch
+
+`classify.py` reads the sheets and answers per widget. For 6.2's tags:
+
+| Tag | through | ending | verdict |
+|---|---:|---:|---|
+| `splitview` | 0 | 12 | shadow ok |
+| `tab` | 0 | 5 | shadow ok |
+| `pagestack` | 0 | 2 | shadow ok |
+| `dialog` | **5** | 8 | **LIGHT (kind B)** |
+| `tabview` | **5** | 12 | **LIGHT (kind B)** |
+
+**And the config kit and the inspector do not appear, because the sheets never name them as tags.**
+`config-kit.css` names `button`, `colorselector`, `graphnode`, `graphview`, `nodecreationmenu`,
+`nodeport`, `searchfield` and `texteditor` — every one of them a widget the kit *contains* —
+and `inspector.css` names exactly one, `projectfiletree`. Between them that is **200 rules keyed
+entirely on classes**, and `classify.py` is tag-keyed, so it is blind to all of it.
+
+Measured by hand over the two sheets, counting multi-compound selectors:
+
+| Sheet | part-under-part | tag-under-part | clean leaf |
+|---|---:|---:|---:|
+| `config-kit.css` | 20 | 33 | 50 |
+| `inspector.css` | **74** | **27** | **1** |
+
+`inspector.css` is the sharpest number in the whole census: of 102 multi-compound selectors, **one**
+is a shape `::part()` can express. `.__configurator__ > .__label__`, `.__configurator__ >
+.__inline__ > .__config-control__`, `.__config-control__ textfield` — the sheet is built out of
+exactly the two shapes a part cannot spell.
+
+**So the verdict for the config kit and the inspector is not close: all 22 files are kind B, light
+tree, no shadow roots, no `part` attributes, no twins.** The port there is a retype plus its handful
+of hand sites, and `tools/port/twins.py` must not be run over those two sheets at all.
+
+That leaves a machinery gap to close first, exactly as §2 did for 6.1: **`classify.py` needs a
+class-keyed mode** — `.__x__ …` hosts as well as `tag …` hosts — or the batch after this one asks a
+question the tool silently answers "no data" to. It is the same failure the tag census already has a
+row for (§1.5: 32 tags matching only through the old engine's lowercased-class-name fallback), one
+axis over.
+
+**One thing this batch does not have to worry about.** Every config-kit and inspector class is
+already `WidgetContracts.localOnly` with a reason (`WidgetCensus` lines 114–126, 218), so a kind
+registered for them would decode nothing and describe nothing. Light-tree structure being *described*
+— which is the one cost of dropping the internal flag — is therefore free here: nothing describes
+them.
+
+#### The 57 internal-child sites, and the 10 that are dynamic
+
+`addInternalChild` / `insertInternalChildAt` / `markAsInternal` appear **57 times** across the 35
+files — more than any batch so far, and for a boring reason: a config control is nothing but internal
+children. 47 of them are build-once structure in a constructor and are a pure retype on a light tree.
+
+The 10 the codemod flags are the ones that mutate a live tree, and they split cleanly:
+
+- **`SplitView` (6).** `insertInternalChildAt(element, 2 * index)` and its siblings — panes and
+  dividers interleaved at computed indices, so the child list *is* the data structure. On a light
+  tree those become `insertAt`, and the arithmetic is unchanged. What must be re-read is the removal
+  pair: `removeInternalChild` on the old engine is the one call that could detach an internal child,
+  and `removeChild` silently refused them; with no flag, `remove` is simply `remove` and the
+  asymmetry that invariant row documents disappears. **Check the boolean returns** — the old code
+  could rely on `removeInternalChild` succeeding where `removeChild` would not.
+- **`PageStack` (2), `Tab` (1), `ConfiguratorPanel` (1).** Single-node swaps — a placeholder, a close
+  button, a page. Ordinary.
+
+#### The seven IMPORTANT writes, one by one
+
+Per §4.5, each becomes a `Measurable`, a box call, an INLINE write or a class.
+
+| Site | What it writes | Answer |
+|---|---|---|
+| `Dialog:418` | the backdrop's layout | **INLINE** — nothing else writes the backdrop |
+| `Dialog:477` | the dialog's own insets while moving | **INLINE** (D4: a moved dialog is positioned by insets) |
+| `InputDialog:165` | `opacity(0)` on the popup before it opens | **class** — the resting value belongs in the sheet; this is the *"transitioning INTO view needs a resting value in the sheet"* row exactly |
+| `InputDialog:174` | reads `slot.origin() == IMPORTANT` to undo the above | **deleted with it** — the read exists only to withdraw the write |
+| `SplitView:779` | `flexGrow(weight)` per pane | **INLINE** — the split weight is the widget's own state, and the sheet states no `flex-grow` for a pane |
+| `Tab:227` | the content pane's layout | **INLINE** |
+| `TabView:582` | the strip bar's layout | **INLINE** |
+
+Six INLINE, one class, one deletion — and no `Measurable` among them, which is the difference
+between this batch and 6.1: nothing in 6.2 pushes a *measured* size back into the cascade. The
+feedback loops were all in the text layer.
+
+#### The four files that carry the batch
+
+**`Dialog` (605 lines) — four decisions land on one widget.** It is the first `resize:` consumer
+(D6: the resize mode over an edge band, no handle nodes — `applyResizeOrigin`,
+`resizeOriginLeft/Top`, `resizeContainingBlock`, four sites), the first modal, the first
+`attachOwned` target, and it moves by INLINE insets (D4). It is also `LIGHT (kind B)` on five
+through-rules, so its backdrop, its content slot and its buttons stay classes. Its
+`stopPropagation` at line 233 is `if (requestClose()) event.stopPropagation()` — under DOM semantics
+that is "end the walk", which is what it meant.
+
+**`SplitView` (877 lines) — the largest file in the batch and the most positional.** Six dynamic
+insert/remove sites at computed indices, one IMPORTANT write per pane, one `stopPropagation` on the
+divider drag. It is `shadow ok` (0 through-rules, 12 clean leaves), so its dividers and panes *can*
+be parts — but read §4.7's constraint first: a `SplitView` pane holds a caller's content, so it needs
+a **slot**, and the panes are what the caller addresses. The two standing invariant rows are its net:
+*"a `SplitView` divider must clamp against the pane's CSS `min-width`"* (and the clamp reads the
+pane's CONTENT, not the pane) and *"cannot go below two panes"*.
+
+**`TabView` (605) + `Tab` (247) — the only post-layout callbacks in the batch.** Two
+`onLayoutChanged` overrides, which per §4.4 become `Animation.afterLayout` hooks registered from
+`connected()`. Three `stopPropagation` sites in the strip. `tabview` is LIGHT on five through-rules
+while `tab` is `shadow ok`, which is the asymmetry to get right: the strip and the rail are reached
+through, a tab's own parts are not. Its rows: *"exactly one tab in a `TabView` strip is tabbable"*
+and *"click-focus tests `focusesOnClick()`, never `== CLICK`"*.
+
+**`NumberControl` (295) — three of the four coordinate conversions.** The scrub gesture reads
+`handle.screenToLocal(0f, 0f)` for an origin and `handle.screenToLocal(probe, 0f).x()` for a scale,
+and `containsScreenPoint(rawX, rawY)` beside them. This is the single most dangerous file in the
+batch, because **`toLocal`'s origin moved** (M6.1): `screenToLocal` did not subtract the element's
+own origin and `toLocal` does, so `screenToLocal(0f, 0f)` — which used to answer "where is my box in
+layout space" — now answers zero by construction. The two derived quantities are an origin and a
+span; the span is a difference and survives, the origin does not. `ColorSelector.withinX/withinY`
+paid exactly this in 6.1 and its javadoc names the bug from the other side.
+
+#### Accepts
+
+Scenes `cgui-splitview` and `cgui-tabview` on `--engine=new` with parity PNGs, plus the gallery's
+dialog, config and inspector pages as parity specs. `cgui-slot` is **gone** — `CgUiSlotScene` was
+deleted with the 6.1 gallery work, and the slot behaviour it demonstrated is covered by
+`ScrollerView`, `Menu` and `Button` in `cgui-new-gallery`.
+
+**54 test files** name a 6.2 class and move with it — `Tab` 25, `SplitView` 13, `TabView` 10,
+`Dialog` 10, `Inspector` 9, `NumberControl` 5, `ContextMenu` 5, `ConfiguratorPanel` 4. Named
+explicitly: `NestedSplitDividerTest`, `SplitPaneGrowChainTest`, `SplitViewNAryTest`,
+`TabViewRailLeakTest`, `TabCloseAndRevealTest`, `ModalDialogTest`, `DesktopModalityTest`'s
+non-desktop half, `PromotedPopoverHitTest`, `PickerInPromotedDialogTest`, `TopLayer*`,
+`AnchoredPlacementTest`, `ResizeTest`, `NumberControlScrubTest`, `ScrubUndoTest`, `ConfigKitTest`,
+`ConfiguratorPanelLifetimeTest`, `InspectorTest`.
+
+**A dialog fixture must `show()` first** — a closed `Dialog` is `display: none`, so every box in it
+measures 0 and any "does it fit?" assertion passes against `0 <= 0`. That is a standing invariant
+row and it is this batch's most likely green-against-nothing.
+
+#### Rows it owns
+
+The modality and inertness rows: *"`inert` keeps its box"*; *"hit-testing an inert subtree FALLS
+THROUGH"*; *"a detached modal must be popped from the modal stack"*; *"modal inertness is enforced at
+four points, and `focusable()` is deliberately not one of them"* — which M5 5.5 already restated as
+one predicate over focus navigation scopes, so this batch is where that restatement is first *used*.
+The layout rows: the `SplitView` clamp and two-pane floor; *"`flex-grow` summing to less than 1
+leaves the remainder undistributed"*; *"a `SplitView` pane is a flex COLUMN regardless of the split's
+orientation"*. And *"transitioning INTO view needs a resting value in the sheet, never a one-frame
+write from Java"*, which `InputDialog:165` is a live instance of.
+
+#### Hazards, in the order they would be found
+
+1. **`classify.py` is blind to the config kit.** Close the class-keyed gap before the batch, or 22
+   files get ported on a guess. This is the batch's §2.
+2. **`NumberControl`'s scrub origin.** A wrong answer here is a scrub that runs at the wrong speed or
+   from the wrong place, and it is wrong by a different amount every time — the shape that reads as a
+   bad constant.
+3. **`Dialog` carrying four first-uses at once.** If it slips, split it: the modal half is what 6.6
+   depends on, the resize half is not.
+4. **`SplitView`'s index arithmetic.** Six sites, all positional, none of which fails loudly.
+5. **The 47 quiet internal-child sites.** They are a retype, and the risk is exactly that: nobody
+   reads them, and a control whose parts were internal is now describable. Free here only because
+   every one of these classes is already `localOnly` — check that stays true.
+
+**First commit of the batch:** delete `ui/shadow/` and `CgUiShadowPartsScene`. 6.1 owed it.
 
 ### 6.3 — Collections, search, the shell's chrome · **L** · after: 6.2
 
@@ -1093,7 +1332,7 @@ Pointer capture, the caret ticker, `HighlightRegistry` per view line (*"a `Highl
 to a `UIText`, not to a document"*) all move. Do this batch after 6.3, never before — the list
 machinery it duplicates by design (`TextEditor`'s own note) is the rehearsal.
 
-### 6.6 — The desktop · **XL** · after: 6.2 (`Dialog`, `Popover`), 6.0's D16 hooks
+### 6.6 — The desktop · **XL** · after: 6.2 (`Dialog`; `Popover` landed early in 6.1), 6.0's D16 hooks
 
 **Ports.** `Desktop`, `WindowFrame` (106 members: chrome, content slot, `adoptChrome`/
 `releaseChrome`, the overlay slot, `attachOwned` ×2, `releaseOwned`, `setOwnerWindow`, tool-window
