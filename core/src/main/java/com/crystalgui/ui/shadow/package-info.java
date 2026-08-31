@@ -53,9 +53,19 @@
  * M5. This is the smallest thing that can carry a real widget through a real cascade and a real focus
  * walk, which is all a measurement needs.</p>
  *
- * <p>The two permanent things S2 produced are elsewhere on purpose: {@code ::part} in
- * {@code style/selector} and {@code style/StyleEngine}, because it is a real CSS feature; and the
- * harness scene {@code cgui-shadow-parts}, which is worth keeping through M6 as a live reference for
- * what a converted widget looks like.</p>
+ * <p><b>The spike is over and this package is not.</b> {@code ShadowButton} and the
+ * {@code cgui-shadow-parts} scene were deleted at M6.2 — the widget they stood beside has been
+ * ported, and {@code cgui-new-gallery} is the live reference now. {@link ShadowRoot} stays, because
+ * it stopped being spike code the moment {@code UIElement.shadowHost()} and
+ * {@code UIElement.shadowPart()} began delegating to it: it is the OLD engine's whole {@code ::part}
+ * support, and it ships until 6.9 with the engine that reads it.</p>
+ *
+ * <p>{@code ShadowButton} moved to {@code src/test} rather than being deleted with the scene. It was
+ * always a fixture, and {@code ShadowEncapsulationTest} is the only cover the old engine's boundary
+ * has — deleting the fixture would have deleted assertions about a mechanism that is still live.</p>
+ *
+ * <p>The one permanent thing S2 produced is elsewhere on purpose: {@code ::part} in
+ * {@code style/selector} and {@code style/StyleEngine}, because it is a real CSS feature and is
+ * shared by both engines.</p>
  */
 package com.crystalgui.ui.shadow;

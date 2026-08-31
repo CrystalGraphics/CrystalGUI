@@ -14,6 +14,11 @@ import com.crystalgui.widget.dnd.DragGhost;
 import com.crystalgui.widget.dnd.InsertionMarker;
 import com.crystalgui.widget.form.ColorSelector;
 import com.crystalgui.widget.form.SearchField;
+import com.crystalgui.widget.layout.PageStack;
+import com.crystalgui.widget.layout.SplitView;
+import com.crystalgui.widget.layout.Tab;
+import com.crystalgui.widget.layout.TabView;
+import com.crystalgui.widget.overlay.Dialog;
 import com.crystalgui.widget.overlay.Dropdown;
 import com.crystalgui.widget.overlay.Menu;
 import com.crystalgui.widget.overlay.MenuItem;
@@ -83,6 +88,15 @@ public final class Widgets implements NodeKinds {
         UINodeRegistry.register(MenuItem.NAME, MenuItem::new, MenuItem.CONTRACT);
         UINodeRegistry.register(Dropdown.NAME, Dropdown::new, Dropdown.CONTRACT);
         UINodeRegistry.register(Tooltip.NAME, Tooltip::new, Tooltip.CONTRACT);
+
+        // ── 6.2: the dialogs and the layout composites ─────────────────────────────
+        UINodeRegistry.register(Dialog.NAME, Dialog::new, Dialog.CONTRACT);
+        UINodeRegistry.register(SplitView.NAME, SplitView::new, SplitView.CONTRACT);
+        UINodeRegistry.register(TabView.NAME, TabView::new, TabView.CONTRACT);
+        UINodeRegistry.register(Tab.NAME, Tab::new, Tab.CONTRACT);
+        // PageStack is shell chrome with a back stack -- localOnly, so it registers a kind for the
+        // cascade's sake (`pagestack { }` is how a theme reaches it) and nothing decodes into it.
+        UINodeRegistry.register(PageStack.NAME, PageStack::new, NodeContract.INERT);
 
         // ── dnd ──────────────────────────────────────────────────────────────
         UINodeRegistry.register(DragGhost.NAME, DragGhost::new, NodeContract.INERT);

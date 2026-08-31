@@ -52,7 +52,6 @@ import com.crystalgui.ui.elements.workbench.StripeView;
 import com.crystalgui.ui.elements.workbench.ToolWindowFrame;
 import com.crystalgui.ui.elements.workbench.ViewContainer;
 import com.crystalgui.ui.elements.workbench.Workbench;
-import com.crystalgui.ui.shadow.ShadowButton;
 
 /**
  * <b>Every widget that deliberately does not travel, and why.</b> {@code plan_ui_rewrite.md} M1.
@@ -218,10 +217,5 @@ public final class WidgetCensus {
         WidgetContracts.localOnly(ArrayControl.class,
                 "Blocked on M7. Its value is a List<Object> whose element type is whatever the "
                         + "descriptor says, so it has no wire form until collections do.");
-
-        // ── Spike leftovers ──────────────────────────────────────────────────
-        WidgetContracts.localOnly(ShadowButton.class,
-                "Spike S2's throwaway subject. At M6 Button itself becomes shadow-rooted and this class "
-                        + "is deleted; contracting it would be contracting something with a delete date.");
     }
 }

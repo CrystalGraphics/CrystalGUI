@@ -1866,6 +1866,22 @@ menuitem::part(accelerator) {
  * ONE surface colour for the whole popup, deliberately. The reference has the field and the box at the
  * same fill with no rule between them, which is what makes it read as a single object rather than a form.
  * left/top are written from Java at IMPORTANT origin by InputDialog's centring, per the popup rule. */
+/* HIDDEN WHILE IT IS BEING PLACED, and the hiding is the SHEET's rather than Java's.
+ *
+ * A prompt is out of flow, so its size is unknown until it has been laid out -- and a popup positioned
+ * from a size it does not have yet appears at the wrong place for one frame and jumps. So it opens
+ * transparent and `InputDialog` drops this class once it has centred it, which hands the property back
+ * here and lets the popup fade in on whatever timing the theme states.
+ *
+ * The old engine wrote `opacity: 0` from Java at IMPORTANT origin and withdrew the candidate. That is
+ * exactly the standing rule against a resting value written from Java: it outranks every rule that
+ * would ever want to restyle it, so a theme could not have faded this in differently even deliberately.
+ * The new engine may not write at IMPORTANT at all, which makes the rule structural rather than
+ * advisory. */
+popover.__prompt__.__placing__ {
+    opacity: 0;
+}
+
 popover.__prompt__ {
     width: 280px;
     flex-direction: column;
