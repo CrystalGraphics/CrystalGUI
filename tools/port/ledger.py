@@ -133,6 +133,11 @@ BY_NAME = {
     # 6,166-line class at the top of it is what the split exists to stop, and `render(int, int)` being
     # public is an honest statement of what it always was -- the contract between an editor and the
     # things that draw it. @see plan_m6.md 6.5
+    # Folding and the diff model get packages of their own. Both were kept at the root on a price
+    # argument -- 27 members for folding, and DiffDecorations' only readers are two view parts --
+    # and both moved anyway, which took a further 25 published members between them. The root is
+    # TextEditor and EditorCommands now, and nothing else.
+    'EditorFolding': 'widget/texteditor/fold', 'DiffDecorations': 'widget/texteditor/diff',
     'EditorViewPart': 'widget/texteditor/part', 'DecorationPool': 'widget/texteditor/part',
     'CurrentLinePart': 'widget/texteditor/part', 'DiffBandsPart': 'widget/texteditor/part',
     'DiffChevronPart': 'widget/texteditor/part', 'ErrorStripePart': 'widget/texteditor/part',
@@ -234,6 +239,7 @@ BATCH = [
     ('widget/texteditor/suggest', '6.5'), ('widget/texteditor/doc', '6.5'),
     ('widget/texteditor/find', '6.5'), ('widget/texteditor/lang', '6.5'),
     ('widget/texteditor/part', '6.5'),
+    ('widget/texteditor/fold', '6.5'), ('widget/texteditor/diff', '6.5'),
     ('desktop', '6.6'),
     ('workbench', '6.7'), ('editor', '6.7'), ('example/machine', '6.7'),
     ('net/window', '6.8'),

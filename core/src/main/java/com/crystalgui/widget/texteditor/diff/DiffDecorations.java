@@ -1,9 +1,10 @@
-package com.crystalgui.widget.texteditor;
+package com.crystalgui.widget.texteditor.diff;
 
 import com.crystalgui.text.diff.DetailedDiff;
 import com.crystalgui.text.diff.DiffRange;
 import com.crystalgui.text.diff.InnerRange;
 
+import com.crystalgui.widget.texteditor.TextEditor;
 import com.crystalgui.widget.texteditor.part.DiffBandsPart;
 import java.util.ArrayList;
 import java.util.Collections;

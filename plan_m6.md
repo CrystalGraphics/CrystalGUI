@@ -1937,9 +1937,10 @@ ideas that happen to both be popups.
 ##### The structure
 
 ```
-com.crystalgui.widget.texteditor       THE WIDGET -- 4 files: TextEditor, EditorFolding,
-                                       DiffDecorations, EditorCommands
+com.crystalgui.widget.texteditor       TextEditor and EditorCommands -- two files
   .part                                EditorViewPart, DecorationPool and the 18 view parts
+  .fold                                EditorFolding
+  .diff                                DiffDecorations
   .suggest                             CompletionPopup, CompletionSession, CompletionRanking,
                                        EditorSuggest
   .doc                                 DocumentationPopup, HoverDocumentation
@@ -1947,7 +1948,8 @@ com.crystalgui.widget.texteditor       THE WIDGET -- 4 files: TextEditor, Editor
   .lang                                EditorLanguageFeatures, EditorDiagnostics, DiagnosticActions
 ```
 
-**`.part` was measured as NOT worth it and taken anyway, which is a decision rather than a mistake.**
+**Three of the four sub-packages were measured as NOT worth it and taken anyway, which is a decision
+rather than a mistake.**
 The parts and `TextEditor` reach each other's package-private surface freely, so the boundary costs
 **17 types and ~72 members on top of the 78** the four feature packages cost — roughly doubling the
 split's bill. What it buys is that the root is four files instead of twenty-two, with the largest
@@ -1956,10 +1958,15 @@ published surface is concentrated and honest: `render(int, int)` becoming public
 statement of what it always was — the contract between an editor and the things that draw it — and
 the rest is the geometry a part asks the editor for.
 
+**`.fold` and `.diff` went the same way.** Both were argued to stay at the root on price — 27 members
+for folding, and `DiffDecorations`' only readers are two view parts — and both moved, for a further
+**25 members** between them. The root is `TextEditor` and `EditorCommands`, and nothing else.
+
 > **The general form, and 6.6 reached the same place from the other side:** a split's price is a fact
 > and whether to pay it is a judgement. Measure it, quote it, and let the person who owns the tree
-> decide — the two times a recommendation was overruled here, the structure that resulted was better
-> than the one the price alone argued for.
+> decide — every time a recommendation was overruled here, the structure that resulted was better
+> than the one the price alone argued for. What the measurement is genuinely for is making sure the
+> bill is a decision rather than a surprise.
 
 **`EditorCommands` stays at the root** because it costs nothing either way and is the editor's own
 named actions — the same place `GraphCommands` and `DesktopCommands` sit relative to their widgets.
@@ -1986,7 +1993,8 @@ the recommendation above — folding staying — the bill is **7 types and 78 me
 packages and twelve files.
 
 6.6 cost **52 members for 27 files**; the four feature packages are **78 for 34**, the same rate.
-Adding `.part` takes it to roughly **150**, which is the price of the root being four files.
+Adding `.part`, `.fold` and `.diff` takes it to roughly **175**, which is the price of the root being
+two files.
 
 > **The rule this section now records, which is 6.6's stated in the reverse direction:** a split's
 > price is a property of the PARTITION, and the partition worth measuring first is the one that keeps

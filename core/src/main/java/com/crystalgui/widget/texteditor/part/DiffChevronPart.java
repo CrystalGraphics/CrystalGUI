@@ -2,8 +2,9 @@ package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.widget.texteditor.DiffDecorations;
+import com.crystalgui.widget.texteditor.diff.DiffDecorations;
 import com.crystalgui.widget.texteditor.TextEditor;
+import com.crystalgui.widget.texteditor.diff.DiffDecorations;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
 import java.util.ArrayList;

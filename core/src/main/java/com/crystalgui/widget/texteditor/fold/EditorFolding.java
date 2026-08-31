@@ -1,4 +1,4 @@
-package com.crystalgui.widget.texteditor;
+package com.crystalgui.widget.texteditor.fold;
 
 import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.async.JobKey;
@@ -12,6 +12,7 @@ import com.crystalgui.text.fold.FoldingRegions;
 import com.crystalgui.text.fold.IndentRangeProvider;
 import com.crystalgui.text.wrap.ProjectedLines;
 
+import com.crystalgui.widget.texteditor.TextEditor;
 import java.util.Arrays;
 import java.util.List;
 
@@ -37,11 +38,11 @@ import java.util.List;
  * and that frame, so every command calls {@link #ensureFoldingCurrent} first — without it a fold right
  * after typing acts on the regions of the document as it was, off by however many rows the edit added.</p>
  */
-final class EditorFolding {
+public final class EditorFolding {
 
     private final TextEditor editor;
 
-    EditorFolding(TextEditor editor) {
+    public EditorFolding(TextEditor editor) {
         this.editor = editor;
     }
 
@@ -66,16 +67,16 @@ final class EditorFolding {
     private boolean dirty = true;
 
     /** The folding model, for tests and for anything wanting to drive folds directly. */
-    FoldingModel model() {
+    public FoldingModel model() {
         return folding;
     }
 
-    boolean isEnabled() {
+    public boolean isEnabled() {
         return enabled;
     }
 
     /** Says the region set no longer describes the document — an edit, a provider swap, a tab-size change. */
-    void markDirty() {
+    public void markDirty() {
         dirty = true;
     }
 
@@ -89,7 +90,7 @@ final class EditorFolding {
      *
      * @return whether the set of visible rows changed, so the caller can drop what it has realised
      */
-    boolean refreshFolding() {
+    public boolean refreshFolding() {
         if (!enabled) return false;
         // TWO HALVES WITH NOTHING IN COMMON, and ed:refreshFolding measured 12-17ms without saying
         // which. Asking the provider is a query over the whole document; applying the answer rebuilds
@@ -160,7 +161,7 @@ final class EditorFolding {
      * runs a document-wide scan is the trap {@code getScrollWidth} already documents; anything that has
      * been painting has current regions, and anything that has not has no folds to report.</p>
      */
-    int[] collapsedRows() {
+    public int[] collapsedRows() {
         FoldingRegions regions = folding.regions();
         int[] found = new int[regions.length()];
         int count = 0;
@@ -184,7 +185,7 @@ final class EditorFolding {
      * region being closed is moved onto its header rather than becoming unpaintable. Restore the caret
      * <em>before</em> calling this and that lift does the right thing for free.</p>
      */
-    void setCollapsedRows(int... startRows) {
+    public void setCollapsedRows(int... startRows) {
         if (!enabled) return;
         TextEditor.StableViewport anchor = editor.captureFoldAnchor();
         ensureFoldingCurrent();
@@ -204,12 +205,12 @@ final class EditorFolding {
     }
 
     /** Swaps the region source — a syntax-aware provider layers over the indent one this way. */
-    void setProvider(FoldingRangeProvider value) {
+    public void setProvider(FoldingRangeProvider value) {
         this.provider = value == null ? FoldingRangeProvider.none() : value;
         this.dirty = true;
     }
 
-    void setEnabled(boolean value) {
+    public void setEnabled(boolean value) {
         if (this.enabled == value) return;
         this.enabled = value;
         if (!value) {
@@ -220,12 +221,12 @@ final class EditorFolding {
     }
 
     /** The rows currently hidden by collapsed folds. */
-    List<FoldingModel.RowRange> hiddenRowRanges() {
+    public List<FoldingModel.RowRange> hiddenRowRanges() {
         return folding.hiddenRows();
     }
 
     /** Opens every fold hiding {@code row}, and nothing else. @see TextEditor#revealOffset */
-    void revealRow(int row) {
+    public void revealRow(int row) {
         for (FoldingModel.RowRange range : folding.hiddenRows()) {
             if (!range.contains(row)) continue;
             TextEditor.StableViewport anchor = editor.captureFoldAnchor();
@@ -239,14 +240,14 @@ final class EditorFolding {
     // ── The commands ────────────────────────────────────────────────────────────────────────────
 
     /** Folds or unfolds the innermost region at the caret, stepping outwards when already in that state. */
-    void fold() {
+    public void fold() {
         TextEditor.StableViewport anchor = editor.captureFoldAnchor();
         ensureFoldingCurrent();
         folding.setCollapseStateUp(true, editor.caretRow());
         afterFoldChange(anchor);
     }
 
-    void unfold() {
+    public void unfold() {
         TextEditor.StableViewport anchor = editor.captureFoldAnchor();
         ensureFoldingCurrent();
         folding.setCollapseStateUp(false, editor.caretRow());
@@ -254,7 +255,7 @@ final class EditorFolding {
     }
 
     /** Folds or unfolds the region at the caret and everything inside it. */
-    void foldRecursively() {
+    public void foldRecursively() {
         TextEditor.StableViewport anchor = editor.captureFoldAnchor();
         ensureFoldingCurrent();
         FoldingRegions.Region region = folding.getRegionAtLine(editor.caretRow());
@@ -264,14 +265,14 @@ final class EditorFolding {
         afterFoldChange(anchor);
     }
 
-    void foldAll() {
+    public void foldAll() {
         TextEditor.StableViewport anchor = editor.captureFoldAnchor();
         ensureFoldingCurrent();
         folding.collapseAllKeepingDocumentVisible(editor.buffer().lineCount());
         afterFoldChange(anchor);
     }
 
-    void unfoldAll() {
+    public void unfoldAll() {
         TextEditor.StableViewport anchor = editor.captureFoldAnchor();
         ensureFoldingCurrent();
         folding.setCollapseStateForAll(false);
@@ -279,7 +280,7 @@ final class EditorFolding {
     }
 
     /** Folds every region at exactly {@code level}, leaving the block the caret is in open. */
-    void foldLevel(int level) {
+    public void foldLevel(int level) {
         TextEditor.StableViewport anchor = editor.captureFoldAnchor();
         ensureFoldingCurrent();
         folding.setCollapseStateAtLevel(level, true, editor.caretRow());
@@ -287,7 +288,7 @@ final class EditorFolding {
     }
 
     /** Toggles the region whose first row is {@code row} — what clicking a gutter arrow does. */
-    void toggleFoldAt(int row) {
+    public void toggleFoldAt(int row) {
         ensureFoldingCurrent();
         FoldingRegions.Region region = folding.getRegionStartingAt(row);
         if (region == null) return;
@@ -360,7 +361,7 @@ final class EditorFolding {
      * from the DOCUMENT rather than assumed, so {@code });} comes back intact instead of being guessed at
      * as a bare brace.</p>
      */
-    String placeholderTextFor(FoldingRegions.Region region) {
+    public String placeholderTextFor(FoldingRegions.Region region) {
         int endRow = region.endLineNumber();
         if (endRow <= region.startLineNumber() || endRow >= editor.buffer().lineCount()) {
             return TextEditor.FOLD_PLACEHOLDER_TEXT;
