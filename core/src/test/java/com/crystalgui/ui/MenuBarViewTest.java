@@ -27,6 +27,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import com.crystalgui.ui.UIElement;
 
 /**
  * {@link MenuBarView} and {@link MenuBuilder}.
@@ -280,7 +281,7 @@ public class MenuBarViewTest extends UiTestBase {
 
         List<UIElement> sources = new ArrayList<>();
         registry.register(Command.of("f.probe", "Probe").menu(fileMenu, "1_new", 99)
-                .enabledWhen(c -> { sources.add(c.source()); return true; })
+                .enabledWhen(c -> { sources.add(UIElement.sourceOf(c)); return true; })
                 .run(c -> { }));
 
         window.getInputHandler().requestFocus(subject);
@@ -304,7 +305,7 @@ public class MenuBarViewTest extends UiTestBase {
 
         List<UIElement> sources = new ArrayList<>();
         registry.register(Command.of("f.probe2", "Probe").menu(fileMenu, "1_new", 99)
-                .enabledWhen(c -> { sources.add(c.source()); return true; })
+                .enabledWhen(c -> { sources.add(UIElement.sourceOf(c)); return true; })
                 .run(c -> { }));
         rawPress(titleAt(0));
 

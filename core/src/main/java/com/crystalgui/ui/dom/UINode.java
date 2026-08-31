@@ -1,5 +1,6 @@
 package com.crystalgui.ui.dom;
 
+import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.GeneralGroup;
 import com.crystalgui.style.LayoutGroup;
@@ -23,6 +24,7 @@ import com.crystalgui.ui.event.FocusEvent;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.ui.input.keymap.KeymapScope;
 import java.util.Collection;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -72,7 +74,7 @@ import org.joml.Vector2f;
  * lifecycle callback is an ordinary new mutation. A reparent is one {@code moved}, which the old tree
  * could not spell (M2).</p>
  */
-public class UINode implements EventTarget, Styleable {
+public class UINode implements EventTarget, Styleable, KeymapScope {
 
     private final Name name;
 
@@ -194,6 +196,36 @@ public class UINode implements EventTarget, Styleable {
             m.end();
         }
         return this;
+    }
+
+    // ── CommandTarget / KeymapScope: how a command finds its subject (M6.3) ─────
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>The LIGHT parent, deliberately. A command's subject is what the author built, and a
+     * widget's own parts are not subjects — a press on a button's label resolves to the button, not
+     * to the label, which is what makes {@code DataContext} answer the same thing however deep the
+     * gesture landed.</p>
+     */
+    @Override
+    @Nullable
+    public KeymapScope commandParent() {
+        return parent;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Empty until something registers a document-level provider. The old engine hangs these off
+     * {@code UIWindow} for the case {@code DataContext} documents at length — a workbench is a
+     * DESCENDANT of the root, so with nothing focused the outward walk never reaches it — and the
+     * new engine has no such consumer yet. Answering honestly is the point: a wrong provider is
+     * worse than none, because it shadows a correct one further out.</p>
+     */
+    @Override
+    public List<DataProvider> scopeProviders() {
+        return List.of();
     }
 
     public final Set<String> classes() {

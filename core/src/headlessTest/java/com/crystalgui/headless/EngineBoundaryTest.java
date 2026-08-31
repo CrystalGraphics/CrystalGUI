@@ -91,7 +91,12 @@ public class EngineBoundaryTest {
             "com/crystalgui/ui/input/UIInputHandler",
             "com/crystalgui/ui/input/UIDragController",
             "com/crystalgui/ui/input/DragScrub",
-            "com/crystalgui/ui/input/keymap/",
+            // NOT ui/input/keymap ANY MORE. It was old-engine because Keymap and KeymapResolver
+            // took a UIElement -- and M6.3 retyped the whole command layer onto CommandTarget and
+            // KeymapScope, which is what unblocked ContextMenu, MenuBuilder and the inspector out of
+            // 6.2. Nothing in the package names an old-engine type now, and both engines implement
+            // the seam: exactly the carve-out FocusPolicy already has one line above, and for the
+            // same reason -- two copies of a seam are how two definitions drift.
             "com/crystalgui/ui/elements/",
             "com/crystalgui/ui/shadow/",
             // NOT ElementStyle: D5.2 shares the cascade's store between engines behind Styleable.

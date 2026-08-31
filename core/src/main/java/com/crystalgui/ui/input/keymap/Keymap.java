@@ -1,7 +1,6 @@
 package com.crystalgui.ui.input.keymap;
 
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.ui.UIElement;
 
 import javax.annotation.Nullable;
 
@@ -167,8 +166,8 @@ public final class Keymap {
      * renders no accelerator.</p>
      */
     @Nullable
-    public static KeyChord acceleratorFor(@Nullable UIElement from, String commandId) {
-        for (UIElement scope = from; scope != null; scope = scope.getParent()) {
+    public static KeyChord acceleratorFor(@Nullable KeymapScope from, String commandId) {
+        for (KeymapScope scope = from; scope != null; scope = scope.commandParent()) {
             Keymap keymap = scope.keymapOrNull();
             if (keymap == null) continue;
             KeyChord chord = keymap.chordFor(commandId);
@@ -194,9 +193,9 @@ public final class Keymap {
      * would when the key is pressed. Commands bound nowhere on this path are absent rather than mapped to
      * null; a palette shows them with no accelerator by looking them up in the registry, not here.</p>
      */
-    public static Map<String, KeyChord> acceleratorsFrom(@Nullable UIElement from) {
+    public static Map<String, KeyChord> acceleratorsFrom(@Nullable KeymapScope from) {
         Map<String, KeyChord> out = new LinkedHashMap<>();
-        for (UIElement scope = from; scope != null; scope = scope.getParent()) {
+        for (KeymapScope scope = from; scope != null; scope = scope.commandParent()) {
             Keymap keymap = scope.keymapOrNull();
             if (keymap == null) continue;
             for (KeyBinding binding : keymap.bindings) {

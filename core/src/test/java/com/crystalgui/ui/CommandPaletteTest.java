@@ -26,6 +26,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.ui.UIElement;
 
 /**
  * The command palette, and above all <b>which element its commands are resolved against</b>.
@@ -82,18 +83,18 @@ public class CommandPaletteTest extends UiTestBase {
         window.init(1200, 800);
 
         window.getCommands().register(Command.of(SCOPED, "Scoped Action")
-                .run(context -> invokedWith.add(context.source()))
+                .run(context -> invokedWith.add(UIElement.sourceOf(context)))
                 .enabledWhen(CommandPaletteTest::hasScopeAbove));
         window.getCommands().register(Command.of(GLOBAL, "Global Action")
-                .run(context -> invokedWith.add(context.source())));
+                .run(context -> invokedWith.add(UIElement.sourceOf(context))));
         window.getCommands().register(Command.of(THIRD, "Third Action")
-                .run(context -> invokedWith.add(context.source())));
+                .run(context -> invokedWith.add(UIElement.sourceOf(context))));
 
         frame();
     }
 
     private static boolean hasScopeAbove(CommandContext context) {
-        for (UIElement element = context.source(); element != null; element = element.getParent()) {
+        for (UIElement element = UIElement.sourceOf(context); element != null; element = element.getParent()) {
             if (element instanceof Scope) return true;
         }
         return false;

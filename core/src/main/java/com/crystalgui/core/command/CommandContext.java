@@ -1,7 +1,7 @@
 package com.crystalgui.core.command;
 
 import com.crystalgui.core.data.DataContext;
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.core.data.CommandTarget;
 
 import javax.annotation.Nullable;
 
@@ -17,9 +17,9 @@ import javax.annotation.Nullable;
  *               clicked item for a menu. Null for a programmatic {@code CommandRegistry.run(id)}.
  * @param args   binding-supplied payload, or null
  */
-public record CommandContext(@Nullable UIElement source, @Nullable Object args) {
+public record CommandContext(@Nullable CommandTarget source, @Nullable Object args) {
 
-    public static CommandContext of(@Nullable UIElement source) {
+    public static CommandContext of(@Nullable CommandTarget source) {
         return new CommandContext(source, null);
     }
 

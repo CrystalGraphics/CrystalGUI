@@ -62,14 +62,14 @@ public final class EditorCommands {
     /** Runs {@code action} against the editor the command was invoked from, if there is one. */
     private static Consumer<CommandContext> on(Consumer<TextEditor> action) {
         return context -> {
-            TextEditor editor = nearest(context.source());
+            TextEditor editor = nearest(UIElement.sourceOf(context));
             if (editor != null) action.accept(editor);
         };
     }
 
     private static Predicate<CommandContext> when(Predicate<TextEditor> test) {
         return context -> {
-            TextEditor editor = nearest(context.source());
+            TextEditor editor = nearest(UIElement.sourceOf(context));
             return editor != null && test.test(editor);
         };
     }

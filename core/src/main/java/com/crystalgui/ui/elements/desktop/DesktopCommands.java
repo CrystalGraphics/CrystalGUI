@@ -150,7 +150,7 @@ public final class DesktopCommands {
      */
     @Nullable
     private static Desktop desktopFor(CommandContext context) {
-        UIElement element = context.source();
+        UIElement element = UIElement.sourceOf(context);
         if (element == null) return null;
         UIWindow window = element.getAttachedWindow();
         return window == null ? null : window.desktopIfPresent();
