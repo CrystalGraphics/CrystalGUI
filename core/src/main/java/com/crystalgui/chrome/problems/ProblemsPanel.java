@@ -130,7 +130,12 @@ public class ProblemsPanel extends UINode implements DataProvider {
      * panel has to be answerable along that walk. That is what a {@link DataKey} is for.</p>
      */
     public static final DataKey<ProblemsPanel> PROBLEMS_PANEL =
-            DataKey.create("problemsPanel", ProblemsPanel.class);
+            // `.new` UNTIL 6.9, the convention 6.3 set for `menuBar.new` and 6.4 for `graphView.new`.
+            // A DataKey is interned by NAME and its TYPE is what it names, so the old engine's copy
+            // and this one cannot share a key: `create` throws the moment both classes initialise,
+            // which is any test that touches both. The OLD name is the one that must not move --
+            // `ContextKeys.find` resolves a key by name out of a `when` expression.
+            DataKey.create("problemsPanel.new", ProblemsPanel.class);
 
     /**
      * The row the menu was opened on — <b>not</b> the selection.

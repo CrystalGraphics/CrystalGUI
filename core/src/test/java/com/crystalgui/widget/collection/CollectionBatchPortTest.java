@@ -311,4 +311,57 @@ public class CollectionBatchPortTest extends UiDocumentTestBase {
         }
         assertTrue(String.join("\n", offenders), offenders.isEmpty());
     }
+
+    /**
+     * <b>Dragging a nested scroller's THUMB scrolls the view.</b>
+     *
+     * <p>The bar highlighted under the pointer and refused to move, which is the shape a retargeted
+     * event makes. {@code Scroller} kept one mouse-down listener on ITSELF and compared
+     * {@code event.getTarget()} against its thumb, head, tail and track — which is what the old
+     * engine needed, because those were light children and the target was the real node. Here they
+     * are SHADOW PARTS, and a listener attached to the host is outside its own shadow tree, so every
+     * event from inside is retargeted to the host before the listener runs: {@code target == thumb}
+     * could never be true, the chain fell through to "the press was on the scroller itself", and that
+     * branch jumps the thumb to where the pointer is — which, for a press on the thumb, is where it
+     * already was.</p>
+     *
+     * <p><b>Asserted through a ListView</b>, which is how it was reported and is the case that
+     * matters: a scroller nested in a page rather than the page's own. And on the OFFSET rather than
+     * on any listener firing, because the broken version fired a listener too — just the wrong one.</p>
+     */
+    @Test
+    public void draggingANestedScrollersThumbScrollsIt() {
+        withDefaultStyles();
+        ListView<String> list = new ListView<>(rows(500));
+        list.setRenderer(labels()).setItemHeight(20f);
+        layout(list, l -> l.width(300f).height(200f));
+        document.append(list);
+        frame();
+        frame();
+
+        UINode thumb = list.verticalScroller().thumb();
+        Box bar = boxOf(thumb);
+        assertNotNull("the scrollbar has no thumb box -- the fixture is not scrollable", bar);
+        assertEquals("the fixture must start at the top", 0f, list.box().scrollTop(), 0.01f);
+
+        float px = bar.worldX() + bar.width() / 2f;
+        float py = bar.worldY() + bar.height() / 2f;
+        press(px, py);
+        frame();
+        move(px, py + 40f);
+        frame();
+
+        assertTrue("dragging the thumb down did not scroll: scrollTop is still "
+                        + list.box().scrollTop(),
+                list.box().scrollTop() > 0f);
+
+        // AND IT TRACKS, rather than jumping once: the broken version's fallback branch DID move the
+        // view when the press landed off the thumb, so a single-step assertion passes against it.
+        float afterFirst = list.box().scrollTop();
+        move(px, py + 80f);
+        frame();
+        assertTrue("the drag did not keep tracking the pointer",
+                list.box().scrollTop() > afterFirst);
+        release(px, py + 80f);
+    }
 }

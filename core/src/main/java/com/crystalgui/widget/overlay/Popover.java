@@ -147,6 +147,36 @@ public class Popover extends UINode {
 
     private boolean placementTickerRunning;
 
+    /**
+     * Whether placement has actually written a position yet.
+     *
+     * <p><b>A popup is DRAWN on the frame it opens, and on that frame it has never been laid out</b> —
+     * so {@code AnchoredPlacement} has no width or height to flip and clamp against and returns
+     * without writing anything, leaving the popup at its containing block's origin: the top-left
+     * corner of the top layer. The next frame's post-layout hook puts it right, which is a visible
+     * jump from the corner to the anchor.</p>
+     *
+     * <p>The old engine did not have this: {@code onLayoutChanged} fired INSIDE the layout loop, so a
+     * placement write re-dirtied layout and settled within the same frame. This engine lays out once
+     * with no feedback into it — a post-layout hook may move a box and may not add one — so the write
+     * lands on the following frame by construction, and the only honest answer is not to PAINT an
+     * unplaced popup. One frame of nothing is what every toolkit shows; one frame in the corner is
+     * what none of them does.</p>
+     */
+    private boolean placed;
+
+    /**
+     * Where an unplaced popup is laid out.
+     *
+     * <p>Far enough off that no viewport can show it, and a POSITION rather than an opacity or a
+     * {@code display}. Opacity was tried and does not work: the sheets transition it, so writing 0
+     * eases DOWN from 1 and the unplaced frame is still drawn at about 0.9 — in the corner.
+     * {@code display: none} is worse, because a popup with no box is one placement can never measure,
+     * which makes the state permanent. Off-screen lays out, gets a box, and is measured and placed by
+     * the post-layout hook before the frame after it.</p>
+     */
+    private static final float UNPLACED = -1e5f;
+
     /** When this was last shown, on {@code UIDocument}'s monotonic show sequence — see
      * {@link com.crystalgui.ui.service.Dismiss#lightDismiss(UINode, int)}. */
     @Getter
@@ -292,6 +322,18 @@ public class Popover extends UINode {
         if (mode == Mode.AUTO) window.dismiss().lightDismiss(popoverInvoker() != null ? popoverInvoker() : this);
 
         open = true;
+        // A RE-SHOW STARTS UNPLACED TOO: hide() may have left the popup detached and its box with it,
+        // so the first frame of the second open has exactly the problem the first one had.
+        placed = freelyPositioned;
+        // OFF-SCREEN FIRST, on the same channel placement itself uses. `open()` runs during input
+        // dispatch, so the first layout of this popup is the very next one -- and placement cannot
+        // have run yet, because it flips and clamps against a width and height that do not exist
+        // until that layout has happened. Without this the popup is laid out at its containing
+        // block's origin and DRAWN there: a menu in the top-left corner for exactly one frame.
+        if (!placed) {
+            StyleGroup.inlinePipeline(getStyle().getLayoutGroup(),
+                    l -> l.left(UNPLACED).top(UNPLACED));
+        }
         applyOpenState();
         document().promote(this);
         if (mode == Mode.AUTO) {
@@ -513,7 +555,14 @@ public class Popover extends UINode {
             AnchoredPlacement.placeAtPoint(this, pointX, pointY, preferredSide, offset);
         } else if (anchor != null) {
             AnchoredPlacement.place(this, anchor, preferredSide, offset);
+        } else {
+            return;
         }
+        // PLACEMENT IS A NO-OP UNTIL THERE IS A BOX, so "was it placed" is a question about the box
+        // rather than about having called this. @see #placed
+        // Placement writes nothing while there is no box, so "has it been placed" is a question
+        // about the box rather than about having called this. @see #UNPLACED
+        if (!placed && box() != null) placed = true;
     }
 
     /**

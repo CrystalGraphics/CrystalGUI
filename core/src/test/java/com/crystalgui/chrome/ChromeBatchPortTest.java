@@ -1,5 +1,6 @@
 package com.crystalgui.chrome;
 
+import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.chrome.menu.MenuBarView;
 import com.crystalgui.chrome.notification.NotificationsView;
 import com.crystalgui.chrome.palette.QuickPick;
@@ -229,5 +230,58 @@ public class ChromeBatchPortTest extends UiDocumentTestBase {
             offenders.add(node.getClass().getSimpleName()
                     + ": measured " + box.width() + "x" + box.height());
         }
+    }
+
+    /**
+     * <b>A menu is never LAID OUT at the origin before it has been placed.</b>
+     *
+     * <p>Reported as a menu that appears in the top-left corner for a frame or two and then teleports
+     * under its title. {@code AnchoredPlacement} flips and clamps against the popup's OWN width and
+     * height, so it writes nothing at all while the popup has no box — and a popup has none on the
+     * frame it opens, because it has never been laid out. It was drawn anyway, at its containing
+     * block's origin.</p>
+     *
+     * <p>The old engine did not have this: {@code onLayoutChanged} fired INSIDE the layout loop, so a
+     * placement write re-dirtied layout and settled in the same frame. Here layout runs once with no
+     * feedback into it, and {@code Box} has no position setter — so a post-layout hook's write lands
+     * on the NEXT layout by construction. The popup is laid out off-screen until it can be measured.</p>
+     *
+     * <p><b>Asserted as an invariant over the frames, not on where it ends up.</b> Checking the final
+     * position passes against the bug, because it ended up in the right place there too. And asserted
+     * on POSITION rather than on opacity: the sheets transition opacity, and a transition advances on
+     * {@code System.nanoTime()}, which a test loop cannot step — an opacity assertion here is a
+     * measurement of how long the test took to run.</p>
+     */
+    @Test
+    public void aMenuIsNeverLaidOutAtTheOriginBeforeItIsPlaced() {
+        withDefaultStyles();
+        CommandRegistry registry = new CommandRegistry();
+        MenuId file = menu("file");
+        registry.register(Command.of("test.new", "New").menu(file, "io", 0).run(() -> {
+        }));
+
+        MenuBarView bar = new MenuBarView(registry).addMenu(file, "File");
+        layout(bar, l -> l.widthPercent(100f).height(22f));
+        document.append(bar);
+        frame();
+        frame();
+
+        bar.open(file);
+        boolean everPlaced = false;
+        for (int i = 0; i < 4; i++) {
+            frame();
+            for (UINode node : composed(document)) {
+                if (!(node instanceof Menu shown) || !shown.isOpen()) continue;
+                Box box = boxOf(shown);
+                if (box == null) continue;
+                boolean atOrigin = Math.abs(box.worldX()) < 1f && Math.abs(box.worldY()) < 1f;
+                assertFalse("frame " + i + ": the menu is laid out at the top-left corner -- "
+                        + "it was placed before it could be measured", atOrigin);
+                if (box.worldY() > 1f) everPlaced = true;
+            }
+        }
+        // THE COUNTER-ASSERTION. A menu parked off-screen forever satisfies every line above, and so
+        // does one that never opened at all.
+        assertTrue("the menu never reached a real position under its title", everPlaced);
     }
 }
