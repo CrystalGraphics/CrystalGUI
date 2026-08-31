@@ -53,6 +53,27 @@ public class SheetPortTest {
         return repoRoot().resolve("core/src/main/resources/assets/crystalgui/ui/styles");
     }
 
+    /** Every RULE's selector list, so a selector can be asked about beside its siblings. */
+    private static List<List<String>> selectorLists() throws IOException {
+        List<List<String>> out = new ArrayList<>();
+        try (var walk = Files.walk(sheets())) {
+            for (Path p : walk.toList()) {
+                if (!p.getFileName().toString().endsWith(".css")) continue;
+                String text = Files.readString(p, StandardCharsets.UTF_8).replaceAll("(?s)/\\*.*?\\*/", "");
+                Matcher m = Pattern.compile("([^{}]+)\\{").matcher(text);
+                while (m.find()) {
+                    List<String> rule = new ArrayList<>();
+                    for (String alternative : m.group(1).split(",")) {
+                        String sel = alternative.trim();
+                        if (!sel.isEmpty() && !sel.startsWith("@")) rule.add(sel);
+                    }
+                    if (!rule.isEmpty()) out.add(rule);
+                }
+            }
+        }
+        return out;
+    }
+
     /** Every selector in every shipped sheet, comments stripped, one per comma-separated alternative. */
     private static List<String> selectors() throws IOException {
         List<String> out = new ArrayList<>();
@@ -91,37 +112,67 @@ public class SheetPortTest {
     }
 
     /**
-     * <b>A rule reaching from one widget's part into a NESTED widget's part is counted, not
-     * converted</b> — and the count may not grow.
+     * <b>No rule ends in a {@code .__part__} whose host exposes it as a shadow part.</b>
      *
-     * <p>{@code colorselector .__channel-row__ slider .__thumb__} is the shape: it styles a slider
-     * that a colour selector builds, through a part of the colour selector. Neither half is
-     * expressible with {@code ::part()} — a part is a leaf, so nothing descends from one — and on the
-     * new engine the nested slider is inside the composite's SHADOW tree, where an outer rule cannot
-     * reach it at all.</p>
+     * <p>Such a rule is unreachable and silent: the class lives inside a shadow tree, so an outer
+     * selector matches nothing, no error is raised, and the widget draws its structure with none of
+     * its styling. Every widget in the M6.1 batch shipped at least one — a checkbox with an unstyled
+     * mark, a slider with no fill, a scrollbar laid out at zero width, a colour picker's channel rows
+     * with the default knob.</p>
      *
-     * <p>Two mechanisms answer it and both are later work: a sheet SCOPED to the composite's shadow
-     * root ({@code StyleEngine.addStylesheet(sheet, root)}, which exists since M5 5.2), or
-     * {@code exportparts}, which does not exist yet. Until one of them is wired, these rules keep
-     * working on the OLD engine — which still runs the game — and reach nothing on the new one.</p>
+     * <p>The fix is always the same and is mechanical: {@code python tools/port/twins.py}, which
+     * rewrites {@code <anything> HOST .__part__} to {@code <anything> HOST::part(part)} and is
+     * idempotent. This asserts the tool has been run, which is the only thing that keeps 400 more
+     * files from each discovering it by eye.</p>
      *
-     * <p>The baseline is 55, measured -- not a target. It is asserted so the number cannot quietly grow while the port is in flight, which is
-     * the only failure available here: nothing errors, the rules simply stop matching, and a composite
-     * comes out unstyled in a way that reads as the widget not having been built.</p>
+     * <p><b>It cannot see the rules that have no spelling at all</b> — a part under a part, or a tag
+     * under a part — which is why {@code ColorSelector} keeps its structure in the LIGHT tree
+     * (D1 kind B) rather than being twinned. That decision is per widget and belongs in the ledger,
+     * not here.</p>
      */
     @Test
-    public void crossWidgetPartRulesAreCountedAndDoNotGrow() throws IOException {
-        Pattern nested = Pattern.compile(
-                "^[a-z][a-z0-9-]*[^,{]*\\.__[a-z0-9-]+__[^,{]*\\b"
-                        + "(?:slider|dropdown|scroller|button|textfield|menuitem|checkbox)\\b");
-        List<String> found = new ArrayList<>();
-        for (String sel : selectors()) {
-            if (nested.matcher(sel).find() && sel.contains("__")) found.add(sel);
+    public void noRuleTargetsAShadowPartByItsClass() throws IOException {
+        // Host -> the part names it exposes. Mirrors tools/port/twins.py; a widget ported without
+        // adding itself to both is a widget whose rules quietly stop matching.
+        var hosts = new java.util.LinkedHashMap<String, Set<String>>();
+        hosts.put("switch", Set.of("spacer", "knob"));
+        hosts.put("slider", Set.of("fill", "thumb", "spacer"));
+        hosts.put("progressbar", Set.of("fill"));
+        hosts.put("scroller", Set.of("track", "thumb", "head", "tail"));
+        hosts.put("scrollerview", Set.of("v-scroller", "h-scroller", "corner"));
+        hosts.put("tooltip", Set.of("label"));
+        hosts.put("menu", Set.of("items", "separator"));
+        hosts.put("menuitem", Set.of("mark", "checkable", "accelerator", "submenu-arrow"));
+        hosts.put("dropdown", Set.of("chevron", "menu"));
+        hosts.put("searchfield", Set.of("icon", "field", "clear", "options"));
+        hosts.put("checkbox", Set.of("mark", "label"));
+        hosts.put("button", Set.of("label"));
+
+        Pattern tail = Pattern.compile("^\\.__([a-z0-9-]+)__(?::[a-z-]+(?:\\([^)]*\\))?)*$");
+        List<String> unreachable = new ArrayList<>();
+        for (List<String> rule : selectorLists()) {
+            for (String sel : rule) {
+                String[] compounds = sel.trim().split("\\s+");
+                if (compounds.length < 2) continue;
+                Matcher m = tail.matcher(compounds[compounds.length - 1]);
+                if (!m.matches()) continue;
+                String part = m.group(1);
+                String host = compounds[compounds.length - 2].split("[.:\\[]")[0];
+                Set<String> exposed = hosts.get(host);
+                if (exposed == null || !exposed.contains(part)) continue;
+                // THE ORIGINAL STAYS -- it is what the OLD engine reads, and both ship until 6.9.
+                // What must not be missing is its TWIN, beside it in the same rule.
+                String twin = String.join(" ",
+                        java.util.Arrays.copyOf(compounds, compounds.length - 1))
+                        + "::part(" + part + ")";
+                if (rule.stream().noneMatch(other -> other.trim().startsWith(twin))) {
+                    unreachable.add(sel);
+                }
+            }
         }
-        assertTrue("cross-widget part rules grew from 55 to " + found.size()
-                        + " -- either scope a sheet to the composite's shadow root, or add"
-                        + " exportparts:\n" + String.join("\n", found),
-                found.size() <= 55);
+        assertTrue("these target a SHADOW PART by its class, so they match nothing and say nothing"
+                + " -- run `python tools/port/twins.py`:\n" + String.join("\n", unreachable),
+                unreachable.isEmpty());
     }
 
     /**

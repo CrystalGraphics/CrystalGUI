@@ -431,7 +431,8 @@ notificationsview .__notification__ .__message__ {
 /* A STATUS-BAR TOOLTIP GETS MORE ROOM. 170px is tuned for a label or a toolbar button, where the tooltip
  * is a few words; a status item's tooltip is the sentence its four-word readout left out — a compile
  * summary, a driver's refusal — and at the default width that is five or six lines of very short measure. */
-.__status-bar__ tooltip .__label__ {
+.__status-bar__ tooltip .__label__,
+.__status-bar__ tooltip::part(label) {
     max-width: 255px;
 }
 

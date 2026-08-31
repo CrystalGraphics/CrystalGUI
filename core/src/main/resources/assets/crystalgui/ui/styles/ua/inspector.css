@@ -143,14 +143,16 @@
 }
 /* Unity does not colour-code a slider's fill; a saturated green track reads as a progress bar or as a
  * validation state rather than as a value being chosen. */
-.__config-control__.__slider__ slider .__fill__ { background: var(--configkit-slider-fill, #6A6A6A); }
+.__config-control__.__slider__ slider .__fill__,
+.__config-control__.__slider__ slider::part(fill) { background: var(--configkit-slider-fill, #6A6A6A); }
 .__config-control__.__slider__ slider .__track__ { background: var(--cfg-field); }
 /* The exception, and a real one: a checkbox is SQUARE — its width is a function of its height, not of
  * the space available. So it does not fill, and sits at the left of its column with the rest empty.
  * Stretching it is the single most obvious way to make a form look wrong. */
 .__config-control__.__boolean__ { flex-grow: 0; flex-direction: row; }
 .__config-control__.__boolean__ checkbox,
-.__config-control__.__boolean__ checkbox .__mark__ {
+.__config-control__.__boolean__ checkbox .__mark__,
+.__config-control__.__boolean__ checkbox::part(mark) {
     width: var(--cfg-check);
     height: var(--cfg-check);
     min-height: var(--cfg-check);
@@ -160,10 +162,14 @@
  * state. Unity draws a checkmark on a dark box, and now that CgUiShape exists we draw the real thing:
  * the box stays the SAME dark field colour checked or not, and `overlay: shape("checkmark")` is what
  * carries the on/off distinction — not a colour swap. */
-.__config-control__.__boolean__ checkbox .__mark__ { background: var(--cfg-field); }
-.__config-control__.__boolean__ checkbox:checked .__mark__ { overlay: shape("checkmark"); }
-.__config-control__.__boolean__ checkbox:hover .__mark__ { background: var(--configkit-check-hover-bg, #3A3A3A); }
-.__config-control__.__boolean__ checkbox:checked:hover .__mark__ { background: var(--configkit-check-hover-bg, #3A3A3A); }
+.__config-control__.__boolean__ checkbox .__mark__,
+.__config-control__.__boolean__ checkbox::part(mark) { background: var(--cfg-field); }
+.__config-control__.__boolean__ checkbox:checked .__mark__,
+.__config-control__.__boolean__ checkbox:checked::part(mark) { overlay: shape("checkmark"); }
+.__config-control__.__boolean__ checkbox:hover .__mark__,
+.__config-control__.__boolean__ checkbox:hover::part(mark) { background: var(--configkit-check-hover-bg, #3A3A3A); }
+.__config-control__.__boolean__ checkbox:checked:hover .__mark__,
+.__config-control__.__boolean__ checkbox:checked:hover::part(mark) { background: var(--configkit-check-hover-bg, #3A3A3A); }
 
 /* ── Colour ─────────────────────────────────────────────────────────────────────────────────────
  * A colour bar with its alpha as a strip beneath — deliberately its own summary rendering, not

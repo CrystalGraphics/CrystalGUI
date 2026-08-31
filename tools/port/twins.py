@@ -10,10 +10,8 @@ edit the span between the last `}` (or `*/`) and the `{` that follows it.
 """
 import io, re, sys, glob
 
-# A host is named by its TAG here; `CLASS_HOSTS` is the other spelling, where a widget wears an
-# identifying class instead. `.__search-field__ .__field__` is the shape: SearchField's own class on
-# itself, then one of its parts -- and the twin is `.__search-field__::part(field)`. Skipping these
-# left the field with no height rule at all, and a TextField that measures zero cannot be clicked.
+# A host named by its identifying CLASS rather than by its tag -- `.__search-field__ .__field__`,
+# where the box's whole look lives on that class so a caller can borrow it.
 CLASS_HOSTS = {
  '__search-field__': {'icon', 'field', 'clear', 'options'},
  '__window-icon__': {'monogram'},
@@ -21,6 +19,10 @@ CLASS_HOSTS = {
  '__drag-ghost__': {'pre-icon', 'label'},
 }
 
+# NOTE `colorselector` is deliberately absent: it is D1 kind B all the way down -- its structure stays
+# LIGHT, because 55 shipped rules reach a nested WIDGET through it and a part is a leaf nothing
+# descends from. @see ColorSelector's own class comment. Its inner Sliders and Dropdowns are in this
+# map though, and reached through it: `colorselector .__channel-row__ slider::part(thumb)`.
 HOSTS = {
  'switch': {'spacer', 'knob'},
  'slider': {'fill', 'thumb', 'spacer'},
@@ -34,30 +36,44 @@ HOSTS = {
  'searchfield': {'icon', 'field', 'clear', 'options'},
  'checkbox': {'mark', 'label'},
  'button': {'label'},
- 'colorselector': {'wheel', 'ring', 'square', 'ring-handle', 'square-handle', 'left', 'side',
-                   'channels', 'channel-row', 'hex-row', 'swatches', 'swatch-original', 'swatch-new'},
 }
 
-SEL = re.compile(r'^([a-z][a-z0-9-]*)([^ ]*)\s+\.__([a-z0-9-]+)__((?::[a-z-]+(?:\([^)]*\))?)*)$')
-CLASS_SEL = re.compile(
-    r'^\.(__[a-z0-9-]+__)([^ ]*)\s+\.__([a-z0-9-]+)__((?::[a-z-]+(?:\([^)]*\))?)*)$')
+PART_TAIL = re.compile(r'^\.__([a-z0-9-]+)__((?::[a-z-]+(?:\([^)]*\))?)*)$')
+HOST_HEAD = re.compile(r'^([a-z][a-z0-9-]*|\.__[a-z0-9-]+__)')
 
 
 def twin(sel):
-    sel = sel.strip()
-    m = CLASS_SEL.match(sel)
-    if m:
-        host, rest, part, pseudo = m.groups()
-        if host in CLASS_HOSTS and part in CLASS_HOSTS[host]:
-            return '.%s%s::part(%s)%s' % (host, rest, part, pseudo)
+    """
+    `<anything> HOST .__part__` -> `<anything> HOST::part(part)`.
+
+    Generalised over the WHOLE selector rather than anchored at its start, which is what the first
+    two versions got wrong. A part is very often reached through something else -- `colorselector
+    .__channel-row__ slider .__thumb__` styles the thumb of a slider a colour selector builds, and
+    `.__side__ dropdown .__menu__` the menu of a dropdown inside a panel. Matching only `tag .__x__`
+    left every one of those untwinned, so the sliders in a colour picker drew with the default knob
+    while the rows around them were perfect: the rule was right, the host was right, and the last
+    two words could not reach a shadow part.
+
+    The HOST is the compound immediately before the part -- named by its tag, or by the identifying
+    class a widget wears -- and everything before it is carried through untouched, because the engine
+    matches the host with the ordinary descendant walk.
+    """
+    parts = sel.strip().split()
+    if len(parts) < 2:
         return None
-    m = SEL.match(sel)
+    tail = PART_TAIL.match(parts[-1])
+    if not tail:
+        return None
+    part, pseudo = tail.groups()
+    host = parts[-2]
+    m = HOST_HEAD.match(host)
     if not m:
         return None
-    tag, rest, part, pseudo = m.groups()
-    if tag in HOSTS and part in HOSTS[tag]:
-        return '%s%s::part(%s)%s' % (tag, rest, part, pseudo)
-    return None
+    key = m.group(1)
+    allowed = CLASS_HOSTS.get(key.lstrip('.')) if key.startswith('.') else HOSTS.get(key)
+    if not allowed or part not in allowed:
+        return None
+    return ' '.join(parts[:-1]) + '::part(%s)%s' % (part, pseudo)
 
 
 def selector_spans(text):

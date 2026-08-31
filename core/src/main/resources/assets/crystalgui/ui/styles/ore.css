@@ -720,13 +720,16 @@ colorselector .__channel-row__ slider {
 /* Transparent, and at the row's full height: the slider's BACKGROUND is the gradient, so a fill and a
  * spacer that paint anything at all paint over the only thing the control is for. */
 colorselector .__channel-row__ slider .__fill__,
-colorselector .__channel-row__ slider .__spacer__ {
+colorselector .__channel-row__ slider .__spacer__,
+colorselector .__channel-row__ slider::part(fill),
+colorselector .__channel-row__ slider::part(spacer) {
     background: #00000000;
     height: 9px;
 }
 /* Kept in step with the same rule in default.css — see the note there on why width, border-width and
  * the margins have to be restated as a set. */
-colorselector .__channel-row__ slider .__thumb__ {
+colorselector .__channel-row__ slider .__thumb__,
+colorselector .__channel-row__ slider::part(thumb) {
     width: 3px;
     height: 9px;
     margin-left: -1.5px;
@@ -741,14 +744,18 @@ colorselector .__channel-row__ slider .__thumb__ {
  * background for every state the theme reacts to. */
 colorselector .__channel-row__ slider:hover .__thumb__,
 colorselector .__channel-row__ slider:active .__thumb__,
-colorselector .__channel-row__ slider:disabled .__thumb__ {
+colorselector .__channel-row__ slider:disabled .__thumb__,
+colorselector .__channel-row__ slider:hover::part(thumb),
+colorselector .__channel-row__ slider:active::part(thumb),
+colorselector .__channel-row__ slider:disabled::part(thumb) {
     background: #FFFFFF;
     background-color: #FFFFFF;
 }
 /* Ore rings the THUMB rather than the root, which is right for a 20px knob and wrong for a hairline —
  * the ring is wider than the thing it rings. The row's track carries a dark edge of its own, so the
  * focused slider is still legible with nothing here. */
-colorselector .__channel-row__ slider:focus-visible .__thumb__ {
+colorselector .__channel-row__ slider:focus-visible .__thumb__,
+colorselector .__channel-row__ slider:focus-visible::part(thumb) {
     outline: none;
 }
 

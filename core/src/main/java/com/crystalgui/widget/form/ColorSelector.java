@@ -11,9 +11,7 @@ import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.render.texture.ArgbMath;
 import com.crystalgui.render.texture.CgUiColorField;
-import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.ShadowRoot;
 import com.crystalgui.ui.dom.UINode;
 
 import java.util.ArrayList;
@@ -56,6 +54,22 @@ import com.crystalgui.ui.box.Box;
 public class ColorSelector extends UINode {
 
     public static final Name NAME = Name.of("colorselector");
+
+    // ── ITS STRUCTURE IS LIGHT, NOT A SHADOW TREE, AND THAT IS D1'S KIND B ─────────────────────────
+    //
+    // Every other composite ported so far keeps its parts in a shadow root, and this one must not.
+    // The test is what the SHEETS reach through: 55 shipped rules style a nested WIDGET through this
+    // widget's structure -- `colorselector .__channel-row__ slider .__fill__`, `.__side__ dropdown
+    // .__menu__` -- and `::part()` cannot express either half. A part is a LEAF a rule addresses by
+    // name; nothing descends from one, and the slider inside a shadow tree is unreachable besides.
+    //
+    // Put behind a shadow root, the channel rows collapsed: the label clipped to one character, the
+    // slider a dot, the value crushed against it. Every rule was correct and none of them arrived.
+    //
+    // What encapsulation would have bought here is nothing. A colour selector takes no caller content
+    // -- there is no slot and nothing to collide with -- so the boundary would protect its parts from
+    // an outer rule that is, in every case, its OWN theme. That is D1's kind B, and this widget is
+    // kind B all the way down.
 
     public static final State<ColorSelector, Mode> MODE =
             State.of("mode", StateTypes.enumOf(Mode.class),
@@ -106,22 +120,22 @@ public class ColorSelector extends UINode {
                     .primary(COLOR)
                     .build());
 
-    public static final String WHEEL_PART = "wheel";
-    public static final String RING_PART = "ring";
-    public static final String SQUARE_PART = "square";
-    public static final String RING_HANDLE_PART = "ring-handle";
-    public static final String SQUARE_HANDLE_PART = "square-handle";
+    public static final String WHEEL_CLASS = "__wheel__";
+    public static final String RING_CLASS = "__ring__";
+    public static final String SQUARE_CLASS = "__square__";
+    public static final String RING_HANDLE_CLASS = "__ring-handle__";
+    public static final String SQUARE_HANDLE_CLASS = "__square-handle__";
     /** The column left of the channels: the swatch pair, then the wheel. */
-    public static final String LEFT_PART = "left";
+    public static final String LEFT_CLASS = "__left__";
     /** The column right of the wheel: mode chooser, channel rows, hex. */
-    public static final String SIDE_PART = "side";
-    public static final String CHANNELS_PART = "channels";
-    public static final String CHANNEL_ROW_PART = "channel-row";
-    public static final String HEX_ROW_PART = "hex-row";
+    public static final String SIDE_CLASS = "__side__";
+    public static final String CHANNELS_CLASS = "__channels__";
+    public static final String CHANNEL_ROW_CLASS = "__channel-row__";
+    public static final String HEX_ROW_CLASS = "__hex-row__";
     /** The before/after pair above the channels. */
-    public static final String SWATCHES_PART = "swatches";
-    public static final String SWATCH_ORIGINAL_PART = "swatch-original";
-    public static final String SWATCH_NEW_PART = "swatch-new";
+    public static final String SWATCHES_CLASS = "__swatches__";
+    public static final String SWATCH_ORIGINAL_CLASS = "__swatch-original__";
+    public static final String SWATCH_NEW_CLASS = "__swatch-new__";
 
     /**
      * How the four channel rows present the colour.
@@ -160,7 +174,6 @@ public class ColorSelector extends UINode {
 
     private Mode mode = Mode.RGB_255;
 
-    private final ShadowRoot shadow;
 
     private final UINode left = new UINode();
     private final UINode wheel = new UINode();
@@ -210,24 +223,23 @@ public class ColorSelector extends UINode {
 
     public ColorSelector() {
         super(NAME);
-        this.shadow = attachShadow();
         // Wheel on the left, everything else in a column on the right — the reference layout, and the
         // one that gives the channel tracks room to be read. Stacked vertically they were a narrow
         // strip under a large wheel, which is the widest thing in the widget wasting the space the
         // things you actually drag need.
-        side.set(Attribute.PART, SIDE_PART);
-        left.set(Attribute.PART, LEFT_PART);
+        side.addClass(SIDE_CLASS);
+        left.addClass(LEFT_CLASS);
         // Swatches ABOVE the wheel rather than over the channels. They are a comparison, and the thing
         // being compared against is chosen on the ring — putting them at the top of the same column
         // keeps the before/after next to the control that changes it, and leaves the channel column to
         // be four bars and a hex field rather than five stacked strips.
         buildSwatches();
         buildWheel();
-        shadow.append(left);
+        append(left);
         buildModeChooser();
         buildChannels();
         buildHexRow();
-        shadow.append(side);
+        append(side);
 
         color.changed.connect((from, to) -> {
             onColorChanged.emit(to);
@@ -240,11 +252,11 @@ public class ColorSelector extends UINode {
     // ── Structure ───────────────────────────────────────────────────────────
 
     private void buildWheel() {
-        wheel.set(Attribute.PART, WHEEL_PART);
-        ring.set(Attribute.PART, RING_PART);
-        square.set(Attribute.PART, SQUARE_PART);
-        ringHandle.set(Attribute.PART, RING_HANDLE_PART);
-        squareHandle.set(Attribute.PART, SQUARE_HANDLE_PART);
+        wheel.addClass(WHEEL_CLASS);
+        ring.addClass(RING_CLASS);
+        square.addClass(SQUARE_CLASS);
+        ringHandle.addClass(RING_HANDLE_CLASS);
+        squareHandle.addClass(SQUARE_HANDLE_CLASS);
         // Handles never take the pointer: a press must reach the surface underneath so a click ON the
         // handle keeps dragging rather than doing nothing, which is what makes grabbing one feel solid.
         ringHandle.setHitTest(false);
@@ -357,9 +369,9 @@ public class ColorSelector extends UINode {
      * one keeps the checker's size and phase identical everywhere alpha is shown in the widget.</p>
      */
     private void buildSwatches() {
-        swatches.set(Attribute.PART, SWATCHES_PART);
-        originalSwatch.set(Attribute.PART, SWATCH_ORIGINAL_PART);
-        newSwatch.set(Attribute.PART, SWATCH_NEW_PART);
+        swatches.addClass(SWATCHES_CLASS);
+        originalSwatch.addClass(SWATCH_ORIGINAL_CLASS);
+        newSwatch.addClass(SWATCH_NEW_CLASS);
         // Decomposed, like a hex edit and unlike a slider drag: restoring the original names a colour
         // outright, so the hue it implies is the one wanted — including when the original is a grey,
         // whose retained hue would otherwise survive a reset that is supposed to undo everything.
@@ -390,7 +402,7 @@ public class ColorSelector extends UINode {
     }
 
     private void buildChannels() {
-        channels.set(Attribute.PART, CHANNELS_PART);
+        channels.addClass(CHANNELS_CLASS);
         for (int i = 0; i < 4; i++) {
             ChannelRow row = new ChannelRow(i);
             rows.add(row);
@@ -401,7 +413,7 @@ public class ColorSelector extends UINode {
 
     private void buildHexRow() {
         UINode row = new UINode();
-        row.set(Attribute.PART, HEX_ROW_PART);
+        row.addClass(HEX_ROW_CLASS);
         TextNode label = new TextNode("Hexadecimal");
         label.setHitTest(false);
         // IMMEDIATE, not the ON_COMMIT default. A picker's fields are a live view of one colour: a hex
@@ -603,7 +615,7 @@ public class ColorSelector extends UINode {
 
         ChannelRow(int index) {
             this.index = index;
-            root.set(Attribute.PART, CHANNEL_ROW_PART);
+            root.addClass(CHANNEL_ROW_CLASS);
             label.setHitTest(false);
             slider.attachListener(v -> {
                 if (updating) return;
