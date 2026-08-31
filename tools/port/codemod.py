@@ -54,6 +54,12 @@ RULES = [
     # here than seventeen manual repairs. `UIText` is a rename as well as a move (D15: it merges into
     # the engine's own text node), which is why it is listed with the packages rather than as a type.
     (r'import com\.crystalgui\.ui\.UIElement;', 'import com.crystalgui.ui.dom.UINode;', 'import'),
+    # AN INLINE FQN, which the import rules above cannot see. `\bUIElement\b -> UINode` then rewrites
+    # the last segment in place and leaves `com.crystalgui.ui.UINode`, a package that does not exist --
+    # and it fails at the USE, not at an import, so it reads as the class being missing rather than as
+    # the qualifier being stale. One site in 6.2 (SettingsConfigurator's `addRow` parameter).
+    (r'\bcom\.crystalgui\.ui\.UIElement\b', 'com.crystalgui.ui.dom.UINode', 'import'),
+    (r'\bcom\.crystalgui\.ui\.UIWindow\b', 'com.crystalgui.ui.dom.UIDocument', 'import'),
     (r'import com\.crystalgui\.ui\.UIWindow;', 'import com.crystalgui.ui.dom.UIDocument;', 'import'),
     (r'import com\.crystalgui\.ui\.elements\.UIText;', 'import com.crystalgui.widget.text.UIText;', 'import'),
     (r'import com\.crystalgui\.ui\.UIFrameTicker;', 'import com.crystalgui.ui.service.Animation;', 'import'),
@@ -88,8 +94,8 @@ RULES = [
     # element's own origin, so its answer was an absolute layout coordinate. Any call site that then
     # added the origin back has to LOSE that addition -- which is why these two land in the reading
     # list as well (see RESIDUAL), rather than being trusted as a pure rename.
-    (r'screenToLocal\(', 'toLocal(', 'coordinates'),
-    (r'containsScreenPoint\(', 'containsSurfacePoint(', 'coordinates'),
+    (r'\bscreenToLocal\(', 'toLocal(', 'coordinates'),
+    (r'\bcontainsScreenPoint\(', 'containsSurfacePoint(', 'coordinates'),
     # contentBox* -> contentBox*, NOT content*. `Box.contentWidth()` is the extent of what is INSIDE
     # a box; `contentBoxWidth()` is the box minus border and padding. Mapping one to the other on the
     # strength of the name made TextField -- which has no child nodes, so its content extent is zero --
@@ -113,6 +119,10 @@ RULES = [
     (r'\.clearAllChildren\(\)', '.removeAll()', 'tree'),
     (r'\.getChildren\(\)', '.children()', 'tree'),
     (r'\.getParent\(\)', '.parent()', 'tree'),
+    # RECEIVER-BLIND, deliberately: it is a node rename and it is right far more often than
+    # not, but `Setting.getId()` and anything else keeping the old spelling comes across
+    # renamed. It fails the COMPILE, loudly, at the call -- which is the outcome to want from
+    # a rule that cannot know its receiver's type. 6.2 hit it three times in one file.
     (r'\.getId\(\)', '.id()', 'identity'),
     (r'\.getClasses\(\)', '.classes()', 'identity'),
 
@@ -130,7 +140,7 @@ RULES = [
     (r'DRAG_CONTROLLER\.startDrag\(', 'Drag.start(', 'drag'),
     # Drag is STATIC now, so the receiver the rule above leaves behind has to go: `window.Drag.start`
     # is a field access on a variable, and it compiles as nothing at all.
-    (r'(?:window|doc|document\(\))\.Drag\.', 'Drag.', 'drag'),
+    (r'\b(?:window|doc|document\(\))\.Drag\.', 'Drag.', 'drag'),
     # hasMode takes an INSTANCE; a caller with only a class asks mode(Class) instead.
     (r'DRAG_CONTROLLER\.isDragging\(\)', 'input().mode(Drag.class) != null', 'drag'),
     (r'DRAG_CONTROLLER\.', 'Drag.', 'drag receiver'),
@@ -197,7 +207,7 @@ RESIDUAL = [
 ]
 
 
-def ported_imports():
+def ported_imports(batch=None):
     """
     `import com.crystalgui.ui.elements.X;` -> the package X was PORTED into.
 
@@ -211,7 +221,16 @@ def ported_imports():
     out = []
     for line in io.open(LEDGER, encoding='utf-8'):
         f = line.rstrip(chr(10)).split(chr(9))
-        if len(f) < 7 or f[0] != 'CLASS' or f[6] != 'ported':
+        if len(f) < 7 or f[0] != 'CLASS':
+            continue
+        # A MOVE re-homes the class for both engines the moment it happens, so it counts
+        # whatever its status; a COPY only once the copy exists.
+        # ...and a row in the batch BEING PORTED counts too, or the copies do not import each
+        # other's new homes: InspectorForm imported ui.elements.config.ConfiguratorPanel, which
+        # resolves perfectly to the OLD class, so every call on it failed as 'no suitable method'
+        # rather than at the import. Cross-references WITHIN a batch are the commonest kind.
+        in_batch = batch is not None and f[4] == batch
+        if f[5] != 'move' and f[6] != 'ported' and not in_batch:
             continue
         old, dest = f[1], f[3]
         simple = old[old.rindex('/') + 1:]
@@ -240,11 +259,11 @@ def ledger_rows(batch, only):
     return rows
 
 
-def transform(text, path=''):
+def transform(text, path='', batch=None):
     applied = {}
     # The ported-import rules go FIRST and are recomputed per run, because what is ported changes
     # between batches -- see ported_imports().
-    for pattern, replacement, name in ported_imports():
+    for pattern, replacement, name in ported_imports(batch):
         text, n = re.subn(pattern, replacement, text, flags=re.M)
         if n:
             applied[name] = applied.get(name, 0) + n
@@ -307,7 +326,7 @@ def main():
             print('  MOVE (do this in the IDE) %-44s -> %s' % (path, dest))
             continue
 
-        out, applied = transform(text, path)
+        out, applied = transform(text, path, args.batch)
         out = re.sub(r'^package [\w.]+;', 'package com.crystalgui.' + dest.replace('/', '.') + ';', out, count=1, flags=re.M)
         for name, n in applied.items():
             total_applied[name] = total_applied.get(name, 0) + n

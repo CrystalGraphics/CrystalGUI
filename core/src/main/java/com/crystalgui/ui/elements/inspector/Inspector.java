@@ -7,6 +7,7 @@ import com.crystalgui.ui.UIWindow;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.ui.tree.UITreeTraversal;
 import com.crystalgui.ui.elements.config.ConfigControl;
+import com.crystalgui.ui.elements.inspector.InspectorRegistry;
 import java.util.ArrayList;
 import com.crystalgui.ui.elements.config.ConfiguratorPanel;
 import com.crystalgui.ui.elements.Tab;

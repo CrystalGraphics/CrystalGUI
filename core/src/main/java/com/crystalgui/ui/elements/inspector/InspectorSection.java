@@ -1,7 +1,7 @@
 package com.crystalgui.ui.elements.inspector;
 
 import com.crystalgui.core.data.DataContext;
-import com.crystalgui.ui.elements.config.ConfigDescriptor;
+import com.crystalgui.core.config.ConfigDescriptor;
 
 /**
  * Something that can describe a subject to the {@link Inspector} — Blender's {@code Panel} plus its

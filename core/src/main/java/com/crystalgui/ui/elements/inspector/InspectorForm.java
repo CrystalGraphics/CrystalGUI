@@ -2,7 +2,7 @@ package com.crystalgui.ui.elements.inspector;
 
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.config.ConfigControl;
-import com.crystalgui.ui.elements.config.ConfigDescriptor;
+import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.ui.elements.config.Configurator;
 import com.crystalgui.ui.elements.config.ConfiguratorGroup;
 import com.crystalgui.ui.elements.config.ConfiguratorPanel;

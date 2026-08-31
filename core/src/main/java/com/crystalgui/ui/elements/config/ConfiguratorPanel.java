@@ -4,6 +4,7 @@ import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.ScrollerView;
 
+import com.crystalgui.core.config.ConfigDescriptor;
 import javax.annotation.Nullable;
 import java.util.LinkedHashMap;
 import java.util.Map;

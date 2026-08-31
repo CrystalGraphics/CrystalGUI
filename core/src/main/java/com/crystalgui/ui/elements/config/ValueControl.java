@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.config;
 
+import com.crystalgui.core.config.ConfigDescriptor;
 import javax.annotation.Nullable;
 
 /**

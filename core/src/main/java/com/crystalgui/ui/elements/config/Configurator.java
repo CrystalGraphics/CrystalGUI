@@ -3,6 +3,7 @@ package com.crystalgui.ui.elements.config;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.UIText;
 
+import com.crystalgui.core.config.ConfigDescriptor;
 import javax.annotation.Nullable;
 
 /**

@@ -2,7 +2,7 @@ package com.crystalgui.graph.shader;
 
 import com.crystalgui.graph.NodeField;
 import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.config.ConfigDescriptor;
+import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.ui.elements.config.control.VectorControl;
 import com.crystalgui.ui.elements.graph.NodeFieldWidgets;
 

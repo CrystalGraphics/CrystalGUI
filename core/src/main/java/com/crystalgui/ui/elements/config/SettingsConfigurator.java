@@ -7,6 +7,7 @@ import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.core.settings.SettingsRegistry;
 import com.crystalgui.core.undo.UndoStack;
 
+import com.crystalgui.core.config.ConfigDescriptor;
 import javax.annotation.Nullable;
 import java.util.Collection;
 import java.util.List;

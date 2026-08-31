@@ -3,6 +3,22 @@ package com.crystalgui.widget;
 import com.crystalgui.ui.dom.NodeContract;
 import com.crystalgui.ui.dom.NodeKinds;
 import com.crystalgui.ui.dom.UINodeRegistry;
+import com.crystalgui.widget.config.Configurator;
+import com.crystalgui.widget.config.ConfiguratorGroup;
+import com.crystalgui.widget.config.ConfiguratorPanel;
+import com.crystalgui.widget.config.control.ArrayControl;
+import com.crystalgui.widget.config.control.AssetControl;
+import com.crystalgui.widget.config.control.BooleanControl;
+import com.crystalgui.widget.config.control.ColorControl;
+import com.crystalgui.widget.config.control.HeaderControl;
+import com.crystalgui.widget.config.control.InfoControl;
+import com.crystalgui.widget.config.control.MaskControl;
+import com.crystalgui.widget.config.control.MatrixControl;
+import com.crystalgui.widget.config.control.NumberControl;
+import com.crystalgui.widget.config.control.SelectControl;
+import com.crystalgui.widget.config.control.SliderControl;
+import com.crystalgui.widget.config.control.TextControl;
+import com.crystalgui.widget.config.control.VectorControl;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Checkbox;
 import com.crystalgui.widget.control.ProgressBar;
@@ -97,6 +113,34 @@ public final class Widgets implements NodeKinds {
         // PageStack is shell chrome with a back stack -- localOnly, so it registers a kind for the
         // cascade's sake (`pagestack { }` is how a theme reaches it) and nothing decodes into it.
         UINodeRegistry.register(PageStack.NAME, PageStack::new, NodeContract.INERT);
+
+        // ── 6.2: the config kit ─────────────────────────────────────────────────────
+        //
+        // ALL INERT, and all of them for the same reason: WidgetCensus already marks the kit
+        // localOnly -- a descriptor-driven form is built from a ConfigDescriptor, which is what
+        // travels, not the controls it produces. What the registration buys is the CASCADE: without
+        // a kind a control reports `crystalgui:element`, so `numbercontrol { }` in a theme matches
+        // nothing and every `element` rule reaches it instead.
+        //
+        // NO FACTORY for the controls: each takes a ConfigDescriptor and there is no sensible
+        // no-argument form of one, so they are registered for their names alone. Nothing decodes
+        // into them, which is exactly what localOnly means.
+        UINodeRegistry.register(Configurator.NAME, Configurator::new, NodeContract.INERT);
+        UINodeRegistry.register(ConfiguratorGroup.NAME, ConfiguratorGroup::new, NodeContract.INERT);
+        UINodeRegistry.register(ConfiguratorPanel.NAME, ConfiguratorPanel::new, NodeContract.INERT);
+        UINodeRegistry.register(ArrayControl.NAME, ArrayControl::new, NodeContract.INERT);
+        UINodeRegistry.register(AssetControl.NAME, AssetControl::new, NodeContract.INERT);
+        UINodeRegistry.register(BooleanControl.NAME, BooleanControl::new, NodeContract.INERT);
+        UINodeRegistry.register(ColorControl.NAME, ColorControl::new, NodeContract.INERT);
+        UINodeRegistry.register(HeaderControl.NAME, HeaderControl::new, NodeContract.INERT);
+        UINodeRegistry.register(InfoControl.NAME, InfoControl::new, NodeContract.INERT);
+        UINodeRegistry.register(MaskControl.NAME, MaskControl::new, NodeContract.INERT);
+        UINodeRegistry.register(MatrixControl.NAME, MatrixControl::new, NodeContract.INERT);
+        UINodeRegistry.register(NumberControl.NAME, NumberControl::new, NodeContract.INERT);
+        UINodeRegistry.register(SelectControl.NAME, SelectControl::new, NodeContract.INERT);
+        UINodeRegistry.register(SliderControl.NAME, SliderControl::new, NodeContract.INERT);
+        UINodeRegistry.register(TextControl.NAME, TextControl::new, NodeContract.INERT);
+        UINodeRegistry.register(VectorControl.NAME, VectorControl::new, NodeContract.INERT);
 
         // ── dnd ──────────────────────────────────────────────────────────────
         UINodeRegistry.register(DragGhost.NAME, DragGhost::new, NodeContract.INERT);

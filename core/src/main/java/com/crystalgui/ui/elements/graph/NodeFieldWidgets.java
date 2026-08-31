@@ -4,7 +4,7 @@ import com.crystalgui.graph.NodeField;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.config.ConfigControl;
 import com.crystalgui.ui.elements.config.ConfigControls;
-import com.crystalgui.ui.elements.config.ConfigDescriptor;
+import com.crystalgui.core.config.ConfigDescriptor;
 
 import javax.annotation.Nullable;
 import java.util.EnumMap;
