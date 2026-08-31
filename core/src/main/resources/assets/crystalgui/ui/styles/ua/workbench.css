@@ -1319,7 +1319,8 @@ workbench splitview.__vertical__ > .__divider__ {
     border-radius: 2px;
 }
 
-.__drag-ghost__ .__pre-icon__ {
+.__drag-ghost__ .__pre-icon__,
+.__drag-ghost__::part(pre-icon) {
     width: 14px;
     height: 14px;
     flex-shrink: 0;
@@ -1328,7 +1329,8 @@ workbench splitview.__vertical__ > .__divider__ {
 
 /* OUT OF FLOW, to the right of the icon by default. `left: 100%` resolves against the ghost's own box,
  * so the gap is stated once and holds whatever size the icon takes. */
-.__drag-ghost__ .__label__ {
+.__drag-ghost__ .__label__,
+.__drag-ghost__::part(label) {
     position: absolute;
     left: 100%;
     margin-left: 6px;
@@ -1346,7 +1348,8 @@ workbench splitview.__vertical__ > .__divider__ {
  * the edge -- and the icon still does not move. RegionDropOverlay decides, by pointer position rather
  * than by whether the text would fit: the text changes length as the destination changes, so a fit
  * test flips and unflips while the pointer sits still. */
-.__drag-ghost__.__flipped__ .__label__ {
+.__drag-ghost__.__flipped__ .__label__,
+.__drag-ghost__.__flipped__::part(label) {
     left: auto;
     right: 100%;
     margin-left: 0px;
@@ -1355,7 +1358,8 @@ workbench splitview.__vertical__ > .__divider__ {
 
 /* NO DESTINATION means no label at all, not an empty capsule -- the middle of the window, where a drop
  * is refused. An empty box would read as a name that failed to load. */
-.__drag-ghost__.__unlabelled__ .__label__ {
+.__drag-ghost__.__unlabelled__ .__label__,
+.__drag-ghost__.__unlabelled__::part(label) {
     display: none;
 }
 
@@ -2333,14 +2337,16 @@ dockgroup > tabview > .__strip__ > .__strip-bar__ {
     background-color: var(--tab-active-bg, #3A3A3A);
 }
 
-.__drag-ghost__.__tab-ghost__ .__pre-icon__ {
+.__drag-ghost__.__tab-ghost__ .__pre-icon__,
+.__drag-ghost__.__tab-ghost__::part(pre-icon) {
     width: 12px;
     height: 12px;
 }
 
 /* BACK IN FLOW. The base rule takes the label out of it and anchors it at `left: 100%`, which is what
  * puts it in its own box beside the chip; a tab wears its name inside itself. */
-.__drag-ghost__.__tab-ghost__ .__label__ {
+.__drag-ghost__.__tab-ghost__ .__label__,
+.__drag-ghost__.__tab-ghost__::part(label) {
     position: relative;
     left: 0;
     margin-left: 0;

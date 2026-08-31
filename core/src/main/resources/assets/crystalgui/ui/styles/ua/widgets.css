@@ -98,7 +98,6 @@ checkbox {
     text-shadow: false;
 }
 checkbox .__mark__,
-checkbox::part(mark),
 checkbox::part(mark) {
     width: 12px;
     height: 12px;
@@ -106,12 +105,10 @@ checkbox::part(mark) {
     border-radius: 2px;
 }
 checkbox:hover .__mark__,
-checkbox:hover::part(mark),
 checkbox:hover::part(mark) {
     background: var(--checkbox-mark-hover-bg, #B4B4B4);
 }
 checkbox:checked .__mark__,
-checkbox:checked::part(mark),
 checkbox:checked::part(mark) {
     background: var(--checkbox-checked-bg, #3C8527);
     /* A real vector checkmark, not a texture asset — default.css has no image assets to lean on and
@@ -120,7 +117,6 @@ checkbox:checked::part(mark) {
     overlay: shape("checkmark");
 }
 checkbox:disabled .__mark__,
-checkbox:disabled::part(mark),
 checkbox:disabled::part(mark) {
     background: var(--checkbox-disabled-bg, #6E6E6E);
 }
