@@ -100,28 +100,28 @@ CLASS	ui/elements/chrome/QuickPickEntry	41	chrome	6.3	move	pending
 CLASS	ui/elements/chrome/QuickPickItem	179	chrome	6.3	move	pending
 CLASS	ui/elements/chrome/QuickPickSource	294	chrome	6.3	move	pending
 CLASS	ui/elements/chrome/StatusBarView	427	chrome	6.3	copy	pending
-CLASS	ui/elements/config/ConfigControl	242	widget/config	6.2	copy	pending
-CLASS	ui/elements/config/ConfigControlContracts	93	widget/config	6.2	move	pending
-CLASS	ui/elements/config/ConfigControls	82	widget/config	6.2	move	pending
-CLASS	ui/elements/config/ConfigDescriptor	262	widget/config	6.2	move	pending
-CLASS	ui/elements/config/Configurator	81	widget/config	6.2	copy	pending
-CLASS	ui/elements/config/ConfiguratorGroup	125	widget/config	6.2	copy	pending
-CLASS	ui/elements/config/ConfiguratorPanel	194	widget/config	6.2	copy	pending
-CLASS	ui/elements/config/SettingsConfigurator	172	widget/config	6.2	copy	pending
-CLASS	ui/elements/config/ValueControl	84	widget/config	6.2	move	pending
-CLASS	ui/elements/config/control/ArrayControl	155	widget/config/control	6.2	copy	pending
-CLASS	ui/elements/config/control/AssetControl	80	widget/config/control	6.2	move	pending
-CLASS	ui/elements/config/control/BooleanControl	54	widget/config/control	6.2	move	pending
-CLASS	ui/elements/config/control/ColorControl	151	widget/config/control	6.2	copy	pending
-CLASS	ui/elements/config/control/HeaderControl	55	widget/config/control	6.2	move	pending
-CLASS	ui/elements/config/control/InfoControl	69	widget/config/control	6.2	move	pending
-CLASS	ui/elements/config/control/MaskControl	159	widget/config/control	6.2	copy	pending
-CLASS	ui/elements/config/control/MatrixControl	109	widget/config/control	6.2	copy	pending
-CLASS	ui/elements/config/control/NumberControl	295	widget/config/control	6.2	copy	pending
-CLASS	ui/elements/config/control/SelectControl	68	widget/config/control	6.2	move	pending
-CLASS	ui/elements/config/control/SliderControl	92	widget/config/control	6.2	move	pending
-CLASS	ui/elements/config/control/TextControl	87	widget/config/control	6.2	move	pending
-CLASS	ui/elements/config/control/VectorControl	123	widget/config/control	6.2	copy	pending
+CLASS	ui/elements/config/ConfigControl	242	widget/config	6.2	copy	ported
+CLASS	ui/elements/config/ConfigControlContracts	93	widget/config	6.2	copy	ported
+CLASS	ui/elements/config/ConfigControls	82	widget/config	6.2	copy	ported
+CLASS	ui/elements/config/ConfigDescriptor	262	core/config	6.2	move	ported
+CLASS	ui/elements/config/Configurator	81	widget/config	6.2	copy	ported
+CLASS	ui/elements/config/ConfiguratorGroup	125	widget/config	6.2	copy	ported
+CLASS	ui/elements/config/ConfiguratorPanel	194	widget/config	6.2	copy	ported
+CLASS	ui/elements/config/SettingsConfigurator	172	widget/config	6.2	copy	ported
+CLASS	ui/elements/config/ValueControl	84	widget/config	6.2	copy	ported
+CLASS	ui/elements/config/control/ArrayControl	155	widget/config/control	6.2	copy	ported
+CLASS	ui/elements/config/control/AssetControl	80	widget/config/control	6.2	copy	ported
+CLASS	ui/elements/config/control/BooleanControl	54	widget/config/control	6.2	copy	ported
+CLASS	ui/elements/config/control/ColorControl	151	widget/config/control	6.2	copy	ported
+CLASS	ui/elements/config/control/HeaderControl	55	widget/config/control	6.2	copy	ported
+CLASS	ui/elements/config/control/InfoControl	69	widget/config/control	6.2	copy	ported
+CLASS	ui/elements/config/control/MaskControl	159	widget/config/control	6.2	copy	ported
+CLASS	ui/elements/config/control/MatrixControl	109	widget/config/control	6.2	copy	ported
+CLASS	ui/elements/config/control/NumberControl	295	widget/config/control	6.2	copy	ported
+CLASS	ui/elements/config/control/SelectControl	68	widget/config/control	6.2	copy	ported
+CLASS	ui/elements/config/control/SliderControl	92	widget/config/control	6.2	copy	ported
+CLASS	ui/elements/config/control/TextControl	87	widget/config/control	6.2	copy	ported
+CLASS	ui/elements/config/control/VectorControl	123	widget/config/control	6.2	copy	ported
 CLASS	ui/elements/desktop/Desktop	1359	desktop	6.6	copy	pending
 CLASS	ui/elements/desktop/DesktopCommands	158	desktop	6.6	copy	pending
 CLASS	ui/elements/desktop/DesktopPresentation	75	desktop	6.6	move	pending
@@ -228,10 +228,10 @@ CLASS	ui/elements/graph/NodeWireLayer	285	widget/graph	6.4	copy	pending
 CLASS	ui/elements/graph/PortDefaultEditor	395	widget/graph	6.4	copy	pending
 CLASS	ui/elements/graph/PortType	95	widget/graph	6.4	copy	pending
 CLASS	ui/elements/graph/PortTypeRegistry	67	widget/graph	6.4	move	pending
-CLASS	ui/elements/inspector/Inspector	447	widget/config/inspector	6.2	copy	pending
-CLASS	ui/elements/inspector/InspectorForm	129	widget/config/inspector	6.2	copy	pending
-CLASS	ui/elements/inspector/InspectorRegistry	75	widget/config/inspector	6.2	move	pending
-CLASS	ui/elements/inspector/InspectorSection	92	widget/config/inspector	6.2	move	pending
+CLASS	ui/elements/inspector/Inspector	447	widget/config/inspector	6.3	copy	pending
+CLASS	ui/elements/inspector/InspectorForm	129	widget/config/inspector	6.3	copy	pending
+CLASS	ui/elements/inspector/InspectorRegistry	75	widget/config/inspector	6.3	copy	pending
+CLASS	ui/elements/inspector/InspectorSection	92	widget/config/inspector	6.3	copy	pending
 CLASS	ui/elements/list/FixedHeightStrategy	50	widget/collection/list	6.3	move	pending
 CLASS	ui/elements/list/ItemSizeStrategy	28	widget/collection/list	6.3	move	pending
 CLASS	ui/elements/list/ListRenderer	74	widget/collection/list	6.3	copy	pending
@@ -328,17 +328,17 @@ PART	(unowned)	tile-4	A	1	proposed	leaf in every rule
 PART	(unowned)	tile-5	A	1	proposed	leaf in every rule
 PART	(unowned)	tile-6	A	1	proposed	leaf in every rule
 PART	(unowned)	warning	A	1	proposed	leaf in every rule
-PART	ArrayControl	add	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	ArrayControl	array	B	10	proposed	a rule selects through it (9)
-PART	ArrayControl	body	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	ArrayControl	empty	C	3	proposed	state adjective
-PART	ArrayControl	entry	B	2	proposed	a rule selects through it (1)
-PART	ArrayControl	foot	B	2	proposed	a rule selects through it (1)
-PART	ArrayControl	head	B	2	proposed	a rule selects through it (1)
-PART	ArrayControl	remove	A	0	proposed	leaf in every rule
-PART	AssetControl	asset	B	3	proposed	a rule selects through it (2)
-PART	AssetControl	browse	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	AssetControl	field	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	ArrayControl	add	B	2	confirmed	light tree: the config kit hosts no shadow roots
+PART	ArrayControl	array	B	10	confirmed	light tree: the config kit hosts no shadow roots
+PART	ArrayControl	body	B	2	confirmed	light tree: the config kit hosts no shadow roots
+PART	ArrayControl	empty	C	3	confirmed	state adjective, flipped by the control itself
+PART	ArrayControl	entry	B	2	confirmed	light tree: the config kit hosts no shadow roots
+PART	ArrayControl	foot	B	2	confirmed	light tree: the config kit hosts no shadow roots
+PART	ArrayControl	head	B	2	confirmed	light tree: the config kit hosts no shadow roots
+PART	ArrayControl	remove	B	0	confirmed	light tree: the config kit hosts no shadow roots
+PART	AssetControl	asset	B	3	confirmed	light tree: the config kit hosts no shadow roots
+PART	AssetControl	browse	B	1	confirmed	light tree: the config kit hosts no shadow roots
+PART	AssetControl	field	B	1	confirmed	light tree: the config kit hosts no shadow roots
 PART	BlackboardPanel	active	C	4	proposed	state adjective
 PART	BlackboardPanel	add	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
 PART	BlackboardPanel	blackboard	B	25	proposed	a rule selects through it (22)
@@ -349,7 +349,7 @@ PART	BlackboardPanel	head	B	4	proposed	a rule selects through it (2)
 PART	BlackboardPanel	subtitle	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
 PART	BlackboardPanel	title	A	5	proposed	leaf in every rule, scoped by an ancestor in 5
 PART	BlackboardPanel	titles	B	5	proposed	a rule selects through it (4)
-PART	BooleanControl	boolean	B	7	proposed	a rule selects through it (6)
+PART	BooleanControl	boolean	B	7	confirmed	light tree: the config kit hosts no shadow roots
 PART	Breadcrumbs	crumb	A	0	proposed	leaf in every rule
 PART	Breadcrumbs	crumb-current	A	0	proposed	leaf in every rule
 PART	Breadcrumbs	crumb-icon	A	0	proposed	leaf in every rule
@@ -364,12 +364,12 @@ PART	CategoryHeader	category	A	0	proposed	leaf in every rule
 PART	CategoryHeader	collapsed	C	4	proposed	state adjective
 PART	CategoryHeader	name	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
 PART	Checkbox	mark	A	0	confirmed	leaf in every rule
-PART	ColorControl	alpha-bar	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	ColorControl	alpha-fill	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	ColorControl	color	B	4	proposed	a rule selects through it (4)
-PART	ColorControl	color-bar	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	ColorControl	picker	A	1	proposed	leaf in every rule
-PART	ColorControl	swatch	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
+PART	ColorControl	alpha-bar	B	1	confirmed	light tree: the config kit hosts no shadow roots
+PART	ColorControl	alpha-fill	B	1	confirmed	light tree: the config kit hosts no shadow roots
+PART	ColorControl	color	B	4	confirmed	light tree: the config kit hosts no shadow roots
+PART	ColorControl	color-bar	B	1	confirmed	light tree: the config kit hosts no shadow roots
+PART	ColorControl	picker	B	1	confirmed	light tree: the config kit hosts no shadow roots
+PART	ColorControl	swatch	B	4	confirmed	light tree: the config kit hosts no shadow roots
 PART	ColorSelector	channel-row	A	0	confirmed	leaf in every rule
 PART	ColorSelector	channels	A	0	confirmed	leaf in every rule
 PART	ColorSelector	hex-row	A	0	confirmed	leaf in every rule
@@ -396,17 +396,17 @@ PART	CompletionPopup	completion-mark-static	A	2	proposed	leaf in every rule
 PART	CompletionPopup	completion-options	A	2	proposed	leaf in every rule
 PART	CompletionPopup	completion-params	A	2	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	CompletionPopup	completion-row	A	2	proposed	leaf in every rule
-PART	ConfigControl	config-control	B	65	proposed	a rule selects through it (55)
-PART	Configurator	configurator	B	6	proposed	a rule selects through it (5)
-PART	Configurator	inline	C	4	proposed	state adjective
-PART	Configurator	label	A	5	proposed	leaf in every rule, scoped by an ancestor in 5
-PART	ConfiguratorGroup	arrow	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	ConfiguratorGroup	collapsed	C	4	proposed	state adjective
-PART	ConfiguratorGroup	configurator-group	B	14	proposed	a rule selects through it (13)
-PART	ConfiguratorGroup	content	B	7	proposed	a rule selects through it (5)
-PART	ConfiguratorGroup	head	B	6	proposed	a rule selects through it (3)
-PART	ConfiguratorGroup	title	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	ConfiguratorPanel	configurator-panel	A	1	proposed	leaf in every rule
+PART	ConfigControl	config-control	B	65	confirmed	light tree: the config kit hosts no shadow roots
+PART	Configurator	configurator	B	6	confirmed	light tree: the config kit hosts no shadow roots
+PART	Configurator	inline	C	4	confirmed	state adjective, flipped by the control itself
+PART	Configurator	label	B	5	confirmed	light tree: the config kit hosts no shadow roots
+PART	ConfiguratorGroup	arrow	B	2	confirmed	light tree: the config kit hosts no shadow roots
+PART	ConfiguratorGroup	collapsed	C	4	confirmed	state adjective, flipped by the control itself
+PART	ConfiguratorGroup	configurator-group	B	14	confirmed	light tree: the config kit hosts no shadow roots
+PART	ConfiguratorGroup	content	B	7	confirmed	light tree: the config kit hosts no shadow roots
+PART	ConfiguratorGroup	head	B	6	confirmed	light tree: the config kit hosts no shadow roots
+PART	ConfiguratorGroup	title	B	3	confirmed	light tree: the config kit hosts no shadow roots
+PART	ConfiguratorPanel	configurator-panel	B	1	confirmed	light tree: the config kit hosts no shadow roots
 PART	ConflictDialog	conflict	B	4	proposed	a rule selects through it (3)
 PART	ConflictDialog	conflict-actions	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	ConflictDialog	conflict-message	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
@@ -492,10 +492,10 @@ PART	GraphNode	preview	A	0	proposed	leaf in every rule
 PART	GraphNode	title	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	GraphNode	title-bar	A	0	proposed	leaf in every rule
 PART	GraphView	marquee	A	0	proposed	leaf in every rule
-PART	HeaderControl	header	B	2	proposed	a rule selects through it (1)
-PART	HeaderControl	title	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	InfoControl	info	B	2	proposed	a rule selects through it (1)
-PART	InfoControl	value	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	HeaderControl	header	B	2	confirmed	light tree: the config kit hosts no shadow roots
+PART	HeaderControl	title	B	1	confirmed	light tree: the config kit hosts no shadow roots
+PART	InfoControl	info	B	2	confirmed	light tree: the config kit hosts no shadow roots
+PART	InfoControl	value	B	1	confirmed	light tree: the config kit hosts no shadow roots
 PART	InputDialog	prompt	B	3	confirmed	light tree: a class on the Popover it builds
 PART	InputDialog	prompt-caption	B	1	confirmed	light tree: a class on the caption
 PART	InsertionMarker	insertion	A	1	confirmed	leaf in every rule
@@ -540,14 +540,14 @@ PART	MarkupView	markup-quote-rule	B	0	confirmed	light tree: markupview hosts no 
 PART	MarkupView	markup-row	B	0	confirmed	light tree: markupview hosts no shadow root
 PART	MarkupView	markup-table	B	0	confirmed	light tree: markupview hosts no shadow root
 PART	MarkupView	markup-term	B	0	confirmed	light tree: markupview hosts no shadow root
-PART	MaskControl	chevron	A	0	proposed	leaf in every rule
-PART	MaskControl	mask	B	6	proposed	a rule selects through it (6)
-PART	MaskControl	mask-panel	B	1	proposed	a rule selects through it (1)
-PART	MaskControl	mask-row	B	5	proposed	a rule selects through it (4)
-PART	MaskControl	toggle	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	MatrixControl	matrix	B	3	proposed	a rule selects through it (2)
-PART	MatrixControl	matrix-cell	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	MatrixControl	matrix-row	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	MaskControl	chevron	B	0	confirmed	light tree: the config kit hosts no shadow roots
+PART	MaskControl	mask	B	6	confirmed	light tree: the config kit hosts no shadow roots
+PART	MaskControl	mask-panel	B	1	confirmed	light tree: the config kit hosts no shadow roots
+PART	MaskControl	mask-row	B	5	confirmed	light tree: the config kit hosts no shadow roots
+PART	MaskControl	toggle	B	1	confirmed	light tree: the config kit hosts no shadow roots
+PART	MatrixControl	matrix	B	3	confirmed	light tree: the config kit hosts no shadow roots
+PART	MatrixControl	matrix-cell	B	1	confirmed	light tree: the config kit hosts no shadow roots
+PART	MatrixControl	matrix-row	B	1	confirmed	light tree: the config kit hosts no shadow roots
 PART	Menu	has-checkable	C	3	confirmed	state adjective
 PART	Menu	items	A	0	confirmed	leaf in every rule
 PART	Menu	separator	A	0	confirmed	leaf in every rule
@@ -623,9 +623,9 @@ PART	NotificationsView	notifications-empty	A	0	proposed	leaf in every rule
 PART	NotificationsView	severity	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
 PART	NotificationsView	time	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	NotificationsView	title	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	NumberControl	number	B	2	proposed	a rule selects through it (1)
-PART	NumberControl	scrub-handle	A	1	proposed	leaf in every rule
-PART	NumberControl	scrubbing	A	0	proposed	leaf in every rule
+PART	NumberControl	number	B	2	confirmed	light tree: the config kit hosts no shadow roots
+PART	NumberControl	scrub-handle	B	1	confirmed	light tree: the config kit hosts no shadow roots
+PART	NumberControl	scrubbing	C	0	confirmed	state adjective, flipped by the control itself
 PART	PageStack	page	B	0	confirmed	light tree: pagestack holds caller pages
 PART	PageStack	page-placeholder	B	0	confirmed	light tree: pagestack holds caller pages
 PART	Popover	open	C	3	confirmed	state adjective
@@ -768,7 +768,7 @@ PART	SearchReplaceBar	option-match-case	A	1	proposed	leaf in every rule
 PART	SearchReplaceBar	option-preserve-case	A	1	proposed	leaf in every rule
 PART	SearchReplaceBar	option-regex	A	1	proposed	leaf in every rule
 PART	SearchReplaceBar	option-words	A	1	proposed	leaf in every rule
-PART	SelectControl	select	B	2	proposed	a rule selects through it (1)
+PART	SelectControl	select	B	2	confirmed	light tree: the config kit hosts no shadow roots
 PART	ShaderGraphEditor	content	A	0	proposed	leaf in every rule
 PART	ShaderGraphEditor	shader-content	A	0	proposed	leaf in every rule
 PART	ShaderGraphEditor	shader-graph	A	0	proposed	leaf in every rule
@@ -780,7 +780,7 @@ PART	ShaderPropertyNodes	property-node	B	20	proposed	a rule selects through it (
 PART	Slider	fill	A	0	confirmed	leaf in every rule
 PART	Slider	spacer	A	0	confirmed	leaf in every rule
 PART	Slider	thumb	A	0	confirmed	leaf in every rule
-PART	SliderControl	slider	B	5	proposed	a rule selects through it (4)
+PART	SliderControl	slider	B	5	confirmed	light tree: the config kit hosts no shadow roots
 PART	SplitView	divider	B	6	confirmed	light tree: panes hold caller content addressed by the caller
 PART	SplitView	dragging	C	2	confirmed	state adjective
 PART	SplitView	first	B	0	confirmed	which pane, not what state -- a positional marker
@@ -860,7 +860,7 @@ PART	TaskbarDesigner	designer-slider	A	1	proposed	leaf in every rule
 PART	TaskbarDesigner	designer-tint	A	0	proposed	leaf in every rule
 PART	TaskbarDesigner	designer-value	A	2	proposed	leaf in every rule
 PART	TaskbarDesigner	taskbar-designer	B	1	proposed	a rule selects through it (1)
-PART	TextControl	text	B	2	proposed	a rule selects through it (1)
+PART	TextControl	text	B	2	confirmed	light tree: the config kit hosts no shadow roots
 PART	TextEditor	active	C	3	proposed	state adjective
 PART	TextEditor	caret	A	0	proposed	leaf in every rule
 PART	TextEditor	code-actions	B	1	proposed	a rule selects through it (1)
@@ -921,9 +921,9 @@ PART	UIElement	user-sized-height	B	1	proposed	a rule selects through it (1)
 PART	UIElement	user-sized-width	A	1	proposed	leaf in every rule
 PART	UIText	syntax	C	54	confirmed	capability marker on the run, never a child
 PART	UIWindow	overlays	A	0	proposed	leaf in every rule
-PART	VectorControl	axis	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	VectorControl	vector	B	4	proposed	a rule selects through it (3)
-PART	VectorControl	vector-cell	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	VectorControl	axis	B	1	confirmed	light tree: the config kit hosts no shadow roots
+PART	VectorControl	vector	B	4	confirmed	light tree: the config kit hosts no shadow roots
+PART	VectorControl	vector-cell	B	2	confirmed	light tree: the config kit hosts no shadow roots
 PART	ViewContainer	content	A	0	proposed	leaf in every rule
 PART	ViewContainer	header	B	3	proposed	a rule selects through it (2)
 PART	ViewContainer	hide	B	4	proposed	a rule selects through it (1)

@@ -4,6 +4,7 @@ import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UiDataKeys;
+import com.crystalgui.ui.elements.inspector.InspectorRegistry;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;

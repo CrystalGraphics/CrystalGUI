@@ -9,7 +9,7 @@ import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.TextField;
 import com.crystalgui.ui.elements.config.ConfigControl;
-import com.crystalgui.ui.elements.config.ConfigDescriptor;
+import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.ui.elements.config.ValueControl;
 
 import javax.annotation.Nullable;

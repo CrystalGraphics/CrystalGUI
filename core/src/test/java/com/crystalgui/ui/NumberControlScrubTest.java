@@ -4,7 +4,7 @@ import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.platform.service.CgInputService;
 import com.crystalgui.testsupport.TestPlatformService;
 import com.crystalgui.ui.elements.UIText;
-import com.crystalgui.ui.elements.config.ConfigDescriptor;
+import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.ui.elements.config.control.NumberControl;
 import com.crystalgui.ui.input.DragScrub;
 import org.junit.Before;

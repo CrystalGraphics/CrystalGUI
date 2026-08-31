@@ -2,7 +2,7 @@ package com.crystalgui.graph.shader;
 
 import com.crystalgraphics.shadergraph.CgShaderType;
 import com.crystalgui.graph.GraphProperty;
-import com.crystalgui.ui.elements.config.ConfigDescriptor;
+import com.crystalgui.core.config.ConfigDescriptor;
 
 import javax.annotation.Nullable;
 import java.util.Locale;

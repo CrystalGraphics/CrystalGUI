@@ -2,6 +2,7 @@ package com.crystalgui.ui.elements.dock;
 
 import com.crystalgui.core.notify.Notification;
 
+import com.crystalgui.ui.elements.inspector.InspectorRegistry;
 import java.util.ArrayList;
 import java.util.List;
 

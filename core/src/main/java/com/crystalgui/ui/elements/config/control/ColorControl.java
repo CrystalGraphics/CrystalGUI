@@ -11,7 +11,7 @@ import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.ColorSelector;
 import com.crystalgui.ui.elements.Dialog;
-import com.crystalgui.ui.elements.config.ConfigDescriptor;
+import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.ui.elements.config.ValueControl;
 import org.joml.Matrix4f;
 

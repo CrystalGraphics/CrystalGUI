@@ -142,7 +142,19 @@ public class ScrollerView extends UINode {
     private boolean scrollbarsVisible = true;
 
     public ScrollerView() {
-        super(NAME);
+        this(NAME);
+    }
+
+    /**
+     * The constructor a subclass hands its own kind to.
+     *
+     * <p>Without one a subclass reports {@code scrollerview} — {@code ConfiguratorPanel} extends this,
+     * and a theme's {@code configuratorpanel { }} would have matched nothing while every
+     * {@code scrollerview} rule reached it. The standing rule: a subclass inherits its parent's kind
+     * unless it is GIVEN one, and only the parent can offer the seam.</p>
+     */
+    protected ScrollerView(Name name) {
+        super(name);
         StyleGroup.defaultPipeline(getStyle().getGeneralGroup(), g -> g.overflow(Overflow.AUTO));
 
         // A SLOT, which is what replaced `acceptsPublicChildren() == true`. A caller's children are

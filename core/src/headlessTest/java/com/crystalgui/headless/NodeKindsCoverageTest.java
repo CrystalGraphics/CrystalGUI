@@ -8,6 +8,7 @@ import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.dom.UINodeRegistry;
 import java.io.IOException;
 import java.lang.invoke.MethodHandles;
+import java.lang.reflect.Modifier;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -71,6 +72,14 @@ public class NodeKindsCoverageTest {
                         continue;
                     }
                     if (!UINode.class.isAssignableFrom(type)) continue;
+                    // AN ABSTRACT CLASS IS NOT A KIND -- it has no factory to register and nothing
+                    // decodes into one. It still ANSWERS for a NAME, because `findStaticGetter` finds
+                    // an INHERITED field: ConfigControl and ValueControl both reported UINode's own
+                    // `crystalgui:element`, so the walk asked the registry to build one and got a bare
+                    // UINode back. Skipping them does not weaken the check -- a CONCRETE subclass that
+                    // forgets its NAME still inherits one and is still caught, which is the trap this
+                    // exists for and the one M6.2 hit five times in its first tranche.
+                    if (Modifier.isAbstract(type.getModifiers())) continue;
                     Name name = nameOf(type);
                     if (name != null) kinds.put(type, name);
                 }

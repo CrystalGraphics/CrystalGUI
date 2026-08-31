@@ -17,7 +17,7 @@ import com.crystalgui.graph.PortSpec;
 import com.crystalgui.graph.PropertyEdits;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.elements.config.ConfigControl;
-import com.crystalgui.ui.elements.config.ConfigDescriptor;
+import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.ui.elements.config.Configurator;
 import com.crystalgui.ui.elements.config.SettingsConfigurator;
 import com.crystalgui.ui.elements.graph.GraphConnection;

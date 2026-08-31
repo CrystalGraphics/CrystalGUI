@@ -52,6 +52,7 @@ import com.crystalgui.ui.elements.workbench.StripeView;
 import com.crystalgui.ui.elements.workbench.ToolWindowFrame;
 import com.crystalgui.ui.elements.workbench.ViewContainer;
 import com.crystalgui.ui.elements.workbench.Workbench;
+import com.crystalgui.core.config.ConfigDescriptor;
 
 /**
  * <b>Every widget that deliberately does not travel, and why.</b> {@code plan_ui_rewrite.md} M1.

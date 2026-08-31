@@ -6,6 +6,7 @@ import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 
+import com.crystalgui.core.config.ConfigDescriptor;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;

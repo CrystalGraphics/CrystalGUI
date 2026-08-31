@@ -71,7 +71,6 @@ public class LayeringTest {
             // be a claim the code contradicts.
             "com/crystalgui/widget/config/",
             "com/crystalgui/widget/config/control/",
-            "com/crystalgui/widget/config/inspector/",
             "com/crystalgui/widget/canvas/",
             "com/crystalgui/widget/graph/",
             "com/crystalgui/widget/editor/");

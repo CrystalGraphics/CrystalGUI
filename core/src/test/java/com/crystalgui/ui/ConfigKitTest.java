@@ -4,6 +4,7 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.elements.config.*;
 import com.crystalgui.ui.elements.config.control.ArrayControl;
+import com.crystalgui.core.config.ConfigDescriptor;
 import org.junit.Test;
 
 import java.util.ArrayList;

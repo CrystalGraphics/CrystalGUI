@@ -15,6 +15,7 @@ import com.crystalgui.ui.Ui;
 import com.crystalgui.ui.elements.config.control.ColorControl;
 import com.crystalgui.ui.elements.config.control.NumberControl;
 import com.crystalgui.ui.elements.config.control.VectorControl;
+import com.crystalgui.core.config.ConfigDescriptor;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -505,7 +506,7 @@ public class NodePortInlineEditorTest extends UiTestBase {
         assertNull("nothing should exist yet — NodeFieldBinder was never asked to attach",
                 port.getDefaultEditor());
         NumberControl placeholder = new NumberControl(
-                com.crystalgui.ui.elements.config.ConfigDescriptor.number("Value", "Value"), 0d);
+                com.crystalgui.core.config.ConfigDescriptor.number("Value", "Value"), 0d);
         port.setDefaultEditor(placeholder);
         frame(); // GraphView discovers and mounts the placeholder, exactly as if its ticker ran first
 

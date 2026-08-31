@@ -9,7 +9,7 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.TextField;
-import com.crystalgui.ui.elements.config.ConfigDescriptor;
+import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.ui.elements.config.ValueControl;
 import com.crystalgui.ui.input.DragScrub;
 import com.crystalgui.ui.input.UIDragController;

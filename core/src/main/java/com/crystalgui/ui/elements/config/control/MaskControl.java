@@ -10,7 +10,7 @@ import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.Checkbox;
 import com.crystalgui.ui.elements.Popover;
-import com.crystalgui.ui.elements.config.ConfigDescriptor;
+import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.ui.elements.config.ValueControl;
 
 import javax.annotation.Nullable;
