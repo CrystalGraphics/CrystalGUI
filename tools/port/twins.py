@@ -31,11 +31,24 @@ HOSTS = {
  'scrollerview': {'v-scroller', 'h-scroller', 'corner'},
  'tooltip': {'label'},
  'menu': {'items', 'separator'},
- 'menuitem': {'mark', 'checkable', 'accelerator', 'submenu-arrow'},
- 'dropdown': {'chevron', 'menu'},
+ # `label` is inherited from Button by every subclass that keeps its shadow tree.
+ 'menuitem': {'mark', 'checkable', 'accelerator', 'submenu-arrow', 'label'},
+ 'dropdown': {'chevron', 'menu', 'label', 'post-icon'},
  'searchfield': {'icon', 'field', 'clear', 'options'},
  'checkbox': {'mark', 'label'},
  'button': {'label'},
+}
+
+# A part reached by the TAG of the element it is, rather than by its class: `dropdown text` means the
+# button label inside a dropdown, and `menuitem text` its own. The sheets do this wherever the part IS
+# a text node, because `text` reads better than `.__label__` -- and it is just as unreachable through a
+# shadow boundary. Host -> {tag: part}.
+TAG_PARTS = {
+ 'button': {'text': 'label'},
+ 'dropdown': {'text': 'label'},
+ 'checkbox': {'text': 'label'},
+ 'menuitem': {'text': 'label'},
+ 'tooltip': {'text': 'label'},
 }
 
 PART_TAIL = re.compile(r'^\.__([a-z0-9-]+)__((?::[a-z-]+(?:\([^)]*\))?)*)$')
@@ -62,9 +75,20 @@ def twin(sel):
     if len(parts) < 2:
         return None
     tail = PART_TAIL.match(parts[-1])
-    if not tail:
-        return None
-    part, pseudo = tail.groups()
+    if tail:
+        part, pseudo = tail.groups()
+    else:
+        # The tag spelling: `<host> text` -> `<host>::part(label)`.
+        m = re.match(r'^([a-z][a-z0-9-]*)((?::[a-z-]+(?:\([^)]*\))?)*)$', parts[-1])
+        if not m:
+            return None
+        tag, pseudo = m.groups()
+        hostHead = HOST_HEAD.match(parts[-2])
+        if not hostHead:
+            return None
+        part = TAG_PARTS.get(hostHead.group(1), {}).get(tag)
+        if part is None:
+            return None
     host = parts[-2]
     m = HOST_HEAD.match(host)
     if not m:

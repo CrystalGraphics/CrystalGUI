@@ -330,7 +330,8 @@ menu::part(separator) {
  * same size as each other for free.
  *
  * Not on `menu text`, which would also catch anything a caller puts in a row. */
-menuitem text {
+menuitem text,
+menuitem::part(label) {
     font-size: 8;
 }
 

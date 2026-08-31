@@ -15,6 +15,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import javax.annotation.Nullable;
+import dev.vfyjxf.taffy.style.TaffyDimension;
+import com.crystalgui.style.property.layout.LayoutProperties;
 
 /**
  * A run of text as a layout leaf: the first {@link Measurable}, and the shape every measured
@@ -121,6 +123,22 @@ public class TextNode extends UINode implements Measurable {
         // spells 0f; min-content is the widest word, which is what wrapping at (nearly) nothing gives.
         float width = constraints.wrapWidth();
         if (Float.isNaN(width)) width = constraints.wantsMinContentWidth() ? MIN_CONTENT_WIDTH : 0f;
+        // MAX-WIDTH IS A WRAP WIDTH, and the layout engine does not say so.
+        //
+        // Taffy clamps the RESULT of a measure against `max-width`; it does not pass the node's own
+        // max-width in, because for an ordinary box the two are the same thing. For a text leaf they
+        // are not: measured unbounded the paragraph is ONE LINE however long, the clamp then makes the
+        // BOX 170px, and the glyphs run straight out of it. A tooltip laid its whole sentence on one
+        // line and drew it across the panel next to it -- `max-width: 170px` and `white-space: normal`
+        // both correct and both arriving too late to break a line.
+        //
+        // A PERCENT max-width is skipped: it resolves against a containing block this measure does not
+        // have, and guessing is worse than the one long line.
+        TaffyDimension max = computedStyle().get(LayoutProperties.MAX_WIDTH);
+        if (max != null && max.isLength() && max.getValue() > 0f
+                && (width <= 0f || width > max.getValue())) {
+            width = max.getValue();
+        }
         measuredAt.add(width);
         if (text.isEmpty()) return Size.ZERO;
 
