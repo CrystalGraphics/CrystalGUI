@@ -23,7 +23,15 @@ CLASS_HOSTS = {
 # LIGHT, because 55 shipped rules reach a nested WIDGET through it and a part is a leaf nothing
 # descends from. @see ColorSelector's own class comment. Its inner Sliders and Dropdowns are in this
 # map though, and reached through it: `colorselector .__channel-row__ slider::part(thumb)`.
+#
+# 6.2: `tab` is here and `tabview`, `splitview`, `dialog` and `pagestack` are deliberately NOT.
+# A Tab EXTENDS Button, and a subclass cannot un-shadow its parent -- so its close button lives in the
+# shadow root Button already owns and has to be exposed as a part. The other four keep their structure
+# LIGHT: classify.py rules `dialog` and `tabview` kind B outright (five rules reach through each), and
+# SplitView and PageStack hold CALLER content addressed by the caller (`split.pane(i).append(x)`),
+# which a shadow tree would have to re-express as one named slot per pane.
 HOSTS = {
+ 'tab': {'close', 'pre-icon'},
  'switch': {'spacer', 'knob'},
  'slider': {'fill', 'thumb', 'spacer'},
  'progressbar': {'fill'},

@@ -49,11 +49,11 @@ CLASS	ui/elements/Button	208	widget/control	6.1	copy	ported
 CLASS	ui/elements/Checkbox	156	widget/control	6.1	copy	ported
 CLASS	ui/elements/CheckboxGroup	58	widget/control	6.1	copy	ported
 CLASS	ui/elements/ColorSelector	767	widget/form	6.1	copy	ported
-CLASS	ui/elements/Dialog	605	widget/overlay	6.2	copy	pending
-CLASS	ui/elements/DialogManager	144	widget/overlay	6.2	copy	pending
+CLASS	ui/elements/Dialog	605	widget/overlay	6.2	copy	ported
+CLASS	ui/elements/DialogManager	144	widget/overlay	6.2	copy	ported
 CLASS	ui/elements/DragGhost	248	widget/dnd	6.1	copy	ported
 CLASS	ui/elements/Dropdown	212	widget/overlay	6.1	copy	ported
-CLASS	ui/elements/InputDialog	178	widget/overlay	6.2	copy	pending
+CLASS	ui/elements/InputDialog	178	widget/overlay	6.2	copy	ported
 CLASS	ui/elements/InsertionMarker	468	widget/dnd	6.1	copy	ported
 CLASS	ui/elements/MarkupView	1034	widget/text	6.1	copy	ported
 CLASS	ui/elements/Menu	572	widget/overlay	6.2	copy	ported
@@ -64,11 +64,11 @@ CLASS	ui/elements/Scroller	385	widget/scroll	6.1	copy	ported
 CLASS	ui/elements/ScrollerView	307	widget/scroll	6.1	copy	ported
 CLASS	ui/elements/SearchField	284	widget/form	6.1	copy	ported
 CLASS	ui/elements/Slider	316	widget/control	6.1	copy	ported
-CLASS	ui/elements/SplitView	877	widget/layout	6.2	copy	pending
+CLASS	ui/elements/SplitView	877	widget/layout	6.2	copy	ported
 CLASS	ui/elements/Switch	135	widget/control	6.1	copy	ported
 CLASS	ui/elements/SymbolIcon	221	widget/control	6.1	copy	ported
-CLASS	ui/elements/Tab	247	widget/layout	6.2	copy	pending
-CLASS	ui/elements/TabView	605	widget/layout	6.2	copy	pending
+CLASS	ui/elements/Tab	247	widget/layout	6.2	copy	ported
+CLASS	ui/elements/TabView	605	widget/layout	6.2	copy	ported
 CLASS	ui/elements/TextField	1240	widget/control	6.1	copy	ported
 CLASS	ui/elements/Tooltip	605	widget/overlay	6.2	copy	ported
 CLASS	ui/elements/UIText	1244	widget/text	6.1	copy	ported
@@ -79,15 +79,15 @@ CLASS	ui/elements/canvas/WorldRect	77	widget/canvas	6.4	move	pending
 CLASS	ui/elements/chrome/Breadcrumbs	166	chrome	6.3	copy	pending
 CLASS	ui/elements/chrome/ChromeCommands	63	chrome	6.3	copy	pending
 CLASS	ui/elements/chrome/CommandPalette	151	chrome	6.3	copy	pending
-CLASS	ui/elements/chrome/ContextMenu	309	widget/overlay	6.2	copy	pending
+CLASS	ui/elements/chrome/ContextMenu	309	widget/overlay	6.3	copy	pending
 CLASS	ui/elements/chrome/MainMenuCommands	89	chrome	6.3	move	pending
 CLASS	ui/elements/chrome/MenuBarView	645	chrome	6.3	copy	pending
-CLASS	ui/elements/chrome/MenuBuilder	231	widget/overlay	6.2	copy	pending
+CLASS	ui/elements/chrome/MenuBuilder	231	widget/overlay	6.3	copy	pending
 CLASS	ui/elements/chrome/NavigatorView	620	chrome	6.3	copy	pending
 CLASS	ui/elements/chrome/NotificationBalloons	314	chrome	6.3	copy	pending
 CLASS	ui/elements/chrome/NotificationCard	217	chrome	6.3	copy	pending
 CLASS	ui/elements/chrome/NotificationsView	200	chrome	6.3	copy	pending
-CLASS	ui/elements/chrome/PageStack	149	widget/layout	6.2	copy	pending
+CLASS	ui/elements/chrome/PageStack	149	widget/layout	6.2	copy	ported
 CLASS	ui/elements/chrome/Preferences	287	chrome	6.3	copy	pending
 CLASS	ui/elements/chrome/ProblemNode	38	chrome	6.3	move	pending
 CLASS	ui/elements/chrome/ProblemsCommands	83	chrome	6.3	move	pending
@@ -415,13 +415,13 @@ PART	CrystalEditor	content	A	0	proposed	leaf in every rule
 PART	CrystalEditor	editor-content	A	0	proposed	leaf in every rule
 PART	Desktop	snap-preview	A	1	proposed	leaf in every rule
 PART	Desktop	windows	A	0	proposed	leaf in every rule
-PART	Dialog	backdrop	A	0	proposed	leaf in every rule
-PART	Dialog	close	B	7	proposed	a rule selects through it (1)
-PART	Dialog	content	A	0	proposed	leaf in every rule
-PART	Dialog	label	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
-PART	Dialog	open	C	3	proposed	state adjective
-PART	Dialog	pulse	A	1	proposed	leaf in every rule
-PART	Dialog	title-bar	A	0	proposed	leaf in every rule
+PART	Dialog	backdrop	B	0	confirmed	light tree: dialog is kind B, five rules reach through it
+PART	Dialog	close	B	7	confirmed	light tree: dialog is kind B
+PART	Dialog	content	B	0	confirmed	light tree: dialog is kind B
+PART	Dialog	label	B	4	confirmed	light tree: dialog is kind B
+PART	Dialog	open	C	3	confirmed	state adjective
+PART	Dialog	pulse	C	1	confirmed	state adjective, flipped by pulse()
+PART	Dialog	title-bar	B	0	confirmed	light tree: dialog is kind B
 PART	DiffView	diff	B	8	proposed	a rule selects through it (7)
 PART	DiffView	diff-actions	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	DiffView	diff-editor	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
@@ -496,8 +496,8 @@ PART	HeaderControl	header	B	2	proposed	a rule selects through it (1)
 PART	HeaderControl	title	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	InfoControl	info	B	2	proposed	a rule selects through it (1)
 PART	InfoControl	value	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	InputDialog	prompt	B	3	proposed	a rule selects through it (2)
-PART	InputDialog	prompt-caption	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	InputDialog	prompt	B	3	confirmed	light tree: a class on the Popover it builds
+PART	InputDialog	prompt-caption	B	1	confirmed	light tree: a class on the caption
 PART	InsertionMarker	insertion	A	1	confirmed	leaf in every rule
 PART	InspectionWidgetPart	inspection	A	1	proposed	leaf in every rule
 PART	InspectionWidgetPart	inspection-clean	B	2	proposed	a rule selects through it (2)
@@ -626,8 +626,8 @@ PART	NotificationsView	title	A	3	proposed	leaf in every rule, scoped by an ances
 PART	NumberControl	number	B	2	proposed	a rule selects through it (1)
 PART	NumberControl	scrub-handle	A	1	proposed	leaf in every rule
 PART	NumberControl	scrubbing	A	0	proposed	leaf in every rule
-PART	PageStack	page	A	0	proposed	leaf in every rule
-PART	PageStack	page-placeholder	A	0	proposed	leaf in every rule
+PART	PageStack	page	B	0	confirmed	light tree: pagestack holds caller pages
+PART	PageStack	page-placeholder	B	0	confirmed	light tree: pagestack holds caller pages
 PART	Popover	open	C	3	confirmed	state adjective
 PART	Preferences	preferences	B	4	proposed	a rule selects through it (2)
 PART	Preferences	preferences-panel	A	0	proposed	leaf in every rule
@@ -781,12 +781,12 @@ PART	Slider	fill	A	0	confirmed	leaf in every rule
 PART	Slider	spacer	A	0	confirmed	leaf in every rule
 PART	Slider	thumb	A	0	confirmed	leaf in every rule
 PART	SliderControl	slider	B	5	proposed	a rule selects through it (4)
-PART	SplitView	divider	A	6	proposed	leaf in every rule, scoped by an ancestor in 6
-PART	SplitView	dragging	C	2	proposed	state adjective
-PART	SplitView	first	C	0	proposed	state adjective
-PART	SplitView	second	C	0	proposed	state adjective
-PART	SplitView	split-pane	A	0	proposed	leaf in every rule
-PART	SplitView	vertical	C	8	proposed	state adjective
+PART	SplitView	divider	B	6	confirmed	light tree: panes hold caller content addressed by the caller
+PART	SplitView	dragging	C	2	confirmed	state adjective
+PART	SplitView	first	B	0	confirmed	which pane, not what state -- a positional marker
+PART	SplitView	second	B	0	confirmed	which pane, not what state -- a positional marker
+PART	SplitView	split-pane	B	0	confirmed	light tree: panes hold caller content addressed by the caller
+PART	SplitView	vertical	C	8	confirmed	state adjective: the split orientation
 PART	SquigglesPart	squiggle	A	1	proposed	leaf in every rule
 PART	SquigglesPart	squiggle-error	A	1	proposed	leaf in every rule
 PART	SquigglesPart	squiggle-information	A	1	proposed	leaf in every rule
@@ -817,17 +817,17 @@ PART	SymbolIcon	completion-mark-final	A	2	confirmed	leaf in every rule
 PART	SymbolIcon	completion-mark-static	A	2	confirmed	leaf in every rule
 PART	SystemMenu	jump-list	A	2	proposed	leaf in every rule
 PART	SystemMenu	rising	C	1	proposed	state adjective
-PART	Tab	close	A	0	proposed	leaf in every rule
-PART	Tab	pane	A	0	proposed	leaf in every rule
-PART	TabView	bottom	A	0	proposed	leaf in every rule
-PART	TabView	empty	C	2	proposed	state adjective
-PART	TabView	left	B	2	proposed	a rule selects through it (2)
-PART	TabView	panes	A	0	proposed	leaf in every rule
-PART	TabView	rail	A	6	proposed	leaf in every rule, scoped by an ancestor in 6
-PART	TabView	right	B	2	proposed	a rule selects through it (2)
-PART	TabView	strip	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	TabView	strip-bar	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	TabView	top	A	0	proposed	leaf in every rule
+PART	Tab	close	A	0	confirmed	exposed in the shadow root Tab inherits from Button
+PART	Tab	pane	B	0	confirmed	light tree: the pane lives in TabView panes container
+PART	TabView	bottom	C	0	confirmed	state adjective: which side the strip is on
+PART	TabView	empty	C	2	confirmed	state adjective
+PART	TabView	left	C	2	confirmed	state adjective: which side the strip is on
+PART	TabView	panes	B	0	confirmed	light tree: tabview is kind B
+PART	TabView	rail	B	6	confirmed	light tree: tabview is kind B
+PART	TabView	right	C	2	confirmed	state adjective: which side the strip is on
+PART	TabView	strip	B	1	confirmed	light tree: tabview is kind B, five rules reach through it
+PART	TabView	strip-bar	B	3	confirmed	light tree: tabview is kind B
+PART	TabView	top	C	0	confirmed	state adjective: which side the strip is on
 PART	TableView	cell	A	0	proposed	leaf in every rule
 PART	TableView	divider	A	0	proposed	leaf in every rule
 PART	TableView	header	B	2	proposed	a rule selects through it (1)
@@ -977,3 +977,4 @@ PART	Workbench	workbench-content	A	0	proposed	leaf in every rule
 PART	WorkbenchRegions	workbench-centre	A	1	proposed	leaf in every rule
 PART	WorkbenchRegions	workbench-regions	A	0	proposed	leaf in every rule
 PART	WorkbenchRegions	workbench-split	A	1	proposed	leaf in every rule
+PART	InputDialog	placing	C	0	confirmed	state adjective: shown but not yet centred

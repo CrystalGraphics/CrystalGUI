@@ -55,7 +55,7 @@ RULES = [
     # the engine's own text node), which is why it is listed with the packages rather than as a type.
     (r'import com\.crystalgui\.ui\.UIElement;', 'import com.crystalgui.ui.dom.UINode;', 'import'),
     (r'import com\.crystalgui\.ui\.UIWindow;', 'import com.crystalgui.ui.dom.UIDocument;', 'import'),
-    (r'import com\.crystalgui\.ui\.elements\.UIText;', 'import com.crystalgui.ui.box.TextNode;', 'import'),
+    (r'import com\.crystalgui\.ui\.elements\.UIText;', 'import com.crystalgui.widget.text.UIText;', 'import'),
     (r'import com\.crystalgui\.ui\.UIFrameTicker;', 'import com.crystalgui.ui.service.Animation;', 'import'),
     (r'import com\.crystalgui\.ui\.AnchoredPlacement;', 'import com.crystalgui.ui.service.AnchoredPlacement;', 'import'),
 
@@ -63,7 +63,6 @@ RULES = [
     (r'\bextends UIElement\b', 'extends UINode', 'base class'),
     (r'\bUIElement\b', 'UINode', 'element type'),
     (r'\bUIWindow\b', 'UIDocument', 'window type'),
-    (r'\bUIText\b', 'TextNode', 'text node'),
 
     # -- Receivers, longest first ---------------------------------------------------------------
     (r'getAttachedWindow\(\)\.getInputHandler\(\)\.getDragController\(\)', 'DRAG_CONTROLLER', 'drag receiver'),
@@ -198,6 +197,34 @@ RESIDUAL = [
 ]
 
 
+def ported_imports():
+    """
+    `import com.crystalgui.ui.elements.X;` -> the package X was PORTED into.
+
+    Derived from the ledger rather than listed, because the list grows with every batch and a
+    hand-written one is a thing to forget an entry from. The failure when you do is not a compile
+    error at the import -- it resolves perfectly to the OLD class -- it is a cascade of
+    "cannot find symbol: method append(TextField)" at every CALL, because the old class is a
+    UIElement and the new tree's methods are not on it. 6.2 hit it on InputDialog, whose `Popover`
+    came across pointing at `ui.elements` while every other type in the file had moved.
+    """
+    out = []
+    for line in io.open(LEDGER, encoding='utf-8'):
+        f = line.rstrip(chr(10)).split(chr(9))
+        if len(f) < 7 or f[0] != 'CLASS' or f[6] != 'ported':
+            continue
+        old, dest = f[1], f[3]
+        simple = old[old.rindex('/') + 1:]
+        old_pkg = 'com.crystalgui.' + old[:old.rindex('/')].replace('/', '.')
+        new_pkg = 'com.crystalgui.' + dest.replace('/', '.')
+        if old_pkg == new_pkg:
+            continue
+        out.append((r'import ' + re.escape(old_pkg + '.' + simple) + r';',
+                    'import ' + new_pkg + '.' + simple + ';',
+                    'ported import'))
+    return out
+
+
 def ledger_rows(batch, only):
     rows = []
     for line in io.open(LEDGER, encoding='utf-8'):
@@ -215,14 +242,20 @@ def ledger_rows(batch, only):
 
 def transform(text, path=''):
     applied = {}
+    # The ported-import rules go FIRST and are recomputed per run, because what is ported changes
+    # between batches -- see ported_imports().
+    for pattern, replacement, name in ported_imports():
+        text, n = re.subn(pattern, replacement, text, flags=re.M)
+        if n:
+            applied[name] = applied.get(name, 0) + n
     for pattern, replacement, name in RULES:
-        # A rule that RENAMES a class must not fire on the file declaring that class. Only the
-        # UIText -> TextNode pair is in that position: D15 merges the two the other way round (the
-        # merged class keeps UIText's name and its `text` tag), so the rename here is the INTERIM
-        # spelling every consumer needs until the merge lands -- and applied to UIText's own port it
-        # would silently rewrite the declaration to `class TextNode` in a file called UIText.java.
-        if name == 'text node' and path.endswith('/UIText'):
-            continue
+        # D15 SHIPPED at 6.1, so there is no rename here any more. The pair used to be
+        # `UIText -> TextNode`, the interim spelling every consumer needed until the merge landed,
+        # with a guard stopping it firing on UIText's own port. The merge went the other way round --
+        # the merged class keeps UIText's name and its `text` tag -- so the rename is now a plain
+        # import rewrite and the guard has nothing to guard. Left as a note because a batch ported
+        # against the old rule comes out naming a class that no longer exists, which is what 6.2's
+        # first run did: `private final TextNode titleLabel` in a tree with no TextNode in it.
         text, n = re.subn(pattern, replacement, text, flags=re.M)
         if n:
             applied[name] = applied.get(name, 0) + n

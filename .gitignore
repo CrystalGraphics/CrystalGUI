@@ -40,3 +40,4 @@ layout.json
 research_repos/
 docs_research/
 NUL
+__pycache__/
