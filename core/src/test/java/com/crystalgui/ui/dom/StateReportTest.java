@@ -4,7 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.ui.box.TextNode;
+import com.crystalgui.widget.text.UIText;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Checkbox;
 import java.util.ArrayList;
@@ -54,7 +54,7 @@ public class StateReportTest extends UiDocumentTestBase {
     /**
      * A composite's label is in its shadow tree, so the report has to come out as the COMPOSITE.
      *
-     * <p>The button's contract carries the text; the {@link TextNode} holding it is not a node any
+     * <p>The button's contract carries the text; the {@link UIText} holding it is not a node any
      * peer has ever been told about, so a report naming it is a report naming nothing.</p>
      */
     @Test
@@ -84,7 +84,7 @@ public class StateReportTest extends UiDocumentTestBase {
     }
 
     /**
-     * A plain {@link TextNode} in the LIGHT tree reports as itself — it is a described node with a
+     * A plain {@link UIText} in the LIGHT tree reports as itself — it is a described node with a
      * text state of its own, so there is nothing to walk out of.
      *
      * <p>The counter-assertion to the two above: a walk written as "always report the parent" would
@@ -92,7 +92,7 @@ public class StateReportTest extends UiDocumentTestBase {
      */
     @Test
     public void aLightTextNodeReportsAsItself() {
-        TextNode text = new TextNode("hello");
+        UIText text = new UIText("hello");
         document.append(text);
         Recorder recorder = observing(document);
 

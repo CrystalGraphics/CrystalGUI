@@ -20,7 +20,7 @@ import java.util.Locale;
 import com.crystalgui.widget.overlay.Dropdown;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.control.Slider;
-import com.crystalgui.ui.box.TextNode;
+import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.ui.box.Box;
@@ -414,7 +414,7 @@ public class ColorSelector extends UINode {
     private void buildHexRow() {
         UINode row = new UINode();
         row.addClass(HEX_ROW_CLASS);
-        TextNode label = new TextNode("Hexadecimal");
+        UIText label = new UIText("Hexadecimal");
         label.setHitTest(false);
         // IMMEDIATE, not the ON_COMMIT default. A picker's fields are a live view of one colour: a hex
         // that only published on Enter looked completely inert, because the ring, square and four
@@ -609,7 +609,7 @@ public class ColorSelector extends UINode {
     private final class ChannelRow {
         private final int index;
         private final UINode root = new UINode();
-        private final TextNode label = new TextNode("");
+        private final UIText label = new UIText("");
         private final Slider slider = new Slider();
         private final TextField field = new TextField();
 

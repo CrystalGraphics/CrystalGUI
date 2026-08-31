@@ -1017,7 +1017,7 @@ public class TextField extends UINode implements Measurable {
 
     // ── Measurement ─────────────────────────────────────────────────────────
 
-    /** Style-driven, exactly as TextNode resolves it — cached by (paths, size), so an unchanged
+    /** Style-driven, exactly as UIText resolves it — cached by (paths, size), so an unchanged
      * font-family/font-size returns the same instance. */
     private CgFontFamily resolveFamily() {
         var general = getStyle().getGeneralGroup();
@@ -1029,7 +1029,7 @@ public class TextField extends UINode implements Measurable {
      * position, done once, so interaction never re-shapes.
      */
     private void ensureMeasured() {
-        // Same reasoning as TextNode.recompute: measuring needs a font stack, which a detached tree
+        // Same reasoning as UIText.recompute: measuring needs a font stack, which a detached tree
         // has no use for and a dedicated server does not have at all. prefixWidths keeps its
         // single-element default, so caretX/indexAt answer 0 rather than throwing.
         if (document() == null) return;

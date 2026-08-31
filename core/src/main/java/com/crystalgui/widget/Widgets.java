@@ -20,6 +20,7 @@ import com.crystalgui.widget.overlay.MenuItem;
 import com.crystalgui.widget.overlay.Popover;
 import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.widget.scroll.Scroller;
+import com.crystalgui.widget.text.UIText;
 import com.crystalgui.widget.scroll.ScrollerView;
 
 /**
@@ -61,6 +62,11 @@ public final class Widgets implements NodeKinds {
         // engine answered the lowercased class name instead, which is the fallback that left 32 tags
         // matching by accident and ToolWindowFrame matching nothing at all.
         UINodeRegistry.register(SymbolIcon.NAME, SymbolIcon::new, NodeContract.INERT);
+
+        // ── text ─────────────────────────────────────────────────────────────
+        // The engine's one text leaf AND the widget layer's label -- D15 merged `ui.box.TextNode` into
+        // it, so the `text` tag is registered here rather than from a static block in `ui.box`.
+        UINodeRegistry.register(UIText.NAME, UIText::new, UIText.CONTRACT);
 
         // ── scroll ───────────────────────────────────────────────────────────
         UINodeRegistry.register(Scroller.NAME, Scroller::new, NodeContract.INERT);

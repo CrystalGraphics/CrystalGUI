@@ -112,7 +112,7 @@ public class ProgressBar extends UINode {
          * IDEMPOTENT, AND THE GUARD IS NOT A MICRO-OPTIMISATION.
          *
          * Every other state setter in the engine already early-returns on an unchanged value --
-         * Slider.setValue by hand, TextNode/TextField/Switch through Property.set -- and the engine
+         * Slider.setValue by hand, UIText/TextField/Switch through Property.set -- and the engine
          * relies on it: MachinePanel.mirror's javadoc states the consequence as a rule, that "calling
          * this more often than necessary costs a few comparisons, not traffic". This setter was the
          * one exception, so that rule was simply FALSE for any panel mirroring a bar every tick.
@@ -155,7 +155,7 @@ public class ProgressBar extends UINode {
         // at whatever it was when the window opened and freezes there, with the server's own value
         // advancing correctly and nothing anywhere reporting a problem. It reads as the bar being
         // broken rather than as an update that was never announced, because the FIRST value is right.
-        // Slider, Switch, Checkbox, TextField and TextNode all notify from their setters; this and
+        // Slider, Switch, Checkbox, TextField and UIText all notify from their setters; this and
         // Dropdown were given writeState without it.
         notifyStateChanged();
     }

@@ -23,7 +23,7 @@ public final class UINodeRegistry {
     /**
      * <b>Declared above the static block, and it has to be.</b> That block reads {@code UINode.NAME},
      * which initialises {@link UINode} — and a widget's own class initialiser registers itself here
-     * ({@link com.crystalgui.ui.box.TextNode} is the shipped example, and every widget M6 ports will
+     * ({@link com.crystalgui.ui.box.UIText} is the shipped example, and every widget M6 ports will
      * be another), so the moment any of these classes gains one, initialisation re-enters this class
      * while it is still being initialised. The JVM lets a thread straight through its own in-progress
      * init rather than deadlocking, so that is safe <em>only</em> while this map already exists.

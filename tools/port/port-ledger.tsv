@@ -71,7 +71,7 @@ CLASS	ui/elements/Tab	247	widget/layout	6.2	copy	pending
 CLASS	ui/elements/TabView	605	widget/layout	6.2	copy	pending
 CLASS	ui/elements/TextField	1240	widget/control	6.1	copy	ported
 CLASS	ui/elements/Tooltip	605	widget/overlay	6.2	copy	ported
-CLASS	ui/elements/UIText	1244	widget/text	6.1	copy	pending
+CLASS	ui/elements/UIText	1244	widget/text	6.1	copy	ported
 CLASS	ui/elements/WidgetCensus	227	widget	6.7	move	pending
 CLASS	ui/elements/canvas/CanvasOverlayMove	232	widget/canvas	6.4	copy	pending
 CLASS	ui/elements/canvas/CanvasView	725	widget/canvas	6.4	copy	pending

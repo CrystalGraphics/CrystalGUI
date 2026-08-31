@@ -1319,7 +1319,7 @@ public class UINode implements EventTarget, Styleable {
      *
      * <p><b>Attributed to the nearest node the far side has heard of</b>, which on this engine is the
      * nearest node <em>outside</em> every enclosing shadow tree. A {@code Button}'s label is a
-     * {@link com.crystalgui.ui.box.TextNode} in the button's shadow root and never travels as a node
+     * {@link com.crystalgui.ui.box.UIText} in the button's shadow root and never travels as a node
      * of its own, so {@code button.setText(...)} has to dirty the <em>Button</em>, whose contract
      * carries the text. The old engine walked out of internal children for exactly this and said so;
      * the shadow boundary is the same boundary, spelled by the engine instead of by a flag.</p>

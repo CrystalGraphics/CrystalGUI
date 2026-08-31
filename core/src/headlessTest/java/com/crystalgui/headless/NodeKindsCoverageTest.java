@@ -7,8 +7,7 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.dom.UINodeRegistry;
 import java.io.IOException;
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
+import java.lang.invoke.MethodHandles;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -80,18 +79,31 @@ public class NodeKindsCoverageTest {
         return kinds;
     }
 
+    /**
+     * This class's {@code NAME}, or null if it declares none — read through <b>one</b> field
+     * resolution, never {@code getDeclaredFields()}.
+     *
+     * <p>The distinction is the difference between this walk working and not. {@code
+     * getDeclaredFields()} builds a {@code Field} for every declared field, which resolves every
+     * field's <em>type</em> — so a widget retaining a {@code CgShapedParagraph} or a {@code
+     * CgFontFamily} throws {@code NoClassDefFoundError} here, on a classpath where CrystalGraphics
+     * core is absent <b>by design</b>. That is the same field-descriptor rule {@code AGENTS.md}
+     * records for {@code UIElement}'s Taffy and JOML fields, met from the reflection end: a method
+     * body's reference is lazy, a field's is not.</p>
+     *
+     * <p>{@code findStaticGetter} resolves the one field it is asked for, so a text widget is
+     * discovered by this walk without its paragraph ever being named. Swapping it back for the
+     * obvious loop does not fail loudly — it drops every such widget out of the coverage set, which
+     * is precisely the class of widget most likely to be forgotten.</p>
+     */
     private static Name nameOf(Class<?> type) {
-        for (Field f : type.getDeclaredFields()) {
-            if (!"NAME".equals(f.getName())) continue;
-            if (!Modifier.isStatic(f.getModifiers()) || f.getType() != Name.class) continue;
-            try {
-                f.setAccessible(true);
-                return (Name) f.get(null);
-            } catch (ReflectiveOperationException | LinkageError e) {
-                return null;
-            }
+        try {
+            return (Name) MethodHandles.lookup()
+                    .findStaticGetter(type, "NAME", Name.class)
+                    .invoke();
+        } catch (Throwable t) {
+            return null;
         }
-        return null;
     }
 
     /**

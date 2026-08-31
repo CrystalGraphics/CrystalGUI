@@ -4,7 +4,7 @@ import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.box.TextNode;
+import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.ShadowRoot;
@@ -44,7 +44,7 @@ import com.crystalgui.ui.service.Drag;
  *       ghost built at drag time is a ghost that never appears.</li>
  *   <li><b>Out of flow and hidden must be written from Java, at IMPORTANT, at construction.</b> Not from
  *       the stylesheet — and this is the one that costs a session. {@code UIDocument.init()} runs its first
- *       layout <em>before any rule has matched</em>, and {@link TextNode} latches once, on that first
+ *       layout <em>before any rule has matched</em>, and {@link UIText} latches once, on that first
  *       measurement, whether it sizes its own width. An in-flow ghost therefore latches to whatever box it
  *       happened to be parked in and keeps it forever: parked in a file panel it stretched to the panel's
  *       width and painted a stray blue bar; parked in a 20px rail it would clamp to 20px. No stylesheet
@@ -105,7 +105,7 @@ public class DragGhost extends UINode {
 
     private final ShadowRoot shadow;
     private final UINode icon = new UINode();
-    private final TextNode label = new TextNode("");
+    private final UIText label = new UIText("");
 
     public DragGhost() {
         super(NAME);
