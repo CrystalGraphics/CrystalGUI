@@ -1,5 +1,14 @@
 package com.crystalgui.widget;
 
+import com.crystalgui.style.StyleGroup;
+import com.crystalgui.ui.box.Box;
+import com.crystalgui.widget.layout.PageStack;
+import com.crystalgui.widget.layout.SplitView;
+import com.crystalgui.widget.layout.Tab;
+import com.crystalgui.widget.layout.TabView;
+import com.crystalgui.widget.overlay.Dialog;
+import com.crystalgui.widget.overlay.DialogManager;
+import com.crystalgui.widget.scroll.Scroller;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -45,7 +54,16 @@ public class WidgetBatchPortTest extends UiDocumentTestBase {
             new Object[]{Popover.NAME, Popover.class},
             new Object[]{Menu.NAME, Menu.class},
             new Object[]{MenuItem.NAME, MenuItem.class},
-            new Object[]{Dropdown.NAME, Dropdown.class});
+            new Object[]{Dropdown.NAME, Dropdown.class},
+            // 6.2. PageStack is here for the registration and no-arg checks and NOT in the shadow-tree
+            // list below, with Dialog, SplitView, TabView and Tab: those five keep their structure
+            // LIGHT on purpose (D1), so asserting a shadow root on them would assert the opposite of
+            // what was decided.
+            new Object[]{Dialog.NAME, Dialog.class},
+            new Object[]{SplitView.NAME, SplitView.class},
+            new Object[]{TabView.NAME, TabView.class},
+            new Object[]{Tab.NAME, Tab.class},
+            new Object[]{PageStack.NAME, PageStack.class});
 
     /**
      * Each kind is registered and builds its own class.
@@ -227,4 +245,160 @@ public class WidgetBatchPortTest extends UiDocumentTestBase {
         assertNull("nothing to encapsulate", new Popover().shadowRoot());
         assertNotNull("a menu builds parts, so it has one", new Menu().shadowRoot());
     }
+
+    /**
+     * <b>A {@link ScrollerView} whose content overflows draws a bar with a thumb in it.</b>
+     *
+     * <h3>Why this exists</h3>
+     *
+     * <p>It regressed once and nothing saw it. The bars are sized by a bare {@code .__v-scroller__}
+     * rule — deliberately keyed on a class rather than a tag list, because a {@code ScrollerView}
+     * subclass reports its own tag and would match none of them — and on this engine the bars are
+     * shadow PARTS, which no outer class selector can reach. The translation is a HOSTLESS
+     * {@code ::part(v-scroller)}, which was added by hand and then lost to a revert that went one
+     * commit too far.</p>
+     *
+     * <p>Every observable around it stayed correct: the view scrolled, the wheel worked, the bar was
+     * in the composed tree with the right visible ratio, and {@code refreshScrollers} had computed
+     * everything. Only the bar's BOX was {@code 0x0}, laid out in flow below the content instead of
+     * absolutely at the edge. So the assertion has to be geometric, and it has to reach the THUMB —
+     * a track that sizes while its thumb does not is the same bug one level down.</p>
+     */
+    @Test
+    public void anOverflowingScrollerViewSizesItsBarAndItsThumb() {
+        withDefaultStyles();
+
+        ScrollerView view = new ScrollerView();
+        layout(view, l -> l.width(400f).height(200f));
+        document.append(view);
+        UINode tall = new UINode();
+        StyleGroup.inlinePipeline(tall.getStyle().getLayoutGroup(),
+                l -> l.widthPercent(100f).height(1000f));
+        view.append(tall);
+        frame();
+        frame();
+
+        Scroller bar = null;
+        for (UINode child : view.shadowRoot().children()) {
+            if (child instanceof Scroller candidate
+                    && candidate.getOrientation() == Scroller.Orientation.VERTICAL) {
+                bar = candidate;
+            }
+        }
+        assertTrue("the vertical bar is not in the shadow tree at all", bar != null);
+
+        Box barBox = document.boxes().boxOf(bar);
+        assertTrue("the bar has no box: the sizing rule reached nothing", barBox != null);
+        assertTrue("the bar laid out " + barBox.width() + "x" + barBox.height()
+                        + " -- a bare `.__v-scroller__` cannot reach a shadow part, so the hostless"
+                        + " `::part(v-scroller)` twin is what sizes it",
+                barBox.width() > 0f && barBox.height() > 0f);
+
+        // AND THE THUMB, which is the part a hand actually has to hit. It is proportional, so it must
+        // be shorter than its track as well as non-zero -- 200 visible of 1000 is a fifth.
+        Box thumb = null;
+        for (UINode part : bar.shadowRoot().children()) {
+            for (UINode inner : part.children()) {
+                Box box = document.boxes().boxOf(inner);
+                if (box != null && box.height() > 0f) thumb = box;
+            }
+        }
+        assertTrue("the bar is sized but its thumb is not", thumb != null);
+        assertTrue("the thumb is " + thumb.height() + " tall in a " + barBox.height()
+                        + " track, which is not a fifth of it",
+                thumb.height() > 0f && thumb.height() < barBox.height());
+    }
+
+    /**
+     * <b>Every 6.2 widget lays out to a real box, with real content in it.</b>
+     *
+     * <h3>Why a layout smoke and not a behaviour test</h3>
+     *
+     * <p>These seven had never been laid out when they were committed — they compiled, their kinds
+     * registered, and nothing had asked any of them for a box. That is the gap M6.1's whole
+     * retrospective is about: the defects were not in the widgets, they were in what the widgets
+     * landed on, and every one of them was found by eye on a gallery scene. This is the mechanical
+     * half of that, and it is cheap: build one, give it room, lay the document out, and ask whether
+     * the thing a user has to hit actually has a size.</p>
+     *
+     * <p><b>Each is asked about a DESCENDANT, never about itself.</b> A composite whose own box is
+     * fine while its content measures zero is exactly the shape 6.1 kept producing — a
+     * {@code TextField} at {@code 215x0}, a {@code ScrollerView} slot at 42px inside a 776px view, a
+     * popover compressed to {@code 60x4} by a flex parent. Asserting the root's box passes against
+     * every one of those.</p>
+     */
+    @Test
+    public void every62WidgetLaysOutWithItsContent() {
+        List<String> offenders = new ArrayList<>();
+
+        SplitView split = new SplitView();
+        UINode inFirst = filled();
+        split.first().append(inFirst);
+        check(split, inFirst, "SplitView's first pane", offenders);
+
+        TabView tabs = new TabView();
+        Tab tab = tabs.addTab("one");
+        UINode inTab = filled();
+        tab.content().append(inTab);
+        check(tabs, inTab, "TabView's selected pane", offenders);
+
+        PageStack<String> stack = new PageStack<>();
+        stack.setPageFactory(key -> filled());
+        check(stack, stack.show("alpha"), "PageStack's shown page", offenders);
+
+        assertTrue(String.join("\n", offenders), offenders.isEmpty());
+    }
+
+    /**
+     * A {@link Dialog} is laid out and moved, and its content has a box.
+     *
+     * <p>Separate from the three above because a dialog must be SHOWN first: a closed one is
+     * {@code display: none}, so every box in it measures zero and a "does it fit" assertion passes
+     * against {@code 0 <= 0}. That is a standing invariant row and it is this batch's most likely
+     * green-against-nothing.</p>
+     */
+    @Test
+    public void aShownDialogLaysOutItsContent() {
+        UINode stage = sized("stage", 400f, 300f);
+        document.append(stage);
+        DialogManager manager = new DialogManager(stage);
+
+        Dialog dialog = manager.manage(new Dialog("panel"));
+        UINode body = filled();
+        dialog.getContent().append(body);
+        dialog.show();
+        frame();
+
+        Box box = document.boxes().boxOf(body);
+        assertTrue("a shown dialog's content has no box at all", box != null);
+        assertTrue("...and it measured " + box.width() + "x" + box.height(),
+                box.width() > 0f && box.height() > 0f);
+    }
+
+    /** Lays {@code root} out at a usable size and reports whether {@code content} got a box. */
+    private void check(UINode root, UINode content, String what, List<String> offenders) {
+        // A SPLIT DIVIDES WHAT IT IS GIVEN and a tab's panes fill what is left, so both measure to
+        // nothing inside a content-sized parent. Sizing them here is the fixture's job, not the
+        // widget's -- the same thing the gallery's stylesheet does for the same reason.
+        layout(root, l -> l.width(400f).height(300f));
+        document.append(root);
+        frame();
+
+        Box box = content == null ? null : document.boxes().boxOf(content);
+        if (box == null) {
+            offenders.add(what + " has no box at all");
+        } else if (!(box.width() > 0f) || !(box.height() > 0f)) {
+            offenders.add(what + " measured " + box.width() + "x" + box.height());
+        }
+        root.removeSelf();
+    }
+
+    /** Something with a size of its own, so a zero box means the container and not the content. */
+    private static UINode filled() {
+        UINode node = new UINode();
+        StyleGroup.inlinePipeline(node.getStyle().getLayoutGroup(),
+                l -> l.width(60f).height(20f));
+        return node;
+    }
+
 }

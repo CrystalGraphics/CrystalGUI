@@ -974,14 +974,23 @@ texteditor .__corner__ {
  * records for the registered-property table: adding a subclass is one line somewhere else, nothing links
  * the two, and the omission is silent. Only ScrollerView creates these classes, so keying on the class
  * is both narrower in intent and wider in reach. Per-widget rules that genuinely differ -- texteditor's
- * z-index above -- stay tag-scoped. */
-.__v-scroller__ {
+ * z-index above -- stay tag-scoped.
+ *
+ * AND A HOSTLESS `::part()` IS THE OTHER HALF. On the new engine the bars are shadow PARTS, which no
+ * outer class selector can reach -- so the class half of this rule matches nothing there and the bars
+ * lay out at zero width, which is the exact failure the paragraph above describes and the reason the
+ * rule was keyed on a class in the first place. `::part(v-scroller)` with no host says what
+ * `.__v-scroller__` said -- "whoever exposes a part by this name" -- and needs no list of subclasses
+ * to go stale. */
+.__v-scroller__,
+::part(v-scroller) {
     width: var(--scrollbar-size, 6px);
     top: 0;
     right: 0;
     bottom: 0;
 }
-.__h-scroller__ {
+.__h-scroller__,
+::part(h-scroller) {
     height: var(--scrollbar-size, 6px);
     left: 0;
     right: 0;
@@ -1106,7 +1115,9 @@ completionpopup {
  * both can show at once because they do not occupy the same corner. A `static final` field wears both,
  * which is what System.out actually is. */
 .__completion-mark-static__,
-.__completion-mark-final__ {
+.__completion-mark-final__,
+::part(completion-mark-static),
+::part(completion-mark-final) {
     position: absolute;
     left: 0;
     top: 0;
@@ -1114,8 +1125,10 @@ completionpopup {
     height: 12px;
 }
 
-.__completion-mark-static__ { background: icon("crystalgui:nodes/java/staticMark"); }
-.__completion-mark-final__  { background: icon("crystalgui:nodes/java/finalMark"); }
+.__completion-mark-static__,
+::part(completion-mark-static) { background: icon("crystalgui:nodes/java/staticMark"); }
+.__completion-mark-final__,
+::part(completion-mark-final) { background: icon("crystalgui:nodes/java/finalMark"); }
 
 /* BOLD, and only on the name. font-weight inherits and is drawn by UIText alone through a CgStyleSpan, so
  * putting it on the row instead would quietly embolden the parameter list and the type column too -- which

@@ -63,6 +63,32 @@ PART_TAIL = re.compile(r'^\.__([a-z0-9-]+)__((?::[a-z-]+(?:\([^)]*\))?)*)$')
 HOST_HEAD = re.compile(r'^([a-z][a-z0-9-]*|\.__[a-z0-9-]+__)')
 
 
+def hostless(sel):
+    """
+    A BARE `.__part__ { }` with no host at all -> `::part(part)`, also with no host.
+
+    `::part(x)` alone is legal CSS and means "whoever exposes a part by this name", which is exactly
+    what a bare class rule said. The shipped example is `.__v-scroller__`, which sizes every
+    scrollbar in the engine and is deliberately NOT a list of tags -- its own comment records what
+    the tag list cost, a ScrollerView subclass reporting its own tag, matching none of them, and its
+    bars laying out at zero width while the wheel still scrolled perfectly.
+
+    Written because the twin was added by hand once and then LOST to a revert that went one commit
+    too far, and nothing could put it back: the generator only ever looked at `host .__part__`, so
+    re-running it over the damaged sheet reported success and changed nothing. The bars went back to
+    zero width and the scrollbar vanished from the gallery -- the identical symptom the comment on
+    that rule describes, from the third direction now.
+    """
+    m = PART_TAIL.match(sel)
+    if not m:
+        return None
+    part, pseudo = m.groups()
+    for exposed in list(HOSTS.values()) + list(CLASS_HOSTS.values()):
+        if part in exposed:
+            return '::part(%s)%s' % (part, pseudo)
+    return None
+
+
 def twin(sel):
     """
     `<anything> HOST .__part__` -> `<anything> HOST::part(part)`.
@@ -81,7 +107,7 @@ def twin(sel):
     """
     parts = sel.strip().split()
     if len(parts) < 2:
-        return None
+        return hostless(sel.strip())
     tail = PART_TAIL.match(parts[-1])
     if tail:
         part, pseudo = tail.groups()
