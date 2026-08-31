@@ -1222,3 +1222,48 @@ colorselector .__side__ dropdown .__menu__ menuitem text,
 colorselector .__side__ dropdown .__menu__ menuitem::part(label) {
     font-size: 6;
 }
+
+/* ── The graph, so it is LEGIBLE without a theme ──────────────────────────────────────────────────
+ *
+ * Everything above in this file is the graph's GEOMETRY, and that is the whole of what the user-agent
+ * sheet used to say about it: a graphnode, a nodeport and a graphview had ZERO appearance
+ * declarations between them, against 12 for `dialog`, 7 for `textfield` and 6 each for `button` and
+ * `menu`. So every other self-drawing widget was visible on this sheet alone and the graph was not --
+ * laid out perfectly and painting nothing, which reads as a broken widget rather than an unthemed one.
+ *
+ * What follows is the MINIMUM that makes a graph readable, not a copy of `crystalgui:graph`. Every
+ * declaration names the same `--graph-*` token the theme's own fallbacks name and sets the same
+ * property the theme sets, so loading the theme overrides all of it and the themed look is unchanged
+ * -- checked declaration by declaration against `graph.css`.
+ *
+ * THE NODE STILL PAINTS NO BACKGROUND OF ITS OWN. Its regions do, and the port band deliberately does
+ * not: that is what lets a wire, drawn under every node, read as plugged into its dot rather than cut
+ * off at the border. Adding a fill here would break the one rule the whole node box is built around. */
+graphview {
+    background: var(--graph-canvas, #202020);
+}
+graphnode {
+    border-width: 1px;
+    border-color: var(--graph-edge, #1A1A1A);
+    color: var(--graph-node-text, #C8C8C8);
+}
+graphnode > .__title-bar__ {
+    background: var(--graph-title-bg, #56565676);
+    color: var(--graph-node-text-bright, #E8E8E8);
+}
+graphnode .__inputs__ { background-color: var(--graph-inputs-bg, #53535376); }
+graphnode .__outputs__ { background-color: var(--graph-outputs-bg, #35353576); }
+graphnode .__ports__ { background-color: var(--graph-ports-bg, #26262676); }
+graphnode .__controls__ { background: var(--graph-ports-bg, #26262676); }
+graphnode .__control-row__ {
+    background: var(--graph-control-row-bg, #56565676);
+    color: var(--graph-control-fg, #B4B4B4);
+}
+/* The dot's FILL. Its border-color is the port TYPE's colour and is the theme's alone: it is what
+ * `NodePort.typeColor()` reads back for the wire, so a fallback here would put a default wire colour
+ * in the user-agent sheet -- which is the one place the per-type palette must not be. Untyped ports
+ * fall back to the engine's own `type-dynamic` grey. */
+nodeport .__dot__ {
+    background-color: var(--graph-dot-bg, #212121);
+    border-color: var(--graph-port-dynamic, #B4B4B4);
+}
