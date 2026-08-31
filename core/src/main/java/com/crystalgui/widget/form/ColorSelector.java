@@ -25,6 +25,7 @@ import com.crystalgui.widget.control.Slider;
 import com.crystalgui.ui.box.TextNode;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.overlay.Tooltip;
+import com.crystalgui.ui.box.Box;
 
 /**
  * A colour picker: a hue ring around a saturation/value square, four channel sliders, and a hex field.
@@ -262,14 +263,19 @@ public class ColorSelector extends UINode {
             // A press anywhere inside the ring's box counts, including the middle. The square sits on
             // top and takes its own presses first, so the only thing this catches is the band and the
             // corners — and a corner press picking the nearest hue is better than doing nothing.
-            hue = hueFromOffset(x - ring.box().width() * 0.5f,
-                    y - ring.box().height() * 0.5f);
+            Box r = ring.box();
+            if (r == null) return;
+            hue = hueFromOffset(x - r.width() * 0.5f, y - r.height() * 0.5f);
             applyHsv();
         });
         dragSurface(square, (x, y) -> {
-            saturation = clamp01(x / Math.max(1f, square.box().width()));
+            Box sq = square.box();
+            if (sq == null) return;
+            // max(1) on a DIVISOR, never 0: a fraction of zero is a NaN, and a NaN poisons a whole
+            // layout with nothing having thrown.
+            saturation = clamp01(x / Math.max(1f, sq.width()));
             // 1 - y because value runs UP the square while coordinates run down it.
-            value = 1f - clamp01(y / Math.max(1f, square.box().height()));
+            value = 1f - clamp01(y / Math.max(1f, sq.height()));
             applyHsv();
         });
     }
@@ -337,11 +343,11 @@ public class ColorSelector extends UINode {
      * clamped to 1 and put every single click in the square's bottom-right corner.</p>
      */
     private static float withinX(UINode surface, float localX) {
-        return localX - surface.box().x();
+        return surface.box() == null ? localX : localX - surface.box().x();
     }
 
     private static float withinY(UINode surface, float localY) {
-        return localY - surface.box().y();
+        return surface.box() == null ? localY : localY - surface.box().y();
     }
 
     private static float clamp01(float v) {

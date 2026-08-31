@@ -1842,7 +1842,8 @@ crystaleditor > .__editor-content__ {
  * The 24px moved to PADDING because an auto margin contributes nothing to min-content: as a margin it
  * stopped reserving the gap while the menu was being measured, so the widest row -- the one with no free
  * space left to push with -- would have had its label touching its shortcut. */
-menuitem .__accelerator__ {
+menuitem .__accelerator__,
+menuitem::part(accelerator) {
     color: var(--menu-accelerator, #8A8A8A);
     margin-left: auto;
     padding-left: 24px;

@@ -12,6 +12,8 @@ import com.crystalgui.ui.event.MouseEvent;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 import com.crystalgraphics.platform.CgPlatform;
+import dev.vfyjxf.taffy.style.FlexDirection;
+import com.crystalgui.ui.box.Box;
 
 /**
  * A scroll container with visible scrollbars.
@@ -147,6 +149,16 @@ public class ScrollerView extends UINode {
         // the content's -- the bars are absolutely positioned and contribute nothing to it.
         this.shadow = attachShadow();
         this.viewport = new UISlot();
+        // THE SLOT MUST FILL THE VIEW'S WIDTH, and it does not by default: a slot is an ordinary box
+        // and this engine's Taffy default is `flex-shrink: 0` with an `auto` basis, so it sizes to its
+        // CONTENT. A caller's `width: 100%` row then resolves against the slot rather than against the
+        // view -- measured at 42px inside a 776px scroller, which reads as the rows being unstyled
+        // rather than as the box around them having collapsed.
+        //
+        // Height is deliberately NOT constrained: the content must be free to exceed the viewport,
+        // which is the whole point of a scroll container.
+        StyleGroup.defaultPipeline(viewport.getStyle().getLayoutGroup(),
+                l -> l.widthPercent(100f).flexDirection(FlexDirection.COLUMN));
         shadow.append(viewport);
 
         this.verticalScroller = newBar(Scroller.Orientation.VERTICAL, V_SCROLLER_PART);
@@ -297,8 +309,14 @@ public class ScrollerView extends UINode {
     private void reserveCorner(Overflow overflow, boolean vOverflowing, boolean hOverflowing) {
         boolean both = scrollbarsVisible
                 && overflow.showsScrollbar(vOverflowing) && overflow.showsScrollbar(hOverflowing);
-        float vThickness = verticalScroller.box().width();
-        float hThickness = horizontalScroller.box().height();
+        // NULL-CHECKED, and zero is the right answer here specifically: a bar that is not shown is
+        // `display: none`, so it HAS no box, and a bar that is not there reserves no corner. Written
+        // out rather than hidden behind an accessor that answers 0 for everything, because "not laid
+        // out" and "zero wide" are different facts and only this method knows they coincide.
+        Box vBar = verticalScroller.box();
+        Box hBar = horizontalScroller.box();
+        float vThickness = vBar == null ? 0f : vBar.width();
+        float hThickness = hBar == null ? 0f : hBar.height();
 
         StyleGroup.inlinePipeline(verticalScroller.getStyle().getLayoutGroup(),
                 l -> l.bottom(both ? hThickness : 0f));

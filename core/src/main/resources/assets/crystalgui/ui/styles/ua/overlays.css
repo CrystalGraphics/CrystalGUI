@@ -102,7 +102,8 @@ tooltip {
  * Bounding the label instead makes it wrap, and the tooltip box then shrink-wraps the wrapped text,
  * which is also what keeps edge-clamping honest — placement measures the box, so the box has to be
  * the size of what actually draws. */
-tooltip .__label__ {
+tooltip .__label__,
+tooltip::part(label) {
     color: var(--tooltip-fg, #FFFFFF);
     max-width: 170px;
     /* SET EXPLICITLY, because `white-space` INHERITS and a tooltip lives as an internal child of the thing
@@ -219,6 +220,7 @@ or it would fight placement every frame.
 popover,
 menu,
 dropdown .__menu__,
+dropdown::part(menu),
 dropdown::part(menu) {
     min-width: 60px;
     /* LIGHTER than the panels it floats over, with a LIGHT hairline. Both matter, and the first version
@@ -269,7 +271,8 @@ popover.__open__, menu.__open__, dropdown .__menu__.__open__ {
  * difference is drawn rather than merely spaced, which is why it reads as the first item being mis-set
  * instead of as the menu being a pixel loose. Even means the first bar is inset from the frame by the
  * same amount it is separated from the next one. */
-menu .__items__ {
+menu .__items__,
+menu::part(items) {
     flex-direction: column;
     gap-all: 2px;
 }
@@ -294,7 +297,8 @@ menu {
  *
  * Inset from the menu's edges — a rule running the full width reads as the bottom of the menu rather
  * than as a divider inside it, which is why Windows insets its own. */
-menu .__separator__ {
+menu .__separator__,
+menu::part(separator) {
     height: 1px;
     min-height: 1px;
     flex-grow: 0;
@@ -401,7 +405,8 @@ menuitem:focus {
  * space is left. */
 /* Dimmer than the label — it is an affordance, not content. Colour is inheritable, so this only needs to
  * override, not restate. */
-menuitem .__submenu-arrow__ {
+menuitem .__submenu-arrow__,
+menuitem::part(submenu-arrow) {
     margin-left: auto;
     width: 8px;
     height: 8px;
@@ -439,7 +444,8 @@ menuitem:disabled {
  * it zero width here (rather than leaving the check up to `dropdown .__menu__` alone) means an ordinary
  * menu's rows stay exactly as wide as their label, with no dead gutter reserved for a checkmark that
  * item can never show. */
-menuitem .__mark__ {
+menuitem .__mark__,
+menuitem::part(mark) {
     width: 0;
     margin-right: 0;
     flex-grow: 0;
@@ -525,7 +531,8 @@ dropdown {
  * the button. Always chevron-DOWN: unlike a foldout, a dropdown's popup can open above or below
  * depending on room, so there is no "open" direction for the glyph to point at (see
  * AnchoredPlacement's flip). */
-dropdown .__chevron__ {
+dropdown .__chevron__,
+dropdown::part(chevron) {
     width: 8px;
     height: 8px;
     flex-grow: 0;

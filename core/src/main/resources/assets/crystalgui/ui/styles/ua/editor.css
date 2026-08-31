@@ -875,13 +875,15 @@ tableview .__cell__ {
 }
 
 scroller .__track__,
+scroller::part(track),
 scroller::part(track) {
     background: var(--scrollbar-track, #00000000);
 }
 /* Only the CROSS axis is set here. The main axis (length + position) is written from Java at
  * IMPORTANT origin, since it's runtime state, and would override anything declared here anyway.
  * A horizontal bar's thumb fills the bar's height; a vertical bar's fills its width. */
-scroller .__thumb__ {
+scroller .__thumb__,
+scroller::part(thumb) {
     height: 100%;
     background: var(--scrollbar-thumb, #6E6E6E);
     /* HALF THE BAR'S THICKNESS, derived rather than restated: a fixed 4px against the old 8px bar
@@ -890,14 +892,17 @@ scroller .__thumb__ {
     border-radius: var(--scrollbar-radius, 3px);
 }
 scroller.__vertical__ .__thumb__,
+scroller.__vertical__::part(thumb),
 scroller.__vertical__::part(thumb) {
     width: 100%;
 }
 scroller .__thumb__:hover,
+scroller::part(thumb):hover,
 scroller::part(thumb):hover {
     background: var(--scrollbar-thumb-hover, #8C8C8C);
 }
 scroller .__thumb__:active,
+scroller::part(thumb):active,
 scroller::part(thumb):active {
     background: var(--scrollbar-thumb-pressed, #B4B4B4);
 }
@@ -908,6 +913,7 @@ so a
  * theme turns them on with nothing but CSS:
  *     scroller .__head__,
 scroller .__tail__,
+scroller::part(tail),
 scroller::part(tail) { display: flex; }
  * Because they're flex items,
 hiding them lets __track__ take the whole bar,
@@ -915,6 +921,7 @@ so the geometry with
  * buttons off is identical to not having them at all. */
 scroller .__head__,
 scroller .__tail__,
+scroller::part(tail),
 scroller::part(tail) {
     display: none;
     background: var(--scrollbar-tail, #4A4A4A);
@@ -929,12 +936,16 @@ scroller::part(tail) {
 scroller.__vertical__ .__head__,
 scroller.__vertical__ .__tail__,
 scroller.__vertical__::part(head),
+scroller.__vertical__::part(tail),
+scroller.__vertical__::part(head),
 scroller.__vertical__::part(tail) {
     width: 100%;
     height: 8px;
 }
 scroller .__head__:hover,
 scroller .__tail__:hover,
+scroller::part(head):hover,
+scroller::part(tail):hover,
 scroller::part(head):hover,
 scroller::part(tail):hover {
     background: var(--scrollbar-tail-hover, #6E6E6E);
@@ -946,7 +957,8 @@ scrollerview .__corner__,
 listview .__corner__,
 treeview .__corner__,
 texteditor .__corner__,
-tableview .__corner__ {
+tableview .__corner__,
+scrollerview::part(corner) {
     background: var(--scrollbar-corner, #2A2A2A);
 }
 
@@ -976,14 +988,23 @@ texteditor .__corner__ {
  * records for the registered-property table: adding a subclass is one line somewhere else, nothing links
  * the two, and the omission is silent. Only ScrollerView creates these classes, so keying on the class
  * is both narrower in intent and wider in reach. Per-widget rules that genuinely differ -- texteditor's
- * z-index above -- stay tag-scoped. */
-.__v-scroller__ {
+ * z-index above -- stay tag-scoped.
+ *
+ * THE `::part()` TWIN CARRIES NO HOST, and that is the point rather than an omission. On the ported
+ * engine the bars are shadow PARTS, which no outer class selector can reach -- so the class half of
+ * this rule matches nothing there and the bars lay out at zero width, which is the exact failure the
+ * paragraph above describes and the reason the rule was keyed on a class in the first place. A
+ * hostless `::part(v-scroller)` is the faithful translation: it says "whoever exposes a part by this
+ * name", which is what `.__v-scroller__` said, and it needs no list of subclasses to go stale. */
+.__v-scroller__,
+::part(v-scroller) {
     width: var(--scrollbar-size, 6px);
     top: 0;
     right: 0;
     bottom: 0;
 }
-.__h-scroller__ {
+.__h-scroller__,
+::part(h-scroller) {
     height: var(--scrollbar-size, 6px);
     left: 0;
     right: 0;

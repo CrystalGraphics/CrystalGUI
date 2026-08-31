@@ -1066,7 +1066,7 @@ public class TextField extends UINode  {
         ensureMeasured();
         // Must subtract the same nudge paintOverlay adds, or click-to-caret lands off by it.
         float target = localX - textOriginX()
-                - getStyle().getGeneralGroup().textOffsetX().resolve(box().width())
+                - getStyle().getGeneralGroup().textOffsetX().resolve(box() == null ? 0f : box().width())
                 + displayOffset;
         int best = 0;
         float bestDistance = Float.MAX_VALUE;
@@ -1112,7 +1112,8 @@ public class TextField extends UINode  {
      * unfocused would drag the view back to the start on every keystroke.</p>
      */
     private void ensureCaretVisible() {
-        float inner = Math.max(1f, box().contentWidth());
+        // A DIVISOR, so max(1) and never 0 -- see Slider.travelLength.
+        float inner = box() == null ? 1f : Math.max(1f, box().contentWidth());
         displayOffset = scrollOffsetFor(isFocused(), caretX(caret), caretX(text.length()),
                 inner, displayOffset);
     }
