@@ -559,6 +559,8 @@ so they stay visible against a
 which is where it is most often dragged. */
 colorselector .__ring-handle__,
 colorselector .__square-handle__,
+colorselector::part(square-handle),
+colorselector::part(ring-handle),
 colorselector::part(square-handle) {
     outline: 1px var(--colorpicker-handle-shadow, #00000080);
     outline-offset: 0px;
@@ -595,7 +597,8 @@ colorselector .__channel-row__ slider {
  * properly rounded content — invisible back when the container's own background was close enough in
  * tone to hide the mismatch, and an obvious squared-off corner poking out past the pill the moment
  * that background changed. */
-colorselector .__swatches__ {
+colorselector .__swatches__,
+colorselector::part(swatches) {
     outline: 1px var(--node-hairline);
     outline-offset: 0px;
     border-radius: 3px;

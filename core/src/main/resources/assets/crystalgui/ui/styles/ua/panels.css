@@ -1216,6 +1216,7 @@ progressbar {
 }
 
 progressbar .__fill__,
+progressbar::part(fill),
 progressbar::part(fill) {
     height: 100%;
     background-color: var(--progress-fill-bg, #3D7AB8);

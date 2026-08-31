@@ -12,6 +12,7 @@ import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import com.crystalgui.ui.box.Box;
 
 /**
  * The placeholder showing where a dragged thing would land in a list — tabs, stripe buttons, rows.
@@ -391,17 +392,22 @@ public class InsertionMarker extends UINode {
         float slot = Math.max(0f, extent - GAP);
         along += GAP / 2f;
 
+        // A host nothing has laid out has nowhere to put a marker -- and the alternative, treating its
+        // box as the origin, draws the slot in the corner of the screen rather than not at all.
+        Box hostBox = host.box();
+        if (hostBox == null) return;
+
         float hostStart = axis == Axis.HORIZONTAL
-                ? host.box().x() : host.box().y();
+                ? hostBox.x() : hostBox.y();
         float hostExtent = axis == Axis.HORIZONTAL
-                ? host.box().width() : host.box().height();
+                ? hostBox.width() : hostBox.height();
         // CLAMPED INSIDE THE HOST, which is what the append position needs: past the last item is past the
         // end of a rail whose bottom group is pinned to its foot, so an unclamped slot is drawn off the
         // bottom of the stripe and looks like it vanished.
         float local = Math.max(0f, Math.min(along - hostStart, Math.max(0f, hostExtent - slot)));
 
         float acrossLocal = across - (axis == Axis.HORIZONTAL
-                ? host.box().y() : host.box().x());
+                ? hostBox.y() : hostBox.x());
         float left = axis == Axis.HORIZONTAL ? local : acrossLocal;
         float top = axis == Axis.HORIZONTAL ? acrossLocal : local;
         float width = axis == Axis.HORIZONTAL ? slot : thickness;

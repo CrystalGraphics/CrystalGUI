@@ -98,6 +98,7 @@ checkbox {
     text-shadow: false;
 }
 checkbox .__mark__,
+checkbox::part(mark),
 checkbox::part(mark) {
     width: 12px;
     height: 12px;
@@ -105,10 +106,12 @@ checkbox::part(mark) {
     border-radius: 2px;
 }
 checkbox:hover .__mark__,
+checkbox:hover::part(mark),
 checkbox:hover::part(mark) {
     background: var(--checkbox-mark-hover-bg, #B4B4B4);
 }
 checkbox:checked .__mark__,
+checkbox:checked::part(mark),
 checkbox:checked::part(mark) {
     background: var(--checkbox-checked-bg, #3C8527);
     /* A real vector checkmark, not a texture asset — default.css has no image assets to lean on and
@@ -117,6 +120,7 @@ checkbox:checked::part(mark) {
     overlay: shape("checkmark");
 }
 checkbox:disabled .__mark__,
+checkbox:disabled::part(mark),
 checkbox:disabled::part(mark) {
     background: var(--checkbox-disabled-bg, #6E6E6E);
 }
@@ -139,15 +143,18 @@ switch:checked {
     background: var(--switch-checked-bg, #3C8527);
 }
 switch .__spacer__,
+switch::part(spacer),
 switch::part(spacer) {
     flex-grow: 0;
     transition: flex-grow 150ms ease;
 }
 switch:checked .__spacer__,
+switch:checked::part(spacer),
 switch:checked::part(spacer) {
     flex-grow: 1;
 }
 switch .__knob__,
+switch::part(knob),
 switch::part(knob) {
     height: 100%;
     aspect-rate: 1;
@@ -157,6 +164,7 @@ switch::part(knob) {
     border-radius: 50%;
 }
 switch:disabled .__knob__,
+switch:disabled::part(knob),
 switch:disabled::part(knob) {
     background: var(--switch-disabled-knob, #8C8C8C);
 }
@@ -181,18 +189,21 @@ slider {
     border-radius: 4px;
 }
 /* 3px is half of the 6px bar height, so fill and track read as one rounded rail. */
-slider .__fill__ {
+slider .__fill__,
+slider::part(fill) {
     height: 6px;
     background: var(--slider-fill, #3C8527);
     border-radius: 3px;
 }
 slider .__spacer__,
+slider::part(spacer),
 slider::part(spacer) {
     height: 6px;
     background: var(--slider-track, #6E6E6E);
     border-radius: 3px;
 }
 slider .__thumb__,
+slider::part(thumb),
 slider::part(thumb) {
     width: 10px;
     height: 10px;
@@ -213,14 +224,17 @@ slider::part(thumb) {
     border-color: var(--slider-thumb-ring, #FFFFFF);
 }
 slider:hover .__thumb__,
+slider:hover::part(thumb),
 slider:hover::part(thumb) {
     background: var(--slider-thumb-hover, #E4E5E8);
 }
 slider:disabled .__fill__,
+slider:disabled::part(fill),
 slider:disabled::part(fill) {
     background: var(--slider-disabled-fill, #5A6E5A);
 }
 slider:disabled .__thumb__,
+slider:disabled::part(thumb),
 slider:disabled::part(thumb) {
     background: var(--slider-disabled-thumb, #8C8C8C);
 }

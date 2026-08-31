@@ -19,6 +19,7 @@ import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.AlignItems;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import com.crystalgui.ui.service.Drag;
+import com.crystalgui.ui.box.Box;
 
 /**
  * Continuous or stepped slider.
@@ -288,12 +289,27 @@ public class Slider extends UINode {
      * edge to its right edge. That is also why the fill's right edge and the spacer's left edge both
      * land under the thumb's centre, hiding their end caps.</p> */
     private float travelLength() {
-        return Math.max(1f, box().contentWidth());
+        Box layout = box();
+        // max(1) rather than 0: this is a DIVISOR, and a slider nothing has laid out would otherwise
+        // turn every drag delta into a NaN -- which poisons a whole layout silently and is what the
+        // `!(x > 0)` rule exists for.
+        return layout == null ? 1f : Math.max(1f, layout.contentWidth());
     }
 
+    /**
+     * The content box's left edge, in this slider's OWN space.
+     *
+     * <p>No {@code box().x()} term. The painter draws every box with the pose set from its own world
+     * matrix and {@link UINode#toLocal} answers in that same space, so a coordinate compared against
+     * this must not carry the slider's position within its parent. The old engine's
+     * {@code screenToLocal} did not subtract the element's origin, so both halves carried a
+     * {@code getX()} that cancelled out; keeping one of them makes the thumb land at an offset that
+     * grows with how far along the row the slider sits.</p>
+     */
     private float contentLeft() {
-        var layout = box();
-        return box().x() + layout.border().left + layout.padding().left;
+        Box layout = box();
+        if (layout == null) return 0f;
+        return layout.border().left + layout.padding().left;
     }
 
     /** Absolute value under a given <em>local</em> x — used for track clicks. The thumb's centre
@@ -305,8 +321,10 @@ public class Slider extends UINode {
 
     /** Takes a local x, like everything else in this section. */
     private boolean isOverThumb(float mouseX) {
-        float x = thumb.box().x();
-        return mouseX >= x && mouseX <= x + thumb.box().width();
+        Box t = thumb.box();
+        // A thumb nothing has laid out is under nothing -- false, rather than a zero-width hit at 0.
+        if (t == null) return false;
+        return mouseX >= t.x() && mouseX <= t.x() + t.width();
     }
 
     /** Takes the RAW pointer x — {@code UIDragController} does the local-space conversion, and
@@ -317,8 +335,7 @@ public class Slider extends UINode {
         this.dragStartValue = this.value;
         float range = max - min;
         float travel = travelLength();
-        Drag.start(this, rawMouseX,
-                box().y(),
+        Drag.start(this, rawMouseX, box() == null ? 0f : box().y(),
                 // Delta from the grab point, not absolute: grabbing the thumb anywhere along its
                 // width must not teleport it so its centre lands under the cursor.
                 (mx, my, sx, sy, dx, dy) -> setValue(dragStartValue + (dx / travel) * range));
