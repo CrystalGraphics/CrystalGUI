@@ -1,4 +1,6 @@
-package com.crystalgui.ui.elements.list;
+package com.crystalgui.core.collection.list;
+
+import com.crystalgui.core.collection.list.FixedHeightStrategy;
 
 /**
  * How tall a row is, and therefore how a scroll offset maps to an index.

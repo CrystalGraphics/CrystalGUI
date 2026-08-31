@@ -1,4 +1,6 @@
-package com.crystalgui.ui.elements.tree;
+package com.crystalgui.core.collection.tree;
+
+import com.crystalgui.core.collection.tree.TreeDataSource;
 
 /**
  * One visible node in a flattened tree — what the underlying {@link com.crystalgui.ui.elements.list.ListView}

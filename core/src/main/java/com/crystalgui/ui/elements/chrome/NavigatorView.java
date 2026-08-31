@@ -1,5 +1,8 @@
 package com.crystalgui.ui.elements.chrome;
 
+import com.crystalgui.core.collection.tree.FilteredTreeSource;
+import com.crystalgui.core.collection.tree.TreeDataSource;
+import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.ui.elements.tree.TreeSearch;
 import com.crystalgui.core.search.SearchQuery;
 import com.crystalgui.core.search.SearchMatcher;

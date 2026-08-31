@@ -1,6 +1,7 @@
 package com.crystalgui.text.wrap;
 
 import com.crystalgui.core.async.FrameProfile;
+import com.crystalgui.core.collection.list.VariableHeightStrategy;
 import com.crystalgui.text.Rope;
 
 import java.util.Arrays;

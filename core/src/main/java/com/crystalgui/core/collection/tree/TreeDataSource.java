@@ -1,4 +1,4 @@
-package com.crystalgui.ui.elements.tree;
+package com.crystalgui.core.collection.tree;
 
 import java.util.List;
 
@@ -29,4 +29,27 @@ public interface TreeDataSource<T> {
     /** Whether {@code item} can be expanded at all — decides the twisty, and is asked for every visible
      * row, so it must be cheap. */
     boolean hasChildren(T item);
+
+    /**
+     * A source with nothing in it.
+     *
+     * <p>For the registry's factory, which needs a no-argument way to build a {@code TreeView} and
+     * has nothing to put in one. An empty tree is a real tree — a file panel with no project open is
+     * exactly this — so it is not a placeholder.</p>
+     */
+    static <T> TreeDataSource<T> empty() {
+        return new TreeDataSource<T>() {
+            @Override public List<T> roots() {
+                return List.of();
+            }
+
+            @Override public List<T> children(T parent) {
+                return List.of();
+            }
+
+            @Override public boolean hasChildren(T item) {
+                return false;
+            }
+        };
+    }
 }

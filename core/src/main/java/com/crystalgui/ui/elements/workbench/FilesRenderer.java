@@ -16,7 +16,7 @@ import com.crystalgui.ui.elements.TextField;
 import com.crystalgui.ui.elements.Tooltip;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.tree.TreeRenderer;
-import com.crystalgui.ui.elements.tree.TreeRow;
+import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.ui.elements.workbench.decoration.FileDecoration;
 import com.crystalgui.ui.input.UIInputHandler;
 

@@ -1,6 +1,8 @@
 package com.crystalgui.ui.elements.tree;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgui.core.collection.tree.TreeDataSource;
+import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;

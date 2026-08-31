@@ -3,9 +3,9 @@ package com.crystalgui.ui;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.elements.chrome.QuickPick;
-import com.crystalgui.ui.elements.chrome.QuickPickEntry;
-import com.crystalgui.ui.elements.chrome.QuickPickItem;
-import com.crystalgui.ui.elements.chrome.QuickPickSource;
+import com.crystalgui.core.collection.pick.QuickPickEntry;
+import com.crystalgui.core.collection.pick.QuickPickItem;
+import com.crystalgui.core.collection.pick.QuickPickSource;
 import org.junit.Before;
 import org.junit.Test;
 

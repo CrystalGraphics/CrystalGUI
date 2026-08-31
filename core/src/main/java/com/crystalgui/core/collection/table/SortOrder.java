@@ -1,4 +1,4 @@
-package com.crystalgui.ui.elements.table;
+package com.crystalgui.core.collection.table;
 
 /**
  * A column's sort state, cycled by clicking its header.

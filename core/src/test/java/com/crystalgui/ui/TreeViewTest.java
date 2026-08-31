@@ -2,10 +2,10 @@ package com.crystalgui.ui;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.testsupport.UiTestBase;
-import com.crystalgui.ui.elements.list.SelectionMode;
-import com.crystalgui.ui.elements.tree.TreeDataSource;
+import com.crystalgui.core.collection.list.SelectionMode;
+import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.ui.elements.tree.TreeRenderer;
-import com.crystalgui.ui.elements.tree.TreeRow;
+import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.ui.elements.tree.TreeView;
 import com.crystalgui.ui.input.FocusPolicy;
 import org.junit.Test;

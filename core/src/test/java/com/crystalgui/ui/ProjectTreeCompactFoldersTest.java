@@ -15,7 +15,7 @@ import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
-import com.crystalgui.ui.elements.tree.TreeRow;
+import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.ui.elements.workbench.ProjectFileTree;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import org.junit.Before;

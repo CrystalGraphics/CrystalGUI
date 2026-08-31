@@ -1,4 +1,6 @@
-package com.crystalgui.ui.elements.list;
+package com.crystalgui.core.collection.list;
+
+import com.crystalgui.core.collection.list.ItemSizeStrategy;
 
 /**
  * Every row the same height — a division rather than a search, and what the overwhelming majority of

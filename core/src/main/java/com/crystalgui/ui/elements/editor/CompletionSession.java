@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.editor;
 
+import com.crystalgui.core.collection.pick.QuickPickSource;
 import com.crystalgui.core.search.SearchMatch;
 import com.crystalgui.core.search.SearchMatcher;
 import com.crystalgui.core.search.SearchQuery;

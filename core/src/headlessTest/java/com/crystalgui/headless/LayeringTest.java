@@ -62,6 +62,9 @@ public class LayeringTest {
             "com/crystalgui/widget/layout/",
             "com/crystalgui/widget/dnd/",
             "com/crystalgui/widget/collection/",
+            "com/crystalgui/widget/collection/list/",
+            "com/crystalgui/widget/collection/tree/",
+            "com/crystalgui/widget/collection/table/",
             "com/crystalgui/widget/form/",
             // THE CONFIG KIT IS ITS OWN THING, not a corner of `form`. `form` holds controls a caller
             // places by hand -- ColorSelector, SearchField; `config` is the descriptor-driven form
@@ -71,6 +74,7 @@ public class LayeringTest {
             // be a claim the code contradicts.
             "com/crystalgui/widget/config/",
             "com/crystalgui/widget/config/control/",
+            "com/crystalgui/widget/config/inspector/",
             "com/crystalgui/widget/canvas/",
             "com/crystalgui/widget/graph/",
             "com/crystalgui/widget/editor/");

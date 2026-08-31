@@ -11,7 +11,7 @@ import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.elements.chrome.ChromeCommands;
 import com.crystalgui.ui.elements.chrome.CommandPalette;
 import com.crystalgui.ui.elements.chrome.QuickPick;
-import com.crystalgui.ui.elements.chrome.QuickPickItem;
+import com.crystalgui.core.collection.pick.QuickPickItem;
 import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import org.junit.Before;

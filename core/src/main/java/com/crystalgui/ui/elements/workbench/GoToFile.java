@@ -12,9 +12,9 @@ import com.crystalgui.text.lang.TypeSearchRegistry;
 import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.chrome.QuickPick;
-import com.crystalgui.ui.elements.chrome.QuickPickEntry;
-import com.crystalgui.ui.elements.chrome.QuickPickItem;
-import com.crystalgui.ui.elements.chrome.QuickPickSource.ResultSink;
+import com.crystalgui.core.collection.pick.QuickPickEntry;
+import com.crystalgui.core.collection.pick.QuickPickItem;
+import com.crystalgui.core.collection.pick.QuickPickSource.ResultSink;
 import com.crystalgui.ui.text.TextRange;
 
 import javax.annotation.Nullable;

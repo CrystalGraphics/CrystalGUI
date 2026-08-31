@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.workbench;
 
+import com.crystalgui.core.collection.table.SortOrder;
 import com.crystalgui.fs.CgFileEntry;
 import com.crystalgui.fs.CgFileError;
 import com.crystalgui.core.signal.Signal;
@@ -11,7 +12,7 @@ import com.crystalgui.fs.WorkspaceClient;
 import com.crystalgui.core.search.SearchMatch;
 import com.crystalgui.core.search.SearchMatcher;
 import com.crystalgui.core.search.SearchQuery;
-import com.crystalgui.ui.elements.tree.TreeDataSource;
+import com.crystalgui.core.collection.tree.TreeDataSource;
 
 import java.util.ArrayList;
 import java.util.HashMap;

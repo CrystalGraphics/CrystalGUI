@@ -1,10 +1,11 @@
 package com.crystalgui.ui;
 
+import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.elements.UIText;
-import com.crystalgui.ui.elements.list.SelectionMode;
-import com.crystalgui.ui.elements.table.SortOrder;
+import com.crystalgui.core.collection.list.SelectionMode;
+import com.crystalgui.core.collection.table.SortOrder;
 import com.crystalgui.ui.elements.table.TableColumn;
 import com.crystalgui.ui.elements.table.TableView;
 import org.junit.Test;

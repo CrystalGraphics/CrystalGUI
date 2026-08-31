@@ -7,4 +7,5 @@
 #   6.1  com.crystalgui.desktop.DesktopKinds  (WindowIcon came early: Taskbar needs it)
 #   6.7  com.crystalgui.workbench.WorkbenchKinds
 com.crystalgui.widget.Widgets
+com.crystalgui.chrome.ChromeKinds
 com.crystalgui.desktop.DesktopKinds

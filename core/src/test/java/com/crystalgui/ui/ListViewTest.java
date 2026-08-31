@@ -4,12 +4,12 @@ import com.crystalgraphics.util.io.CgIO;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiTestBase;
-import com.crystalgui.ui.elements.list.FixedHeightStrategy;
+import com.crystalgui.core.collection.list.FixedHeightStrategy;
 import com.crystalgui.ui.elements.list.ListRenderer;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.ui.elements.list.ListView;
-import com.crystalgui.ui.elements.list.SelectionMode;
+import com.crystalgui.core.collection.list.SelectionMode;
 import com.crystalgui.ui.input.FocusPolicy;
 import org.junit.Test;
 
@@ -761,10 +761,16 @@ public class ListViewTest extends UiTestBase {
         }
         String sheet = joined.toString();
         assertTrue("the ua/ parts must be readable", !sheet.isEmpty());
+        // MATCHED WITHOUT THE BRACE, because the rule now carries a hostless ::part() twin beside it,
+        // on the next line -- so the class no longer sits against its own brace. The twin is what makes the rule reach the NEW engine, where the bars are shadow
+        // parts no outer class selector can touch; the assertion is about the class-scoped rule
+        // EXISTING, and it exists more widely than when this was written.
         assertTrue("the vertical scrollbar has no class-scoped sizing rule, so any ScrollerView subclass "
-                + "not named by a tag rule draws no bar at all", sheet.contains(".__v-scroller__ {"));
+                + "not named by a tag rule draws no bar at all", sheet.contains(".__v-scroller__"));
         assertTrue("the horizontal scrollbar has no class-scoped sizing rule",
-                sheet.contains(".__h-scroller__ {"));
+                sheet.contains(".__h-scroller__"));
+        assertTrue("...and its hostless ::part twin, which is what reaches the new engine's bars",
+                sheet.contains("::part(v-scroller)"));
         for (String tag : new String[] { "scrollerview", "listview", "treeview", "tableview" }) {
             assertFalse("'" + tag + " .__v-scroller__' is back. A per-subclass list is the thing that "
                             + "went stale: ConfiguratorPanel was in neither the sheet nor the test that "

@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.workbench;
 
+import com.crystalgui.core.collection.tree.FilteredTreeSource;
 import com.crystalgui.core.search.SearchQuery;
 import com.crystalgui.core.search.SearchMatch;
 import com.crystalgui.fs.CgPath;

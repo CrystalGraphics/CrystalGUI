@@ -1,7 +1,7 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.ui.elements.list.FixedHeightStrategy;
-import com.crystalgui.ui.elements.list.VariableHeightStrategy;
+import com.crystalgui.core.collection.list.FixedHeightStrategy;
+import com.crystalgui.core.collection.list.VariableHeightStrategy;
 import org.junit.Test;
 
 import java.util.Random;

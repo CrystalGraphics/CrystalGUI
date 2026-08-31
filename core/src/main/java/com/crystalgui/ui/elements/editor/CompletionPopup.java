@@ -17,7 +17,7 @@ import com.crystalgui.ui.elements.Popover;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.list.ListRenderer;
 import com.crystalgui.ui.elements.list.ListView;
-import com.crystalgui.ui.elements.list.SelectionMode;
+import com.crystalgui.core.collection.list.SelectionMode;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.UIDragController;
 import com.crystalgui.ui.input.FocusPolicy;

@@ -1,4 +1,4 @@
-package com.crystalgui.ui.elements.list;
+package com.crystalgui.core.collection.list;
 
 /**
  * How many rows a {@link ListView} may have selected at once.
