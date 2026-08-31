@@ -1,14 +1,17 @@
 package com.crystalgui.widget.config;
 
+import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.scroll.ScrollerView;
-
-import com.crystalgui.core.config.ConfigDescriptor;
-import javax.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
-import com.crystalgui.ui.dom.Name;
+import java.util.function.Function;
+import javax.annotation.Nullable;
 
 /**
  * <b>The inspector surface: a scrolling stack of rows.</b>
@@ -88,8 +91,8 @@ public class ConfiguratorPanel extends ScrollerView {
      * <p>A {@link ConfigDescriptor.Kind#GROUP} becomes a {@link ConfiguratorGroup} and recurses;
      * anything else becomes a row.</p>
      */
-    public ConfiguratorPanel build(java.util.List<ConfigDescriptor> descriptors,
-                                   java.util.function.Function<String, Object> values) {
+    public ConfiguratorPanel build(List<ConfigDescriptor> descriptors,
+                                   Function<String, Object> values) {
         for (ConfigDescriptor descriptor : descriptors) {
             buildInto(this, descriptor, values);
         }
@@ -97,7 +100,7 @@ public class ConfiguratorPanel extends ScrollerView {
     }
 
     private void buildInto(UINode parent, ConfigDescriptor descriptor,
-                           java.util.function.Function<String, Object> values) {
+                           Function<String, Object> values) {
         if (descriptor.kind() == ConfigDescriptor.Kind.GROUP) {
             ConfiguratorGroup group = new ConfiguratorGroup(descriptor.label());
             parent.append(group);
@@ -145,7 +148,7 @@ public class ConfiguratorPanel extends ScrollerView {
      * sweeping those out would leave the panel unable to scroll and unable to get them back.</p>
      */
     public void clearRows() {
-        for (UINode child : new java.util.ArrayList<>(children())) {
+        for (UINode child : new ArrayList<>(children())) {
             if (child instanceof Configurator || child instanceof ConfiguratorGroup) {
                 remove(child);
             }
@@ -194,6 +197,6 @@ public class ConfiguratorPanel extends ScrollerView {
     }
 
     public Map<String, ConfigControl> controls() {
-        return java.util.Collections.unmodifiableMap(controls);
+        return Collections.unmodifiableMap(controls);
     }
 }

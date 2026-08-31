@@ -1,24 +1,25 @@
 package com.crystalgui.widget.overlay;
 
 import com.crystalgui.chrome.status.ProcessesPopover;
-import com.crystalgui.ui.contract.WidgetContracts;
-import com.crystalgui.ui.contract.WidgetContract;
-import com.crystalgui.ui.contract.StateTypes;
-import com.crystalgui.ui.contract.State;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.service.AnchoredPlacement;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.service.Animation;
+import com.crystalgui.ui.contract.State;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.WidgetContracts;
+import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.dom.ShadowRoot;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UISlot;
+import com.crystalgui.ui.service.AnchoredPlacement;
+import com.crystalgui.ui.service.Animation;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
+import java.util.ArrayList;
+import java.util.List;
+import javax.annotation.Nullable;
 import lombok.Getter;
 import lombok.Setter;
-
-import javax.annotation.Nullable;
-import com.crystalgui.ui.dom.UISlot;
-import com.crystalgui.ui.dom.ShadowRoot;
-import com.crystalgui.ui.dom.Name;
 
 /**
  * A light-dismissable, anchored, top-layer popup — the web's <b>Popover API</b>.
@@ -413,7 +414,7 @@ public class Popover extends UINode {
      * the first step.</p>
      */
     public void hideChain() {
-        java.util.List<Popover> chain = new java.util.ArrayList<>();
+        List<Popover> chain = new ArrayList<>();
         for (Popover popover = this; popover != null; popover = popover.parentPopover()) {
             chain.add(popover);
         }

@@ -1,35 +1,41 @@
 package com.crystalgui.widget.collection.list;
 
-import com.crystalgui.ui.dom.Name;
-import com.crystalgui.core.data.DataProvider;
-import com.crystalgui.ui.box.Box;
+import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.platform.input.CgModifiers;
+import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.chrome.palette.QuickPick;
 import com.crystalgui.core.collection.list.FixedHeightStrategy;
 import com.crystalgui.core.collection.list.ItemSizeStrategy;
 import com.crystalgui.core.collection.list.SelectionMode;
+import com.crystalgui.core.data.DataKey;
+import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.property.ObservableList;
-import com.crystalgraphics.platform.input.CgKeyCodes;
-import com.crystalgraphics.platform.input.CgModifiers;
-import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgui.style.StyleGroup;
+import com.crystalgui.ui.ClipboardActions;
+import com.crystalgui.ui.UiDataKeys;
+import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.input.UIInputHandler;
-import com.crystalgui.ui.event.KeyboardEvent;
-import com.crystalgui.style.StyleGroup;
-import com.crystalgui.core.data.DataKey;
-import com.crystalgui.ui.ClipboardActions;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.UiDataKeys;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.widget.scroll.ScrollerView;
+import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.style.TaffyPosition;
-import lombok.Getter;
-
-import javax.annotation.Nullable;
 import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
+import java.util.function.Consumer;
+import javax.annotation.Nullable;
+import lombok.Getter;
 
 /**
  * A windowed view over an {@link ObservableList} — only the visible rows exist as elements, and they are
@@ -155,7 +161,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
     private int selectionAnchor = -1;
 
     /** Fires whenever the selected set changes, with the new selection. */
-    public final Signal.Value<java.util.Set<Integer>> onSelectionChanged = new Signal.Value<>();
+    public final Signal.Value<Set<Integer>> onSelectionChanged = new Signal.Value<>();
 
     /**
      * Fires when a row is <b>activated</b> — Enter on the focused row.
@@ -420,7 +426,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
      *
      * <p>Deliberately a list rather than a map: the point is that they have no index.</p>
      */
-    private final java.util.List<UINode> awaitingRecycle = new java.util.ArrayList<>();
+    private final List<UINode> awaitingRecycle = new ArrayList<>();
 
     /**
      * A standing post-layout hook, which is what the {@code onLayoutChanged} override became.
@@ -689,7 +695,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
         // position forever: the list grew a tail of unclickable ghost rows showing whatever used to be
         // there. Geometry has one writer and can be authoritative; display has two and cannot.
         StyleGroup.defaultPipeline(row.getStyle().getLayoutGroup(),
-                l -> l.display(dev.vfyjxf.taffy.style.TaffyDisplay.FLEX));
+                l -> l.display(TaffyDisplay.FLEX));
         renderer.bind(model.get(index), index, row);
         applySelectionClass(row, index);
         return row;
@@ -712,7 +718,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
 
     /** In list order, not selection order — a caller acting on a multi-selection almost always wants it
      * top-to-bottom. */
-    public java.util.Set<Integer> getSelectedIndices() {
+    public Set<Integer> getSelectedIndices() {
         return Collections.unmodifiableSet(selected);
     }
 
@@ -911,12 +917,12 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
      *
      * @see ContextMenu#installDefaultForLists
      */
-    public static void setDefaultContextMenuInstaller(@Nullable java.util.function.Consumer<ListView<?>> installer) {
+    public static void setDefaultContextMenuInstaller(@Nullable Consumer<ListView<?>> installer) {
         defaultContextMenuInstaller = installer;
     }
 
     @Nullable
-    private static java.util.function.Consumer<ListView<?>> defaultContextMenuInstaller;
+    private static Consumer<ListView<?>> defaultContextMenuInstaller;
 
     private boolean defaultContextMenuInstalled;
 
@@ -1021,7 +1027,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
     private int contextRow = -1;
 
     /** What Copy would act on: the right-clicked row if there is one, otherwise the selection. */
-    private java.util.Collection<Integer> copyTargets() {
+    private Collection<Integer> copyTargets() {
         if (contextRow >= 0 && contextRow < model.size() && !selected.contains(contextRow)) {
             return List.of(contextRow);
         }
@@ -1040,7 +1046,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
             clipboardDelegate.copy();
             return;
         }
-        java.util.Collection<Integer> targets = copyTargets();
+        Collection<Integer> targets = copyTargets();
         contextRow = -1;
         if (renderer == null || targets.isEmpty()) return;
         StringBuilder out = new StringBuilder();
@@ -1213,7 +1219,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
         // candidate on it, so the next scroll step would pay to rebuild what it just threw away — which
         // is precisely the cost a pool exists to avoid.
         StyleGroup.defaultPipeline(row.getStyle().getLayoutGroup(),
-                l -> l.display(dev.vfyjxf.taffy.style.TaffyDisplay.NONE));
+                l -> l.display(TaffyDisplay.NONE));
         pool.addLast(row);
     }
 
@@ -1227,7 +1233,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
     /** Realised rows, by model index — for tests and for anything that needs "the element for item N, if
      * it exists right now". */
     public Map<Integer, UINode> realisedRows() {
-        return java.util.Collections.unmodifiableMap(realised);
+        return Collections.unmodifiableMap(realised);
     }
 
     public int realisedCount() {

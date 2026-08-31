@@ -1,29 +1,29 @@
 package com.crystalgui.widget.form;
 
-import com.crystalgui.ui.contract.RatePolicy;
-import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.WidgetContracts;
-import com.crystalgui.ui.contract.WidgetContract;
-import com.crystalgui.ui.contract.StateTypes;
-import com.crystalgui.ui.contract.State;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.render.texture.ArgbMath;
 import com.crystalgui.render.texture.CgUiColorField;
+import com.crystalgui.serialization.StateMap;
+import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.contract.Event;
+import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgui.ui.contract.State;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UINode;
-
+import com.crystalgui.ui.service.Drag;
+import com.crystalgui.widget.control.Slider;
+import com.crystalgui.widget.control.TextField;
+import com.crystalgui.widget.overlay.Dropdown;
+import com.crystalgui.widget.overlay.Tooltip;
+import com.crystalgui.widget.text.UIText;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import com.crystalgui.widget.overlay.Dropdown;
-import com.crystalgui.widget.control.TextField;
-import com.crystalgui.widget.control.Slider;
-import com.crystalgui.widget.text.UIText;
-import com.crystalgui.ui.service.Drag;
-import com.crystalgui.widget.overlay.Tooltip;
-import com.crystalgui.ui.box.Box;
+import java.util.function.BiConsumer;
 
 /**
  * A colour picker: a hue ring around a saturation/value square, four channel sliders, and a hex field.
@@ -320,7 +320,7 @@ public class ColorSelector extends UINode {
     }
 
     /** Press-and-drag on a surface, reported in that surface's own local coordinates. */
-    private void dragSurface(UINode surface, java.util.function.BiConsumer<Float, Float> onPoint) {
+    private void dragSurface(UINode surface, BiConsumer<Float, Float> onPoint) {
         // Target phase only (both flags false): a press on the SQUARE must not also reach the ring
         // underneath it, or one click would set the hue and the saturation at once.
         surface.onMouseDown.attachListener((el, event) -> {

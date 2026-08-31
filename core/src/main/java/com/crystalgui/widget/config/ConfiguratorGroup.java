@@ -1,8 +1,9 @@
 package com.crystalgui.widget.config;
 
+import com.crystalgui.core.signal.Signal;
+import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.text.UIText;
-import com.crystalgui.ui.dom.Name;
 
 /**
  * A collapsible section of an inspector.
@@ -44,8 +45,8 @@ public class ConfiguratorGroup extends UINode {
      * it says how you are looking at the thing, not what the thing is — so it must survive a rebuild the
      * same way a scroll position does, and a panel cannot remember what it is never told.</p>
      */
-    public final com.crystalgui.core.signal.Signal.Value<Boolean> collapsedChanged =
-            new com.crystalgui.core.signal.Signal.Value<>();
+    public final Signal.Value<Boolean> collapsedChanged =
+            new Signal.Value<>();
 
     private final UINode head = new UINode();
     private final UINode arrow = new UINode();

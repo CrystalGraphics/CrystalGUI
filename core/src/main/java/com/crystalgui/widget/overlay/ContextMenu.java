@@ -1,19 +1,18 @@
 package com.crystalgui.widget.overlay;
 
+import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.widget.overlay.Menu;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.event.MouseEvent;
-
+import com.crystalgui.widget.overlay.Menu;
 import com.crystalgui.widget.overlay.MenuBuilder;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
-
+import java.util.function.Function;
 import javax.annotation.Nullable;
-import com.crystalgraphics.platform.input.CgMouseCodes;
 
 /**
  * A right-click menu built from commands.
@@ -191,7 +190,7 @@ public final class ContextMenu {
      *                for <em>that row</em> rather than for the container
      */
     public static UINode attach(UINode on, CommandRegistry registry,
-                                   java.util.function.Function<UINode, ContextMenu> builder) {
+                                   Function<UINode, ContextMenu> builder) {
         // ONE LIVE MENU PER ATTACHMENT SITE, and this is a correctness requirement rather than tidiness.
         //
         // Building a fresh Menu per press and leaving the last one in the tree crashed Taffy outright:

@@ -225,9 +225,9 @@ public class ScrollerView extends UINode {
             // where `editor.zoomIn` and anything else can bind it -- and declining is the only way, since
             // the resolver runs after dispatch and only on what nothing consumed. Shift+wheel is still
             // ours: it is this view's horizontal scroll, and the convention everywhere.
-            int held = com.crystalgraphics.platform.CgPlatform.input().getCurrentModifiers();
-            if (com.crystalgraphics.platform.input.CgModifiers.hasCtrl(held)
-                    || com.crystalgraphics.platform.input.CgModifiers.hasSuper(held)) {
+            int held = CgPlatform.input().getCurrentModifiers();
+            if (CgModifiers.hasCtrl(held)
+                    || CgModifiers.hasSuper(held)) {
                 return;
             }
             float delta = event.getScroll() * WHEEL_PIXELS_PER_NOTCH;

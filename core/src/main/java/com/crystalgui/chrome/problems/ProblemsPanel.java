@@ -1,18 +1,17 @@
 package com.crystalgui.chrome.problems;
 
 import com.crystalgui.chrome.preferences.Preferences;
-import com.crystalgui.ui.dom.Name;
-import com.crystalgui.core.data.DataProvider;
-import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.core.collection.tree.FilteredTreeSource;
-import com.crystalgui.core.search.SearchQuery;
-import com.crystalgui.core.search.SearchMatcher;
-import com.crystalgui.core.search.SearchMatch;
-import com.crystalgui.core.signal.Connection;
-import com.crystalgui.core.signal.ConnectionGroup;
+import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.core.command.ClipboardCommands;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataKey;
+import com.crystalgui.core.data.DataProvider;
+import com.crystalgui.core.search.SearchMatch;
+import com.crystalgui.core.search.SearchMatcher;
+import com.crystalgui.core.search.SearchQuery;
+import com.crystalgui.core.signal.Connection;
+import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.render.texture.CgUiDrawable;
@@ -24,24 +23,27 @@ import com.crystalgui.text.diagnostic.DiagnosticTag;
 import com.crystalgui.text.diagnostic.Markers;
 import com.crystalgui.text.diagnostic.ProblemNode;
 import com.crystalgui.text.diagnostic.ProblemsTreeSource;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.input.UIInputHandler;
+import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.service.AnchoredPlacement;
-import com.crystalgui.widget.overlay.Menu;
-import com.crystalgui.widget.overlay.MenuItem;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.input.FocusPolicy;
-import com.crystalgui.widget.text.UIText;
+import com.crystalgui.ui.input.UIInputHandler;
+import com.crystalgui.ui.service.AnchoredPlacement;
 import com.crystalgui.widget.collection.tree.TreeRenderer;
-import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.widget.collection.tree.TreeSearch;
 import com.crystalgui.widget.collection.tree.TreeView;
-
-import javax.annotation.Nullable;
+import com.crystalgui.widget.overlay.ContextMenu;
+import com.crystalgui.widget.overlay.Menu;
+import com.crystalgui.widget.overlay.MenuItem;
+import com.crystalgui.widget.text.UIText;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.Set;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import javax.annotation.Nullable;
 
 /**
  * Every problem in the workspace, grouped by file — the Problems panel.
@@ -353,7 +355,7 @@ public class ProblemsPanel extends UINode implements DataProvider {
      * rather than to whatever was in front when you last switched it off.</p>
      */
     public ProblemsPanel setActiveResource(@Nullable Resource resource) {
-        if (java.util.Objects.equals(activeResource, resource)) return this;
+        if (Objects.equals(activeResource, resource)) return this;
         activeResource = resource;
         if (activeFileOnly) showOnly(resource);
         return this;
@@ -622,7 +624,7 @@ public class ProblemsPanel extends UINode implements DataProvider {
     /** Restricts the tree to one file — VS Code's "Show Active File Only". Null shows the workspace. */
     public ProblemsPanel showOnly(@Nullable Resource resource) {
         if (source == null) return this;
-        if (java.util.Objects.equals(source.onlyResource(), resource)) return this;
+        if (Objects.equals(source.onlyResource(), resource)) return this;
         source.setOnlyResource(resource);
         refresh();
         return this;
@@ -646,7 +648,7 @@ public class ProblemsPanel extends UINode implements DataProvider {
 
     /** Every problem currently shown, in tree order. The surface a test asserts on. */
     public List<Diagnostic> visibleProblems() {
-        List<Diagnostic> shown = new java.util.ArrayList<>();
+        List<Diagnostic> shown = new ArrayList<>();
         if (tree == null) return shown;
         for (TreeRow<ProblemNode> row : tree.visibleRows()) {
             if (!row.item().isFile()) shown.add(row.item().diagnostic());
@@ -656,7 +658,7 @@ public class ProblemsPanel extends UINode implements DataProvider {
 
     /** Every file currently shown, in tree order. */
     public List<Resource> visibleFiles() {
-        List<Resource> shown = new java.util.ArrayList<>();
+        List<Resource> shown = new ArrayList<>();
         if (tree == null) return shown;
         for (TreeRow<ProblemNode> row : tree.visibleRows()) {
             if (row.item().isFile()) shown.add(row.item().resource());
@@ -764,7 +766,7 @@ public class ProblemsPanel extends UINode implements DataProvider {
          * tree scrolls and a listener may only be attached once, so a captured node would keep folding
          * whichever file its slot was first used for. The same trap the editor's gutter arrows document.</p>
          */
-        private final java.util.Map<UINode, ProblemNode> rowItems = new java.util.IdentityHashMap<>();
+        private final Map<UINode, ProblemNode> rowItems = new IdentityHashMap<>();
 
         /**
          * What Copy puts on the clipboard — <b>the message, and nothing else</b>.

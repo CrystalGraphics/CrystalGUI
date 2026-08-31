@@ -13,6 +13,8 @@ import com.crystalgui.ui.service.Input;
 import com.crystalgui.ui.service.Lifecycle;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -156,7 +158,7 @@ public final class UIDocument extends UINode {
     private UINode topLayerNode;
 
     /** Nodes promoted to the top layer, in the order they were promoted. */
-    private final java.util.LinkedHashSet<UINode> promoted = new java.util.LinkedHashSet<>();
+    private final LinkedHashSet<UINode> promoted = new LinkedHashSet<>();
 
     /**
      * Promotes {@code node} into the top layer — or RAISES it if already promoted.
@@ -193,8 +195,8 @@ public final class UIDocument extends UINode {
     }
 
     /** What is promoted, bottom-most first. The box tree's, on every sync. */
-    public java.util.Collection<UINode> promotedNodes() {
-        return java.util.Collections.unmodifiableCollection(promoted);
+    public Collection<UINode> promotedNodes() {
+        return Collections.unmodifiableCollection(promoted);
     }
 
     /** The layer's node if one has been built, never building it. The box tree's, per sync. */

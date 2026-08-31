@@ -1,14 +1,14 @@
 package com.crystalgui.ui.dom;
 
+import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.contract.WidgetContracts;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
-
+import java.util.Set;
 import javax.annotation.Nullable;
-
-import com.crystalgui.ui.UIElement;
 
 /**
  * {@link TreeSource} over today's {@code UIElement} tree. {@code plan_ui_rewrite.md} M0.
@@ -212,7 +212,7 @@ public final class ElementTreeSource implements TreeSource<UIElement> {
      */
     @Override
     public NodeContract contractOf(UIElement node) {
-        NodeContract declared = com.crystalgui.ui.contract.WidgetContracts.of(node);
+        NodeContract declared = WidgetContracts.of(node);
         if (declared != null) return declared;
         return contracts.computeIfAbsent(node.getClass(), type -> new PlainNode(
                 node.tagName(), node.acceptsDescribedChildrenFor()));
@@ -231,8 +231,8 @@ public final class ElementTreeSource implements TreeSource<UIElement> {
         @Override public String name() {
             return name;
         }
-        @Override public java.util.Set<String> eventKinds() {
-            return java.util.Set.of();
+        @Override public Set<String> eventKinds() {
+            return Set.of();
         }
         @Override public boolean acceptsDescribedChildren() {
             return acceptsChildren;

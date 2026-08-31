@@ -4,7 +4,9 @@ import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UINode;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import javax.annotation.Nullable;
 
@@ -203,7 +205,7 @@ public final class Dismiss {
     }
 
     /** When each open popover was last shown. @see #lightDismiss(UINode, int) */
-    private final java.util.Map<UINode, Integer> shownAt = new java.util.IdentityHashMap<>();
+    private final Map<UINode, Integer> shownAt = new IdentityHashMap<>();
 
     /** Records that {@code popover} was shown now, and returns the sequence it was shown at. */
     public int recordShown(UINode popover) {
