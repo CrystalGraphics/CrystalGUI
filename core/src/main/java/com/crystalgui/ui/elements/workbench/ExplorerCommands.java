@@ -330,7 +330,7 @@ public final class ExplorerCommands {
 
     /** Everything selected — what the commands that act on several things ask for. */
     private static List<CgPath> targets(CommandContext context) {
-        for (UIElement element = context.source(); element != null; element = element.getParent()) {
+        for (UIElement element = UIElement.sourceOf(context); element != null; element = element.getParent()) {
             if (element instanceof ProjectFileTree tree) return tree.selectedPaths();
         }
         return List.of();
@@ -409,7 +409,7 @@ public final class ExplorerCommands {
 
     @Nullable
     private static CgPath target(CommandContext context) {
-        for (UIElement element = context.source(); element != null; element = element.getParent()) {
+        for (UIElement element = UIElement.sourceOf(context); element != null; element = element.getParent()) {
             if (element instanceof ProjectFileTree tree) return tree.selectedPath();
         }
         return null;
@@ -484,7 +484,7 @@ public final class ExplorerCommands {
             tree.beginNew(parent, folder, name -> createEntry(workbench, parent.resolve(name), folder));
             return;
         }
-        InputDialog.ask(context.source(), folder ? "New Folder" : "New File", "Name", "", name ->
+        InputDialog.ask(UIElement.sourceOf(context), folder ? "New Folder" : "New File", "Name", "", name ->
                 createEntry(workbench, parent.resolve(name), folder));
     }
 
@@ -524,7 +524,7 @@ public final class ExplorerCommands {
             tree.beginRename(path, name -> workbench.files().move(path, parent.resolve(name), false));
             return;
         }
-        InputDialog.ask(context.source(), "Rename", "New name", path.name(), name -> {
+        InputDialog.ask(UIElement.sourceOf(context), "Rename", "New name", path.name(), name -> {
             if (name.equals(path.name())) return;
             workbench.files().move(path, parent.resolve(name), false);
         });
@@ -549,7 +549,7 @@ public final class ExplorerCommands {
             return;
         }
 
-        InputDialog.confirm(context.source(), "Delete",
+        InputDialog.confirm(UIElement.sourceOf(context), "Delete",
                 directory ? "Delete '" + path.name() + "' and everything in it?"
                         : "Delete '" + path.name() + "'?",
                 () -> workbench.files().delete(path, directory));

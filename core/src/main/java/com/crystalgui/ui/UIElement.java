@@ -21,6 +21,7 @@ import com.crystalgui.style.ElementStyle;
 import com.crystalgui.style.Styleable;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgui.style.property.StyleProperty;
+import com.crystalgui.ui.input.keymap.KeymapScope;
 import com.crystalgui.ui.shadow.ShadowRoot;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.StyleOrigin;
@@ -71,13 +72,15 @@ import java.util.*;
 import java.util.function.Consumer;
 
 import static com.crystalgui.ui.UIWindow.EMPTY_LAYOUT;
+import com.crystalgui.core.data.DataContext;
+import com.crystalgui.core.command.CommandContext;
 
 /**
  * Base DOM node — every CgGui component extends this (a general-purpose, styleable, extensible container, conceptually
  * like an HTML {@code <div>}).
  */
 @Accessors(chain = true)
-public class UIElement implements EventTarget, Styleable, SettingsScope, DataProvider {
+public class UIElement implements KeymapScope, EventTarget, Styleable, SettingsScope, DataProvider {
     private static final Comparator<UIElement> Z_INDEX_DESCENDING = (a, b) -> Integer.compare(b.style.generalGroup.zIndex(), a.style.generalGroup.zIndex());
 
     // ── Core state ───────────────────────────────────────────────────────────
@@ -1855,8 +1858,57 @@ public class UIElement implements EventTarget, Styleable, SettingsScope, DataPro
         return keymap;
     }
 
-    /** The keymap if one was ever created, without creating one. Used by the resolver, which walks every
-     * ancestor on every keystroke and must not allocate a keymap for each. */
+    /**
+     * The element a command was invoked from, or null if it came from somewhere else.
+     *
+     * <p>{@link DataContext#source()} promises a {@link CommandTarget} now, because the command
+     * layer stopped naming this class at M6.3 — and every old-engine command still wants an element,
+     * to walk it or to hang a dialog off it. Narrowed ONCE here rather than as nine {@code
+     * instanceof} chains, and it goes at 6.9 with everything that calls it.</p>
+     */
+    @Nullable
+    public static UIElement sourceOf(@Nullable CommandContext context) {
+        return context != null && context.source() instanceof UIElement element ? element : null;
+    }
+
+    /** @see #sourceOf(CommandContext) */
+    @Nullable
+    public static UIElement sourceOf(@Nullable DataContext context) {
+        return context != null && context.source() instanceof UIElement element ? element : null;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>The LIGHT parent, which is what {@code getParent()} already is here.</p>
+     */
+    @Override
+    @Nullable
+    public KeymapScope commandParent() {
+        return getParent();
+    }
+
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>The window's, when this element is in one. {@code DataContext} used to reach through
+     * {@code getAttachedWindow().getDataProviders()} itself, which is exactly the reach that made
+     * the command layer old-engine-only.</p>
+     */
+    @Override
+    public List<DataProvider> scopeProviders() {
+        UIWindow window = getAttachedWindow();
+        return window == null ? List.of() : window.getDataProviders();
+    }
+
+    /**
+     * The keymap if one was ever created, without creating one.
+     *
+     * <p>Used by the resolver, which walks every ancestor on every keystroke and must not allocate a
+     * keymap for each.</p>
+     */
+    @Override
     @Nullable
     public Keymap keymapOrNull() {
         return keymap;

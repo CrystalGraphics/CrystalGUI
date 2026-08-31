@@ -198,7 +198,7 @@ public final class DockCommands {
 
     @Nullable
     private static DockArea areaFor(CommandContext context) {
-        for (UIElement element = context.source(); element != null; element = element.getParent()) {
+        for (UIElement element = UIElement.sourceOf(context); element != null; element = element.getParent()) {
             if (element instanceof DockArea area) return area;
         }
         return null;
