@@ -478,8 +478,8 @@ else. The one honest exception is 6.5's D22, budgeted as XL for that reason and 
 | Batch | copied | moved | mechanical | hand sites | |
 |---|---|---|---|---|---|
 | 6.1 | 18 | 0 | 364 | 80 | *(shipped: 22 classes, the four overlays pulled forward)* |
-| 6.2 | 25 | 10 | 390 | 35 | *(re-measured after those four left the batch)* |
-| 6.3 | 21 | 17 | 474 | 59 | |
+| 6.2 | 25 | 10 | 390 | 35 | *(shipped: 33 classes; 6 deferred to 6.3 on the command seam)* |
+| 6.3 | 27 | 17 | 601 | 58 | *(re-measured after those 6 arrived)* |
 | 6.4 | 26 | 9 | 445 | 85 | |
 | 6.5 | 26 | 8 | 394 | 77 | |
 | 6.6 | 19 | 8 | 409 | 49 | |
@@ -1006,7 +1006,7 @@ failed.
 and they are not: `ui/shadow/` and `CgUiShadowPartsScene` are still on disk. Deleting them is 6.2's
 first commit, not a loose end to carry to 6.9.
 
-### 6.2 — Dialogs, the layout composites, and the config kit · **L** · after: 6.1
+### 6.2 — Dialogs, the layout composites, and the config kit · **L** · after: 6.1 · **SHIPPED 2026-08-31**
 
 *Retitled. The overlay family — `Popover`, `Menu`, `MenuItem`, `Tooltip` — shipped in 6.1, pulled
 forward because `Dropdown` and `SearchField` compose them; `ColorSelector` and `MarkupView` were 6.1
@@ -1207,50 +1207,204 @@ write from Java"*, which `InputDialog:165` is a live instance of.
 
 **First commit of the batch:** delete `ui/shadow/` and `CgUiShadowPartsScene`. 6.1 owed it.
 
-### 6.3 — Collections, search, the shell's chrome · **L** · after: 6.2
+#### 6.2 — what shipped, and the two things it found
 
-**Ports.** `ListView` + `ItemSizeStrategy`/`FixedHeightStrategy`/`VariableHeightStrategy`/
-`ListRenderer` (retyped), `TreeView`, `TreeSearch`, `TreeRenderer`/`TreeRow`/the sources (headless,
-retyped only), `TableView` + `TableColumn`/`TableCellRenderer`, `NavigatorView`, `Preferences`,
-`QuickPick` + `QuickPickItem/Entry/Source`, `CommandPalette`, `MenuBarView`, `MainMenuCommands`,
-`ChromeCommands`, `ProblemsPanel` + `ProblemNode/Commands/TreeSource`, `ProcessesPopover`. Sheets:
-`search.css`, the rest of `panels.css`.
+**Shipped.** 33 classes: the dialogs, the four layout composites, and the whole config kit — 22 files
+into `widget.config` and `widget.config.control`, plus `ConfigDescriptor` into `core.config`. **Six
+did not**: `ContextMenu`, `MenuBuilder` and the inspector's four are blocked on `CommandContext` and
+`DataContext`, both `record …(UIElement source, …)`, and they moved to 6.3 with the seam.
 
-**Accepts.** The gallery's list, tree, table and palette pages as parity specs; `ListView` 275,
-`TreeView` 115, `TableView`, `TreeSearchInstall`, `TreeQuery`, `VariableHeightStrategy`,
-`CommandPalette`, `QuickPickQueryRetention`, `QuickPickResize`, `MenuBarView`, `ProblemsPanel`,
-`ProblemsMenu`, `ProblemBandPrimary`, `Preferences`, `PreferencesKey`, `AppearanceSettings`,
-`ContextMenu`, `ElementSettings`, `Keymap`, `ShippedKeymapDefaults`.
+**The ledger's copy/move split was wrong twelve times out of thirteen.** Its heuristic reads a file's
+own imports, and a same-package reference has none: `ValueControl extends ConfigControl` (a node),
+`ConfigControls` is a factory RETURNING one, `InspectorSection` takes an `InspectorForm`,
+`InspectorRegistry` types `List<InspectorSection>`. Every one transitively bound; moving them would
+have taken them from the old engine, which ships until 6.9. **Audit a move by TYPE NAME, never by
+imports** — which is why 6.3's seventeen were re-audited that way before it was planned.
 
-**Destination.** `widget.collection.list/.tree/.table`, `chrome.palette`, `chrome.menu` (MenuBarView,
-MainMenuCommands, ChromeCommands), `chrome.problems`, `chrome.preferences`, `chrome.status`
-(ProcessesPopover). The tree sources, strategies and renderers are **moved**, not copied.
+And the one genuine move could not go where the ledger said. `ConfigDescriptor` in `widget.config`
+made `EngineBoundaryTest` fail with seven old-engine classes reaching into the new tree —
+correctly. **A neutral class belongs in a package BOTH engines may name**, which is the conclusion
+`SimilarNames` reached when it moved to `com.crystalgui.text`. 6.3 has sixteen of these.
 
-**Budget, measured:** **21 copied, 17 moved, 474 mechanical, 59 hand sites.** Nearly half the batch
-is a move: the tree sources, the strategies, the renderers and the palette's sources are all
-headless.
+**Five codemod rules were silently dead**, and the cause is worth stating exactly: the file carried
+nine stray backspace bytes, because `""` in a Python string is a BACKSPACE and not a regex word
+boundary. `screenToLocal(`, `containsScreenPoint(` and the `Drag.` receiver matched nothing — which
+is precisely what the first tranche hand-fixed without noticing the tool should have. Repaired, the
+batch's reading list fell from 6 sites to 3. Four further gaps closed with it, each of which would
+have hit every later batch: an inline FQN the import rules cannot see, a wildcard import, `.getId()`
+firing on a non-node receiver, and ported-import rewriting that only fired for rows ALREADY marked
+ported — so a batch's own copies imported each other's OLD classes, which resolves perfectly and
+fails at every call.
 
-**Rows it owns.** The whole list/tree/search cluster: *"a list restoring focus to a row must never
-take it from a CONTROL INSIDE one"*; *"a blur raised by ROW RECYCLING is not a user gesture"*; *"a
-row's inline editor is primed ONCE PER EDIT"*; *"a search box is a `TextField`"*; *"a tree's inline
-editor is built in `createTemplate`"*; *"FILTERING REVEALS; HIGHLIGHTING DOES NOT"*; *"a tree that
-restores selection BY ITEM must clear the index-based one first"*; *"a panel's FILTER and its SEARCH
-must share one notion of matches"*; *"pass the `SearchQuery`, never the text"*; *"a search marks the
-matched CHARACTERS"*; *"a `::highlight()` BAND must be cleared on the no-styles path"*; *"a shared
-row component must reach the rows ITSELF"*; *"a search bar is either TRANSIENT or PERMANENT"*; *"a
-pane MINIMUM measured from realised rows"* ×2; *"a `ListView` is the tab stop of its own composite"*;
-*"a recycled row must SWAP its data-driven classes"*; *"a row's slots are built in
-`createTemplate`"*; *"a menu bar resolves commands against the FOCUSED element; a context menu
-against the element that was CLICKED"*; *"the registry carries `enabled`; it never filters"*;
-*"`MenuBuilder` is the only thing that turns commands into menu rows"*; *"a `MenuId.submenu`
-declaration is PERMANENT"*; *"a widget must never rebuild the elements it is being clicked or dragged
-on"* (`TableView`'s header).
+**And the gallery found a cascade regression latent since 5.2.** `invalidateStyleMatch` marked the
+node and its exposed shadow parts and nothing else, so a rule keyed on an ancestor's class never
+re-matched its descendants. The old engine walked its children and its comment named the case; M6.1
+added the shadow half for `::part` and REPLACED the light walk rather than joining it. Nothing could
+see it until a widget's LAYOUT depended on such a rule — a `ConfiguratorGroup` folds by adding a
+class and letting the sheet set `display: none`, and it would not fold, with every observable
+correct.
 
-**Hazards.** `ListView` rows are kind B (a renderer's template is a caller's node) placed by D22;
-`ListView.getScrollHeight` is the first model-derived scroll extent (§2.2). `MenuBarView`'s
-`__menu-title__` mnemonics and *"a menu MNEMONIC must not fire while a text field has focus"* go
-through `claimsChord` and the keymap's `allowWhileTyping`. `TreeSearch` (1,141 lines, 16 parts) is
-mostly kind C.
+### 6.3 — Collections, the shell's chrome, and the seam two batches deferred to it · **XL** · after: 6.2
+
+*Re-sized from **L**. It absorbed six classes 6.2 could not port — `ContextMenu`, `MenuBuilder` and
+the inspector's four — and the reason they came here is also the batch's first piece of work: the
+command and data layer is typed on `UIElement`, and 6.3 is where it has to stop being.*
+
+**Scope, from the ledger:** 44 files, **11,883 old-engine lines** — the largest batch in M6 by both
+measures, half again the size of 6.2.
+
+| Group | The files | Files | Lines | Destination |
+|---|---|---:|---:|---|
+| **The seam** | `Keymap` 235 · `KeymapResolver` 297 · `DataContext` 162 · `CommandContext` 41 · `DataProvider` 36 | 5 | 771 | *retyped in place* |
+| Lists | `ListView` 1,408 · `VariableHeightStrategy` 189 · `ListRenderer` 74 · `FixedHeightStrategy` 50 · `ItemSizeStrategy` 28 · `SelectionMode` 15 | 6 | 1,764 | `widget.collection.list` |
+| Trees | `TreeSearch` 1,141 · `TreeView` 449 · `PathTreeSource` 156 · `FilteredTreeSource` 106 · `TreeRenderer` 40 · `TreeDataSource` 32 · `TreeRow` 21 | 7 | 1,945 | `widget.collection.tree` |
+| Tables | `TableView` 519 · `TableColumn` 156 · `SortOrder` 25 · `TableCellRenderer` 18 | 4 | 718 | `widget.collection.table` |
+| The palette | `QuickPick` 791 · `QuickPickSource` 294 · `QuickPickItem` 179 · `CommandPalette` 151 · `QuickPickEntry` 41 | 5 | 1,456 | `chrome.palette` |
+| The menu bar | `MenuBarView` 645 · `MainMenuCommands` 89 · `ChromeCommands` 63 | 3 | 797 | `chrome.menu` |
+| Problems | `ProblemsPanel` 929 · `ProblemsTreeSource` 210 · `ProblemsCommands` 83 · `ProblemNode` 38 | 4 | 1,260 | `chrome.problems` |
+| Notifications | `NotificationBalloons` 314 · `NotificationCard` 217 · `NotificationsView` 200 | 3 | 731 | `chrome.notification` |
+| Navigation | `NavigatorView` 620 · `Preferences` 287 | 2 | 907 | `chrome.preferences` |
+| The status bar | `StatusBarView` 427 · `ProgressStatusItem` 215 · `ProcessesPopover` 214 · `Breadcrumbs` 166 | 4 | 1,022 | `chrome.status` |
+| **Deferred from 6.2** | `Inspector` 447 · `MenuBuilder` 231 · `ContextMenu` 309 · `InspectorForm` 129 · `InspectorSection` 92 · `InspectorRegistry` 75 | 6 | 1,283 | `widget.config.inspector`, `widget.overlay` |
+
+> **The ledger says `chrome` flat for all twenty-one chrome files.** The six sub-packages above are
+> this section's proposal and have to be written into it before the batch starts, the way
+> `widget.config` was — `LayeringTest`'s ungoverned-package check walks to depth 2, so each needs its
+> own entry rather than inheriting one.
+
+**Budget, measured** (`python tools/port/codemod.py --batch 6.3 --dry-run`): **27 copied, 17 moved,
+601 mechanical rewrites, 58 hand sites.**
+
+Mechanical, by kind: element type 237 · tree 102 · ported import 65 · import 44 · document receiver
+37 · window type 35 · focus 14 · geometry 14 · base class 12 · `acceptsPublicChildren` 12 · identity
+5 · ticker interface 4 · drag receiver 4 · internal flag 3 · internal child 3 · the rest 10.
+
+Hand sites, by kind: **`stopPropagation` 27** · **IMPORTANT write 18** · post-layout callback 4 ·
+dynamic restructure 4 · internal child 3 · layout internals 1 · resize hook 1.
+
+**What the numbers say.** 58 hand sites is 6.1's 80 and 6.2's 35 — but the shape is different from
+both. Twenty-seven of them are `stopPropagation`, which is a *reading* rather than a rewrite (§4.4:
+is this "end the walk" or "pre-empt my own later listeners"), and they cluster: `MenuBarView` has
+four, `ProblemsPanel` three, `QuickPick` two. The eighteen IMPORTANT writes are the real work and are
+the most any batch has had — 6.2 had seven and every one became an INLINE write, which will not hold
+here, because a virtualised list computes geometry it has to hand back.
+
+#### 2 — the seam, and it is not optional
+
+**`ContextMenu`, `MenuBuilder` and the inspector's four are already blocked on it**, which is why
+they are in this batch and not the last one. `CommandContext` is `record CommandContext(UIElement
+source, …)`; `DataContext` is the same shape; `Keymap.acceleratorFor` takes one; `KeymapResolver`
+names it nine times. 771 lines across five files, and **55 files across the repo call into them**.
+
+This is the first of the fourteen non-element seams §1.2 counted, and it cannot be deferred again:
+`MenuBarView` and `CommandPalette` are the batch's own, and both are built on it end to end.
+
+The retype is not a port — these classes are engine-neutral apart from the type they name — so the
+question is only which type replaces `UIElement`. `Styleable` is too narrow (the walk needs
+`parent()`), and `UINode` alone would break the old engine, which still resolves commands. **A
+generic parameter or a small `CommandTarget` seam is the shape**, decided the same way `ui.dom`'s
+`TreeSource` was: the walk is `parent()` and `getData`, and both engines can supply it.
+
+#### A MOVE INTO A `widget/` PACKAGE IS ILLEGAL, and sixteen of the seventeen are
+
+6.2 learned this the expensive way and 6.3 has it sixteen times over. `EngineBoundaryTest`'s
+`theOldEngineNamesNothingOfTheNew` is what enforces it: a class the OLD engine still names cannot
+live in the new engine's tree. `ConfigDescriptor` was moved to `widget.config`, seven old-engine
+classes reached into it, and the answer was a package **both** may name — `com.crystalgui.core.config`.
+
+Every one of 6.3's moves lands in `widget.collection.*` or `chrome`, and every one is still named by
+the old engine's `ui.elements.list/tree/table`. So the destinations above are wrong for exactly the
+rows marked *move*, and each needs a neutral home instead:
+
+| What | Why it is neutral | Neutral home |
+|---|---|---|
+| `TreeDataSource`, `TreeRow`, `FilteredTreeSource`, `PathTreeSource` | a pull-based model, no node in it | `core.collection.tree` |
+| `ItemSizeStrategy`, `FixedHeightStrategy`, `VariableHeightStrategy`, `SelectionMode` | row arithmetic and an enum | `core.collection.list` |
+| `SortOrder`, `TableColumn` | a column definition and an enum | `core.collection.table` |
+| `ProblemNode`, `ProblemsTreeSource` | a diagnostic tree over the model above | `core.collection.tree` or beside `text.diagnostic` |
+| `QuickPickItem`, `QuickPickEntry`, `QuickPickSource` | what a picker offers, not how it draws | `core.collection` |
+| `MainMenuCommands` | command registrations, no widget | `core.command` |
+
+**Audited by TYPE NAME, not by imports** — which is the check 6.2's ledger got wrong twelve times out
+of thirteen, because a same-package reference has no import to find. Of 6.3's seventeen, **sixteen
+are genuinely neutral** and the single hits in eight of them are javadoc prose. The exception is
+**`ProblemsCommands`**, which resolves a `ProblemsPanel` out of a `CommandContext` six times over: it
+is a copy.
+
+#### D1 — the tool answers for nine of seventeen widgets
+
+| Tag | through | ending | verdict |
+|---|---:|---:|---|
+| `listview` | 0 | 1 | shadow ok |
+| `treeview` | 0 | 1 | shadow ok |
+| `tableview` | 0 | 6 | shadow ok |
+| `breadcrumbs` | 0 | 4 | shadow ok |
+| `statusbarview` | **2** | 5 | **LIGHT (kind B)** |
+| `notificationsview` | **2** | 5 | **LIGHT (kind B)** |
+| `navigatorview` | **5** | 11 | **LIGHT (kind B)** |
+| `quickpick` | **7** | 22 | **LIGHT (kind B)** |
+| `problemspanel` | **17** | 14 | **LIGHT (kind B)** |
+
+`problemspanel` is the most reached-through widget measured anywhere — seventeen rules select through
+its structure against fourteen clean leaves.
+
+**And eight name no tag at all**, so the tool has no answer for them: `menubarview`,
+`commandpalette`, `notificationcard`, `preferences`, `processespopover`, `progressstatusitem`,
+`treesearch`, `inspector`. That is the class-keyed gap 6.2's section already asks for, unclosed —
+and 6.3 is where it stops being a nicety, because `TreeSearch` alone is 1,141 lines and sixteen
+part names.
+
+**A row is the exception to all of it.** `ListView` and `TreeView` are `shadow ok` by the sheets and
+must still keep their rows LIGHT: a renderer's template is a *caller's* node, so it can no more live
+in the widget's shadow tree than a `SplitView` pane can. Same reasoning, and the same conclusion 6.2
+reached for panes and pages.
+
+#### Accepts
+
+The gallery's list, tree, table and palette pages as parity specs, and the new-engine gallery grows
+the same five. **36 test files** name a 6.3 class — `ListView` 275 assertions, `TreeView` 115 — plus
+`TreeSearchInstall`, `TreeQuery`, `VariableHeightStrategy`, `CommandPalette`,
+`QuickPickQueryRetention`, `QuickPickResize`, `MenuBarView`, `ProblemsPanel`, `ProblemsMenu`,
+`ProblemBandPrimary`, `Preferences`, `PreferencesKey`, `AppearanceSettings`, `ContextMenu`,
+`ElementSettings`, `Keymap`, `ShippedKeymapDefaults`.
+
+**Two of those cannot pass through `sendInputEvent`** and the invariant rows say so: *"a menu bar
+must REMEMBER the focus owner"* (sixteen passing tests shipped that bug) and *"a `ListView` is the
+tab stop of its own composite"*. Both need `consumeMouseEvent` at a POINT.
+
+#### Rows it owns
+
+The whole list/tree/search cluster — *"a list restoring focus to a row must never take it from a
+CONTROL INSIDE one"*, *"a blur raised by ROW RECYCLING is not a user gesture"*, *"a row's inline
+editor is primed ONCE PER EDIT"*, *"a tree's inline editor is built in `createTemplate`"*,
+*"FILTERING REVEALS; HIGHLIGHTING DOES NOT"*, *"a tree that restores selection BY ITEM must clear the
+index-based one first"*, *"a panel's FILTER and its SEARCH must share one notion of matches"*,
+*"pass the `SearchQuery`, never the text"*, *"a search marks the matched CHARACTERS"*, *"a
+`::highlight()` BAND must be cleared on the no-styles path"*, *"a shared row component must reach the
+rows ITSELF"*, *"a search bar is either TRANSIENT or PERMANENT"*, *"a pane MINIMUM measured from
+realised rows"* ×2, *"a recycled row must SWAP its data-driven classes"*, *"a row's slots are built in
+`createTemplate`"* — plus the menu rows: *"a menu bar resolves commands against the FOCUSED element;
+a context menu against the element that was CLICKED"*, *"the registry carries `enabled`; it never
+filters"*, *"`MenuBuilder` is the only thing that turns commands into menu rows"*, *"a `MenuId.submenu`
+declaration is PERMANENT"*, *"a menu MNEMONIC must not fire while a text field has focus"*.
+
+#### Hazards, in the order they would be found
+
+1. **The seam blocks six classes and 55 call sites.** Do it first, alone, and land it before a single
+   widget moves — it is this batch's 6.0.
+2. **Sixteen illegal moves.** Decide each neutral home before the codemod runs; a move applied and
+   then reverted is what cost 6.2 an afternoon, and here it is sixteen times over.
+3. **`ListView` (1,408 lines) is the first model-derived scroll extent.** `scrollExtent` exists for
+   exactly this and has never had a consumer — its javadoc names a list overriding it with
+   `model.size() * rowHeight` as the case it was written for. 6.2 mistook it for a content-size
+   accessor and got `-1`; this batch is where it stops answering `-1`.
+4. **`TreeSearch` (1,141 lines, 16 part names) with no D1 answer.** Close the class-keyed gap or read
+   all sixteen by hand.
+5. **`ProblemsPanel` (929 lines, 17 through-rules).** The most reached-through widget in the census;
+   kind B all the way down, and nothing about it can be a part.
+6. **Eighteen IMPORTANT writes, the most of any batch**, and unlike 6.2's they will not all be INLINE:
+   a virtualised list computes geometry and hands it back, which is the `Measurable`/box-call half of
+   §4.5 that 6.2 never had to exercise.
 
 ### 6.4 — Canvas, graph, the shader graph · **M** · after: 6.3
 
