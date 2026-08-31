@@ -465,7 +465,8 @@ menuitem::part(mark) {
  * gutter is reserved for ALL of them, checked or not. Without a shared gutter the checked row's label
  * would sit one glyph to the right of every other row's, which reads as misaligned text rather than as
  * "this one has a mark". `:checked` only ever changes the overlay, never the box. */
-dropdown .__menu__ menuitem .__mark__ {
+dropdown .__menu__ menuitem .__mark__,
+dropdown .__menu__ menuitem::part(mark) {
     width: 12px;
     height: 12px;
     flex-grow: 0;
@@ -477,7 +478,8 @@ dropdown .__menu__ menuitem .__mark__ {
     margin-right: 1px;
     color: var(--menu-mark, #DDDDDD);
 }
-dropdown .__menu__ menuitem:checked .__mark__ {
+dropdown .__menu__ menuitem:checked .__mark__,
+dropdown .__menu__ menuitem:checked::part(mark) {
     overlay: shape("checkmark");
 }
 
@@ -492,7 +494,8 @@ dropdown .__menu__ menuitem:checked .__mark__ {
  *
  * The gutter is reserved whether or not a row is currently checked, so ticking one does not shift its
  * label sideways. */
-menu.__has-checkable__ menuitem .__mark__ {
+menu.__has-checkable__ menuitem .__mark__,
+menu.__has-checkable__ menuitem::part(mark) {
     width: 12px;
     height: 12px;
     flex-grow: 0;
@@ -503,7 +506,8 @@ menu.__has-checkable__ menuitem .__mark__ {
 }
 /* The mark itself is still the ITEM's business: only a checkable row ever shows one, even though every
  * row in the menu reserves the space for it. */
-menu.__has-checkable__ menuitem.__checkable__:checked .__mark__ {
+menu.__has-checkable__ menuitem.__checkable__:checked .__mark__,
+menu.__has-checkable__ menuitem.__checkable__:checked::part(mark) {
     overlay: shape("checkmark");
 }
 /* Same trim the dropdown rule below makes, and for the same reason: the base `menuitem` rule's 6px

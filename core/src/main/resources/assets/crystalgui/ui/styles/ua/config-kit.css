@@ -390,7 +390,8 @@ graphnode .__control-row__ switch {
  * the box oblong, so it takes the height and the mark follows — the one control whose width is a
  * function of its height rather than of the row. */
 graphnode .__control-row__ checkbox,
-graphnode .__control-row__ checkbox .__mark__ {
+graphnode .__control-row__ checkbox .__mark__,
+graphnode .__control-row__ checkbox::part(mark) {
     width: var(--graph-ctrl-h);
     height: var(--graph-ctrl-h);
     min-height: var(--graph-ctrl-h);
@@ -403,7 +404,8 @@ graphnode .__control-row__ checkbox .__mark__ {
  * of the graph's own 14px — caught by `everyKind()`, not by eye. One more class component
  * (`.__config-control__.__boolean__`) is what breaks the tie in the node's favour. */
 graphnode .__control-row__ .__config-control__.__boolean__ checkbox,
-graphnode .__control-row__ .__config-control__.__boolean__ checkbox .__mark__ {
+graphnode .__control-row__ .__config-control__.__boolean__ checkbox .__mark__,
+graphnode .__control-row__ .__config-control__.__boolean__ checkbox::part(mark) {
     width: var(--graph-ctrl-h);
     height: var(--graph-ctrl-h);
     min-height: var(--graph-ctrl-h);
@@ -895,8 +897,7 @@ colorselector .__hex-row__ textfield {
 }
 
 /* Swatch pair on top, wheel filling what is left. */
-colorselector .__left__,
-colorselector::part(left) {
+colorselector .__left__{
     width: 73px;
     flex-direction: column;
     align-items: center;
@@ -906,8 +907,7 @@ colorselector::part(left) {
  * flex-shrink is 0 here, so without the minimum a short channel column would leave the 73px ring
  * overflowing its own parent rather than the parent staying open for it. Growing is what centres the
  * wheel — the box takes the slack and its own centring puts the ring in the middle of it. */
-colorselector .__wheel__,
-colorselector::part(wheel) {
+colorselector .__wheel__{
     width: 73px;
     height: 0;
     min-height: 73px;
@@ -921,8 +921,7 @@ colorselector::part(wheel) {
 /* Centred against the LEFT column, which is the taller of the two: the swatch pair adds its height to
  * that side, so a channel stack starting at the top sits a few pixels above the ring's middle and reads
  * as misaligned with the thing it is describing. Centring is what ties the two columns together. */
-colorselector .__side__,
-colorselector::part(side) {
+colorselector .__side__{
     width: 0;
     flex-grow: 1;
     flex-direction: column;
@@ -936,8 +935,7 @@ colorselector::part(side) {
 }
 /* Square, because a ring drawn into a non-square box is an ellipse — the shader normalises its own
  * radius, so an oval box would show as a stretched band with a round handle path on top of it. */
-colorselector .__ring__,
-colorselector::part(ring) {
+colorselector .__ring__{
     width: 73px;
     height: 73px;
 }
@@ -948,8 +946,7 @@ colorselector::part(ring) {
  *
  * Tied to the shader's inner radius: change one and this has to move, or the square either overlaps
  * the band or floats loose in the middle of it. */
-colorselector .__square__,
-colorselector::part(square) {
+colorselector .__square__{
     position: absolute;
     left: 28%;
     top: 28%;
@@ -967,8 +964,7 @@ colorselector::part(square) {
  * SIZED TO SPAN THE BAND. The band is (1 - 0.72) of the ring's half-width — 14px on a 104px ring — so
  * the handle is 14px and reads as a collar around it rather than a dot floating on it. Derived from the
  * shader's inner radius, so the two move together. */
-colorselector .__ring-handle__,
-colorselector::part(ring-handle) {
+colorselector .__ring-handle__{
     position: absolute;
     width: 9px;
     height: 9px;
@@ -980,8 +976,7 @@ colorselector::part(ring-handle) {
 }
 /* Much smaller: the square is a continuous field, so the handle marks a POINT rather than spanning
  * anything, and every pixel it covers is a colour you were trying to look at. */
-colorselector .__square-handle__,
-colorselector::part(square-handle) {
+colorselector .__square-handle__{
     position: absolute;
     width: 5px;
     height: 5px;
@@ -1041,8 +1036,7 @@ colorselector .__side__ dropdown text {
 /* Sized against Unity's own reference swatch pair rather than the wheel/ring column: ~20% narrower and
  * ~20% taller than this used to be (44x8 -> 35x10) is what actually reads as "two stout chips", not the
  * wide flat strip the old proportions gave. */
-colorselector .__swatches__,
-colorselector::part(swatches) {
+colorselector .__swatches__{
     width: 35px;
     flex-direction: row;
     height: 10px;
@@ -1069,8 +1063,7 @@ colorselector .__swatches__ .__swatch-new__ {
  * middle, 3px to match the box's own 20% bigger size — is set in Java instead, in
  * `ColorSelector.paintSwatch`, via `CgUiColorField.setCornerRadius(...)`. See that method's doc. */
 
-colorselector .__channels__,
-colorselector::part(channels) {
+colorselector .__channels__{
     width: 100%;
     flex-direction: column;
     gap-all: 3px;
@@ -1079,8 +1072,7 @@ colorselector::part(channels) {
  * track's visible edge stops 2px inside the slider's box (that padding is the thumb's travel room), so
  * a 4px gap reads as 6px against a 4px margin at the panel edge. 2 + 2 = 4 evens them, and hands the
  * difference to the bar — which is the only thing in the row that grows. */
-colorselector .__channel-row__,
-colorselector::part(channel-row) {
+colorselector .__channel-row__{
     width: 100%;
     flex-direction: row;
     align-items: center;
@@ -1127,7 +1119,9 @@ colorselector .__channel-row__ slider {
     border-radius: 0px;
 }
 colorselector .__channel-row__ slider .__fill__,
-colorselector .__channel-row__ slider .__spacer__ {
+colorselector .__channel-row__ slider .__spacer__,
+colorselector .__channel-row__ slider::part(fill),
+colorselector .__channel-row__ slider::part(spacer) {
     background: #00000000;
     height: 9px;
 }
@@ -1145,7 +1139,8 @@ colorselector .__channel-row__ slider .__spacer__ {
  *                   at both ends. -1.5px pairs with the slider's 1.5px padding to land it flush.
  *
  * All three are invisible in the stylesheet when wrong — the rule reads as complete on its own. */
-colorselector .__channel-row__ slider .__thumb__ {
+colorselector .__channel-row__ slider .__thumb__,
+colorselector .__channel-row__ slider::part(thumb) {
     width: 3px;
     height: 9px;
     margin-left: -1.5px;
@@ -1181,8 +1176,7 @@ colorselector .__channel-row__ textfield {
     flex-grow: 0;
 }
 
-colorselector .__hex-row__,
-colorselector::part(hex-row) {
+colorselector .__hex-row__{
     width: 100%;
     flex-direction: row;
     align-items: center;
@@ -1210,7 +1204,8 @@ colorselector .__hex-row__ textfield {
  *
  * Without them the popup inherits the global menu geometry and opens two or three times the size of the
  * control it belongs to, which reads as a different widget appearing rather than that button unfolding. */
-colorselector .__side__ dropdown .__menu__ {
+colorselector .__side__ dropdown .__menu__,
+colorselector .__side__ dropdown::part(menu) {
     min-width: 33px;
     padding-all: 1px;
 }
