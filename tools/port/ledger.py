@@ -88,7 +88,7 @@ BY_NAME = {
     'ShaderGraphBridge': 'app/shadergraph',
     'ShaderPropertyForm': 'app/shadergraph',
     'ShaderGraphSettings': 'app/shadergraph',
-    'ShaderPropertyNodes': 'app/shadergraph',
+    'ShaderPropertyNodes': 'app/shadergraph/node',
     # THE APPLICATION. `graph.shader` held an editor, a properties panel, three previews, two field
     # widgets and five inspector sections in one flat directory, INSIDE the model's package -- while
     # importing `ui.elements.dock` and `ui.elements.workbench`, which a model package cannot.
@@ -99,14 +99,24 @@ BY_NAME = {
     'MainPreviewPanel': 'app/shadergraph/preview',
     'ShaderNodePreview': 'app/shadergraph/preview',
     'ShaderGraphPreviews': 'app/shadergraph/preview',
-    'ShaderColorFieldWidget': 'app/shadergraph/field',
-    'ShaderVectorFieldWidget': 'app/shadergraph/field',
-    'ShaderPortArity': 'app/shadergraph/field',
+    # `.node`, not `.field`: what a shader graph NODE is and how its fields are edited. Renamed
+    # during the batch when the graph widgets gained their own `.node` split.
+    'ShaderColorFieldWidget': 'app/shadergraph/node',
+    'ShaderVectorFieldWidget': 'app/shadergraph/node',
+    'ShaderPortArity': 'app/shadergraph/node',
     'ShaderInspectorSections': 'app/shadergraph',
     # DEFERRED TO 6.7, and structurally rather than incidentally: one `implements FileDocument` and
     # holds a `TextEditor` field, the other IS the registration with the dock and the workbench.
     'ShaderGraphEditor': 'app/shadergraph',
     'ShaderGraphContribution': 'app/shadergraph',
+    # `widget.graph.node` is the four that reach nothing package-private. GraphNode, NodePort and
+    # PortDefaultEditor CANNOT be here: they share package-private members with GraphView by design,
+    # and Java has no sub-package visibility, so moving them means publishing ten "only the view may
+    # call this" methods. NodeWidgetFactory looked clean by the obvious test and was not -- it CALLS
+    # GraphNode.bindToDocument. @see plan_m6.md 6.4
+    'NodeCreationMenu': 'widget/graph/node',
+    'NodeFieldBinder': 'widget/graph/node',
+    'NodeFieldWidgets': 'widget/graph/node',
     # ui/elements root -- by kind, which is the whole reason the root is being split.
     'Button': 'widget/control', 'Checkbox': 'widget/control', 'CheckboxGroup': 'widget/control',
     'Switch': 'widget/control', 'Slider': 'widget/control', 'ProgressBar': 'widget/control',
@@ -135,10 +145,16 @@ BATCH = [
     ('widget/control', '6.1'), ('widget/text', '6.1'), ('widget/scroll', '6.1'),
     ('widget/dnd', '6.1'), ('desktop/window', '6.1'),
     ('widget/layout', '6.2'), ('widget/overlay', '6.2'), ('widget/form', '6.2'),
+    # THE CONFIG KIT, and this table is the second half of the correction 6.4 made to BY_DIR. Renaming
+    # the destination from `widget/form` to `widget/config` left no batch prefix matching it, so all
+    # twenty-five config files fell through to the longest OTHER match and were reported as 6.7's --
+    # which is how a progress count can be wrong without any file moving. A destination appears in two
+    # tables here and changing one is changing half of it.
+    ('widget/config', '6.2'),
     ('chrome/status', '6.2'), ('chrome/notification', '6.2'),
     ('widget/collection', '6.3'), ('chrome', '6.3'),
     ('widget/canvas', '6.4'), ('widget/graph', '6.4'), ('graph/shader', '6.4'),
-    ('graph/port', '6.4'), ('app/shadergraph', '6.4'),
+    ('graph/port', '6.4'), ('app/shadergraph', '6.4'), ('widget/graph/node', '6.4'),
     ('widget/editor', '6.5'),
     ('desktop', '6.6'),
     ('workbench', '6.7'), ('editor', '6.7'), ('example/machine', '6.7'),
@@ -323,6 +339,10 @@ HOW_OVERRIDE = {
 BATCH_OVERRIDE = {
     'ShaderGraphEditor': '6.7',
     'ShaderGraphContribution': '6.7',
+    # THE DEFERRAL CASCADED. ShaderInspectorSections names ShaderGraphEditor four times, so it waits
+    # with it -- which 6.4's audit missed by asking which classes reach OUTSIDE the batch, when the
+    # question is which reach outside what is SHIPPING.
+    'ShaderInspectorSections': '6.7',
 }
 
 
