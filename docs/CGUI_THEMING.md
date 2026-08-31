@@ -317,6 +317,8 @@ editor scheme's.
 | `--graph-marquee-bg` | `#2C79C433` | crystal-dark.css |
 | `--graph-marquee-border` | `#44C0FF` | crystal-dark.css |
 | `--graph-node-hover-ring` | `#327090` | crystal-dark.css |
+| `--graph-node-text` | `var(--fg-secondary)` | base.css |
+| `--graph-node-text-bright` | `var(--fg)` | base.css |
 | `--graph-outputs-bg` | `#35353576` | crystal-dark.css |
 | `--graph-panel` | `var(--surface-panel)` | base.css |
 | `--graph-port-label-hover-fg` | `var(--fg)` | base.css |
@@ -700,5 +702,4 @@ editor scheme's.
 | `--window-title-bg` | `var(--surface-base)` | base.css |
 | `--window-title-fg` | `var(--fg-secondary)` | base.css |
 | `--workbench-bg` | `var(--surface-base)` | base.css |
-
 <!-- TOKENS:END -->

@@ -6,6 +6,7 @@ import com.crystalgraphics.platform.service.CgInputService;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.notify.Notifications;
+import com.crystalgui.core.window.WindowState;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.TestPlatformService;
 import com.crystalgui.testsupport.UiTestBase;

@@ -1,4 +1,4 @@
-package com.crystalgui.ui.elements.desktop;
+package com.crystalgui.core.window;
 
 /**
  * <b>What the compositor should be showing right now, and whether it is live</b> — M16 §26.2.

@@ -1,11 +1,11 @@
 package com.crystalgui.ui;
 
 import com.crystalgui.core.settings.SettingsLayer;
+import com.crystalgui.core.window.WindowState;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.ConfigStorage;
 import com.crystalgui.fs.InMemoryConfigStorage;
 import com.crystalgui.ui.elements.desktop.WindowFrame;
-import com.crystalgui.ui.elements.desktop.WindowState;
 import com.crystalgui.ui.elements.workbench.ToolWindowType;
 import com.crystalgui.fs.InMemoryFileSystem;
 import com.crystalgui.fs.ProjectRegistry;

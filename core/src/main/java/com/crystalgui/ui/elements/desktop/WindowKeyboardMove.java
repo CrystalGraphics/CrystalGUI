@@ -4,6 +4,7 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.service.CgInputService;
 
+import com.crystalgui.core.window.WindowState;
 import javax.annotation.Nullable;
 
 /**

@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.desktop;
 
+import com.crystalgui.core.window.WindowState;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.easing.ProgressFunctions;
 import com.crystalgui.ui.AnchoredPlacement;

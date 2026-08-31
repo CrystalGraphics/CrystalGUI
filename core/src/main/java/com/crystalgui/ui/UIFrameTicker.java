@@ -1,5 +1,7 @@
 package com.crystalgui.ui;
 
+import com.crystalgui.core.window.WindowState;
+
 /**
  * Something that needs a callback every frame for a while — a press-and-hold repeat, a blinking
  * caret, a spinner.

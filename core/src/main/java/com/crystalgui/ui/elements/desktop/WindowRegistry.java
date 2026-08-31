@@ -2,6 +2,7 @@ package com.crystalgui.ui.elements.desktop;
 
 import com.crystalgui.core.signal.Signal;
 
+import com.crystalgui.core.window.WindowState;
 import javax.annotation.Nullable;
 
 import java.util.ArrayList;

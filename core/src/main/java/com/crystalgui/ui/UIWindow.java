@@ -3,6 +3,8 @@ package com.crystalgui.ui;
 import com.crystalgraphics.api.PoseStack;
 import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.data.Transform2D;
+import com.crystalgui.core.window.DesktopPresentation;
+import com.crystalgui.core.window.WindowState;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.async.JobScheduler;
@@ -32,10 +34,8 @@ import javax.annotation.Nullable;
 import java.util.*;
 import com.crystalgui.ui.elements.Popover;
 import com.crystalgui.ui.elements.desktop.Desktop;
-import com.crystalgui.ui.elements.desktop.DesktopPresentation;
 import com.crystalgui.ui.elements.desktop.ScreenOverlay;
 import com.crystalgui.ui.elements.desktop.WindowFrame;
-import com.crystalgui.ui.elements.desktop.WindowState;
 
 /**
  * Runtime engine. Owns the paint context, the live

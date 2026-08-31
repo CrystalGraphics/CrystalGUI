@@ -1,12 +1,12 @@
 package com.crystalgui.ui;
 
+import com.crystalgui.core.window.WindowPolicy;
+import com.crystalgui.core.window.WindowState;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.elements.desktop.Desktop;
 import com.crystalgui.ui.elements.desktop.WindowFrame;
-import com.crystalgui.ui.elements.desktop.WindowPolicy;
-import com.crystalgui.ui.elements.desktop.WindowState;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;

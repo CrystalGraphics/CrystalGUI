@@ -1,6 +1,8 @@
 package com.crystalgui.ui.elements.desktop;
 
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.window.WindowPolicy;
+import com.crystalgui.core.window.WindowState;
 import com.crystalgui.ui.elements.chrome.ContextMenu;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.data.DataKey;

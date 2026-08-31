@@ -1,4 +1,4 @@
-package com.crystalgui.ui.elements.desktop;
+package com.crystalgui.core.window;
 
 /**
  * What closing a window <em>means</em> — Swing's {@code setDefaultCloseOperation}, minus the values

@@ -2,6 +2,8 @@ package com.crystalgui.ui.elements.desktop;
 
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgui.core.window.WindowPolicy;
+import com.crystalgui.core.window.WindowState;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.UIElement;

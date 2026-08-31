@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.desktop;
 
+import com.crystalgui.core.window.WindowState;
 import com.crystalgui.fs.ConfigStorage;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.StateMap;

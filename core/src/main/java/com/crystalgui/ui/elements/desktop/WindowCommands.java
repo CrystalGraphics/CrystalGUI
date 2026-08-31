@@ -5,6 +5,7 @@ import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
 
+import com.crystalgui.core.window.WindowState;
 import javax.annotation.Nullable;
 
 /**
