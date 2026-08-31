@@ -542,7 +542,8 @@ dropdown {
  * depending on room, so there is no "open" direction for the glyph to point at (see
  * AnchoredPlacement's flip). */
 dropdown .__chevron__,
-dropdown::part(post-icon) {
+dropdown::part(post-icon),
+dropdown::part(chevron) {
     width: 8px;
     height: 8px;
     flex-grow: 0;

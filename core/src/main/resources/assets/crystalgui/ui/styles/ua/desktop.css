@@ -399,7 +399,8 @@ taskbar .__entry__.__busy__ .__progress__ {
  * legible everywhere except on the entry that was active. A neutral that clears the bar, the hover
  * fill, the active fill, the preview's acrylic and the switcher's is a needle no grey threads — the
  * seventh hue does, and the letter goes on-accent with it. */
-.__window-icon__ .__monogram__ {
+.__window-icon__ .__monogram__,
+.__window-icon__::part(monogram) {
     color: var(--window-icon-mono-fg, #FFFFFF);
 }
 

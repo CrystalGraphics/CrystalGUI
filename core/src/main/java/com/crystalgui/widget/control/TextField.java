@@ -34,6 +34,7 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.box.Measurable;
 
 /**
  * A single-line editable text field.
@@ -75,7 +76,7 @@ import com.crystalgui.ui.dom.Name;
  * {@code setMode(INTEGER).setPattern("[a-z]+")} — is simply unsatisfiable; a caller who wants
  * complete control uses {@link Mode#STRING}.</p>
  */
-public class TextField extends UINode  {
+public class TextField extends UINode implements Measurable {
 
     public static final Name NAME = Name.of("textfield");
 
@@ -1138,6 +1139,42 @@ public class TextField extends UINode  {
         else if (caretX - offset > inner) offset = caretX - inner;
         // Don't strand the text scrolled past its end when it shrinks.
         return Math.max(0f, Math.min(offset, Math.max(0f, totalX - inner)));
+    }
+
+    // ── Measuring ───────────────────────────────────────────────────────────
+
+    /**
+     * <b>A widget that paints its own content must be {@link Measurable}, or it measures ZERO.</b>
+     *
+     * <p>A text field has no child nodes — it draws its glyphs itself — so nothing in the box tree has
+     * anything to size it from, and it laid out {@code 215x0}: present, styled, and one pixel tall. A
+     * click aimed at it therefore landed on whatever was BEHIND it, which for a {@code SearchField} is
+     * the search field, which takes no focus — so the box could not be clicked into and could not be
+     * typed in, while its border, its icon and its placeholder all drew correctly.</p>
+     *
+     * <p>The old engine never needed this: a Taffy leaf with no measure function fell back to whatever
+     * the sheet said, and the sheets say a height for every field this ships. It is the widgets a
+     * THEME sizes that break, and a theme that sizes nothing is the honest default.</p>
+     *
+     * <p>The height is the line box — the font's own ascender + descender + lineGap when
+     * {@code line-height} is {@code normal}, exactly as {@link #paintDecoration} computes it, because a
+     * field measured differently from how it paints crops its own text. The width is the TEXT's, which
+     * is the max-content answer; a field is nearly always given a width by a rule or a flex basis, and
+     * where it is not, sizing to its content is what an {@code <input>} does.</p>
+     */
+    @Override
+    public Size measure(Constraints constraints) {
+        var styleGen = getStyle().getGeneralGroup();
+        float fontSize = styleGen.fontSize();
+        var metrics = resolveFamily().getLayoutMetrics();
+        float lineHeight = LineHeightValue.isNormal(styleGen.lineHeight())
+                ? metrics.getLineHeight()
+                : fontSize * styleGen.lineHeight();
+
+        if (constraints.hasKnownWidth()) return new Size(constraints.knownWidth(), lineHeight);
+        ensureMeasured();
+        float textWidth = prefixWidths.length == 0 ? 0f : prefixWidths[prefixWidths.length - 1];
+        return new Size(textWidth, lineHeight);
     }
 
     // ── Painting ────────────────────────────────────────────────────────────

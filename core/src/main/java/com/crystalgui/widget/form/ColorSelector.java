@@ -320,34 +320,23 @@ public class ColorSelector extends UINode {
             if (!surface.containsSurfacePoint(rawX, rawY)) return;
 
             var local = surface.toLocal(rawX, rawY);
-            onPoint.accept(withinX(surface, local.x()), withinY(surface, local.y()));
+            onPoint.accept(local.x(), local.y());
 
             var window = document();
             if (window == null) return;
-            // mx/my arrive in the same space screenToLocal produces — UIDragController converts through
-            // the source's own transform before calling this — so they need the same origin shift and
-            // must NOT be converted a second time.
+            // ALREADY IN THE SURFACE'S OWN SPACE, with its origin at zero -- Drag converts through the
+            // source's transform before calling this, and `toLocal` above answers in the same space.
+            // Neither is converted again and neither is shifted.
+            //
+            // There USED to be a shift, and the note it carried was true of the old engine: its
+            // `screenToLocal` mapped into the space the element's box is expressed in WITHOUT
+            // subtracting the element's own position, so the raw answer was offset by wherever the
+            // surface sat. `toLocal` puts the box's origin at zero, so subtracting it again moves every
+            // point up and left by the square's inset -- a click on the bottom-right corner landing
+            // near the middle, which is precisely the old symptom running backwards.
             Drag.start(surface, rawX, rawY,
-                    (mx, my, sx, sy, dx, dy) ->
-                            onPoint.accept(withinX(surface, mx), withinY(surface, my)));
+                    (mx, my, sx, sy, dx, dy) -> onPoint.accept(mx, my));
         }, false, false);
-    }
-
-    /**
-     * A {@code screenToLocal} result shifted so 0 is the surface's own left edge.
-     *
-     * <p><b>{@code screenToLocal} does not do this for you.</b> It maps into the space the element's box
-     * is expressed in, and the element's own layout position is part of that space — so the raw result
-     * is offset by wherever the surface sits. {@code Slider} subtracts its {@code contentLeft()} for the
-     * same reason. Skipping the shift made every coordinate a few hundred pixels too large, which
-     * clamped to 1 and put every single click in the square's bottom-right corner.</p>
-     */
-    private static float withinX(UINode surface, float localX) {
-        return surface.box() == null ? localX : localX - surface.box().x();
-    }
-
-    private static float withinY(UINode surface, float localY) {
-        return surface.box() == null ? localY : localY - surface.box().y();
     }
 
     private static float clamp01(float v) {
