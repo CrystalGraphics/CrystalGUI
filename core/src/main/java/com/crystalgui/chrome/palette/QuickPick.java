@@ -1,5 +1,6 @@
 package com.crystalgui.chrome.palette;
 
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.async.FrameProfile;
@@ -476,7 +477,11 @@ public class QuickPick extends Popover {
             // against: it came to rest one whole row down, hiding the best match behind the search box.
             // Measured at scrollTop=22 with a 198px list in a 198px viewport, where the only valid scroll
             // offset is 0.
-            if (first < MAX_VISIBLE_ROWS) list.box().setScroll(0f, 0f);
+            // AND box() IS NULLABLE, which is the same sentence one step further: on the frame a
+            // palette opens the list may not have been laid out AT ALL, so there is no box to reset
+            // -- and a list with no box is already at the offset this is trying to put it at.
+            Box listBox = list.box();
+            if (first < MAX_VISIBLE_ROWS && listBox != null) listBox.setScroll(0f, 0f);
         } else {
             // Nothing here can run, so nothing is selected. Leaving the previous index in place would paint
             // a dimmed row with the selection highlight -- an unrunnable row that looks like the one Enter

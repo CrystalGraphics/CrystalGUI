@@ -55,10 +55,10 @@ public class ShaderNodePreview extends UINode {
         // than as a hole in the node.
         if (!(texture instanceof CgTexture2D)) return;
 
-        float x = box().x();
-        float y = box().y();
-        float w = box().width();
-        float h = box().height();
+        float x = box.x();
+        float y = box.y();
+        float w = box.width();
+        float h = box.height();
         if (w <= 0f || h <= 0f) return;
 
         // CONTAIN only for a SPHERE. A sphere is rendered on a genuinely round target, so filling a

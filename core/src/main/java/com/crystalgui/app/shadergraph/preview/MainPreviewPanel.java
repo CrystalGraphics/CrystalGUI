@@ -443,10 +443,10 @@ public class MainPreviewPanel extends UINode implements Disposable.Gl {
             // background, so an empty panel reads as "not yet" rather than as a hole.
             if (!(texture instanceof CgTexture2D)) return;
 
-            float x = box().x();
-            float y = box().y();
-            float w = box().width();
-            float h = box().height();
+            float x = box.x();
+            float y = box.y();
+            float w = box.width();
+            float h = box.height();
             if (w <= 0f || h <= 0f) return;
 
             // THE WHOLE SURFACE, stretched — which is only correct because the renderer was handed this

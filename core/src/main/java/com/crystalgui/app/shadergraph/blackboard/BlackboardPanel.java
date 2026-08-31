@@ -855,15 +855,20 @@ public class BlackboardPanel extends UINode implements DataProvider {
         // a body-relative y -- the space an absolutely positioned sibling's `top` is measured in. Scroll
         // is deliberately absent from both, and stays correct because the drop line is scrolled by the
         // body exactly as the pills are.
-        float origin = body.box().y();
+        Box bodyBox = body.box();
+        if (bodyBox == null) return;
+        float origin = bodyBox.y();
         float top;
         if (rows.isEmpty()) {
             top = 0f;
         } else if (index < rows.size()) {
-            top = rows.get(index).element().box().y() - origin - 2f;
+            Box row = rows.get(index).element().box();
+            if (row == null) return;
+            top = row.y() - origin - 2f;
         } else {
-            UINode last = rows.get(rows.size() - 1).element();
-            top = last.box().y() - origin + last.box().height() + 2f;
+            Box last = rows.get(rows.size() - 1).element().box();
+            if (last == null) return;
+            top = last.y() - origin + last.height() + 2f;
         }
         StyleGroup.inlinePipeline(dropLine.getStyle().getLayoutGroup(), l -> l.top(top));
     }
