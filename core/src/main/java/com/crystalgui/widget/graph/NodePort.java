@@ -436,6 +436,29 @@ public class NodePort extends UINode {
         return dot.getStyle().getGeneralGroup().borderColor();
     }
 
+
+    /**
+     * A pointer position a {@link Drag} reported, converted from THIS port's space into the plane's.
+     *
+     * <p><b>A drag callback's coordinates are relative to the SOURCE, and since M6.1 that means the
+     * source's own origin is zero.</b> The old engine's {@code screenToLocal} converted out of surface
+     * pixels without subtracting the element's own position, so a listener on a port received what was
+     * effectively an absolute layout coordinate — near enough the plane's space that both the pending
+     * wire and the create menu could use it directly, which is what they did and what
+     * {@code NodeWireLayer.updatePending}'s javadoc still described.</p>
+     *
+     * <p>So the live wire's pointer end was drawn a whole node's width from the pointer, and dropping
+     * on empty canvas would have opened the create menu somewhere else again. Adding the port's own
+     * origin within the plane is the whole conversion: there is no scale between a port and the plane
+     * it sits on — the zoom is the plane's own transform, which neither coordinate carries.</p>
+     */
+    private Vector2f pointerInPlane(float localX, float localY) {
+        GraphView graph = graphView();
+        if (graph == null) return new Vector2f(localX, localY);
+        Vector2f origin = Box.originIn(box(), graph.content().box());
+        return origin.add(localX, localY);
+    }
+
     /** The node this port belongs to, or {@code null} if it is not on one. */
     @Nullable
     public GraphNode node() {
@@ -485,12 +508,14 @@ public class NodePort extends UINode {
                 new Drag.Listener() {
                     @Override
                     public void onDragUpdate(float mx, float my, float sx, float sy, float dx, float dy) {
-                        view.updatePendingWire(mx, my);
+                        Vector2f plane = pointerInPlane(mx, my);
+                        view.updatePendingWire(plane.x(), plane.y());
                     }
 
                     @Override
                     public void onDragEnd(float mx, float my) {
-                        view.endPendingWire(NodePort.this, mx, my,
+                        Vector2f plane = pointerInPlane(mx, my);
+                        view.endPendingWire(NodePort.this, plane.x(), plane.y(),
                                 getConnectionCount() > startingConnections);
                     }
 

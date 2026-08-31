@@ -1513,10 +1513,12 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
         float x = Math.min(marqueeStartX, localX), y = Math.min(marqueeStartY, localY);
         float w = Math.abs(localX - marqueeStartX), h = Math.abs(localY - marqueeStartY);
 
-        Box cache = box();
-        // left/top are relative to this element's own box, since the band is absolutely positioned
-        // inside it — while the drag reports coordinates in the space getX() lives in.
-        final float left = x - cache.x(), top = y - cache.y();
+        // ALREADY RELATIVE TO THIS BOX. The band is absolutely positioned inside this view, and a
+        // drag callback reports the pointer in the SOURCE's own space -- which since M6.1 has the
+        // source's origin at zero. This used to subtract `box().x()` because the old engine's
+        // accessors were absolute and the drag handed it one of those; doing it now shifts the band
+        // by however far this view sits inside its own parent.
+        final float left = x, top = y;
         StyleGroup.inlinePipeline(marquee.getStyle().getLayoutGroup(),
                 l -> l.display(TaffyDisplay.FLEX).left(left).top(top).width(w).height(h));
 

@@ -486,8 +486,11 @@ public class CanvasView extends UINode  {
      * silently applying {@code uiScale} twice, which looks correct at a scale of 1.</p>
      */
     public Vector2f viewportToWorld(float localX, float localY) {
-        return new Vector2f((localX - contentOriginX() - panX) / zoom,
-                (localY - contentOriginY() - panY) / zoom);
+        // A VIEWPORT COORDINATE STARTS AT ZERO, so only the pan and zoom come off. The plane's own
+        // origin used to be subtracted here because the old engine's accessors were absolute and this
+        // method was handed one; `toLocal` puts a box's own origin at zero now, and its caller is
+        // `screenToWorld` or a drag callback -- both of which already answer in this space.
+        return new Vector2f((localX - panX) / zoom, (localY - panY) / zoom);
     }
 
     // ── Culling ─────────────────────────────────────────────────────────────
