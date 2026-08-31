@@ -1,12 +1,13 @@
 package com.crystalgui.ui;
 
+import com.crystalgui.core.collection.tree.FilteredTreeSource;
 import org.joml.Vector2f;
 import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.elements.tree.TreeSearch;
-import com.crystalgui.ui.elements.tree.TreeDataSource;
+import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.ui.event.MouseEvent;
-import com.crystalgui.ui.elements.tree.TreeRow;
+import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.ui.elements.chrome.NavigatorView;
 import com.crystalgui.ui.elements.TextField;
 import com.crystalgraphics.platform.input.CgKeyCodes;
@@ -487,7 +488,7 @@ public class PreferencesTest extends UiTestBase {
      *
      * <p>Two rules stacked into a wrong answer. {@code matches} walked every setting <em>at or under</em> a
      * path, so {@code Editor} reported a match because {@code Editor ▸ General} held one — and
-     * {@link com.crystalgui.ui.elements.tree.FilteredTreeSource} has two branches, where a node whose own
+     * {@link com.crystalgui.core.collection.tree.FilteredTreeSource} has two branches, where a node whose own
      * predicate is true "keeps its whole subtree, unfiltered". So {@code ge} listed Appearance and Code
      * Style beside General, purely for being Editor's children.</p>
      *

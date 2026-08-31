@@ -1,5 +1,6 @@
-package com.crystalgui.ui.elements.chrome;
+package com.crystalgui.core.collection.pick;
 
+import com.crystalgui.core.collection.pick.QuickPickEntry;
 import com.crystalgui.text.lang.SymbolKind;
 
 import javax.annotation.Nullable;

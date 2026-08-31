@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.chrome;
 
+import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.core.search.SearchQuery;
 import com.crystalgui.core.search.SearchMatcher;
 import com.crystalgui.fs.Resource;
@@ -30,7 +31,7 @@ import java.util.Set;
  * <p>The same reason the severity filter is a set rather than a minimum level. "Errors and hints but not
  * warnings" is not a threshold, and VS Code's three independent toggles are not a ladder.</p>
  */
-public final class ProblemsTreeSource implements com.crystalgui.ui.elements.tree.TreeDataSource<ProblemNode> {
+public final class ProblemsTreeSource implements com.crystalgui.core.collection.tree.TreeDataSource<ProblemNode> {
 
     private final Markers markers;
 

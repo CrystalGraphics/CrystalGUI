@@ -1,5 +1,8 @@
 package com.crystalgui.ui.elements.list;
 
+import com.crystalgui.core.collection.list.FixedHeightStrategy;
+import com.crystalgui.core.collection.list.ItemSizeStrategy;
+import com.crystalgui.core.collection.list.SelectionMode;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;

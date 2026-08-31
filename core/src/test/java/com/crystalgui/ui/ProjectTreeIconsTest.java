@@ -1,5 +1,6 @@
 package com.crystalgui.ui;
 
+import com.crystalgui.core.collection.table.SortOrder;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.InMemoryFileSystem;
 import com.crystalgui.fs.ProjectRegistry;

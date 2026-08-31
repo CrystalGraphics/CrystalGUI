@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.tree;
 
+import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.ui.UIElement;
 
 /**

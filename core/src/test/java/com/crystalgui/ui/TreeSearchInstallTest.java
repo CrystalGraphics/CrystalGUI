@@ -8,10 +8,10 @@ import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.elements.UIText;
-import com.crystalgui.ui.elements.tree.FilteredTreeSource;
-import com.crystalgui.ui.elements.tree.TreeDataSource;
+import com.crystalgui.core.collection.tree.FilteredTreeSource;
+import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.ui.elements.tree.TreeRenderer;
-import com.crystalgui.ui.elements.tree.TreeRow;
+import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.ui.elements.tree.TreeSearch;
 import com.crystalgui.ui.elements.tree.TreeView;
 

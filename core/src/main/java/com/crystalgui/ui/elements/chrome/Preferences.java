@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.chrome;
 
+import com.crystalgui.core.collection.tree.FilteredTreeSource;
 import com.crystalgui.core.settings.Setting;
 import com.crystalgui.core.settings.Settings;
 import com.crystalgui.core.settings.SettingsCategory;
@@ -15,7 +16,7 @@ import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.config.ConfiguratorGroup;
 import com.crystalgui.ui.elements.config.ConfiguratorPanel;
 import com.crystalgui.ui.elements.config.SettingsConfigurator;
-import com.crystalgui.ui.elements.tree.PathTreeSource;
+import com.crystalgui.core.collection.tree.PathTreeSource;
 import com.crystalgui.core.search.SearchMatcher;
 import com.crystalgui.core.search.SearchQuery;
 

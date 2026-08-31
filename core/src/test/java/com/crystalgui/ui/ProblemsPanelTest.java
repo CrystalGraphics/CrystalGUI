@@ -1,5 +1,6 @@
 package com.crystalgui.ui;
 
+import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.core.search.SearchQuery;
 import com.crystalgui.ui.elements.tree.TreeSearch;
 import com.crystalgui.testsupport.TestPlatformService;
@@ -370,7 +371,7 @@ public class ProblemsPanelTest extends UiTestBase {
 
     /** Walks the flattened rows and checks every collapsed file is followed by another file, or nothing. */
     private void assertCollapsedRowsHaveNoChildren() {
-        List<com.crystalgui.ui.elements.tree.TreeRow<ProblemNode>> rows = panel.tree().visibleRows();
+        List<com.crystalgui.core.collection.tree.TreeRow<ProblemNode>> rows = panel.tree().visibleRows();
         for (int i = 0; i < rows.size(); i++) {
             var row = rows.get(i);
             if (!row.item().isFile() || row.expanded()) continue;

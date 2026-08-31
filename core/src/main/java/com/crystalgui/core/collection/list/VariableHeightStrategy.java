@@ -1,5 +1,7 @@
-package com.crystalgui.ui.elements.list;
+package com.crystalgui.core.collection.list;
 
+import com.crystalgui.core.collection.list.FixedHeightStrategy;
+import com.crystalgui.core.collection.list.ItemSizeStrategy;
 import java.util.Arrays;
 
 /**

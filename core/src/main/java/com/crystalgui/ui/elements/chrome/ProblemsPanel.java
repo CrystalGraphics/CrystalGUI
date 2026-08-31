@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.chrome;
 
+import com.crystalgui.core.collection.tree.FilteredTreeSource;
 import com.crystalgui.core.search.SearchQuery;
 import com.crystalgui.core.search.SearchMatcher;
 import com.crystalgui.core.search.SearchMatch;
@@ -26,7 +27,7 @@ import com.crystalgui.ui.elements.MenuItem;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.tree.TreeRenderer;
-import com.crystalgui.ui.elements.tree.TreeRow;
+import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.ui.elements.tree.TreeSearch;
 import com.crystalgui.ui.elements.tree.TreeView;
 import com.crystalgui.ui.elements.workbench.HeaderContributor;

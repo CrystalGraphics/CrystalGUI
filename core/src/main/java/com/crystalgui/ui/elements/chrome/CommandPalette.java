@@ -1,5 +1,7 @@
 package com.crystalgui.ui.elements.chrome;
 
+import com.crystalgui.core.collection.pick.QuickPickItem;
+import com.crystalgui.core.collection.pick.QuickPickSource;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;

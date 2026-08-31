@@ -1,5 +1,7 @@
-package com.crystalgui.ui.elements.chrome;
+package com.crystalgui.core.collection.pick;
 
+import com.crystalgui.core.collection.pick.QuickPickItem;
+import com.crystalgui.core.collection.pick.QuickPickSource;
 import com.crystalgui.ui.text.TextRange;
 
 import java.util.Collections;

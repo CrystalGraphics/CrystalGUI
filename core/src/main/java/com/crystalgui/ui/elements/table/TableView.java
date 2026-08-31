@@ -1,5 +1,8 @@
 package com.crystalgui.ui.elements.table;
 
+import com.crystalgui.core.collection.table.SortOrder;
+import com.crystalgui.ui.elements.table.TableColumn;
+import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;

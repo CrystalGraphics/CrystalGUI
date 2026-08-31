@@ -1,7 +1,7 @@
 package com.crystalgui.ui;
 
-import com.crystalgui.ui.elements.chrome.QuickPickEntry;
-import com.crystalgui.ui.elements.chrome.QuickPickSource;
+import com.crystalgui.core.collection.pick.QuickPickEntry;
+import com.crystalgui.core.collection.pick.QuickPickSource;
 
 import com.crystalgui.core.search.SearchQuery;
 
@@ -29,7 +29,7 @@ import com.crystalgui.ui.elements.MenuItem;
 import com.crystalgui.ui.elements.workbench.ExplorerClipboard;
 import com.crystalgui.ui.elements.workbench.ExplorerCommands;
 import com.crystalgui.ui.elements.dock.DockPanelRef;
-import com.crystalgui.ui.elements.chrome.QuickPickItem;
+import com.crystalgui.core.collection.pick.QuickPickItem;
 import com.crystalgui.ui.elements.workbench.GoToFile;
 import com.crystalgui.ui.elements.workbench.WorkspaceTreeSource;
 import com.crystalgui.ui.elements.workbench.Workbench;
@@ -62,7 +62,7 @@ import com.crystalgraphics.platform.service.CgInputService;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.testsupport.TestPlatformService;
 import com.crystalgui.ui.elements.UIText;
-import com.crystalgui.ui.elements.list.SelectionMode;
+import com.crystalgui.core.collection.list.SelectionMode;
 import com.crystalgui.ui.elements.workbench.FileDocument;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.fs.Resource;

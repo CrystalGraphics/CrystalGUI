@@ -1,5 +1,6 @@
-package com.crystalgui.ui.elements.tree;
+package com.crystalgui.core.collection.tree;
 
+import com.crystalgui.core.collection.tree.TreeDataSource;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Predicate;

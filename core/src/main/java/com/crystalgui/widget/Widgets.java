@@ -1,8 +1,13 @@
 package com.crystalgui.widget;
 
+import com.crystalgui.core.collection.tree.TreeDataSource;
+import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.ui.dom.NodeContract;
 import com.crystalgui.ui.dom.NodeKinds;
 import com.crystalgui.ui.dom.UINodeRegistry;
+import com.crystalgui.widget.collection.list.ListView;
+import com.crystalgui.widget.collection.table.TableView;
+import com.crystalgui.widget.collection.tree.TreeView;
 import com.crystalgui.widget.config.Configurator;
 import com.crystalgui.widget.config.ConfiguratorGroup;
 import com.crystalgui.widget.config.ConfiguratorPanel;
@@ -19,6 +24,7 @@ import com.crystalgui.widget.config.control.SelectControl;
 import com.crystalgui.widget.config.control.SliderControl;
 import com.crystalgui.widget.config.control.TextControl;
 import com.crystalgui.widget.config.control.VectorControl;
+import com.crystalgui.widget.config.inspector.Inspector;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Checkbox;
 import com.crystalgui.widget.control.ProgressBar;
@@ -113,6 +119,23 @@ public final class Widgets implements NodeKinds {
         // PageStack is shell chrome with a back stack -- localOnly, so it registers a kind for the
         // cascade's sake (`pagestack { }` is how a theme reaches it) and nothing decodes into it.
         UINodeRegistry.register(PageStack.NAME, PageStack::new, NodeContract.INERT);
+
+        // ── 6.3: the collections and the shell's chrome ─────────────────────────────
+        //
+        // ALL INERT. ListView and TableView are localOnly with a reason WidgetCensus already
+        // records -- a row stream has no wire form until M7 -- and the rest are shell chrome. What
+        // the registration buys is the CASCADE: 32 shipped rules name `quickpick` and 8 name
+        // `treeview`, and without a kind each would report `crystalgui:element` and match none of
+        // them. A generic widget takes a raw factory, which is what a decode would produce anyway.
+        UINodeRegistry.register(ListView.NAME, () -> new ListView<>(new ObservableList<>()),
+                NodeContract.INERT);
+        UINodeRegistry.register(TreeView.NAME, () -> new TreeView<>(TreeDataSource.empty()),
+                NodeContract.INERT);
+        UINodeRegistry.register(TableView.NAME, () -> new TableView<>(new ObservableList<>()),
+                NodeContract.INERT);
+        // The inspector is INERT for the reason its whole kit is: a descriptor is what travels, not
+        // the panel built from one. The kind is for the cascade.
+        UINodeRegistry.register(Inspector.NAME, Inspector::new, NodeContract.INERT);
 
         // ── 6.2: the config kit ─────────────────────────────────────────────────────
         //
