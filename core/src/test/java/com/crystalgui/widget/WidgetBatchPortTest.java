@@ -310,6 +310,126 @@ public class WidgetBatchPortTest extends UiDocumentTestBase {
     }
 
     /**
+     * <b>A drag whose SOURCE moves with it still tracks the pointer one-for-one.</b>
+     *
+     * <p>{@code Drag} captured its start point once in the source's local space and recomputed the
+     * pointer in that space every frame. Since M6.1 {@code toLocal} puts the box's own origin at zero,
+     * so a source that travels changes the frame its own delta is measured in: the reported delta is
+     * pointer travel MINUS how far the source has already gone, the window moves less than the hand,
+     * and the next frame reports less still. On screen that is a title bar rubber-banding against the
+     * cursor.</p>
+     *
+     * <p>Every earlier consumer was a {@code Slider}, a {@code Scroller} or a {@code TextField} — none
+     * of which moves — so nothing could see it. A {@code Dialog} is the first drag whose source
+     * travels and {@code SplitView}'s divider is the second, which is why this arrives with 6.2.</p>
+     */
+    @Test
+    public void aDialogDragTracksThePointerOneForOne() {
+        withDefaultStyles();
+        UINode stage = sized("stage", 600f, 400f);
+        document.append(stage);
+        DialogManager manager = new DialogManager(stage);
+        Dialog dialog = manager.manage(new Dialog("panel"));
+        dialog.show();
+        frame();
+
+        Box bar = document.boxes().boxOf(dialog.getTitleBar());
+        assertTrue("no title bar to drag", bar != null);
+        float px = bar.worldX() + 20f;
+        float py = bar.worldY() + 5f;
+        press(px, py);
+        frame();
+        float startX = document.boxes().boxOf(dialog).worldX();
+
+        // FIVE STEPS, not one. One step passes against the bug -- the first frame's delta is correct
+        // and the error compounds only once the source has moved.
+        for (int step = 1; step <= 5; step++) {
+            move(px + step * 20f, py);
+            frame();
+            float moved = document.boxes().boxOf(dialog).worldX() - startX;
+            assertEquals("after " + (step * 20) + "px of pointer travel the dialog moved " + moved,
+                    step * 20f, moved, 0.5f);
+        }
+        release(px + 100f, py);
+    }
+
+    /**
+     * <b>Selecting a tab reveals it in its own rail and scrolls nothing else.</b>
+     *
+     * <p>{@code revealPendingTab} used {@code Box.scrollIntoView()}, which walks every clipping
+     * ancestor to the root. That is the DOM's behaviour and right for focus that lands off-screen; it
+     * is wrong for a reveal that wants one container. A TabView inside a scrolling page therefore
+     * scrolled the PAGE to bring a tab into view, so clicking the last tab jumped the whole document
+     * out from under the pointer.</p>
+     *
+     * <p>Asserted on the ANCESTOR's offset rather than the rail's: the rail is allowed to move, and a
+     * fix that simply stopped revealing anything would satisfy an assertion about the tab.</p>
+     */
+    @Test
+    public void selectingATabDoesNotScrollThePageAroundIt() {
+        withDefaultStyles();
+        ScrollerView page = new ScrollerView();
+        layout(page, l -> l.width(600f).height(200f));
+        document.append(page);
+
+        TabView tabs = new TabView();
+        StyleGroup.inlinePipeline(tabs.getStyle().getLayoutGroup(),
+                l -> l.widthPercent(100f).height(150f));
+        page.append(tabs);
+        for (String name : new String[] {"one", "two", "three", "four", "five", "six", "seven"}) {
+            tabs.addTab(name).content().append(new UINode());
+        }
+        UINode below = new UINode();
+        StyleGroup.inlinePipeline(below.getStyle().getLayoutGroup(),
+                l -> l.widthPercent(100f).height(600f));
+        page.append(below);
+        frame();
+        frame();
+
+        assertTrue("the fixture's page has to be scrollable, or this passes for the wrong reason",
+                page.box().maxScrollTop() > 0f);
+
+        tabs.selectIndex(6);
+        frame();
+        frame();
+
+        assertEquals("selecting a tab scrolled the page around it",
+                0f, page.box().scrollTop(), 0.01f);
+    }
+
+    /**
+     * <b>A horizontal {@link ScrollerView} lays its content out in a row.</b>
+     *
+     * <p>The slot is a real box between a host and its content, so it is the flex container the
+     * content actually lays out in — and {@code flex-direction} does not inherit. The slot stated
+     * {@code COLUMN} outright, which made a horizontal scroller impossible: a TabView's tab rail is a
+     * {@code ScrollerView}, its sheet gives the rail a row, and its tabs stacked vertically anyway,
+     * each one full width.</p>
+     *
+     * <p>Asserted through a TabView rather than a bare ScrollerView, because the rail is what made it
+     * visible and because the tabs being side by side is the thing a reader can check against a
+     * screenshot.</p>
+     */
+    @Test
+    public void aTabStripLaysItsTabsOutInARow() {
+        withDefaultStyles();
+        TabView tabs = new TabView();
+        layout(tabs, l -> l.width(600f).height(200f));
+        document.append(tabs);
+        tabs.addTab("one");
+        tabs.addTab("two");
+        frame();
+        frame();
+
+        Box first = document.boxes().boxOf(tabs.getTab(0));
+        Box second = document.boxes().boxOf(tabs.getTab(1));
+        assertTrue("a tab has no box", first != null && second != null);
+        assertTrue("the second tab is at y=" + second.y() + ", below the first at y=" + first.y()
+                        + " -- the rail's slot is laying them out in a column",
+                second.x() > first.x() && Math.abs(second.y() - first.y()) < 0.5f);
+    }
+
+    /**
      * <b>Every 6.2 widget lays out to a real box, with real content in it.</b>
      *
      * <h3>Why a layout smoke and not a behaviour test</h3>

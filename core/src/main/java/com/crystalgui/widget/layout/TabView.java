@@ -407,8 +407,14 @@ public class TabView extends UINode {
      * is short by however much the filename is wide. Leaving the request pending until there is something
      * to measure is self-correcting and costs one field read per layout.</p>
      *
-     * <p>{@code scrollIntoView} moves the minimum distance and does nothing to an element already in
-     * view, so this is also correct for the ordinary case of clicking a tab that is already on screen.</p>
+     * <p>Moves the minimum distance and does nothing to a tab already in view, so this is also correct
+     * for the ordinary case of clicking a tab that is already on screen.</p>
+     *
+     * <p><b>Scoped to the RAIL, never {@code Box.scrollIntoView()}.</b> That walks every clipping
+     * ancestor to the root, which is the DOM's behaviour and right for focus that lands off-screen —
+     * and wrong here. A TabView inside a scrolling page would scroll the PAGE to bring a tab into view,
+     * so clicking the last tab in a strip jumped the whole document. What the reveal wants is one
+     * container: the rail the tabs are in.</p>
      */
     private void revealPendingTab() {
         Tab wanted = pendingReveal;
@@ -420,7 +426,25 @@ public class TabView extends UINode {
         Box wantedBox = wanted.box();
         if (wantedBox == null || !(wantedBox.width() > 0f)) return;
         pendingReveal = null;
-        wantedBox.scrollIntoView();
+
+        Box railBox = rail.box();
+        if (railBox == null) return;
+        boolean vertical = tabSide.isVertical();
+        float viewStart = vertical ? railBox.worldY() + railBox.border().top
+                : railBox.worldX() + railBox.border().left;
+        float viewLength = vertical ? Math.max(0f, railBox.clientHeight())
+                : Math.max(0f, railBox.clientWidth());
+        float start = vertical ? wantedBox.worldY() : wantedBox.worldX();
+        float length = vertical ? wantedBox.height() : wantedBox.width();
+
+        float shift = 0f;
+        if (start + length > viewStart + viewLength) shift = start + length - viewStart - viewLength;
+        // A tab longer than the rail aligns to the rail's START rather than its end, which is what
+        // scrollIntoView does and what a reader expects: the beginning of the label is the useful half.
+        if (start - shift < viewStart) shift = start - viewStart;
+        if (shift == 0f) return;
+        if (vertical) rail.scrollTo(rail.scrollLeft(), rail.scrollTop() + shift);
+        else rail.scrollTo(rail.scrollLeft() + shift, rail.scrollTop());
     }
 
     public TabView selectIndex(int index) {

@@ -242,7 +242,19 @@ public final class Drag implements InputMode {
         }
         moveGhost(x, y);
         float[] local = toLocal(source, x, y);
-        listener.onDragUpdate(local[0], local[1], startX, startY, local[0] - startX, local[1] - startY);
+        // THE DELTA IS A VECTOR, NOT A DIFFERENCE OF TWO POINTS, and it has to be: `toLocal` puts the
+        // box's own origin at zero (M6.1), so a source that MOVES WITH THE DRAG changes the frame its
+        // own delta is measured in. `local - startX` then reports pointer travel MINUS how far the
+        // source has already travelled, the window moves less than the hand, the next frame reports
+        // less still -- which on screen is a title bar rubber-banding against the cursor.
+        //
+        // Transforming the SURFACE delta with w = 0 drops the translation and keeps the scale and
+        // rotation, so the answer is in the source's units and independent of where the source is.
+        // Every earlier consumer was a Slider, a Scroller or a TextField, none of which moves; the
+        // Dialog is the first drag whose source travels, and SplitView's divider is the second.
+        float[] delta = toLocalVector(source, x - pressSurfaceX, y - pressSurfaceY);
+        listener.onDragUpdate(local[0], local[1],
+                local[0] - delta[0], local[1] - delta[1], delta[0], delta[1]);
         if (payload != null) updateDropTarget(x, y);
         return true;
     }
@@ -347,6 +359,20 @@ public final class Drag implements InputMode {
             }
         }
         return null;
+    }
+
+    /**
+     * A surface DIRECTION into a box's own units — the same matrix with the translation dropped.
+     *
+     * <p>{@code w = 0} is the whole of it: a point carries the box's position and a vector does not,
+     * so this answers the same thing however far the box has moved since the drag began.</p>
+     */
+    private static float[] toLocalVector(UINode node, float surfaceDx, float surfaceDy) {
+        Box box = node.box();
+        if (box == null) return new float[]{surfaceDx, surfaceDy};
+        Vector4f vector = new Vector4f(surfaceDx, surfaceDy, 0f, 0f);
+        box.worldToLocal().transform(vector);
+        return new float[]{vector.x, vector.y};
     }
 
     /** Surface pixels into a box's own space, through the matrix layout composed. */
