@@ -1477,7 +1477,7 @@ than guessed, and it settles the eight widgets `tools/port/classify.py` had no t
 `progressstatusitem`, `treesearch`, `inspector`) without the class-keyed pass the section asked for.
 Seventeen state adjectives stay kind C, each verified against the class that flips it.
 
-### 6.4 — Canvas, graph, the shader graph · **XL** · after: 6.3
+### 6.4 — Canvas, graph, the shader graph · **XL** · after: 6.3 · **SHIPPED 2026-08-31**
 
 *Re-sized from **L**, and the stub's numbers were stale in both directions. Its two trees hold 35
 files and 12,955 lines — more than any other batch — but two classes defer to 6.7, which leaves
@@ -1495,9 +1495,9 @@ deferred to 6.7.
 | The port types | `PortType` 95 · `PortTypeRegistry` 67 · `BasicPortType` 29 | 3 | 191 | **`graph.port`** — see D25 |
 | The Blackboard | `BlackboardPanel` 1,360 · `PropertyPill` 296 · `InlineRename` 166 · `CategoryHeader` 134 | 4 | 1,956 | `app.shadergraph.blackboard` |
 | The previews | `MainPreviewPanel` 466 · `ShaderGraphPreviews` 247 · `ShaderNodePreview` 82 | 3 | 795 | `app.shadergraph.preview` |
-| The field widgets | `ShaderPortArity` 284 · `ShaderColorFieldWidget` 112 · `ShaderVectorFieldWidget` 89 | 3 | 485 | `app.shadergraph.field` |
-| The app root | `ShaderInspectorSections` 668 · `ShaderGraphBridge` 494 · `ShaderPropertyForm` 246 · `ShaderPropertyNodes` 241 · `ShaderGraphSettings` 95 | 5 | 1,744 | `app.shadergraph` |
-| **Deferred to 6.7** | `ShaderGraphEditor` 1,309 · `ShaderGraphContribution` 167 | 2 | 1,476 | `app.shadergraph` |
+| The app root | `ShaderGraphBridge` 494 · `ShaderPropertyForm` 246 · `ShaderGraphSettings` 95 | 3 | 835 | `app.shadergraph` |
+| The shader nodes | `ShaderPortArity` 284 · `ShaderPropertyNodes` 241 · `ShaderColorFieldWidget` 112 · `ShaderVectorFieldWidget` 89 | 4 | 726 | `app.shadergraph.node` |
+| **Deferred to 6.7** | `ShaderGraphEditor` 1,309 · `ShaderInspectorSections` 668 · `ShaderGraphContribution` 167 | 3 | 2,144 | `app.shadergraph` |
 
 **Budget, measured**: **31 copied, 2 moved, ~575 mechanical rewrites, 65 hand sites** — three moves
 once D25 lands. The heuristic proposes nine moves and D27 refuses seven of them; the ledger records
@@ -1773,6 +1773,66 @@ reads the LIVE Taffy inset"*.
 6. **The two deferred classes leave the app rootless until 6.7.** Everything ported is reachable and
    testable on its own, but there is no *running* shader graph on the new engine until 6.7 — so 6.4's
    gallery page is the canvas and the graph widget, not the application.
+
+#### 6.4 — what shipped, and the four things it found
+
+**Shipped.** 30 files: the canvas, the twelve-file graph widget, the three port types into `graph.port`,
+and fifteen of the shader graph's seventeen into `app.shadergraph` with `.blackboard`, `.node` and
+`.preview`. `graph.shader` empties at 6.9 exactly as the map says. The `LayeringTest` layer list gained
+`com/crystalgui/app/` and `EngineBoundaryTest`'s `NEW_PACKAGES` gained it too — without the second, the
+shader graph is classified as OLD engine and every reference it makes into `widget` reads as the old
+engine reaching into the new one.
+
+**THREE classes defer to 6.7, not two, and the deferral CASCADES.** `ShaderInspectorSections` names
+`ShaderGraphEditor` four times; the editor implements `FileDocument` and holds a `TextEditor`, so it
+waits for 6.7 and 6.5, and anything naming it waits with it. §1's audit missed this because it asked
+which classes reach outside the BATCH — and `ShaderGraphEditor` is inside the batch, merely deferred.
+**The question is what a class names that is not SHIPPING, not what it names that is not local.**
+
+**D25 was right about the problem and wrong about the answer.** The plan proposed a `PortEditors`
+registry in `widget.graph`, keyed by port-type id. What `createInlineEditor()` actually needed was
+deleting: nothing in the repository overrode it, so in production it returned `null` every time, and
+`NodePort`'s own javadoc calls what it returns a *"throwaway generic control"* while recording the bug
+it caused — a vector editor frozen at its first pre-layout 0×0 position, because `GraphView`
+snapshotted the throwaway into a `PortDefaultEditor` before `NodeFieldBinder` supplied the real one.
+`onDefaultEditorChanged` exists to work around exactly that. A registry to preserve a hook nothing uses
+is machinery for its own sake; deleting it made all three port types neutral with **no replacement at
+all**. The covering test moved onto `setDefaultEditor`, which is the path production takes — it had
+been asserting the mounting rule through a mechanism no shipped port type used.
+
+**`widget.graph.node` is four files, and the boundary is Java's rather than a judgement.** The split
+was asked for as "the node stuff", and `GraphNode`, `NodePort` and `PortDefaultEditor` cannot be in it:
+they share package-private members with `GraphView` by design — `setSelected`, `bindToDocument`,
+`setConnectionCount`, the whole editor mount lifecycle — and Java has no sub-package visibility, so
+moving them means publishing ten *"only the view may call this"* methods. `NodeWidgetFactory` looked
+clean by the obvious test (it declares no package-private members) and was not: it CALLS
+`GraphNode.bindToDocument`. **Audit a package split by what a class calls as well as by what it
+declares.** What is in `.node` is the four that reach nothing private, and the boundary sits exactly
+where the encapsulation already was.
+
+**Two pieces of machinery were broken at the source, and both would have hit every later batch.** The
+codemod's ticker rule could not handle `implements UIFrameTicker, X` — it left `extends UINode , X`,
+which is a parse error and therefore the GOOD outcome; the bad one is `implements A, UIFrameTicker, B`
+becoming `implements A, B` with a stray comma. And the ledger's destination table still said
+`widget/form/field` for the config kit and `widget/control` for `ColorSelector` and `SearchField`: 6.2
+moved both and this table was never updated, so every 6.4 copy naming a config control imported a
+package that has never existed. **A generated table that nothing regenerates against reality is a
+second copy of the truth**, which is what its own header warns about.
+
+**And a `DataKey` collides between an engine and its copy.** `DataKey.create` interns by NAME and
+throws when the TYPE differs, so the old `GraphView`'s `"graphView"` and the new one's cannot coexist —
+it fires the moment any test touches both classes. 6.3 had already set the convention (`menuBar.new`)
+and 6.4 follows it. The OLD name is the one that must not move: `ContextKeys.find` resolves a key by
+name out of a `when` expression, so renaming the shipped one silently breaks every command declaration
+naming it.
+
+**Six covering tests, four of which passed on the first run** — including the two hardest, the pan
+drag and the wheel direction. The two that did not are both worth the writing: `worldBoundsOf` and
+`visibleWorldRect` were unguarded `box()` reads reached from the culling pass on the ordinary path (a
+node added this frame has no box), which is M6.1's invariant firing where a test rather than an eye
+caught it; and the port-colour fixture wrote `#FF3C8CFF` in the ENGINE's `0xAARRGGBB` order when a
+sheet reads `#RRGGBBAA`, which is a documented invariant walked into while writing the test for a
+different one.
 
 ### 6.5 — The editor · **XL** · after: 6.3
 
