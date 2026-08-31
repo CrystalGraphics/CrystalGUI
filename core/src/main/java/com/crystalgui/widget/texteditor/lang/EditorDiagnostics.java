@@ -10,6 +10,7 @@ import com.crystalgui.text.diagnostic.DiagnosticSet;
 import com.crystalgui.text.lang.Versioned;
 
 import com.crystalgui.widget.texteditor.TextEditor;
+import com.crystalgui.widget.texteditor.part.SquigglesPart;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;

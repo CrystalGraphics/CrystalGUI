@@ -1,7 +1,9 @@
-package com.crystalgui.widget.texteditor;
+package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.texteditor.DiffDecorations;
+import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
 /**
@@ -25,19 +27,19 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
  * <p>Putting both in one layer makes one of them wrong, and the failure is quiet: at scroll offset zero the
  * two agree exactly, so it looks correct until somebody scrolls sideways.</p>
  */
-final class DiffBandsPart extends EditorViewPart {
+public final class DiffBandsPart extends EditorViewPart {
 
     private final DecorationPool bands;
     private final DecorationPool marks;
 
-    DiffBandsPart(TextEditor editor) {
+    public DiffBandsPart(TextEditor editor) {
         super(editor);
         this.bands = new DecorationPool(editor::textViewport, TextEditor.DIFF_BAND_CLASS, false);
         this.marks = new DecorationPool(editor::linesLayer, TextEditor.DIFF_MARK_CLASS, false);
     }
 
     @Override
-    void render(int firstViewLine, int lastViewLine) {
+    public void render(int firstViewLine, int lastViewLine) {
         bands.beginPass();
         marks.beginPass();
 

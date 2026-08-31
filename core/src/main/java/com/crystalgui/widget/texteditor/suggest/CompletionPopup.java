@@ -565,7 +565,9 @@ public final class CompletionPopup extends Popover {
             if (session != null) session.reorder();
         });
         window.addOverlay(menu, this);
-        menu.showAt(options.box().worldX(), options.box().worldY() + HINT_HEIGHT, options);
+        Box optionsBox = options.box();
+        if (optionsBox == null) return;
+        menu.showAt(optionsBox.worldX(), optionsBox.worldY() + HINT_HEIGHT, options);
     }
 
     /**
@@ -616,7 +618,8 @@ public final class CompletionPopup extends Popover {
             // is scrolled": it is a popup with no visible selection at all, opening on the second-best
             // match. QuickPick.refresh carries the same two lines for the same reason, measured there at
             // scrollTop=22 in a viewport whose only valid offset was 0.
-            if (selected < MAX_VISIBLE_ROWS) list.box().setScroll(0f, 0f);
+            Box listBox = list.box();
+            if (selected < MAX_VISIBLE_ROWS && listBox != null) listBox.setScroll(0f, 0f);
         } else {
             list.setFocusedIndex(-1);
             list.clearSelection();
@@ -677,7 +680,8 @@ public final class CompletionPopup extends Popover {
         // The probe's natural width, read a frame after it was bound. One frame late is invisible; a
         // synchronous read would be of the PREVIOUS content, which is worse and looks the same.
         if (widthProbe != null) {
-            float probed = widthProbe.box().width();
+            Box probeBox = widthProbe.box();
+            float probed = probeBox == null ? 0f : probeBox.width();
             if (Float.isFinite(probed) && probed > 0f) measuredWidth = probed + WIDTH_SLACK;
         }
         // THE USER OWNS WHAT THEY HAVE DRAGGED. Either latch stops this method writing anything, because

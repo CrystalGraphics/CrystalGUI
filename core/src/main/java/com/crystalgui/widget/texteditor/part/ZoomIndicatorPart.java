@@ -1,13 +1,15 @@
-package com.crystalgui.widget.texteditor;
+package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.api.text.CgTextLayout;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
 /**
@@ -17,7 +19,7 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
  * positioned against the viewport rather than against the document, so it neither scrolls nor lives in the
  * text's coordinate space. It is built lazily: an editor that is never zoomed never creates it.</p>
  */
-final class ZoomIndicatorPart extends EditorViewPart {
+public final class ZoomIndicatorPart extends EditorViewPart {
 
     /**
      * How long the indicator stays up after the last zoom, before it starts fading.
@@ -35,17 +37,17 @@ final class ZoomIndicatorPart extends EditorViewPart {
     private UIText label;
     private Button resetButton;
 
-    ZoomIndicatorPart(TextEditor editor) {
+    public ZoomIndicatorPart(TextEditor editor) {
         super(editor);
     }
 
     /** Seconds the indicator holds before fading. The fade's own duration is CSS. */
-    void setHoldSeconds(float seconds) {
+    public void setHoldSeconds(float seconds) {
         this.holdSeconds = Math.max(0f, seconds);
     }
 
     /** Shows the current size and restarts the hold — pressing zoom again keeps it up. */
-    void show(float baseFontSize) {
+    public void show(float baseFontSize) {
         secondsLeft = holdSeconds;
         panel();
         label.setText("Font size: " + Math.round(editor.getFontSize()) + "px");
@@ -69,7 +71,7 @@ final class ZoomIndicatorPart extends EditorViewPart {
      * transition on {@code opacity} runs because the computed value changed, and the widget never learns
      * how long it takes.</p>
      */
-    void tick(float deltaSeconds) {
+    public void tick(float deltaSeconds) {
         if (secondsLeft <= 0f) return;
         secondsLeft -= deltaSeconds;
         if (secondsLeft > 0f) return;
@@ -112,7 +114,7 @@ final class ZoomIndicatorPart extends EditorViewPart {
      * there, so the thing telling you about the text does not sit on top of the text you are reading.</p>
      */
     @Override
-    void render(int firstViewLine, int lastViewLine) {
+    public void render(int firstViewLine, int lastViewLine) {
         if (panel == null) return;
         // NOTHING TO PLACE WHILE IT IS HIDDEN, and this runs every frame for as long as the part exists.
         // Both label widths are SHAPED text measurements, so an indicator nobody has summoned was paying
@@ -123,7 +125,7 @@ final class ZoomIndicatorPart extends EditorViewPart {
         // chrome size on a theme change; between those the answer is last frame's.
         final float chrome = label.getStyle().getGeneralGroup().fontSize();
         String key = label.getText() + ' ' + resetButton.getText() + ' ' + chrome
-                + ' ' + editor.box().clientWidth();
+                + ' ' + editorClientWidth();
         if (key.equals(placedKey)) return;
         placedKey = key;
         // THE THREE MULTIPLIERS BELOW STAY IN JAVA, and `em` does not retire them -- which is worth
@@ -148,7 +150,7 @@ final class ZoomIndicatorPart extends EditorViewPart {
         // Centred on the CLIENT box, not on the code area. textOriginX moves with the gutter, which grows
         // with the font -- so anchoring to it made the indicator slide sideways on the very gesture it is
         // reporting.
-        final float left = Math.max(0f, (editor.box().clientWidth() - width) / 2f);
+        final float left = Math.max(0f, (editorClientWidth() - width) / 2f);
         // A BOTTOM inset, not a computed top. Every position here is derived from the PREVIOUS frame's
         // layout, which is fine for anything anchored to the top -- a height change does not move it. This
         // is anchored to the bottom, so a resize moved it by the full delta for one frame and then
@@ -177,4 +179,10 @@ final class ZoomIndicatorPart extends EditorViewPart {
                 editor.getStyle().getGeneralGroup().fontFamily(), Math.round(Math.max(1f, size)));
         return CgTextLayout.of(text, family).build().totalWidth();
     }
+    /** The editor's padding-box width, or zero before it has a box. @see Box */
+    private float editorClientWidth() {
+        Box box = editor.box();
+        return box == null ? 0f : box.clientWidth();
+    }
+
 }

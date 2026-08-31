@@ -1,4 +1,4 @@
-package com.crystalgui.widget.texteditor;
+package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.view.RenderWhitespace;
@@ -7,6 +7,7 @@ import com.crystalgui.text.wrap.LineProjection;
 import com.crystalgui.text.wrap.ProjectedLines;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.text.UIText;
+import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
 /**
@@ -18,7 +19,7 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
  * here a middot and a space have different advances, so replacing one with the other would shift every
  * glyph after it and the caret would stop landing where the text is.</p>
  */
-final class WhitespacePart extends EditorViewPart {
+public final class WhitespacePart extends EditorViewPart {
 
     /** Cap on marker elements — see {@code IndentGuidesPart.MAX_GUIDES} for the same reasoning. */
     private static final int MAX_MARKS = 2048;
@@ -28,18 +29,18 @@ final class WhitespacePart extends EditorViewPart {
     /** The font the markers were last styled for, so the push happens while it is settling and not after. */
     private String markerFontKey;
 
-    WhitespacePart(TextEditor editor) {
+    public WhitespacePart(TextEditor editor) {
         super(editor);
         this.pool = new DecorationPool(editor::linesLayer, TextEditor.WHITESPACE_CLASS, true);
     }
 
     /** Forces the next pass to re-push the font, after a zoom or a theme change. */
-    void forgetFont() {
+    public void forgetFont() {
         markerFontKey = null;
     }
 
     @Override
-    void render(int firstViewLine, int lastViewLine) {
+    public void render(int firstViewLine, int lastViewLine) {
         RenderWhitespace mode = editor.getRenderWhitespace();
         if (mode == RenderWhitespace.NONE || lastViewLine < firstViewLine) {
             pool.hideAll();

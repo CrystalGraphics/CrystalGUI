@@ -1,10 +1,11 @@
-package com.crystalgui.widget.texteditor;
+package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.Selection;
 import com.crystalgui.text.wrap.LineProjection;
 import com.crystalgui.text.wrap.ProjectedLines;
 import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
 
@@ -20,7 +21,7 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
  * by hand — and it is what lets a theme colour them, since the engine's rule is that no widget writes a
  * colour in Java.</p>
  */
-final class ViewCursorsPart extends EditorViewPart {
+public final class ViewCursorsPart extends EditorViewPart {
 
     /** Pooled — a multi-caret edit that shrinks back to one must not churn elements every keystroke. */
     private final DecorationPool carets;
@@ -33,13 +34,13 @@ final class ViewCursorsPart extends EditorViewPart {
     private float blinkClock;
     private boolean shown = true;
 
-    ViewCursorsPart(TextEditor editor) {
+    public ViewCursorsPart(TextEditor editor) {
         super(editor);
         this.carets = new DecorationPool(editor::linesLayer, TextEditor.CARET_CLASS, false);
     }
 
     /** Seconds per full blink cycle; {@code 0} keeps the caret solid. */
-    void setBlinkSeconds(float seconds) {
+    public void setBlinkSeconds(float seconds) {
         this.blinkPeriodSeconds = Math.max(0f, seconds);
         restartBlink();
     }
@@ -52,7 +53,7 @@ final class ViewCursorsPart extends EditorViewPart {
      * ({@link #restartBlink()}), so the caret is always solid at the instant you type — one that happened
      * to be in its off phase would otherwise vanish exactly when it is being looked for.</p>
      */
-    void advanceBlink(float deltaSeconds) {
+    public void advanceBlink(float deltaSeconds) {
         boolean focused = editor.isFocused();
         boolean wanted;
         if (!focused) {
@@ -72,7 +73,7 @@ final class ViewCursorsPart extends EditorViewPart {
     }
 
     /** Makes the caret solid again and restarts the cycle. Called from every edit and every caret move. */
-    void restartBlink() {
+    public void restartBlink() {
         blinkClock = 0f;
         if (shown) return;
         shown = true;
@@ -82,7 +83,7 @@ final class ViewCursorsPart extends EditorViewPart {
     }
 
     @Override
-    void render(int firstViewLine, int lastViewLine) {
+    public void render(int firstViewLine, int lastViewLine) {
         carets.beginPass();
         if (!hasWindow(firstViewLine, lastViewLine)) {
             carets.endPass();

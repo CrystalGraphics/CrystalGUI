@@ -1,7 +1,8 @@
-package com.crystalgui.widget.texteditor;
+package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
 /**
@@ -16,17 +17,17 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
  * when the document scrolls vertically. It is also the reason this part attaches to the editor rather than
  * to the text viewport: chrome beside the text would be clipped away by the viewport's own box.</p>
  */
-final class GutterEdgePart extends EditorViewPart {
+public final class GutterEdgePart extends EditorViewPart {
 
     private final DecorationPool pool;
 
-    GutterEdgePart(TextEditor editor) {
+    public GutterEdgePart(TextEditor editor) {
         super(editor);
         this.pool = new DecorationPool(() -> editor, TextEditor.GUTTER_EDGE_CLASS, false);
     }
 
     @Override
-    void render(int firstViewLine, int lastViewLine) {
+    public void render(int firstViewLine, int lastViewLine) {
         if (!editor.isGutterVisible()) {
             pool.hideAll();
             return;

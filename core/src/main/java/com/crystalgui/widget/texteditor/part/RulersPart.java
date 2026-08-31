@@ -1,7 +1,8 @@
-package com.crystalgui.widget.texteditor;
+package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
 /**
@@ -16,17 +17,17 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
  * document scrolls vertically. It does move when the document scrolls sideways, which is why the
  * horizontal offset is subtracted and the vertical one is not.</p>
  */
-final class RulersPart extends EditorViewPart {
+public final class RulersPart extends EditorViewPart {
 
     private final DecorationPool pool;
 
-    RulersPart(TextEditor editor) {
+    public RulersPart(TextEditor editor) {
         super(editor);
         this.pool = new DecorationPool(editor::textViewport, TextEditor.RULER_CLASS, false);
     }
 
     @Override
-    void render(int firstViewLine, int lastViewLine) {
+    public void render(int firstViewLine, int lastViewLine) {
         int[] columns = editor.rulerColumns();
         if (columns.length == 0) {
             pool.hideAll();

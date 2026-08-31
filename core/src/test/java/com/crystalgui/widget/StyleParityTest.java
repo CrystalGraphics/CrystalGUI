@@ -26,6 +26,8 @@ import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.style.sheet.StyleSheet;
+import com.crystalgui.widget.texteditor.TextEditor;
+import com.crystalgui.text.view.RenderWhitespace;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.canvas.CanvasView;
 import com.crystalgui.widget.collection.list.ListView;
@@ -201,6 +203,29 @@ public class StyleParityTest extends UiDocumentTestBase {
         // with no window takes up no space by design, so an empty one has no work area, no strip and no
         // entry -- which is the fixture failure this whole test exists to catch, arriving through the
         // subject rather than through the port.
+        // WITH TEXT AND A PROBLEM, or the fixture agrees with any sheet: an empty editor realises no
+        // line, so `__line__`, `__syntax__` and every decoration the view parts pool are absent, and
+        // `ua/editor.css` is 174 rules over 78 part names -- nearly all of them under a realised row.
+        subjects.put("texteditor", () -> {
+            // INDENTED, with real spaces: an indent guide is drawn per indent LEVEL and a
+            // whitespace mark per space, so a document of unindented words realises neither
+            // and the fixture would report both rules unreachable while the setting was on.
+            TextEditor editor = new TextEditor(
+                    "one\n    two\n        three\n    four\nfive\n");
+            editor.buffer().diagnostics().changeOne("parity", java.util.List.of(
+                    Diagnostic.onRow(2, DiagnosticSeverity.ERROR, "boom")));
+            // THE THREE VIEW PARTS THAT ARE OFF BY DEFAULT, turned on rather than exempted. Each is
+            // one call, and exempting them by NAME would exempt them for every widget -- the map is
+            // keyed on the class name alone, so `__active__` written off here would also excuse the
+            // desktop's `window.__active__`, which IS reachable and is asserted.
+            editor.setIndentGuidesVisible(true);
+            editor.setRenderWhitespace(RenderWhitespace.ALL);
+            editor.setRulers(2);
+            // AND THE CARET IN THE NESTED BLOCK, which is what makes one guide `__active__`.
+            editor.setCaret("one\n    two\n        thr".length());
+            return editor;
+        });
+
         subjects.put("desktop", () -> ownDocument(d -> d));
         subjects.put("taskbar", () -> ownDocument(Desktop::taskbar));
         subjects.put("window", () -> ownDocument(d -> d.registry().windows().get(0)));
@@ -288,7 +313,23 @@ public class StyleParityTest extends UiDocumentTestBase {
             Map.entry("dock", "the Dock button in a tool window's caption -- 6.7"),
             Map.entry("dock-window", "DockWindow, a torn-out editor -- 6.7"),
             Map.entry("strip", "a DockWindow's tab strip -- 6.7"),
-            Map.entry("problem-tab", "ProblemsPanel's tabs, seen through a tool window -- 6.7"));
+            Map.entry("problem-tab", "ProblemsPanel's tabs, seen through a tool window -- 6.7"),
+            // ── The editor (6.5) ──────────────────────────────────────────────
+            //
+            // GESTURE AND DOCUMENT STATE the fixture does not enter. The three view parts that are
+            // merely OFF by default are not here -- the subject turns them on, because a setting is
+            // one call and an exemption is forever.
+            Map.entry("selection", "SelectionsPart, which needs a selection -- a drag or an API call"),
+            Map.entry("fold", "a folded region; the fixture's document has no foldable block"),
+            Map.entry("fold-placeholder", "the `...` inside that folded region"),
+            Map.entry("quick-fix-bulb", "QuickFixBulbPart, which needs a language engine offering an action"),
+            Map.entry("zoom-indicator", "the zoom overlay, shown for a moment after Ctrl+scroll"),
+            Map.entry("zoom-label", "inside that overlay"),
+            Map.entry("zoom-reset", "inside that overlay"),
+            Map.entry("shown", "a state class on the find bar, which the fixture does not open"),
+            // 6.7'S APPLICATION, styled through `texteditor` because CrystalEditor puts these on one.
+            Map.entry("file-editor", "CrystalEditor marks its editors with this -- 6.7"),
+            Map.entry("shader-source", "the shader graph's source view, likewise -- 6.7"));
 
     /**
      * <b>The check.</b> For each widget: every {@code __x__} a sheet selects under its tag is a class

@@ -1,4 +1,4 @@
-package com.crystalgui.widget.texteditor;
+package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.layout.LayoutProperties;
@@ -9,6 +9,7 @@ import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.diagnostic.DiagnosticTag;
 import com.crystalgui.text.wrap.LineProjection;
 import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
 import java.util.ArrayList;
@@ -48,7 +49,7 @@ import java.util.List;
  * range whose word was deleted would be widened into a mark over whatever moved into its place, which is a
  * squiggle on innocent text. {@link TrackedRange#collapsedByEdit()} is what tells the two apart.</p>
  */
-final class SquigglesPart extends EditorViewPart {
+public final class SquigglesPart extends EditorViewPart {
 
     static final String SQUIGGLE_CLASS = "__squiggle__";
     static final String ERROR_CLASS = "__squiggle-error__";
@@ -57,12 +58,12 @@ final class SquigglesPart extends EditorViewPart {
 
     private final List<UINode> bands = new ArrayList<>();
 
-    SquigglesPart(TextEditor editor) {
+    public SquigglesPart(TextEditor editor) {
         super(editor);
     }
 
     @Override
-    void render(int firstViewLine, int lastViewLine) {
+    public void render(int firstViewLine, int lastViewLine) {
         int used = 0;
         if (lastViewLine >= firstViewLine) {
             for (TrackedRange tracked

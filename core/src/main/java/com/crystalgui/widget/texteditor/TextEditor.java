@@ -59,6 +59,24 @@ import com.crystalgui.widget.texteditor.find.EditorFind;
 import com.crystalgui.widget.texteditor.find.SearchReplaceBar;
 import com.crystalgui.widget.texteditor.lang.EditorDiagnostics;
 import com.crystalgui.widget.texteditor.lang.EditorLanguageFeatures;
+import com.crystalgui.widget.texteditor.part.CurrentLinePart;
+import com.crystalgui.widget.texteditor.part.DecorationPool;
+import com.crystalgui.widget.texteditor.part.DiffBandsPart;
+import com.crystalgui.widget.texteditor.part.DiffChevronPart;
+import com.crystalgui.widget.texteditor.part.EditorViewPart;
+import com.crystalgui.widget.texteditor.part.ErrorStripePart;
+import com.crystalgui.widget.texteditor.part.FoldingDecorationsPart;
+import com.crystalgui.widget.texteditor.part.GutterEdgePart;
+import com.crystalgui.widget.texteditor.part.IndentGuidesPart;
+import com.crystalgui.widget.texteditor.part.InspectionWidgetPart;
+import com.crystalgui.widget.texteditor.part.LineNumbersPart;
+import com.crystalgui.widget.texteditor.part.QuickFixBulbPart;
+import com.crystalgui.widget.texteditor.part.RulersPart;
+import com.crystalgui.widget.texteditor.part.SelectionsPart;
+import com.crystalgui.widget.texteditor.part.SquigglesPart;
+import com.crystalgui.widget.texteditor.part.ViewCursorsPart;
+import com.crystalgui.widget.texteditor.part.WhitespacePart;
+import com.crystalgui.widget.texteditor.part.ZoomIndicatorPart;
 import com.crystalgui.widget.texteditor.suggest.CompletionPopup;
 import com.crystalgui.widget.texteditor.suggest.CompletionSession;
 import com.crystalgui.widget.texteditor.suggest.EditorSuggest;
@@ -225,7 +243,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
     // toggled by FOLD_COLLAPSED_CLASS exactly as before — no glyph constants needed any more.
 
     /** {@code "..."} for the same reason — U+22EF and U+2026 are both absent from the bundled fonts. */
-    static final String FOLD_PLACEHOLDER_TEXT = "...";
+    public static final String FOLD_PLACEHOLDER_TEXT = "...";
 
     /** Rows kept realised beyond the viewport, so a scroll does not expose an unpainted band. */
     private static final int OVERSCAN = 3;
@@ -584,7 +602,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         return this;
     }
 
-    DiffDecorations diffDecorations() {
+    public DiffDecorations diffDecorations() {
         return diffDecorations;
     }
 
@@ -603,7 +621,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         return this;
     }
 
-    java.util.function.IntConsumer diffRevertHandler() {
+    public java.util.function.IntConsumer diffRevertHandler() {
         return diffRevertHandler;
     }
 
@@ -723,7 +741,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
     private final UINode foldColumn = new UINode();
 
     /** The arrows' strip. Owned here so its attachment order among siblings is unchanged. */
-    UINode foldColumn() {
+    public UINode foldColumn() {
         return foldColumn;
     }
 
@@ -1403,8 +1421,13 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
     /** Records the pointer in this element's own space, for the autoscroll to steer by. */
     private void rememberPointer(float screenX, float screenY) {
         var local = toLocal(screenX, screenY);
-        pointerX = local.x() - box().x();
-        pointerY = local.y() - box().y();
+        // NO SUBTRACTION. `toLocal` puts this element's OWN origin at zero, so its answer is
+        // already the offset within the editor -- the old `screenToLocal` did not, which is why
+        // the subtraction was here and correct. Keeping it takes the editor's position off a
+        // coordinate that never had it, so every click lands at a point offset by however far
+        // down the page the editor sits. @see plan_m6.md 6.1, ColorSelector.withinX
+        pointerX = local.x();
+        pointerY = local.y();
     }
 
     private void requestFocusHere() {
@@ -1624,7 +1647,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * obviously a row. For an editor it is not — the last line ends up sliced in half by the bar, and it
      * is the line you are usually typing on, since that is where the caret was scrolled to.</p>
      */
-    float viewportHeight() {
+    public float viewportHeight() {
         return Math.max(0f, clientHeightOrZero() - horizontalBarThickness());
     }
 
@@ -1664,8 +1687,8 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         float clientWidth = clientWidthOrZero();
         float clientHeight = clientHeightOrZero();
         float contentWidth = scrollWidth();
-        float barWidth = Math.max(0f, verticalScroller().box().width());
-        float barHeight = Math.max(0f, horizontalScroller().box().height());
+        float barWidth = widthOf(verticalScroller());
+        float barHeight = heightOf(horizontalScroller());
 
         // Pass one: no bars at all.
         boolean vertical = contentHeightWithin(clientHeight) > clientHeight;
@@ -1699,13 +1722,13 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
     /** The horizontal bar's thickness when it is showing, otherwise zero. */
     float horizontalBarThickness() {
         if (!horizontalBarShown) return 0f;
-        return Math.max(0f, horizontalScroller().box().height());
+        return heightOf(horizontalScroller());
     }
 
     /** The vertical bar's thickness when it is showing, otherwise zero. */
     float verticalBarThickness() {
         if (!verticalBarShown) return 0f;
-        return Math.max(0f, verticalScroller().box().width());
+        return widthOf(verticalScroller());
     }
 
     /**
@@ -1857,7 +1880,8 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
     /** Document offset nearest a point in this element's own space. */
     public int offsetAt(float screenX, float screenY) {
         var local = toLocal(screenX, screenY);
-        return offsetAtLocal(local.x() - box().x(), local.y() - box().y());
+        // @see #rememberPointer -- `toLocal` is already this element's own space.
+        return offsetAtLocal(local.x(), local.y());
     }
 
     /**
@@ -1920,7 +1944,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
     public float textOriginX() {
         // Mirrored: no gutter to skip on this side, but the vertical bar is here instead.
         float leading = gutterOnRight ? verticalBarThickness() : gutterWidth;
-        return box().padding().left + leading + codeLeftPad();
+        return paddingLeftOrZero() + leading + codeLeftPad();
     }
 
     /**
@@ -1961,12 +1985,12 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
     }
 
     /** Where the gutter's own box begins, in this element's coordinates. */
-    float gutterLeft() {
+    public float gutterLeft() {
         // MIRRORED, THE BAR MOVES TOO -- see layOutMirroredGutter -- so the gutter reaches the edge
         // rather than stopping short of a bar that is no longer there.
         return gutterOnRight
                 ? Math.max(0f, clientWidthOrZero() - gutterWidth)
-                : box().padding().left;
+                : paddingLeftOrZero();
     }
 
     /**
@@ -1978,7 +2002,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * that letter; drawn any further left it lands under the gutter, which has a higher z-index and paints
      * straight over it. The gap is the only place it can live.</p>
      */
-    float codeLeftPad() {
+    public float codeLeftPad() {
         // Zero without a gutter: the margin exists to separate the code FROM the gutter, so with no
         // gutter there is nothing to separate from and the text belongs on the content-box origin.
         if (!gutterVisible) return 0f;
@@ -2301,6 +2325,11 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
 
     private final EditorSuggest suggest = new EditorSuggest(this);
 
+    /** The completion driver. Package-private: it is the editor's, not a caller's. */
+    EditorSuggest suggestions() {
+        return suggest;
+    }
+
     private static float finiteOrZero(float value) {
         return Float.isFinite(value) ? value : 0f;
     }
@@ -2378,7 +2407,9 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         float localX = textOriginX() + xOfView(viewLine, view.column()) - finiteOrZero(scrollLeft());
         float localY = screenTopOfViewLine(viewLine);
         if (!Float.isFinite(localX) || !Float.isFinite(localY)) return null;
-        return new float[] { box().worldX() + localX, box().worldY() + localY, lineHeight() };
+        Box self = box();
+        if (self == null) return new float[] { localX, localY, lineHeight() };
+        return new float[] { self.worldX() + localX, self.worldY() + localY, lineHeight() };
     }
 
     /**
@@ -2799,7 +2830,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * derived from a timestamp of its own would settle at a different moment from the colouring, and two
      * things that both mean "still typing" disagreeing is worse than either being wrong.</p>
      */
-    boolean isTyping() {
+    public boolean isTyping() {
         return editing && System.nanoTime() - lastEditNanos < TYPING_SETTLE_NANOS;
     }
 
@@ -4217,7 +4248,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * value would not. Three quarters of a row, so the column is narrow enough that the numbers stay close
      * to the code rather than being pushed away by a control that is only sometimes there.</p>
      */
-    float gutterChevronWidth() {
+    public float gutterChevronWidth() {
         return diffRevertHandler == null ? 0f : lineHeight() * 0.75f;
     }
 
@@ -4234,7 +4265,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * {@code default.css}. A theme can now change the gutter's proportions without touching Java, and the
      * three numbers sit next to each other in the sheet where they can be compared.</p>
      */
-    float gutterPadLeft() {
+    public float gutterPadLeft() {
         return cachedPadLeft;
     }
 
@@ -4310,7 +4341,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
     }
 
     /** The numbers' own column: margin, digits, margin. */
-    float gutterNumberWidth() {
+    public float gutterNumberWidth() {
         if (!gutterVisible) return 0f;
         return gutterPadLeft() + gutterDigitsWidth() + gutterPadLeft();
     }
@@ -4322,7 +4353,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * the text, which is the whole reason IntelliJ's gutter reads as a margin rather than as a column of
      * numbers jammed against the code. It is also where a fold arrow goes, when there is one.</p>
      */
-    float gutterFoldWidth() {
+    public float gutterFoldWidth() {
         return gutterVisible ? cachedFoldWidth : 0f;
     }
 
@@ -4333,12 +4364,12 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
     // for why the parts sit beside the editor instead of behind a Monaco-style ViewContext.
 
     /** The model-row to view-line projection every part resolves geometry through. */
-    ProjectedLines projections() {
+    public ProjectedLines projections() {
         return projections;
     }
 
     /** The digits' measured width, cached alongside {@code gutterWidth} so the two never disagree. */
-    float gutterNumbersWidth() {
+    public float gutterNumbersWidth() {
         return gutterNumbersWidth;
     }
 
@@ -4348,23 +4379,23 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
     }
 
     /** The editor's own padding-left, which every absolutely-placed child is measured from. */
-    float paddingLeft() {
-        return box().padding().left;
+    public float paddingLeft() {
+        return paddingLeftOrZero();
     }
 
     /** Whether blocks end by dedenting alone — Python, YAML. Drives the indent guides only. */
-    boolean isOffSideLanguage() {
+    public boolean isOffSideLanguage() {
         return offSideLanguage;
     }
 
     /** The ruler columns, uncopied. {@link #getRulers()} clones, which a per-frame pass must not. */
-    int[] rulerColumns() {
+    public int[] rulerColumns() {
         return rulers;
     }
 
 
     /** The font key row measurements are currently keyed on — see {@code WhitespacePart}. */
-    String measuredFontKey() {
+    public String measuredFontKey() {
         return measuredFontKey;
     }
 
@@ -4396,7 +4427,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * the editor's own font moves, which is the only thing that can invalidate it, and it is weakly held
      * so a pooled line that goes away does not pin it.</p>
      */
-    void pushEditorFontTo(UINode element) {
+    public void pushEditorFontTo(UINode element) {
         var general = getStyle().getGeneralGroup();
         float size = general.fontSize();
         List<String> family = general.fontFamily();
@@ -4443,7 +4474,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
     }
 
     float textOriginY() {
-        return box().padding().top;
+        return paddingTopOrZero();
     }
 
     /**
@@ -4464,7 +4495,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * formula having one home is worth it on its own, and because a scroll offset arriving non-finite from
      * somewhere new should degrade to zero rather than flatten the document.</p>
      */
-    float topOfViewLine(int viewLine) {
+    public float topOfViewLine(int viewLine) {
         return textOriginY() + viewLine * lineHeight();
     }
 
@@ -4483,7 +4514,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * <p>{@code finiteOrZero} for the reason {@link #lineHeight()} records: a NaN offset minus anything
      * is NaN, and every row then lands at the same y with nothing having thrown.</p>
      */
-    float screenTopOfViewLine(int viewLine) {
+    public float screenTopOfViewLine(int viewLine) {
         return topOfViewLine(viewLine) - finiteOrZero(scrollTop());
     }
 
@@ -4495,7 +4526,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * rather than where it would sit in the fully-shaped line. Cached per row and dropped wholesale on
      * any edit, since a row's index is not stable across one.</p>
      */
-    RowMetrics rowMetrics(int row) {
+    public RowMetrics rowMetrics(int row) {
         var general = getStyle().getGeneralGroup();
         String fontKey = general.fontFamily() + "/" + general.fontSize();
         if (!fontKey.equals(measuredFontKey)) {
@@ -4863,7 +4894,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * the scroll translate for free and subtract the offsets by hand, exactly as the gutter's numbers
      * already did.</p>
      */
-    UINode textViewport() {
+    public UINode textViewport() {
         if (textViewport == null) {
             textViewport = new UINode();
             textViewport.addClass(TEXT_VIEWPORT_CLASS);
@@ -4929,19 +4960,19 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * 4 — so everything moving into a layer occupies -1..1 with the viewport-space decorations strictly
      * below and strictly above. The layer sits at 0 between them and the inner order is untouched.</p>
      */
-    UINode linesLayer() {
+    public UINode linesLayer() {
         if (linesLayer == null) linesLayer = scrollLayer(textViewport());
         return linesLayer;
     }
 
     /** The gutter's scroll layer — its numbers follow the rows. @see #linesLayer() */
-    UINode gutterLayer() {
+    public UINode gutterLayer() {
         if (gutterLayer == null) gutterLayer = scrollLayer(gutter);
         return gutterLayer;
     }
 
     /** The fold column's scroll layer — its arrows follow the rows. @see #linesLayer() */
-    UINode foldLayer() {
+    public UINode foldLayer() {
         if (foldLayer == null) foldLayer = scrollLayer(foldColumn());
         return foldLayer;
     }
@@ -4994,7 +5025,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
     }
 
     /** Width of the code area — the client box, less the gutter and whatever the vertical bar covers. */
-    float textViewportWidth() {
+    public float textViewportWidth() {
         // MIRRORED, the gutter is at the far end rather than behind the origin, so its width comes off
         // the far side instead of having already been skipped by textViewportLeft. Forgetting it lets the
         // text run underneath the numbers, which reads as the gutter being transparent.
@@ -5018,7 +5049,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * from its left edge, which is where the unscrolled first glyph sits. Same screen position as before,
      * a margin's more room to scroll into.</p>
      */
-    float textViewportLeft() {
+    public float textViewportLeft() {
         return textOriginX() - codeLeftPad();
     }
 
@@ -5112,7 +5143,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
     }
 
     /** The advance of one space in the editor's measured font. */
-    float spaceAdvance() {
+    public float spaceAdvance() {
         var general = getStyle().getGeneralGroup();
         String fontKey = general.fontFamily() + "/" + general.fontSize();
         // CACHED, for the reason `gutterDigitsWidth` records for the digit: two view parts ask this
@@ -5362,7 +5393,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * it looks. Taken from the font's own ascender and descender so it tracks the font rather than a
      * guessed fraction of the row.</p>
      */
-    float textHeight() {
+    public float textHeight() {
         if (textHeight < 0f) {
             var metrics = CgTextLayout.of("Xg", resolveFamily()).build().metrics();
             textHeight = Math.abs(metrics.getAscender()) + Math.abs(metrics.getDescender());
@@ -6024,7 +6055,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
     }
 
     /** What a collapsed region's chip reads. @see EditorFolding#placeholderTextFor */
-    String placeholderTextFor(FoldingRegions.Region region) {
+    public String placeholderTextFor(FoldingRegions.Region region) {
         return folds.placeholderTextFor(region);
     }
 
@@ -6055,7 +6086,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
     // ── §G view decorations: layout ─────────────────────────────────────────────────────────────
 
     /** X of a document column, via its display index — see {@link RowMetrics}. */
-    float widthOf(int row, int column) {
+    public float widthOf(int row, int column) {
         RowMetrics metrics = rowMetrics(row);
         int index = metrics.line().displayIndexOf(column);
         float[] widths = metrics.widths();
@@ -6077,14 +6108,14 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
     }
 
     /** The document offset at which a view line's text begins. */
-    int viewLineStartOffset(int viewLine) {
+    public int viewLineStartOffset(int viewLine) {
         ProjectedLines.ModelPosition model = modelAt(viewLine);
         return buffer.document().lineStartOffset(model.row())
                 + projectionAt(viewLine).viewLineStart(model.viewLineInRow());
     }
 
     /** The document offset at which a view line's text ends, excluding any newline. */
-    int viewLineEndOffset(int viewLine) {
+    public int viewLineEndOffset(int viewLine) {
         ProjectedLines.ModelPosition model = modelAt(viewLine);
         return buffer.document().lineStartOffset(model.row())
                 + projectionAt(viewLine).viewLineEnd(model.viewLineInRow());
@@ -6242,6 +6273,38 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
     }
 
     // ── The box, guarded ──────────────────────────────────────────────
+
+    /** The content box's left inset, or zero before this has a box. @see #clientWidthOrZero */
+    private float paddingLeftOrZero() {
+        Box box = box();
+        return box == null ? 0f : box.padding().left;
+    }
+
+    /** @see #paddingLeftOrZero */
+    private float paddingTopOrZero() {
+        Box box = box();
+        return box == null ? 0f : box.padding().top;
+    }
+
+    /**
+     * A node's box dimension, or zero when it has none.
+     *
+     * <p>{@code Box} is nullable where {@code getRuntimeCache()} always answered, and a
+     * SCROLLBAR is the case that proves it: a bar that is not shown has no box at all, so the
+     * very first frame of a fresh editor threw out of {@code measureScrollbars} — which runs
+     * from the per-frame hook, so it took the whole frame loop with it. Zero is the right
+     * answer for every reader here: a bar that is not there covers nothing.</p>
+     */
+    private static float widthOf(@Nullable UINode node) {
+        Box box = node == null ? null : node.box();
+        return box == null ? 0f : box.width();
+    }
+
+    /** @see #widthOf */
+    private static float heightOf(@Nullable UINode node) {
+        Box box = node == null ? null : node.box();
+        return box == null ? 0f : box.height();
+    }
 
     /**
      * The padding box's width, or zero while this has no box.

@@ -6,8 +6,9 @@ import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.wrap.LineProjection;
 import com.crystalgui.text.wrap.ProjectedLines;
 
-import com.crystalgui.widget.texteditor.EditorViewPart;
+import com.crystalgui.widget.texteditor.part.EditorViewPart;
 import com.crystalgui.widget.texteditor.TextEditor;
+import com.crystalgui.widget.texteditor.part.EditorViewPart;
 import com.crystalgui.widget.texteditor.suggest.CompletionSession;
 import java.util.List;
 
