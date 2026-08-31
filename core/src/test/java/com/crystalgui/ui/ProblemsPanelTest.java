@@ -17,7 +17,7 @@ import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.diagnostic.Markers;
-import com.crystalgui.ui.elements.chrome.ProblemNode;
+import com.crystalgui.text.diagnostic.ProblemNode;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.elements.chrome.ProblemsPanel;
 

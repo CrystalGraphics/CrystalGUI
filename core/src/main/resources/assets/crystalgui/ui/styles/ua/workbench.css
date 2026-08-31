@@ -1878,7 +1878,11 @@ menuitem::part(accelerator) {
  * would ever want to restyle it, so a theme could not have faded this in differently even deliberately.
  * The new engine may not write at IMPORTANT at all, which makes the rule structural rather than
  * advisory. */
-popover.__prompt__.__placing__ {
+popover.__prompt__.__placing__,
+/* A DIALOG CENTRES THE SAME WAY, and for the same reason: out of flow, so its size is unknown until
+ * it has been laid out, and a box positioned from a size it does not have appears in the corner for
+ * one frame and jumps. Preferences is the consumer. */
+dialog.__placing__ {
     opacity: 0;
 }
 

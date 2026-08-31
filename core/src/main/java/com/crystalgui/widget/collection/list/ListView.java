@@ -3,7 +3,7 @@ package com.crystalgui.widget.collection.list;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.chrome.QuickPick;
+import com.crystalgui.chrome.palette.QuickPick;
 import com.crystalgui.core.collection.list.FixedHeightStrategy;
 import com.crystalgui.core.collection.list.ItemSizeStrategy;
 import com.crystalgui.core.collection.list.SelectionMode;

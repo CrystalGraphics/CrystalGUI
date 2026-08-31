@@ -1,5 +1,9 @@
-package com.crystalgui.ui.elements.chrome;
+package com.crystalgui.chrome.problems;
 
+import com.crystalgui.chrome.preferences.Preferences;
+import com.crystalgui.ui.dom.Name;
+import com.crystalgui.core.data.DataProvider;
+import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.core.collection.tree.FilteredTreeSource;
 import com.crystalgui.core.search.SearchQuery;
 import com.crystalgui.core.search.SearchMatcher;
@@ -20,19 +24,18 @@ import com.crystalgui.text.diagnostic.DiagnosticTag;
 import com.crystalgui.text.diagnostic.Markers;
 import com.crystalgui.text.diagnostic.ProblemNode;
 import com.crystalgui.text.diagnostic.ProblemsTreeSource;
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.input.UIInputHandler;
-import com.crystalgui.ui.UIWindow;
-import com.crystalgui.ui.AnchoredPlacement;
-import com.crystalgui.ui.elements.Menu;
-import com.crystalgui.ui.elements.MenuItem;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.service.AnchoredPlacement;
+import com.crystalgui.widget.overlay.Menu;
+import com.crystalgui.widget.overlay.MenuItem;
 import com.crystalgui.ui.input.FocusPolicy;
-import com.crystalgui.ui.elements.UIText;
-import com.crystalgui.ui.elements.tree.TreeRenderer;
+import com.crystalgui.widget.text.UIText;
+import com.crystalgui.widget.collection.tree.TreeRenderer;
 import com.crystalgui.core.collection.tree.TreeRow;
-import com.crystalgui.ui.elements.tree.TreeSearch;
-import com.crystalgui.ui.elements.tree.TreeView;
-import com.crystalgui.ui.elements.workbench.HeaderContributor;
+import com.crystalgui.widget.collection.tree.TreeSearch;
+import com.crystalgui.widget.collection.tree.TreeView;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -65,11 +68,20 @@ import java.util.List;
  * <p>Because it changes the tree's shape rather than its paint — see {@link ProblemsTreeSource}. A file
  * whose only error is filtered out has to stop being a row.</p>
  */
-public class ProblemsPanel extends UIElement implements HeaderContributor {
+public class ProblemsPanel extends UINode implements DataProvider {
+
+    public static final Name NAME = Name.of("problemspanel");
 
     /** The scope tabs, placed on the container's title line rather than inside this panel. */
-    @Override
-    public UIElement headerContent() {
+    /**
+     * The controls this panel contributes to its container's header.
+     *
+     * <p>Not an {@code @Override} yet: {@code HeaderContributor} is typed on {@code UIElement} and
+     * its only consumer is {@code ViewContainer}, which is a 6.7 class. The METHOD is what a
+     * container calls, so nothing is lost by the interface arriving with the thing that reads it —
+     * and declaring a second interface now would mean guessing its shape a batch early.</p>
+     */
+    public UINode headerContent() {
         return tabs;
     }
 
@@ -139,7 +151,9 @@ public class ProblemsPanel extends UIElement implements HeaderContributor {
     public Object getData(DataKey<?> key) {
         if (key == PROBLEMS_PANEL) return this;
         // SUPER LAST, so the generic ELEMENT answer stays reachable -- the rule every override follows.
-        return super.getData(key);
+        // No super: DataProvider is an interface the node does not implement, so an unanswered
+        // key is null -- which is the walk's own signal to try the next step out.
+        return null;
     }
 
     /** Opens the quick fixes for the right-clicked problem, in the editor showing it. */
@@ -162,7 +176,7 @@ public class ProblemsPanel extends UIElement implements HeaderContributor {
      */
     public final Signal.Value<ProblemNode> onQuickFixesRequested = new Signal.Value<>();
 
-    private final UIElement content = new UIElement();
+    private final UINode content = new UINode();
     private final UIText empty = new UIText("No problems have been detected in the workspace");
 
     @Nullable
@@ -198,17 +212,17 @@ public class ProblemsPanel extends UIElement implements HeaderContributor {
         // what says the eye opens a menu instead of toggling something.
         gutterMark.addClass(GUTTER_MARK_CLASS);
         gutterMark.setHitTest(false);
-        viewOptions.addChild(gutterMark);
+        viewOptions.append(gutterMark);
 
         head.addClass(HEAD_CLASS);
-        head.addChild(viewOptions);
+        head.append(viewOptions);
         // A COLUMN OF [tabs, [gutter | tree]] -- the tabs span the panel and the gutter runs beside the
         // tree only, which is IntelliJ's arrangement. The body exists because those two axes cannot be one
         // element.
         body.addClass(BODY_CLASS);
-        body.addChild(head);
+        body.append(head);
         buildTabs();
-        addInternalChild(body);
+        append(body);
 
         // CHECKABLE through the MENU rather than the item, which is what reserves the mark gutter for
         // every row -- an item that made itself checkable would sit indented against its neighbours.
@@ -220,7 +234,7 @@ public class ProblemsPanel extends UIElement implements HeaderContributor {
         viewMenu.onItemActivated.connect(item -> applyViewChoice(item.getText()));
         // Must be IN the tree to be promoted to the top layer — a Menu is a Popover, and an unparented one
         // has nothing to promote from.
-        addInternalChild(viewMenu);
+        append(viewMenu);
         syncViewMenu();
     }
 
@@ -233,24 +247,22 @@ public class ProblemsPanel extends UIElement implements HeaderContributor {
      */
     private void buildTabs() {
         tabs.addClass(TABS_CLASS);
-        buildTab(fileTab, FILE_TAB, true).addChild(fileCount);
+        buildTab(fileTab, FILE_TAB, true).append(fileCount);
         fileCount.addClass(TAB_COUNT_CLASS);
         fileCount.setHitTest(false);
-        fileCount.forceSelfSizeWidth();
         buildTab(projectTab, PROJECT_TAB, false);
-        tabs.addChild(fileTab);
-        tabs.addChild(projectTab);
+        tabs.append(fileTab);
+        tabs.append(projectTab);
         // NOT added here: the container puts these on its title line. @see HeaderContributor
         syncTabs();
     }
 
-    private UIElement buildTab(UIElement tab, String label, boolean fileScope) {
+    private UINode buildTab(UINode tab, String label, boolean fileScope) {
         tab.addClass(TAB_CLASS);
         tab.setFocusPolicy(FocusPolicy.CLICK);
         UIText text = new UIText(label);
         text.setHitTest(false);
-        text.forceSelfSizeWidth();
-        tab.addChild(text);
+        tab.append(text);
         tab.onMouseDown.attachListener((element, event) -> {
             event.stopPropagation();
             setFileScope(fileScope);
@@ -265,7 +277,7 @@ public class ProblemsPanel extends UIElement implements HeaderContributor {
     }
 
     private void openViewMenu(float screenX, float screenY) {
-        UIWindow window = getAttachedWindow();
+        UIDocument window = document();
         if (window == null) return;
         // ROOT space, not physical pixels: a promoted menu's containing block is the root, so a raw
         // pointer position lands wherever that number falls in root coordinates.
@@ -399,18 +411,18 @@ public class ProblemsPanel extends UIElement implements HeaderContributor {
     /** The count beside {@code File}, which is the only tab IntelliJ badges. */
     public static final String TAB_COUNT_CLASS = "__tab-count__";
 
-    private final UIElement body = new UIElement();
-    private final UIElement head = new UIElement();
-    private final UIElement gutterMark = new UIElement();
-    private final UIElement viewOptions = new UIElement();
+    private final UINode body = new UINode();
+    private final UINode head = new UINode();
+    private final UINode gutterMark = new UINode();
+    private final UINode viewOptions = new UINode();
     private final Menu viewMenu = new Menu();
     private MenuItem errorsItem;
     private MenuItem warningsItem;
     private MenuItem infosItem;
 
-    private final UIElement tabs = new UIElement();
-    private final UIElement fileTab = new UIElement();
-    private final UIElement projectTab = new UIElement();
+    private final UINode tabs = new UINode();
+    private final UINode fileTab = new UINode();
+    private final UINode projectTab = new UINode();
     private final UIText fileCount = new UIText("");
 
     /** The file in front, so {@link #ACTIVE_FILE_ONLY} has something to narrow to. */
@@ -421,6 +433,7 @@ public class ProblemsPanel extends UIElement implements HeaderContributor {
     private boolean activeFileOnly = true;
 
     public ProblemsPanel() {
+        super(NAME);
         addClass(PANEL_CLASS);
         content.addClass(CONTENT_CLASS);
         buildHead();
@@ -428,16 +441,11 @@ public class ProblemsPanel extends UIElement implements HeaderContributor {
         // [tabs, body]. Added while empty: markAsInternal() RECURSES, and the tree adds and recycles its
         // own rows, so stamping a populated subtree marks those internal too and removeChild then silently
         // refuses them.
-        body.addChild(content);
+        body.append(content);
 
         empty.addClass(EMPTY_CLASS);
         empty.setHitTest(false);
-        content.addChild(empty);
-    }
-
-    @Override
-    public boolean acceptsPublicChildren() {
-        return false;
+        content.append(empty);
     }
 
     /** The tree, once something has been bound. Null before that. */
@@ -568,7 +576,7 @@ public class ProblemsPanel extends UIElement implements HeaderContributor {
         tree.setHorizontalScrolling(true);
         tree.setRenderer(new ProblemRenderer());
         tree.onRowActivated.connect(this::chooseRow);
-        content.addChild(tree);
+        content.append(tree);
         // SEARCH, FOR ONE LAMBDA. The bar, the two modes, the arrows, the counter, the keys and the
         // amber marking are all TreeSearch's -- this panel supplies only what a problem's searchable text
         // is, which is the seam VS Code calls IKeyboardNavigationLabelProvider and IntelliJ calls the
@@ -756,7 +764,7 @@ public class ProblemsPanel extends UIElement implements HeaderContributor {
          * tree scrolls and a listener may only be attached once, so a captured node would keep folding
          * whichever file its slot was first used for. The same trap the editor's gutter arrows document.</p>
          */
-        private final java.util.Map<UIElement, ProblemNode> rowItems = new java.util.IdentityHashMap<>();
+        private final java.util.Map<UINode, ProblemNode> rowItems = new java.util.IdentityHashMap<>();
 
         /**
          * What Copy puts on the clipboard — <b>the message, and nothing else</b>.
@@ -778,15 +786,15 @@ public class ProblemsPanel extends UIElement implements HeaderContributor {
         }
 
         @Override
-        public UIElement createTemplate() {
-            UIElement row = new UIElement();
+        public UINode createTemplate() {
+            UINode row = new UINode();
             row.addClass(ROW_CLASS);
 
             // THE ONE PART THAT KEEPS THE POINTER. Everything else refuses it so a press lands on the row —
             // click targeting takes the exact element hit and never walks up to a handler-bearing ancestor.
             // A chevron is a control in its own right, which is what lets a file fold on ONE click while
             // choosing a problem still takes two.
-            UIElement twisty = new UIElement();
+            UINode twisty = new UINode();
             twisty.addClass(TWISTY_CLASS);
             twisty.onMouseDown.attachListener((element, event) -> {
                 ProblemNode node = rowItems.get(row);
@@ -825,7 +833,7 @@ public class ProblemsPanel extends UIElement implements HeaderContributor {
                 if (index >= 0) tree.onRowActivated.emit(index);
             }, false, false);
 
-            UIElement icon = new UIElement();
+            UINode icon = new UINode();
             icon.addClass(ICON_CLASS);
             icon.setHitTest(false);
 
@@ -838,31 +846,28 @@ public class ProblemsPanel extends UIElement implements HeaderContributor {
             // UIText latches whether it self-sizes from its FIRST measurement, before any rule here has
             // matched, so it has to be told in Java at construction. Same call, same reason, as the
             // project tree's label and the Blackboard's type column.
-            label.forceSelfSizeWidth();
 
             UIText detail = new UIText("");
             detail.addClass(LINE_CLASS);
             detail.setHitTest(false);
-            detail.forceSelfSizeWidth();
 
             UIText count = new UIText("");
             count.addClass(COUNT_CLASS);
             count.setHitTest(false);
-            count.forceSelfSizeWidth();
 
-            row.addChild(twisty);
-            row.addChild(icon);
-            row.addChild(label);
-            row.addChild(detail);
-            row.addChild(count);
+            row.append(twisty);
+            row.append(icon);
+            row.append(label);
+            row.append(detail);
+            row.append(count);
             return row;
         }
 
         @Override
-        public void bind(ProblemNode item, TreeRow<ProblemNode> row, int index, UIElement template) {
+        public void bind(ProblemNode item, TreeRow<ProblemNode> row, int index, UINode template) {
             rowItems.put(template, item);
-            List<UIElement> parts = template.getChildren();
-            UIElement icon = parts.get(1);
+            List<UINode> parts = template.children();
+            UINode icon = parts.get(1);
             UIText label = (UIText) parts.get(2);
             UIText detail = (UIText) parts.get(3);
             UIText count = (UIText) parts.get(4);
@@ -910,7 +915,7 @@ public class ProblemsPanel extends UIElement implements HeaderContributor {
         }
     }
 
-    private static void setTag(UIElement row, String cls, boolean present) {
+    private static void setTag(UINode row, String cls, boolean present) {
         if (present) row.addClass(cls);
         else row.removeClass(cls);
     }

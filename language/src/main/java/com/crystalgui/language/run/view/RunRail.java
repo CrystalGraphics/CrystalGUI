@@ -1,5 +1,6 @@
 package com.crystalgui.language.run.view;
 
+import com.crystalgui.core.collection.list.SelectionMode;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.Resource;
@@ -11,7 +12,6 @@ import com.crystalgui.ui.elements.Tooltip;
 import com.crystalgui.ui.elements.UIText;
 import com.crystalgui.ui.elements.list.ListRenderer;
 import com.crystalgui.ui.elements.list.ListView;
-import com.crystalgui.ui.elements.list.SelectionMode;
 
 import javax.annotation.Nullable;
 

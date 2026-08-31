@@ -1,9 +1,13 @@
 package com.crystalgui.widget.collection.tree;
 
-import com.crystalgui.chrome.QuickPick;
+import com.crystalgui.chrome.palette.QuickPick;
+import com.crystalgui.chrome.preferences.NavigatorView;
+import com.crystalgui.chrome.preferences.Preferences;
+import com.crystalgui.chrome.problems.ProblemsPanel;
 import com.crystalgui.core.collection.tree.FilteredTreeSource;
 import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.core.collection.tree.TreeRow;
+import com.crystalgui.text.diagnostic.ProblemNode;
 import com.crystalgui.widget.overlay.ContextMenu;
 import java.util.function.BooleanSupplier;
 import java.util.Set;

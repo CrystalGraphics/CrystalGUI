@@ -1,6 +1,7 @@
 package com.crystalgui.ui.dom;
 
 import com.crystalgui.core.async.UiThread;
+import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgui.ui.box.Box;
@@ -19,6 +20,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import javax.annotation.Nullable;
+import lombok.Getter;
 
 /**
  * The root of a tree, and the owner of what a tree has exactly one of: the frame thread, the id
@@ -44,6 +46,20 @@ import javax.annotation.Nullable;
  * would put the edit script out of order.</p>
  */
 public final class UIDocument extends UINode {
+
+    /**
+     * This surface's own commands.
+     *
+     * <p>The counterpart of {@code UIWindow.getCommands()}, and the second half of the seam that kept
+     * {@code CommandPalette} out of two batches: a palette lists what the SURFACE can do, and asking
+     * the global registry instead would show one window's verbs in another's picker.</p>
+     *
+     * <p>Its own registry rather than a view of the global one, exactly as the old engine has it —
+     * {@code CommandRegistry.global()} is where an application registers what is always true, and
+     * this is where a surface adds what is true of itself.</p>
+     */
+    @Getter
+    private final CommandRegistry commands = new CommandRegistry();
 
     @Nullable
     private volatile Thread frameThread;

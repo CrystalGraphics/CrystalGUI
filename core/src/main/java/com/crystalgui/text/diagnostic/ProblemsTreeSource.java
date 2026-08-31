@@ -1,4 +1,4 @@
-package com.crystalgui.ui.elements.chrome;
+package com.crystalgui.text.diagnostic;
 
 import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.core.search.SearchQuery;
@@ -8,6 +8,7 @@ import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.diagnostic.Markers;
 
+import com.crystalgui.text.diagnostic.ProblemNode;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Comparator;
