@@ -2,6 +2,8 @@ package com.crystalgui.widget.scroll;
 
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.style.property.StyleProperty;
+import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
@@ -14,6 +16,7 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
 import com.crystalgraphics.platform.CgPlatform;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import com.crystalgui.ui.box.Box;
+import javax.annotation.Nullable;
 
 /**
  * A scroll container with visible scrollbars.
@@ -158,7 +161,8 @@ public class ScrollerView extends UINode {
         // Height is deliberately NOT constrained: the content must be free to exceed the viewport,
         // which is the whole point of a scroll container.
         StyleGroup.defaultPipeline(viewport.getStyle().getLayoutGroup(),
-                l -> l.widthPercent(100f).flexDirection(FlexDirection.COLUMN));
+                l -> l.widthPercent(100f));
+        mirrorDirection();
         shadow.append(viewport);
 
         this.verticalScroller = newBar(Scroller.Orientation.VERTICAL, V_SCROLLER_PART);
@@ -278,6 +282,37 @@ public class ScrollerView extends UINode {
      *
      * <p>Call after the content changes. Cheap and idempotent.</p>
      */
+    /**
+     * Gives the slot the view's own {@code flex-direction}.
+     *
+     * <p><b>A slot is a real box between a host and its content, so it is the flex container the
+     * content actually lays out in</b> — and {@code flex-direction} does not inherit. The slot used to
+     * state {@code COLUMN} outright, which made a horizontal scroller impossible: a TabView's tab rail
+     * is a {@code ScrollerView}, its sheet gives the rail a row, and its tabs stacked vertically
+     * anyway, each one full width. That took two more symptoms with it — the rail became a VERTICAL
+     * scroll container, so it ate wheel notches meant for the page, and the strip bar it sized was for
+     * an axis nothing scrolls on.</p>
+     *
+     * <p>Mirroring rather than inheriting is the narrowest fix that is also correct: a scroll
+     * container's direction IS the axis its content runs along, so there is no case where the two
+     * should differ. Written at DEFAULT origin so a sheet can still address the view itself, and
+     * re-run from {@link #computedChanged} because a theme may set the direction long after
+     * construction — a rail that is a row until the first restyle is worse than one that is never a
+     * row, because only one of the two is reproducible.</p>
+     */
+    private void mirrorDirection() {
+        FlexDirection direction = computedStyle().get(LayoutProperties.FLEX_DIRECTION);
+        StyleGroup.defaultPipeline(viewport.getStyle().getLayoutGroup(),
+                l -> l.flexDirection(direction == null ? FlexDirection.COLUMN : direction));
+    }
+
+    @Override
+    public void computedChanged(StyleProperty<?> property, @Nullable Object oldValue,
+                                @Nullable Object newValue) {
+        super.computedChanged(property, oldValue, newValue);
+        if (property == LayoutProperties.FLEX_DIRECTION) mirrorDirection();
+    }
+
     public void refreshScrollers() {
         syncing = true;
         try {

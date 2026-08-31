@@ -531,7 +531,11 @@ public class Dialog extends UINode {
         // Deliberately here rather than FocusPolicy.CLICK: focus-on-click tests the click's *target*,
         // which for a title-bar press is the title bar, not the dialog. Requesting it explicitly is
         // what makes "click anywhere on the chrome activates the window" actually true.
-        window.focus().requestFocus(this);
+        // POINTER, not programmatic. `requestFocus` scrolls its target into view -- correct for
+        // focus that lands off-screen, and wrong for a press, which by definition landed on something
+        // already visible. Through the programmatic entry, grabbing a dialog's title bar scrolled the
+        // whole page under it.
+        window.focus().requestPointerFocus(this);
 
         dragStartLeft = posLeft;
         dragStartTop = posTop;
