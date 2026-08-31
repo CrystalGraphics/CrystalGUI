@@ -1,5 +1,6 @@
 package com.crystalgui.widget.overlay;
 
+import com.crystalgui.chrome.status.ProcessesPopover;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;

@@ -1,5 +1,15 @@
 package com.crystalgui.chrome;
 
+import com.crystalgui.chrome.menu.MenuBarView;
+import com.crystalgui.chrome.notification.NotificationBalloons;
+import com.crystalgui.chrome.notification.NotificationsView;
+import com.crystalgui.chrome.palette.QuickPick;
+import com.crystalgui.chrome.preferences.NavigatorView;
+import com.crystalgui.chrome.problems.ProblemsPanel;
+import com.crystalgui.chrome.status.Breadcrumbs;
+import com.crystalgui.chrome.status.ProcessesPopover;
+import com.crystalgui.chrome.status.ProgressStatusItem;
+import com.crystalgui.chrome.status.StatusBarView;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.ui.dom.NodeContract;
 import com.crystalgui.ui.dom.NodeKinds;
@@ -33,5 +43,14 @@ public final class ChromeKinds implements NodeKinds {
         UINodeRegistry.register(QuickPick.NAME, QuickPick::new, NodeContract.INERT);
         UINodeRegistry.register(MenuBarView.NAME,
                 () -> new MenuBarView(CommandRegistry.global()), NodeContract.INERT);
+        UINodeRegistry.register(StatusBarView.NAME, StatusBarView::new, NodeContract.INERT);
+        UINodeRegistry.register(ProgressStatusItem.NAME, ProgressStatusItem::new, NodeContract.INERT);
+        UINodeRegistry.register(ProcessesPopover.NAME, ProcessesPopover::new, NodeContract.INERT);
+        UINodeRegistry.register(Breadcrumbs.NAME, Breadcrumbs::new, NodeContract.INERT);
+        UINodeRegistry.register(NotificationsView.NAME, NotificationsView::new, NodeContract.INERT);
+        UINodeRegistry.register(NotificationBalloons.NAME, NotificationBalloons::new,
+                NodeContract.INERT);
+        UINodeRegistry.register(ProblemsPanel.NAME, ProblemsPanel::new, NodeContract.INERT);
+        UINodeRegistry.register(NavigatorView.NAME, NavigatorView::new, NodeContract.INERT);
     }
 }

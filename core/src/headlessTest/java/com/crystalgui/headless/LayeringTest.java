@@ -42,6 +42,13 @@ public class LayeringTest {
     /** A layer, and everything it may not name. Ordered bottom-up; each may name only what precedes it. */
     private static final List<String> LAYERS = List.of(
             "com/crystalgui/widget/",
+            // ONE LAYER, and its six sub-packages are organisational rather than ordered:
+            // `chrome/` is a prefix, so palette, menu, problems, notification,
+            // preferences and status are already inside it. Listing them as LAYERS made
+            // each one "above" the layer root, and ChromeKinds -- the layer's own
+            // registrar, which must name everything in it -- became a layer reaching
+            // upward. Ordering WITHIN a layer is a separate question and has its own
+            // list; see WIDGET_TIERS, which is the only layer that needs one.
             "com/crystalgui/chrome/",
             "com/crystalgui/desktop/",
             "com/crystalgui/workbench/");

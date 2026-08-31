@@ -1,4 +1,4 @@
-package com.crystalgui.chrome;
+package com.crystalgui.chrome.palette;
 
 import com.crystalgui.ui.dom.Name;
 import com.crystalgraphics.platform.input.CgKeyCodes;

@@ -3,6 +3,7 @@ package com.crystalgui.ui.elements.tree;
 import com.crystalgui.core.collection.tree.FilteredTreeSource;
 import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.core.collection.tree.TreeRow;
+import com.crystalgui.text.diagnostic.ProblemNode;
 import java.util.function.BooleanSupplier;
 import java.util.Set;
 import java.util.EnumSet;

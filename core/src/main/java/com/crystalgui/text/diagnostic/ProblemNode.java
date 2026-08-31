@@ -1,4 +1,4 @@
-package com.crystalgui.ui.elements.chrome;
+package com.crystalgui.text.diagnostic;
 
 import com.crystalgui.fs.Resource;
 import com.crystalgui.text.diagnostic.Diagnostic;

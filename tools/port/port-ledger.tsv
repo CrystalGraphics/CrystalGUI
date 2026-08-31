@@ -76,30 +76,30 @@ CLASS	ui/elements/WidgetCensus	227	widget	6.7	move	pending
 CLASS	ui/elements/canvas/CanvasOverlayMove	232	widget/canvas	6.4	copy	pending
 CLASS	ui/elements/canvas/CanvasView	725	widget/canvas	6.4	copy	pending
 CLASS	ui/elements/canvas/WorldRect	77	widget/canvas	6.4	move	pending
-CLASS	ui/elements/chrome/Breadcrumbs	166	chrome	6.3	copy	pending
-CLASS	ui/elements/chrome/ChromeCommands	63	chrome	6.3	copy	pending
-CLASS	ui/elements/chrome/CommandPalette	151	chrome	6.3	copy	pending
+CLASS	ui/elements/chrome/Breadcrumbs	166	chrome/status	6.3	copy	ported
+CLASS	ui/elements/chrome/ChromeCommands	63	chrome/menu	6.3	copy	ported
+CLASS	ui/elements/chrome/CommandPalette	151	chrome/palette	6.3	copy	ported
 CLASS	ui/elements/chrome/ContextMenu	309	widget/overlay	6.3	copy	ported
-CLASS	ui/elements/chrome/MainMenuCommands	89	chrome	6.3	copy	ported
-CLASS	ui/elements/chrome/MenuBarView	645	chrome	6.3	copy	ported
+CLASS	ui/elements/chrome/MainMenuCommands	89	chrome/menu	6.3	copy	ported
+CLASS	ui/elements/chrome/MenuBarView	645	chrome/menu	6.3	copy	ported
 CLASS	ui/elements/chrome/MenuBuilder	231	widget/overlay	6.3	copy	ported
-CLASS	ui/elements/chrome/NavigatorView	620	chrome	6.3	copy	pending
-CLASS	ui/elements/chrome/NotificationBalloons	314	chrome	6.3	copy	pending
-CLASS	ui/elements/chrome/NotificationCard	217	chrome	6.3	copy	pending
-CLASS	ui/elements/chrome/NotificationsView	200	chrome	6.3	copy	pending
+CLASS	ui/elements/chrome/NavigatorView	620	chrome/preferences	6.3	copy	ported
+CLASS	ui/elements/chrome/NotificationBalloons	314	chrome/notification	6.3	copy	ported
+CLASS	ui/elements/chrome/NotificationCard	217	chrome/notification	6.3	copy	ported
+CLASS	ui/elements/chrome/NotificationsView	200	chrome/notification	6.3	copy	ported
 CLASS	ui/elements/chrome/PageStack	149	widget/layout	6.2	copy	ported
-CLASS	ui/elements/chrome/Preferences	287	chrome	6.3	copy	pending
-CLASS	ui/elements/chrome/ProblemNode	38	chrome	6.3	move	pending
-CLASS	ui/elements/chrome/ProblemsCommands	83	chrome	6.3	copy	pending
-CLASS	ui/elements/chrome/ProblemsPanel	929	chrome	6.3	copy	pending
-CLASS	ui/elements/chrome/ProblemsTreeSource	210	chrome	6.3	move	pending
-CLASS	ui/elements/chrome/ProcessesPopover	214	chrome	6.3	copy	pending
-CLASS	ui/elements/chrome/ProgressStatusItem	215	chrome	6.3	copy	pending
-CLASS	ui/elements/chrome/QuickPick	791	chrome	6.3	copy	ported
+CLASS	ui/elements/chrome/Preferences	287	chrome/preferences	6.3	copy	ported
+CLASS	text/diagnostic/ProblemNode	38	text/diagnostic	6.3	move	ported
+CLASS	ui/elements/chrome/ProblemsCommands	83	chrome/problems	6.3	copy	ported
+CLASS	ui/elements/chrome/ProblemsPanel	929	chrome/problems	6.3	copy	ported
+CLASS	text/diagnostic/ProblemsTreeSource	210	text/diagnostic	6.3	move	ported
+CLASS	ui/elements/chrome/ProcessesPopover	214	chrome/status	6.3	copy	ported
+CLASS	ui/elements/chrome/ProgressStatusItem	215	chrome/status	6.3	copy	ported
+CLASS	ui/elements/chrome/QuickPick	791	chrome/palette	6.3	copy	ported
 CLASS	core/collection/pick/QuickPickEntry	41	core/collection/pick	6.3	move	ported
 CLASS	core/collection/pick/QuickPickItem	179	core/collection/pick	6.3	move	ported
 CLASS	core/collection/pick/QuickPickSource	294	core/collection/pick	6.3	move	ported
-CLASS	ui/elements/chrome/StatusBarView	427	chrome	6.3	copy	pending
+CLASS	ui/elements/chrome/StatusBarView	427	chrome/status	6.3	copy	ported
 CLASS	ui/elements/config/ConfigControl	242	widget/config	6.2	copy	ported
 CLASS	ui/elements/config/ConfigControlContracts	93	widget/config	6.2	copy	ported
 CLASS	ui/elements/config/ConfigControls	82	widget/config	6.2	copy	ported
@@ -350,10 +350,10 @@ PART	BlackboardPanel	subtitle	A	2	proposed	leaf in every rule, scoped by an ance
 PART	BlackboardPanel	title	A	5	proposed	leaf in every rule, scoped by an ancestor in 5
 PART	BlackboardPanel	titles	B	5	proposed	a rule selects through it (4)
 PART	BooleanControl	boolean	B	7	confirmed	light tree: the config kit hosts no shadow roots
-PART	Breadcrumbs	crumb	A	0	proposed	leaf in every rule
-PART	Breadcrumbs	crumb-current	A	0	proposed	leaf in every rule
-PART	Breadcrumbs	crumb-icon	A	0	proposed	leaf in every rule
-PART	Breadcrumbs	crumb-sep	A	0	proposed	leaf in every rule
+PART	Breadcrumbs	crumb	B	0	confirmed	light tree: Breadcrumbs hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	Breadcrumbs	crumb-current	B	0	confirmed	light tree: Breadcrumbs hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	Breadcrumbs	crumb-icon	B	0	confirmed	light tree: Breadcrumbs hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	Breadcrumbs	crumb-sep	B	0	confirmed	light tree: Breadcrumbs hosts no shadow root -- every rule reaching one of its names reaches through its structure
 PART	Button	post-icon	A	0	confirmed	leaf in every rule
 PART	Button	pre-icon	A	0	confirmed	leaf in every rule
 PART	Button	underlay	A	0	confirmed	leaf in every rule
@@ -509,13 +509,13 @@ PART	InspectionWidgetPart	inspection-number	A	4	proposed	leaf in every rule, sco
 PART	InspectionWidgetPart	inspection-ok	A	1	proposed	leaf in every rule
 PART	InspectionWidgetPart	inspection-previous	A	5	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	InspectionWidgetPart	inspection-warnings	A	0	proposed	leaf in every rule
-PART	Inspector	inspector	A	1	proposed	leaf in every rule
-PART	Inspector	inspector-empty	A	0	proposed	leaf in every rule
-PART	Inspector	inspector-scroll	A	1	proposed	leaf in every rule
-PART	ListView	focused	C	1	proposed	state adjective
-PART	ListView	h-scroll	A	0	proposed	leaf in every rule
-PART	ListView	row	A	0	proposed	leaf in every rule
-PART	ListView	selected	C	8	proposed	state adjective
+PART	Inspector	inspector	B	1	confirmed	light tree: Inspector hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	Inspector	inspector-empty	B	0	confirmed	light tree: Inspector hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	Inspector	inspector-scroll	B	1	confirmed	light tree: Inspector hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ListView	focused	C	1	confirmed	state adjective, flipped by the widget itself
+PART	ListView	h-scroll	B	0	confirmed	light tree: ListView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ListView	row	B	0	confirmed	light tree: ListView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ListView	selected	C	8	confirmed	state adjective, flipped by the widget itself
 PART	MainPreviewPanel	head	B	3	proposed	a rule selects through it (1)
 PART	MainPreviewPanel	main-preview	B	8	proposed	a rule selects through it (6)
 PART	MainPreviewPanel	orbiting	B	1	proposed	a rule selects through it (1)
@@ -551,12 +551,12 @@ PART	MatrixControl	matrix-row	B	1	confirmed	light tree: the config kit hosts no 
 PART	Menu	has-checkable	C	3	confirmed	state adjective
 PART	Menu	items	A	0	confirmed	leaf in every rule
 PART	Menu	separator	A	0	confirmed	leaf in every rule
-PART	MenuBarView	burger	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	MenuBarView	burger-bar	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	MenuBarView	collapsed	C	4	proposed	state adjective
-PART	MenuBarView	menu-bar	B	9	proposed	a rule selects through it (7)
-PART	MenuBarView	menu-title	B	4	proposed	a rule selects through it (1)
-PART	MenuBarView	open	C	4	proposed	state adjective
+PART	MenuBarView	burger	B	2	confirmed	light tree: MenuBarView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	MenuBarView	burger-bar	B	1	confirmed	light tree: MenuBarView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	MenuBarView	collapsed	C	4	confirmed	state adjective, flipped by the widget itself
+PART	MenuBarView	menu-bar	B	9	confirmed	light tree: MenuBarView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	MenuBarView	menu-title	B	4	confirmed	light tree: MenuBarView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	MenuBarView	open	C	4	confirmed	state adjective, flipped by the widget itself
 PART	MenuItem	accelerator	A	0	confirmed	leaf in every rule
 PART	MenuItem	checkable	A	0	confirmed	leaf in every rule
 PART	MenuItem	has-submenu	C	0	confirmed	state adjective
@@ -571,15 +571,15 @@ PART	MergeView	merge-pane-title	A	1	proposed	leaf in every rule, scoped by an an
 PART	MergeView	merge-panes	B	4	proposed	a rule selects through it (3)
 PART	MergeView	merge-status	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	MergeView	merge-toolbar	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	NavigatorView	nav-arrow	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	NavigatorView	nav-back	A	0	proposed	leaf in every rule
-PART	NavigatorView	nav-detail	A	0	proposed	leaf in every rule
-PART	NavigatorView	nav-forward	A	0	proposed	leaf in every rule
-PART	NavigatorView	nav-header	A	0	proposed	leaf in every rule
-PART	NavigatorView	nav-label	A	0	proposed	leaf in every rule
-PART	NavigatorView	nav-node	A	0	proposed	leaf in every rule
-PART	NavigatorView	nav-search	A	0	proposed	leaf in every rule
-PART	NavigatorView	nav-sidebar	A	0	proposed	leaf in every rule
+PART	NavigatorView	nav-arrow	B	2	confirmed	light tree: NavigatorView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	NavigatorView	nav-back	B	0	confirmed	light tree: NavigatorView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	NavigatorView	nav-detail	B	0	confirmed	light tree: NavigatorView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	NavigatorView	nav-forward	B	0	confirmed	light tree: NavigatorView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	NavigatorView	nav-header	B	0	confirmed	light tree: NavigatorView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	NavigatorView	nav-label	B	0	confirmed	light tree: NavigatorView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	NavigatorView	nav-node	B	0	confirmed	light tree: NavigatorView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	NavigatorView	nav-search	B	0	confirmed	light tree: NavigatorView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	NavigatorView	nav-sidebar	B	0	confirmed	light tree: NavigatorView hosts no shadow root -- every rule reaching one of its names reaches through its structure
 PART	NodeCreationMenu	category	A	0	proposed	leaf in every rule
 PART	NodeCreationMenu	category-segment	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	NodeCreationMenu	category-separator	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
@@ -604,66 +604,66 @@ PART	NodePort	label	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	NodePort	output	B	3	proposed	a rule selects through it (1)
 PART	NodeWidgetFactory	unknown-type	C	0	proposed	state adjective
 PART	NodeWireLayer	wire-layer	A	0	proposed	leaf in every rule
-PART	NotificationBalloons	balloon	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	NotificationBalloons	balloons	B	6	proposed	a rule selects through it (5)
-PART	NotificationBalloons	hidden	C	1	proposed	state adjective
-PART	NotificationsView	action	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
-PART	NotificationsView	action-secondary	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	NotificationsView	actions	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	NotificationsView	clear	A	0	proposed	leaf in every rule
-PART	NotificationsView	close	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	NotificationsView	detail	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	NotificationsView	entry-head	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	NotificationsView	head	A	0	proposed	leaf in every rule
-PART	NotificationsView	message	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	NotificationsView	notification	B	17	proposed	a rule selects through it (15)
-PART	NotificationsView	notification-list	A	0	proposed	leaf in every rule
-PART	NotificationsView	notifications	A	0	proposed	leaf in every rule
-PART	NotificationsView	notifications-empty	A	0	proposed	leaf in every rule
-PART	NotificationsView	severity	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
-PART	NotificationsView	time	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	NotificationsView	title	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
+PART	NotificationBalloons	balloon	B	3	confirmed	light tree: NotificationBalloons hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	NotificationBalloons	balloons	B	6	confirmed	light tree: NotificationBalloons hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	NotificationBalloons	hidden	C	1	confirmed	state adjective, flipped by the widget itself
+PART	NotificationsView	action	B	4	confirmed	light tree: NotificationsView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	NotificationsView	action-secondary	B	2	confirmed	light tree: NotificationsView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	NotificationsView	actions	B	1	confirmed	light tree: NotificationsView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	NotificationsView	clear	B	0	confirmed	light tree: NotificationsView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	NotificationsView	close	B	2	confirmed	light tree: NotificationsView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	NotificationsView	detail	B	1	confirmed	light tree: NotificationsView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	NotificationsView	entry-head	B	1	confirmed	light tree: NotificationsView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	NotificationsView	head	B	0	confirmed	light tree: NotificationsView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	NotificationsView	message	B	2	confirmed	light tree: NotificationsView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	NotificationsView	notification	B	17	confirmed	light tree: NotificationsView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	NotificationsView	notification-list	B	0	confirmed	light tree: NotificationsView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	NotificationsView	notifications	B	0	confirmed	light tree: NotificationsView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	NotificationsView	notifications-empty	B	0	confirmed	light tree: NotificationsView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	NotificationsView	severity	B	4	confirmed	light tree: NotificationsView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	NotificationsView	time	B	1	confirmed	light tree: NotificationsView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	NotificationsView	title	B	3	confirmed	light tree: NotificationsView hosts no shadow root -- every rule reaching one of its names reaches through its structure
 PART	NumberControl	number	B	2	confirmed	light tree: the config kit hosts no shadow roots
 PART	NumberControl	scrub-handle	B	1	confirmed	light tree: the config kit hosts no shadow roots
 PART	NumberControl	scrubbing	C	0	confirmed	state adjective, flipped by the control itself
 PART	PageStack	page	B	0	confirmed	light tree: pagestack holds caller pages
 PART	PageStack	page-placeholder	B	0	confirmed	light tree: pagestack holds caller pages
 PART	Popover	open	C	3	confirmed	state adjective
-PART	Preferences	preferences	B	4	proposed	a rule selects through it (2)
-PART	Preferences	preferences-panel	A	0	proposed	leaf in every rule
-PART	ProblemsPanel	content	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	ProblemsPanel	dropdown-gutter	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	ProblemsPanel	line	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	ProblemsPanel	message	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
-PART	ProblemsPanel	problem	B	1	proposed	a rule selects through it (1)
-PART	ProblemsPanel	problem-count	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	ProblemsPanel	problem-file	A	0	proposed	leaf in every rule
-PART	ProblemsPanel	problem-list	A	0	proposed	leaf in every rule
-PART	ProblemsPanel	problem-tab	B	6	proposed	a rule selects through it (2)
-PART	ProblemsPanel	problem-tabs	A	1	proposed	leaf in every rule
-PART	ProblemsPanel	problems	A	0	proposed	leaf in every rule
-PART	ProblemsPanel	problems-body	A	0	proposed	leaf in every rule
-PART	ProblemsPanel	problems-empty	A	0	proposed	leaf in every rule
-PART	ProblemsPanel	problems-head	A	0	proposed	leaf in every rule
-PART	ProblemsPanel	selected	C	7	proposed	state adjective
-PART	ProblemsPanel	severity	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
-PART	ProblemsPanel	tab-count	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	ProblemsPanel	twisty	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
-PART	ProblemsPanel	view-options	A	0	proposed	leaf in every rule
-PART	ProcessesPopover	cancel	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	ProcessesPopover	cancelling	B	2	proposed	a rule selects through it (2)
-PART	ProcessesPopover	detail	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	ProcessesPopover	hide	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	ProcessesPopover	label	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	ProcessesPopover	process-row	B	8	proposed	a rule selects through it (7)
-PART	ProcessesPopover	processes	B	12	proposed	a rule selects through it (11)
-PART	ProcessesPopover	title	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	Preferences	preferences	B	4	confirmed	light tree: Preferences hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	Preferences	preferences-panel	B	0	confirmed	light tree: Preferences hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProblemsPanel	content	B	1	confirmed	light tree: ProblemsPanel hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProblemsPanel	dropdown-gutter	B	2	confirmed	light tree: ProblemsPanel hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProblemsPanel	line	B	2	confirmed	light tree: ProblemsPanel hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProblemsPanel	message	B	4	confirmed	light tree: ProblemsPanel hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProblemsPanel	problem	B	1	confirmed	light tree: ProblemsPanel hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProblemsPanel	problem-count	B	1	confirmed	light tree: ProblemsPanel hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProblemsPanel	problem-file	B	0	confirmed	light tree: ProblemsPanel hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProblemsPanel	problem-list	B	0	confirmed	light tree: ProblemsPanel hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProblemsPanel	problem-tab	B	6	confirmed	light tree: ProblemsPanel hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProblemsPanel	problem-tabs	B	1	confirmed	light tree: ProblemsPanel hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProblemsPanel	problems	B	0	confirmed	light tree: ProblemsPanel hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProblemsPanel	problems-body	B	0	confirmed	light tree: ProblemsPanel hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProblemsPanel	problems-empty	B	0	confirmed	light tree: ProblemsPanel hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProblemsPanel	problems-head	B	0	confirmed	light tree: ProblemsPanel hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProblemsPanel	selected	C	7	confirmed	state adjective, flipped by the widget itself
+PART	ProblemsPanel	severity	B	4	confirmed	light tree: ProblemsPanel hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProblemsPanel	tab-count	B	2	confirmed	light tree: ProblemsPanel hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProblemsPanel	twisty	B	4	confirmed	light tree: ProblemsPanel hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProblemsPanel	view-options	B	0	confirmed	light tree: ProblemsPanel hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProcessesPopover	cancel	B	3	confirmed	light tree: ProcessesPopover hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProcessesPopover	cancelling	B	2	confirmed	light tree: ProcessesPopover hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProcessesPopover	detail	B	1	confirmed	light tree: ProcessesPopover hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProcessesPopover	hide	B	2	confirmed	light tree: ProcessesPopover hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProcessesPopover	label	B	2	confirmed	light tree: ProcessesPopover hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProcessesPopover	process-row	B	8	confirmed	light tree: ProcessesPopover hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProcessesPopover	processes	B	12	confirmed	light tree: ProcessesPopover hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProcessesPopover	title	B	1	confirmed	light tree: ProcessesPopover hosts no shadow root -- every rule reaching one of its names reaches through its structure
 PART	ProgressBar	fill	A	0	confirmed	leaf in every rule
 PART	ProgressBar	indeterminate	A	0	confirmed	leaf in every rule
-PART	ProgressStatusItem	cancel	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	ProgressStatusItem	count	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	ProgressStatusItem	label	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	ProgressStatusItem	progress-item	B	7	proposed	a rule selects through it (5)
+PART	ProgressStatusItem	cancel	B	3	confirmed	light tree: ProgressStatusItem hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProgressStatusItem	count	B	1	confirmed	light tree: ProgressStatusItem hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProgressStatusItem	label	B	1	confirmed	light tree: ProgressStatusItem hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	ProgressStatusItem	progress-item	B	7	confirmed	light tree: ProgressStatusItem hosts no shadow root -- every rule reaching one of its names reaches through its structure
 PART	ProjectFileTree	badge	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
 PART	ProjectFileTree	content	A	0	proposed	leaf in every rule
 PART	ProjectFileTree	drop-target	A	0	proposed	leaf in every rule
@@ -684,24 +684,24 @@ PART	PropertyPill	renaming	B	2	proposed	a rule selects through it (2)
 PART	PropertyPill	selected	C	7	proposed	state adjective
 PART	PropertyPill	type	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
 PART	QuickFixBulbPart	quick-fix-bulb	A	0	proposed	leaf in every rule
-PART	QuickPick	content	A	0	proposed	leaf in every rule
-PART	QuickPick	qp-accelerator	A	0	proposed	leaf in every rule
-PART	QuickPick	qp-category	A	0	proposed	leaf in every rule
-PART	QuickPick	qp-description	A	0	proposed	leaf in every rule
-PART	QuickPick	qp-disabled	A	0	proposed	leaf in every rule
-PART	QuickPick	qp-empty	A	0	proposed	leaf in every rule
-PART	QuickPick	qp-file-icon	A	0	proposed	leaf in every rule
-PART	QuickPick	qp-header	A	0	proposed	leaf in every rule
-PART	QuickPick	qp-header-spacer	A	0	proposed	leaf in every rule
-PART	QuickPick	qp-icon	A	0	proposed	leaf in every rule
-PART	QuickPick	qp-key	A	0	proposed	leaf in every rule
-PART	QuickPick	qp-key-sep	A	0	proposed	leaf in every rule
-PART	QuickPick	qp-label	A	0	proposed	leaf in every rule
-PART	QuickPick	qp-spacer	A	0	proposed	leaf in every rule
-PART	QuickPick	qp-title	A	0	proposed	leaf in every rule
-PART	QuickPick	qp-truncated	A	0	proposed	leaf in every rule
-PART	QuickPick	results	A	0	proposed	leaf in every rule
-PART	QuickPick	search	A	0	proposed	leaf in every rule
+PART	QuickPick	content	B	0	confirmed	light tree: QuickPick hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	QuickPick	qp-accelerator	B	0	confirmed	light tree: QuickPick hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	QuickPick	qp-category	B	0	confirmed	light tree: QuickPick hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	QuickPick	qp-description	B	0	confirmed	light tree: QuickPick hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	QuickPick	qp-disabled	B	0	confirmed	light tree: QuickPick hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	QuickPick	qp-empty	B	0	confirmed	light tree: QuickPick hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	QuickPick	qp-file-icon	B	0	confirmed	light tree: QuickPick hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	QuickPick	qp-header	B	0	confirmed	light tree: QuickPick hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	QuickPick	qp-header-spacer	B	0	confirmed	light tree: QuickPick hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	QuickPick	qp-icon	B	0	confirmed	light tree: QuickPick hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	QuickPick	qp-key	B	0	confirmed	light tree: QuickPick hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	QuickPick	qp-key-sep	B	0	confirmed	light tree: QuickPick hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	QuickPick	qp-label	B	0	confirmed	light tree: QuickPick hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	QuickPick	qp-spacer	B	0	confirmed	light tree: QuickPick hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	QuickPick	qp-title	B	0	confirmed	light tree: QuickPick hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	QuickPick	qp-truncated	B	0	confirmed	light tree: QuickPick hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	QuickPick	results	B	0	confirmed	light tree: QuickPick hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	QuickPick	search	B	0	confirmed	light tree: QuickPick hosts no shadow root -- every rule reaching one of its names reaches through its structure
 PART	RegionDropOverlay	region-drop-overlay	A	1	proposed	leaf in every rule
 PART	RegionDropOverlay	region-drop-preview	A	1	proposed	leaf in every rule
 PART	RegionHost	region-half	A	2	proposed	leaf in every rule
@@ -791,14 +791,14 @@ PART	SquigglesPart	squiggle	A	1	proposed	leaf in every rule
 PART	SquigglesPart	squiggle-error	A	1	proposed	leaf in every rule
 PART	SquigglesPart	squiggle-information	A	1	proposed	leaf in every rule
 PART	SquigglesPart	squiggle-warning	A	1	proposed	leaf in every rule
-PART	StatusBarView	clickable	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	StatusBarView	first	C	0	proposed	state adjective
-PART	StatusBarView	left	B	2	proposed	a rule selects through it (2)
-PART	StatusBarView	right	B	2	proposed	a rule selects through it (2)
-PART	StatusBarView	spacer	A	0	proposed	leaf in every rule
-PART	StatusBarView	status-bar	B	5	proposed	a rule selects through it (5)
-PART	StatusBarView	status-item	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
-PART	StatusBarView	status-sep	A	0	proposed	leaf in every rule
+PART	StatusBarView	clickable	B	2	confirmed	light tree: StatusBarView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	StatusBarView	first	C	0	confirmed	state adjective, flipped by the widget itself
+PART	StatusBarView	left	B	2	confirmed	light tree: StatusBarView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	StatusBarView	right	B	2	confirmed	light tree: StatusBarView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	StatusBarView	spacer	B	0	confirmed	light tree: StatusBarView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	StatusBarView	status-bar	B	5	confirmed	light tree: StatusBarView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	StatusBarView	status-item	B	4	confirmed	light tree: StatusBarView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	StatusBarView	status-sep	B	0	confirmed	light tree: StatusBarView hosts no shadow root -- every rule reaching one of its names reaches through its structure
 PART	StripeView	activity-bar	B	4	proposed	a rule selects through it (4)
 PART	StripeView	activity-item	A	0	proposed	leaf in every rule
 PART	StripeView	badge	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
@@ -828,12 +828,12 @@ PART	TabView	right	C	2	confirmed	state adjective: which side the strip is on
 PART	TabView	strip	B	1	confirmed	light tree: tabview is kind B, five rules reach through it
 PART	TabView	strip-bar	B	3	confirmed	light tree: tabview is kind B
 PART	TabView	top	C	0	confirmed	state adjective: which side the strip is on
-PART	TableView	cell	A	0	proposed	leaf in every rule
-PART	TableView	divider	A	0	proposed	leaf in every rule
-PART	TableView	header	B	2	proposed	a rule selects through it (1)
-PART	TableView	header-cell	A	0	proposed	leaf in every rule
-PART	TableView	sorted-asc	C	0	proposed	state adjective
-PART	TableView	sorted-desc	C	0	proposed	state adjective
+PART	TableView	cell	B	0	confirmed	light tree: TableView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	TableView	divider	B	0	confirmed	light tree: TableView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	TableView	header	B	2	confirmed	light tree: TableView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	TableView	header-cell	B	0	confirmed	light tree: TableView hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	TableView	sorted-asc	C	0	confirmed	state adjective, flipped by the widget itself
+PART	TableView	sorted-desc	C	0	confirmed	state adjective, flipped by the widget itself
 PART	Taskbar	active	C	3	proposed	state adjective
 PART	Taskbar	animating	C	0	proposed	state adjective
 PART	Taskbar	attention	C	0	proposed	state adjective
@@ -897,25 +897,25 @@ PART	ToolWindowFrame	floating	C	0	proposed	state adjective
 PART	ToolWindowFrame	tool-window	B	10	proposed	a rule selects through it (9)
 PART	ToolWindowFrame	windowed	C	0	proposed	state adjective
 PART	Tooltip	label	A	0	confirmed	leaf in every rule
-PART	TreeSearch	dimmed	C	1	proposed	state adjective
-PART	TreeSearch	find-bar	B	32	proposed	a rule selects through it (31)
-PART	TreeSearch	find-close	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	TreeSearch	find-count	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	TreeSearch	find-input	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	TreeSearch	find-mode	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	TreeSearch	find-next	A	5	proposed	leaf in every rule, scoped by an ancestor in 5
-PART	TreeSearch	find-prev	A	5	proposed	leaf in every rule, scoped by an ancestor in 5
-PART	TreeSearch	match	C	2	proposed	state adjective
-PART	TreeSearch	off	C	2	proposed	state adjective
-PART	TreeSearch	on	C	3	proposed	state adjective
-PART	TreeSearch	option-match-case	A	1	proposed	leaf in every rule
-PART	TreeSearch	option-regex	A	1	proposed	leaf in every rule
-PART	TreeSearch	option-words	A	1	proposed	leaf in every rule
-PART	TreeSearch	search-option	A	4	proposed	leaf in every rule
-PART	TreeSearch	searching	C	0	proposed	state adjective
-PART	TreeView	collapsed	C	4	proposed	state adjective
-PART	TreeView	expanded	C	0	proposed	state adjective
-PART	TreeView	leaf	C	0	proposed	state adjective
+PART	TreeSearch	dimmed	C	1	confirmed	state adjective, flipped by the widget itself
+PART	TreeSearch	find-bar	B	32	confirmed	light tree: TreeSearch hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	TreeSearch	find-close	B	2	confirmed	light tree: TreeSearch hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	TreeSearch	find-count	B	2	confirmed	light tree: TreeSearch hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	TreeSearch	find-input	B	1	confirmed	light tree: TreeSearch hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	TreeSearch	find-mode	B	3	confirmed	light tree: TreeSearch hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	TreeSearch	find-next	B	5	confirmed	light tree: TreeSearch hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	TreeSearch	find-prev	B	5	confirmed	light tree: TreeSearch hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	TreeSearch	match	C	2	confirmed	state adjective, flipped by the widget itself
+PART	TreeSearch	off	C	2	confirmed	state adjective, flipped by the widget itself
+PART	TreeSearch	on	C	3	confirmed	state adjective, flipped by the widget itself
+PART	TreeSearch	option-match-case	B	1	confirmed	light tree: TreeSearch hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	TreeSearch	option-regex	B	1	confirmed	light tree: TreeSearch hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	TreeSearch	option-words	B	1	confirmed	light tree: TreeSearch hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	TreeSearch	search-option	B	4	confirmed	light tree: TreeSearch hosts no shadow root -- every rule reaching one of its names reaches through its structure
+PART	TreeSearch	searching	C	0	confirmed	state adjective, flipped by the widget itself
+PART	TreeView	collapsed	C	4	confirmed	state adjective, flipped by the widget itself
+PART	TreeView	expanded	C	0	confirmed	state adjective, flipped by the widget itself
+PART	TreeView	leaf	C	0	confirmed	state adjective, flipped by the widget itself
 PART	UIElement	resizer	A	1	proposed	leaf in every rule
 PART	UIElement	user-sized-height	B	1	proposed	a rule selects through it (1)
 PART	UIElement	user-sized-width	A	1	proposed	leaf in every rule

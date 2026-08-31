@@ -1,4 +1,4 @@
-package com.crystalgui.chrome;
+package com.crystalgui.chrome.menu;
 
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
