@@ -855,8 +855,34 @@ public class UINode implements EventTarget, Styleable {
         if (frozen) return;
         StyleEngine engine = styleEngine();
         if (engine == null) return;
+        markSubtreeDirty(engine);
+    }
+
+    /**
+     * Marks this node and everything a rule could reach THROUGH it.
+     *
+     * <p><b>Descendants too, and the old engine said why.</b> A descendant selector can key off this
+     * node's own state or classes — {@code checkbox:checked .__mark__},
+     * {@code .__configurator-group__.__collapsed__ > .__content__} — so a change here decides
+     * which rules apply further down. Marking only this node leaves every descendant holding the
+     * match it made under the PREVIOUS state, permanently.</p>
+     *
+     * <p>It is not a subtle failure. A {@code ConfiguratorGroup} folds by adding a class and letting
+     * the sheet set {@code display: none} on its content; without the walk the class went on, the
+     * group re-matched, and the content kept {@code display: flex} — a foldout that would not
+     * fold, with every observable correct. M6.1 added the SHADOW half of this walk for {@code ::part}
+     * rules and it REPLACED the light half rather than joining it, which is why this was latent from
+     * 5.2 until the first widget whose LAYOUT depended on such a rule.</p>
+     *
+     * <p>Frozen subtrees are skipped, as {@link #invalidateStyleMatch} skips a frozen node: a frozen
+     * subtree matches nothing until it thaws, and thawing re-matches it.</p>
+     */
+    private void markSubtreeDirty(StyleEngine engine) {
         engine.markDirty(this);
         invalidateExposedParts(engine);
+        for (UINode child : children) {
+            if (!child.frozen) child.markSubtreeDirty(engine);
+        }
     }
 
     /**

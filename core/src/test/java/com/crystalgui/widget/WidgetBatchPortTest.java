@@ -1,7 +1,10 @@
 package com.crystalgui.widget;
 
+import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.widget.config.ConfiguratorGroup;
+import com.crystalgui.widget.config.ConfiguratorPanel;
 import com.crystalgui.widget.layout.PageStack;
 import com.crystalgui.widget.layout.SplitView;
 import com.crystalgui.widget.layout.Tab;
@@ -9,6 +12,7 @@ import com.crystalgui.widget.layout.TabView;
 import com.crystalgui.widget.overlay.Dialog;
 import com.crystalgui.widget.overlay.DialogManager;
 import com.crystalgui.widget.scroll.Scroller;
+import java.util.Set;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -427,6 +431,87 @@ public class WidgetBatchPortTest extends UiDocumentTestBase {
         assertTrue("the second tab is at y=" + second.y() + ", below the first at y=" + first.y()
                         + " -- the rail's slot is laying them out in a column",
                 second.x() > first.x() && Math.abs(second.y() - first.y()) < 0.5f);
+    }
+
+    /**
+     * <b>Every kind of config control lays out with a label and an editor that both have size.</b>
+     *
+     * <p>Thirteen controls, one panel, and the check is per ROW rather than per panel — a panel whose
+     * own box is fine while a row inside it measures zero is the shape M6.1 kept producing, and
+     * asserting the container passes against every one of those.</p>
+     *
+     * <p>Driven through {@code ConfiguratorPanel.add} rather than by constructing controls, because
+     * that is the only path anything real uses: a descriptor goes in and {@code ConfigControls}
+     * chooses the control. A kind whose factory was lost in the port would come back as nothing here,
+     * and constructing the control directly would hide exactly that.</p>
+     */
+    @Test
+    public void everyConfigControlKindLaysOutARow() {
+        withDefaultStyles();
+        ConfiguratorPanel panel = new ConfiguratorPanel();
+        layout(panel, l -> l.width(400f).height(600f));
+        document.append(panel);
+
+        panel.add(ConfigDescriptor.header("Header"), null);
+        panel.add(ConfigDescriptor.text("text", "Text"), "value");
+        panel.add(ConfigDescriptor.number("number", "Number"), 1.0);
+        panel.add(ConfigDescriptor.bool("bool", "Bool"), true);
+        panel.add(ConfigDescriptor.select("select", "Select", List.of("a", "b")), "a");
+        panel.add(ConfigDescriptor.vector("vector", "Vector", 3), new double[] {0, 1, 0});
+        panel.add(ConfigDescriptor.color("color", "Colour"), 0xFF3C8CFF);
+        panel.add(ConfigDescriptor.mask("mask", "Mask", List.of("x", "y")), Set.of("x"));
+        panel.add(ConfigDescriptor.matrix("matrix", "Matrix", 4), null);
+        panel.add(ConfigDescriptor.asset("asset", "Asset"), "a/b.shader");
+        frame();
+        frame();
+
+        List<String> offenders = new ArrayList<>();
+        for (String id : new String[] {"text", "number", "bool", "select", "vector",
+                                       "color", "mask", "matrix", "asset"}) {
+            UINode control = panel.control(id);
+            if (control == null) {
+                offenders.add(id + ": ConfigControls built nothing for this kind");
+                continue;
+            }
+            Box box = document.boxes().boxOf(control);
+            if (box == null) {
+                offenders.add(id + ": no box");
+            } else if (!(box.width() > 0f) || !(box.height() > 0f)) {
+                offenders.add(id + ": measured " + box.width() + "x" + box.height());
+            }
+        }
+        assertTrue(String.join("\n", offenders), offenders.isEmpty());
+    }
+
+    /**
+     * A {@link ConfiguratorGroup} folds, and folding is what makes its content stop taking space.
+     *
+     * <p>The one behaviour in the kit that is a layout question rather than a value one, and the
+     * counter-assertion matters: a group that never showed its content would satisfy "collapsed is
+     * zero" perfectly.</p>
+     */
+    @Test
+    public void aConfiguratorGroupFolds() {
+        withDefaultStyles();
+        ConfiguratorPanel panel = new ConfiguratorPanel();
+        layout(panel, l -> l.width(400f).height(400f));
+        document.append(panel);
+        ConfiguratorGroup group = new ConfiguratorGroup("Advanced");
+        panel.append(group);
+        panel.addTo(group.content(), ConfigDescriptor.number("bias", "Bias"), 0.0);
+        frame();
+        frame();
+
+        Box open = document.boxes().boxOf(group.content());
+        assertTrue("an open group has to show its content", open != null && open.height() > 0f);
+
+        group.setCollapsed(true);
+        frame();
+        frame();
+
+        Box closed = document.boxes().boxOf(group.content());
+        assertTrue("a collapsed group still takes " + (closed == null ? "no box" : closed.height()),
+                closed == null || closed.height() <= 0f);
     }
 
     /**

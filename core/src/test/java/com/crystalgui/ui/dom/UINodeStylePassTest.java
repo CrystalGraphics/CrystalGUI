@@ -288,6 +288,55 @@ public class UINodeStylePassTest extends UiTestBase {
     }
 
     /**
+     * <b>A change on an ancestor re-matches its LIGHT descendants too.</b>
+     *
+     * <p>The twin of {@link #aHostsOwnChangeRematchesItsShadowParts}, and it was the half that got
+     * lost. A descendant selector can key off an ancestor's classes or state —
+     * {@code checkbox:checked .__mark__}, {@code .__group__.__collapsed__ > .__content__} — so
+     * toggling one decides which rules apply further down. Marking only the node that changed leaves
+     * every descendant holding the match it made under the PREVIOUS state, permanently.</p>
+     *
+     * <p>The old engine walked its children here and its comment named this case exactly. M6.1 added
+     * the shadow half for {@code ::part} rules and <em>replaced</em> the light walk rather than
+     * joining it, so this was latent from 5.2 until 6.2 shipped the first widget whose LAYOUT
+     * depended on such a rule: a {@code ConfiguratorGroup} folds by adding a class and letting the
+     * sheet set {@code display: none} on its content. The class went on, the group re-matched, the
+     * content kept {@code display: flex} — a foldout that would not fold, with every observable
+     * correct.</p>
+     *
+     * <p>Asserted through a GRANDCHILD, because a one-level walk passes against the shape that
+     * actually occurs: a widget's content container holds the rows, and it is the rows a theme
+     * styles.</p>
+     */
+    @Test
+    public void anAncestorsChangeRematchesItsLightDescendants() {
+        UIDocument document = document(".host.on .row { opacity: 0.25 }");
+        UINode host = new UINode().addClass("host");
+        UINode content = new UINode();
+        UINode row = new UINode().addClass("row");
+        content.append(row);
+        host.append(content);
+        document.append(host);
+        document.update(800f, 600f);
+
+        assertEquals("nothing is `on` yet, so the rule must not apply",
+                1f, opacity(row), 0.001f);
+
+        host.addClass("on");
+        document.update(800f, 600f);
+
+        assertEquals("adding a class to the ancestor has to re-match two levels down",
+                0.25f, opacity(row), 0.001f);
+
+        // AND BACK, which a fix that only ever ADDS dirt would fail: removing the class has to
+        // withdraw the rule as surely as adding it applied one.
+        host.removeClass("on");
+        document.update(800f, 600f);
+
+        assertEquals("removing it has to withdraw the rule again", 1f, opacity(row), 0.001f);
+    }
+
+    /**
      * And an <b>unexposed</b> node in a shadow tree is not marked — it cannot be reached from outside,
      * so nothing about the host can have changed what matches it.
      *
