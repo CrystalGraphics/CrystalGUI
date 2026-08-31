@@ -94,17 +94,26 @@ public final class Dismiss {
         return topWatcherIn(null);
     }
 
-    /** The topmost watcher whose own scope is {@code scope}. */
+    /**
+     * The topmost watcher whose own scope is {@code scope}, where {@code null} means the DOCUMENT.
+     *
+     * <p>The null has to be resolved rather than compared: {@link Focus#scopeOf} answers the document
+     * when nothing between the node and the root declares a scope, so comparing against a bare
+     * {@code null} matched nothing and <b>every watcher registered outside a window frame was
+     * unreachable</b> — which is most of them, and all of them in an application with no desktop.
+     * Escape then closed nothing at all, with the whole cascade present and correct.</p>
+     */
     @Nullable
     private UINode topWatcherIn(@Nullable UINode scope) {
         Focus focus = document.focus();
+        UINode wanted = scope == null ? document : scope;
         for (int i = closeWatchers.size() - 1; i >= 0; i--) {
             UINode watcher = closeWatchers.get(i);
             // A watcher's scope is the one CONTAINING it, never itself: a dialog is a scope, and
             // asking `scopeOf(dialog)` would answer the dialog -- so a dialog's own Escape would
             // never be found from the window it is in. Same shape as the modality bug 5.5 found.
             UINode enclosing = focus.scopeOf(watcher.parent() == null ? watcher : watcher.parent());
-            if (enclosing == scope) return watcher;
+            if (enclosing == wanted) return watcher;
         }
         return null;
     }
