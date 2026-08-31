@@ -1,24 +1,25 @@
 package com.crystalgui.widget.collection.tree;
 
-import com.crystalgui.ui.dom.Name;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.widget.collection.list.ListRenderer;
 import com.crystalgui.widget.collection.list.ListView;
-import com.crystalgui.ui.event.KeyboardEvent;
-import lombok.Getter;
-
-import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
+import javax.annotation.Nullable;
+import lombok.Getter;
 
 /**
  * A tree, built as a <b>flattened {@link ListView}</b>.
@@ -161,8 +162,8 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
      * restores parents before their children, which a lazily-listed tree needs — a folder cannot be
      * expanded before the listing that reveals it has arrived.</p>
      */
-    public java.util.List<T> expandedItems() {
-        return new java.util.ArrayList<>(expanded);
+    public List<T> expandedItems() {
+        return new ArrayList<>(expanded);
     }
 
     /**
@@ -176,7 +177,7 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
      * <p>Insertion order is preserved, because a lazily-listed tree needs parents before children — a
      * folder cannot be expanded before the listing that reveals it has arrived.</p>
      */
-    public TreeView<T> setExpandedItems(java.util.Collection<T> items) {
+    public TreeView<T> setExpandedItems(Collection<T> items) {
         expanded.clear();
         if (items != null) expanded.addAll(items);
         refresh();
@@ -284,7 +285,7 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
     private int visibleIndexOf(T item) {
         for (int i = 0; i < getModel().size(); i++) {
             TreeRow<T> row = getModel().get(i);
-            if (row != null && java.util.Objects.equals(row.item(), item)) return i;
+            if (row != null && Objects.equals(row.item(), item)) return i;
         }
         return -1;
     }

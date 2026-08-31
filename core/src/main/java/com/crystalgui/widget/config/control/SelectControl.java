@@ -35,7 +35,7 @@ public class SelectControl extends ValueControl<String> {
      * placeholder. Nothing decodes one: the kit is {@code localOnly}, and the registration
      * exists so a theme can address {@code selectcontrol } by tag. */
     public SelectControl() {
-        this(ConfigDescriptor.select("", "", java.util.List.of("")), "");
+        this(ConfigDescriptor.select("", "", List.of("")), "");
     }
 
     /** A discrete choice from a list. */

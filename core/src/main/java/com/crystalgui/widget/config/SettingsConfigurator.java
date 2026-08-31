@@ -1,16 +1,17 @@
 package com.crystalgui.widget.config;
 
+import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.settings.SetSettingEdit;
 import com.crystalgui.core.settings.Setting;
 import com.crystalgui.core.settings.Settings;
 import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.core.settings.SettingsRegistry;
 import com.crystalgui.core.undo.UndoStack;
-
-import com.crystalgui.core.config.ConfigDescriptor;
-import javax.annotation.Nullable;
+import com.crystalgui.ui.dom.UINode;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
+import javax.annotation.Nullable;
 
 /**
  * Builds inspector rows from {@link Setting} declarations, and writes changes back.
@@ -66,7 +67,7 @@ public final class SettingsConfigurator {
      * @return the row, or null when the setting's kind has no registered control
      */
     @Nullable
-    public static Configurator addRow(ConfiguratorPanel panel, com.crystalgui.ui.dom.UINode parent,
+    public static Configurator addRow(ConfiguratorPanel panel, UINode parent,
                                       Settings settings, SettingsLayer layer, Setting<?> setting,
                                       @Nullable UndoStack undo) {
         ConfigDescriptor descriptor = describe(setting);
@@ -159,7 +160,7 @@ public final class SettingsConfigurator {
                 if (!change.affects(setting)) return;
                 if (control.isInteracting()) return;
                 String live = settings.layer(layer).get(setting.getId());
-                if (java.util.Objects.equals(live, lastWritten[0])) return;
+                if (Objects.equals(live, lastWritten[0])) return;
                 lastWritten[0] = live;
                 control.setValueObject(currentValue(settings, setting));
             });

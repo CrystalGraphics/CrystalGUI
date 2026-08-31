@@ -1,35 +1,35 @@
 package com.crystalgui.widget.overlay;
 
-import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.contract.RatePolicy;
-import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.WidgetContracts;
-import com.crystalgui.ui.contract.WidgetContract;
-import com.crystalgui.ui.contract.StateTypes;
-import com.crystalgui.ui.contract.State;
 import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgui.core.signal.Signal;
 import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgui.core.signal.Signal;
+import com.crystalgui.serialization.StateMap;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.EventListenerGroup;
-import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.service.Drag;
-import com.crystalgui.ui.service.Animation;
+import com.crystalgui.ui.contract.Event;
+import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgui.ui.contract.State;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.WidgetContracts;
+import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.elements.desktop.WindowFrame;
 import com.crystalgui.ui.event.CloseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.ui.service.Animation;
+import com.crystalgui.ui.service.Drag;
 import com.crystalgui.ui.tree.UITreeTraversal;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.text.UIText;
+import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.style.TaffyPosition;
-import lombok.Getter;
-
 import javax.annotation.Nullable;
+import lombok.Getter;
 
 /**
  * A floating, movable panel — the web's {@code <dialog>}.
@@ -193,7 +193,7 @@ public class Dialog extends UINode {
         // Out of flow and positioned: a floating panel is placed by left/top against its containing
         // block, not laid out among its siblings.
         StyleGroup.defaultPipeline(getStyle().getLayoutGroup(),
-                l -> l.positionType(TaffyPosition.ABSOLUTE).flexDirection(dev.vfyjxf.taffy.style.FlexDirection.COLUMN));
+                l -> l.positionType(TaffyPosition.ABSOLUTE).flexDirection(FlexDirection.COLUMN));
 
         titleLabel = new UIText(title == null ? "" : title);
         titleLabel.addClass(LABEL_CLASS);

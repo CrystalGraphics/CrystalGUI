@@ -1,30 +1,33 @@
 package com.crystalgui.widget.collection.table;
 
-import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.box.Box;
 import com.crystalgui.core.collection.table.SortOrder;
-import com.crystalgui.ui.service.Drag;
-import com.crystalgui.widget.collection.table.TableColumn;
 import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.style.property.visual.Overflow;
+import com.crystalgui.style.property.visual.text.TextOverflow;
+import com.crystalgui.style.property.visual.text.WhiteSpace;
+import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.widget.text.UIText;
+import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.collection.list.ListRenderer;
 import com.crystalgui.widget.collection.list.ListView;
+import com.crystalgui.widget.collection.table.TableColumn;
+import com.crystalgui.widget.text.UIText;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.TaffyPosition;
-import lombok.Getter;
-
-import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
+import javax.annotation.Nullable;
+import lombok.Getter;
 
 /**
  * A table: a <b>sorted view</b> over a source list, with columns, a pinned header and draggable
@@ -226,7 +229,7 @@ public class TableView<T> extends ListView<T> {
 
     private static <T> boolean contains(ObservableList<T> list, T item) {
         for (int i = 0; i < list.size(); i++) {
-            if (java.util.Objects.equals(list.get(i), item)) return true;
+            if (Objects.equals(list.get(i), item)) return true;
         }
         return false;
     }
@@ -403,7 +406,7 @@ public class TableView<T> extends ListView<T> {
         divider.addClass(DIVIDER_CLASS);
         // Out of flow — see DIVIDER_HALF_WIDTH. positionDividers() supplies the left inset.
         StyleGroup.defaultPipeline(divider.getStyle().getLayoutGroup(),
-                l -> l.positionType(dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE).top(0f).bottom(0f));
+                l -> l.positionType(TaffyPosition.ABSOLUTE).top(0f).bottom(0f));
         divider.onMouseDown.attachListener((el, event) -> {
             var window = document();
             if (window == null) return;
@@ -449,11 +452,11 @@ public class TableView<T> extends ListView<T> {
                     // as garbage rather than as an overflow. Ellipsis rather than a hard cut so the
                     // truncation is legible as truncation.
                     StyleGroup.defaultPipeline(cell.getStyle().getGeneralGroup(),
-                            g -> g.overflow(com.crystalgui.style.property.visual.Overflow.HIDDEN));
+                            g -> g.overflow(Overflow.HIDDEN));
                     for (UINode inner : cell.children()) {
                         StyleGroup.defaultPipeline(inner.getStyle().getGeneralGroup(),
-                                g -> g.whiteSpace(com.crystalgui.style.property.visual.text.WhiteSpace.NOWRAP)
-                                        .textOverflow(com.crystalgui.style.property.visual.text.TextOverflow.ELLIPSIS));
+                                g -> g.whiteSpace(WhiteSpace.NOWRAP)
+                                        .textOverflow(TextOverflow.ELLIPSIS));
                     }
                     row.append(cell);
                 }

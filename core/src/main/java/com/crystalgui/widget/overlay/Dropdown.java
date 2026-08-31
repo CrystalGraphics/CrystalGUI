@@ -53,7 +53,7 @@ public class Dropdown extends Button {
      * been on the wire, and the description is content-hashed -- changing the shape changes the hash of
      * every description holding a dropdown.</p>
      */
-    public static final State<Dropdown, java.util.List<String>> OPTIONS =
+    public static final State<Dropdown, List<String>> OPTIONS =
             State.of("options", StateTypes.stringListUnder("label"),
                     Dropdown::getOptions,
                     // Cleared and refilled, and GUARDED ON NON-EMPTY exactly as the hand-written
@@ -64,7 +64,7 @@ public class Dropdown extends Button {
                         dropdown.clearOptions();
                         for (String label : labels) dropdown.addOption(label);
                     },
-                    java.util.List.of());
+                    List.of());
 
     public static final State<Dropdown, Integer> SELECTED =
             State.of("selected", StateTypes.INT, Dropdown::getSelectedIndex, Dropdown::select, -1);

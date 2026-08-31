@@ -122,13 +122,13 @@ public class SplitView extends UINode {
             (split, sink) -> split.attachListener(percentage -> sink.accept(split.getWeights())),
             new Event.Payload<float[]>() {
                 @Override public <T> void write(StateMap<T> out, float[] value) {
-                    java.util.List<Float> boxed = new java.util.ArrayList<>();
+                    List<Float> boxed = new ArrayList<>();
                     if (value != null) for (float weight : value) boxed.add(weight);
                     out.putList("weights", boxed,
                             (entry, weight) -> entry.putFloat(KEY_WEIGHT, weight));
                 }
                 @Override public <T> float[] read(StateMap<T> in) {
-                    java.util.List<Float> boxed =
+                    List<Float> boxed =
                             in.getList("weights", entry -> entry.getFloat(KEY_WEIGHT, 0f));
                     float[] out = new float[boxed.size()];
                     for (int i = 0; i < out.length; i++) out[i] = boxed.get(i);

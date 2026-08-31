@@ -32,7 +32,7 @@ import java.util.Set;
  * <p>The same reason the severity filter is a set rather than a minimum level. "Errors and hints but not
  * warnings" is not a threshold, and VS Code's three independent toggles are not a ladder.</p>
  */
-public final class ProblemsTreeSource implements com.crystalgui.core.collection.tree.TreeDataSource<ProblemNode> {
+public final class ProblemsTreeSource implements TreeDataSource<ProblemNode> {
 
     private final Markers markers;
 
