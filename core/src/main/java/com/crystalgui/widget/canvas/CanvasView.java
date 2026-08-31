@@ -410,9 +410,19 @@ public class CanvasView extends UINode  {
         return union;
     }
 
-    /** A node's own rect in world space. */
+    /**
+     * A node's own rect in world space, or an EMPTY rect at the origin when it has no box yet.
+     *
+     * <p>{@code box()} is nullable on this engine where {@code getRuntimeCache()} always answered, and
+     * a node added this frame has not been laid out — the culling pass asks about every child of the
+     * plane on every tick, including one added a moment ago, so this is reached on the ordinary path
+     * rather than an exotic one. An empty rect is the right answer rather than a convenient one: it
+     * intersects nothing, so a node nobody has measured is culled until it has a size, which is what
+     * a zero-area node should be.</p>
+     */
     public WorldRect worldBoundsOf(UINode node) {
         Box cache = node.box();
+        if (cache == null) return new WorldRect(0f, 0f, 0f, 0f);
         // getX() accumulates through parents but NOT through the plane's transform — that is applied
         // afterwards, in localToWorld — so subtracting the plane's origin lands in world units with
         // no division by zoom.
@@ -420,9 +430,15 @@ public class CanvasView extends UINode  {
                 cache.width(), cache.height());
     }
 
-    /** The slice of world space the viewport currently shows. */
+    /**
+     * The slice of world space the viewport currently shows, or an empty one before first layout.
+     *
+     * <p>Empty rather than infinite: an unmeasured viewport shows NOTHING, and answering "everything"
+     * would un-cull the whole plane for one frame on every attach.</p>
+     */
     public WorldRect visibleWorldRect() {
         Box cache = box();
+        if (cache == null) return new WorldRect(0f, 0f, 0f, 0f);
         float x = (cache.x() - contentOriginX() - panX) / zoom;
         float y = (cache.y() - contentOriginY() - panY) / zoom;
         return new WorldRect(x, y, cache.width() / zoom, cache.height() / zoom);
