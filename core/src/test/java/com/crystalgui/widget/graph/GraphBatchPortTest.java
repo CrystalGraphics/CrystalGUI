@@ -397,4 +397,110 @@ public class GraphBatchPortTest extends UiDocumentTestBase {
                 -60f, low.visibleWorldRect().x(), 0.5f);
         assertEquals(30f, low.visibleWorldRect().y(), 0.5f);
     }
+
+    /**
+     * <b>The live wire's pointer end follows the pointer.</b>
+     *
+     * <p>Reported as a wire being dragged from a port to another port sitting a whole node's width
+     * away from the cursor. The wire's START was correct — it had just been fixed — and its END was
+     * the raw coordinate a {@code Drag} callback reports, which is relative to the drag's SOURCE and,
+     * since M6.1, to that source's own origin. The old engine's {@code screenToLocal} did not subtract
+     * the element's own position, so a listener on a port received what was near enough an absolute
+     * layout coordinate to use as a plane one — which is what both this and the create-node menu did,
+     * and what {@code NodeWireLayer.updatePending}'s javadoc still claimed.</p>
+     *
+     * <p>Asserted against the port the pointer is actually OVER, which is what the user sees and what
+     * a drop would connect to. Asserting the raw number would test the arithmetic against itself.</p>
+     */
+    @Test
+    public void theLiveWireEndsUnderThePointer() {
+        withDefaultStyles();
+        GraphView view = graph();
+        GraphNode left = new GraphNode("Left");
+        GraphNode right = new GraphNode("Right");
+        view.addNode(left, 20f, 20f);
+        view.addNode(right, 260f, 120f);
+        NodePort out = left.addOutput(FLOAT, "Out");
+        NodePort target = right.addInput(FLOAT, "In");
+        frame();
+        frame();
+
+        Box from = boxOf(out);
+        Box onto = boxOf(target);
+        assertNotNull("the fixture has no ports to drag between", from);
+        assertNotNull(onto);
+
+        press(from.worldX() + from.width() / 2f, from.worldY() + from.height() / 2f);
+        frame();
+        // ONTO THE OTHER PORT, which is where the pointer visibly is.
+        float px = onto.worldX() + onto.width() / 2f;
+        float py = onto.worldY() + onto.height() / 2f;
+        move(px, py);
+        frame();
+
+        Vector2f live = view.wireLayer().pendingEnd();
+        // The POINTER's own position in the plane, which is what the wire has to reach -- not the
+        // port's centre, since the press landed at the port's centre and the pointer is there.
+        Vector2f expected = Box.originIn(onto, view.content().box())
+                .add(onto.width() / 2f, onto.height() / 2f);
+        assertEquals("the live wire ends " + live + " while the pointer is at " + expected,
+                expected.x(), live.x(), 6f);
+        assertEquals(expected.y(), live.y(), 6f);
+        release(px, py);
+    }
+
+    /**
+     * <b>A marquee drawn over a node selects it, wherever the view sits in the page.</b>
+     *
+     * <p>The third consumer of the same mistake, and the one whose symptom is a selection rather than
+     * a mis-drawn line: the band's {@code left}/{@code top} subtracted this view's own offset inside
+     * ITS parent from a coordinate that is already relative to this view. So a graph half way down a
+     * page drew its band hundreds of pixels from the pointer and selected whatever happened to be
+     * there.</p>
+     *
+     * <p>Driven with a SPACER above the view, because a graph at the top of an empty document has a
+     * zero offset and passes against the bug — the same shape the cull-rect test needs.</p>
+     */
+    @Test
+    public void aMarqueeSelectsWhatItIsDrawnOver() {
+        withDefaultStyles();
+        UINode spacer = new UINode();
+        layout(spacer, l -> l.width(600f).height(220f));
+        document.append(spacer);
+        GraphView view = new GraphView();
+        layout(view, l -> l.width(600f).height(400f));
+        document.append(view);
+        frame();
+        frame();
+
+        GraphNode node = new GraphNode("Target");
+        view.addNode(node, 60f, 60f);
+        frame();
+        frame();
+
+        Box target = boxOf(node);
+        assertNotNull("the node has no box", target);
+        assertTrue("the fixture did not push the view down the page", boxOf(view).worldY() > 200f);
+
+        // A BAND FROM ABOVE-LEFT OF THE NODE TO BELOW-RIGHT OF IT, in surface pixels, over empty plane.
+        press(target.worldX() - 24f, target.worldY() - 24f);
+        frame();
+        move(target.worldX() + target.width() + 24f, target.worldY() + target.height() + 24f);
+        frame();
+
+        assertTrue("a marquee drawn over the node did not select it",
+                view.getSelection().nodes().contains(node));
+
+        // AND THE BAND IS DRAWN WHERE THE POINTER IS. Selection alone cannot see this: it is computed
+        // from the raw drag coordinates, while the band's left/top are written separately -- so the
+        // band can sit hundreds of pixels away while the right nodes light up, which is precisely the
+        // failure and precisely what a selection assertion passes against.
+        Box band = boxOf(view.marqueeElement());
+        assertNotNull("the marquee band has no box", band);
+        assertEquals("the band's left edge is not at the pointer's press",
+                target.worldX() - 24f, band.worldX(), 4f);
+        assertEquals("the band's top edge is not at the pointer's press",
+                target.worldY() - 24f, band.worldY(), 4f);
+        release(target.worldX() + target.width() + 24f, target.worldY() + target.height() + 24f);
+    }
 }

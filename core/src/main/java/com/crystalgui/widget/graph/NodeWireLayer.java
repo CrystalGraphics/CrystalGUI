@@ -98,12 +98,28 @@ public class NodeWireLayer extends UINode {
         this.pendingLive = false;
     }
 
-    /** @param planeX pointer position in the plane's own space — what a {@code DragListener} on a port
-     *                reports, and the space this layer paints in. */
+    /**
+     * @param planeX pointer position in the plane's own space, which is what this layer paints in.
+     *               <b>NOT what a drag callback reports</b> — those are relative to the drag's SOURCE
+     *               and, since M6.1, to that source's own origin. {@code NodePort.pointerInPlane} is
+     *               the conversion; this used to say a listener reported plane coordinates directly,
+     *               which was true of the old engine and drew the live wire a node's width away here.
+     */
     void updatePending(float planeX, float planeY) {
         this.pendingX = planeX;
         this.pendingY = planeY;
         this.pendingLive = pendingFrom != null;
+    }
+
+    /**
+     * Where the wire being dragged currently ends, in the plane's own space.
+     *
+     * <p>The only observable this has: a live wire is PAINTED rather than laid out, so nothing about
+     * it is reachable through a box or a style. Without it the pointer end can only be checked by
+     * eye, which is how it shipped drawn a node's width from the cursor.</p>
+     */
+    public Vector2f pendingEnd() {
+        return new Vector2f(pendingX, pendingY);
     }
 
     void endPending() {
