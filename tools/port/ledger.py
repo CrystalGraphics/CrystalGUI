@@ -46,9 +46,16 @@ BY_DIR = [
     ('ui/elements/list',                'widget/collection/list'),
     ('ui/elements/tree',                'widget/collection/tree'),
     ('ui/elements/table',               'widget/collection/table'),
-    ('ui/elements/config/control',      'widget/form/field'),
-    ('ui/elements/config',              'widget/form'),
-    ('ui/elements/inspector',           'widget/form/inspector'),
+    # THE CONFIG KIT IS ITS OWN THING, not a corner of `form` -- corrected during 6.2 and this table
+    # was not, which is what 6.4 tripped on: the codemod builds a batch's ported imports from these
+    # destinations, so every 6.4 copy that named a config control imported `widget.form.field`, a
+    # package that has never existed. It compiles nowhere, so it fails loudly -- but it fails in the
+    # BATCH, four files at a time, reading as a port defect rather than as a stale table.
+    # `form` holds controls a caller places by hand (ColorSelector, SearchField); `config` is the
+    # descriptor-driven generator over them.
+    ('ui/elements/config/control',      'widget/config/control'),
+    ('ui/elements/config',              'widget/config'),
+    ('ui/elements/inspector',           'widget/config/inspector'),
     ('ui/elements/desktop',             'desktop'),
     ('ui/elements/dock',                'workbench/dock'),
     ('ui/elements/workbench/decoration','workbench/decoration'),
@@ -72,12 +79,16 @@ BY_NAME = {
     'PortType': 'graph/port',
     'BasicPortType': 'graph/port',
     'PortTypeRegistry': 'graph/port',
-    # WHAT IS LEFT IN `graph.shader` ONCE THE WIDGETS LEAVE, and it is exactly the shader MODEL: a
-    # compile bridge, the literal form of a property's default, and a Settings declaration. All three
-    # are named by both engines, so they stay in a package both may name (D26, D27).
-    'ShaderGraphBridge': 'graph/shader',
-    'ShaderPropertyForm': 'graph/shader',
-    'ShaderGraphSettings': 'graph/shader',
+    # THE APP'S OWN VOCABULARY -- model-shaped, and still the application's rather than the graph
+    # model's: a bridge onto CrystalGraphics' shader compiler, the literal form of a property's
+    # default, a Settings declaration, and what a property NODE is. `graph.shader` empties completely
+    # at 6.9, which is the point: `com.crystalgui.graph` goes back to being only the graph model.
+    # ShaderPropertyNodes is here rather than in .blackboard because it and the bridge are mutually
+    # recursive -- the bridge COMPILES a property node, it does not merely register one.
+    'ShaderGraphBridge': 'app/shadergraph',
+    'ShaderPropertyForm': 'app/shadergraph',
+    'ShaderGraphSettings': 'app/shadergraph',
+    'ShaderPropertyNodes': 'app/shadergraph',
     # THE APPLICATION. `graph.shader` held an editor, a properties panel, three previews, two field
     # widgets and five inspector sections in one flat directory, INSIDE the model's package -- while
     # importing `ui.elements.dock` and `ui.elements.workbench`, which a model package cannot.
@@ -85,7 +96,6 @@ BY_NAME = {
     'PropertyPill': 'app/shadergraph/blackboard',
     'CategoryHeader': 'app/shadergraph/blackboard',
     'InlineRename': 'app/shadergraph/blackboard',
-    'ShaderPropertyNodes': 'app/shadergraph/blackboard',
     'MainPreviewPanel': 'app/shadergraph/preview',
     'ShaderNodePreview': 'app/shadergraph/preview',
     'ShaderGraphPreviews': 'app/shadergraph/preview',
@@ -100,8 +110,12 @@ BY_NAME = {
     # ui/elements root -- by kind, which is the whole reason the root is being split.
     'Button': 'widget/control', 'Checkbox': 'widget/control', 'CheckboxGroup': 'widget/control',
     'Switch': 'widget/control', 'Slider': 'widget/control', 'ProgressBar': 'widget/control',
-    'TextField': 'widget/control', 'SearchField': 'widget/control', 'Dropdown': 'widget/control',
-    'ColorSelector': 'widget/control', 'SymbolIcon': 'widget/control',
+    'TextField': 'widget/control', 'Dropdown': 'widget/control',
+    'SymbolIcon': 'widget/control',
+    # A WIDGET'S TIER IS DECIDED BY WHAT IT COMPOSES (M6.1): SearchField holds a Tooltip and
+    # ColorSelector a Dropdown, both of which are `overlay` -- so neither can be in `control`,
+    # which may name only control/text/scroll. LayeringTest is what said so.
+    'SearchField': 'widget/form', 'ColorSelector': 'widget/form',
     'UIText': 'widget/text', 'MarkupView': 'widget/text',
     'Scroller': 'widget/scroll', 'ScrollerView': 'widget/scroll',
     'SplitView': 'widget/layout', 'TabView': 'widget/layout', 'Tab': 'widget/layout',
@@ -289,6 +303,23 @@ def destination(rel, stem):
 # `ShaderGraphContribution` IS the registration with the dock and the workbench. Recorded here
 # rather than by moving their destination, because where a class BELONGS and when it can GO are
 # different questions and conflating them is how a deferral becomes a lost file.
+# A class the heuristic calls neutral that STILL has to be copied, because the old engine's own copy
+# of the batch names it and stays until 6.9 (plan_m6.md 6.4 D27). `theOldEngineNamesNothingOfTheNew`
+# scans everything that is not new-engine, which includes `ui/elements/graph`, `ui/elements/canvas`
+# and `graph/shader` -- so a move into `widget.*` or `app.*` fails the boundary scan on the day it
+# lands, however neutral the class itself is. The exceptions are the two heading for `graph.port`,
+# which is a package BOTH engines may name.
+HOW_OVERRIDE = {
+    'WorldRect': 'copy',
+    'GraphConnection': 'copy',
+    'GraphSelection': 'copy',
+    'NodeWidgetFactory': 'copy',
+    'ShaderGraphBridge': 'copy',
+    'ShaderGraphSettings': 'copy',
+    'ShaderPropertyForm': 'copy',
+}
+
+
 BATCH_OVERRIDE = {
     'ShaderGraphEditor': '6.7',
     'ShaderGraphContribution': '6.7',
@@ -328,8 +359,8 @@ def classify_classes():
                 touches = bool(re.search(r'\bUIElement\b|\bUIWindow\b|getRuntimeCache|CgUiPaintContext', text))
                 dest = forced or destination(rel, stem)
                 batch = BATCH_OVERRIDE.get(stem) or batch_of(dest)
-                rows.append((rel + '/' + stem, lines, dest or rel, batch,
-                             'copy' if touches else 'move', 'pending'))
+                how = HOW_OVERRIDE.get(stem) or ('copy' if touches else 'move')
+                rows.append((rel + '/' + stem, lines, dest or rel, batch, how, 'pending'))
     return rows
 
 

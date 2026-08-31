@@ -78,7 +78,7 @@ public class BlackboardPanelTest extends UiTestBase {
         mount();
         GraphProperty colour = board.addProperty("Color");
         assertEquals("without a recorded kind it reads as the first entry using that type",
-                "Vector 4", BlackboardPanel.displayTypeOf(colour.withOption(BlackboardPanel.KIND_OPTION, null)));
+                "Vector 4", BlackboardPanel.displayTypeOf(colour.withOption(ShaderPropertyForm.KIND_OPTION, null)));
 
         assertEquals("but it was added as Color, so that is what it says",
                 "Color", BlackboardPanel.displayTypeOf(colour));
@@ -93,7 +93,7 @@ public class BlackboardPanelTest extends UiTestBase {
         mount();
         GraphProperty added = board.addProperty("Color");
         assertEquals("vec4", added.typeId());
-        assertEquals("Color", added.option(BlackboardPanel.KIND_OPTION));
+        assertEquals("Color", added.option(ShaderPropertyForm.KIND_OPTION));
     }
 
     // ── Adding ──────────────────────────────────────────────────────────────

@@ -1,8 +1,5 @@
-package com.crystalgui.ui.elements.graph;
+package com.crystalgui.graph.port;
 
-import com.crystalgui.ui.UIElement;
-
-import javax.annotation.Nullable;
 
 /**
  * What a port carries, and therefore what may be wired to it.
@@ -71,19 +68,18 @@ public interface PortType {
         return other != null && id().equals(other.id());
     }
 
-    /**
-     * The control an <b>unconnected input</b> shows inline — Unity's {@code X 0.9} field — or
-     * {@code null} for none.
-     *
-     * <p>It is the type's job because only the type knows what editing one of these means: a float
-     * wants a number field, a boolean a checkbox, an enum-like binding a dropdown. {@code NodePort}
-     * only decides <em>when</em> to show it, which is a question about connection state and belongs to
-     * the widget.</p>
-     */
-    @Nullable
-    default UIElement createInlineEditor() {
-        return null;
-    }
+    // THE INLINE EDITOR IS NOT HERE, and the empty space is deliberate. `createInlineEditor()` lived
+    // here until M6.4 on the argument that only the type knows what editing one of its values means
+    // -- a float wants a number field, a boolean a checkbox. The argument is good and the mechanism
+    // was dead: nothing in the repository ever overrode it, so in production it answered null every
+    // time, while `NodePort.setDefaultEditor` carried the real control that `NodeFieldBinder.attach`
+    // builds from the document's own NodeField. Worse than unused -- NodePort's javadoc for
+    // `onDefaultEditorChanged` records the bug the throwaway caused, a vector editor frozen at its
+    // first pre-layout 0x0 position because GraphView snapshotted it before the real one arrived.
+    //
+    // Its absence is what makes this interface engine-free, which is why it is worth a comment: the
+    // one method returning a UIElement is the whole reason a port TYPE could not live beside the
+    // graph model it describes.
 
     /** Prefix for {@link #cssClass()}. */
     String CSS_CLASS_PREFIX = "type-";

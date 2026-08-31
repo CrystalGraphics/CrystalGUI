@@ -97,10 +97,10 @@ public class ShaderGraphBridgeTest extends UiTestBase {
     public void theWidgetSideCompatibilityAgreesWithTheDocumentSide() {
         library(); // registering the library is what registers the port types
 
-        var vec4 = com.crystalgui.ui.elements.graph.PortTypeRegistry.get("vec4");
-        var dynamic = com.crystalgui.ui.elements.graph.PortTypeRegistry.get(
+        var vec4 = com.crystalgui.graph.port.PortTypeRegistry.get("vec4");
+        var dynamic = com.crystalgui.graph.port.PortTypeRegistry.get(
                 ShaderGraphBridge.DYNAMIC_TYPE);
-        var floatType = com.crystalgui.ui.elements.graph.PortTypeRegistry.get("float");
+        var floatType = com.crystalgui.graph.port.PortTypeRegistry.get("float");
         assertNotNull("the bridge must register its port types", vec4);
         assertNotNull(dynamic);
 

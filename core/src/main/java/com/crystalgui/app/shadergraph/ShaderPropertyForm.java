@@ -1,4 +1,4 @@
-package com.crystalgui.graph.shader;
+package com.crystalgui.app.shadergraph;
 
 import com.crystalgraphics.shadergraph.CgShaderType;
 import com.crystalgui.graph.GraphProperty;

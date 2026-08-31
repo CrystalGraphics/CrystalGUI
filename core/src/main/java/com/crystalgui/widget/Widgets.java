@@ -2,9 +2,13 @@ package com.crystalgui.widget;
 
 import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.core.property.ObservableList;
+import com.crystalgui.graph.NodeTypeRegistry;
+import com.crystalgui.graph.PortDirection;
+import com.crystalgui.graph.port.BasicPortType;
 import com.crystalgui.ui.dom.NodeContract;
 import com.crystalgui.ui.dom.NodeKinds;
 import com.crystalgui.ui.dom.UINodeRegistry;
+import com.crystalgui.widget.canvas.CanvasView;
 import com.crystalgui.widget.collection.list.ListView;
 import com.crystalgui.widget.collection.table.TableView;
 import com.crystalgui.widget.collection.tree.TreeView;
@@ -36,6 +40,11 @@ import com.crystalgui.widget.dnd.DragGhost;
 import com.crystalgui.widget.dnd.InsertionMarker;
 import com.crystalgui.widget.form.ColorSelector;
 import com.crystalgui.widget.form.SearchField;
+import com.crystalgui.widget.graph.GraphNode;
+import com.crystalgui.widget.graph.GraphView;
+import com.crystalgui.widget.graph.NodePort;
+import com.crystalgui.widget.graph.NodeWireLayer;
+import com.crystalgui.widget.graph.node.NodeCreationMenu;
 import com.crystalgui.widget.layout.PageStack;
 import com.crystalgui.widget.layout.SplitView;
 import com.crystalgui.widget.layout.Tab;
@@ -47,9 +56,9 @@ import com.crystalgui.widget.overlay.MenuItem;
 import com.crystalgui.widget.overlay.Popover;
 import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.widget.scroll.Scroller;
+import com.crystalgui.widget.scroll.ScrollerView;
 import com.crystalgui.widget.text.MarkupView;
 import com.crystalgui.widget.text.UIText;
-import com.crystalgui.widget.scroll.ScrollerView;
 
 /**
  * <b>The widget library's kinds</b> — every {@code widget.*} node a description can decode into.
@@ -136,6 +145,56 @@ public final class Widgets implements NodeKinds {
         // The inspector is INERT for the reason its whole kit is: a descriptor is what travels, not
         // the panel built from one. The kind is for the cascade.
         UINodeRegistry.register(Inspector.NAME, Inspector::new, NodeContract.INERT);
+
+        // ── 6.4: the canvas and the graph ───────────────────────────────────────────
+        //
+        // ALL INERT, and for the graph the reason is stronger than "no wire form yet": a graph's
+        // state IS its GraphDocument, which has its own codec and its own edits, so a description
+        // that carried the widgets would be a second, worse copy of the model. What the kinds buy is
+        // the cascade -- graph.css names `graphview`, `graphnode`, `nodeport`, `nodecreationmenu`
+        // and `canvasview`, and without a kind each would report `crystalgui:element` and match none
+        // of them.
+        //
+        // NodeWireLayer has no entry: its only constructor takes the view it draws for, so there is
+        // nothing a registry could build, and no sheet names it -- the wires are styled through the
+        // view. A kind for the cascade would be a kind for nobody.
+        UINodeRegistry.register(CanvasView.NAME, CanvasView::new, NodeContract.INERT);
+        UINodeRegistry.register(GraphView.NAME, GraphView::new, NodeContract.INERT);
+        UINodeRegistry.register(GraphNode.NAME, () -> new GraphNode(""), NodeContract.INERT);
+        UINodeRegistry.register(NodePort.NAME,
+                () -> new NodePort(PortDirection.INPUT, new BasicPortType("any"), ""),
+                NodeContract.INERT);
+        UINodeRegistry.register(NodeCreationMenu.NAME,
+                () -> new NodeCreationMenu(new NodeTypeRegistry()), NodeContract.INERT);
+        // No sheet names `nodewirelayer` -- the wires take their look from the view that owns them --
+        // so this kind is for the RULE rather than the cascade: a concrete node declaring no NAME
+        // inherits one and is indistinguishable from a widget that forgot to declare its own.
+        UINodeRegistry.register(NodeWireLayer.NAME, NodeWireLayer::new, NodeContract.INERT);
+
+        // ── 6.4: the canvas and the graph ───────────────────────────────────────────
+        //
+        // ALL INERT, and for the graph the reason is stronger than "no wire form yet": a graph's
+        // state IS its GraphDocument, which has its own codec and its own edits, so a description
+        // that carried the widgets would be a second, worse copy of the model. What the kinds buy is
+        // the cascade -- graph.css names `graphview`, `graphnode`, `nodeport`, `nodecreationmenu`
+        // and `canvasview`, and without a kind each would report `crystalgui:element` and match none
+        // of them.
+        //
+        // NodeWireLayer has no entry: its only constructor takes the view it draws for, so there is
+        // nothing a registry could build, and no sheet names it -- the wires are styled through the
+        // view. A kind for the cascade would be a kind for nobody.
+        UINodeRegistry.register(CanvasView.NAME, CanvasView::new, NodeContract.INERT);
+        UINodeRegistry.register(GraphView.NAME, GraphView::new, NodeContract.INERT);
+        UINodeRegistry.register(GraphNode.NAME, () -> new GraphNode(""), NodeContract.INERT);
+        UINodeRegistry.register(NodePort.NAME,
+                () -> new NodePort(PortDirection.INPUT, new BasicPortType("any"), ""),
+                NodeContract.INERT);
+        UINodeRegistry.register(NodeCreationMenu.NAME,
+                () -> new NodeCreationMenu(new NodeTypeRegistry()), NodeContract.INERT);
+        // No sheet names `nodewirelayer` -- the wires take their look from the view that owns them --
+        // so this kind is for the RULE rather than the cascade: a concrete node declaring no NAME
+        // inherits one and is indistinguishable from a widget that forgot to declare its own.
+        UINodeRegistry.register(NodeWireLayer.NAME, NodeWireLayer::new, NodeContract.INERT);
 
         // ── 6.2: the config kit ─────────────────────────────────────────────────────
         //

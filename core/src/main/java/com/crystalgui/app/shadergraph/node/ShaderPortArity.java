@@ -1,14 +1,15 @@
-package com.crystalgui.graph.shader;
+package com.crystalgui.app.shadergraph.node;
 
+import com.crystalgui.app.shadergraph.ShaderGraphBridge;
 import com.crystalgui.graph.EdgeData;
 import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.graph.NodeData;
 import com.crystalgui.graph.NodeField;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.graph.NodeFieldBinder;
-import com.crystalgui.ui.elements.graph.GraphNode;
-import com.crystalgui.ui.elements.graph.GraphView;
-import com.crystalgui.ui.elements.graph.NodePort;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.graph.node.NodeFieldBinder;
+import com.crystalgui.widget.graph.GraphNode;
+import com.crystalgui.widget.graph.GraphView;
+import com.crystalgui.widget.graph.NodePort;
 import com.crystalgui.graph.port.PortType;
 
 import javax.annotation.Nullable;
@@ -188,7 +189,7 @@ public final class ShaderPortArity {
 
         // The literal is passed as the PRESET rather than left to the document: a widget infers its
         // shape from the value it is handed, so a stored scalar would build two boxes for a vec3.
-        UIElement rebuilt = NodeFieldBinder.buildControl(field, view.getDocument(), nodeId,
+        UINode rebuilt = NodeFieldBinder.buildControl(field, view.getDocument(), nodeId,
                 view.undoStack(), onChange, field.defaultValue());
         if (rebuilt != null) port.setDefaultEditor(rebuilt);
     }

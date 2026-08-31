@@ -202,7 +202,7 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
 
         // The library IS the shader node set -- the create menu, its search and the widget factory all
         // come from one bridge call, so there is no shader-specific UI code anywhere below this line.
-        library = ShaderGraphBridge.asNodeLibrary(shaderNodes);
+        library = ShaderNodeLibrary.of(shaderNodes);
         graph.setNodeLibrary(library, propertyAwareFactory(NodeWidgetFactory.of(library).build()),
                 ShaderGraphBridge.GLSL_PROMOTION);
 

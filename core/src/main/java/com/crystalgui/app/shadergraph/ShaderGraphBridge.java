@@ -1,5 +1,6 @@
-package com.crystalgui.graph.shader;
+package com.crystalgui.app.shadergraph;
 
+import com.crystalgui.app.shadergraph.node.ShaderPropertyNodes;
 import com.crystalgraphics.shadergraph.*;
 import com.crystalgui.graph.EdgeData;
 import com.crystalgui.graph.GraphDocument;

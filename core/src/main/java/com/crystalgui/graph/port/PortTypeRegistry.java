@@ -1,4 +1,4 @@
-package com.crystalgui.ui.elements.graph;
+package com.crystalgui.graph.port;
 
 import javax.annotation.Nullable;
 import java.util.Map;

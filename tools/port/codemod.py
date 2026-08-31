@@ -130,6 +130,13 @@ RULES = [
     # The FQN spelling too -- two widgets write `implements com.crystalgui.ui.UIFrameTicker` inline
     # rather than importing it, and the bare rule below turns that into a package that does not exist.
     (r'\bcom\.crystalgui\.ui\.UIFrameTicker\b', 'com.crystalgui.ui.service.Animation.Hook', 'ticker type'),
+    # ORDER MATTERS, and the longer form has to go first. `implements UIFrameTicker, Disposable.Gl`
+    # under the bare rule leaves `, Disposable.Gl` dangling after `extends UINode`, which is a parse
+    # error -- the GOOD outcome, since it stops the build. The bad one is
+    # `implements A, UIFrameTicker, B` becoming `implements A, B` with a stray comma somewhere in the
+    # middle. Three rules: ticker-and-more keeps the clause and drops the ticker, ticker-alone drops
+    # the whole clause, and a trailing ticker drops its own comma.
+    (r'\bimplements UIFrameTicker\s*,\s*', 'implements ', 'ticker interface'),
     (r'\bimplements UIFrameTicker\b', '', 'ticker interface'),
     (r',\s*UIFrameTicker\b', '', 'ticker interface'),
     (r'\bUIFrameTicker\b', 'Animation.Hook', 'ticker type'),

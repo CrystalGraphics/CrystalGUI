@@ -44,7 +44,11 @@ public class EngineBoundaryTest {
             "com/crystalgui/widget/",
             "com/crystalgui/chrome/",
             "com/crystalgui/desktop/",
-            "com/crystalgui/workbench/");
+            "com/crystalgui/workbench/",
+            // THE APPLICATIONS (6.4). Without this the shader graph is classified as OLD engine, and
+            // every reference it makes into `widget` reads as the old engine reaching into the new
+            // one -- which is the opposite of what it is.
+            "com/crystalgui/app/");
 
     /**
      * The classes in {@code ui/dom} that are the SEAM rather than the node tree — everything else in

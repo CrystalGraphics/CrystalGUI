@@ -92,7 +92,7 @@ public class NodeFieldTest extends UiTestBase {
     public void aPortIsFoundByIdNotByItsDrawnLabel() {
         var port = new com.crystalgui.ui.elements.graph.NodePort(
                 com.crystalgui.graph.PortDirection.INPUT,
-                new com.crystalgui.ui.elements.graph.BasicPortType("vec4", 4), "Value");
+                new com.crystalgui.graph.port.BasicPortType("vec4", 4), "Value");
 
         assertEquals("the id is what a document and a field refer to", "Value", port.getPortId());
         assertEquals("the label is what the user sees", "Value(4)", port.getName());
