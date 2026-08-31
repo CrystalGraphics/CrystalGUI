@@ -1244,7 +1244,7 @@ see it until a widget's LAYOUT depended on such a rule — a `ConfiguratorGroup`
 class and letting the sheet set `display: none`, and it would not fold, with every observable
 correct.
 
-### 6.3 — Collections, the shell's chrome, and the seam two batches deferred to it · **XL** · after: 6.2
+### 6.3 — Collections, the shell's chrome, and the seam two batches deferred to it · **XL** · after: 6.2 · **SHIPPED 2026-08-31**
 
 *Re-sized from **L**. It absorbed six classes 6.2 could not port — `ContextMenu`, `MenuBuilder` and
 the inspector's four — and the reason they came here is also the batch's first piece of work: the
@@ -1267,10 +1267,11 @@ measures, half again the size of 6.2.
 | The status bar | `StatusBarView` 427 · `ProgressStatusItem` 215 · `ProcessesPopover` 214 · `Breadcrumbs` 166 | 4 | 1,022 | `chrome.status` |
 | **Deferred from 6.2** | `Inspector` 447 · `MenuBuilder` 231 · `ContextMenu` 309 · `InspectorForm` 129 · `InspectorSection` 92 · `InspectorRegistry` 75 | 6 | 1,283 | `widget.config.inspector`, `widget.overlay` |
 
-> **The ledger says `chrome` flat for all twenty-one chrome files.** The six sub-packages above are
-> this section's proposal and have to be written into it before the batch starts, the way
-> `widget.config` was — `LayeringTest`'s ungoverned-package check walks to depth 2, so each needs its
-> own entry rather than inheriting one.
+> **The ledger said `chrome` flat for all twenty-one chrome files**, and the batch landed that way
+> before being split. The six sub-packages are in the ledger now. What the note got wrong is the
+> mechanism: they need NO entry in `LayeringTest`'s tier list, because `chrome/` is a prefix and one
+> layer — adding them there made each a layer above the layer root and the layer's own registrar a
+> layer reaching upward. See *what shipped* below.
 
 **Budget, measured** (`python tools/port/codemod.py --batch 6.3 --dry-run`): **27 copied, 17 moved,
 601 mechanical rewrites, 58 hand sites.**
@@ -1405,6 +1406,58 @@ declaration is PERMANENT"*, *"a menu MNEMONIC must not fire while a text field h
 6. **Eighteen IMPORTANT writes, the most of any batch**, and unlike 6.2's they will not all be INLINE:
    a virtualised list computes geometry and hands it back, which is the `Measurable`/box-call half of
    §4.5 that 6.2 never had to exercise.
+
+#### 6.3 — what shipped, and the four things it found
+
+**Shipped.** All 44 classes, and the seam first: `CommandTarget` in `core.data` plus `KeymapScope` in
+`ui.input.keymap`, which both engines implement — `UIElement` answers `getParent()` and the window's
+providers, `UINode` answers `parent()` and nothing. That unblocked the six classes 6.2 could not
+port, and `UIDocument` gained a `CommandRegistry` of its own to unblock the seventh
+(`CommandPalette`). Then the collections into `widget.collection.{list,tree,table}`, the chrome into
+six sub-packages, and the sixteen neutral models into `core.collection.{list,tree,table,pick}` and
+`text.diagnostic`.
+
+**Two interfaces, not one, and the reason is the package graph.** `core.data` may not name
+`ui.input.keymap`, so the walk (`commandParent`, `scopeProviders`) is `CommandTarget` and everything
+about keys (`keymapOrNull`, `consumesTextInput`) is `KeymapScope extends CommandTarget`. Collapsing
+them either drags the keymap into `core.data` or leaves the command layer unable to walk.
+
+**The chrome landed flat, and splitting it hit `LayeringTest` from an angle the test was right
+about.** Twelve classes in one `chrome/` package is what the ledger's destination said, and a flat
+package puts a palette, a menu bar, a problems tree, a notification stack, a preferences navigator
+and a status bar side by side on no principle but the batch they arrived in. Adding the six
+sub-packages to `LAYERS` — the ORDERED tier list — then made each one a layer *above* `chrome/`, and
+`ChromeKinds`, the layer's own `NodeKinds` registrar, must name every widget in the layer by
+construction: it came back as a layer reaching upward, naming ten things at once. `chrome/` is one
+layer and a prefix already covers everything under it. **Ordering WITHIN a layer is a separate
+question with its own list**, and `widget` remains the only layer that has ever needed one.
+
+**`scrollExtent` got its first consumer, three milestones after it was written.** It shipped at 6.0
+with none, 6.2 mistook it for a content-size accessor and got back the `-1` that means "ask the
+boxes", and `ListView` is what its javadoc always named: a list realises a dozen rows of ten
+thousand, so the boxes under it describe the WINDOW and the children genuinely cannot be asked. It
+answers `model.size() * rowHeight` vertically and `-1` horizontally unless the list scrolls sideways
+— the contract's own way of saying the children already know.
+
+**Fifty-two inline fully-qualified names came across in the port**, across twenty files, and none was
+a collision: they are simply what a codemod leaves behind when the class it rewrites was reached by
+its full name rather than through an import. Worth a rule for 6.4 onward — the codemod should emit an
+import rather than a qualified name, since the qualified form compiles perfectly and only shows up by
+being read.
+
+**Ten covering tests, and both of the two the invariant rows say cannot be written any other way.**
+`aListIsTheTabStopOfItsOwnComposite` and `aMenuBarRemembersTheFocusOwnerThePressDestroys` are each
+driven at a POINT, and each was checked against a deliberately broken build before being believed —
+`FocusPolicy.NONE` on the list, the removed fallback on the bar. Both failed there. The other eight
+are what is new about running on this engine rather than a port of the old suite, which still runs
+against the old widgets and moves wholesale at 6.9.
+
+**All sixteen newly-ported owners are light structure.** Not one hosts a shadow root, because every
+one is a container a shipped rule reaches *into* — which is D1's answer read off the sheets rather
+than guessed, and it settles the eight widgets `tools/port/classify.py` had no tag-keyed answer for
+(`menubarview`, `commandpalette`, `notificationcard`, `preferences`, `processespopover`,
+`progressstatusitem`, `treesearch`, `inspector`) without the class-keyed pass the section asked for.
+Seventeen state adjectives stay kind C, each verified against the class that flips it.
 
 ### 6.4 — Canvas, graph, the shader graph · **M** · after: 6.3
 
