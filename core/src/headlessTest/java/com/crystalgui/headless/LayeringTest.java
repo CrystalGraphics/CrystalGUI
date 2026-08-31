@@ -63,6 +63,15 @@ public class LayeringTest {
             "com/crystalgui/widget/dnd/",
             "com/crystalgui/widget/collection/",
             "com/crystalgui/widget/form/",
+            // THE CONFIG KIT IS ITS OWN THING, not a corner of `form`. `form` holds controls a caller
+            // places by hand -- ColorSelector, SearchField; `config` is the descriptor-driven form
+            // GENERATOR over them, and `config/control` its thirteen field editors. Above tier 5, so
+            // the three impose no ordering on each other, which is right: a control extends
+            // ConfigControl and the inspector composes Configurators, so any order between them would
+            // be a claim the code contradicts.
+            "com/crystalgui/widget/config/",
+            "com/crystalgui/widget/config/control/",
+            "com/crystalgui/widget/config/inspector/",
             "com/crystalgui/widget/canvas/",
             "com/crystalgui/widget/graph/",
             "com/crystalgui/widget/editor/");
