@@ -208,19 +208,15 @@ dialog .__title-bar__ {
     background: var(--dialog-title-bg, #393939);
 }
 
-/* ── Popovers,
-menus and dropdowns ──────────────────────────────────────────────────────────────
- * `position: absolute` is forced at IMPORTANT origin by top-layer promotion,
-and `left`/`top` are written
- * by AnchoredPlacement — so nothing here may set either,
-or it would fight placement every frame.
+/* ── Popovers, menus and dropdowns ──────────────────────────────────────────────────────────────
+ * `position: absolute` is forced at IMPORTANT origin by top-layer promotion, and `left`/`top` are written
+ * by AnchoredPlacement — so nothing here may set either, or it would fight placement every frame.
  *
  * A popover is a bare box on the web (the UA sheet gives `<dialog>`/`[popover]` little more than borders),
-* so this is our chrome: enough for a menu to be legible with no theme loaded. */
+ * so this is our chrome: enough for a menu to be legible with no theme loaded. */
 popover,
 menu,
 dropdown .__menu__,
-dropdown::part(menu),
 dropdown::part(menu) {
     min-width: 60px;
     /* LIGHTER than the panels it floats over, with a LIGHT hairline. Both matter, and the first version

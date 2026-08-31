@@ -91,8 +91,7 @@ public class TextNode extends UINode implements Measurable {
         ensureShaped(family);
         float contentX = box.border().left + box.padding().left;
         float contentY = box.border().top + box.padding().top;
-        float contentWidth = Math.max(0f,
-                box.width() - contentX - box.border().right - box.padding().right);
+        float contentWidth = box.contentBoxWidth();
         CgTextLayout laid = paragraph.layout(contentWidth, 0f);
         Integer color = computedStyle().get(StylePropertyRegistry.COLOR);
         ctx.text().draw().layout(laid).family(family)

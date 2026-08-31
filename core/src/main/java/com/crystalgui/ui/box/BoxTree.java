@@ -395,9 +395,14 @@ public final class BoxTree {
 
     private void refreshStyles(Box box) {
         ComputedStyle computed = box.node.computedStyle();
-        if (computed != box.appliedStyle) {
+        // The HOSTING is an input to the layout style as well as the computed style -- see
+        // BoxStyle.apply(.., hosted). Promoting a node changes no style of its own, so comparing the
+        // computed style alone would leave a freshly promoted popup in flow.
+        boolean hosted = box.hostOverride != null;
+        if (computed != box.appliedStyle || hosted != box.appliedHosted) {
+            box.appliedHosted = hosted;
             int zBefore = box.appliedStyle == null ? 0 : box.appliedStyle.get(StylePropertyRegistry.Z_INDEX);
-            BoxStyle.apply(box.bridge, computed);
+            BoxStyle.apply(box.bridge, computed, hosted);
             box.appliedStyle = computed;
             taffy.markDirty(box.taffyId);
             transformsDirty = true;

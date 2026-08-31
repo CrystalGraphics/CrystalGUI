@@ -48,6 +48,8 @@ public final class Box {
     @Nullable Box naturalHost;
     /** A host something chose instead of the natural one. */
     @Nullable Box hostOverride;
+    /** What {@link BoxStyle} was last told about this box's hosting. @see BoxTree#refreshStyles */
+    boolean appliedHosted;
     /** Order in which overrides were declared, so two popups hosted on the root stack in the order they opened. */
     int hostedSequence;
     /** The boxes hosted here, in insertion order: natural children first, then overrides by sequence. */
@@ -242,6 +244,29 @@ public final class Box {
     public float scrollHeight() {
         float declared = node.scrollExtent(false);
         return declared >= 0f ? declared : contentHeight;
+    }
+
+    /**
+     * The <b>content box</b>'s width — this box minus its border AND its padding.
+     *
+     * <p>Not to be confused with {@link #contentWidth()}, which is the extent of what is INSIDE this
+     * box: one is a property of the box, the other of its contents, and they are equal only by
+     * coincidence. The M6 codemod mapped the old engine's {@code contentBoxWidth()} onto
+     * {@code contentWidth()} on the strength of the name, and {@code TextField} — which has no child
+     * nodes at all, so its content extent is <b>zero</b> — pushed a zero-width scissor and clipped its
+     * own text away entirely. The field drew its border, took focus, accepted typing and showed
+     * nothing, which reads as the text not being stored.</p>
+     *
+     * <p>The three widths, in order: {@link #width()} is the border box, {@link #clientWidth()} the
+     * padding box (what scrolls), and this the content box (where text and inline content go).</p>
+     */
+    public float contentBoxWidth() {
+        return Math.max(0f, width - border.left - border.right - padding.left - padding.right);
+    }
+
+    /** The content box's height. @see #contentBoxWidth() */
+    public float contentBoxHeight() {
+        return Math.max(0f, height - border.top - border.bottom - padding.top - padding.bottom);
     }
 
     /** The visible width — the padding box, which is what content scrolls within. */

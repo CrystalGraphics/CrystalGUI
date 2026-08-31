@@ -8,6 +8,7 @@ import dev.vfyjxf.taffy.style.AlignContent;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 import dev.vfyjxf.taffy.style.TaffyDimension;
+import dev.vfyjxf.taffy.style.TaffyPosition;
 
 /**
  * The ONE mapper from a node's {@link ComputedStyle} to the layout engine's style.
@@ -37,10 +38,32 @@ public final class BoxStyle {
 
     /** Writes every layout-facing value of {@code computed} into {@code bridge}'s style. */
     public static void apply(TaffyBridge bridge, ComputedStyle c) {
+        apply(bridge, c, false);
+    }
+
+    /**
+     * As {@link #apply(TaffyBridge, ComputedStyle)}, forcing {@code position: absolute} when the box
+     * is <b>hosted somewhere other than its natural parent</b>.
+     *
+     * <h3>Hosting IS out-of-flow, and nothing else was saying so</h3>
+     *
+     * <p>A promoted popup keeps whatever {@code position} it cascaded to, so it arrived in the top
+     * layer as an ordinary flex ITEM — and the top layer is a zero-sized box, so with this engine's
+     * CSS-initial {@code flex-shrink: 1} the popup was compressed to nothing. Measured on a popover
+     * whose text child laid out at 56x52 inside a parent box of 60x4: it painted, it was hit-testable,
+     * and it clipped its own content away, which on screen is a popup that does not open.</p>
+     *
+     * <p>The old engine forced this from the widget side — top-layer promotion wrote
+     * {@code position: absolute} at IMPORTANT origin, and {@code ua/overlays.css} still says so in a
+     * comment. The new engine may not write into the cascade at all, and should not have to: being
+     * hosted somewhere other than where you sit in the tree is exactly what out-of-flow MEANS, so it
+     * is the box tree's fact rather than a style a widget has to remember.</p>
+     */
+    public static void apply(TaffyBridge bridge, ComputedStyle c, boolean hosted) {
         bridge.setDisplay(c.get(LayoutProperties.DISPLAY));
         bridge.setOverflow(StylePropertyRegistry.toTaffyOverflow(c.get(StylePropertyRegistry.OVERFLOW)));
         bridge.setDirection(c.get(LayoutProperties.LAYOUT_DIRECTION));
-        bridge.setPosition(c.get(LayoutProperties.POSITION));
+        bridge.setPosition(hosted ? TaffyPosition.ABSOLUTE : c.get(LayoutProperties.POSITION));
         bridge.setBoxSizing(c.get(LayoutProperties.BOX_SIZING));
 
         // Flex -- the two divergent defaults go back to CSS's when nothing set them.
