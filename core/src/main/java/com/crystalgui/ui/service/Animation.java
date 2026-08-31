@@ -114,6 +114,7 @@ public final class Animation {
 
     private final List<Timeline> timelines = new ArrayList<>();
     private final List<OwnedHook> hooks = new ArrayList<>();
+    private final List<OwnedHook> afterLayout = new ArrayList<>();
 
     /** Starts a timeline, writing its start value now. */
     public Timeline start(float durationSeconds, Easing easing, Body body, @Nullable Runnable onDone) {
@@ -143,6 +144,31 @@ public final class Animation {
         hooks.add(new OwnedHook(owner, hook));
     }
 
+    /**
+     * As {@link #every}, but run <b>after</b> layout has settled — for a hook that has to READ
+     * geometry.
+     *
+     * <p>The frame is {@code animation → style → layout}, so an ordinary hook sees the PREVIOUS
+     * frame's boxes. For anything that moves a box that is fine; for anything that measures one it is
+     * a frame late, and on the frame a node first gets a box it is measuring zero. That is the old
+     * engine's documented trap — <i>"a newly added element measures zero on the same frame, because
+     * advanceFrame runs style → tickers → layout"</i> — and it cost an entire feature there: an
+     * animation that needed its target's natural size read 0, the "nothing to animate" guard fired,
+     * and every arrival settled instantly at full size, which is exactly what no animation looks
+     * like.</p>
+     *
+     * <p>What needs it is anything positioned FROM measured geometry: a popover and a tooltip flip and
+     * clamp against their own width and height, so placed before layout on their opening frame they
+     * are placed as if they were a point and jump on the next. The old engine spelled this as an
+     * {@code onLayoutChanged} override on the element; a list here keeps geometry out of the node.</p>
+     *
+     * <p>It may not mutate the tree — a structural change would need another layout, and there is no
+     * second pass. Move a box, read a box, place something; do not add one.</p>
+     */
+    public void afterLayout(UINode owner, Hook hook) {
+        afterLayout.add(new OwnedHook(owner, hook));
+    }
+
     public int hookCount() {
         return hooks.size();
     }
@@ -159,8 +185,20 @@ public final class Animation {
         }
     }
 
+    /** Runs the post-layout hooks. Called by the document once layout has settled. */
+    public void tickAfterLayout(float deltaSeconds) {
+        for (OwnedHook owned : new ArrayList<>(afterLayout)) {
+            if (!owned.owner().isConnected() || owned.owner().isFrozen()) {
+                afterLayout.remove(owned);
+                continue;
+            }
+            if (!owned.hook().frame(deltaSeconds)) afterLayout.remove(owned);
+        }
+    }
+
     /** Drops the hooks a subtree owns — the lifecycle service, freezing or destroying it. */
     public void forget(UINode node) {
         hooks.removeIf(owned -> UINode.isShadowIncludingInclusiveAncestor(node, owned.owner()));
+        afterLayout.removeIf(owned -> UINode.isShadowIncludingInclusiveAncestor(node, owned.owner()));
     }
 }

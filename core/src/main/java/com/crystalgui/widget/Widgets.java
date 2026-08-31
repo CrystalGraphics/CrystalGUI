@@ -1,9 +1,26 @@
 package com.crystalgui.widget;
 
+import com.crystalgui.ui.dom.NodeContract;
 import com.crystalgui.ui.dom.NodeKinds;
 import com.crystalgui.ui.dom.UINodeRegistry;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Checkbox;
+import com.crystalgui.widget.control.ProgressBar;
+import com.crystalgui.widget.control.Slider;
+import com.crystalgui.widget.control.Switch;
+import com.crystalgui.widget.control.SymbolIcon;
+import com.crystalgui.widget.control.TextField;
+import com.crystalgui.widget.dnd.DragGhost;
+import com.crystalgui.widget.dnd.InsertionMarker;
+import com.crystalgui.widget.form.ColorSelector;
+import com.crystalgui.widget.form.SearchField;
+import com.crystalgui.widget.overlay.Dropdown;
+import com.crystalgui.widget.overlay.Menu;
+import com.crystalgui.widget.overlay.MenuItem;
+import com.crystalgui.widget.overlay.Popover;
+import com.crystalgui.widget.overlay.Tooltip;
+import com.crystalgui.widget.scroll.Scroller;
+import com.crystalgui.widget.scroll.ScrollerView;
 
 /**
  * <b>The widget library's kinds</b> — every {@code widget.*} node a description can decode into.
@@ -19,8 +36,10 @@ import com.crystalgui.widget.control.Checkbox;
  * names. That is the same anti-rot shape {@code WidgetContractCoverageTest} and
  * {@code StyleGovernanceTest} already use, and it is what makes a central list safe to keep.</p>
  *
- * <p>The other layers get their own — {@code chrome}, {@code desktop} and {@code workbench} each
- * declare theirs — because the point of the service is that a LAYER speaks for itself.</p>
+ * <p>Grouped by tier, in the order {@code LayeringTest} enforces, so a reader can see at a glance
+ * what a tier holds. The other layers get their own service — {@code chrome}, {@code desktop} and
+ * {@code workbench} each declare theirs — because the point of the service is that a LAYER speaks
+ * for itself.</p>
  */
 public final class Widgets implements NodeKinds {
 
@@ -30,7 +49,36 @@ public final class Widgets implements NodeKinds {
 
     @Override
     public void register() {
+        // ── control ──────────────────────────────────────────────────────────
         UINodeRegistry.register(Button.NAME, Button::new, Button.CONTRACT);
         UINodeRegistry.register(Checkbox.NAME, Checkbox::new, Checkbox.CONTRACT);
+        UINodeRegistry.register(Switch.NAME, Switch::new, Switch.CONTRACT);
+        UINodeRegistry.register(Slider.NAME, Slider::new, Slider.CONTRACT);
+        UINodeRegistry.register(ProgressBar.NAME, ProgressBar::new, ProgressBar.CONTRACT);
+        UINodeRegistry.register(TextField.NAME, TextField::new, TextField.CONTRACT);
+        // INERT: a symbol icon carries nothing over a wire. Registered all the same, because a kind
+        // that is not registered has no tag, and `symbolicon { }` is how a theme reaches it -- the old
+        // engine answered the lowercased class name instead, which is the fallback that left 32 tags
+        // matching by accident and ToolWindowFrame matching nothing at all.
+        UINodeRegistry.register(SymbolIcon.NAME, SymbolIcon::new, NodeContract.INERT);
+
+        // ── scroll ───────────────────────────────────────────────────────────
+        UINodeRegistry.register(Scroller.NAME, Scroller::new, NodeContract.INERT);
+        UINodeRegistry.register(ScrollerView.NAME, ScrollerView::new, NodeContract.INERT);
+
+        // ── overlay ──────────────────────────────────────────────────────────
+        UINodeRegistry.register(Popover.NAME, Popover::new, Popover.CONTRACT);
+        UINodeRegistry.register(Menu.NAME, Menu::new, Menu.CONTRACT);
+        UINodeRegistry.register(MenuItem.NAME, MenuItem::new, MenuItem.CONTRACT);
+        UINodeRegistry.register(Dropdown.NAME, Dropdown::new, Dropdown.CONTRACT);
+        UINodeRegistry.register(Tooltip.NAME, Tooltip::new, Tooltip.CONTRACT);
+
+        // ── dnd ──────────────────────────────────────────────────────────────
+        UINodeRegistry.register(DragGhost.NAME, DragGhost::new, NodeContract.INERT);
+        UINodeRegistry.register(InsertionMarker.NAME, InsertionMarker::new, NodeContract.INERT);
+
+        // ── form ─────────────────────────────────────────────────────────────
+        UINodeRegistry.register(SearchField.NAME, SearchField::new, SearchField.CONTRACT);
+        UINodeRegistry.register(ColorSelector.NAME, ColorSelector::new, ColorSelector.CONTRACT);
     }
 }

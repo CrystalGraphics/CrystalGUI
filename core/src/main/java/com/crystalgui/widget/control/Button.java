@@ -110,7 +110,25 @@ public class Button extends UINode {
     }
 
     public Button(@Nullable String text) {
-        super(NAME);
+        this(NAME, text);
+    }
+
+    /**
+     * For a subclass that is its own KIND — {@code Dropdown}, {@code MenuItem}.
+     *
+     * <p>Without it a subclass inherits {@code button} as its tag, and the old engine's row records
+     * exactly what that costs: {@code tagName()} was an exact-class lookup there, so an unregistered
+     * subclass matched <b>none</b> of its supertype's rules and {@code ToolWindowFrame} came out with
+     * no background, no border and both its titles drawn at once — which reads as the widget not
+     * having been BUILT rather than not being styled. The mirror case is this one:
+     * {@code Dropdown extends Button} and deliberately does not answer {@code button}, because a
+     * dropdown taking a button's whole look is wrong.</p>
+     *
+     * <p>A subclass that DOES want everything the supertype has plus a modifier passes
+     * {@code Button.NAME} and adds a class.</p>
+     */
+    protected Button(Name name, @Nullable String text) {
+        super(name);
         // DEFAULT origin -- the lowest priority there is, so any stylesheet rule targeting `button`
         // or a class still wins without needing !important. The engine may not write at IMPORTANT
         // at all now (EngineBoundaryTest reads the constant pool for it), and this never needed to.

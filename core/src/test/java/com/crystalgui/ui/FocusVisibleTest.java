@@ -85,11 +85,28 @@ public class FocusVisibleTest extends UiTestBase {
         assertEquals(1, sheet.getRules().size());
     }
 
-    /** The hyphen is the only thing separating the CSS name from the enum constant. */
+    /**
+     * A typo costs its own rule and nothing else — the hyphen is all that separates the CSS name from
+     * the enum constant, so this is the likeliest mistake anyone makes here.
+     *
+     * <p><b>It used to assert a throw, and that stopped being true at M5 5.2.</b>
+     * {@code PseudoClasses.lookup} still raises — that is what validates the name eagerly, at parse
+     * time rather than silently at paint time — but {@code StyleSheet.parse} catches it, warns with
+     * the selector text and carries on, which is CSS's own rule and what both browsers do. The old
+     * behaviour was worse than strict: one {@code :focus-within} rule broke <b>six</b> unrelated
+     * layout tests in panels that had never heard of a search box, because the throw came out of
+     * {@code StyleSheet.parse} and took the whole sheet with it.</p>
+     *
+     * <p>So the assertion is the surviving guarantee, and it is the stronger one: the bad rule is
+     * gone AND the good rule beside it is still there. A throw could never have told you the second
+     * half. {@code UiThemeParseTest} asserts the same thing from the theme side.</p>
+     */
     @Test
-    public void aTypoStillFailsLoudly() {
-        assertThrows(IllegalArgumentException.class,
-                () -> StyleSheet.parse("button:focus-visibel { outline: 2px #FF0000; }"));
+    public void aTypoCostsItsOwnRuleAndNothingElse() {
+        StyleSheet sheet = StyleSheet.parse(
+                "button:focus-visibel { outline: 2px #FF0000; } button { opacity: 0.5; }");
+
+        assertEquals("the typo'd rule is dropped and the sound one survives", 1, sheet.getRules().size());
     }
 
     /** The user-agent sheet must actually reach elements — this is what broke if the mapping was

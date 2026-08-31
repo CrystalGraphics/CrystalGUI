@@ -91,6 +91,40 @@ public class SheetPortTest {
     }
 
     /**
+     * <b>A rule reaching from one widget's part into a NESTED widget's part is counted, not
+     * converted</b> — and the count may not grow.
+     *
+     * <p>{@code colorselector .__channel-row__ slider .__thumb__} is the shape: it styles a slider
+     * that a colour selector builds, through a part of the colour selector. Neither half is
+     * expressible with {@code ::part()} — a part is a leaf, so nothing descends from one — and on the
+     * new engine the nested slider is inside the composite's SHADOW tree, where an outer rule cannot
+     * reach it at all.</p>
+     *
+     * <p>Two mechanisms answer it and both are later work: a sheet SCOPED to the composite's shadow
+     * root ({@code StyleEngine.addStylesheet(sheet, root)}, which exists since M5 5.2), or
+     * {@code exportparts}, which does not exist yet. Until one of them is wired, these rules keep
+     * working on the OLD engine — which still runs the game — and reach nothing on the new one.</p>
+     *
+     * <p>The baseline is 55, measured -- not a target. It is asserted so the number cannot quietly grow while the port is in flight, which is
+     * the only failure available here: nothing errors, the rules simply stop matching, and a composite
+     * comes out unstyled in a way that reads as the widget not having been built.</p>
+     */
+    @Test
+    public void crossWidgetPartRulesAreCountedAndDoNotGrow() throws IOException {
+        Pattern nested = Pattern.compile(
+                "^[a-z][a-z0-9-]*[^,{]*\\.__[a-z0-9-]+__[^,{]*\\b"
+                        + "(?:slider|dropdown|scroller|button|textfield|menuitem|checkbox)\\b");
+        List<String> found = new ArrayList<>();
+        for (String sel : selectors()) {
+            if (nested.matcher(sel).find() && sel.contains("__")) found.add(sel);
+        }
+        assertTrue("cross-widget part rules grew from 55 to " + found.size()
+                        + " -- either scope a sheet to the composite's shadow root, or add"
+                        + " exportparts:\n" + String.join("\n", found),
+                found.size() <= 55);
+    }
+
+    /**
      * Every {@code __x__} in a sheet is in the ledger with a kind decided.
      *
      * <p>So a name cannot be introduced without somebody saying whether it is a part, structure or a
