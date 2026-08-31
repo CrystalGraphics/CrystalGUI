@@ -3,6 +3,7 @@ package com.crystalgui.ui;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.data.Transform2D;
+import com.crystalgui.core.window.WindowState;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.elements.Tab;
@@ -198,7 +199,7 @@ public class DockTearOutTest extends UiTestBase {
         frame();
 
         assertTrue("the emptied window stayed open", torn.state()
-                == com.crystalgui.ui.elements.desktop.WindowState.DESTROYED);
+                == WindowState.DESTROYED);
         assertFalse("and it is still in the registry",
                 window.desktop().registry().windows().contains(torn));
         assertTrue("the panel did not come home", holds(beta));

@@ -121,8 +121,13 @@ BY_NAME = {
     'TaskbarPreviews': 'desktop/taskbar', 'TaskbarDesigner': 'desktop/taskbar',
     'WindowPreview': 'desktop/taskbar', 'WindowThumbnail': 'desktop/taskbar',
     'WindowSwitcher': 'desktop/switcher',
-    # An enum, a policy record and a host SPI -- named by BOTH engines, so a package both may name.
-    'WindowState': 'core/window', 'WindowPolicy': 'core/window', 'ScreenOverlay': 'core/window',
+    # An enum, a policy record and a presentation enum -- named by BOTH engines, so a package both
+    # may name. ScreenOverlay was the plan's fourth candidate and does NOT qualify: it holds a
+    # `UIWindow` and reads its focus owner, so it is a facade over the engine rather than an SPI a
+    # host implements, and it stays in `desktop` as an ordinary copy. DesktopPresentation replaces
+    # it -- a bare enum with no imports at all, read by UIWindow and by the taskbar.
+    'WindowState': 'core/window', 'WindowPolicy': 'core/window',
+    'DesktopPresentation': 'core/window',
     # `widget.graph.node` is the four that reach nothing package-private. GraphNode, NodePort and
     # PortDefaultEditor CANNOT be here: they share package-private members with GraphView by design,
     # and Java has no sub-package visibility, so moving them means publishing ten "only the view may
@@ -150,8 +155,11 @@ BY_NAME = {
     'WidgetCensus': 'widget',  # a diagnostic, not a widget -- ported last, with 6.7's applications
     # chrome, which is a layer rather than a directory: a few of these are overlay/layout widgets.
     'ContextMenu': 'widget/overlay', 'MenuBuilder': 'widget/overlay', 'PageStack': 'widget/layout',
-    # desktop's one leaf widget.
-    'WindowIcon': 'desktop/window',
+    # desktop's one leaf widget. It landed at 6.1 as `desktop/window` and moved UP at 6.6, when the
+    # price table refused `.window` outright (97 published call sites, 57 on WindowFrame alone). A
+    # package holding one leaf while the eleven classes it belongs with stay behind is a directory,
+    # not a boundary -- the same argument that refused `.motion`.
+    'WindowIcon': 'desktop',
 }
 
 # Which BATCH ports each destination (plan_m6.md section 5).
@@ -194,6 +202,10 @@ STATE_NAMES = {
     'second', 'selected', 'shown', 'sorted-asc', 'sorted-desc', 'truncated', 'unlabelled',
     'vertical', 'windowed', 'floating', 'full-width', 'problem-only', 'no-message', 'disabled',
     'thin', 'dock-bannered', 'unknown-type', 'caption-adopted',
+    # 6.6: the two IMPORTANT writes that became classes -- the compositor's own presence and a
+    # window's overlay slot. Both are state a widget flips from its own bookkeeping, which is what
+    # a state adjective IS, and both have the SAFE answer as the base rule.
+    'live', 'occupied',
 }
 
 
@@ -342,6 +354,16 @@ def destination(rel, stem):
 # lands, however neutral the class itself is. The exceptions are the two heading for `graph.port`,
 # which is a package BOTH engines may name.
 HOW_OVERRIDE = {
+    # 6.6: SIX classes the `touches` heuristic reads as pure, because they name no UIElement and no
+    # paint context -- and every one of them is named by the OLD Desktop or WindowFrame, which still
+    # run the game until 6.9. `com/crystalgui/desktop/` is a NEW_PACKAGES prefix, so a move there is
+    # the old engine reaching into the new one: the boundary scan fails on the day it lands, and the
+    # old engine stops compiling besides. Only a NEUTRAL destination can take a move.
+    'DesktopSession': 'copy',
+    'SnapZones': 'copy',
+    'WindowKeyboardMove': 'copy',
+    'WindowMotion': 'copy',
+    'WindowRegistry': 'copy',
     'WorldRect': 'copy',
     'GraphConnection': 'copy',
     'GraphSelection': 'copy',
@@ -353,6 +375,10 @@ HOW_OVERRIDE = {
 
 
 BATCH_OVERRIDE = {
+    # WindowIcon's destination moved from `desktop/window` to `desktop` at 6.6, and `desktop` is 6.6's
+    # -- but the class itself shipped at 6.1 as the taskbar's leaf widget. A destination decides where
+    # a class GOES, never when it went.
+    'WindowIcon': '6.1',
     'ShaderGraphEditor': '6.7',
     'ShaderGraphContribution': '6.7',
     # THE DEFERRAL CASCADED. ShaderInspectorSections names ShaderGraphEditor four times, so it waits

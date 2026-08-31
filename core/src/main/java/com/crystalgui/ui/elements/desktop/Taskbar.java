@@ -1,6 +1,8 @@
 package com.crystalgui.ui.elements.desktop;
 
 import com.crystalgui.core.signal.ConnectionGroup;
+import com.crystalgui.core.window.DesktopPresentation;
+import com.crystalgui.core.window.WindowState;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;

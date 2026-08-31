@@ -2,13 +2,13 @@ package com.crystalgui.ui;
 
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.dispose.Disposer;
+import com.crystalgui.core.window.WindowPolicy;
+import com.crystalgui.core.window.WindowState;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.desktop.Desktop;
 import com.crystalgui.ui.elements.desktop.WindowFrame;
-import com.crystalgui.ui.elements.desktop.WindowPolicy;
-import com.crystalgui.ui.elements.desktop.WindowState;
 import com.crystalgui.ui.input.UIInputHandler;
 import org.junit.Test;
 

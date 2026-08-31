@@ -1,6 +1,8 @@
 package com.crystalgui.ui.elements.desktop;
 
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.window.DesktopPresentation;
+import com.crystalgui.core.window.WindowState;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.style.sheet.StyleSheet;

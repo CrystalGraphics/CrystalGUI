@@ -22,6 +22,10 @@ import com.crystalgui.text.diagnostic.DiagnosticSet;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.diagnostic.Markers;
 import com.crystalgui.ui.dom.Attribute;
+import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.window.WindowFrame;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.canvas.CanvasView;
 import com.crystalgui.widget.collection.list.ListView;
@@ -81,6 +85,26 @@ public class StyleParityTest extends UiDocumentTestBase {
             "ua/core.css", "ua/widgets.css", "ua/editor.css", "ua/overlays.css", "ua/config-kit.css",
             "ua/inspector.css", "ua/workbench.css", "ua/panels.css", "ua/search.css", "ua/desktop.css",
             "graph.css");
+
+    /**
+     * A compositor and something inside it, in a document of their own.
+     *
+     * <p><b>The one subject kind that cannot be handed to the fixture's document</b>, and both halves
+     * of the reason are the batch's own rules. A {@code Desktop} takes no space until a window is open,
+     * so an empty one has no work area, no strip and no entry — a fixture built empty would agree with
+     * any sheet at all. And a window has to be OPENED through the compositor rather than appended, so
+     * the subject has to run frames before it is looked at. Mounted here and reported as already
+     * connected, which {@link #everyPartTheSheetsSelectIsReachable} honours.</p>
+     */
+    private static UINode ownDocument(java.util.function.Function<Desktop, UINode> pick) {
+        UIDocument doc = new UIDocument().markFrameThread();
+        doc.styles().addStylesheet(StyleSheet.DEFAULT);
+        Desktop desktop = Desktop.of(doc);
+        desktop.addWindow(new WindowFrame("Parity"));
+        doc.frame(0.016f, 800f, 600f);
+        doc.frame(0.016f, 800f, 600f);
+        return pick.apply(desktop);
+    }
 
     /**
      * The ported widgets, by the tag their rules name.
@@ -171,6 +195,16 @@ public class StyleParityTest extends UiDocumentTestBase {
             node.addOutput(FLOAT, "Out");
             return node;
         });
+        // ── The desktop (6.6) ────────────────────────────────────────────────
+        //
+        // WITH A WINDOW OPEN, and the fixture would agree with any sheet at all without one: a desktop
+        // with no window takes up no space by design, so an empty one has no work area, no strip and no
+        // entry -- which is the fixture failure this whole test exists to catch, arriving through the
+        // subject rather than through the port.
+        subjects.put("desktop", () -> ownDocument(d -> d));
+        subjects.put("taskbar", () -> ownDocument(Desktop::taskbar));
+        subjects.put("window", () -> ownDocument(d -> d.registry().windows().get(0)));
+
         return subjects;
     }
 
@@ -230,7 +264,31 @@ public class StyleParityTest extends UiDocumentTestBase {
             // `row` and `expanded` are ListView's and TreeView's own, and both ARE checked under
             // their own tags, where the fixture does give them data.
             Map.entry("row", "a realised row; checked under `listview` and `treeview` instead"),
-            Map.entry("expanded", "a TreeView state; checked under `treeview` instead"));
+            Map.entry("expanded", "a TreeView state; checked under `treeview` instead"),
+            // ── The desktop (6.6) ─────────────────────────────────────────────
+            //
+            // GESTURE STATE. Each is a class the compositor adds for the length of an interaction the
+            // fixture does not perform, and reaching them would mean driving a drag, a maximise or a
+            // minimise inside a style test -- which is the DesktopBatchPortTest's job and is where each
+            // is actually asserted.
+            Map.entry("snap-preview", "hosted on the work area only while a move drag is over an edge"),
+            Map.entry("maximized", "WindowFrame.maximize, a gesture the fixture does not make"),
+            Map.entry("fullscreen", "as above, for F11"),
+            Map.entry("pinned", "WindowFrame.setPinned -- the caption's pin, or a HUD"),
+            Map.entry("occupied", "the overlay slot, sized only while an owned modal is showing"),
+            Map.entry("hidden", "a taskbar entry for a MINIMISED window"),
+            Map.entry("attention", "an entry flashing for a window that asked without stealing focus"),
+            Map.entry("badge", "an entry's count, which an application sets"),
+            Map.entry("busy", "an entry's progress, which an application sets"),
+            Map.entry("progress", "inside that busy entry"),
+            // 6.7'S WIDGETS, styled through `window` because a tool window IS one. ToolWindowFrame,
+            // DockWindow and the Problems panel all live in `workbench`, which has not been ported --
+            // so these rules are unreachable HERE and reachable in the batch that brings them.
+            Map.entry("tool-window", "ToolWindowFrame, a workbench widget -- 6.7"),
+            Map.entry("dock", "the Dock button in a tool window's caption -- 6.7"),
+            Map.entry("dock-window", "DockWindow, a torn-out editor -- 6.7"),
+            Map.entry("strip", "a DockWindow's tab strip -- 6.7"),
+            Map.entry("problem-tab", "ProblemsPanel's tabs, seen through a tool window -- 6.7"));
 
     /**
      * <b>The check.</b> For each widget: every {@code __x__} a sheet selects under its tag is a class
@@ -246,8 +304,14 @@ public class StyleParityTest extends UiDocumentTestBase {
         for (Map.Entry<String, Supplier<UINode>> entry : subjects().entrySet()) {
             String tag = entry.getKey();
             UINode widget = entry.getValue().get();
-            layout(widget, l -> l.width(400f).height(300f));
-            document.append(widget);
+            // A SUBJECT THAT BROUGHT ITS OWN DOCUMENT IS LEFT WHERE IT IS. Appending it here would
+            // move it across documents mid-walk, which tears its subtree down and rebuilds it -- and a
+            // compositor cannot be built anywhere else, since a desktop with no window has no tree.
+            boolean mounted = widget.document() != null;
+            if (!mounted) {
+                layout(widget, l -> l.width(400f).height(300f));
+                document.append(widget);
+            }
             frame();
             // A POPUP BUILDS ITS ROWS ON OPEN. NodeCreationMenu's entries are realised by the
             // TreeView inside it, and a menu nobody opened has none -- so an unopened fixture
@@ -269,7 +333,7 @@ public class StyleParityTest extends UiDocumentTestBase {
                     }
                 }
             }
-            widget.removeSelf();
+            if (!mounted) widget.removeSelf();
             frame();
         }
         assertTrue("a shipped rule can no longer match anything in the widget it was written for:\n"

@@ -387,6 +387,40 @@ public final class Box {
         tree.transformsChanged();
     }
 
+    /**
+     * The point a compositor's transform is applied about, or {@code null} for the cascade's.
+     *
+     * <p><b>It must be PINNED for a transform animation's whole life, and that is the whole reason
+     * this exists rather than being read from the style.</b> {@code transform-origin} is not
+     * interpolable, so a value re-resolved partway through a gesture changes what the SAME transform
+     * means: the cascade-driven version of the window animations eased a maximise about the CENTRE
+     * having computed it about the CORNER, which was reported as "chopped and flickering". Pinning it
+     * beside the transform means the pair are withdrawn together and an origin cannot outlive the
+     * animation that needed it.</p>
+     *
+     * <p>Resolved lengths, not a {@link LengthPercent}: a compositor knows the box it is animating.</p>
+     */
+    public void setTransformOrigin(@Nullable Float x, @Nullable Float y) {
+        transformOriginX = x;
+        transformOriginY = y;
+        tree.transformsChanged();
+    }
+
+    /** @see #setTransformOrigin */
+    @Nullable
+    public Float transformOriginX() {
+        return transformOriginX;
+    }
+
+    /** @see #setTransformOrigin */
+    @Nullable
+    public Float transformOriginY() {
+        return transformOriginY;
+    }
+
+    private @Nullable Float transformOriginX;
+    private @Nullable Float transformOriginY;
+
     /** The node's {@code hit-test} attribute — off means this box AND everything it hosts is passed over. */
     public boolean hitTestable() {
         return node.get(Attribute.HIT_TEST);

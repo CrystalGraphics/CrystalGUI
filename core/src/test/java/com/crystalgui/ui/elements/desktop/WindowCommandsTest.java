@@ -8,6 +8,7 @@ import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.command.MenuEntry;
 import com.crystalgui.core.command.MenuSection;
+import com.crystalgui.core.window.WindowState;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.UIElement;

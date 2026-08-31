@@ -65,6 +65,35 @@
  * is a desktop something can silently scroll, and a window dragged half off an edge is exactly the
  * content that would make it scrollable. `clip` is CSS's value for "clipped and genuinely not
  * scrollable". */
+/* THE COMPOSITOR TAKES UP NO SPACE UNTIL A WINDOW IS OPEN, and on the M6 engine that is a rule rather
+ * than an IMPORTANT write from Java. It is the most-repeated failure in this codebase stated as CSS: a
+ * full-size transparent element over the application hit-tests across the whole surface and eats every
+ * click that lands on background, so a UI that never opened a window simply stops responding, with
+ * nothing on screen pointing at a compositor. The mirror case is the one that bites later -- the LAST
+ * window closing has to give the surface back, or a desktop used once keeps the application dead.
+ *
+ * `Desktop.setLive` adds and removes `__live__`; the base rule is the empty state, so the failure mode
+ * of forgetting the class is a desktop that takes no space rather than one that swallows everything. */
+desktop {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 0;
+    height: 0;
+}
+
+desktop.__live__ {
+    width: 100%;
+    height: 100%;
+}
+
+/* Out of flow so it overlays the work area rather than taking a row in it, and so the timeline that
+ * animates it has a left/top to write. The RECT is inline -- geometry is what a timeline writes, and
+ * writing it here too would put a static value permanently above the animation's own channel. */
+desktop .__snap-preview__ {
+    position: absolute;
+}
+
 desktop .__windows__ {
     width: 100%;
     height: 0;
@@ -729,7 +758,21 @@ window.__maximized__ {
  * paint above it anyway, so getting this wrong fails NOTHING today and fails the first time anything
  * reorders the frame's parts. */
 window > .__overlays__ {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 0;
+    height: 0;
     z-index: 10;
+}
+
+/* SIZED ONLY WHILE SOMETHING IS SHOWING ON IT. A full-size slot with nothing in it swallows every click
+ * on the window's own content -- the desktop's own rule, one level down. `WindowFrame.syncOverlaySlot`
+ * adds and removes the class; the base rule above is the empty state, so forgetting it leaves an owned
+ * dialog unsized rather than leaving a window dead. */
+window > .__overlays__.__occupied__ {
+    width: 100%;
+    height: 100%;
 }
 
 /* THE CHILD COMBINATOR IS NOT OPTIONAL HERE. `window .__content__` would reach CrystalEditor's,
@@ -959,6 +1002,16 @@ window.__dock-window__ .__strip__ {
     border-width: 1px;
     border-color: var(--snap-preview-border, #C8CDD2AA);
     border-radius: var(--radius-panel, 4px);
+}
+
+/* A HOVER PREVIEW IS INVISIBLE UNTIL IT HAS BEEN PLACED, and it is one frame.
+ *
+ * The panel has never been laid out when it is first shown, so it has no size -- and it is placed
+ * RELATIVE TO ITS OWN SIZE, being anchored above its entry. Without this it would be drawn full-size at
+ * the origin for the frame between showing and measuring. The class rather than an opacity written from
+ * Java, so a theme can restyle the fade and nothing outranks it; TaskbarPreviews only says when. */
+.__window-preview__.__placing__ {
+    opacity: 0;
 }
 
 /* A fullscreen window has no border and no rounding: there is nothing beside it for either to separate

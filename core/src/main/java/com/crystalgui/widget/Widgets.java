@@ -38,6 +38,7 @@ import com.crystalgui.widget.control.SymbolIcon;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.dnd.DragGhost;
 import com.crystalgui.widget.dnd.InsertionMarker;
+import com.crystalgui.widget.dnd.Resizer;
 import com.crystalgui.widget.form.ColorSelector;
 import com.crystalgui.widget.form.SearchField;
 import com.crystalgui.widget.graph.GraphNode;
@@ -227,6 +228,10 @@ public final class Widgets implements NodeKinds {
         // ── dnd ──────────────────────────────────────────────────────────────
         UINodeRegistry.register(DragGhost.NAME, DragGhost::new, NodeContract.INERT);
         UINodeRegistry.register(InsertionMarker.NAME, InsertionMarker::new, NodeContract.INERT);
+        // A grab handle. Built by `Resizer.install` for a Resizable rather than decoded, so the factory
+        // makes an UNBOUND one -- registered all the same, because a concrete node that declares no kind
+        // inherits `crystalgui:element` and would match every bare `element` rule there is.
+        UINodeRegistry.register(Resizer.NAME, Resizer::new, NodeContract.INERT);
 
         // ── form ─────────────────────────────────────────────────────────────
         UINodeRegistry.register(SearchField.NAME, SearchField::new, SearchField.CONTRACT);

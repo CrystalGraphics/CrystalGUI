@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.desktop;
 
+import com.crystalgui.core.window.WindowState;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;

@@ -184,6 +184,12 @@ theme {
     --graph-control-fg: var(--fg-secondary);
     --graph-dot-bg: var(--surface-base);
     --graph-edge: var(--border-base);
+    /* A node's body text and its title's, derived rather than pinned: the UA sheet's `graphnode` rules
+     * reference these, and a theme that restyles `--fg` should move them with it. `graph.css` names the
+     * same two colours `--node-text`/`--node-text-bright`, which are that THEME's own -- the UA sheet
+     * may not read a theme's private tokens, so the pair exists here as well. */
+    --graph-node-text: var(--fg-secondary);
+    --graph-node-text-bright: var(--fg);
     --graph-editor-dot-ring-bg: var(--surface-panel);
     --graph-field: var(--surface-recessed);
     --graph-hairline: var(--divider);

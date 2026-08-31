@@ -1,13 +1,13 @@
 package com.crystalgui.ui.elements.dock;
 
+import com.crystalgui.core.window.WindowPolicy;
+import com.crystalgui.core.window.WindowState;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.Tab;
 import com.crystalgui.ui.input.UIInputHandler;
 import com.crystalgui.ui.elements.desktop.WindowFrame;
-import com.crystalgui.ui.elements.desktop.WindowPolicy;
-import com.crystalgui.ui.elements.desktop.WindowState;
 import com.crystalgui.ui.tree.UITreeTraversal;
 
 /**

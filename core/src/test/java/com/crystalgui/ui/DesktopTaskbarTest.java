@@ -1,13 +1,13 @@
 package com.crystalgui.ui;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgui.core.window.WindowState;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.desktop.Desktop;
 import com.crystalgui.ui.elements.desktop.Taskbar;
 import com.crystalgui.ui.elements.desktop.WindowFrame;
-import com.crystalgui.ui.elements.desktop.WindowState;
 import com.crystalgui.ui.input.UIInputHandler;
 import org.junit.Test;
 

@@ -1,5 +1,6 @@
 package com.crystalgui.ui.elements.desktop;
 
+import com.crystalgui.core.window.WindowState;
 import com.crystalgui.fs.InMemoryConfigStorage;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonParser;

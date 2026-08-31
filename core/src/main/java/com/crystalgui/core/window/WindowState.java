@@ -1,4 +1,4 @@
-package com.crystalgui.ui.elements.desktop;
+package com.crystalgui.core.window;
 
 /**
  * What a window <em>is</em> — the three states every windowing system in the survey turned out to have,

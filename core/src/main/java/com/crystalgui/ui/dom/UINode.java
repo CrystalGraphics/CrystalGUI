@@ -13,7 +13,9 @@ import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.easing.ProgressFunctions;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.ScrollBehavior;
+import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.ui.EventListenerGroup;
 import com.crystalgui.ui.box.Box;
@@ -226,6 +228,25 @@ public class UINode implements EventTarget, Styleable, KeymapScope {
     @Override
     public List<DataProvider> scopeProviders() {
         return List.of();
+    }
+
+    /**
+     * The node a command or a data lookup was invoked from, or {@code null} when it was not a node.
+     *
+     * <p>{@code CommandContext.source()} is an {@code Object} on purpose — {@code core.command} may
+     * name no UI type — so every consumer that wants to walk the tree has to narrow it. Narrowed once
+     * here rather than as an {@code instanceof} chain per command file, which is what the old engine
+     * ended up with before it did the same.</p>
+     */
+    @Nullable
+    public static UINode sourceOf(@Nullable CommandContext context) {
+        return context != null && context.source() instanceof UINode node ? node : null;
+    }
+
+    /** @see #sourceOf(CommandContext) */
+    @Nullable
+    public static UINode sourceOf(@Nullable DataContext context) {
+        return context != null && context.source() instanceof UINode node ? node : null;
     }
 
     public final Set<String> classes() {

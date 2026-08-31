@@ -55,6 +55,23 @@ public final class BoxPainter {
         paintBox(root, ctx, base);
     }
 
+    /**
+     * Paints ONE box and what it hosts, with the pose on the stack as the surface transform.
+     *
+     * <p>For a caller drawing a subtree somewhere other than where it lives — a window photographing
+     * itself into an off-screen target. Nothing about the boxes is changed by it: the pose is
+     * {@code base × localToWorld}, computed per box and never written back, so drawing a subtree a
+     * second time cannot disturb where hit-testing thinks it is. That is the whole of what the old
+     * engine's {@code CgUiPaintContext.mirrored} counter existed to protect, and why there is no
+     * counterpart here.</p>
+     *
+     * <p>A LIVE second copy wants {@link BoxTree#mirror} instead, which lays the subtree out again and
+     * gives the copy boxes of its own; this is for a one-shot into a target the caller owns.</p>
+     */
+    public static void paintSubtree(Box box, CgUiPaintContext ctx) {
+        paintBox(box, ctx, new Matrix4f(ctx.getPoseStack().last().pose()));
+    }
+
     private static void paintBox(Box box, CgUiPaintContext ctx, Matrix4f base) {
         float opacity = box.opacity();
         if (opacity <= 0f) return;

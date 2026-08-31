@@ -459,11 +459,15 @@ public final class BoxTree {
         UITransform transform = box.transform();
         if (!transform.isIdentity()) {
             ComputedStyle style = box.node.computedStyle();
+            // THE COMPOSITOR'S ORIGIN OUTRANKS THE CASCADE'S, and is pinned for its animation's whole
+            // life -- @see Box#setTransformOrigin, which records what a re-resolved one cost.
+            Float pinnedX = box.transformOriginX();
+            Float pinnedY = box.transformOriginY();
             LengthPercent originX = style.get(StylePropertyRegistry.TRANSFORM_ORIGIN_X);
             LengthPercent originY = style.get(StylePropertyRegistry.TRANSFORM_ORIGIN_Y);
             transform.applyTo(box.localToWorld, 0f, 0f, box.width, box.height,
-                    originX == null ? 0f : originX.resolve(box.width),
-                    originY == null ? 0f : originY.resolve(box.height));
+                    pinnedX != null ? pinnedX : originX == null ? 0f : originX.resolve(box.width),
+                    pinnedY != null ? pinnedY : originY == null ? 0f : originY.resolve(box.height));
         }
         box.localToWorld.invert(box.worldToLocal);
         for (Box child : box.hosted) compose(child, box.localToWorld, box.scrollLeft(), box.scrollTop());

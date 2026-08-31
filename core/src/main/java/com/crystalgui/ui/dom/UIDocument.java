@@ -2,6 +2,7 @@ package com.crystalgui.ui.dom;
 
 import com.crystalgui.core.async.UiThread;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgui.ui.box.Box;
@@ -282,6 +283,39 @@ public final class UIDocument extends UINode {
     public Lifecycle lifecycle() {
         if (lifecycle == null) lifecycle = new Lifecycle(this);
         return lifecycle;
+    }
+
+    // ── Document-level data providers ───────────────────────────────────────────────────────────
+
+    private final List<DataProvider> scopeProviders = new ArrayList<>();
+
+    /**
+     * Registers a provider {@code DataContext} asks once nothing in the element chain has answered.
+     *
+     * <p><b>This is the LAST resort by construction, and that is the whole design.</b> A command
+     * invoked from inside a window resolves its subject by walking outward from the focused element
+     * and finds the frame; one invoked from a taskbar entry finds the entry's own answer; one invoked
+     * from the palette with nothing focused finds neither, and the desktop's "the active window" is
+     * the only sensible answer left. Registering it here rather than on an element is what keeps it
+     * last: an element that answers still wins, so two open windows never both resolve to whatever
+     * the desktop named.</p>
+     *
+     * <p>Document-level rather than a node's own because the consumer is not an ancestor of the
+     * things that ask. {@code DataContext} records the case at length — a workbench is a DESCENDANT
+     * of the root, so with nothing focused the outward walk never reaches it.</p>
+     */
+    public void addDataProvider(DataProvider provider) {
+        if (provider != null && !scopeProviders.contains(provider)) scopeProviders.add(provider);
+    }
+
+    /** Drops a provider. A provider whose owner has left the tree must go, or it answers for a corpse. */
+    public void removeDataProvider(DataProvider provider) {
+        scopeProviders.remove(provider);
+    }
+
+    @Override
+    public List<DataProvider> scopeProviders() {
+        return Collections.unmodifiableList(scopeProviders);
     }
 
     /**

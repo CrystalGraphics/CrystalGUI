@@ -3,6 +3,7 @@ package com.crystalgui.ui.elements.desktop;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgui.core.window.WindowState;
 import com.crystalgui.ui.input.UIInputHandler;
 import com.crystalgraphics.platform.service.CgInputService;
 import com.crystalgui.core.command.Command;

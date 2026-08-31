@@ -1,10 +1,10 @@
 package com.crystalgui.ui.elements.workbench;
 
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.core.window.WindowPolicy;
 import com.crystalgui.ui.elements.Button;
 import com.crystalgui.ui.elements.Tooltip;
 import com.crystalgui.ui.elements.desktop.WindowFrame;
-import com.crystalgui.ui.elements.desktop.WindowPolicy;
 
 import javax.annotation.Nullable;
 
