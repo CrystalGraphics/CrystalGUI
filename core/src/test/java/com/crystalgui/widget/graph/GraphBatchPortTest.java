@@ -1,5 +1,7 @@
 package com.crystalgui.widget.graph;
 
+import com.crystalgui.widget.canvas.WorldRect;
+import org.joml.Vector2f;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.graph.PortDirection;
 import com.crystalgui.graph.port.BasicPortType;
@@ -296,5 +298,103 @@ public class GraphBatchPortTest extends UiDocumentTestBase {
         assertTrue("the theme did not reach the port dot: still " + Integer.toHexString(themed),
                 themed != bare);
         assertEquals("a float port takes the theme's vec1 colour", 0xFF84E4E7, themed);
+    }
+
+    /**
+     * <b>A wire's two endpoints are the two dots it connects, in the wire layer's own space.</b>
+     *
+     * <p>Reported as a graph with three connections in its model and no wires on screen — except one
+     * short horizontal segment near the top-left of the plane, which was every wire in the graph drawn
+     * on top of each other.</p>
+     *
+     * <p>{@code Box.x()} is the offset from the HOST's border-box origin, where the old engine's
+     * {@code getRuntimeCache().getX()} accumulated through every ancestor and was absolute. So
+     * {@code dotCenter()} returned a dot's few-pixel offset inside its own port row rather than its
+     * position on the plane: every endpoint collapsed to nearly the same point, and the wires were
+     * drawn perfectly, in the wrong place, with the model entirely correct. It is the same class of
+     * error as {@code toLocal}'s moved origin at M6.1 — silent, and wrong by an amount that depends on
+     * how deep in the tree the two boxes are.</p>
+     *
+     * <p><b>Asserted on the SEPARATION rather than on absolute positions</b>, which is the thing that
+     * was broken and the thing a reader can check: two nodes 240px apart have dots about 240px apart,
+     * whatever the plane's own origin happens to be.</p>
+     */
+    @Test
+    public void aWireRunsBetweenTheTwoDotsItConnects() {
+        withDefaultStyles();
+        GraphView view = graph();
+        GraphNode left = new GraphNode("Left");
+        GraphNode right = new GraphNode("Right");
+        view.addNode(left, 0f, 0f);
+        view.addNode(right, 240f, 0f);
+        NodePort out = left.addOutput(FLOAT, "Out");
+        NodePort in = right.addInput(FLOAT, "In");
+        frame();
+        frame();
+        view.connect(out, in);
+        frame();
+        frame();
+
+        NodeWireLayer wires = view.wireLayer();
+        Vector2f a = out.dotCenterIn(wires);
+        Vector2f b = in.dotCenterIn(wires);
+
+        assertTrue("the two endpoints collapsed onto each other: " + a + " and " + b
+                        + " -- every wire in the graph would be one short segment",
+                Math.abs(b.x() - a.x()) > 150f);
+        assertTrue("the endpoints are not on the same row: " + a + " and " + b,
+                Math.abs(b.y() - a.y()) < 40f);
+
+        // AND THEY ARE THE DOTS' REAL POSITIONS, not merely far apart: the output dot is on the LEFT
+        // node, so it has to sit left of the input's. A sign error would satisfy the separation above.
+        assertTrue("the output dot is not left of the input dot: " + a + " then " + b, a.x() < b.x());
+    }
+
+    /**
+     * <b>The visible world rect does not depend on where the canvas sits in the page.</b>
+     *
+     * <p>It did. {@code visibleWorldRect} read {@code box().x()} — this canvas's offset inside ITS
+     * OWN parent — and subtracted the plane's origin from it, which cancelled on the old engine
+     * because that accessor was absolute and does not cancel here. So a canvas half way down a
+     * scrolling page reported a viewport hundreds of world units from the one it shows, and that rect
+     * is what culls both the nodes and the WIRES: things plainly on screen were drawn and then thrown
+     * away.</p>
+     *
+     * <p>Asserted by putting the same canvas at two different offsets and demanding the same answer,
+     * which is the property that was broken. A fixture with one canvas at the top of an empty document
+     * passes against the bug, because there the offset is zero.</p>
+     */
+    @Test
+    public void theVisibleRectIsIndependentOfWhereTheCanvasSits() {
+        withDefaultStyles();
+        CanvasView top = new CanvasView();
+        layout(top, l -> l.width(400f).height(200f));
+        // A TALL SPACER between them, so the second canvas is a long way down its parent.
+        UINode spacer = new UINode();
+        layout(spacer, l -> l.width(400f).height(500f));
+        CanvasView low = new CanvasView();
+        layout(low, l -> l.width(400f).height(200f));
+        document.append(top);
+        document.append(spacer);
+        document.append(low);
+        frame();
+        frame();
+
+        assertTrue("the fixture did not actually separate them",
+                boxOf(low).worldY() - boxOf(top).worldY() > 400f);
+
+        WorldRect a = top.visibleWorldRect();
+        WorldRect b = low.visibleWorldRect();
+        assertEquals("two identical canvases report different world origins purely because one is "
+                        + "further down the page: " + a.x() + " vs " + b.x(), a.x(), b.x(), 0.01f);
+        assertEquals("...and in y: " + a.y() + " vs " + b.y(), a.y(), b.y(), 0.01f);
+
+        // AND THE ANSWER IS THE PAN, which is what makes it a viewport rather than a constant.
+        low.setPan(60f, -30f);
+        frame();
+        frame();
+        assertEquals("panning right must move the visible world LEFT",
+                -60f, low.visibleWorldRect().x(), 0.5f);
+        assertEquals(30f, low.visibleWorldRect().y(), 0.5f);
     }
 }

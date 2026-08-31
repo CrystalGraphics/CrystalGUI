@@ -423,11 +423,13 @@ public class CanvasView extends UINode  {
     public WorldRect worldBoundsOf(UINode node) {
         Box cache = node.box();
         if (cache == null) return new WorldRect(0f, 0f, 0f, 0f);
-        // getX() accumulates through parents but NOT through the plane's transform — that is applied
-        // afterwards, in localToWorld — so subtracting the plane's origin lands in world units with
-        // no division by zoom.
-        return new WorldRect(cache.x() - contentOriginX(), cache.y() - contentOriginY(),
-                cache.width(), cache.height());
+        // A NODE IS A CHILD OF THE PLANE, so `x()` -- the offset from its host's border-box origin --
+        // IS its world position already: the plane's pan and zoom live in its TRANSFORM, which `x()`
+        // does not carry. The old engine's accessor accumulated through every ancestor, so it had to
+        // subtract the plane's own origin to get here; doing that now subtracts it a second time.
+        // Invisible while the plane sits at the canvas's own origin, which it does until a sheet gives
+        // `canvasview` a padding.
+        return new WorldRect(cache.x(), cache.y(), cache.width(), cache.height());
     }
 
     /**
@@ -439,9 +441,13 @@ public class CanvasView extends UINode  {
     public WorldRect visibleWorldRect() {
         Box cache = box();
         if (cache == null) return new WorldRect(0f, 0f, 0f, 0f);
-        float x = (cache.x() - contentOriginX() - panX) / zoom;
-        float y = (cache.y() - contentOriginY() - panY) / zoom;
-        return new WorldRect(x, y, cache.width() / zoom, cache.height() / zoom);
+        // THE VIEWPORT'S OWN TOP-LEFT IS (0, 0) IN ITS OWN SPACE, so the world point it shows is
+        // just the pan undone. `cache.x()` here is this CANVAS's offset inside ITS parent, which is
+        // not a canvas-relative quantity at all -- on the old engine that accessor was absolute and
+        // the two terms cancelled; here they do not, and the error is however far down the page the
+        // canvas happens to sit. This rect is what culls both nodes and WIRES, so a wrong one hides
+        // things that are plainly on screen.
+        return new WorldRect(-panX / zoom, -panY / zoom, cache.width() / zoom, cache.height() / zoom);
     }
 
     // ── Coordinates ─────────────────────────────────────────────────────────
@@ -454,9 +460,10 @@ public class CanvasView extends UINode  {
      * about.</p>
      */
     public Vector2f screenToWorld(float rawX, float rawY) {
+        // `toLocal` puts THIS box's origin at zero (M6.1), so the plane's own offset is already out
+        // of the answer and only the pan and zoom remain.
         Vector2f local = toLocal(rawX, rawY);
-        return new Vector2f((local.x() - contentOriginX() - panX) / zoom,
-                (local.y() - contentOriginY() - panY) / zoom);
+        return new Vector2f((local.x() - panX) / zoom, (local.y() - panY) / zoom);
     }
 
     /**

@@ -178,7 +178,11 @@ public class NavigatorView<T> extends UINode {
             Box labelBox = label.box();
             Box sidebarBox = sidebar.box();
             if (labelBox == null || sidebarBox == null) continue;
-            float left = labelBox.x() - sidebarBox.x();
+            // THROUGH THE WORLD MATRIX: a label sits inside a row inside a tree inside the sidebar,
+            // so its `x()` is an offset within its ROW. Subtracting the sidebar's own offset mixes
+            // two spaces and answers a number that is neither -- it only looked right because both
+            // are small.
+            float left = Box.originIn(labelBox, sidebarBox).x();
             // Its own box is the right measure now that the label self-sizes -- see the renderer.
             widest = Math.max(widest, left + labelBox.width());
         }

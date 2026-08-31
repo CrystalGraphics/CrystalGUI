@@ -1,5 +1,6 @@
 package com.crystalgui.ui.box;
 
+import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.style.ComputedStyle;
 import com.crystalgui.style.TaffyBridge;
 import com.crystalgui.style.property.StylePropertyRegistry;
@@ -16,6 +17,7 @@ import java.util.List;
 import java.util.function.Predicate;
 import javax.annotation.Nullable;
 import org.joml.Matrix4f;
+import org.joml.Vector2f;
 import org.joml.Vector4f;
 
 /**
@@ -154,6 +156,40 @@ public final class Box {
     }
 
     // ── Geometry ─────────────────────────────────────────────────────────────
+
+    /**
+     * The centre of {@code box}, expressed in {@code space}'s own local coordinates.
+     *
+     * <p><b>{@link #x()} is parent-relative</b> — the offset from the HOST's border-box origin — where
+     * the old engine's {@code getRuntimeCache().getX()} accumulated through every ancestor and was
+     * absolute. So anything that used to read two boxes' raw offsets and subtract them is now
+     * comparing coordinates in two different spaces, which is silent and looks like a small constant
+     * error until the two boxes are far apart in the tree. Going through the world matrix is the only
+     * conversion that holds, and it carries every intervening transform and scroll with it.</p>
+     *
+     * <p>The half-extents are added AFTER the conversion, in {@code space}'s units: {@code worldToLocal}
+     * has already undone every scale above {@code space}, and a box's own width is unscaled, so the
+     * two agree. Adding them first would scale them twice.</p>
+     *
+     * @return the centre, or {@code (0, 0)} when either box has not been laid out
+     */
+    /**
+     * The top-left of {@code box}, in {@code space}'s own local coordinates.
+     *
+     * <p>{@link #centreIn}'s twin, for a caller that wants an edge rather than a middle — and the same
+     * warning applies: subtracting two boxes' raw {@link #x()} values only works when they share a
+     * parent, because {@code x()} is parent-relative here and was absolute on the old engine.</p>
+     */
+    public static Vector2f originIn(@Nullable Box box, @Nullable Box space) {
+        if (box == null || space == null) return new Vector2f();
+        return Transform2D.apply(space.worldToLocal(), box.worldX(), box.worldY());
+    }
+
+    public static Vector2f centreIn(@Nullable Box box, @Nullable Box space) {
+        if (box == null || space == null) return new Vector2f();
+        Vector2f origin = Transform2D.apply(space.worldToLocal(), box.worldX(), box.worldY());
+        return origin.add(box.width() * 0.5f, box.height() * 0.5f);
+    }
 
     /** Offset from the host's border-box origin, before the host's scroll. */
     public float x() {

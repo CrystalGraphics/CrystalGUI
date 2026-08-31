@@ -347,10 +347,13 @@ final class PortDefaultEditor {
     }
 
     void reposition() {
-        Box contentCache = view.content().box();
-        Vector2f portDot = port.dotCenter();
-        float dotWorldX = portDot.x() - contentCache.x();
-        float dotWorldY = portDot.y() - contentCache.y();
+        // WORLD SPACE IS THE PLANE'S OWN LOCAL SPACE, so asking for the dot's centre in the plane
+        // IS the conversion the subtraction used to perform by hand -- and it is now the only one
+        // that holds, `Box.x()` being parent-relative where the old cache accumulated through every
+        // ancestor. @see NodePort#dotCenterIn
+        Vector2f portDot = port.dotCenterIn(view.content());
+        float dotWorldX = portDot.x();
+        float dotWorldY = portDot.y();
 
         Box boxCache = box.box();
         float boxX = dotWorldX - GAP - boxCache.width();
@@ -384,16 +387,21 @@ final class PortDefaultEditor {
      * #dot} and the real port's dot sit at the same Y (see {@link #reposition}), so the segment is
      * already purely horizontal and the trim is exact, not an approximation.</p>
      */
-    void paintStub(CgUiPaintContext ctx) {
+    void paintStub(CgUiPaintContext ctx, UINode space) {
         Box cache = dot.box();
         // The dot has not been laid out yet on the very first frame after mounting — see setMounted —
         // and a zero-size box would draw a stub from nowhere to itself. Invisible either way, but
         // skipped rather than submitted as a degenerate draw call.
-        if (cache.width() <= 0f || cache.height() <= 0f) return;
+        if (cache == null || cache.width() <= 0f || cache.height() <= 0f) return;
+        // BOTH ENDS IN THE CALLER'S SPACE. This stub is drawn from GraphNode.paintDecoration, so the
+        // pose is the NODE's — while this editor's own dot hangs off the plane and the port's dot off
+        // another subtree entirely. Reading either one's raw `x()` mixes three different parents'
+        // coordinate systems; the old engine got away with it because that accessor was absolute.
+        Vector2f own = Box.centreIn(cache, space == null ? null : space.box());
         float radius0 = cache.width() * 0.5f;
-        float centerX = cache.x() + radius0, y0 = cache.y() + cache.height() * 0.5f;
-        float x0 = centerX + radius0; // trimmed forward, off this dot's own edge
-        Vector2f target = port.dotCenter();
+        float y0 = own.y();
+        float x0 = own.x() + radius0; // trimmed forward, off this dot's own edge
+        Vector2f target = port.dotCenterIn(space);
         float x1 = target.x() - port.dotRadius();
         int color = port.typeColor();
         ctx.curve()

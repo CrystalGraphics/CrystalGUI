@@ -146,8 +146,8 @@ public class NodeWireLayer extends UINode {
         if (view == null) return null;
         float bestDistance = PICK_TOLERANCE / Math.max(1e-4f, view.getZoom());
         for (GraphConnection connection : connections) {
-            Vector2f a = connection.from().dotCenter();
-            Vector2f b = connection.to().dotCenter();
+            Vector2f a = connection.from().dotCenterIn(this);
+            Vector2f b = connection.to().dotCenterIn(this);
             float distance = distanceToWire(worldX + originX, worldY + originY, a, b);
             if (distance < bestDistance) {
                 bestDistance = distance;
@@ -210,16 +210,19 @@ public class NodeWireLayer extends UINode {
         super.paintContent(ctx, box);
         if (connections.isEmpty() && !pendingLive) return;
 
-        // The layer sits at world (0,0), so its own origin is the plane origin — this is what turns a
-        // plane-space coordinate into a world one for the cull test below.
-        float ox = box.x(), oy = box.y();
+        // ZERO, because `dotCenterIn(this)` already answers in this layer's own space and
+        // `BoxPainter` poses every box at its own origin. This used to add the layer's own `x`/`y`,
+        // which was right when a dot's centre was an ABSOLUTE layout coordinate and is a double
+        // offset now that it is not. Kept as named locals rather than deleted: the cull test below
+        // reads them, and the plane-to-world shift they represent is the thing that changed.
+        float ox = 0f, oy = 0f;
         // ...and draws nothing.
         if (view == null) return;
         WorldRect visible = view.visibleWorldRect().expand(CULL_MARGIN);
 
         for (GraphConnection connection : connections) {
-            Vector2f a = connection.from().dotCenter();
-            Vector2f b = connection.to().dotCenter();
+            Vector2f a = connection.from().dotCenterIn(this);
+            Vector2f b = connection.to().dotCenterIn(this);
             if (!isVisible(a, b, ox, oy, visible)) continue;
             boolean selected = connection.equals(view.getSelection().wire());
             // Thicker for BOTH, recoloured for selection only — the two states have to stay tellable
@@ -237,7 +240,7 @@ public class NodeWireLayer extends UINode {
         }
 
         if (pendingLive && pendingFrom != null) {
-            Vector2f a = pendingFrom.dotCenter();
+            Vector2f a = pendingFrom.dotCenterIn(this);
             int color = pendingFrom.typeColor();
             // Drawn from the port toward the pointer regardless of which direction the port is, so a
             // drag started from an input still reads as a wire being pulled out of it. The pointer end
