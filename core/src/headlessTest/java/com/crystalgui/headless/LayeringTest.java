@@ -51,7 +51,13 @@ public class LayeringTest {
             // list; see WIDGET_TIERS, which is the only layer that needs one.
             "com/crystalgui/chrome/",
             "com/crystalgui/desktop/",
-            "com/crystalgui/workbench/");
+            "com/crystalgui/workbench/",
+            // THE APPLICATIONS, and the layer the doctrine has always named without anything
+            // enforcing it: `graph.shader` was reachable from a leaf widget because nothing in this
+            // list covered it. ONE prefix for all of them -- app.shadergraph at 6.4, app.editor and
+            // app.machine at 6.7 -- rather than an entry each, and its sub-packages get none of
+            // their own, for the reason the chrome note above records.
+            "com/crystalgui/app/");
 
     /**
      * The tiers WITHIN {@code widget}, bottom-up.

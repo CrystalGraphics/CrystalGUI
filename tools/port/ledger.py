@@ -65,6 +65,38 @@ BY_DIR = [
 LANGUAGE_DEST = 'language/run/view'
 
 BY_NAME = {
+    # ── 6.4 ────────────────────────────────────────────────────────────────────────────────────
+    # THE PORT TYPES ARE MODEL, NOT WIDGET (D25). Six of PortType's seven members are facts about a
+    # type; the seventh returns a UIElement and has ONE caller, which is the whole reason the SPI
+    # and its registry could not live beside the graph model they describe.
+    'PortType': 'graph/port',
+    'BasicPortType': 'graph/port',
+    'PortTypeRegistry': 'graph/port',
+    # WHAT IS LEFT IN `graph.shader` ONCE THE WIDGETS LEAVE, and it is exactly the shader MODEL: a
+    # compile bridge, the literal form of a property's default, and a Settings declaration. All three
+    # are named by both engines, so they stay in a package both may name (D26, D27).
+    'ShaderGraphBridge': 'graph/shader',
+    'ShaderPropertyForm': 'graph/shader',
+    'ShaderGraphSettings': 'graph/shader',
+    # THE APPLICATION. `graph.shader` held an editor, a properties panel, three previews, two field
+    # widgets and five inspector sections in one flat directory, INSIDE the model's package -- while
+    # importing `ui.elements.dock` and `ui.elements.workbench`, which a model package cannot.
+    'BlackboardPanel': 'app/shadergraph/blackboard',
+    'PropertyPill': 'app/shadergraph/blackboard',
+    'CategoryHeader': 'app/shadergraph/blackboard',
+    'InlineRename': 'app/shadergraph/blackboard',
+    'ShaderPropertyNodes': 'app/shadergraph/blackboard',
+    'MainPreviewPanel': 'app/shadergraph/preview',
+    'ShaderNodePreview': 'app/shadergraph/preview',
+    'ShaderGraphPreviews': 'app/shadergraph/preview',
+    'ShaderColorFieldWidget': 'app/shadergraph/field',
+    'ShaderVectorFieldWidget': 'app/shadergraph/field',
+    'ShaderPortArity': 'app/shadergraph/field',
+    'ShaderInspectorSections': 'app/shadergraph',
+    # DEFERRED TO 6.7, and structurally rather than incidentally: one `implements FileDocument` and
+    # holds a `TextEditor` field, the other IS the registration with the dock and the workbench.
+    'ShaderGraphEditor': 'app/shadergraph',
+    'ShaderGraphContribution': 'app/shadergraph',
     # ui/elements root -- by kind, which is the whole reason the root is being split.
     'Button': 'widget/control', 'Checkbox': 'widget/control', 'CheckboxGroup': 'widget/control',
     'Switch': 'widget/control', 'Slider': 'widget/control', 'ProgressBar': 'widget/control',
@@ -92,6 +124,7 @@ BATCH = [
     ('chrome/status', '6.2'), ('chrome/notification', '6.2'),
     ('widget/collection', '6.3'), ('chrome', '6.3'),
     ('widget/canvas', '6.4'), ('widget/graph', '6.4'), ('graph/shader', '6.4'),
+    ('graph/port', '6.4'), ('app/shadergraph', '6.4'),
     ('widget/editor', '6.5'),
     ('desktop', '6.6'),
     ('workbench', '6.7'), ('editor', '6.7'), ('example/machine', '6.7'),
@@ -250,6 +283,18 @@ def destination(rel, stem):
     return ''
 
 
+# A class whose DESTINATION is in one batch but whose PORT waits for another. Two so far, both
+# 6.4's, both blocked on 6.7 by a supertype or a field rather than by a reference that could be
+# stubbed -- `ShaderGraphEditor implements FileDocument` and holds a `TextEditor`, and
+# `ShaderGraphContribution` IS the registration with the dock and the workbench. Recorded here
+# rather than by moving their destination, because where a class BELONGS and when it can GO are
+# different questions and conflating them is how a deferral becomes a lost file.
+BATCH_OVERRIDE = {
+    'ShaderGraphEditor': '6.7',
+    'ShaderGraphContribution': '6.7',
+}
+
+
 def batch_of(dest):
     best = ('', '')
     for prefix, b in BATCH:
@@ -282,7 +327,8 @@ def classify_classes():
                 # MOVED in the IDE, whose Move refactor fixes both engines' imports for nothing.
                 touches = bool(re.search(r'\bUIElement\b|\bUIWindow\b|getRuntimeCache|CgUiPaintContext', text))
                 dest = forced or destination(rel, stem)
-                rows.append((rel + '/' + stem, lines, dest or rel, batch_of(dest),
+                batch = BATCH_OVERRIDE.get(stem) or batch_of(dest)
+                rows.append((rel + '/' + stem, lines, dest or rel, batch,
                              'copy' if touches else 'move', 'pending'))
     return rows
 
