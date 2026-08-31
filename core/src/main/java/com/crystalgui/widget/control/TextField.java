@@ -1113,7 +1113,7 @@ public class TextField extends UINode  {
      */
     private void ensureCaretVisible() {
         // A DIVISOR, so max(1) and never 0 -- see Slider.travelLength.
-        float inner = box() == null ? 1f : Math.max(1f, box().contentWidth());
+        float inner = box() == null ? 1f : Math.max(1f, box().contentBoxWidth());
         displayOffset = scrollOffsetFor(isFocused(), caretX(caret), caretX(text.length()),
                 inner, displayOffset);
     }
@@ -1196,7 +1196,7 @@ public class TextField extends UINode  {
         // 10px text). The full element height is used instead.
         // Unrounded — pushScissor quantises once, in physical space. See its javadoc.
         ctx.pushScissor(textOriginX(), 0f,
-                Math.max(0f, layout.contentWidth()),
+                Math.max(0f, layout.contentBoxWidth()),
                 Math.max(0f, box.height()));
 
         // Focused, not merely selected. A blurred field keeps its selection INDICES — browsers do too,

@@ -552,14 +552,11 @@ graphview .__editor__ .__color__ { width: 40px; }
 colorselector .__channel-row__ text { color: var(--colorpicker-channel-fg, #9A9A9A); }
 colorselector .__hex-row__ text     { color: var(--colorpicker-channel-fg, #9A9A9A); }
 
-/* Both handles carry a dark outer ring as well as the white one,
-so they stay visible against a
+/* Both handles carry a dark outer ring as well as the white one, so they stay visible against a
  * white square corner and against a yellow band alike. Without it the handle vanishes exactly where
- * the colour is brightest,
-which is where it is most often dragged. */
+ * the colour is brightest, which is where it is most often dragged. */
 colorselector .__ring-handle__,
 colorselector .__square-handle__,
-colorselector::part(square-handle),
 colorselector::part(ring-handle),
 colorselector::part(square-handle) {
     outline: 1px var(--colorpicker-handle-shadow, #00000080);

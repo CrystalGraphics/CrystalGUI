@@ -293,7 +293,7 @@ public class Slider extends UINode {
         // max(1) rather than 0: this is a DIVISOR, and a slider nothing has laid out would otherwise
         // turn every drag delta into a NaN -- which poisons a whole layout silently and is what the
         // `!(x > 0)` rule exists for.
-        return layout == null ? 1f : Math.max(1f, layout.contentWidth());
+        return layout == null ? 1f : Math.max(1f, layout.contentBoxWidth());
     }
 
     /**

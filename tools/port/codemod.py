@@ -91,8 +91,12 @@ RULES = [
     # list as well (see RESIDUAL), rather than being trusted as a pure rename.
     (r'screenToLocal\(', 'toLocal(', 'coordinates'),
     (r'containsScreenPoint\(', 'containsSurfacePoint(', 'coordinates'),
-    (r'getTaffyLayout\(\)\.contentBoxWidth\(\)', 'box().contentWidth()', 'geometry'),
-    (r'getTaffyLayout\(\)\.contentBoxHeight\(\)', 'box().contentHeight()', 'geometry'),
+    # contentBox* -> contentBox*, NOT content*. `Box.contentWidth()` is the extent of what is INSIDE
+    # a box; `contentBoxWidth()` is the box minus border and padding. Mapping one to the other on the
+    # strength of the name made TextField -- which has no child nodes, so its content extent is zero --
+    # push a zero-width scissor and clip its own text away.
+    (r'getTaffyLayout\(\)\.contentBoxWidth\(\)', 'box().contentBoxWidth()', 'geometry'),
+    (r'getTaffyLayout\(\)\.contentBoxHeight\(\)', 'box().contentBoxHeight()', 'geometry'),
     (r'getTaffyLayout\(\)', 'box()', 'geometry'),
 
     # -- Geometry: the runtime cache becomes the box --------------------------------------------
