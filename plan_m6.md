@@ -385,12 +385,15 @@ com.crystalgui.widget                 THE LIBRARY: general-purpose, knows nothin
                  .field (the thirteen controls) · .inspector (Inspector, InspectorForm, InspectorRegistry, InspectorSection)
   .canvas        CanvasView, CanvasOverlayMove, WorldRect
   .graph         GraphView, GraphNode, NodePort, NodeWireLayer, PortDefaultEditor, NodeCreationMenu, GraphSelection, GraphCommands, port types, field binder/widgets
-  .editor        THE WIDGET AND ITS RENDERING, 22 files: TextEditor, EditorViewPart, DecorationPool,
+  .texteditor    THE WIDGET AND ITS RENDERING, 22 files: TextEditor, EditorViewPart, DecorationPool,
                  the 18 view parts, EditorFolding (view state by the engine's own rule),
                  DiffDecorations (read only by two view parts) and EditorCommands. The parts and
                  TextEditor are welded -- moving the parts out alone is 19 types and 65+ published
                  members, moving them WITH TextEditor is nine types and ZERO -- so the split is not
-                 `.view` leaving, it is the LANGUAGE FEATURES leaving. @see 6.5, measured by compiling
+                 `.view` leaving, it is the LANGUAGE FEATURES leaving. @see 6.5, measured by compiling.
+                 NAMED `texteditor`, not `editor`: `TextEditor` is the widget and `CrystalEditor` is
+                 the APPLICATION built on it, which 6.7 ports into a package of its own -- two things
+                 one word would have covered, in a repository where the tag is `texteditor` anyway
     .suggest     CompletionPopup, CompletionSession, CompletionRanking, EditorSuggest
     .doc         DocumentationPopup, HoverDocumentation
     .find        SearchReplaceBar, EditorFind
@@ -1933,7 +1936,7 @@ ideas that happen to both be popups.
 ##### The structure
 
 ```
-com.crystalgui.widget.editor          THE WIDGET AND ITS RENDERING -- 22 files
+com.crystalgui.widget.texteditor          THE WIDGET AND ITS RENDERING -- 22 files
                                       TextEditor, EditorViewPart, DecorationPool and the 18 view
                                       parts, plus EditorFolding and DiffDecorations
   .suggest                            CompletionPopup, CompletionSession, CompletionRanking,

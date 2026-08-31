@@ -5,6 +5,7 @@ import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.lang.CompletionItem;
 import com.crystalgui.text.lang.CompletionList;
 import com.crystalgui.text.lang.CompletionProvider;
+import com.crystalgui.text.lang.CompletionRecency;
 import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.text.lang.Versioned;
 

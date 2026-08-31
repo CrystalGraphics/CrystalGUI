@@ -11,7 +11,7 @@ import com.crystalgui.text.syntax.Language;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.text.SyntaxHighlighting;
+import com.crystalgui.widget.text.SyntaxHighlighting;
 import com.crystalgui.ui.text.TextRange;
 import com.crystalgui.widget.scroll.ScrollerView;
 import java.util.ArrayList;

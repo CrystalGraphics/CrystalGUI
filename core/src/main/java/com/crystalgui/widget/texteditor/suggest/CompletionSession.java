@@ -1,4 +1,4 @@
-package com.crystalgui.ui.elements.editor;
+package com.crystalgui.widget.texteditor.suggest;
 
 import com.crystalgui.core.collection.pick.QuickPickSource;
 import com.crystalgui.core.search.SearchMatch;

@@ -68,6 +68,43 @@ public interface Resizable {
     void applyResizeOrigin(float left, float top);
 
     /**
+     * A drag has claimed an axis, and the widget must stop sizing that axis itself.
+     *
+     * <p><b>Records only; it never clears anything.</b> A {@link Resizer} writes at INLINE origin, per
+     * spec — and every widget that sizes itself writes higher, so without this the handle would appear
+     * dead on that axis: the drag writes a width and the widget writes over it on the next frame. The
+     * flag is what lets the widget stand down instead, rather than the handle winning an origin fight
+     * it should not win. Withdrawing the widget's own declarations would beat an AUTHOR's
+     * {@code !important} in the same stroke, because those share one origin bucket.</p>
+     *
+     * <p>Two classes go with it so a sheet can see the state — {@link #USER_SIZED_WIDTH_CLASS} and
+     * {@link #USER_SIZED_HEIGHT_CLASS}. State a widget flips from its own code belongs on a class
+     * rather than a pseudo-class, and this one changes at most twice in a node's life.</p>
+     */
+    default void markUserSized(boolean width, boolean height) {
+    }
+
+    /** @see #markUserSized */
+    default boolean isUserSizedWidth() {
+        return false;
+    }
+
+    /** @see #markUserSized */
+    default boolean isUserSizedHeight() {
+        return false;
+    }
+
+    /** Forgets both, for a widget that has been given genuinely new content to size to. */
+    default void clearUserSizing() {
+    }
+
+    /** @see #markUserSized */
+    String USER_SIZED_WIDTH_CLASS = "__user-sized-width__";
+
+    /** @see #markUserSized */
+    String USER_SIZED_HEIGHT_CLASS = "__user-sized-height__";
+
+    /**
      * The drag settled on this geometry.
      *
      * <p>Called LAST, so an implementation sees the size the resize actually achieved and its own

@@ -220,6 +220,11 @@ public final class Resizer extends UINode {
             if (handle.dy != 0) l.height(finalHeight);
         });
 
+        // AND SAY SO. Everything else that writes geometry from code writes at a higher origin than
+        // this INLINE one, so a widget that sizes itself would overwrite the drag every frame and the
+        // handle would appear dead on that axis. @see Resizable#markUserSized
+        target.markUserSized(handle.dx != 0, handle.dy != 0);
+
         // The origin follows the size that was ACHIEVED, never the pointer. That is what pins the
         // opposite edge in place, and what makes the element stop moving the instant it stops resizing.
         if (handle.isLeading()) {

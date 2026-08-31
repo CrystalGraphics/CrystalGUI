@@ -171,40 +171,39 @@ CLASS	ui/elements/dock/DockRegion	74	workbench/dock	6.7	move	pending
 CLASS	ui/elements/dock/DockWindow	199	workbench/dock	6.7	copy	pending
 CLASS	ui/elements/dock/RegionSide	58	workbench/dock	6.7	move	pending
 CLASS	ui/elements/dock/ViewId	84	workbench/dock	6.7	move	pending
-CLASS	ui/elements/editor/CompletionPopup	897	widget/editor/suggest	6.5	copy	pending
-CLASS	ui/elements/editor/CompletionRanking	173	widget/editor/suggest	6.5	move	pending
-CLASS	ui/elements/editor/CompletionRecency	106	text/lang	6.5	move	pending
-CLASS	ui/elements/editor/CompletionSession	520	widget/editor/suggest	6.5	move	pending
-CLASS	ui/elements/editor/CurrentLinePart	76	widget/editor	6.5	copy	pending
-CLASS	ui/elements/editor/DecorationPool	121	widget/editor	6.5	copy	pending
-CLASS	ui/elements/editor/DiagnosticActions	95	widget/editor/lang	6.5	move	pending
-CLASS	ui/elements/editor/DiffBandsPart	134	widget/editor	6.5	copy	pending
-CLASS	ui/elements/editor/DiffChevronPart	135	widget/editor	6.5	copy	pending
-CLASS	ui/elements/editor/DiffDecorations	113	widget/editor	6.5	move	pending
-CLASS	ui/elements/editor/DocumentationPopup	1516	widget/editor/doc	6.5	copy	pending
-CLASS	ui/elements/editor/EditorCommands	534	widget/editor	6.5	copy	pending
-CLASS	ui/elements/editor/EditorDiagnostics	221	widget/editor/lang	6.5	move	pending
-CLASS	ui/elements/editor/EditorFind	312	widget/editor/find	6.5	copy	pending
-CLASS	ui/elements/editor/EditorFolding	374	widget/editor	6.5	move	pending
-CLASS	ui/elements/editor/EditorLanguageFeatures	514	widget/editor/lang	6.5	copy	pending
-CLASS	ui/elements/editor/EditorSuggest	250	widget/editor/suggest	6.5	copy	pending
-CLASS	ui/elements/editor/EditorViewPart	109	widget/editor	6.5	copy	pending
-CLASS	ui/elements/editor/ErrorStripePart	269	widget/editor	6.5	copy	pending
-CLASS	ui/elements/editor/FoldingDecorationsPart	306	widget/editor	6.5	copy	pending
-CLASS	ui/elements/editor/GutterEdgePart	60	widget/editor	6.5	copy	pending
-CLASS	ui/elements/editor/HoverDocumentation	281	widget/editor/doc	6.5	move	pending
-CLASS	ui/elements/editor/IndentGuidesPart	132	widget/editor	6.5	copy	pending
-CLASS	ui/elements/editor/InspectionWidgetPart	220	widget/editor	6.5	copy	pending
-CLASS	ui/elements/editor/LineNumbersPart	135	widget/editor	6.5	copy	pending
-CLASS	ui/elements/editor/QuickFixBulbPart	182	widget/editor	6.5	copy	pending
-CLASS	ui/elements/editor/RulersPart	55	widget/editor	6.5	copy	pending
-CLASS	ui/elements/editor/SearchReplaceBar	685	widget/editor/find	6.5	copy	pending
-CLASS	ui/elements/editor/SelectionsPart	124	widget/editor	6.5	copy	pending
-CLASS	ui/elements/editor/SquigglesPart	176	widget/editor	6.5	copy	pending
-CLASS	ui/elements/editor/TextEditor	6166	widget/editor	6.5	copy	pending
-CLASS	ui/elements/editor/ViewCursorsPart	163	widget/editor	6.5	copy	pending
-CLASS	ui/elements/editor/WhitespacePart	93	widget/editor	6.5	copy	pending
-CLASS	ui/elements/editor/ZoomIndicatorPart	181	widget/editor	6.5	copy	pending
+CLASS	ui/elements/editor/CompletionPopup	897	widget/texteditor/suggest	6.5	copy	ported
+CLASS	ui/elements/editor/CompletionRanking	174	widget/texteditor/suggest	6.5	copy	ported
+CLASS	ui/elements/editor/CompletionSession	521	widget/texteditor/suggest	6.5	copy	ported
+CLASS	ui/elements/editor/CurrentLinePart	76	widget/texteditor	6.5	copy	ported
+CLASS	ui/elements/editor/DecorationPool	121	widget/texteditor	6.5	copy	ported
+CLASS	ui/elements/editor/DiagnosticActions	95	widget/texteditor/lang	6.5	copy	ported
+CLASS	ui/elements/editor/DiffBandsPart	134	widget/texteditor	6.5	copy	ported
+CLASS	ui/elements/editor/DiffChevronPart	135	widget/texteditor	6.5	copy	ported
+CLASS	ui/elements/editor/DiffDecorations	113	widget/texteditor	6.5	copy	ported
+CLASS	ui/elements/editor/DocumentationPopup	1516	widget/texteditor/doc	6.5	copy	ported
+CLASS	ui/elements/editor/EditorCommands	534	widget/texteditor	6.5	copy	ported
+CLASS	ui/elements/editor/EditorDiagnostics	221	widget/texteditor/lang	6.5	copy	ported
+CLASS	ui/elements/editor/EditorFind	312	widget/texteditor/find	6.5	copy	ported
+CLASS	ui/elements/editor/EditorFolding	374	widget/texteditor	6.5	copy	ported
+CLASS	ui/elements/editor/EditorLanguageFeatures	514	widget/texteditor/lang	6.5	copy	ported
+CLASS	ui/elements/editor/EditorSuggest	250	widget/texteditor/suggest	6.5	copy	ported
+CLASS	ui/elements/editor/EditorViewPart	109	widget/texteditor	6.5	copy	ported
+CLASS	ui/elements/editor/ErrorStripePart	269	widget/texteditor	6.5	copy	ported
+CLASS	ui/elements/editor/FoldingDecorationsPart	306	widget/texteditor	6.5	copy	ported
+CLASS	ui/elements/editor/GutterEdgePart	60	widget/texteditor	6.5	copy	ported
+CLASS	ui/elements/editor/HoverDocumentation	281	widget/texteditor/doc	6.5	copy	ported
+CLASS	ui/elements/editor/IndentGuidesPart	132	widget/texteditor	6.5	copy	ported
+CLASS	ui/elements/editor/InspectionWidgetPart	220	widget/texteditor	6.5	copy	ported
+CLASS	ui/elements/editor/LineNumbersPart	135	widget/texteditor	6.5	copy	ported
+CLASS	ui/elements/editor/QuickFixBulbPart	182	widget/texteditor	6.5	copy	ported
+CLASS	ui/elements/editor/RulersPart	55	widget/texteditor	6.5	copy	ported
+CLASS	ui/elements/editor/SearchReplaceBar	685	widget/texteditor/find	6.5	copy	ported
+CLASS	ui/elements/editor/SelectionsPart	124	widget/texteditor	6.5	copy	ported
+CLASS	ui/elements/editor/SquigglesPart	176	widget/texteditor	6.5	copy	ported
+CLASS	ui/elements/editor/TextEditor	6166	widget/texteditor	6.5	copy	ported
+CLASS	ui/elements/editor/ViewCursorsPart	163	widget/texteditor	6.5	copy	ported
+CLASS	ui/elements/editor/WhitespacePart	93	widget/texteditor	6.5	copy	ported
+CLASS	ui/elements/editor/ZoomIndicatorPart	181	widget/texteditor	6.5	copy	ported
 CLASS	ui/elements/graph/GraphCommands	275	widget/graph	6.4	copy	ported
 CLASS	ui/elements/graph/GraphConnection	30	widget/graph	6.4	copy	ported
 CLASS	ui/elements/graph/GraphNode	634	widget/graph	6.4	copy	ported
@@ -272,6 +271,9 @@ CLASS	ui/elements/workbench/decoration/FileDecoration	70	workbench/decoration	6.
 CLASS	ui/elements/workbench/decoration/FileDecorationProvider	41	workbench/decoration	6.7	move	pending
 CLASS	ui/elements/workbench/decoration/FileDecorations	136	workbench/decoration	6.7	move	pending
 CLASS	ui/elements/workbench/document/TextFileDocument	272	workbench/document	6.7	copy	pending
+CLASS	ui/text/HighlightRegistry	117	ui/text	stays	move	pending
+CLASS	ui/text/SyntaxHighlighting	283	widget/text	6.5	copy	ported
+CLASS	ui/text/TextRange	44	ui/text	stays	move	pending
 CLASS	language/run/view/MappingCommands	174	language/run/view	6.7	move	pending
 CLASS	language/run/view/RunConsoleView	622	language/run/view	6.7	move	pending
 CLASS	language/run/view/RunDecorations	124	language/run/view	6.7	move	pending
@@ -363,19 +365,19 @@ PART	ColorSelector	swatch-new	A	2	confirmed	leaf in every rule, scoped by an anc
 PART	ColorSelector	swatch-original	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	ColorSelector	swatches	A	0	confirmed	leaf in every rule
 PART	ColorSelector	wheel	A	0	confirmed	leaf in every rule
-PART	CompletionPopup	completion	A	0	proposed	leaf in every rule
-PART	CompletionPopup	completion-deprecated	B	2	proposed	a rule selects through it (2)
-PART	CompletionPopup	completion-detail	A	1	proposed	leaf in every rule
-PART	CompletionPopup	completion-hint	A	1	proposed	leaf in every rule
-PART	CompletionPopup	completion-hint-text	A	1	proposed	leaf in every rule
-PART	CompletionPopup	completion-icon	A	2	proposed	leaf in every rule
-PART	CompletionPopup	completion-inherited	B	1	proposed	a rule selects through it (1)
-PART	CompletionPopup	completion-label	A	3	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	CompletionPopup	completion-mark-final	A	2	proposed	leaf in every rule
-PART	CompletionPopup	completion-mark-static	A	2	proposed	leaf in every rule
-PART	CompletionPopup	completion-options	A	2	proposed	leaf in every rule
-PART	CompletionPopup	completion-params	A	2	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	CompletionPopup	completion-row	A	2	proposed	leaf in every rule
+PART	CompletionPopup	completion	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	CompletionPopup	completion-deprecated	B	2	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	CompletionPopup	completion-detail	B	1	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	CompletionPopup	completion-hint	B	1	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	CompletionPopup	completion-hint-text	B	1	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	CompletionPopup	completion-icon	B	2	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	CompletionPopup	completion-inherited	B	1	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	CompletionPopup	completion-label	B	3	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	CompletionPopup	completion-mark-final	B	2	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	CompletionPopup	completion-mark-static	B	2	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	CompletionPopup	completion-options	B	2	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	CompletionPopup	completion-params	B	2	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	CompletionPopup	completion-row	B	2	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
 PART	ConfigControl	config-control	B	71	confirmed	a rule selects through it (61)
 PART	Configurator	configurator	B	6	confirmed	a rule selects through it (5)
 PART	Configurator	inline	C	4	confirmed	state adjective
@@ -423,27 +425,27 @@ PART	DockGroup	empty	C	2	confirmed	state adjective
 PART	DockGroup	missing	C	0	proposed	state adjective
 PART	DockGroup	pane-host	A	0	proposed	leaf in every rule
 PART	DockWindow	dock-window	B	1	proposed	a rule selects through it (1)
-PART	DocumentationPopup	doc-body	A	0	proposed	leaf in every rule
-PART	DocumentationPopup	doc-definition	A	0	proposed	leaf in every rule
-PART	DocumentationPopup	doc-definition-box	A	0	proposed	leaf in every rule
-PART	DocumentationPopup	doc-footer	A	0	proposed	leaf in every rule
-PART	DocumentationPopup	doc-footer-edit	A	0	proposed	leaf in every rule
-PART	DocumentationPopup	doc-footer-icon	A	0	proposed	leaf in every rule
-PART	DocumentationPopup	doc-footer-text	A	0	proposed	leaf in every rule
-PART	DocumentationPopup	doc-owner	A	0	proposed	leaf in every rule
-PART	DocumentationPopup	doc-owner-icon	A	0	proposed	leaf in every rule
-PART	DocumentationPopup	doc-owner-text	A	0	proposed	leaf in every rule
-PART	DocumentationPopup	doc-problem	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	DocumentationPopup	doc-problem-action	A	0	proposed	leaf in every rule
-PART	DocumentationPopup	doc-problem-actions	A	0	proposed	leaf in every rule
-PART	DocumentationPopup	doc-problem-message	A	0	proposed	leaf in every rule
-PART	DocumentationPopup	doc-problem-shortcut	A	0	proposed	leaf in every rule
-PART	DocumentationPopup	doc-scroll	A	0	proposed	leaf in every rule
-PART	DocumentationPopup	doc-separator	A	0	proposed	leaf in every rule
-PART	DocumentationPopup	documentation	A	0	proposed	leaf in every rule
-PART	DocumentationPopup	no-message	C	0	proposed	state adjective
-PART	DocumentationPopup	pinned	C	1	proposed	state adjective
-PART	DocumentationPopup	problem-only	C	2	proposed	state adjective
+PART	DocumentationPopup	doc-body	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	DocumentationPopup	doc-definition	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	DocumentationPopup	doc-definition-box	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	DocumentationPopup	doc-footer	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	DocumentationPopup	doc-footer-edit	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	DocumentationPopup	doc-footer-icon	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	DocumentationPopup	doc-footer-text	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	DocumentationPopup	doc-owner	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	DocumentationPopup	doc-owner-icon	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	DocumentationPopup	doc-owner-text	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	DocumentationPopup	doc-problem	B	1	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	DocumentationPopup	doc-problem-action	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	DocumentationPopup	doc-problem-actions	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	DocumentationPopup	doc-problem-message	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	DocumentationPopup	doc-problem-shortcut	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	DocumentationPopup	doc-scroll	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	DocumentationPopup	doc-separator	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	DocumentationPopup	documentation	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	DocumentationPopup	no-message	C	0	confirmed	state adjective
+PART	DocumentationPopup	pinned	C	1	confirmed	state adjective
+PART	DocumentationPopup	problem-only	C	2	confirmed	state adjective
 PART	DragGhost	drag-ghost	B	14	confirmed	a rule selects through it (6)
 PART	DragGhost	flipped	C	2	confirmed	state adjective
 PART	DragGhost	label	A	4	confirmed	leaf in every rule, scoped by an ancestor in 4
@@ -451,11 +453,11 @@ PART	DragGhost	pre-icon	A	2	confirmed	leaf in every rule, scoped by an ancestor 
 PART	DragGhost	unlabelled	C	2	confirmed	state adjective
 PART	Dropdown	chevron	A	0	confirmed	leaf in every rule
 PART	Dropdown	menu	A	0	confirmed	leaf in every rule
-PART	EditorFind	editor-find	B	4	proposed	a rule selects through it (3)
-PART	ErrorStripePart	error-stripe	A	1	proposed	leaf in every rule
-PART	ErrorStripePart	error-stripe-error	A	1	proposed	leaf in every rule
-PART	ErrorStripePart	error-stripe-information	A	1	proposed	leaf in every rule
-PART	ErrorStripePart	error-stripe-warning	A	1	proposed	leaf in every rule
+PART	EditorFind	editor-find	B	4	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	ErrorStripePart	error-stripe	B	1	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	ErrorStripePart	error-stripe-error	B	1	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	ErrorStripePart	error-stripe-information	B	1	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	ErrorStripePart	error-stripe-warning	B	1	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
 PART	GraphNode	collapse	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	GraphNode	collapsed	C	4	confirmed	state adjective
 PART	GraphNode	control-row	B	0	confirmed	leaf in every rule
@@ -481,16 +483,16 @@ PART	InputDialog	placing	C	3	confirmed	state adjective
 PART	InputDialog	prompt	B	4	confirmed	a rule selects through it (2)
 PART	InputDialog	prompt-caption	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	InsertionMarker	insertion	A	1	confirmed	leaf in every rule
-PART	InspectionWidgetPart	inspection	A	1	proposed	leaf in every rule
-PART	InspectionWidgetPart	inspection-clean	B	2	proposed	a rule selects through it (2)
-PART	InspectionWidgetPart	inspection-count	B	7	proposed	a rule selects through it (6)
-PART	InspectionWidgetPart	inspection-errors	A	0	proposed	leaf in every rule
-PART	InspectionWidgetPart	inspection-icon	A	4	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	InspectionWidgetPart	inspection-next	A	5	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	InspectionWidgetPart	inspection-number	A	4	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	InspectionWidgetPart	inspection-ok	A	1	proposed	leaf in every rule
-PART	InspectionWidgetPart	inspection-previous	A	5	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	InspectionWidgetPart	inspection-warnings	A	0	proposed	leaf in every rule
+PART	InspectionWidgetPart	inspection	B	1	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	InspectionWidgetPart	inspection-clean	B	2	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	InspectionWidgetPart	inspection-count	B	7	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	InspectionWidgetPart	inspection-errors	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	InspectionWidgetPart	inspection-icon	B	4	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	InspectionWidgetPart	inspection-next	B	5	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	InspectionWidgetPart	inspection-number	B	4	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	InspectionWidgetPart	inspection-ok	B	1	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	InspectionWidgetPart	inspection-previous	B	5	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	InspectionWidgetPart	inspection-warnings	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
 PART	Inspector	inspector	B	1	confirmed	leaf in every rule
 PART	Inspector	inspector-empty	B	0	confirmed	leaf in every rule
 PART	Inspector	inspector-scroll	B	1	confirmed	leaf in every rule
@@ -665,7 +667,7 @@ PART	PropertyPill	rename	B	1	confirmed	leaf in every rule, scoped by an ancestor
 PART	PropertyPill	renaming	B	2	confirmed	a rule selects through it (2)
 PART	PropertyPill	selected	C	7	confirmed	state adjective
 PART	PropertyPill	type	B	3	confirmed	leaf in every rule, scoped by an ancestor in 3
-PART	QuickFixBulbPart	quick-fix-bulb	A	0	proposed	leaf in every rule
+PART	QuickFixBulbPart	quick-fix-bulb	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
 PART	QuickPick	content	B	0	confirmed	leaf in every rule
 PART	QuickPick	qp-accelerator	B	0	confirmed	leaf in every rule
 PART	QuickPick	qp-category	B	0	confirmed	leaf in every rule
@@ -691,6 +693,8 @@ PART	RegionHost	region-host	A	2	proposed	leaf in every rule
 PART	RegionHost	region-primary	A	0	proposed	leaf in every rule
 PART	RegionHost	region-secondary	A	0	proposed	leaf in every rule
 PART	RegionHost	region-split	A	1	proposed	leaf in every rule
+PART	Resizable	user-sized-height	B	1	proposed	a rule selects through it (1)
+PART	Resizable	user-sized-width	A	1	proposed	leaf in every rule
 PART	Resizer	resizer	A	1	proposed	leaf in every rule
 PART	RunConsoleView	over-link	A	0	proposed	leaf in every rule
 PART	RunConsoleView	run-console	A	0	proposed	leaf in every rule
@@ -734,23 +738,23 @@ PART	SearchField	on	C	2	confirmed	state adjective
 PART	SearchField	options	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	SearchField	search-field	B	14	confirmed	a rule selects through it (6)
 PART	SearchField	search-option	A	4	confirmed	leaf in every rule
-PART	SearchReplaceBar	expanded	C	1	proposed	state adjective
-PART	SearchReplaceBar	find-action	B	6	proposed	a rule selects through it (2)
-PART	SearchReplaceBar	find-bar	B	32	proposed	a rule selects through it (31)
-PART	SearchReplaceBar	find-chevron	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	SearchReplaceBar	find-close	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	SearchReplaceBar	find-count	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	SearchReplaceBar	find-input	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	SearchReplaceBar	find-next	A	5	proposed	leaf in every rule, scoped by an ancestor in 5
-PART	SearchReplaceBar	find-prev	A	5	proposed	leaf in every rule, scoped by an ancestor in 5
-PART	SearchReplaceBar	find-row	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	SearchReplaceBar	find-rows	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	SearchReplaceBar	find-trailing	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	SearchReplaceBar	off	C	2	proposed	state adjective
-PART	SearchReplaceBar	option-match-case	A	1	proposed	leaf in every rule
-PART	SearchReplaceBar	option-preserve-case	A	1	proposed	leaf in every rule
-PART	SearchReplaceBar	option-regex	A	1	proposed	leaf in every rule
-PART	SearchReplaceBar	option-words	A	1	proposed	leaf in every rule
+PART	SearchReplaceBar	expanded	C	1	confirmed	state adjective
+PART	SearchReplaceBar	find-action	B	6	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	SearchReplaceBar	find-bar	B	32	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	SearchReplaceBar	find-chevron	B	3	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	SearchReplaceBar	find-close	B	2	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	SearchReplaceBar	find-count	B	2	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	SearchReplaceBar	find-input	B	1	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	SearchReplaceBar	find-next	B	5	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	SearchReplaceBar	find-prev	B	5	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	SearchReplaceBar	find-row	B	1	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	SearchReplaceBar	find-rows	B	1	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	SearchReplaceBar	find-trailing	B	1	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	SearchReplaceBar	off	C	2	confirmed	state adjective
+PART	SearchReplaceBar	option-match-case	B	1	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	SearchReplaceBar	option-preserve-case	B	1	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	SearchReplaceBar	option-regex	B	1	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	SearchReplaceBar	option-words	B	1	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
 PART	SelectControl	select	B	2	confirmed	a rule selects through it (1)
 PART	ShaderGraphEditor	content	A	0	proposed	leaf in every rule
 PART	ShaderGraphEditor	shader-content	A	0	proposed	leaf in every rule
@@ -770,10 +774,10 @@ PART	SplitView	first	B	0	confirmed	state adjective
 PART	SplitView	second	B	0	confirmed	state adjective
 PART	SplitView	split-pane	B	0	confirmed	leaf in every rule
 PART	SplitView	vertical	C	12	confirmed	state adjective
-PART	SquigglesPart	squiggle	A	1	proposed	leaf in every rule
-PART	SquigglesPart	squiggle-error	A	1	proposed	leaf in every rule
-PART	SquigglesPart	squiggle-information	A	1	proposed	leaf in every rule
-PART	SquigglesPart	squiggle-warning	A	1	proposed	leaf in every rule
+PART	SquigglesPart	squiggle	B	1	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	SquigglesPart	squiggle-error	B	1	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	SquigglesPart	squiggle-information	B	1	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	SquigglesPart	squiggle-warning	B	1	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
 PART	StatusBarView	clickable	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	StatusBarView	first	C	0	confirmed	state adjective
 PART	StatusBarView	left	B	2	confirmed	a rule selects through it (2)
@@ -845,37 +849,37 @@ PART	TaskbarDesigner	designer-value	B	2	confirmed	leaf in every rule
 PART	TaskbarDesigner	taskbar-designer	B	1	confirmed	a rule selects through it (1)
 PART	TaskbarPreviews	placing	C	3	confirmed	state adjective
 PART	TextControl	text	B	2	confirmed	a rule selects through it (1)
-PART	TextEditor	active	C	3	proposed	state adjective
-PART	TextEditor	caret	A	0	proposed	leaf in every rule
-PART	TextEditor	code-actions	B	1	proposed	a rule selects through it (1)
-PART	TextEditor	collapsed	C	4	proposed	state adjective
-PART	TextEditor	current-line	A	0	proposed	leaf in every rule
-PART	TextEditor	diff-added	A	3	proposed	leaf in every rule
-PART	TextEditor	diff-band	A	7	proposed	leaf in every rule
-PART	TextEditor	diff-changed	A	3	proposed	leaf in every rule
-PART	TextEditor	diff-chevron	A	1	proposed	leaf in every rule
-PART	TextEditor	diff-mark	A	4	proposed	leaf in every rule
-PART	TextEditor	diff-removed	A	3	proposed	leaf in every rule
-PART	TextEditor	diff-thin	A	3	proposed	leaf in every rule
-PART	TextEditor	fold	A	0	proposed	leaf in every rule
-PART	TextEditor	fold-column	A	0	proposed	leaf in every rule
-PART	TextEditor	fold-placeholder	A	0	proposed	leaf in every rule
-PART	TextEditor	gutter	A	0	proposed	leaf in every rule
-PART	TextEditor	gutter-edge	A	0	proposed	leaf in every rule
-PART	TextEditor	gutter-right	A	0	proposed	leaf in every rule
-PART	TextEditor	indent-guide	A	0	proposed	leaf in every rule
-PART	TextEditor	line	A	0	proposed	leaf in every rule
-PART	TextEditor	line-number	A	0	proposed	leaf in every rule
-PART	TextEditor	preferred-action	C	1	proposed	state adjective
-PART	TextEditor	ruler	A	0	proposed	leaf in every rule
-PART	TextEditor	scroll-layer	A	0	proposed	leaf in every rule
-PART	TextEditor	selection	A	0	proposed	leaf in every rule
-PART	TextEditor	shown	C	0	proposed	state adjective
-PART	TextEditor	text-viewport	A	0	proposed	leaf in every rule
-PART	TextEditor	whitespace	A	0	proposed	leaf in every rule
-PART	TextEditor	zoom-indicator	A	0	proposed	leaf in every rule
-PART	TextEditor	zoom-label	A	0	proposed	leaf in every rule
-PART	TextEditor	zoom-reset	A	0	proposed	leaf in every rule
+PART	TextEditor	active	C	3	confirmed	state adjective
+PART	TextEditor	caret	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	TextEditor	code-actions	B	1	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	TextEditor	collapsed	C	4	confirmed	state adjective
+PART	TextEditor	current-line	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	TextEditor	diff-added	B	3	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	TextEditor	diff-band	B	7	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	TextEditor	diff-changed	B	3	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	TextEditor	diff-chevron	B	1	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	TextEditor	diff-mark	B	4	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	TextEditor	diff-removed	B	3	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	TextEditor	diff-thin	B	3	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	TextEditor	fold	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	TextEditor	fold-column	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	TextEditor	fold-placeholder	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	TextEditor	gutter	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	TextEditor	gutter-edge	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	TextEditor	gutter-right	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	TextEditor	indent-guide	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	TextEditor	line	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	TextEditor	line-number	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	TextEditor	preferred-action	C	1	confirmed	state adjective
+PART	TextEditor	ruler	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	TextEditor	scroll-layer	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	TextEditor	selection	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	TextEditor	shown	C	0	confirmed	state adjective
+PART	TextEditor	text-viewport	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	TextEditor	whitespace	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	TextEditor	zoom-indicator	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	TextEditor	zoom-label	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
+PART	TextEditor	zoom-reset	B	0	confirmed	the widget is LIGHT (D28), so every name it uses is light structure
 PART	ToolWindowFrame	dock	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
 PART	ToolWindowFrame	floating	C	0	proposed	state adjective
 PART	ToolWindowFrame	tool-window	B	10	proposed	a rule selects through it (9)

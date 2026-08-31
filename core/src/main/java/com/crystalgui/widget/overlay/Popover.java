@@ -10,6 +10,8 @@ import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.ShadowRoot;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.widget.dnd.Resizable;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.dom.UISlot;
 import com.crystalgui.ui.service.AnchoredPlacement;
@@ -51,7 +53,7 @@ import lombok.Setter;
  * both closes the chain from the top down. That falls out of {@link com.crystalgui.ui.service.Dismiss#lightDismiss} finding the
  * target's innermost popover ancestor — see there for why the invoker counts as part of the popover.</p>
  */
-public class Popover extends UINode {
+public class Popover extends UINode implements Resizable {
 
     public static final Name NAME = Name.of("popover");
 
@@ -227,10 +229,8 @@ public class Popover extends UINode {
      * routes the leading edges through it, and re-showing re-anchors, so a popup resized from the top does
      * not open detached forever afterwards.</p>
      */
-    // NOT an override yet: UIResizer is M6.2 machinery, so nothing calls this on the new engine.
-    // Kept, with its reasoning, so the port of the resizer has the answer waiting rather than
-    // rediscovering why a popup may own its own left/top.
-    protected boolean canMoveResizeOrigin() {
+    @Override
+    public boolean canMoveResizeOrigin() {
         return true;
     }
 
@@ -543,9 +543,72 @@ public class Popover extends UINode {
      * transfers ownership rather than competing for it. Same handover a drag on the body uses; this is the
      * other gesture that moves a popup.</p>
      */
-    // NOT an override yet -- see canMoveResizeOrigin.
-    protected void applyResizeOrigin(float left, float top) {
+    @Override
+    public void applyResizeOrigin(float left, float top) {
         moveTo(left, top);
+    }
+
+    @Override
+    public UINode node() {
+        return this;
+    }
+
+    /**
+     * Where a promoted popup's origin is measured from — its own box, which is already an offset
+     * within the top layer.
+     *
+     * <p>{@code Box.x()} is the offset from the HOST's border-box origin, and a promoted popup's host
+     * IS the top layer, so its own x is exactly the {@code left} a leading drag has to write back.
+     * The old engine's default read the {@code left} inset and answered {@code 0} for {@code auto} —
+     * the teleport-to-the-corner bug, which for an ANCHORED popup is every popup before it is placed.
+     */
+    @Override
+    public float resizeOriginLeft() {
+        Box box = box();
+        return box == null ? 0f : box.x();
+    }
+
+    /** @see #resizeOriginLeft */
+    @Override
+    public float resizeOriginTop() {
+        Box box = box();
+        return box == null ? 0f : box.y();
+    }
+
+    // ── User sizing ─────────────────────────────────────────────────────────
+
+    private boolean userSizedWidth, userSizedHeight;
+
+    @Override
+    public void markUserSized(boolean width, boolean height) {
+        userSizedWidth |= width;
+        userSizedHeight |= height;
+        syncUserSizedClasses();
+    }
+
+    @Override
+    public boolean isUserSizedWidth() {
+        return userSizedWidth;
+    }
+
+    @Override
+    public boolean isUserSizedHeight() {
+        return userSizedHeight;
+    }
+
+    @Override
+    public void clearUserSizing() {
+        if (!userSizedWidth && !userSizedHeight) return;
+        userSizedWidth = false;
+        userSizedHeight = false;
+        syncUserSizedClasses();
+    }
+
+    private void syncUserSizedClasses() {
+        if (userSizedWidth) addClass(USER_SIZED_WIDTH_CLASS);
+        else removeClass(USER_SIZED_WIDTH_CLASS);
+        if (userSizedHeight) addClass(USER_SIZED_HEIGHT_CLASS);
+        else removeClass(USER_SIZED_HEIGHT_CLASS);
     }
 
     /** Re-runs placement against the current anchor. */
