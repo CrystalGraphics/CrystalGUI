@@ -53,10 +53,12 @@ import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.text.HighlightRegistry;
 import com.crystalgui.widget.text.SyntaxHighlighting;
 import com.crystalgui.ui.text.TextRange;
+import com.crystalgui.widget.texteditor.diff.DiffDecorations;
 import com.crystalgui.widget.texteditor.doc.DocumentationPopup;
 import com.crystalgui.widget.texteditor.doc.HoverDocumentation;
 import com.crystalgui.widget.texteditor.find.EditorFind;
 import com.crystalgui.widget.texteditor.find.SearchReplaceBar;
+import com.crystalgui.widget.texteditor.fold.EditorFolding;
 import com.crystalgui.widget.texteditor.lang.EditorDiagnostics;
 import com.crystalgui.widget.texteditor.lang.EditorLanguageFeatures;
 import com.crystalgui.widget.texteditor.part.CurrentLinePart;
@@ -1160,7 +1162,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
     }
 
     /** The shared tail of every selection change: end the undo run, re-place the carets, repaint. */
-    void afterSelectionChange() {
+    public void afterSelectionChange() {
         buffer.breakUndoCoalescing();
         updateBracketMatch();
         updateOccurrences();
@@ -4811,7 +4813,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * because a zoom at the top has nothing to preserve — but folding at the top genuinely can need to
      * scroll to keep the caret still once the rows above it are gone.</p>
      */
-    StableViewport captureFoldAnchor() {
+    public StableViewport captureFoldAnchor() {
         float height = lineHeight();
         if (!(height > 0f)) return StableViewport.NONE;
         int caret = selections.primary().head();
@@ -4835,7 +4837,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * correction would show the wrong lines for the length of it — the same reason caret-follow scrolling
      * is immediate.</p>
      */
-    void restoreStableViewport(StableViewport anchor) {
+    public void restoreStableViewport(StableViewport anchor) {
         float height = lineHeight();
         if (anchor.offset() < 0 || !(height > 0f)) return;
         // The delta is re-added verbatim, which is what the original does. It is a pixel count taken at
@@ -6050,7 +6052,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         folds.toggleFoldAt(row);
     }
 
-    int caretRow() {
+    public int caretRow() {
         return buffer.document().offsetToPoint(selections.primary().head()).row();
     }
 
@@ -6065,7 +6067,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * <p>For folding, which changes <em>which</em> rows exist rather than only where they are — what is
      * realised is keyed on a view-line window that no longer describes the same text.</p>
      */
-    void dropRealisedLines() {
+    public void dropRealisedLines() {
         firstRealised = -1;
         lastRealised = -1;
         forgetWidestLine();
@@ -6078,7 +6080,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * outside a widget can force its cascade — and the parts and subsystems are outside it in Java's terms
      * while being inside it in every other sense. This is the one forwarder rather than a widening.</p>
      */
-    void invalidateStyles() {
+    public void invalidateStyles() {
         invalidateStyleMatch();
     }
 

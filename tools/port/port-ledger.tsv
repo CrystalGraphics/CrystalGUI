@@ -179,12 +179,12 @@ CLASS	ui/elements/editor/DecorationPool	121	widget/texteditor/part	6.5	copy	port
 CLASS	ui/elements/editor/DiagnosticActions	95	widget/texteditor/lang	6.5	copy	ported
 CLASS	ui/elements/editor/DiffBandsPart	134	widget/texteditor/part	6.5	copy	ported
 CLASS	ui/elements/editor/DiffChevronPart	135	widget/texteditor/part	6.5	copy	ported
-CLASS	ui/elements/editor/DiffDecorations	113	widget/texteditor	6.5	copy	ported
+CLASS	ui/elements/editor/DiffDecorations	113	widget/texteditor/diff	6.5	copy	ported
 CLASS	ui/elements/editor/DocumentationPopup	1516	widget/texteditor/doc	6.5	copy	ported
 CLASS	ui/elements/editor/EditorCommands	534	widget/texteditor	6.5	copy	ported
 CLASS	ui/elements/editor/EditorDiagnostics	221	widget/texteditor/lang	6.5	copy	ported
 CLASS	ui/elements/editor/EditorFind	312	widget/texteditor/find	6.5	copy	ported
-CLASS	ui/elements/editor/EditorFolding	374	widget/texteditor	6.5	copy	ported
+CLASS	ui/elements/editor/EditorFolding	374	widget/texteditor/fold	6.5	copy	ported
 CLASS	ui/elements/editor/EditorLanguageFeatures	514	widget/texteditor/lang	6.5	copy	ported
 CLASS	ui/elements/editor/EditorSuggest	250	widget/texteditor/suggest	6.5	copy	ported
 CLASS	ui/elements/editor/EditorViewPart	109	widget/texteditor/part	6.5	copy	ported

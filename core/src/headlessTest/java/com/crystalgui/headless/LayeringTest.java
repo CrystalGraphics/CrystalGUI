@@ -105,6 +105,8 @@ public class LayeringTest {
             // names the features and the features name the core. They are sub-packages OF the editor,
             // not tiers above it, and an ordered claim either way would be false.
             "com/crystalgui/widget/texteditor/part/",
+            "com/crystalgui/widget/texteditor/fold/",
+            "com/crystalgui/widget/texteditor/diff/",
             "com/crystalgui/widget/texteditor/suggest/",
             "com/crystalgui/widget/texteditor/doc/",
             "com/crystalgui/widget/texteditor/find/",
