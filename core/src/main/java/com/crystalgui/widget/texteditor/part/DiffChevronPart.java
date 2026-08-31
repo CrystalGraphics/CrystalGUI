@@ -1,7 +1,9 @@
-package com.crystalgui.widget.texteditor;
+package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.texteditor.DiffDecorations;
+import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
 import java.util.ArrayList;
@@ -30,18 +32,18 @@ import java.util.List;
  * caret being placed through it. A chevron is the one decoration that <em>is</em> a control, so it keeps
  * its own pool.</p>
  */
-final class DiffChevronPart extends EditorViewPart {
+public final class DiffChevronPart extends EditorViewPart {
 
     private final List<UINode> chevrons = new ArrayList<>();
     /** Which difference each pooled chevron currently stands for, parallel to {@link #chevrons}. */
     private final List<Integer> bandOf = new ArrayList<>();
 
-    DiffChevronPart(TextEditor editor) {
+    public DiffChevronPart(TextEditor editor) {
         super(editor);
     }
 
     @Override
-    void render(int firstViewLine, int lastViewLine) {
+    public void render(int firstViewLine, int lastViewLine) {
         int used = 0;
         if (editor.diffRevertHandler() != null && !editor.diffDecorations().isEmpty()
                 && hasWindow(firstViewLine, lastViewLine)) {

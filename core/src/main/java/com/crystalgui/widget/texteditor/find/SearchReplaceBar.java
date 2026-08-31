@@ -15,6 +15,7 @@ import com.crystalgui.core.search.SearchQuery;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.control.Button;
@@ -547,7 +548,7 @@ public class SearchReplaceBar extends UINode {
      * widget measured. Run from a ticker because the height changes when the replace row appears.</p>
      */
     private void syncEditorInset() {
-        float inset = isOpen() ? box().height() : 0f;
+        float inset = isOpen() ? boxHeight(this) : 0f;
         if (Math.abs(inset - appliedInset) < 0.5f) return;
         appliedInset = inset;
         StyleGroup.inlinePipeline(editor.getStyle().getLayoutGroup(), l -> l.paddingTop(inset));
@@ -583,7 +584,7 @@ public class SearchReplaceBar extends UINode {
      */
     private void syncTrailingWidths() {
         float target = replaceShown
-                ? Math.max(0f, replaceTrailing.box().width()) : 0f;
+                ? boxWidth(replaceTrailing) : 0f;
         if (Math.abs(target - appliedTrailing) < 0.5f) return;
         appliedTrailing = target;
         StyleGroup.inlinePipeline(findTrailing.getStyle().getLayoutGroup(), l -> l.minWidth(target));
@@ -697,4 +698,16 @@ public class SearchReplaceBar extends UINode {
     }
 
     /** The parts are this widget's own structure. */
+    /** A node's border-box width, or zero before it has a box. @see com.crystalgui.ui.box.Box */
+    private static float boxHeight(UINode node) {
+        Box box = node.box();
+        return box == null ? 0f : box.height();
+    }
+
+    /** @see #boxHeight */
+    private static float boxWidth(UINode node) {
+        Box box = node.box();
+        return box == null ? 0f : box.width();
+    }
+
 }

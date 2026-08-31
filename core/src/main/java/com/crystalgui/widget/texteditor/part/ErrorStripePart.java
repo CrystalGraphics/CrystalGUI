@@ -1,4 +1,4 @@
-package com.crystalgui.widget.texteditor;
+package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.layout.LayoutProperties;
@@ -8,6 +8,7 @@ import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.wrap.LineProjection;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
 import java.util.ArrayList;
@@ -46,7 +47,7 @@ import java.util.List;
  * translated by the pose every frame and would have to subtract the scroll back out by hand, which is the
  * mistake {@code SelectionsPart} records having made in the other direction.</p>
  */
-final class ErrorStripePart extends EditorViewPart {
+public final class ErrorStripePart extends EditorViewPart {
 
     static final String STRIPE_CLASS = "__error-stripe__";
     static final String ERROR_CLASS = "__error-stripe-error__";
@@ -116,7 +117,7 @@ final class ErrorStripePart extends EditorViewPart {
         float height = Float.NaN;
     }
 
-    ErrorStripePart(TextEditor editor) {
+    public ErrorStripePart(TextEditor editor) {
         super(editor);
         editor.verticalScroller().track().onMouseDown.attachListener((element, event) -> {
             if (goToNearestMark(element, event.getPosition().x(), event.getPosition().y())) {
@@ -142,7 +143,9 @@ final class ErrorStripePart extends EditorViewPart {
      */
     private boolean goToNearestMark(UINode track, float screenX, float screenY) {
         var local = track.toLocal(screenX, screenY);
-        float tolerance = Math.max(MIN_SNAP_PX, track.box().height() * SNAP_PERCENT / 100f);
+        Box grooveBox = track.box();
+        if (grooveBox == null) return false;
+        float tolerance = Math.max(MIN_SNAP_PX, grooveBox.height() * SNAP_PERCENT / 100f);
         Diagnostic best = null;
         float bestDistance = Float.MAX_VALUE;
         for (int i = 0; i < marks.size(); i++) {
@@ -165,7 +168,7 @@ final class ErrorStripePart extends EditorViewPart {
     }
 
     @Override
-    void render(int firstViewLine, int lastViewLine) {
+    public void render(int firstViewLine, int lastViewLine) {
         int used = 0;
         int viewLines = editor.viewLineCount();
         if (viewLines > 0) {

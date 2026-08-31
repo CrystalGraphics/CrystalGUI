@@ -1,4 +1,4 @@
-package com.crystalgui.widget.texteditor;
+package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
@@ -7,6 +7,7 @@ import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
 /**
@@ -31,7 +32,7 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
  * hitting exactly this with {@code U+25B8}, and {@code UIText}'s ellipsis fallback with {@code U+2026}.
  * Java names no character at all here.</p>
  */
-final class InspectionWidgetPart extends EditorViewPart {
+public final class InspectionWidgetPart extends EditorViewPart {
 
     static final String PANEL_CLASS = "__inspection__";
     /** One severity's icon-and-number pair. Carries a {@code severity-*} class the cascade draws from. */
@@ -60,12 +61,12 @@ final class InspectionWidgetPart extends EditorViewPart {
     private Button previous;
     private Button next;
 
-    InspectionWidgetPart(TextEditor editor) {
+    public InspectionWidgetPart(TextEditor editor) {
         super(editor);
     }
 
     @Override
-    void render(int firstViewLine, int lastViewLine) {
+    public void render(int firstViewLine, int lastViewLine) {
         DiagnosticSet diagnostics = editor.diagnostics();
         panel();
 

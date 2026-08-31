@@ -1,4 +1,4 @@
-package com.crystalgui.widget.texteditor;
+package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.UINode;
@@ -26,7 +26,7 @@ import java.util.function.Supplier;
  * it no longer shows would still act on a stray click. Pools whose elements are interactive — the fold
  * arrows — clear their row mapping alongside {@link #endPass()}; see {@code FoldArrowsPart}.</p>
  */
-final class DecorationPool {
+public final class DecorationPool {
 
     private final List<UINode> elements = new ArrayList<>();
     private final Supplier<UINode> parent;

@@ -1,8 +1,9 @@
-package com.crystalgui.widget.texteditor;
+package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.view.IndentLevels;
 import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
 /**
@@ -14,7 +15,7 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
  * exists to answer, and where a guide derived from a row's own characters would have nothing to derive
  * from.</p>
  */
-final class IndentGuidesPart extends EditorViewPart {
+public final class IndentGuidesPart extends EditorViewPart {
 
     /**
      * Cap on guide elements.
@@ -28,13 +29,13 @@ final class IndentGuidesPart extends EditorViewPart {
 
     private final DecorationPool pool;
 
-    IndentGuidesPart(TextEditor editor) {
+    public IndentGuidesPart(TextEditor editor) {
         super(editor);
         this.pool = new DecorationPool(editor::linesLayer, TextEditor.INDENT_GUIDE_CLASS, false);
     }
 
     @Override
-    void render(int firstViewLine, int lastViewLine) {
+    public void render(int firstViewLine, int lastViewLine) {
         if (!editor.isIndentGuidesVisible() || lastViewLine < firstViewLine) {
             pool.hideAll();
             return;

@@ -1,10 +1,12 @@
-package com.crystalgui.widget.texteditor;
+package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.wrap.ProjectedLines;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.text.UIText;
+import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
 import java.util.ArrayList;
@@ -24,7 +26,7 @@ import java.util.List;
  * So the gutter opts out of both and subtracts {@code scrollTop} itself. Letting it scroll normally would
  * slide the numbers sideways the moment a line is wider than the viewport.</p>
  */
-final class LineNumbersPart extends EditorViewPart {
+public final class LineNumbersPart extends EditorViewPart {
 
     private final UINode gutter;
     /**
@@ -33,7 +35,7 @@ final class LineNumbersPart extends EditorViewPart {
      */
     private final DecorationPool numbers;
 
-    LineNumbersPart(TextEditor editor, UINode gutter) {
+    public LineNumbersPart(TextEditor editor, UINode gutter) {
         super(editor);
         this.gutter = gutter;
         // Into the GUTTER'S scroll layer, not the gutter: the numbers follow the rows, so they are
@@ -42,7 +44,7 @@ final class LineNumbersPart extends EditorViewPart {
     }
 
     @Override
-    void render(int firstViewLine, int lastViewLine) {
+    public void render(int firstViewLine, int lastViewLine) {
         if (!editor.isGutterVisible()) {
             DecorationPool.hide(gutter);
             numbers.hideAll();
@@ -59,7 +61,8 @@ final class LineNumbersPart extends EditorViewPart {
         // gutter can run the whole height and the bar draws on top of its bottom edge.
         DecorationPool.show(gutter);
         final float width = editor.paddingLeft() + editor.gutterWidth();
-        final float gutterHeight = editor.box().clientHeight();
+        Box editorBox = editor.box();
+        final float gutterHeight = editorBox == null ? 0f : editorBox.clientHeight();
         StyleGroup.defaultPipeline(gutter.getStyle().getLayoutGroup(),
                 l -> l.positionType(TaffyPosition.ABSOLUTE)
                         .left(0f).top(0f).width(width).height(gutterHeight));

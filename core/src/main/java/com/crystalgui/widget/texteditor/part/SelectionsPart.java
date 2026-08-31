@@ -1,9 +1,10 @@
-package com.crystalgui.widget.texteditor;
+package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.Selection;
 import com.crystalgui.text.wrap.LineProjection;
 import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
 
@@ -15,7 +16,7 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
  * that is not selected. Working in view space makes the wrapped and unwrapped cases the same code; the
  * only thing that changes is how many bands a row produces.</p>
  */
-final class SelectionsPart extends EditorViewPart {
+public final class SelectionsPart extends EditorViewPart {
 
     /**
      * The bands, pooled.
@@ -30,13 +31,13 @@ final class SelectionsPart extends EditorViewPart {
      */
     private final DecorationPool bands;
 
-    SelectionsPart(TextEditor editor) {
+    public SelectionsPart(TextEditor editor) {
         super(editor);
         this.bands = new DecorationPool(editor::linesLayer, TextEditor.SELECTION_CLASS, false);
     }
 
     @Override
-    void render(int firstViewLine, int lastViewLine) {
+    public void render(int firstViewLine, int lastViewLine) {
         // HIDE WHAT WE HAVE rather than returning -- see EditorViewPart.render. A pass with no window
         // still has to retire the bands from the last one, or they mark rows that no longer exist.
         bands.beginPass();

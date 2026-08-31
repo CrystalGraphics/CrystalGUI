@@ -385,12 +385,13 @@ com.crystalgui.widget                 THE LIBRARY: general-purpose, knows nothin
                  .field (the thirteen controls) · .inspector (Inspector, InspectorForm, InspectorRegistry, InspectorSection)
   .canvas        CanvasView, CanvasOverlayMove, WorldRect
   .graph         GraphView, GraphNode, NodePort, NodeWireLayer, PortDefaultEditor, NodeCreationMenu, GraphSelection, GraphCommands, port types, field binder/widgets
-  .texteditor    THE WIDGET AND ITS RENDERING, 22 files: TextEditor, EditorViewPart, DecorationPool,
-                 the 18 view parts, EditorFolding (view state by the engine's own rule),
-                 DiffDecorations (read only by two view parts) and EditorCommands. The parts and
-                 TextEditor are welded -- moving the parts out alone is 19 types and 65+ published
-                 members, moving them WITH TextEditor is nine types and ZERO -- so the split is not
-                 `.view` leaving, it is the LANGUAGE FEATURES leaving. @see 6.5, measured by compiling.
+  .texteditor    THE WIDGET, 4 files: TextEditor, EditorFolding (view state by the engine's own rule),
+                 DiffDecorations (read only by two view parts) and EditorCommands. @see 6.5,
+                 measured by compiling.
+    .part        EditorViewPart, DecorationPool and the 18 view parts. They and TextEditor reach each
+                 other's package-private surface freely, so this costs 17 types and ~72 members and
+                 makes `render(int, int)` public -- taken deliberately, because the alternative is 22
+                 files in one directory with a 6,166-line class at the top of it.
                  NAMED `texteditor`, not `editor`: `TextEditor` is the widget and `CrystalEditor` is
                  the APPLICATION built on it, which 6.7 ports into a package of its own -- two things
                  one word would have covered, in a repository where the tag is `texteditor` anyway
@@ -1936,15 +1937,29 @@ ideas that happen to both be popups.
 ##### The structure
 
 ```
-com.crystalgui.widget.texteditor          THE WIDGET AND ITS RENDERING -- 22 files
-                                      TextEditor, EditorViewPart, DecorationPool and the 18 view
-                                      parts, plus EditorFolding and DiffDecorations
-  .suggest                            CompletionPopup, CompletionSession, CompletionRanking,
-                                      EditorSuggest
-  .doc                                DocumentationPopup, HoverDocumentation
-  .find                               SearchReplaceBar, EditorFind
-  .lang                               EditorLanguageFeatures, EditorDiagnostics, DiagnosticActions
+com.crystalgui.widget.texteditor       THE WIDGET -- 4 files: TextEditor, EditorFolding,
+                                       DiffDecorations, EditorCommands
+  .part                                EditorViewPart, DecorationPool and the 18 view parts
+  .suggest                             CompletionPopup, CompletionSession, CompletionRanking,
+                                       EditorSuggest
+  .doc                                 DocumentationPopup, HoverDocumentation
+  .find                                SearchReplaceBar, EditorFind
+  .lang                                EditorLanguageFeatures, EditorDiagnostics, DiagnosticActions
 ```
+
+**`.part` was measured as NOT worth it and taken anyway, which is a decision rather than a mistake.**
+The parts and `TextEditor` reach each other's package-private surface freely, so the boundary costs
+**17 types and ~72 members on top of the 78** the four feature packages cost — roughly doubling the
+split's bill. What it buys is that the root is four files instead of twenty-two, with the largest
+class in the repository no longer sharing a directory with eighteen of its own internals. The
+published surface is concentrated and honest: `render(int, int)` becoming public is an accurate
+statement of what it always was — the contract between an editor and the things that draw it — and
+the rest is the geometry a part asks the editor for.
+
+> **The general form, and 6.6 reached the same place from the other side:** a split's price is a fact
+> and whether to pay it is a judgement. Measure it, quote it, and let the person who owns the tree
+> decide — the two times a recommendation was overruled here, the structure that resulted was better
+> than the one the price alone argued for.
 
 **`EditorCommands` stays at the root** because it costs nothing either way and is the editor's own
 named actions — the same place `GraphCommands` and `DesktopCommands` sit relative to their widgets.
@@ -1970,8 +1985,8 @@ The published members are concentrated and they read as a contract rather than a
 the recommendation above — folding staying — the bill is **7 types and 78 members** across four
 packages and twelve files.
 
-6.6 cost **52 members for 27 files**; this is **78 for 34**. The same rate, for a package that is
-otherwise 34 files in one directory with the largest class in the repository at the top of it.
+6.6 cost **52 members for 27 files**; the four feature packages are **78 for 34**, the same rate.
+Adding `.part` takes it to roughly **150**, which is the price of the root being four files.
 
 > **The rule this section now records, which is 6.6's stated in the reverse direction:** a split's
 > price is a property of the PARTITION, and the partition worth measuring first is the one that keeps

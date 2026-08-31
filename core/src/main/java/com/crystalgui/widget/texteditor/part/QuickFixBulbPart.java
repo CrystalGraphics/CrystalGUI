@@ -1,8 +1,9 @@
-package com.crystalgui.widget.texteditor;
+package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.texteditor.TextEditor;
 import com.crystalgui.widget.texteditor.lang.EditorLanguageFeatures;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
@@ -34,18 +35,18 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
  * the synchronous fast path — see {@link #somethingToOffer()} for the half that asks, and for why it asks
  * once per caret move rather than once per frame.</p>
  */
-final class QuickFixBulbPart extends EditorViewPart {
+public final class QuickFixBulbPart extends EditorViewPart {
 
     static final String BULB_CLASS = "__quick-fix-bulb__";
 
     private UINode bulb;
 
-    QuickFixBulbPart(TextEditor editor) {
+    public QuickFixBulbPart(TextEditor editor) {
         super(editor);
     }
 
     @Override
-    void render(int firstViewLine, int lastViewLine) {
+    public void render(int firstViewLine, int lastViewLine) {
         long timed = FrameProfile.begin();
         boolean offer = editor.isGutterVisible() && somethingToOffer();
         FrameProfile.step(timed, "bulb.somethingToOffer -> " + offer);

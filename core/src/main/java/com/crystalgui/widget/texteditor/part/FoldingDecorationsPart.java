@@ -1,10 +1,12 @@
-package com.crystalgui.widget.texteditor;
+package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.fold.FoldingRegions;
 import com.crystalgui.text.wrap.ProjectedLines;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.text.UIText;
+import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
 import java.util.ArrayList;
@@ -29,19 +31,19 @@ import java.util.List;
  * origin — so an arrow left pointing at a row it no longer shows would toggle that row on a stray click in
  * the gutter's corner. That is why the row mapping is cleared alongside the box.</p>
  */
-final class FoldingDecorationsPart extends EditorViewPart {
+public final class FoldingDecorationsPart extends EditorViewPart {
 
     private final List<UINode> arrows = new ArrayList<>();
     private final List<Integer> arrowRows = new ArrayList<>();
     private final List<UINode> chips = new ArrayList<>();
     private final List<Integer> chipRows = new ArrayList<>();
 
-    FoldingDecorationsPart(TextEditor editor) {
+    public FoldingDecorationsPart(TextEditor editor) {
         super(editor);
     }
 
     @Override
-    void render(int firstViewLine, int lastViewLine) {
+    public void render(int firstViewLine, int lastViewLine) {
         renderArrows(firstViewLine, lastViewLine);
         renderChips(firstViewLine, lastViewLine);
     }
@@ -68,7 +70,8 @@ final class FoldingDecorationsPart extends EditorViewPart {
         final float columnLeft = editor.gutterLeft() + editor.gutterChevronWidth()
                 + editor.gutterNumberWidth();
         final float columnWidth = editor.gutterFoldWidth();
-        final float columnHeight = editor.box().clientHeight();
+        Box editorBox = editor.box();
+        final float columnHeight = editorBox == null ? 0f : editorBox.clientHeight();
         StyleGroup.defaultPipeline(column.getStyle().getLayoutGroup(),
                 l -> l.positionType(TaffyPosition.ABSOLUTE)
                         .left(columnLeft).top(0f).width(columnWidth).height(columnHeight));
@@ -263,7 +266,7 @@ final class FoldingDecorationsPart extends EditorViewPart {
      * <p>Only a bracket counts. A row ending in a word — {@code do}, {@code then}, a Python colon — has no
      * character the chip can absorb without the collapsed line reading as if it were missing something.</p>
      */
-    static int trailingOpenerIndex(String rowText) {
+    public static int trailingOpenerIndex(String rowText) {
         int i = rowText.length() - 1;
         while (i >= 0 && Character.isWhitespace(rowText.charAt(i))) i--;
         if (i < 0) return -1;

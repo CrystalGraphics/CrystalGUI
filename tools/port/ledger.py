@@ -127,6 +127,21 @@ BY_NAME = {
     # the whole bill for one file); DiffDecorations stays because its only readers are two view parts;
     # EditorCommands stays because it costs nothing either way and belongs beside its widget, as
     # GraphCommands and DesktopCommands do. @see plan_m6.md 6.5 section 1
+    # The 18 VIEW PARTS. They and TextEditor reach each other's package-private surface freely, so a
+    # `.part` package publishes the whole render protocol -- 17 types and ~72 members, on top of the
+    # 78 the four feature packages cost. Taken anyway, deliberately: 22 files in one directory with a
+    # 6,166-line class at the top of it is what the split exists to stop, and `render(int, int)` being
+    # public is an honest statement of what it always was -- the contract between an editor and the
+    # things that draw it. @see plan_m6.md 6.5
+    'EditorViewPart': 'widget/texteditor/part', 'DecorationPool': 'widget/texteditor/part',
+    'CurrentLinePart': 'widget/texteditor/part', 'DiffBandsPart': 'widget/texteditor/part',
+    'DiffChevronPart': 'widget/texteditor/part', 'ErrorStripePart': 'widget/texteditor/part',
+    'FoldingDecorationsPart': 'widget/texteditor/part', 'GutterEdgePart': 'widget/texteditor/part',
+    'IndentGuidesPart': 'widget/texteditor/part', 'InspectionWidgetPart': 'widget/texteditor/part',
+    'LineNumbersPart': 'widget/texteditor/part', 'QuickFixBulbPart': 'widget/texteditor/part',
+    'RulersPart': 'widget/texteditor/part', 'SelectionsPart': 'widget/texteditor/part',
+    'SquigglesPart': 'widget/texteditor/part', 'ViewCursorsPart': 'widget/texteditor/part',
+    'WhitespacePart': 'widget/texteditor/part', 'ZoomIndicatorPart': 'widget/texteditor/part',
     'CompletionPopup': 'widget/texteditor/suggest', 'CompletionSession': 'widget/texteditor/suggest',
     'CompletionRanking': 'widget/texteditor/suggest', 'EditorSuggest': 'widget/texteditor/suggest',
     'DocumentationPopup': 'widget/texteditor/doc', 'HoverDocumentation': 'widget/texteditor/doc',
@@ -218,6 +233,7 @@ BATCH = [
     ('widget/texteditor', '6.5'),
     ('widget/texteditor/suggest', '6.5'), ('widget/texteditor/doc', '6.5'),
     ('widget/texteditor/find', '6.5'), ('widget/texteditor/lang', '6.5'),
+    ('widget/texteditor/part', '6.5'),
     ('desktop', '6.6'),
     ('workbench', '6.7'), ('editor', '6.7'), ('example/machine', '6.7'),
     ('net/window', '6.8'),

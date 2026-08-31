@@ -1015,7 +1015,8 @@ public final class DocumentationPopup extends Popover {
         //
         // IMMEDIATE rather than animated: there is nothing on screen yet to animate from, and a smooth
         // scroll would be a visible slide on every open.
-        scroller.box().setScroll(0f, 0f);
+        Box scrollBox = scroller.box();
+        if (scrollBox != null) scrollBox.setScroll(0f, 0f);
         // THE OWNER'S ICON, NOT THE SYMBOL'S. This band names what DECLARES the symbol, so it must be
         // drawn as that -- a method shows the class it is on, a class shows its package. Drawing the
         // symbol's own kind put a method glyph next to the class name, which says the wrong thing

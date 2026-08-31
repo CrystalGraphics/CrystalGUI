@@ -1,7 +1,8 @@
-package com.crystalgui.widget.texteditor;
+package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
 /**
@@ -25,19 +26,19 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
  * numbers, above its background — which is the only place it can be both visible and behind the
  * digits.</p>
  */
-final class CurrentLinePart extends EditorViewPart {
+public final class CurrentLinePart extends EditorViewPart {
 
     private final UINode band;
     private final UINode gutterBand;
 
-    CurrentLinePart(TextEditor editor, UINode band, UINode gutterBand) {
+    public CurrentLinePart(TextEditor editor, UINode band, UINode gutterBand) {
         super(editor);
         this.band = band;
         this.gutterBand = gutterBand;
     }
 
     @Override
-    void render(int firstViewLine, int lastViewLine) {
+    public void render(int firstViewLine, int lastViewLine) {
         if (editor.selections().hasSelection() || !editor.isFocused()) {
             DecorationPool.hide(band);
             DecorationPool.hide(gutterBand);

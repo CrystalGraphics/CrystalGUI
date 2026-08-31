@@ -1,7 +1,8 @@
-package com.crystalgui.widget.texteditor;
+package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 import dev.vfyjxf.taffy.style.TaffyDimension;
 
@@ -60,7 +61,7 @@ public abstract class EditorViewPart {
      * longer exist. The pool-based parts called {@code hideAll()} and two of them returned; this is the
      * rule they now share, and it lives here so a new part inherits it rather than choosing.</p>
      */
-    abstract void render(int firstViewLine, int lastViewLine);
+    public abstract void render(int firstViewLine, int lastViewLine);
 
     /** Whether this pass has any line to draw on. @see #render */
     protected final boolean hasWindow(int firstViewLine, int lastViewLine) {
