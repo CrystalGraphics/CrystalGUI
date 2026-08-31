@@ -295,7 +295,11 @@ public class NodeCreationMenu extends Popover {
         // IMMEDIATE, not the animated setter: this is a reset, not a movement, and smooth-scrolling from
         // wherever the user left off would be a visible slide on open. Before rebuild(), so the offset is
         // already 0 when the new model is measured rather than being clamped against the old content.
-        tree.box().setScroll(0f, 0f);
+        // NULLABLE, and reached on the ordinary path: a menu opened on the frame it was built in has
+        // a tree that has never been laid out, so there is no box and no scroll offset to reset --
+        // which is exactly the state this reset exists to leave it in.
+        Box treeBox = tree.box();
+        if (treeBox != null) treeBox.setScroll(0f, 0f);
         rebuild();
         showAt(rootX, rootY, invoker);
         // Focus the box, not the first row: the menu exists to be typed into, and a user who wanted the

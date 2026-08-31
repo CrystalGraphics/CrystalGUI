@@ -1,5 +1,6 @@
 package com.crystalgui.chrome.preferences;
 
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.chrome.palette.QuickPick;
 import com.crystalgui.chrome.status.Breadcrumbs;
 import com.crystalgui.ui.dom.Name;
@@ -174,9 +175,12 @@ public class NavigatorView<T> extends UINode {
         for (UINode label : tree.querySelectorAll("." + LABEL_CLASS)) {
             // The label's own X relative to the sidebar already carries the indent and the arrow, so
             // there is nothing to add back -- and no need to reach for the Taffy box to find it.
-            float left = label.box().x() - sidebar.box().x();
+            Box labelBox = label.box();
+            Box sidebarBox = sidebar.box();
+            if (labelBox == null || sidebarBox == null) continue;
+            float left = labelBox.x() - sidebarBox.x();
             // Its own box is the right measure now that the label self-sizes -- see the renderer.
-            widest = Math.max(widest, left + label.box().width());
+            widest = Math.max(widest, left + labelBox.width());
         }
         if (widest <= 0f) return true;   // nothing laid out yet
         float wanted = Math.min(MAX_SIDEBAR_WIDTH, widest + SIDEBAR_PADDING);

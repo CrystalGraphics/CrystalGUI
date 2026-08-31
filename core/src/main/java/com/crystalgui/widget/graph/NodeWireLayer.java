@@ -212,7 +212,7 @@ public class NodeWireLayer extends UINode {
 
         // The layer sits at world (0,0), so its own origin is the plane origin — this is what turns a
         // plane-space coordinate into a world one for the cull test below.
-        float ox = box().x(), oy = box().y();
+        float ox = box.x(), oy = box.y();
         // ...and draws nothing.
         if (view == null) return;
         WorldRect visible = view.visibleWorldRect().expand(CULL_MARGIN);

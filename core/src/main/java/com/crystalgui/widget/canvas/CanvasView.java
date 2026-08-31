@@ -729,11 +729,13 @@ public class CanvasView extends UINode  {
     }
 
     private float contentOriginX() {
-        return content.box().x();
+        Box origin = content.box();
+        return origin == null ? 0f : origin.x();
     }
 
     private float contentOriginY() {
-        return content.box().y();
+        Box origin = content.box();
+        return origin == null ? 0f : origin.y();
     }
 
     /**
