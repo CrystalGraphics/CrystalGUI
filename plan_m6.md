@@ -413,10 +413,29 @@ com.crystalgui.workbench              THE PROJECT EDITOR: may use everything abo
   .diff          DiffView, MergeView, ConflictDialog
   .decoration    as it is
 
-com.crystalgui.editor                 the application root, as it is
-com.crystalgui.graph.shader           as it is; split into .panel / .preview / .property in its batch
+com.crystalgui.graph                  THE GRAPH MODEL: headless, engine-neutral, named by BOTH engines
+  (root)         GraphDocument, NodeType, NodeData, EdgeData, PortSpec, codecs, edits -- not in port scope
+  .port          PortType, BasicPortType, PortTypeRegistry   (6.4 D25: the SPI, once its one
+                 UIElement-returning method becomes a lookup in widget.graph)
+  .shader        ShaderGraphBridge, ShaderPropertyForm, ShaderGraphSettings -- the shader MODEL, which
+                 is what is left of `graph.shader` once its fourteen widgets leave
+
+com.crystalgui.app                    THE APPLICATIONS: may use everything above, and nothing may use them
+  .shadergraph   (root) ShaderInspectorSections, ShaderNodeLibrary, ShaderGraphEditor (6.7),
+                 ShaderGraphContribution (6.7) · .blackboard · .preview · .field
+  .editor        CrystalEditor, CrystalEditorCommands            (6.7)
+  .machine       the Machine example                             (6.7)
+
 com.crystalgui.language.run.view      as it is
 ```
+
+> **`graph.shader` was an application inside a model package.** Seventeen files in one flat directory
+> holding an editor, a properties panel, three previews, two field widgets, a compile bridge, a
+> settings declaration, five inspector sections and a rename box — and importing `ui.elements.dock`
+> and `ui.elements.workbench`, which a model package cannot. 6.4 splits the model out (three files
+> stay) and the application into `app.shadergraph` with three sub-packages. `com.crystalgui.editor`
+> and `com.crystalgui.example.machine` join it at 6.7, which is what turns *applications* from a word
+> in the layering rule into one `LayeringTest` prefix.
 
 **The layering rule**: engine < widget < chrome < desktop < workbench < applications, and inside
 `widget`: `control`/`text`/`scroll` at the bottom, `overlay`/`layout`/`dnd` above them,
@@ -1459,40 +1478,292 @@ than guessed, and it settles the eight widgets `tools/port/classify.py` had no t
 `progressstatusitem`, `treesearch`, `inspector`) without the class-keyed pass the section asked for.
 Seventeen state adjectives stay kind C, each verified against the class that flips it.
 
-### 6.4 — Canvas, graph, the shader graph · **M** · after: 6.3
+### 6.4 — Canvas, graph, the shader graph · **XL** · after: 6.3
 
-**Ports.** `CanvasView`, `CanvasOverlayMove`, `WorldRect`, `GraphView`, `GraphNode`, `NodePort`,
-`NodeWireLayer`, `PortDefaultEditor`, `NodeCreationMenu`, `GraphSelection`, `GraphCommands`,
-`NodeFieldBinder/Widgets`, `NodeWidgetFactory`; `graph/shader/` — `ShaderGraphEditor`,
-`BlackboardPanel`, `MainPreviewPanel`, `PropertyPill`, `CategoryHeader`, `InlineRename`,
-`ShaderNodePreview`, `ShaderPropertyNodes`, `ShaderInspectorSections`, the field widgets. Sheets:
-`graph.css` (235 part refs), the `graphnode`/`nodeport`/`nodecreationmenu` half of `config-kit.css`.
+*Re-sized from **L**, and the stub's numbers were stale in both directions. Its two trees hold 35
+files and 12,955 lines — more than any other batch — but two classes defer to 6.7, which leaves
+**33 files and 11,479 lines**, a hair under 6.3. What makes it tractable rather than merely big is
+that it is one vertical slice with exactly two seams to the outside, both small and both already
+known.*
 
-**Accepts.** The gallery's graph page; `GraphView` 293, `GraphNode` 168, `NodePort` 136,
+**Scope, from the ledger:** 33 files, **11,479 old-engine lines**, plus 2 files and 1,476 lines
+deferred to 6.7.
+
+| Group | The files | Files | Lines | Destination |
+|---|---|---:|---:|---|
+| The canvas | `CanvasView` 725 · `CanvasOverlayMove` 232 · `WorldRect` 77 | 3 | 1,034 | `widget.canvas` |
+| The graph widget | `GraphView` 1,758 · `GraphNode` 633 · `NodePort` 488 · `NodeCreationMenu` 639 · `PortDefaultEditor` 395 · `NodeWireLayer` 285 · `GraphCommands` 275 · `NodeFieldBinder` 241 · `GraphSelection` 198 · `NodeFieldWidgets` 191 · `NodeWidgetFactory` 141 · `GraphConnection` 30 | 12 | 5,274 | `widget.graph` |
+| The port types | `PortType` 95 · `PortTypeRegistry` 67 · `BasicPortType` 29 | 3 | 191 | **`graph.port`** — see D25 |
+| The Blackboard | `BlackboardPanel` 1,360 · `PropertyPill` 296 · `ShaderPropertyNodes` 241 · `InlineRename` 166 · `CategoryHeader` 134 | 5 | 2,197 | `app.shadergraph.blackboard` |
+| The previews | `MainPreviewPanel` 466 · `ShaderGraphPreviews` 247 · `ShaderNodePreview` 82 | 3 | 795 | `app.shadergraph.preview` |
+| The field widgets | `ShaderPortArity` 284 · `ShaderColorFieldWidget` 112 · `ShaderVectorFieldWidget` 89 | 3 | 485 | `app.shadergraph.field` |
+| The app root | `ShaderInspectorSections` 668 | 1 | 668 | `app.shadergraph` |
+| The shader model | `ShaderGraphBridge` 494 · `ShaderPropertyForm` 246 · `ShaderGraphSettings` 95 | 3 | 835 | `graph.shader` — stays |
+| **Deferred to 6.7** | `ShaderGraphEditor` 1,309 · `ShaderGraphContribution` 167 | 2 | 1,476 | `app.shadergraph` |
+
+**Budget, measured** (`python tools/port/codemod.py --batch 6.4 --dry-run`): **24 copied, 9 moved,
+~575 mechanical rewrites, 65 hand sites.**
+
+Hand sites, by kind: **`stopPropagation` 21** · **internal child 19** · dynamic restructure 9 · resize
+hook 6 · post-layout callback 5 · paint override 4 · drag ghost 1.
+
+They cluster the way 6.3's did and in the same places: `BlackboardPanel` has four
+`stopPropagation` sites, `NodeCreationMenu` and `MainPreviewPanel` three each. The nineteen internal
+children are the batch's real work, and §D24 is what decides each one.
+
+#### 1 — the two seams out, and why only two classes wait for them
+
+**Fifteen of the seventeen shader classes port in this batch.** The exceptions are structural, not
+incidental:
+
+- **`ShaderGraphEditor` `implements FileDocument` and holds a `TextEditor source`** — 6.7 and 6.5
+  respectively, and neither is a reference that can be stubbed: one is a supertype and the other a
+  field.
+- **`ShaderGraphContribution` names seven dock types plus `Workbench`, `DocumentType` and
+  `FileDocument`** — it is the feature's registration with the shell, so it is by definition the
+  class that knows about the shell.
+
+Everything else — the whole Blackboard, all three previews, the field widgets, the inspector sections
+— reaches nothing above `widget` and `chrome`. **Measured by comment-stripped import scan**, not by
+grep: every other apparent reference to the dock, the workbench or the editor from `graph/shader` is
+javadoc.
+
+This is 6.2's shape repeated (six classes held back for 6.3's seam) and it is worth stating as the
+general rule: **a batch defers the class that knows about the shell, never the feature.**
+
+#### 2 — the package map, and the nausea it is fixing
+
+The old tree has three flat packages and one of them is an application living inside a model:
+
+```
+com.crystalgui.graph            18 files — the MODEL. Correct where it is.
+com.crystalgui.graph.shader     17 files, FLAT — an application, inside the model's package.
+com.crystalgui.ui.elements.canvas    3 files
+com.crystalgui.ui.elements.graph    15 files, FLAT
+```
+
+`graph.shader` is the offender twice over. It is flat — one directory holding an editor, a properties
+panel, three previews, two field widgets, a compile bridge, a settings declaration, five inspector
+sections and a rename box — and it is **inside the model package**, which reads as "the shader part of
+the graph model" and is really "the application that edits shaders with the graph model". It imports
+`ui.elements.dock` and `ui.elements.workbench`; a model package cannot.
+
+```
+com.crystalgui.graph                    THE MODEL — headless, engine-neutral, named by BOTH engines
+  (root)        GraphDocument, GraphChangeset, GraphCodecs, GraphIds, GraphProperty, NodeBuilder,
+                NodeData, NodeField, NodeMenuTree, NodeType, NodeTypeRegistry, EdgeData, PortRef,
+                PortSpec, PortDirection, PropertyEdits, SetNodeFieldEdit, TypeCompatibility
+                — unchanged, and NOT in port scope: nothing in it names the engine
+  .port         PortType, BasicPortType, PortTypeRegistry                          ← NEW (D25)
+  .shader       ShaderGraphBridge, ShaderPropertyForm, ShaderGraphSettings         ← what is left
+                once the widgets leave, and it is exactly the shader MODEL
+
+com.crystalgui.widget.canvas            CanvasView, CanvasOverlayMove, WorldRect
+com.crystalgui.widget.graph             GraphView, GraphNode, NodePort, NodeWireLayer,
+                                        GraphConnection, GraphSelection, GraphCommands,
+                                        NodeCreationMenu, PortDefaultEditor, PortEditors (new),
+                                        NodeWidgetFactory, NodeFieldBinder, NodeFieldWidgets
+
+com.crystalgui.app                      APPLICATIONS — the layer the doctrine already names and
+                                        nothing has enforced
+  .shadergraph  (root)      ShaderInspectorSections, ShaderNodeLibrary (new);
+                            ShaderGraphEditor + ShaderGraphContribution at 6.7
+                .blackboard BlackboardPanel, PropertyPill, CategoryHeader, InlineRename,
+                            ShaderPropertyNodes
+                .preview    MainPreviewPanel, ShaderNodePreview, ShaderGraphPreviews
+                .field      ShaderColorFieldWidget, ShaderVectorFieldWidget, ShaderPortArity
+```
+
+**`widget.graph` stays ONE package, and that is a finding rather than a shrug.** Read out of the
+constant pool, nine of its twelve classes are a single mutually recursive cluster — `GraphView`
+names `GraphNode`, `NodePort`, `GraphSelection`, `GraphConnection`, `NodeWireLayer`,
+`GraphCommands`, `NodeWidgetFactory`, `PortDefaultEditor` and `NodeCreationMenu`, and six of those
+name `GraphView` back. A sub-package split would have to cut one of those cycles, and
+`WIDGET_TIERS` forbids mutual naming across tiers. Inventing `.core`/`.field`/`.create` here would
+produce three packages that must all name each other, which is a directory listing pretending to be
+a layering. Twelve cohesive files is `widget.overlay`'s size and `desktop.window`'s.
+
+**`app.shadergraph`'s three sub-packages are cycle-free, and were checked that way.** `.field` <
+`.preview` (`ShaderGraphPreviews` names `ShaderPortArity`); `.blackboard` names neither; the root
+names all three. Two edges had to be cut to make that true, and both are D-decisions below, because
+both are cases of a lower layer holding something that belongs to a higher one.
+
+**`app/` gets one `LayeringTest` entry above `workbench`**, which closes the governance gap for every
+application at once — `graph.shader` is named by nothing today because nothing in `LAYERS` covers it,
+so a leaf widget importing the shader graph would pass. 6.7's `editor` and `example/machine` land in
+the same prefix (`app.editor`, `app.machine`) rather than needing an entry each.
+
+> **Not `chrome/`'s mistake again.** `app/` is ONE layer and its sub-packages are organisational;
+> they get no entries of their own, for exactly the reason 6.3 recorded — a prefix already covers
+> what is under it, and listing a sub-package makes the layer's own root a layer reaching upward.
+
+#### D24 — `NodePort` is `shadow ok` and its editor slot is still a SLOT
+
+`tools/port/classify.py`, on the shipped sheets:
+
+| Tag | through | ending | verdict |
+|---|---:|---:|---|
+| `nodeport` | 0 | 54 | shadow ok |
+| `shadergrapheditor` | 0 | 2 | shadow ok |
+| `nodecreationmenu` | **8** | 12 | **LIGHT (kind B)** |
+| `graphview` | **11** | 7 | **LIGHT (kind B)** |
+| `graphnode` | **23** | 42 | **LIGHT (kind B)** |
+
+**`graphnode` at 23 through-rules is the most reached-through widget measured anywhere in the
+census**, past `problemspanel`'s 17, which 6.3's section called the record. Sixteen part names, and a
+sheet reaches through most of them: kind B all the way down and nothing about it can be a part.
+
+`nodeport` is the interesting one, and the standing exception applies to it. **A row is a caller's
+node** — 6.3's rule for `ListView`, 6.2's for a `SplitView` pane — and a port's default editor is
+exactly that: it comes from `PortType.createInlineEditor()`, which a *consumer* implements. So
+`nodeport` may host a shadow tree for its dot and its label and **must expose a slot** for the
+editor, or the one thing about a port that a third party contributes lands in a tree no rule can
+reach. The same holds for `GraphNode`'s field widgets, which `NodeWidgetFactory` builds from a
+caller's registration — but `graphnode` is kind B anyway, so it costs nothing there.
+
+`canvasview`, `blackboardpanel`, `propertypill`, `categoryheader`, `mainpreviewpanel` and
+`inlinerename` name no tag the sheets recognise, so the tool has no answer. 6.3 settled its eight the
+same way and the answer was the same every time: a container a rule reaches into is light. Read them
+by hand before the copy, and expect the same verdict for the four that are panels.
+
+#### D25 — `PortType` is two things, and one method is what stops it being neutral
+
+`PortType` has seven members. Six are facts about a type — `id()`, `label()`, `arity()`,
+`arityLabel()`, `isCompatibleWith()`, `cssClass()` — and one, `createInlineEditor()`, returns a
+`UIElement`. That single method is the whole reason the SPI cannot move to a package both engines
+name, and it drags `BasicPortType` and `PortTypeRegistry` with it: the registry is neutral, the
+record is neutral, and the interface they are written against is not.
+
+**`createInlineEditor()` has exactly one caller** — `NodePort.setDefaultEditor(...)`. So the split is
+a small one: the type moves to `graph.port` with its registry and its record, and the editor lookup
+becomes `PortEditors` in `widget.graph`, keyed by port-type id, which is the shape `NodeWidgetFactory`
+already has for node fields. Each engine registers its own, which is what makes the port types
+nameable by both.
+
+**Recommendation: split it.** It is the difference between three neutral files in the model and three
+files that have to be copied into the widget layer and copied again at 6.9.
+
+#### D26 — two edges point from the model up into the widgets, and both are registrations
+
+`ShaderGraphBridge` is otherwise the cleanest class in the batch — a pure map from `GraphDocument`
+onto CrystalGraphics' `CgShaderGraph`, no engine anywhere in it — and it contains two lines:
+
+```java
+ShaderColorFieldWidget.install();
+ShaderVectorFieldWidget.install();
+```
+
+Its comment defends the *timing* and the defence is good ("building a shader node library is the
+moment the shader domain's vocabulary has to exist… a colour field silently falling back to a GLSL
+text box is the kind of miss nobody reports as a bug"). The timing is right and the placement is what
+binds a model class to two widgets. **Keep the timing, move the knowledge**: a `ShaderNodeLibrary` in
+the app root installs the field widgets and then calls `ShaderGraphBridge.asNodeLibrary(...)`.
+
+`ShaderPropertyForm` — "the one place that knows the literal form" of a property's default — reads
+`BlackboardPanel.KIND_COLOR` and `BlackboardPanel.KIND_OPTION` in three places. The *kind of a
+property* is a model fact that a panel happens to declare. **Move the constants to
+`ShaderPropertyForm`** and let the panel read them, which is the direction they already flow in
+meaning.
+
+Both are two-line changes and both are load-bearing: without them `.field` and `.blackboard` cannot
+sit above the model, and `graph.shader` cannot be the neutral package the map above says it is.
+
+#### D27 — all nine `move` rows are illegal as written, and the ledger is wrong in the other direction too
+
+6.3's most expensive lesson, and 6.4 has it nine times. **`EngineBoundaryTest.theOldEngineNamesNothingOfTheNew`
+scans everything that is not new-engine**, which includes `ui/elements/graph`, `ui/elements/canvas`
+and `graph/shader` — all of which stay until 6.9. So:
+
+| Row | Named by, and it stays until 6.9 |
+|---|---|
+| `GraphConnection`, `GraphSelection`, `NodeWidgetFactory` | old `GraphView` |
+| `BasicPortType`, `PortTypeRegistry` | old `NodeWidgetFactory` |
+| `WorldRect` | old `CanvasView` |
+| `ShaderGraphBridge`, `ShaderGraphSettings`, `ShaderPropertyForm` | old `ShaderGraphEditor`, and five more |
+
+**Nothing outside the batch names any of them in code** — every apparent external reference is
+javadoc, checked with comments stripped — so the only obstacle is the old copy of the batch itself.
+Which is the whole obstacle: a move into `widget.*` or `app.*` fails the boundary scan on the day it
+lands. **Every one of the nine is either a copy, or a move into a package both engines may
+name**, and the map above chooses the latter for the five that deserve it (`graph.port` ×2 —
+`BasicPortType` and `PortTypeRegistry`, with `PortType` a copy until D25 lands; `graph.shader` ×3)
+and the former for the four that are genuinely widgets (`WorldRect`, `GraphConnection`,
+`GraphSelection`, `NodeWidgetFactory` — all four named by old widget code, three of them under 200
+lines).
+
+**And the heuristic is wrong here in the direction 6.2 did not see.** `ShaderPropertyForm` is marked
+a MOVE, and by every test 6.2 devised it is one — it names no engine type, imports nothing from
+`ui.*`, and reads as pure model. It reads `BlackboardPanel.KIND_COLOR` in three places, so it is
+transitively a widget and can go nowhere the Blackboard cannot follow. 6.2's rule (*audit by TYPE
+NAME, never by imports*) catches a class other classes are BOUND BY; this is a class bound TO
+others, and only walking what it names finds it. **Both questions, both with comments stripped** —
+and D26 is what makes this particular answer a move after all.
+
+The mirror case is `ShaderGraphPreviews`, marked a copy for exactly one line —
+`view.getRuntimeCache()`, which the new engine spells `box()`. One mechanical rewrite decides a whole
+file's destination, which is worth knowing before reading `copy` as a statement about how entangled
+something is.
+
+#### Accepts
+
+The gallery's graph page as a parity spec, and `cgui-new-gallery` grows a canvas/graph page. Test
+files naming a 6.4 class: `GraphView` 293 assertions, `GraphNode` 168, `NodePort` 136, plus
 `GraphEditing`, `GraphDocumentView`, `NodeCreationMenu`, `NodeField`, `NodeControlKit`,
 `NodePortInlineEditor`, `CanvasView`, `CanvasOverlay`, `CanvasResize`, `ShaderGraphEditor`,
 `ShaderGraphCommands`, `ShaderGraphBridge`, `MainPreviewPanel`, `SemanticOverlay`.
 
-**Destination.** `widget.canvas`, `widget.graph`, `graph.shader.panel/.preview/.property`. The graph
-model (`GraphDocument`, codecs, node types — 18 files, 2,577 lines) is **moved**.
+The batch's own tests, in the shape 6.3 settled — what is NEW about running on this engine:
 
-**Budget, measured:** **26 copied, 9 moved, 445 mechanical, 85 hand sites** — the highest of any
-batch, because the shader graph's panels resize, anchor and drag.
+- **A pan drag's source is the viewport, never the transformed plane** — the invariant row, and the
+  first thing `toLocal`'s changed origin can break, since the plane moves under the drag. 6.2's
+  `aDialogDragTracksThePointerOneForOne` is the same defect one widget earlier.
+- **A positive scroll notch means the wheel rolled DOWN** — `CanvasView` shipped zooming the wrong
+  way on the old engine and no test caught it, because a test written from the implementation agrees
+  with it. Assert against `ScrollerView`'s direction, which is the engine's one statement of the sign.
+- **The plane's `transform-origin` is pinned to `0 0`** — every world↔screen conversion is off by half
+  a viewport times the zoom without it, and the picture stays internally consistent, so it looks
+  plausible.
+- **A wire's colour is read back out of the cascade** — `NodePort.typeColor()` returns the dot's
+  computed `border-color`, which is how `graph.css` keeps the per-type palette out of Java. It is
+  also the first thing in the port to read a computed style back, so it is the first that can silently
+  answer the initial value.
+- **An input port takes one edge and connecting to an occupied one REPLACES** — through the same
+  `disconnect` a manual one takes, or undo will not know it happened.
+- **A press on an already-selected node must not collapse the selection**, and a marquee selects what
+  it TOUCHES.
 
-**Rows it owns.** The canvas/graph rows: *"the canvas culls with `opacity: 0`, not `display:
-none`"* (box opacity, D4/§4.5); *"the plane's `transform-origin` is pinned to `0 0`"*; *"a pan drag's
-source is the viewport"*; *"a positive `Scroll` notch means the wheel rolled down"*; *"a drag ends
-when the button that started it is released"*; *"a wire's colour is read back out of the cascade"*;
-*"an input port takes ONE edge"*; *"`nodeport:blank` means unconnected"*; *"click-focus targets the
-exact element hit"* (`GraphNode.requestFocus` — re-read under retargeting); *"a `graphnode` paints no
-background of its own"*; *"a press on an already-selected node must not collapse the selection"*;
-*"a marquee selects what it TOUCHES"*; *"selection is not undoable"*; *"a drag's own delta is the
-truth at drag end"*.
+#### Rows it owns
 
-**Hazards.** `CanvasView`'s zoom is the first non-desktop `box().setTransform` writer and the
-`transform-origin` pin must survive as a UA rule. `NodeWireLayer.paintSelf` draws under the nodes
-through `ctx.curve()` — `paintContent` runs before children, which is the same order. `GraphNode`'s
-rows are the archetypal kind B (`graphnode .__control-row__ checkbox .__mark__`).
+The canvas and graph cluster — *"a pan drag's source is the viewport, never the transformed plane"*,
+*"a POSITIVE `MouseEvent.Scroll` notch means the wheel rolled DOWN"*, *"the canvas culls with
+`opacity: 0`, not `display: none`"*, *"the plane's `transform-origin` is pinned to `0 0` at
+IMPORTANT"*, *"a drag ends when THE BUTTON THAT STARTED IT is released"*, *"a press on an
+already-selected node must not collapse the selection"*, *"a marquee selects what it TOUCHES"*,
+*"selection is NOT undoable"*, *"a drag's own delta is the truth at drag end"*, *"a wire's colour is
+read back out of the cascade"*, *"an input port takes ONE edge, an output MANY"*, *"`nodeport:blank`
+means unconnected"*, *"a `graphnode` paints NO background of its own"*, *"click-focus targets the
+exact element hit"*, *"a flex item with `flex-shrink: 1` contributes ZERO to its row's min-content
+width"*, *"`getScrollWidth`/`getScrollHeight` measure DIRECT CHILDREN only"*, *"`resizeOriginLeft()`
+reads the LIVE Taffy inset"*.
+
+#### Hazards, in the order they would be found
+
+1. **D25 and D26 first, before any copy.** Three edges decide five files' destinations, and a copy
+   made against the wrong destination is a copy made twice — which is what cost 6.2 an afternoon at a
+   third this scale.
+2. **`GraphView` is 1,758 lines and names nine of its own package.** It is the largest single class
+   in M6 outside the editor, and its whole neighbourhood is mutually recursive, so it ports as a unit
+   or not at all. Copy the twelve together.
+3. **`graphnode`'s 23 through-rules.** Kind B everywhere, sixteen part names, and 6.1's lesson says
+   the failure is silent: a rule that stops matching produces an unstyled widget, not an error.
+4. **Nineteen internal children and nine dynamic restructures**, the most of any batch relative to
+   its file count, and every one is a D24 reading rather than a rewrite.
+5. **`nodeport`'s slot.** It is `shadow ok` by the sheets and would be wrong shadowed whole — the
+   default editor is a caller's node. The failure mode is the one M6.1 met four times: a light child
+   of a shadow-rooted node is never composed, gets no box, and reports nothing.
+6. **The two deferred classes leave the app rootless until 6.7.** Everything ported is reachable and
+   testable on its own, but there is no *running* shader graph on the new engine until 6.7 — so 6.4's
+   gallery page is the canvas and the graph widget, not the application.
 
 ### 6.5 — The editor · **XL** · after: 6.3
 
