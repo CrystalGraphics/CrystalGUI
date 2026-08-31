@@ -520,7 +520,7 @@ public class Popover extends UINode {
      * <p>{@code open()} runs before the promoted node has ever been laid out, so at that moment width and
      * height are both 0 — and flipping and clamping are decided by exactly those. Without this hook the
      * first frame is placed as if the popover were a point, and only the next frame's ticker corrects it:
-     * a visible one-frame jump. Same hook, same reason, as {@code Tooltip} and {@code TextNode}.</p>
+     * a visible one-frame jump. Same hook, same reason, as {@code Tooltip} and {@code UIText}.</p>
      */
     private void startPlacementTicker() {
         if (placementTickerRunning) return;

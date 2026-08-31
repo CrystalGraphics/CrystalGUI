@@ -13,7 +13,7 @@ import lombok.Getter;
 
 import javax.annotation.Nullable;
 import com.crystalgui.widget.control.Button;
-import com.crystalgui.ui.box.TextNode;
+import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.dom.Name;
 
 /**
@@ -151,7 +151,7 @@ public class MenuItem extends Button {
     public static final String ACCELERATOR_CLASS = "__accelerator__";
 
     @Nullable
-    private TextNode accelerator;
+    private UIText accelerator;
 
     /**
      * Shows the keystroke that runs this item, in the trailing slot.
@@ -182,12 +182,12 @@ public class MenuItem extends Button {
                 accelerator.setText("");
                 // NOT removed from the tree: an item's accelerator comes and goes with its binding, and
                 // removing a POST-ICON re-runs Button's slot bookkeeping for a label that is about to come
-                // back. An empty TextNode measures zero.
+                // back. An empty UIText measures zero.
             }
             return this;
         }
         if (accelerator == null) {
-            accelerator = new TextNode(text);
+            accelerator = new UIText(text);
             accelerator.addClass(ACCELERATOR_CLASS);
             accelerator.setHitTest(false);
             setPostIcon(accelerator);

@@ -11,12 +11,13 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.testsupport.UiTestBase;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.text.UIText;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.FlexWrap;
 import org.junit.Test;
 
 /**
- * Text measured INSIDE the layout pass: a {@link TextNode} under {@code flex-wrap: wrap} is asked
+ * Text measured INSIDE the layout pass: a {@link UIText} under {@code flex-wrap: wrap} is asked
  * for its height at the width it was actually given, and the box comes out that tall — in one
  * pass, with nothing written back into the cascade (5.3, D5.10).
  *
@@ -29,8 +30,8 @@ public class MeasureThroughTaffyTest extends UiTestBase {
 
     private static final String TEXT = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda";
 
-    private static TextNode growing(String text) {
-        TextNode node = new TextNode(text);
+    private static UIText growing(String text) {
+        UIText node = new UIText(text);
         StyleGroup.inlinePipeline(node.getStyle().getLayoutGroup(), l -> {
             l.flexGrow(1);
             l.flexBasis(0);
@@ -39,7 +40,7 @@ public class MeasureThroughTaffyTest extends UiTestBase {
         return node;
     }
 
-    private static UIDocument rowOfTwo(FlexWrap wrap, TextNode[] out) {
+    private static UIDocument rowOfTwo(FlexWrap wrap, UIText[] out) {
         UIDocument document = new UIDocument();
         UINode row = new UINode();
         StyleGroup.inlinePipeline(row.getStyle().getLayoutGroup(), l -> {
@@ -47,8 +48,8 @@ public class MeasureThroughTaffyTest extends UiTestBase {
             l.flexDirection(FlexDirection.ROW);
             l.flexWrap(wrap);
         });
-        TextNode a = growing(TEXT);
-        TextNode b = growing(TEXT);
+        UIText a = growing(TEXT);
+        UIText b = growing(TEXT);
         row.append(a).append(b);
         document.append(row);
         document.update(800, 800);
@@ -59,9 +60,9 @@ public class MeasureThroughTaffyTest extends UiTestBase {
 
     @Test
     public void aTextNodeIsMeasuredAtItsUsedWidthUnderWrap() {
-        TextNode[] wrapped = new TextNode[2];
+        UIText[] wrapped = new UIText[2];
         UIDocument document = rowOfTwo(FlexWrap.WRAP, wrapped);
-        TextNode[] plain = new TextNode[2];
+        UIText[] plain = new UIText[2];
         rowOfTwo(FlexWrap.NO_WRAP, plain);
 
         Box box = wrapped[0].box();
@@ -80,9 +81,9 @@ public class MeasureThroughTaffyTest extends UiTestBase {
 
     @Test
     public void theBoxIsAsTallAsTheTextWrappedAtThatWidth() {
-        TextNode[] nodes = new TextNode[2];
+        UIText[] nodes = new UIText[2];
         rowOfTwo(FlexWrap.WRAP, nodes);
-        TextNode node = nodes[0];
+        UIText node = nodes[0];
         Box box = node.box();
         assertNotNull(box);
 
@@ -97,7 +98,7 @@ public class MeasureThroughTaffyTest extends UiTestBase {
 
     @Test
     public void changingTheTextIsOneMorePassAndNoWalk() {
-        TextNode[] nodes = new TextNode[2];
+        UIText[] nodes = new UIText[2];
         UIDocument document = rowOfTwo(FlexWrap.WRAP, nodes);
         float before = nodes[0].box().height();
         int syncs = document.boxes().syncPasses();

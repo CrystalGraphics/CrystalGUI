@@ -8,7 +8,7 @@ import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.ShadowRoot;
 import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.box.TextNode;
+import com.crystalgui.widget.text.UIText;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Objects;
@@ -82,7 +82,7 @@ public class WindowIcon extends UINode {
     public static final int PALETTE_SIZE = 6;
 
     private final ShadowRoot shadow;
-    private final TextNode monogram = new TextNode("");
+    private final UIText monogram = new UIText("");
     private boolean showingMonogram;
     @Nullable
     private String tileClass;

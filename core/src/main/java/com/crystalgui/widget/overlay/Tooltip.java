@@ -8,7 +8,7 @@ import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.service.AnchoredPlacement;
-import com.crystalgui.ui.box.TextNode;
+import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.ShadowRoot;
@@ -108,7 +108,7 @@ public class Tooltip extends UINode {
     }
 
     private final ShadowRoot shadow;
-    private final TextNode label;
+    private final UIText label;
 
     /**
      * What {@link #setText} wrote — what this tooltip says outside every {@linkplain #addRegion region}.
@@ -146,8 +146,8 @@ public class Tooltip extends UINode {
         super(NAME);
         this.shadow = attachShadow();
         this.baseText = text == null ? "" : text;
-        this.label = new TextNode(text == null ? "" : text);
-        // SELF-SIZING, forced rather than detected. The wrap bound in TextNode.selfMaxWidthForWrap is only
+        this.label = new UIText(text == null ? "" : text);
+        // SELF-SIZING, forced rather than detected. The wrap bound in UIText.selfMaxWidthForWrap is only
         // consulted for a label that sizes ITSELF; one that latched "takes what it is handed" wraps against
         // its own content box instead — which the sheet's max-width has already clamped, so the box comes
         // out at the maximum while the glyphs run on past it unwrapped. That is exactly what a long tooltip
@@ -261,7 +261,7 @@ public class Tooltip extends UINode {
     }
 
     /** The internal text element, so callers can style or measure it without opening the tree. */
-    public TextNode getLabel() {
+    public UIText getLabel() {
         return label;
     }
 
@@ -560,7 +560,7 @@ public class Tooltip extends UINode {
      * those. Without this hook the first frame is placed as if the tooltip were a point, and only
      * the next frame's ticker corrects it: a visible one-frame jump.</p>
      *
-     * <p>Same shape as {@code TextNode}, which also re-derives geometry after layout and pushes it back
+     * <p>Same shape as {@code UIText}, which also re-derives geometry after layout and pushes it back
      * at IMPORTANT origin. It settles for the same reason: {@code replaceOrPutCandidate} no-ops on an
      * unchanged value, so the extra pass stops re-dirtying the tree as soon as placement holds still.</p>
      */

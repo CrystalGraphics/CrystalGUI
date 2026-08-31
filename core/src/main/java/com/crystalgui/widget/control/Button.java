@@ -4,7 +4,7 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.box.TextNode;
+import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.StateTypes;
@@ -90,7 +90,7 @@ public class Button extends UINode {
     public final Signal.Action onPressed = new Signal.Action();
 
     private final ShadowRoot shadow;
-    private final TextNode label;
+    private final UIText label;
     @Nullable
     private UINode preIcon;
     @Nullable
@@ -144,7 +144,7 @@ public class Button extends UINode {
         setFocusPolicy(FocusPolicy.CLICK);
 
         this.shadow = attachShadow();
-        this.label = new TextNode(text == null ? "" : text);
+        this.label = new UIText(text == null ? "" : text);
         label.set(Attribute.PART, LABEL_PART);
         label.setHitTest(false);
         shadow.append(label);
@@ -191,7 +191,7 @@ public class Button extends UINode {
     }
 
     /** The label node, for a subclass that needs to style or measure it. */
-    protected final TextNode label() {
+    protected final UIText label() {
         return label;
     }
 

@@ -269,7 +269,7 @@ public class Slider extends UINode {
     }
 
     /** Pushes the current fraction into the flex weights. IMPORTANT origin because this is runtime
-     * state a stylesheet has no business overriding — the same reasoning TextNode uses for its
+     * state a stylesheet has no business overriding — the same reasoning UIText uses for its
      * measured size. */
     private void applyFraction() {
         float f = getFraction();

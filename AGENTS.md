@@ -959,8 +959,27 @@ int value types.
 
 It does **not** use a Taffy `MeasureFunc`. Taffy 1.1.4's flex-wrap cross-size algorithm passes `NaN`
 instead of an item's resolved column width under `flex-wrap: wrap` (the `nowrap` path is correct), so
-a measured leaf wraps at the wrong width whenever any ancestor has wrapping enabled — unfixable
-without forking a Maven dependency.
+a measured leaf wraps at the wrong width whenever any ancestor has wrapping enabled — ~~unfixable
+without forking a Maven dependency~~. **The fork happened** (`taffy/`, `MODIFICATIONS.md` #1), so the
+sentence is stale for the *engine* and stays true of *this class*: the old `UIText` ships until 6.9
+and keeps the post-layout recompute it was built around.
+
+> **The new engine's twin is a different design and must not be ported from this one.**
+> `com.crystalgui.widget.text.UIText` (M6.1, D15 — the merge of this class with M5's `TextNode`)
+> implements `Measurable` and is simply *asked*: given this width, how tall are you. One pass, nothing
+> written back. **About four hundred lines of this file exist only because it could not be asked**, and
+> each of them was a defect with a real invariant behind it: `selfSizesWidth`, latched once from
+> whether the box measured zero on the first post-attachment pass — a race against an ancestor's
+> not-yet-converged layout, held for the element's life, which latched `false` on a graph node's title
+> against a placeholder width and truncated it for good; `forceSelfSizeWidth()`/`neverSelfSizeWidth()`,
+> the two hatches for callers who knew the answer and had no way to state it; and
+> `invalidateMeasurement()` with the deadlock it is named for, where withdrawing the pushed size made
+> the box resolve to zero and zero-in-zero-out is not a geometry change, so nothing ever asked again.
+> Min-content and max-content are questions the engine asks per layout now, so there is no latch to
+> pre-empt and no loop to make terminate. What replaces the four static property listeners is one
+> `computedChanged` hook — and it must watch `font-weight` and `font-style` as well as size and family,
+> because synthesis is per SPAN and a bold label resolves the same `CgFontFamily` instance a regular
+> one does, so the paragraph's own "has the family changed" check answers no.
 
 `text-overflow: ellipsis` truncates the **string** and re-shapes, never drops glyphs from the shaped run
 — shaping is not a per-character mapping, so cutting the glyph array splits clusters. The ellipsis is
@@ -1275,6 +1294,7 @@ The things that are invisible from any single class and expensive to rediscover.
 | **A completion session is about a WORD, and must re-anchor when the caret leaves it** | The prefix is `text.substring(wordStart, caret)` and `wordStart` was fixed at open time, so typing a `.` did not begin a new word — it made the prefix `out.`, which still `startsWith` the queried `out`, so the narrowing check passed and the session refiltered the members of `System` against a string containing a dot. An empty list from a filter is indistinguishable from an empty list from a provider, and where a fuzzy match survived it was worse: a few unrelated rows, reading as a wrong member list rather than a missing one. Ask `WordClassifier`, so "a word" keeps one definition |
 | CSS text belongs in `test`, never `headlessTest` | `StyleSheet` class-init reads `default.css` via `CgIO` → unloadable headlessly |
 | JOML + Taffy must stay on the headless classpath | Field descriptors resolve at class load; `UIElement`/`ElementStyle` have fields of those types |
+| **...and `getDeclaredFields()` resolves EVERY field's type, so a headless reflection walk must ask for the ONE field it wants** — `MethodHandles.lookup().findStaticGetter(type, "NAME", Name.class)`, never a loop over the declared fields | The row above from the reflection end, and it decides whether a coverage walk can see a widget at all. A text widget retains a `CgShapedParagraph` and a `CgFontFamily`, so building a `Field` for each of its fields throws `NoClassDefFoundError` on the classpath CrystalGraphics core is absent from **by design** — and `NodeKindsCoverageTest` walks the ported tree looking for a `NAME`, on exactly that classpath. It was invisible until `UIText` moved: the pre-merge `TextNode` held the same fields and lived in `ui/box/`, which the walk does not cover. **The failure is not the loud one it looks like**: catching the `LinkageError` and carrying on is the obvious repair and silently drops every text-holding widget out of the coverage set — which is the class of widget most likely to be forgotten, since it is the one that cannot be loaded to check. Resolving one field costs nothing and is true on every classpath |
 | CrystalGraphics `platform` must stay on the headless classpath too — the excluded module is CG **core** | `UIInputHandler` *implements* `CgSystemInput`; a supertype resolves at class load, so stripping it fails every input test with `NoClassDefFoundError` |
 | CrystalGUI has no platform registry — input, sound, clipboard and cursor all come from `CgPlatform` | Two registries let a loader wire up one and not the other: a working GL backend and a dead keyboard, with nothing to report it |
 | **A client screen that talks to the server may not pause the game** — `doesGuiPauseGame()` must return `false` for anything holding a `ProtocolConnection` | Pausing stops `MinecraftServer.tick`, so `ServerTickEvent` stops, so `CgUiConnections` never ticks the server's connection and its mailbox is never drained. **The editor asks the integrated server for the project list and the integrated server is not listening, because the editor being open is what stopped it** — every call then dies at its 10s timeout. It presented as *"the workspace is empty"* with New File and New Folder greyed, greyed because there was no project root to create INTO rather than because anything was refused, and with nothing in the log at all. The decision was CORRECT when written — Phase 1's editor owned local files and had no server to stall — and Phase 4 moving the files to the server turned a conservative default into a deadlock, without touching the line. **It hid because every verification of the server workspace used a DEDICATED server**, which no client GUI can pause: the two-process test, `CgUiRemoteWorkspaceProbe` and `CgUiWireProbe` all close the screen or never open one, so the one configuration nobody exercised was the commonest one a player uses |

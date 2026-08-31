@@ -21,7 +21,7 @@ import java.util.Objects;
  * <p>This class held {@code ELEMENT}, {@code DOCUMENT}, {@code SHADOW_ROOT} and {@code SLOT} as
  * constants, which reads as a vocabulary and is really a <b>second registry</b>: two places to look
  * for what a kind is called, and only one of them can be extended. A widget outside this module
- * declares its own {@code NAME} beside its class ({@link com.crystalgui.ui.box.TextNode} does, and
+ * declares its own {@code NAME} beside its class ({@link com.crystalgui.ui.box.UIText} does, and
  * every widget M6 ports will), so the four built-ins doing something different would make the
  * pattern a special case rather than the rule. They are now {@code UINode.NAME},
  * {@code UIDocument.NAME}, {@code ShadowRoot.NAME} and {@code UISlot.NAME} — declared where the

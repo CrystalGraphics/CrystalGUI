@@ -5,7 +5,7 @@ import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.box.TextNode;
+import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.contract.State;
@@ -97,7 +97,7 @@ public class Checkbox extends UINode {
 
     private final ShadowRoot shadow;
     private final UINode mark;
-    private final TextNode label;
+    private final UIText label;
     private boolean checked;
     @Nullable
     private CheckboxGroup group;
@@ -124,7 +124,7 @@ public class Checkbox extends UINode {
         mark.setHitTest(false);
         shadow.append(mark);
 
-        this.label = new TextNode(label == null ? "" : label);
+        this.label = new UIText(label == null ? "" : label);
         this.label.set(Attribute.PART, LABEL_PART);
         this.label.setHitTest(false);
         shadow.append(this.label);
@@ -160,7 +160,7 @@ public class Checkbox extends UINode {
     }
 
     public Checkbox setLabel(String value) {
-        // No notifyStateChanged here: TextNode.setText fires its own, and that walks out of the
+        // No notifyStateChanged here: UIText.setText fires its own, and that walks out of the
         // shadow tree onto this Checkbox -- whose contract carries the label. Doing both would be
         // harmless (the dirty set dedups) and would imply the wiring is per-widget when it is not.
         label.setText(value);
