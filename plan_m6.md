@@ -385,9 +385,11 @@ com.crystalgui.widget                 THE LIBRARY: general-purpose, knows nothin
                  .field (the thirteen controls) · .inspector (Inspector, InspectorForm, InspectorRegistry, InspectorSection)
   .canvas        CanvasView, CanvasOverlayMove, WorldRect
   .graph         GraphView, GraphNode, NodePort, NodeWireLayer, PortDefaultEditor, NodeCreationMenu, GraphSelection, GraphCommands, port types, field binder/widgets
-  .editor        TextEditor, EditorCommands, EditorFolding, EditorDiagnostics, EditorLanguageFeatures, DiagnosticActions, DiffDecorations
-                 .view (EditorViewPart, the ten parts, DecorationPool) · .suggest (CompletionPopup, CompletionSession, CompletionRanking, CompletionRecency, EditorSuggest)
-                 .doc (DocumentationPopup, HoverDocumentation) · .find (SearchReplaceBar, EditorFind)
+  .editor        FLAT, 33 files, and 6.5 measured why: TextEditor declares 434 package-private
+                 members, 109 of which 29 of the other classes reach -- and it reaches back into five
+                 of them 62 times. The `.view`/`.suggest`/`.doc`/`.find` split proposed here would
+                 need every one of those published, or Monaco's ViewContext, which AGENTS.md rejects
+                 by name. `CompletionRecency` leaves for `text.lang` instead. @see 6.5
 
 com.crystalgui.chrome                 THE SHELL'S OWN WIDGETS: may use widget; may not use desktop or workbench
   .menu          MenuBarView, MainMenuCommands, ChromeCommands, Breadcrumbs
@@ -398,11 +400,21 @@ com.crystalgui.chrome                 THE SHELL'S OWN WIDGETS: may use widget; m
   .preferences   Preferences, NavigatorView
 
 com.crystalgui.desktop                CRYSTALOS: may use widget and chrome
-  (root)         Desktop, DesktopCommands, DesktopPresentation, DesktopSession, ScreenOverlay, WindowRegistry
-  .window        WindowFrame, WindowState, WindowPolicy, WindowChrome, WindowIcon, WindowCommands, SystemMenu, WindowMove, WindowKeyboardMove, SnapZones
-  .motion        WindowAnimator, WindowAnimation, WindowGeometryAnimation, WindowMotion
-  .taskbar       Taskbar, TaskbarEntryMotion, TaskbarPreviews, TaskbarDesigner, WindowPreview, WindowThumbnail, WindowSnapshot
-  .switcher      WindowSwitcher
+  (root)         Desktop, DesktopCommands, DesktopSession, DesktopPresentation, ScreenOverlay,
+                 WindowFrame, WindowMove, WindowKeyboardMove, WindowCommands, SnapZones, SystemMenu,
+                 WindowRegistry, WindowSnapshot, WindowChrome, WindowAnimator, WindowAnimation,
+                 WindowGeometryAnimation, WindowMotion
+                 -- `.window` and `.motion` were proposed here and are NOT taken: 97 and 24
+                 package-private call sites would have to be published, 57 of them on WindowFrame,
+                 which is how Desktop drives its own windows. @see 6.6 for the price table
+  .taskbar       Taskbar, TaskbarEntryMotion, TaskbarPreviews, TaskbarDesigner, WindowPreview,
+                 WindowThumbnail                              (31 sites, and a taskbar IS a view of
+                 the registry rather than part of a window, so the boundary is one the design claims)
+  .switcher      WindowSwitcher                               (6 sites -- free)
+
+com.crystalgui.core.window            WindowState, WindowPolicy, ScreenOverlay -- an enum, a policy
+                                      record and a host SPI, named by BOTH engines. The D27 rule that
+                                      gave 6.3 `core.collection` and 6.4 `graph.port`.
 
 com.crystalgui.workbench              THE PROJECT EDITOR: may use everything above
   (root)         Workbench, WorkbenchRegions, WorkbenchSession, WorkbenchSettings, WorkbenchMenus, RegionHost, RegionDropOverlay, RegionDropZones, SplitFill
@@ -1836,119 +1848,249 @@ different one.
 
 ### 6.5 — The editor · **XL** · after: 6.3
 
-**Ports.** `TextEditor` (6,166 lines, 194 public members, 31 parts, 35 scroll sites, 13 geometry
-reads, 10 IMPORTANT writes, 8 `setHitTest`, 7 `HighlightRegistry` uses, the one `setPointerCapture`),
-`EditorViewPart` + ten parts + `DecorationPool`, `CompletionPopup`, `CompletionSession/Ranking/Recency`,
-`DocumentationPopup` (1,516 lines, 21 parts, 29 `setDisplayed`), `SearchReplaceBar`, `EditorFind`,
-`EditorFolding`, `EditorSuggest`, `EditorDiagnostics`, `EditorLanguageFeatures`, `HoverDocumentation`,
-`DiagnosticActions`, `DiffDecorations`, `EditorCommands`. Sheet: `editor.css` (179 rules, 81 parts,
-60 `::highlight`).
+*The largest single class in the port and the one package that cannot be split. Everything below the
+package map is downstream of one measurement: `TextEditor` declares **434 package-private members**,
+**109** of which are reached from **29** of the other 33 classes in its package — and it reaches back
+into five of them 62 times.*
 
-**Accepts.** `cgui-completion`, `cgui-text`; `TextEditor` 620 and every `Editor*` test
-(`EditorFind`, `EditorFindReplace`, `EditorFolding`, `EditorView`, `EditorReveal`,
-`EditorIndefiniteHeight`, `EditorTypingHighlight`, `EditorHighlightCache`, `EditorFrameCost`,
-`EditorSelfSave`, `Squiggles`, `ErrorStripe`, `QuickFixBulb`, `InspectionWidget`,
-`HoverDocumentation`, `DocumentationPopup`, `Completion*`, `CodeActionApply`, `GoToDefinition`,
-`DiagnosticTracking`, `SyntaxColours`, `UnnecessaryTag`, `MirroredGutter`, `HoverActionBand`,
-`SemanticOverGrammar`); **`EditorFrameCostTest` must not regress** — the 151ms open-frame targets in
-memory are the standing goal.
+**Scope, from the ledger:** 34 files, **15,428 old-engine lines** — the biggest batch in M6 by lines
+after 6.7. `TextEditor` alone is 6,166 of them.
 
-**Destination.** `widget.editor` + `.view` + `.suggest` + `.doc` + `.find`.
+| Group | The files | Files | Lines |
+|---|---|---:|---:|
+| The widget | `TextEditor` 6,166 | 1 | 6,166 |
+| The view parts | `EditorViewPart` 109 · `DecorationPool` 121 · `FoldingDecorationsPart` 306 · `ErrorStripePart` 269 · `InspectionWidgetPart` 220 · `QuickFixBulbPart` 182 · `ZoomIndicatorPart` 181 · `SquigglesPart` 176 · `ViewCursorsPart` 163 · `LineNumbersPart` 135 · `DiffChevronPart` 135 · `DiffBandsPart` 134 · `IndentGuidesPart` 132 · `SelectionsPart` 124 · `WhitespacePart` 93 · `CurrentLinePart` 76 · `GutterEdgePart` 60 · `RulersPart` 55 | 18 | 2,671 |
+| Completion | `CompletionPopup` 897 · `CompletionSession` 520 · `EditorSuggest` 250 · `CompletionRanking` 173 · `CompletionRecency` 106 | 5 | 1,946 |
+| Documentation | `DocumentationPopup` 1,516 · `HoverDocumentation` 281 | 2 | 1,797 |
+| Find | `SearchReplaceBar` 685 · `EditorFind` 312 | 2 | 997 |
+| The rest | `EditorCommands` 534 · `EditorLanguageFeatures` 514 · `EditorFolding` 374 · `EditorDiagnostics` 221 · `DiffDecorations` 113 · `DiagnosticActions` 95 | 6 | 1,851 |
 
-**Budget, measured:** **26 copied, 8 moved, 394 mechanical, 77 hand sites** — plus D22, which is the
-batch's real cost and appears in no count.
+**Budget, measured:** **26 copied, 8 moved, 26 internal children, 18 `stopPropagation` readings,
+2 post-layout callbacks.** Only 46 hand sites — the lowest per line of any batch — because the editor
+paints rather than lays out: its parts place rows through `DecorationPool`, not through the tree.
 
-**Rows it owns.** Every `TextEditor` row: *"the ERROR STRIPE is the one part that is honestly
-O(document)"*; *"a NaN poisons a whole layout silently"*; *"semantic tokens REPLACE grammar
-tokens"*; *"a recovered parse re-colours the rows it SWALLOWS"*; *"a pooled gutter arrow's row is read
-per frame"*; *"`TextEditor.getScrollWidth` is a pure accessor; the scan is once a frame"*; *"a view
-part is a piece of the editor, not a client of it"*; *"`measuredRows` may be invalidated one row at a
-time only when the line count is unchanged"*; *"a completion session is about a WORD"*; *"position a
-popup from `getWindowX/Y`, never `localToWorld`"* — **marked**: there is one chain now; *"an
-absolute child of a scroller still SCROLLS"* (`scrollExempt`); *"a widget that eats a chord it has no
-use for"* (marked at 5.6; `claimsChord` states the want list); *"`stopPropagation()` is
-`stopImmediatePropagation` WITHIN a phase"* (marked; the Down handler is fixed in its own commit);
-*"a paint method may skip the DRAW, never the METHOD"*.
+#### 1 — the editor is ONE package, and the plan's split cannot happen
 
-**Hazards.** The largest single risk in M6. The view parts place rows and decorations with IMPORTANT
-`left`/`top` and re-run layout; D22 moves rows to transforms, which is a behaviour-preserving change
-to the hottest path in the application and the one place the port may honestly become a rewrite of a
-view layer. `textViewport`, `gutter`, `foldColumn` and the layers are `scrollExempt` and
-`setHitTest(false)` in a specific arrangement (*"not a child of the gutter, and it cannot be one"*).
-Pointer capture, the caret ticker, `HighlightRegistry` per view line (*"a `HighlightRegistry` belongs
-to a `UIText`, not to a document"*) all move. Do this batch after 6.3, never before — the list
-machinery it duplicates by design (`TextEditor`'s own note) is the rehearsal.
+**§2.6 proposes `widget.editor` + `.view` + `.suggest` + `.doc` + `.find`. It is not available.** Read
+out of the source with receiver types resolved, every one of those groups reaches package-private
+members of classes outside it:
 
-### 6.6 — The desktop · **XL** · after: 6.2 (`Dialog`; `Popover` landed early in 6.1), 6.0's D16 hooks
+| would-be package | reaches into, package-privately |
+|---|---|
+| `.view` (18 parts) | `TextEditor` 4–19 members EACH · `DecorationPool` 2–6 each |
+| `.suggest` | `TextEditor` 5 · and `TextEditor` reaches `EditorSuggest` 11 back |
+| `.doc` | `TextEditor` 12 · `EditorLanguageFeatures` 10 the other way |
+| `.find` | `TextEditor` 9+4 · and `TextEditor` reaches `EditorFind` 17 back |
 
-**Ports.** `Desktop`, `WindowFrame` (106 members: chrome, content slot, `adoptChrome`/
-`releaseChrome`, the overlay slot, `attachOwned` ×2, `releaseOwned`, `setOwnerWindow`, tool-window
-flag, `WINDOW_FRAME` data key, attention/badge/progress, pin, `focusDelegate`, state/policy/key/discard
-guard, `requestClose`/`hide`/`show(persisted)`/`destroy`/`dispose`, recorded size, maximise/restore/
-fullscreen, `moveTo`/`resizeTo`/`snapTo`, wanted vs placed geometry, `isAnimating`, `minimize`,
-`isPlaced`, `pressedInContent`, `hidingWithOwner`), `WindowRegistry` (open order, MRU, bounded
-retention with the dirty exemption), `WindowState`, `WindowPolicy`, `Taskbar`, `TaskbarEntryMotion`,
-`TaskbarPreviews`, `TaskbarDesigner`, `WindowPreview`, `WindowThumbnail`, `WindowSnapshot`,
-`WindowSwitcher`, `WindowAnimator` + `WindowAnimation` + `WindowGeometryAnimation` + `WindowMotion`,
-`WindowMove`, `WindowKeyboardMove`, `SnapZones`, `SystemMenu`, `WindowChrome`, `WindowCommands`,
-`DesktopCommands`, `DesktopPresentation`, `DesktopSession`, `ScreenOverlay`; and `UIWindow`'s host
-surface onto `UIDocument` (§4.2's last row). Sheet: `desktop.css` (108 rules, 74 parts).
+Treating a package-private call in **either direction** as welding two classes together, the package
+has **exactly three components: one of 32 classes, plus `CompletionRecency` and `EditorViewPart`
+alone**. And `EditorViewPart` is a false positive of the measurement — the parts *extend* it and
+override its package-private `render`, which Java does not permit across a package boundary. So the
+real answer is **33 of 34 in one package**.
 
-**Accepts.** `cgui-desktop` (**needs the harness pointer reconciled** — it is not at `b5a2219`),
-`cgui-snapshot-probe`; the 20 desktop tests plus `DesktopActivation`, `DesktopLifecycle`,
-`DesktopMaximise`, `DesktopModality`, `DesktopTaskbar`, `DesktopWindow`, `WindowAnimation`,
-`WindowCaptionChrome`, `ToolWindowFloat`, `ToolWindowIsNotACitizen`, `ToolWindowPlacement`
-(`WindowFrame` 352, `Desktop` 246, `WindowState` 192).
+**This is not an accident to be tidied.** `AGENTS.md` already states it as a decision, in the entry
+for the view-part decomposition: *"A view part is a piece of the editor, not a client of it — the
+parts sit BESIDE `TextEditor` in its package and reach it through package-private accessors. Monaco
+needs a `ViewContext` because a part may not touch the view; with one view implementation in one
+package that indirection is a layer to keep in step rather than a seam."* The 109 call sites are that
+sentence's cost, paid deliberately.
 
-**Destination.** `desktop`, `desktop.window`, `desktop.motion`, `desktop.taskbar`, `desktop.switcher`.
+> **The general rule 6.4 learned at a tenth of this scale:** the boundary a split can take is the one
+> the encapsulation already has. `widget.graph` gave up `GraphNode`, `NodePort` and
+> `PortDefaultEditor` for ten methods; the editor would give up its whole surface for 109.
 
-**Budget, measured:** **19 copied, 8 moved, 409 mechanical, 49 hand sites** — every paint and mirror
-site in the port is here or in 6.4, and freeze-replacing-detach appears in none of them.
+**What IS available, and it is the right kind of improvement.** Not sub-packages — lifting the
+genuinely non-editor concepts OUT, which is what 6.3 did with `core.collection` and 6.4 with
+`graph.port`:
 
-**Rows it owns.** The ~65 compositor rows. Structural ones that change meaning: **hide is freeze**
-(*"HIDE IS DETACH"* in every row that says it — `WindowState.HIDDEN`'s javadoc is rewritten:
-retained AND frozen, with no detach; the row *"a window's geometry must be captured BEFORE it leaves
-the tree"* is marked — nothing leaves); *"a raise is a `z-index` assignment and NEVER a child-list
-move"* (`box().setZIndex` — the row's reason, un/registerElement over the subtree, no longer exists,
-but the rule holds because a move still fires observers); *"a window's modal is OWNED by it, never
-promoted"* (a hosted box in the frame's overlay slot); *"`WindowFrame.hide()` may only delegate to a
-WINDOW LAYER"* (marked — hide is `lifecycle().freeze`); *"a STYLESHEET candidate outlives the element
-being reparented"* (unchanged — the cascade is shared); *"`markAsInternal()` RECURSES, so RE-ADDING a
-container"* (marked at 5.6); *"a window is drawn whether or not it has been placed"* (placed on the
-frame after the one pass); *"a freshly allocated FBO loses the first draw"* (unchanged —
-`WindowSnapshot`); *"drawing a subtree a SECOND time corrupts hit-testing"* (marked — mirrors);
-*"an animation's clock starts on its first tick"* (structural in `Animation`); *"a window animates its
-LIVE contents, not a photograph"* (`BoxTree.mirror` makes the photograph unnecessary for the
-animation exactly as the row found); the four `WindowAnimation` rows about `IDENTITY` snapping, peak
-velocity, GNOME's timings, one mechanism per motion — **all unchanged**, re-hosted on `Animation`;
-*"a gesture's STATE changes on the press; only the picture waits"*; *"an owner takes its owned windows
-down with it"*; *"a cascade written in `hide()` runs at the END of the owner's animation"*; *"a
-maximised window restores on the first MOVEMENT"*; *"a snap zone is read from the POINTER"*;
-*"fullscreen needs NO geometry of its own"*; *"a taskbar entry is not INSIDE the window it stands
-for"*; *"a taskbar route must open into the ENTRY's window"* (a frozen frame is still IN the tree
-now — the row's `getAttachedWindow() == null` cause is gone, mark it); *"Restore and Maximize are
-TWO rows"*; *"a window command resolves its subject from the CONTEXT"*; *"'is this panel on screen'
-has ONE answer"*; *"CLICK-FOCUS LANDS ON THE FRAME BEFORE ANYTHING IS DISPATCHED"*; *"a PRESS IN A
-WINDOW'S CONTENT HAS ALREADY DECIDED WHERE FOCUS GOES"*; *"a desktop-scoped close watcher is
-UNREACHABLE while any window is active"* (the `Dismiss` cascade order); *"a held-modifier gesture
-polls the modifier"*; *"a MODE that intercepts keys must take only the keys it ACTS on"* (modes);
-*"a full-size overlay is safe to make HITTABLE exactly when it is `display: none`"*; *"a modal
-gesture that is not an ELEMENT gets no keys"* (modes); *"a STATIC 'do this on open' flag on a
-`GuiScreen` must be CONSUMED"* (6.9); *"a first `openWindow` does not go through `show()`"*;
-*"every live window and every window worth SHOWING are different questions"*; *"a caption shows
-whatever the taskbar shows"*; *"a window's content slot is a `ScrollerView`"*; *"a window nobody
-placed opens centred"*; *"a frame's content slot is not the fill idiom"*.
+- **`CompletionRecency`** (106 lines) is an LRU of what was recently accepted, keyed by string. It
+  reaches nothing and nothing reaches into it. It is a MODEL, and it belongs in
+  `com.crystalgui.text.lang` beside `CompletionItem` — where a headless consumer ranking completions
+  can have it and a widget package is not the only place it exists.
+- **`DiffDecorations`** (113) and **`DiagnosticActions`** (95) are the next candidates and are NOT free
+  today: `DiffBandsPart` reads two of the first's members and `EditorLanguageFeatures` two of the
+  second's. Both are small and inverting them is a real option; **cost it before assuming it, which is
+  the mistake this section exists to stop repeating.**
 
-**Hazards.** Freeze replaces detach, and **every consumer that read "hidden" as "not in the tree"
-must be found**: `DesktopSession` (*"recordedWidth, never the measured box: a HIDDEN window is
-detached, so its box is zero"* — a frozen frame has no box either, so `recordedWidth` stays);
-`Taskbar` (*"a taskbar route must open into the ENTRY's window … HIDE IS DETACH"*);
-`ToolWindowManager` (*"asking the frame about a closed panel asks a corpse"* — destroy still
-destroys); `WorkspaceClient`'s drain ticker (*"a drain ticker returns false when its element leaves
-the tree"* — becomes the hook dropped by freeze, re-registered on thaw per D10); `UIWindow.enterHudMode`
-(hides unpinned windows — freezes them). `WindowFrame.paintChildren` (the owned slot and the
-snapshot) has no counterpart — §4.4. The `Desktop`'s geometry written at IMPORTANT (*"must not be
-movable by a stylesheet"*) becomes UA-origin rules on the D16 layers.
+**Destination: `com.crystalgui.widget.editor`, flat, 33 files.** Stated in the package map with the
+number beside it, so the next reader does not re-propose the split.
+
+#### D28 — `texteditor` is `shadow ok` by the sheets and should NOT take one
+
+`tools/port/classify.py` on the shipped sheets:
+
+| Tag | through | ending | verdict |
+|---|---:|---:|---|
+| `texteditor` | 0 | 34 | shadow ok |
+| `documentationpopup` | **1** | 27 | **LIGHT (kind B)** |
+
+`ua/editor.css` is **174 rules, 78 distinct part names, 58 `::highlight`** — and no rule descends past
+a `texteditor` part, so `::part()` twins would cover all 34.
+
+**Recommend LIGHT anyway, and the reason is the 18 view parts.** Every decoration the parts place is
+pooled by `DecorationPool` and reused across rows; a shadow root would put 34 part names and every
+pooled decoration inside an encapsulation boundary that buys nothing here — the editor takes no
+caller content, so there is no `.__content__` collision to protect against, which is the one thing a
+shadow tree is for (§M6.1: *"what a shadow tree buys is the SLOT"*). It would cost 78 twin rules and
+a `::part()` lookup per pooled decoration per frame, against an error stripe already measured at
+**18µs per problem per frame**.
+
+`completionpopup`, `searchreplacebar`, `editorfind` and the sixteen parts name no tag the sheets
+recognise — the class-keyed gap again. Read them by hand; expect kind B, as every batch has found.
+
+#### Hazards, in the order they would be found
+
+1. **`TextEditor` is 6,166 lines and 194 public members**, and 29 classes read its internals. It ports
+   as a unit with its whole package or not at all. Budget a single sitting for the copy.
+2. **58 `::highlight` rules.** The highlight path resolves into a side table that never touches an
+   element's cascade, and the new engine's `Styleable` seam carries it — but nothing has exercised it
+   since M5 5.2. It is the one style mechanism in M6 with no ported consumer yet.
+3. **The error stripe is honestly O(document)** and its per-slot memory is what keeps it so: 524µs a
+   frame with no problems, 5.0ms at 2000 WITH the memory and 33.7ms without. A port that loses
+   `applySeverity`'s class-change guard turns a decompiled Minecraft class into 55fps.
+4. **26 internal children and 18 `stopPropagation` readings.** `TextEditor`'s `MouseEvent.Down` ends
+   with an unconditional `stopPropagation()`, which the invariant table records as having denied the
+   Run console its own press — that reading is now a DOM-semantics choice between ending the walk and
+   pre-empting the editor's own later listeners.
+5. **A NaN `line-height` poisons the whole layout** and `!(x > 0)` is the only guard that catches one.
+   Eleven copies of `origin + line * lineHeight - scrollTop` existed and exactly one was guarded;
+   `topOfViewLine` is now the single spelling and must stay so through the copy.
+
+### 6.6 — The desktop · **L** · after: 6.2 (`Dialog`; `Popover` landed early in 6.1)
+
+*Re-sized from **XL**. 27 files and 10,498 lines — smaller than 6.3 and 6.4 — and its budget is the
+lightest of the four widget batches: **19 copied, 8 moved, 32 hand sites**. What makes it worth doing
+before the editor is that its hand sites are almost entirely geometry and paint, which is exactly the
+ground the last three sessions' bugs came from.*
+
+**Scope, from the ledger:** 27 files, **10,498 old-engine lines**.
+
+| Group | The files | Files | Lines |
+|---|---|---:|---:|
+| The compositor | `Desktop` 1,359 · `DesktopCommands` 158 · `DesktopSession` 244 · `DesktopPresentation` 75 · `ScreenOverlay` 156 | 5 | 1,992 |
+| The window | `WindowFrame` 2,424 · `WindowMove` 411 · `WindowCommands` 283 · `SnapZones` 257 · `SystemMenu` 251 · `WindowRegistry` 213 · `WindowSnapshot` 210 · `WindowKeyboardMove` 182 · `WindowChrome` 55 · `WindowState` 45 · `WindowPolicy` 36 | 11 | 4,367 |
+| Motion | `WindowAnimator` 514 · `WindowAnimation` 291 · `WindowGeometryAnimation` 156 · `WindowMotion` 21 | 4 | 982 |
+| The taskbar | `TaskbarDesigner` 586 · `Taskbar` 565 · `TaskbarPreviews` 539 · `WindowThumbnail` 336 · `TaskbarEntryMotion` 268 · `WindowPreview` 236 | 6 | 2,530 |
+| The switcher | `WindowSwitcher` 627 | 1 | 627 |
+
+**Budget, measured:** **19 copied, 8 moved**, and 32 hand sites: **resize hook 12** · **mirror 9** ·
+`stopPropagation` 4 · post-layout callback 2 · paint override 2 · internal child 2 · dynamic
+restructure 1.
+
+**The nine mirrors are unique to this batch and have no counterpart.** `CgUiPaintContext.mirrored`
+was a COUNTER on the old paint context, because drawing a subtree twice corrupted the `localToWorld`
+every element reconciles against. `BoxTree.mirror` is a second BOX with its own matrices, so a
+taskbar thumbnail is a box painted like any other and the flag has nothing to do — the nine sites are
+deletions, not conversions, and the invariant row that documents the counter is marked
+*(M5: no counterpart.)* already.
+
+#### 1 — the desktop is one package too, and here the price is quotable
+
+The same measurement as 6.5, and the same shape of answer with a much better ratio: treating a
+package-private call in either direction as welding two classes, `ui.elements.desktop` is **one
+cluster of 22 plus six singletons** — `DesktopPresentation`, `ScreenOverlay`, `WindowAnimation`,
+`WindowGeometryAnimation`, `WindowPolicy`, `WindowState`.
+
+So §2.6's `desktop` + `.window` + `.motion` + `.taskbar` + `.switcher` is not free either. **Unlike
+the editor, it is affordable, and the price is worth stating rather than assuming:**
+
+| would-be package | classes | package-private call sites that must be PUBLISHED | on |
+|---|---:|---:|---|
+| `.switcher` | 1 | **6** | `Desktop` 2, `WindowFrame` 2, `WindowIcon` 1, `WindowThumbnail` 1 |
+| `.motion` | 4 | **24** | `WindowAnimator` 12, `WindowFrame` 8, `WindowMotion` 3, `Desktop` 1 |
+| `.taskbar` | 7 | **31** | `WindowFrame` 13, `Desktop` 6, `WindowIcon` 4, `WindowSnapshot` 4 |
+| `.window` | 11 | **97** | `WindowFrame` 57, `Desktop` 18, `WindowAnimator` 9 |
+
+**Recommendation: `desktop` + `.taskbar` + `.switcher`, and NOT `.window` or `.motion`.**
+
+- **`.switcher` at 6 is free.** `WindowSwitcher` is 627 lines that nothing else names, and six
+  accessors is a smaller surface than the class already exposes.
+- **`.taskbar` at 31 is worth it.** It is 2,530 lines and six classes — the largest coherent group in
+  the batch — and the 31 sites are concentrated: 13 on `WindowFrame` and 6 on `Desktop`, most of them
+  geometry a taskbar legitimately asks a window about (its box, its state, its icon). **A taskbar is
+  a VIEW OF the registry, not part of the window** — the invariant table says so outright — so the
+  boundary is one the design already claims to have.
+- **`.window` at 97 is the editor's mistake in miniature.** 57 of them on `WindowFrame` alone, whose
+  package-private surface is what `Desktop` drives it through. Publishing those is publishing the
+  compositor's control of its own windows.
+- **`.motion` at 24 is a near miss and the reason is instructive.** `WindowAnimator` and
+  `WindowMotion` are in the welded core; `WindowAnimation` and `WindowGeometryAnimation` are free. A
+  package holding the two free ones while the driver and the interface stay behind is a directory,
+  not a boundary. **Take it only if `WindowAnimator` goes too**, which costs the 12 sites on it.
+
+**Destination:**
+
+```
+com.crystalgui.desktop            the compositor and the window: Desktop, DesktopCommands,
+                                  DesktopSession, DesktopPresentation, ScreenOverlay, WindowFrame,
+                                  WindowMove, WindowKeyboardMove, WindowCommands, SnapZones,
+                                  SystemMenu, WindowRegistry, WindowSnapshot, WindowChrome,
+                                  WindowState, WindowPolicy, WindowAnimator, WindowAnimation,
+                                  WindowGeometryAnimation, WindowMotion
+  .taskbar                        Taskbar, TaskbarEntryMotion, TaskbarPreviews, TaskbarDesigner,
+                                  WindowPreview, WindowThumbnail
+  .switcher                       WindowSwitcher
+```
+
+**And four of the six singletons should leave the widget layer entirely**, which is the improvement
+worth more than any sub-package: `WindowState` (45 lines, an enum), `WindowPolicy` (36, a policy
+record) and `ScreenOverlay` (156, an SPI a host implements) name no engine and are read by
+`DesktopSession`'s persistence. They belong where **both** engines can name them — `core.window` —
+which is the D27 rule that gave 6.3 `core.collection` and 6.4 `graph.port`. `DesktopPresentation`
+(75) is the fourth candidate and needs the same check.
+
+#### D29 — `window` is the most reached-through tag in the engine
+
+| Tag | through | ending | verdict |
+|---|---:|---:|---|
+| `window` | **24** | 9 | **LIGHT (kind B)** |
+| `taskbar` | **9** | 9 | **LIGHT (kind B)** |
+| `desktop` | 0 | 1 | shadow ok |
+
+**24 beats `graphnode`'s 23 and `problemspanel`'s 17**, each of which held the record in its own
+batch. `ua/desktop.css` is 105 rules over 72 distinct part names, and a `window` rule reaches through
+its caption, its content slot, its resizers and its icon — which is what a window IS. Kind B all the
+way down, and `desktop` may host a shadow root only because nothing reaches into it at all.
+
+**The content slot is the one thing that must be a SLOT** and it is already known: *"A FRAME'S CONTENT
+SLOT IS NOT THE FILL IDIOM"* and *"A WINDOW'S CONTENT SLOT IS A `ScrollerView`"* are both invariant
+rows, and a caller's content landing among a frame's parts is exactly the collision §M6.1 recorded
+three times.
+
+#### 2 — one `DataKey`, checked before the batch rather than after
+
+`windowFrame`, declared by `WindowFrame`. It is the only one in either 6.5 or 6.6, and it takes the
+`.new` suffix like `graphView`, `blackboard`, `menuBar` and `problemsPanel` before it —
+`DataKeyCollisionTest` now fails the commit that forgets, which is why this is a line in the plan
+rather than a crash in an unrelated fixture three sessions later.
+
+**No cross-batch blockers.** The editor and the desktop both name `MenuBuilder` and `ContextMenu`,
+and both landed in `widget.overlay` at 6.3. Checked by import scan with comments stripped — the
+question being what a class names that is **not shipping**, which is what 6.4's audit got wrong.
+
+#### Hazards, in the order they would be found
+
+1. **Freeze replaces detach, and every consumer that read "hidden" as "not in the tree" changes
+   meaning.** `hide()` detaching is what made the old freeze real — no selector matches, no layout, no
+   paint, every input reference dropped. `Lifecycle.freeze` is the counterpart and it keeps the
+   subtree, so *"a `UIFrameTicker` whose element has left the tree must return `false`"* has no teeth
+   any more and the hidden-editor-that-keeps-compiling comes back unless the freeze stops the hooks.
+2. **Twelve resize sites and no `UIResizer`.** D6 replaces eight handle nodes with a mode over an edge
+   band; `Popover` already carries `canMoveResizeOrigin`/`applyResizeOrigin` as not-yet-overrides
+   waiting for it. This batch is what makes them real, and every window edge in the application
+   depends on getting it right.
+3. **The coordinate rules, three times over.** `WindowMove`, `SnapZones` and `WindowKeyboardMove` each
+   carry a comment explaining that `screenToLocal` does not subtract the source's own origin — the
+   exact sentence that was true of the old engine, is false here, and cost five sites in 6.4 before it
+   was recorded. **These three comments are the highest-value reading in the batch**: a snap zone read
+   from the window's edge instead of the pointer is a documented past bug, and the coordinate change
+   reintroduces it silently.
+4. **Nine mirrors to delete rather than convert**, and the risk is deleting the wrong thing: a
+   thumbnail that keeps a `mirrored` guard is harmless, one that loses `WindowSnapshot` is a minimised
+   window with no picture.
+5. **`Desktop` must take up NO SPACE until a window is open.** The invariant is unchanged and its
+   failure mode is the worst available — a transparent full-size overlay that eats every click on the
+   application beneath it, with nothing on screen to explain why.
 
 ### 6.7 — Workbench, dock, the shell, the applications · **XL** · after: 6.3, 6.5, 6.6
 
