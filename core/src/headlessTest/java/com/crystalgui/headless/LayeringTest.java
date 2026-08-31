@@ -97,6 +97,12 @@ public class LayeringTest {
             // no sub-package visibility, so splitting them means publishing ten "only the view may
             // call this" methods. The boundary is where the encapsulation already was.
             "com/crystalgui/widget/graph/node/",
+            // ONE TIER, and its four sub-packages get no entry: `widget/editor/` is a PREFIX, so
+            // `.suggest`, `.doc`, `.find` and `.lang` are already inside it. Listing them would claim
+            // an ORDER the code contradicts -- TextEditor holds an EditorSuggest and an EditorFind as
+            // fields, so the core names the features and the features name the core. That is what
+            // makes them sub-packages of the editor rather than tiers above it, and it is the same
+            // correction `chrome` needed at 6.3.
             "com/crystalgui/widget/editor/");
 
     /** Which tiers may name which: an index into {@link #WIDGET_TIERS}, and everything at or below it. */

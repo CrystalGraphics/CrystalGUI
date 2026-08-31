@@ -385,11 +385,22 @@ com.crystalgui.widget                 THE LIBRARY: general-purpose, knows nothin
                  .field (the thirteen controls) · .inspector (Inspector, InspectorForm, InspectorRegistry, InspectorSection)
   .canvas        CanvasView, CanvasOverlayMove, WorldRect
   .graph         GraphView, GraphNode, NodePort, NodeWireLayer, PortDefaultEditor, NodeCreationMenu, GraphSelection, GraphCommands, port types, field binder/widgets
-  .editor        FLAT, 33 files, and 6.5 measured why: TextEditor declares 434 package-private
-                 members, 109 of which 29 of the other classes reach -- and it reaches back into five
-                 of them 62 times. The `.view`/`.suggest`/`.doc`/`.find` split proposed here would
-                 need every one of those published, or Monaco's ViewContext, which AGENTS.md rejects
-                 by name. `CompletionRecency` leaves for `text.lang` instead. @see 6.5
+  .editor        THE WIDGET AND ITS RENDERING, 22 files: TextEditor, EditorViewPart, DecorationPool,
+                 the 18 view parts, EditorFolding (view state by the engine's own rule),
+                 DiffDecorations (read only by two view parts) and EditorCommands. The parts and
+                 TextEditor are welded -- moving the parts out alone is 19 types and 65+ published
+                 members, moving them WITH TextEditor is nine types and ZERO -- so the split is not
+                 `.view` leaving, it is the LANGUAGE FEATURES leaving. @see 6.5, measured by compiling
+    .suggest     CompletionPopup, CompletionSession, CompletionRanking, EditorSuggest
+    .doc         DocumentationPopup, HoverDocumentation
+    .find        SearchReplaceBar, EditorFind
+    .lang        EditorLanguageFeatures, EditorDiagnostics, DiagnosticActions
+                 Four packages, twelve files, SEVEN public types and 78 published members -- the rate
+                 6.6 paid. NOT tiers in LayeringTest: TextEditor holds an EditorSuggest and an
+                 EditorFind as fields, so the core names the features and the features name the core,
+                 which is what makes them sub-packages rather than something above. `.suggest` and
+                 `.doc` do NOT merge -- measured, and it saves nothing.
+                 `CompletionRecency` leaves the layer entirely, for `text.lang`.
 
 com.crystalgui.chrome                 THE SHELL'S OWN WIDGETS: may use widget; may not use desktop or workbench
   .menu          MenuBarView, MainMenuCommands, ChromeCommands, Breadcrumbs
@@ -1848,10 +1859,10 @@ different one.
 
 ### 6.5 — The editor · **XL** · after: 6.3
 
-*The largest single class in the port and the one package that cannot be split. Everything below the
-package map is downstream of one measurement: `TextEditor` declares **434 package-private members**,
-**109** of which are reached from **29** of the other 33 classes in its package — and it reaches back
-into five of them 62 times.*
+*The largest single class in the port, and a package that splits five ways for **7 public types and
+78 published members** — the same rate per file 6.6 paid and was accepted at. This section said the
+opposite until the numbers were taken from a compiler instead of from a regex; §1 is the correction
+and the reason it was wrong is the third instance of one mistake.*
 
 **Scope, from the ledger:** 34 files, **15,428 old-engine lines** — the biggest batch in M6 by lines
 after 6.7. `TextEditor` alone is 6,166 of them.
@@ -1869,51 +1880,100 @@ after 6.7. `TextEditor` alone is 6,166 of them.
 2 post-layout callbacks.** Only 46 hand sites — the lowest per line of any batch — because the editor
 paints rather than lays out: its parts place rows through `DecorationPool`, not through the tree.
 
-#### 1 — the editor is ONE package, and the plan's split cannot happen
+**Plus the split's own bill: 7 public types and 78 published members**, measured by compiling it
+(§1). Not in the hand-site count above, because publishing a member is a modifier rather than a
+reading — but it IS the thing to check a diff for, since a `public` nobody argued for is how a
+package's contract quietly becomes its whole surface. 6.6's equivalent was 52 for 27 files, and the
+same warning applies: every one of the 78 should be traceable to a named cross-package caller.
 
-**§2.6 proposes `widget.editor` + `.view` + `.suggest` + `.doc` + `.find`. It is not available.** Read
-out of the source with receiver types resolved, every one of those groups reaches package-private
-members of classes outside it:
+#### 1 — the package structure, measured by compiling it
 
-| would-be package | reaches into, package-privately |
-|---|---|
-| `.view` (18 parts) | `TextEditor` 4–19 members EACH · `DecorationPool` 2–6 each |
-| `.suggest` | `TextEditor` 5 · and `TextEditor` reaches `EditorSuggest` 11 back |
-| `.doc` | `TextEditor` 12 · `EditorLanguageFeatures` 10 the other way |
-| `.find` | `TextEditor` 9+4 · and `TextEditor` reaches `EditorFind` 17 back |
+**The previous version of this section concluded that the editor could not be split, and it was
+wrong in exactly the way 6.6's price table was wrong.** It measured each would-be sub-package
+*leaving on its own*, which charges a tightly-coupled pair twice — and it measured by matching
+identifiers in the source, which cannot resolve a receiver, so `height`, `left`, `next`, `row` and
+`size` all counted as reaching `TextEditor` when they are ordinary locals in every view part. The
+static tool reported **285** members for the five-way split; the compiler reports **78**.
 
-Treating a package-private call in **either direction** as welding two classes together, the package
-has **exactly three components: one of 32 classes, plus `CompletionRecency` and `EditorViewPart`
-alone**. And `EditorViewPart` is a false positive of the measurement — the parts *extend* it and
-override its package-private `render`, which Java does not permit across a package boundary. So the
-real answer is **33 of 34 in one package**.
+**The measurement is a scratch copy and a compile**, which is the two-minute answer 6.6 arrived at
+the hard way (`tools/port/` has the three scripts). One trap is worth stating because it produced a
+confidently wrong number *twice*: a single unresolved type marks its class erroneous and javac stops
+attributing everything downstream, so **one `TextEditor.StableViewport` error was hiding 307
+others** and the split measured as free. The loop must run to a genuinely clean build.
 
-**This is not an accident to be tidied.** `AGENTS.md` already states it as a decision, in the entry
-for the view-part decomposition: *"A view part is a piece of the editor, not a client of it — the
-parts sit BESIDE `TextEditor` in its package and reach it through package-private accessors. Monaco
-needs a `ViewContext` because a part may not touch the view; with one view implementation in one
-package that indirection is a layer to keep in step rather than a seam."* The 109 call sites are that
-sentence's cost, paid deliberately.
+##### The one real weld, and it is not where the old section said
 
-> **The general rule 6.4 learned at a tenth of this scale:** the boundary a split can take is the one
-> the encapsulation already has. `widget.graph` gave up `GraphNode`, `NodePort` and
-> `PortDefaultEditor` for ten methods; the editor would give up its whole surface for 109.
+`TextEditor` and its **18 view parts** are welded — and *only* to each other. Move the parts out on
+their own and the price is **19 types and 65+ members**; move `TextEditor` out *with* them and it is
+**9 types and zero members**. Everything else in the package reaches `TextEditor` through its public
+API, which is what a 194-member public surface is for.
 
-**What IS available, and it is the right kind of improvement.** Not sub-packages — lifting the
-genuinely non-editor concepts OUT, which is what 6.3 did with `core.collection` and 6.4 with
-`graph.port`:
+That is the entry `AGENTS.md` already carries, now with a number: *"a view part is a piece of the
+editor, not a client of it — the parts sit BESIDE `TextEditor` in its package and reach it through
+package-private accessors."* What the old section got wrong was concluding that this welds the whole
+package. It welds nineteen files.
 
-- **`CompletionRecency`** (106 lines) is an LRU of what was recently accepted, keyed by string. It
-  reaches nothing and nothing reaches into it. It is a MODEL, and it belongs in
-  `com.crystalgui.text.lang` beside `CompletionItem` — where a headless consumer ranking completions
-  can have it and a widget package is not the only place it exists.
-- **`DiffDecorations`** (113) and **`DiagnosticActions`** (95) are the next candidates and are NOT free
-  today: `DiffBandsPart` reads two of the first's members and `EditorLanguageFeatures` two of the
-  second's. Both are small and inverting them is a real option; **cost it before assuming it, which is
-  the mistake this section exists to stop repeating.**
+##### Per-group price, each leaving an otherwise-whole core
 
-**Destination: `com.crystalgui.widget.editor`, flat, 33 files.** Stated in the package map with the
-number beside it, so the next reader does not re-propose the split.
+| would-be package | files | types | members |
+|---|---:|---:|---:|
+| `.suggest` — completion | 5 | 1 | ~14 |
+| `.doc` — documentation | 2 | 3 | ~22 |
+| `.find` — find and replace | 2 | 2 | ~22 |
+| `.lang` — language features, diagnostics | 3 | 4 | ~28 |
+| `.fold` — the fold model | 1 | 1 | ~27 |
+| `.diff` — `DiffDecorations` | 1 | 1 | **0** |
+| `.cmd` — `EditorCommands` | 1 | **0** | **0** |
+| **all four language features together** | **12** | **7** | **78** |
+
+Merging `.suggest` and `.doc` into one `.assist` saves **nothing** — measured, not assumed — so they
+stay separate, which is also what they are: a completion list and a documentation popup are two
+ideas that happen to both be popups.
+
+##### The structure
+
+```
+com.crystalgui.widget.editor          THE WIDGET AND ITS RENDERING -- 22 files
+                                      TextEditor, EditorViewPart, DecorationPool and the 18 view
+                                      parts, plus EditorFolding and DiffDecorations
+  .suggest                            CompletionPopup, CompletionSession, CompletionRanking,
+                                      EditorSuggest
+  .doc                                DocumentationPopup, HoverDocumentation
+  .find                               SearchReplaceBar, EditorFind
+  .lang                               EditorLanguageFeatures, EditorDiagnostics, DiagnosticActions
+```
+
+**`EditorCommands` stays at the root** because it costs nothing either way and is the editor's own
+named actions — the same place `GraphCommands` and `DesktopCommands` sit relative to their widgets.
+
+**`EditorFolding` stays with the widget, and it is a decision rather than a price.** Moving it costs
+27 published members, which is a third of the whole split's bill for one 374-line file — and the
+engine's own rule says where it belongs: *"folding is view state — it never touches `UndoStack`"*.
+A fold model that is view state belongs with the view.
+
+**`DiffDecorations` stays too**, at zero cost, because its only two readers are `DiffBandsPart` and
+`DiffChevronPart`, which are view parts. A one-class `.diff` package beside them would be a
+directory rather than a boundary — the argument that refused `.motion` at 6.6.
+
+**`CompletionRecency` leaves the batch entirely** for `com.crystalgui.text.lang`, beside
+`CompletionItem`. It is an LRU of what was recently accepted, keyed by string; it reaches nothing
+and nothing reaches into it, and a headless consumer ranking completions should be able to have it.
+
+##### What 78 buys, and why it is worth paying
+
+The published members are concentrated and they read as a contract rather than as a leak:
+`TextEditor` **26**, `EditorFolding` 19 and `EditorFind` 17 when those move, then
+`EditorLanguageFeatures` 11, `EditorSuggest` 11, `EditorDiagnostics` 7, `HoverDocumentation` 6. With
+the recommendation above — folding staying — the bill is **7 types and 78 members** across four
+packages and twelve files.
+
+6.6 cost **52 members for 27 files**; this is **78 for 34**. The same rate, for a package that is
+otherwise 34 files in one directory with the largest class in the repository at the top of it.
+
+> **The rule this section now records, which is 6.6's stated in the reverse direction:** a split's
+> price is a property of the PARTITION, and the partition worth measuring first is the one that keeps
+> a hub with whatever is welded to it. Measuring "what if this group leaves" answers a question
+> nobody is asking.
 
 #### D28 — `texteditor` is `shadow ok` by the sheets and should NOT take one
 
@@ -1940,8 +2000,10 @@ recognise — the class-keyed gap again. Read them by hand; expect kind B, as ev
 
 #### Hazards, in the order they would be found
 
-1. **`TextEditor` is 6,166 lines and 194 public members**, and 29 classes read its internals. It ports
-   as a unit with its whole package or not at all. Budget a single sitting for the copy.
+1. **`TextEditor` is 6,166 lines and 194 public members**, and its 18 view parts read 65 of its
+   internals. It ports as a unit WITH THEM — a copy that leaves a part behind does not compile, and a
+   copy that takes only the parts publishes 65 members. Budget a single sitting for those 22 files;
+   the four feature packages can follow separately, which is what makes the batch divisible at all.
 2. **58 `::highlight` rules.** The highlight path resolves into a side table that never touches an
    element's cascade, and the new engine's `Styleable` seam carries it — but nothing has exercised it
    since M5 5.2. It is the one style mechanism in M6 with no ported consumer yet.
