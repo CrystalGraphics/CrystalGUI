@@ -69,6 +69,25 @@ public interface Styleable {
     String partName();
 
     /** {@code :root}. */
+    /**
+     * Whether this is a popup that is currently showing — CSS's {@code :popover-open}.
+     *
+     * <p>A PSEUDO-CLASS rather than a class, and the difference is what made it necessary. The open
+     * state was a {@code __open__} class flipped by the widget, which an outer sheet can read on a
+     * popover in the light tree and <b>cannot read on one inside a shadow tree</b>: classes do not
+     * cross that boundary, so a {@code Dropdown}'s menu matched the base rule through
+     * {@code ::part(menu)} — which sets {@code opacity: 0} while closed — and matched nothing that
+     * lifted it again. The menu opened, promoted, placed itself correctly and was drawn at zero
+     * alpha: invisible, with every observable saying it was open.</p>
+     *
+     * <p>A pseudo-class is legal after {@code ::part()} where a class is not, which is exactly why the
+     * web spells this one {@code :popover-open}. False by default: a node that is not a popup is not
+     * open.</p>
+     */
+    default boolean isOpen() {
+        return false;
+    }
+
     default boolean isRoot() {
         return getParent() == null;
     }

@@ -17,6 +17,7 @@ import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import javax.annotation.Nullable;
+import com.crystalgui.ui.dom.UISlot;
 
 /**
  * A labelled, activatable control — the first widget on the new engine, and the shape every other
@@ -147,6 +148,18 @@ public class Button extends UINode {
         label.set(Attribute.PART, LABEL_PART);
         label.setHitTest(false);
         shadow.append(label);
+
+        // A SLOT, so a button can take light children at all.
+        //
+        // Without one, anything appended to a Button is in the light tree and in no COMPOSED tree: no
+        // box, no paint, no promotion, and nothing reporting a problem. That is not hypothetical --
+        // `Dropdown` keeps its Menu on itself, and with the menu forced into the shadow tree instead
+        // every `menuitem` rule became an outer rule that could not reach the rows inside it, so a
+        // dropdown's items had no padding and no focus bar while an ordinary menu's did.
+        //
+        // LAST in the shadow tree, after both icon slots, so a caller's content cannot come between a
+        // button's own parts. Web-faithful too: a `<button>` takes children.
+        shadow.append(new UISlot());
 
         attachDefaultListener(onMouseUp, (node, event) -> {
             // THE LEFT BUTTON ACTIVATES, and no other one does.

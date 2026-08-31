@@ -91,11 +91,39 @@ public record CompoundSelector(List<Part> parts) {
         return matchesOriginating(element);
     }
 
-    /** Matches ignoring any pseudo-element part — "is this the <em>originating</em> element?" */
+    /**
+     * Matches the parts BEFORE any pseudo-element — "is this the <em>originating</em> element?"
+     *
+     * <p>Anything after the pseudo-element describes the pseudo-element, not its originator, and is
+     * matched by {@link #matchesAfterPseudoElement}. That split is CSS's and it is load-bearing here:
+     * {@code dropdown::part(menu):open} asks whether the MENU is open, and testing {@code :open} on
+     * the dropdown answers about a node that is never open — so the rule matched nothing, the
+     * dropdown's menu kept the {@code opacity: 0} it inherits while closed, and it opened, promoted,
+     * placed itself and drew at zero alpha.</p>
+     */
     public boolean matchesOriginating(Styleable element) {
         for (var part : parts) {
-            if (part.type() == SelectorType.PSEUDO_ELEMENT) continue;
+            if (part.type() == SelectorType.PSEUDO_ELEMENT) break;
             if (!partMatches(part, element)) return false;
+        }
+        return true;
+    }
+
+    /**
+     * Matches the parts AFTER the pseudo-element, against the pseudo-element's own element.
+     *
+     * <p>Only meaningful for {@code ::part()}, which selects a REAL node — a {@code ::highlight()} is
+     * a paint-time overlay with no element to test. True when there is nothing after it, which is the
+     * ordinary case.</p>
+     */
+    public boolean matchesAfterPseudoElement(Styleable part) {
+        boolean afterPseudo = false;
+        for (var p : parts) {
+            if (p.type() == SelectorType.PSEUDO_ELEMENT) {
+                afterPseudo = true;
+                continue;
+            }
+            if (afterPseudo && !partMatches(p, part)) return false;
         }
         return true;
     }
