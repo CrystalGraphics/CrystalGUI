@@ -6,6 +6,7 @@ import com.crystalgui.graph.port.BasicPortType;
 import com.crystalgui.graph.port.PortType;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.sheet.StyleSheet;
+import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UINode;
@@ -249,5 +250,51 @@ public class GraphBatchPortTest extends UiDocumentTestBase {
             }
         }
         assertTrue(String.join("\n", offenders), offenders.isEmpty());
+    }
+
+    /**
+     * <b>A graph is legible on the user-agent sheet alone, and a theme still wins.</b>
+     *
+     * <p>It was not. Counted across the whole UA sheet, {@code dialog} had 12 appearance declarations,
+     * {@code textfield} 7, {@code button} and {@code menu} 6 each — and {@code graphnode},
+     * {@code nodeport} and {@code graphview} had <b>zero between them</b>. So every other self-drawing
+     * widget was visible with no theme loaded and the graph was not: laid out perfectly and painting
+     * nothing, which reads as a broken widget rather than an unthemed one.</p>
+     *
+     * <p>Both halves matter and only the pair is worth asserting. A fallback that a theme could not
+     * override would put the per-type palette in the wrong sheet; a fallback that never applies is the
+     * bug it was written for, still there.</p>
+     */
+    @Test
+    public void aGraphIsLegibleWithNoThemeAndAThemeStillWins() {
+        withDefaultStyles();
+        GraphView view = graph();
+        GraphNode node = new GraphNode("A");
+        view.addNode(node, 0f, 0f);
+        NodePort port = node.addInput(FLOAT, "In");
+        frame();
+        frame();
+
+        int bare = port.typeColor();
+        assertTrue("a port dot has no colour at all without a theme -- the wire it feeds would be "
+                        + "invisible too, since NodePort.typeColor() reads exactly this",
+                (bare >>> 24) > 0);
+        assertTrue("the node has no edge without a theme",
+                (node.getStyle().getGeneralGroup().borderColor() >>> 24) > 0);
+
+        // AND A THEME STILL WINS -- by REDECLARING THE PROPERTY, which is the only mechanism that
+        // works across sheets. `var()` substitutes at parse time, so a token set in a later sheet
+        // cannot reach an earlier sheet's declaration; the first version of this test asserted
+        // exactly that and failed, which is the useful half of writing it. `crystalgui:graph` states
+        // `nodeport.type-float .__dot__ { border-color: ... }` itself, at higher specificity and
+        // later in order, so the per-type palette lands where the user-agent grey was.
+        document.styles().addStylesheet(StyleSheetRegistry.of("crystalgui:graph"));
+        frame();
+        frame();
+
+        int themed = port.typeColor();
+        assertTrue("the theme did not reach the port dot: still " + Integer.toHexString(themed),
+                themed != bare);
+        assertEquals("a float port takes the theme's vec1 colour", 0xFF84E4E7, themed);
     }
 }
