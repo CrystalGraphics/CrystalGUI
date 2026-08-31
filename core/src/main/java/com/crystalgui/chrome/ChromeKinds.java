@@ -41,15 +41,13 @@ public final class ChromeKinds implements NodeKinds {
     @Override
     public void register() {
         UINodeRegistry.register(QuickPick.NAME, QuickPick::new, NodeContract.INERT);
-        UINodeRegistry.register(MenuBarView.NAME,
-                () -> new MenuBarView(CommandRegistry.global()), NodeContract.INERT);
+        UINodeRegistry.register(MenuBarView.NAME, () -> new MenuBarView(CommandRegistry.global()), NodeContract.INERT);
         UINodeRegistry.register(StatusBarView.NAME, StatusBarView::new, NodeContract.INERT);
         UINodeRegistry.register(ProgressStatusItem.NAME, ProgressStatusItem::new, NodeContract.INERT);
         UINodeRegistry.register(ProcessesPopover.NAME, ProcessesPopover::new, NodeContract.INERT);
         UINodeRegistry.register(Breadcrumbs.NAME, Breadcrumbs::new, NodeContract.INERT);
         UINodeRegistry.register(NotificationsView.NAME, NotificationsView::new, NodeContract.INERT);
-        UINodeRegistry.register(NotificationBalloons.NAME, NotificationBalloons::new,
-                NodeContract.INERT);
+        UINodeRegistry.register(NotificationBalloons.NAME, NotificationBalloons::new, NodeContract.INERT);
         UINodeRegistry.register(ProblemsPanel.NAME, ProblemsPanel::new, NodeContract.INERT);
         UINodeRegistry.register(NavigatorView.NAME, NavigatorView::new, NodeContract.INERT);
     }
