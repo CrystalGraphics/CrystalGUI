@@ -115,6 +115,19 @@ BY_NAME = {
     # by nobody -- so it is the one thing a split can take, and it belongs beside CompletionItem
     # rather than inside a widget. @see plan_m6.md 6.5
     'CompletionRecency': 'text/lang',
+    # THE EDITOR'S FOUR FEATURE PACKAGES (6.5). TextEditor and its 18 view parts are welded -- moving
+    # the parts out alone costs 19 types and 65+ members, moving them WITH TextEditor costs zero -- so
+    # the root holds the widget and its rendering and the LANGUAGE features leave. EditorFolding stays
+    # because folding is view state by the engine's own rule (and moving it is 27 members, a third of
+    # the whole bill for one file); DiffDecorations stays because its only readers are two view parts;
+    # EditorCommands stays because it costs nothing either way and belongs beside its widget, as
+    # GraphCommands and DesktopCommands do. @see plan_m6.md 6.5 section 1
+    'CompletionPopup': 'widget/editor/suggest', 'CompletionSession': 'widget/editor/suggest',
+    'CompletionRanking': 'widget/editor/suggest', 'EditorSuggest': 'widget/editor/suggest',
+    'DocumentationPopup': 'widget/editor/doc', 'HoverDocumentation': 'widget/editor/doc',
+    'SearchReplaceBar': 'widget/editor/find', 'EditorFind': 'widget/editor/find',
+    'EditorLanguageFeatures': 'widget/editor/lang', 'EditorDiagnostics': 'widget/editor/lang',
+    'DiagnosticActions': 'widget/editor/lang',
     # 6.6's FIVE sub-packages, and the price table above them was wrong by a factor of two. It quoted
     # `.window` at 97 published call sites and `.motion` at 24 and recommended taking neither; taken
     # TOGETHER the whole partition cost 52 members and 4 types, because most of those 97 are pairs a
@@ -198,6 +211,8 @@ BATCH = [
     ('desktop/motion', '6.6'), ('desktop/host', '6.6'),
     ('text/lang', '6.5'),
     ('widget/editor', '6.5'),
+    ('widget/editor/suggest', '6.5'), ('widget/editor/doc', '6.5'),
+    ('widget/editor/find', '6.5'), ('widget/editor/lang', '6.5'),
     ('desktop', '6.6'),
     ('workbench', '6.7'), ('editor', '6.7'), ('example/machine', '6.7'),
     ('net/window', '6.8'),
