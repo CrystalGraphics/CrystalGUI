@@ -35,7 +35,36 @@ the port hit something the guide did not say. Five things changed that way; each
 
 ---
 
-## 2. Structure: internal children become a shadow tree
+## 2. Structure: a shadow tree is OPT-IN — ask first
+
+> **⚠⚠ REVERSED AT M6.1, after sixteen widgets.** This section used to say every composite's parts
+> become a shadow tree. That is the wrong default and it cost eleven silent defects in one batch.
+> **Run `python tools/port/classify.py` before you port a widget.** It reads every shipped sheet and
+> tells you, for that widget, whether a shadow tree is possible at all.
+
+**A widget may host a shadow tree only if no rule reaches THROUGH its structure.** Measured across the
+shipped sheets: 23 widgets can, 21 cannot, and 220 rules have no `::part()` spelling. The three shapes
+that have none are a part under a part (`::part(a)::part(b)` is invalid CSS), a tag under a part
+(nothing descends from a leaf), and a nested widget's part (the inner widget is inside the outer's
+shadow tree).
+
+So there are three answers, and the tool gives you the first bit:
+
+| classify.py says | the widget takes caller content | do this |
+|---|---|---|
+| any through-rules | either | **LIGHT.** Keep `__x__` classes, keep children in the light tree. The sheet needs no edit. |
+| none | yes | **SHADOW + SLOT.** Parts become `part=`, add the widget to `twins.py`'s `HOSTS`, run it. |
+| none | no | Prefer **LIGHT** — smaller change, no sheet edit. Shadow is defensible but buys nothing. |
+
+**What a shadow tree actually buys is the slot**, not the part naming: a caller's content cannot land
+among a widget's own parts. That is what `.__content__` cost three times over, and it is why
+`ScrollerView`, `Menu` and `Button` genuinely need one. A widget that takes no content has nothing to
+protect.
+
+**A subclass cannot un-shadow its parent.** `Dropdown extends Button`, so Button's decision is
+Dropdown's. Decide the base class first.
+
+### When it IS a shadow tree
 
 The old rule was *"structure is internal children"*: `markAsInternal()`, `addInternalChild()`, a
 `__double-underscore__` class per part, and `acceptsPublicChildren()` returning `false` so

@@ -690,7 +690,7 @@ lambdas in `InsertionMarker` ×10, `TextEditor` ×10, `RegionDropOverlay` ×6, `
 
 | # | Question | Recommendation |
 |---|---|---|
-| **D1** | How is a `__x__` classified as kind A, B or C? | **A** if the widget builds it in its constructor, it never holds a caller's node, and no sheet reaches through it to a TAG (§0.4's 99). **B** if any sheet selects a part or a tag beneath it, or a caller's content lands inside it. **C** if the widget toggles it from a listener. Applied per name in the ledger (§2.5), and a name used by two widgets as different kinds is renamed at one of them — which is the `.__content__` row's fix arriving as a rule |
+| **D1** | ~~How is a `__x__` classified as kind A, B or C?~~ **Which widgets may host a shadow tree at all?** | **REVERSED at M6.1 — see §4.7 below.** The original answer classified a NAME; the batch showed the question belongs to the WIDGET, and that the default was the wrong way round. A widget hosts a shadow tree only when **no shipped rule reaches through its structure**; measured, that is 23 of 44, and 21 must keep their structure light. `tools/port/classify.py` is the measurement and it is per widget, not per opinion |
 | **D2** | Part naming | strip the underscores: `part="label"`, `slider::part(thumb)`; kind-B and C classes lose theirs too (`.row`, `.active`) — the underscore convention existed to mark "engine-owned, don't reach in", and the shadow root now says that |
 | **D3** | `exportparts` | implement it in the selector engine beside `::part` — it is what lets `window::part(close)` reach a `Button`'s label without the caption being a kind-B tree; S2 measured `::part` alone |
 | **D4** | Persistent geometry (a window's `left`/`top`/size, a popup's placement, a resized panel) | **INLINE author style on the node**, exactly what a browser does with `element.style.left` — it is state, it is what the desktop record persists, and an author's `!important` can still pin it. The boundary test forbids IMPORTANT only. Transient motion is a `Box` override driven by `Animation` |
@@ -718,6 +718,102 @@ lambdas in `InsertionMarker` ×10, `TextEditor` ×10, `RegionDropOverlay` ×6, `
 | **D24** | The 32 unregistered tags | every one registers a `Name` in a static initializer beside its class, and `SheetPortTest` refuses a sheet tag no name answers |
 
 ---
+
+### 4.7 D1 REVERSED — a shadow tree is opt-in, and the sheets decide
+
+**Status: decided at M6.1, from the batch rather than from first principles.**
+
+D1 asked how to classify a `__x__` NAME. That was the wrong unit. Encapsulation is a property of a
+WIDGET — a node either has a shadow root or it does not, and every one of its parts follows — so the
+question is which widgets may have one, and the sheets already answer it.
+
+#### The rule
+
+> A widget may host a shadow tree **only if no shipped rule reaches through its structure.**
+> Everything else keeps its structure in the light tree with `__x__` classes, unchanged from the old
+> engine.
+
+`::part()` has no spelling for a rule that reaches through:
+
+| shape | example | why it cannot be written |
+|---|---|---|
+| a part under a part | `colorselector .__channel-row__ slider .__thumb__` | `::part(a)::part(b)` is invalid CSS |
+| a tag under a part | `dialog .__title-bar__ .__close__ text` | nothing descends from a leaf |
+| a nested widget's part | `.__side__ dropdown .__menu__` | the inner widget is inside the outer's shadow tree |
+
+#### The measurement
+
+`tools/port/classify.py`, over every shipped sheet. `through` counts rules with no `::part()`
+spelling; `ending` counts rules that twin cleanly.
+
+**23 widgets can host a shadow tree. 21 must stay light. 220 rules have no spelling at all.**
+
+Must stay LIGHT, worst first:
+
+| widget | through-rules | | widget | through-rules |
+|---|---|---|---|---|
+| `colorselector` | 51 | | `window` | 24 |
+| `graphnode` | 23 | | `runpanel` | 21 |
+| `problemspanel` | 17 | | `projectfiletree` | 13 |
+| `graphview` | 11 | | `taskbar` | 9 |
+| `nodecreationmenu` | 8 | | `quickpick` | 7 |
+| `workbench` | 6 | | `dialog` | 5 |
+| `dropdown` | 5 | | `navigatorview` | 5 |
+| `tabview` | 5 | | `dockgroup` | 3 |
+| `notificationsview` | 2 | | `statusbarview` | 2 |
+| `documentationpopup` | 1 | | `markupview` | 1 |
+| `menu` | 1 | | | |
+
+Shadow is safe for: `breadcrumbs`, `checkbox`, `crystaleditor`, `desktop`, `listview`, `menuitem`, `nodeport`, `pagestack`, `popover`, `progressbar`, `scroller`, `scrollerview`, `searchfield`, `shadergrapheditor`, `slider`, `splitview`, `switch`, `tab`, `tableview`, `texteditor`, `tooltip`, `treeview`, `viewcontainer`.
+
+#### Why this is not a retreat
+
+What a shadow tree buys is exactly one thing: **a caller's content cannot collide with a widget's own
+parts.** That is what made `.__content__` mean three different things and zero a panel's height, and
+it is real. What delivers it is the **slot**, not the part naming — and a slot is available to any
+widget that takes content, whichever way this decision goes.
+
+What it costs is every rule that reaches through. The batch paid that cost eleven times in sixteen
+widgets, each one silent, each one found by eye.
+
+So the migration keeps its value where the value is — `ScrollerView`, `Menu`, `Button`, `Dialog`,
+`Tab`, `SplitView`: widgets that take caller content, where the batch's real defects were content
+landing among parts — and stops paying for it where there is nothing to buy. A `ColorSelector` accepts
+no content; a boundary there protects its parts from its own theme and from nothing else.
+
+#### The constraint inheritance imposes
+
+**A subclass cannot un-shadow its parent.** `Dropdown extends Button`, so Button's shadow root is
+Dropdown's, and Dropdown's five through-rules cannot be answered by making Dropdown light — the whole
+chain has to agree. Where a superclass is a shadow host and a subclass has through-rules, the choices
+are: expose the needed parts on the superclass and twin them (what `dropdown::part(label)` does for
+the label a Button owns), or take the superclass light. **Decide the base class first**, and record
+the answer on it, because every subclass inherits the consequence.
+
+#### What changes for the widgets already ported
+
+Nothing is reverted beyond `ColorSelector`, which is done. The other fifteen are all in the "shadow
+ok" column or are content-takers whose through-rules are answered by twins that now exist. The
+per-widget verdict lives in the ledger's PART rows and is regenerated by `classify.py`.
+
+#### Enforcement
+
+- `tools/port/classify.py` — the verdict, per widget, from the sheets. Run it when porting a widget.
+- `tools/port/twins.py` — writes the `::part()` twins for a widget that IS a shadow host. Idempotent
+  and generalised over the whole selector, including the tag spelling of a part (`dropdown text`).
+- `SheetPortTest.noRuleTargetsAShadowPartByItsClass` — fails when a rule targets a shadow part with
+  no twin beside it in the same rule. This is the guard that makes the tool's absence loud.
+- `SheetPortTest.noSheetSpellsAPartInsideAPart` — the invalid-CSS shape a mechanical rewrite of the
+  218 would produce.
+
+#### The porting step, restated
+
+1. Run `classify.py`. If the widget has any through-rules, it stays **light**: keep its `__x__`
+   classes, keep its children in the light tree, and its sheet needs no edit at all.
+2. If it has none and it **takes caller content**, give it a shadow root **and a slot**, move its
+   parts to `part=`, add it to `twins.py`'s `HOSTS`, and run the tool.
+3. If it has none and takes no content, either is correct; prefer **light**, because it is the
+   smaller change and the sheet needs no edit.
 
 ## 5. The minor milestones
 
