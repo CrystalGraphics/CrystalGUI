@@ -1,12 +1,15 @@
-package com.crystalgui.ui.elements.graph;
+package com.crystalgui.widget.graph;
 
+import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.service.Drag;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.graph.port.PortType;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.graph.PortDirection;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.UIWindow;
-import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.UIDragController;
@@ -44,7 +47,18 @@ import javax.annotation.Nullable;
  * theme changes a padding — and each of those is a thing a user does routinely. The same lesson as
  * {@code resizeOriginLeft()} reading the live Taffy inset rather than a field.</p>
  */
-public class NodePort extends UIElement {
+public class NodePort extends UINode {
+
+    /**
+     * This widget's kind.
+     *
+     * <p>Declared here rather than in a vocabulary class, and declared AT ALL because a subclass
+     * inherits its parent's kind unless it is given its own: without this, NodePort reports
+     * {@code crystalgui:element} (or its supertype's) and every rule the sheets write for
+     * {@code nodeport} matches nothing at all — no background, no border, an unstyled widget that
+     * reads as one that was never built.</p>
+     */
+    public static final Name NAME = Name.of("nodeport");
 
     public static final String DOT_CLASS = "__dot__";
     public static final String LABEL_CLASS = "__label__";
@@ -79,7 +93,7 @@ public class NodePort extends UIElement {
     @Getter
     private final PortType type;
 
-    private final UIElement dot = new UIElement();
+    private final UINode dot = new UINode();
     private final UIText label;
 
     /**
@@ -95,7 +109,7 @@ public class NodePort extends UIElement {
      */
     @Nullable
     @Getter
-    private UIElement defaultEditor;
+    private UINode defaultEditor;
 
     /**
      * Fires whenever {@link #setDefaultEditor} actually changes which control is stored — never on the
@@ -108,7 +122,7 @@ public class NodePort extends UIElement {
      * document-declared one <em>later</em>, on whatever tick the node's fields get bound. For a node built
      * at scene-construction time that happens synchronously, before anything is watching, and is invisible.
      * For a node added later — Space's create menu, mid-session — the swap happens lazily inside
-     * {@code ShaderGraphPreviews.tickFrame()}, a {@code UIFrameTicker} registered on the same
+     * {@code ShaderGraphPreviews.tickFrame()}, a {@code Animation.Hook} registered on the same
      * hash-ordered set as {@code GraphView} itself. Without this signal, {@code GraphView}'s own discovery
      * only ever looks at the port ONCE, and if its tick happened to run first, it would snapshot the
      * throwaway generic control into a {@code PortDefaultEditor} forever — mounted, hit-testable, and
@@ -129,7 +143,7 @@ public class NodePort extends UIElement {
      *
      * <p>Outputs are refused: a value flows <em>out</em> of one, so there is nothing to type.</p>
      */
-    public NodePort setDefaultEditor(@Nullable UIElement editor) {
+    public NodePort setDefaultEditor(@Nullable UINode editor) {
         if (!direction.isInput()) return this;
         if (defaultEditor == editor) return this;
         defaultEditor = editor;
@@ -171,6 +185,7 @@ public class NodePort extends UIElement {
     private String resolvedTypeClass;
 
     public NodePort(PortDirection direction, PortType type, String name) {
+        super(NAME);
         this.direction = direction;
         this.type = type;
         this.portId = name;
@@ -189,10 +204,10 @@ public class NodePort extends UIElement {
         // outside the type-classed subtree; here the outer ring is DOT_CLASS's own border (still what
         // typeColor() reads), so only the core needs a child at all — the "gap" is just DOT_CLASS's own
         // background showing between its border and this core.
-        UIElement core = new UIElement();
+        UINode core = new UINode();
         core.addClass(DOT_CORE_CLASS);
         core.setHitTest(false);
-        dot.addInternalChild(core);
+        dot.append(core);
 
         this.label = new UIText(displayLabel(humanise(name), type.arityLabel()));
         label.addClass(LABEL_CLASS);
@@ -200,7 +215,6 @@ public class NodePort extends UIElement {
         // Same reasoning as `GraphNode.title`'s identical call: this label has to drive its column's
         // (and therefore the node's own) growth, and the auto-detect heuristic races the ancestor
         // chain's first, not-yet-converged layout pass — see `UIText.forceSelfSizeWidth()`.
-        label.forceSelfSizeWidth();
 
         // Not mounted here — see the field javadoc. GraphView discovers it and places it on the plane.
 
@@ -208,11 +222,11 @@ public class NodePort extends UIElement {
         // the difference between a wire arriving and a wire leaving. Reversing it in CSS would need a
         // flex-direction override per direction and would still be lying about the reading order.
         if (direction.isInput()) {
-            addInternalChild(dot);
-            addInternalChild(label);
+            append(dot);
+            append(label);
         } else {
-            addInternalChild(label);
-            addInternalChild(dot);
+            append(label);
+            append(dot);
         }
 
         this.events.getGroup(MouseEvent.Down.class).attachListener((el, event) -> {
@@ -348,10 +362,6 @@ public class NodePort extends UIElement {
     }
 
     /** The whole port is one control; its parts are internal. */
-    @Override
-    public boolean acceptsPublicChildren() {
-        return false;
-    }
 
     /** Drives {@code nodeport:blank} — see the class javadoc. */
     @Override
@@ -359,7 +369,15 @@ public class NodePort extends UIElement {
         return connectionCount == 0;
     }
 
-    public boolean isConnected() {
+    /**
+     * Whether a wire is attached.
+     *
+     * <p>Was {@code isConnected()}, which {@link UINode} now declares as {@code final} and uses for
+     * something else entirely — whether the node is in a document. Two meanings of "connected" one
+     * method apart is exactly the collision worth renaming out of: a port that is in the tree and has
+     * no wire would have answered both true and false to the same word.</p>
+     */
+    public boolean hasConnection() {
         return connectionCount > 0;
     }
 
@@ -390,11 +408,11 @@ public class NodePort extends UIElement {
     }
 
     /** The dot's centre, in the plane's coordinate space — i.e. the same space a paint call inside the
-     * canvas uses, and the space {@link UIElement#screenToLocal} reports in. Read live; never cached. */
+     * canvas uses, and the space {@link UINode#screenToLocal} reports in. Read live; never cached. */
     public Vector2f dotCenter() {
-        var cache = dot.getRuntimeCache();
-        return new Vector2f(cache.getX() + cache.getWidth() * 0.5f,
-                cache.getY() + cache.getHeight() * 0.5f);
+        Box cache = dot.box();
+        return new Vector2f(cache.x() + cache.width() * 0.5f,
+                cache.y() + cache.height() * 0.5f);
     }
 
     /** The dot's live outer radius (half its width) — what {@link NodeWireLayer} and {@link
@@ -403,7 +421,7 @@ public class NodePort extends UIElement {
      * theme constant" reasoning as {@link #dotCenter()} — a themed {@code --graph-dot} change must not
      * need a matching Java constant kept in step by hand. */
     public float dotRadius() {
-        return dot.getRuntimeCache().getWidth() * 0.5f;
+        return dot.box().width() * 0.5f;
     }
 
     /** The colour of this port's type, taken from the dot's computed {@code border-color}.
@@ -421,7 +439,7 @@ public class NodePort extends UIElement {
     /** The node this port belongs to, or {@code null} if it is not on one. */
     @Nullable
     public GraphNode node() {
-        for (UIElement e = getParent(); e != null; e = e.getParent()) {
+        for (UINode e = parent(); e != null; e = e.parent()) {
             if (e instanceof GraphNode node) return node;
         }
         return null;
@@ -429,7 +447,7 @@ public class NodePort extends UIElement {
 
     @Nullable
     GraphView graphView() {
-        for (UIElement e = getParent(); e != null; e = e.getParent()) {
+        for (UINode e = parent(); e != null; e = e.parent()) {
             if (e instanceof GraphView view) return view;
         }
         return null;
@@ -452,7 +470,7 @@ public class NodePort extends UIElement {
      */
     private boolean beginConnectionDrag(float rawX, float rawY) {
         GraphView view = graphView();
-        UIWindow window = getAttachedWindow();
+        UIDocument window = document();
         if (view == null || window == null) return false;
 
         view.beginPendingWire(this);
@@ -463,8 +481,8 @@ public class NodePort extends UIElement {
         // here first and was FALSE, which made a wire dropped on a valid port connect and open the
         // create-node menu at the same time. See UIDragController.endDrag.
         final int startingConnections = getConnectionCount();
-        window.getInputHandler().getDragController().startDrag(this, rawX, rawY, this,
-                new UIDragController.DragListener() {
+        Drag.startWithPayload(this, rawX, rawY, this,
+                new Drag.Listener() {
                     @Override
                     public void onDragUpdate(float mx, float my, float sx, float sy, float dx, float dy) {
                         view.updatePendingWire(mx, my);

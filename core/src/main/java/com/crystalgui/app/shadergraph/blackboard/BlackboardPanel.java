@@ -1,10 +1,14 @@
-package com.crystalgui.graph.shader;
+package com.crystalgui.app.shadergraph.blackboard;
 
+import com.crystalgui.core.data.DataProvider;
+import com.crystalgui.ui.service.Drag;
+import com.crystalgui.ui.box.Box;
+import com.crystalgui.app.shadergraph.ShaderPropertyForm;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.command.CommandRegistry;
-import com.crystalgui.ui.elements.chrome.ContextMenu;
+import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.undo.CompositeEdit;
@@ -15,14 +19,14 @@ import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.graph.GraphIds;
 import com.crystalgui.graph.GraphProperty;
 import com.crystalgui.graph.PropertyEdits;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.UIFrameTicker;
-import com.crystalgui.ui.UIWindow;
-import com.crystalgui.ui.elements.Menu;
-import com.crystalgui.ui.elements.ScrollerView;
-import com.crystalgui.ui.elements.UIText;
-import com.crystalgui.ui.AnchoredPlacement;
-import com.crystalgui.ui.elements.canvas.CanvasOverlayMove;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.service.Animation;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.widget.overlay.Menu;
+import com.crystalgui.widget.scroll.ScrollerView;
+import com.crystalgui.widget.text.UIText;
+import com.crystalgui.ui.service.AnchoredPlacement;
+import com.crystalgui.widget.canvas.CanvasOverlayMove;
 import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.style.StyleGroup;
@@ -59,7 +63,7 @@ import com.crystalgui.ui.input.keymap.Keymap;
  * {@link #onPropertySelected} and the inspector listens; each source clears the other. Two sources, one
  * subject, and neither has to know what the other can hold.</p>
  */
-public class BlackboardPanel extends UIElement implements UIFrameTicker {
+public class BlackboardPanel extends UINode implements DataProvider {
 
     public static final String PANEL_CLASS = "__blackboard__";
     public static final String HEAD_CLASS = "__head__";
@@ -167,11 +171,11 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
     @Nullable
     private final UndoStack undo;
 
-    private final UIElement head = new UIElement();
-    private final UIElement titles = new UIElement();
+    private final UINode head = new UINode();
+    private final UINode titles = new UINode();
     private final UIText title = new UIText("");
     private final UIText subtitle = new UIText("Shader Graphs");
-    private final UIElement add = new UIElement();
+    private final UINode add = new UINode();
     /**
      * The list, and a real {@link ScrollerView}.
      *
@@ -227,7 +231,7 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
     private final List<String> pendingCategories = new ArrayList<>();
 
     /** One row of the list — a pill for a property, or a category heading. @see #rows */
-    private record Row(UIElement element, @Nullable String propertyId, String category) {
+    private record Row(UINode element, @Nullable String propertyId, String category) {
     }
 
     /** Where a drop lands: a position in the <b>document</b>, and the category it joins. */
@@ -243,7 +247,7 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
      * so a pointer resting near a boundary alternates between two indices and the line flickers between
      * two gaps. An overlay cannot move what it is measuring.</p>
      */
-    private final UIElement dropLine = new UIElement();
+    private final UINode dropLine = new UINode();
 
     /** Where {@link #dropLine} currently says the drop lands, or -1 while it is hidden. */
     private int dropIndex = -1;
@@ -293,8 +297,6 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
         // Focusable so Delete can be a command scoped to this panel rather than a global key that would
         // fire while the user was deleting a NODE. Commands resolve outward from the focused element.
         setFocusPolicy(FocusPolicy.CLICK);
-        markAsInternal();
-
         // Head is a CONTAINER with the text as children -- a UIText draws from its own box top, so making
         // the text be the strip leaves nothing for align-items to centre. Same structure, same reason, as
         // the Main Preview's header.
@@ -311,17 +313,17 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
         // what the first version looked like.
         titles.addClass(TITLES_CLASS);
         titles.setHitTest(false);
-        titles.addChild(title);
-        titles.addChild(subtitle);
-        head.addChild(titles);
-        head.addChild(add);
+        titles.append(title);
+        titles.append(subtitle);
+        head.append(titles);
+        head.append(add);
 
         body.addClass(BODY_CLASS);
-        addInternalChild(head);
-        addInternalChild(body);
+        append(head);
+        append(body);
 
         setDocumentName(documentName);
-        move = CanvasOverlayMove.install(this, head, this::resizeContainingBlock);
+        move = CanvasOverlayMove.install(this, head, this::parent);
         add.onMouseDown.attachListener((element, event) -> {
             openTypeMenu();
             event.stopPropagation();
@@ -335,7 +337,7 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
         // closes the rename. Clicking into the box you are typing in shut it, which reads as the field
         // refusing to be clicked rather than as a focus fight two elements apart.
         onMouseDown.attachListener((element, event) -> {
-            UIElement target = ((UIElement) event.getTarget());
+            UINode target = ((UINode) event.getTarget());
             if (target != null && target.consumesTextInput()) return;
             focusSelf();
         }, false, true);
@@ -346,16 +348,11 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
         // Nothing in an indicator may take the pointer -- it sits directly under the cursor for the whole
         // hover, so a hittable one becomes the drop target it is drawn to describe.
         dropLine.setHitTest(false);
-        body.addInternalChild(dropLine);
+        body.append(dropLine);
         installReorderDrop();
 
         document.onChanged.connect(this::refresh);
         refresh();
-    }
-
-    @Override
-    public boolean acceptsPublicChildren() {
-        return false;
     }
 
     /** The graph's file name, shown as the panel's title. @see BlackboardPanel */
@@ -378,8 +375,8 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
      * property is selected. Nothing is in scope until something here holds focus.</p>
      */
     private void focusSelf() {
-        UIWindow window = getAttachedWindow();
-        if (window != null) window.getInputHandler().requestPointerFocus(this);
+        UIDocument window = document();
+        if (window != null) window.focus().requestPointerFocus(this);
     }
 
     /**
@@ -399,9 +396,8 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
      * <p>The widget owns this, like its theme and its commands — a host that has to remember to drive
      * another widget's geometry is a host that will forget, and this one did.</p>
      */
-    @Override
-    public boolean tickFrame(float deltaSeconds) {
-        move.reclampIfPlaced(resizeOriginLeft(), resizeOriginTop());
+        public boolean tickFrame(float deltaSeconds) {
+        move.reclampIfPlaced(placedLeft(), placedTop());
         return true;
     }
 
@@ -412,11 +408,16 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
      * {@code HashSet}-backed and this registers {@code this}, so re-registering is genuinely idempotent —
      * unlike a lambda, which would be a new object every layout pass.</p>
      */
-    @Override
-    protected void onLayoutChanged() {
-        super.onLayoutChanged();
-        UIWindow window = getAttachedWindow();
-        if (window != null) window.registerTicker(this);
+    /**
+     * Geometry that can only be settled once layout has run.
+     *
+     * <p>{@code onLayoutChanged()} on the old engine; there is no such override here, because layout
+     * is ONE pass with no feedback into it. A post-layout hook may move a box and read a box and may
+     * not add one — a structural change would need a second pass, and there is not one.</p>
+     */
+    private void onLayoutSettled() {
+        UIDocument window = document();
+        if (window != null) document().animation().every(this, this::tickFrame);
     }
 
     /**
@@ -500,22 +501,22 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
 
     /** Whether a drag is in flight anywhere — a rebuild now could detach its source. @see #refresh */
     private boolean dragInFlight() {
-        UIWindow window = getAttachedWindow();
-        return window != null && window.getInputHandler().getDragController().isDragging();
+        UIDocument window = document();
+        return window != null && window.input().mode(Drag.class) != null;
     }
 
     /**
      * Runs the deferred rebuild once the drag is over.
      *
-     * <p>A {@link com.crystalgui.ui.UIFrameTicker}, because there is no "drag ended" signal to listen to
+     * <p>A {@link com.crystalgui.ui.service.Animation.Hook}, because there is no "drag ended" signal to listen to
      * and polling one flag per frame for the length of a drag costs nothing. It drops itself the moment
      * it fires — registration is {@code HashSet}-backed, so asking twice during one drag is harmless.</p>
      */
     private void deferUntilDragEnds() {
-        UIWindow window = getAttachedWindow();
+        UIDocument window = document();
         if (window == null || deferredRefreshArmed) return;
         deferredRefreshArmed = true;
-        window.registerTicker(delta -> {
+        window.animation().every(this, delta -> {
             if (dragInFlight()) return true;
             deferredRefreshArmed = false;
             if (refreshPending) {
@@ -545,7 +546,7 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
         // which is the only thing that can be, since a widget cannot stop its host promoting it.
         // ENDED BEFORE DETACHED, and that order is the whole of a nasty crash.
         //
-        // UIElement.onRemoved drops the window's input references -- which BLURS a focused field -- and
+        // UINode.onRemoved drops the window's input references -- which BLURS a focused field -- and
         // then iterates its own children. A blur handler that removes the editor mutates that list in
         // between, so the forEach on the next line walks a modified list and throws
         // ConcurrentModificationException. Pressing F2 and hitting Enter was enough to hit it.
@@ -555,17 +556,17 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
         // a rename reported from here would re-enter this method.
         for (PropertyPill pill : new ArrayList<>(pills)) {
             pill.endRename();
-            body.removeInternalChild(pill);
+            body.remove(pill);
         }
         for (CategoryHeader header : new ArrayList<>(headers)) {
             header.endRename();
-            body.removeInternalChild(header);
+            body.remove(header);
         }
         pills.clear();
         headers.clear();
         rows.clear();
         if (emptyMessage != null) {
-            body.removeInternalChild(emptyMessage);
+            body.remove(emptyMessage);
             emptyMessage = null;
         }
 
@@ -597,7 +598,7 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
             emptyMessage.addClass("__empty__");
             emptyMessage.setHitTest(false);
             // addInternalChild/removeInternalChild, never the public pair -- see the note on refresh().
-            body.addInternalChild(emptyMessage);
+            body.append(emptyMessage);
         }
         if (renaming != null) {
             PropertyPill pill = pillFor(renaming);
@@ -641,7 +642,7 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
         header.onRenameEnded.connect(this::focusSelf);
         headers.add(header);
         rows.add(new Row(header, null, category));
-        body.addChild(header);
+        body.append(header);
     }
 
     private void addPill(GraphProperty property) {
@@ -678,7 +679,7 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
         pill.onRenameEnded.connect(this::focusSelf);
         pills.add(pill);
         rows.add(new Row(pill, property.id(), property.category()));
-        body.addChild(pill);
+        body.append(pill);
     }
 
     /**
@@ -785,13 +786,13 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
      */
     int dropIndexAt(float screenX, float screenY) {
         for (int i = 0; i < rows.size(); i++) {
-            UIElement row = rows.get(i).element();
+            UINode row = rows.get(i).element();
             // ABOVE THIS ROW'S MIDPOINT MEANS "BEFORE IT", so the first row that passes is the slot.
             //
             // screenToLocal does NOT return a position relative to the row's own top-left, and reading
-            // it that way is what broke this. UIElement.localToWorld composes the parent chain, scroll
+            // it that way is what broke this. UINode.localToWorld composes the parent chain, scroll
             // and the element's own `transform` -- but never its layout offset -- so "local" here is
-            // ABSOLUTE LOGICAL SPACE: the same space getRuntimeCache().getY() is in, which is exactly
+            // ABSOLUTE LOGICAL SPACE: the same space box().y() is in, which is exactly
             // why isMouseOverElement compares against getX()/getY() rather than against zero. The only
             // work it does for us is undoing uiScale and any transform, and that is the whole point of
             // using it rather than dividing by the scale by hand.
@@ -800,8 +801,8 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
             // no row ever matched and this returned rows.size() for every position on the panel. Which
             // is why dragging a pill DOWN appeared to work perfectly -- "the end of the list" is where a
             // downward drag was going anyway -- and dragging one back up did nothing at all.
-            var cache = row.getRuntimeCache();
-            if (row.screenToLocal(screenX, screenY).y < cache.getY() + cache.getHeight() * 0.5f) {
+            Box cache = row.box();
+            if (row.toLocal(screenX, screenY).y < cache.y() + cache.height() * 0.5f) {
                 return i;
             }
         }
@@ -854,15 +855,15 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
         // a body-relative y -- the space an absolutely positioned sibling's `top` is measured in. Scroll
         // is deliberately absent from both, and stays correct because the drop line is scrolled by the
         // body exactly as the pills are.
-        float origin = body.getRuntimeCache().getY();
+        float origin = body.box().y();
         float top;
         if (rows.isEmpty()) {
             top = 0f;
         } else if (index < rows.size()) {
-            top = rows.get(index).element().getRuntimeCache().getY() - origin - 2f;
+            top = rows.get(index).element().box().y() - origin - 2f;
         } else {
-            UIElement last = rows.get(rows.size() - 1).element();
-            top = last.getRuntimeCache().getY() - origin + last.getRuntimeCache().getHeight() + 2f;
+            UINode last = rows.get(rows.size() - 1).element();
+            top = last.box().y() - origin + last.box().height() + 2f;
         }
         StyleGroup.inlinePipeline(dropLine.getStyle().getLayoutGroup(), l -> l.top(top));
     }
@@ -1046,7 +1047,7 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
 
     /** The heading's context menu: rename or remove. Built once and reopened, like every menu here. */
     private void openCategoryMenu(String category, float screenX, float screenY) {
-        UIWindow window = getAttachedWindow();
+        UIDocument window = document();
         if (window == null) return;
         if (categoryMenu == null) {
             categoryMenu = new Menu();
@@ -1062,7 +1063,7 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
                     removeCategory(target);
                 }
             });
-            addInternalChild(categoryMenu);
+            append(categoryMenu);
         }
         // WHICH heading was pressed, held rather than captured: the menu is built once and reused, so a
         // closure over the first category it opened for would act on that one forever.
@@ -1105,7 +1106,7 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
      * hold state and costs a tree rebuild on a gesture that should feel instant.</p>
      */
     public void openTypeMenu() {
-        UIWindow window = getAttachedWindow();
+        UIDocument window = document();
         if (window == null) return;
         if (typeMenu == null) {
             typeMenu = new Menu();
@@ -1123,7 +1124,7 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
             // In the tree for the same reason as the row menu below, even though showFor could attach it
             // through its anchor -- relying on that would make the two menus behave differently for no
             // reason a reader could see.
-            addInternalChild(typeMenu);
+            append(typeMenu);
         }
         typeMenu.showFor(add, add);
     }
@@ -1219,13 +1220,35 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
      */
     /** This board, for a command that acts on one. */
     public static final DataKey<BlackboardPanel> BLACKBOARD =
-            DataKey.create("blackboard", BlackboardPanel.class);
+            DataKey.create("blackboard.new", BlackboardPanel.class);
 
     @Override
     public Object getData(DataKey<?> key) {
         if (key == BLACKBOARD) return this;
-        return super.getData(key);
+        // NO super: a UINode is not a DataProvider, and the outward walk through `commandParent()`
+        // is what reaches the next one. Null is how this one says it has nothing.
+        return null;
     }
+    /**
+     * Where this panel currently sits inside its containing block.
+     *
+     * <p>{@code resizeOriginLeft()}/{@code resizeOriginTop()} on the old element, which read the live
+     * Taffy inset and MEASURED the offset when it was {@code auto} — because {@code auto} means
+     * "wherever the static position put it", which is only zero for a box with no inset on that axis.
+     * A settled box answers both cases at once, so the distinction disappears here; what does not
+     * disappear is that a box is {@code null} until one exists, and 0 is the honest answer for a panel
+     * that has never been laid out.</p>
+     */
+    private float placedLeft() {
+        Box box = box();
+        return box == null ? 0f : box.x();
+    }
+
+    private float placedTop() {
+        Box box = box();
+        return box == null ? 0f : box.y();
+    }
+
 
     @Nullable
     private static BlackboardPanel boardFor(CommandContext context) {
@@ -1276,7 +1299,7 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
      * than dropped, and dispatch by command id instead of by matching a display string.</p>
      */
     public void openRowMenu(float screenX, float screenY) {
-        UIWindow window = getAttachedWindow();
+        UIDocument window = document();
         if (window == null || selectedId == null) return;
         // REBUILT PER PRESS, unlike the + and type menus above. Those list a fixed set this class owns;
         // this one is a query whose answer depends on what is registered and what applies right now, and
@@ -1288,7 +1311,7 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
         // one has nothing to promote from. showFor can attach itself through its anchor; showAt has no
         // anchor to find a host from, so it throws. Internal, because this is a composite. The Main
         // Preview's mesh menu records the same requirement.
-        addInternalChild(rowMenu);
+        append(rowMenu);
         // ROOT space, not physical pixels: the menu is promoted to the top layer, whose containing block
         // is the root, so a raw pointer position lands wherever that number falls in root coordinates --
         // which put an earlier menu in the corner of the whole window.
@@ -1358,4 +1381,13 @@ public class BlackboardPanel extends UIElement implements UIFrameTicker {
         }
         return typeId;
     }
+    @Override
+    protected void connected() {
+        super.connected();
+        document().animation().afterLayout(this, delta -> {
+            onLayoutSettled();
+            return true;
+        });
+    }
+
 }

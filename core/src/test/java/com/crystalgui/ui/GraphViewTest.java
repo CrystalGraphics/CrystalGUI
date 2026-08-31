@@ -7,13 +7,13 @@ import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiTestBase;
-import com.crystalgui.ui.elements.graph.BasicPortType;
+import com.crystalgui.graph.port.BasicPortType;
 import com.crystalgui.ui.elements.graph.GraphConnection;
 import com.crystalgui.ui.elements.graph.GraphNode;
 import com.crystalgui.ui.elements.graph.GraphView;
 import com.crystalgui.ui.elements.graph.NodePort;
 import com.crystalgui.ui.elements.canvas.WorldRect;
-import com.crystalgui.ui.elements.graph.PortType;
+import com.crystalgui.graph.port.PortType;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 import org.joml.Vector2f;
 import org.junit.Before;
@@ -344,21 +344,22 @@ public class GraphViewTest extends UiTestBase {
      */
     @Test
     public void theDefaultEditorMountsOnlyWhileTheInputIsUnconnected() {
-        // Implementing PortType directly rather than extending BasicPortType, which is a record and
-        // therefore final — and that is the intended shape: a type with an editor is not a plain id.
-        PortType editable = new PortType() {
-            @Override public String id() { return "float"; }
-            @Override public int arity() { return 1; }
-            @Override public UIElement createInlineEditor() { return new UIElement(); }
-        };
+        // THROUGH setDefaultEditor, which is the path production takes: NodeFieldBinder.attach builds
+        // the control from the document's own NodeField and hands it to the port. PortType used to
+        // carry a createInlineEditor() hook and this test was the only thing in the repository that
+        // ever overrode it -- so it asserted the mounting rule through a mechanism no shipped port
+        // type used. M6.4 deleted the hook; the rule it was demonstrating is unchanged and is now
+        // demonstrated on the path that actually reaches it.
+        PortType editable = new BasicPortType("float", 1);
         GraphNode a = node("A", 20f, 20f);
         GraphNode b = node("B", 220f, 20f);
         NodePort out = a.addOutput(editable, "Out");
         NodePort in = b.addInput(editable, "A");
+        in.setDefaultEditor(new UIElement());
         frame();
 
         UIElement editor = in.getDefaultEditor();
-        assertNotNull("an input port must offer its type's editor", editor);
+        assertNotNull("an input port must hold the editor it was given", editor);
         // frame() ticks the graph, which is what discovers a newly-bound default editor and mounts it —
         // the same one-tick lag ShaderGraphPreviews's own node discovery has.
         assertNotNull("mounted on the plane while unconnected", editor.getAttachedWindow());

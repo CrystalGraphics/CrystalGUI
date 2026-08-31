@@ -11,12 +11,12 @@ import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiTestBase;
-import com.crystalgui.ui.elements.graph.BasicPortType;
+import com.crystalgui.graph.port.BasicPortType;
 import com.crystalgui.ui.elements.graph.GraphNode;
 import com.crystalgui.ui.elements.graph.GraphView;
 import com.crystalgui.ui.elements.graph.NodePort;
 import com.crystalgui.ui.elements.graph.NodeWidgetFactory;
-import com.crystalgui.ui.elements.graph.PortType;
+import com.crystalgui.graph.port.PortType;
 import org.junit.Before;
 import org.junit.Test;
 

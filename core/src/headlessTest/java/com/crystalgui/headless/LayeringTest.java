@@ -90,6 +90,13 @@ public class LayeringTest {
             "com/crystalgui/widget/config/inspector/",
             "com/crystalgui/widget/canvas/",
             "com/crystalgui/widget/graph/",
+            // The node's own BUILD half: the widget factory's callers, the field binder and the
+            // create menu. GraphNode, NodePort and PortDefaultEditor are NOT here and cannot be --
+            // they share package-private members with GraphView by design (`setSelected`,
+            // `bindToDocument`, `setConnectionCount`, the whole editor mount lifecycle), and Java has
+            // no sub-package visibility, so splitting them means publishing ten "only the view may
+            // call this" methods. The boundary is where the encapsulation already was.
+            "com/crystalgui/widget/graph/node/",
             "com/crystalgui/widget/editor/");
 
     /** Which tiers may name which: an index into {@link #WIDGET_TIERS}, and everything at or below it. */

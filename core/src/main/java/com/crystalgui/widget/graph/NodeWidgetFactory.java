@@ -1,4 +1,4 @@
-package com.crystalgui.ui.elements.graph;
+package com.crystalgui.widget.graph;
 
 import com.crystalgui.graph.port.PortTypeRegistry;
 import com.crystalgui.graph.port.BasicPortType;

@@ -417,8 +417,7 @@ com.crystalgui.graph                  THE GRAPH MODEL: headless, engine-neutral,
   (root)         GraphDocument, NodeType, NodeData, EdgeData, PortSpec, codecs, edits -- not in port scope
   .port          PortType, BasicPortType, PortTypeRegistry   (6.4 D25: the SPI, once its one
                  UIElement-returning method becomes a lookup in widget.graph)
-  .shader        ShaderGraphBridge, ShaderPropertyForm, ShaderGraphSettings -- the shader MODEL, which
-                 is what is left of `graph.shader` once its fourteen widgets leave
+  .shader        EMPTIED at 6.9 -- all seventeen files belong to an application, not to the model
 
 com.crystalgui.app                    THE APPLICATIONS: may use everything above, and nothing may use them
   .shadergraph   (root) ShaderInspectorSections, ShaderNodeLibrary, ShaderGraphEditor (6.7),
@@ -432,8 +431,8 @@ com.crystalgui.language.run.view      as it is
 > **`graph.shader` was an application inside a model package.** Seventeen files in one flat directory
 > holding an editor, a properties panel, three previews, two field widgets, a compile bridge, a
 > settings declaration, five inspector sections and a rename box — and importing `ui.elements.dock`
-> and `ui.elements.workbench`, which a model package cannot. 6.4 splits the model out (three files
-> stay) and the application into `app.shadergraph` with three sub-packages. `com.crystalgui.editor`
+> and `ui.elements.workbench`, which a model package cannot. 6.4 moves the whole of it into
+> `app.shadergraph` with three sub-packages, and `graph.shader` empties. `com.crystalgui.editor`
 > and `com.crystalgui.example.machine` join it at 6.7, which is what turns *applications* from a word
 > in the layering rule into one `LayeringTest` prefix.
 
@@ -1494,15 +1493,15 @@ deferred to 6.7.
 | The canvas | `CanvasView` 725 · `CanvasOverlayMove` 232 · `WorldRect` 77 | 3 | 1,034 | `widget.canvas` |
 | The graph widget | `GraphView` 1,758 · `GraphNode` 633 · `NodePort` 488 · `NodeCreationMenu` 639 · `PortDefaultEditor` 395 · `NodeWireLayer` 285 · `GraphCommands` 275 · `NodeFieldBinder` 241 · `GraphSelection` 198 · `NodeFieldWidgets` 191 · `NodeWidgetFactory` 141 · `GraphConnection` 30 | 12 | 5,274 | `widget.graph` |
 | The port types | `PortType` 95 · `PortTypeRegistry` 67 · `BasicPortType` 29 | 3 | 191 | **`graph.port`** — see D25 |
-| The Blackboard | `BlackboardPanel` 1,360 · `PropertyPill` 296 · `ShaderPropertyNodes` 241 · `InlineRename` 166 · `CategoryHeader` 134 | 5 | 2,197 | `app.shadergraph.blackboard` |
+| The Blackboard | `BlackboardPanel` 1,360 · `PropertyPill` 296 · `InlineRename` 166 · `CategoryHeader` 134 | 4 | 1,956 | `app.shadergraph.blackboard` |
 | The previews | `MainPreviewPanel` 466 · `ShaderGraphPreviews` 247 · `ShaderNodePreview` 82 | 3 | 795 | `app.shadergraph.preview` |
 | The field widgets | `ShaderPortArity` 284 · `ShaderColorFieldWidget` 112 · `ShaderVectorFieldWidget` 89 | 3 | 485 | `app.shadergraph.field` |
-| The app root | `ShaderInspectorSections` 668 | 1 | 668 | `app.shadergraph` |
-| The shader model | `ShaderGraphBridge` 494 · `ShaderPropertyForm` 246 · `ShaderGraphSettings` 95 | 3 | 835 | `graph.shader` — stays |
+| The app root | `ShaderInspectorSections` 668 · `ShaderGraphBridge` 494 · `ShaderPropertyForm` 246 · `ShaderPropertyNodes` 241 · `ShaderGraphSettings` 95 | 5 | 1,744 | `app.shadergraph` |
 | **Deferred to 6.7** | `ShaderGraphEditor` 1,309 · `ShaderGraphContribution` 167 | 2 | 1,476 | `app.shadergraph` |
 
-**Budget, measured** (`python tools/port/codemod.py --batch 6.4 --dry-run`): **24 copied, 9 moved,
-~575 mechanical rewrites, 65 hand sites.**
+**Budget, measured**: **31 copied, 2 moved, ~575 mechanical rewrites, 65 hand sites** — three moves
+once D25 lands. The heuristic proposes nine moves and D27 refuses seven of them; the ledger records
+the refusal (`HOW_OVERRIDE`) so the tool and this section cannot drift.
 
 Hand sites, by kind: **`stopPropagation` 21** · **internal child 19** · dynamic restructure 9 · resize
 hook 6 · post-layout callback 5 · paint override 4 · drag ghost 1.
@@ -1549,27 +1548,28 @@ the graph model" and is really "the application that edits shaders with the grap
 `ui.elements.dock` and `ui.elements.workbench`; a model package cannot.
 
 ```
-com.crystalgui.graph                    THE MODEL — headless, engine-neutral, named by BOTH engines
+com.crystalgui.graph                    THE GRAPH MODEL — headless, engine-neutral, named by BOTH
   (root)        GraphDocument, GraphChangeset, GraphCodecs, GraphIds, GraphProperty, NodeBuilder,
                 NodeData, NodeField, NodeMenuTree, NodeType, NodeTypeRegistry, EdgeData, PortRef,
                 PortSpec, PortDirection, PropertyEdits, SetNodeFieldEdit, TypeCompatibility
                 — unchanged, and NOT in port scope: nothing in it names the engine
   .port         PortType, BasicPortType, PortTypeRegistry                          ← NEW (D25)
-  .shader       ShaderGraphBridge, ShaderPropertyForm, ShaderGraphSettings         ← what is left
-                once the widgets leave, and it is exactly the shader MODEL
+  .shader       EMPTIED at 6.9. Nothing stays: a package holding the graph MODEL should hold the
+                graph model, and every one of its seventeen files belongs to an application.
 
 com.crystalgui.widget.canvas            CanvasView, CanvasOverlayMove, WorldRect
 com.crystalgui.widget.graph             GraphView, GraphNode, NodePort, NodeWireLayer,
                                         GraphConnection, GraphSelection, GraphCommands,
-                                        NodeCreationMenu, PortDefaultEditor, PortEditors (new),
+                                        NodeCreationMenu, PortDefaultEditor,
                                         NodeWidgetFactory, NodeFieldBinder, NodeFieldWidgets
 
 com.crystalgui.app                      APPLICATIONS — the layer the doctrine already names and
                                         nothing has enforced
-  .shadergraph  (root)      ShaderInspectorSections, ShaderNodeLibrary (new);
+  .shadergraph  (root)      the feature's own vocabulary, model-shaped but the APP's rather than the
+                            graph model's: ShaderGraphBridge, ShaderPropertyNodes, ShaderPropertyForm,
+                            ShaderGraphSettings, ShaderNodeLibrary (new), ShaderInspectorSections;
                             ShaderGraphEditor + ShaderGraphContribution at 6.7
-                .blackboard BlackboardPanel, PropertyPill, CategoryHeader, InlineRename,
-                            ShaderPropertyNodes
+                .blackboard BlackboardPanel, PropertyPill, CategoryHeader, InlineRename
                 .preview    MainPreviewPanel, ShaderNodePreview, ShaderGraphPreviews
                 .field      ShaderColorFieldWidget, ShaderVectorFieldWidget, ShaderPortArity
 ```
@@ -1634,14 +1634,19 @@ by hand before the copy, and expect the same verdict for the four that are panel
 name, and it drags `BasicPortType` and `PortTypeRegistry` with it: the registry is neutral, the
 record is neutral, and the interface they are written against is not.
 
-**`createInlineEditor()` has exactly one caller** — `NodePort.setDefaultEditor(...)`. So the split is
-a small one: the type moves to `graph.port` with its registry and its record, and the editor lookup
-becomes `PortEditors` in `widget.graph`, keyed by port-type id, which is the shape `NodeWidgetFactory`
-already has for node fields. Each engine registers its own, which is what makes the port types
-nameable by both.
+**And it is vestigial, which makes the answer deletion rather than a registry.** It has exactly one
+caller — `NodePort`'s constructor — and, repo-wide, exactly one override, in a test. So in production
+it returns `null` every time it is asked. Its job was taken over by `NodePort.setDefaultEditor`, which
+`NodeFieldBinder.attach` calls with the real document-declared control; `NodePort`'s own javadoc
+calls what the method returns a *"throwaway generic control"* and records the bug it caused — a
+vector editor frozen at its first pre-layout 0×0 position, because `GraphView` snapshotted the
+throwaway into a `PortDefaultEditor` before the real one arrived. `onDefaultEditorChanged` exists to
+work around exactly that.
 
-**Recommendation: split it.** It is the difference between three neutral files in the model and three
-files that have to be copied into the widget layer and copied again at 6.9.
+**Recommendation: delete it.** A `PortEditors` registry was the first answer and it is machinery built
+to preserve a hook nothing uses. Deleting it makes `PortType`, `BasicPortType` and `PortTypeRegistry`
+neutral with no replacement at all, which is three files moved into a package both engines name
+instead of three copied into the widget layer and copied again at 6.9.
 
 #### D26 — two edges point from the model up into the widgets, and both are registrations
 
@@ -1665,8 +1670,13 @@ property* is a model fact that a panel happens to declare. **Move the constants 
 `ShaderPropertyForm`** and let the panel read them, which is the direction they already flow in
 meaning.
 
-Both are two-line changes and both are load-bearing: without them `.field` and `.blackboard` cannot
-sit above the model, and `graph.shader` cannot be the neutral package the map above says it is.
+Both are two-line changes and both are load-bearing: without the first, the app's own model-shaped
+root would name its widgets, and without the second `.blackboard` and the root point at each other.
+
+**`ShaderPropertyNodes` looks like a third and is not.** The bridge names it four times —
+`isPropertyNode`, `resolve`, `missingNodeFor`, `compilerNodeFor` — and every one is compilation: the
+bridge turns a property node into a compiler node. That is a mutual edge with real content, not a
+registration, so the two sit together at the app root and the Blackboard merely drags one.
 
 #### D27 — all nine `move` rows are illegal as written, and the ledger is wrong in the other direction too
 
@@ -1685,11 +1695,10 @@ and `graph/shader` — all of which stay until 6.9. So:
 javadoc, checked with comments stripped — so the only obstacle is the old copy of the batch itself.
 Which is the whole obstacle: a move into `widget.*` or `app.*` fails the boundary scan on the day it
 lands. **Every one of the nine is either a copy, or a move into a package both engines may
-name**, and the map above chooses the latter for the five that deserve it (`graph.port` ×2 —
-`BasicPortType` and `PortTypeRegistry`, with `PortType` a copy until D25 lands; `graph.shader` ×3)
-and the former for the four that are genuinely widgets (`WorldRect`, `GraphConnection`,
-`GraphSelection`, `NodeWidgetFactory` — all four named by old widget code, three of them under 200
-lines).
+name**, and only the port types qualify for the second: `graph.port` takes `BasicPortType`,
+`PortTypeRegistry` and — once D25 has deleted its one engine-facing method — `PortType`. The other
+seven are copies, recorded as such in the ledger's `HOW_OVERRIDE` so the tool stops proposing a move
+the boundary scan would refuse.
 
 **And the heuristic is wrong here in the direction 6.2 did not see.** `ShaderPropertyForm` is marked
 a MOVE, and by every test 6.2 devised it is one — it names no engine type, imports nothing from

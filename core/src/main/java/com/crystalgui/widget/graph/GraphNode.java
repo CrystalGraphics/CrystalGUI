@@ -1,5 +1,8 @@
-package com.crystalgui.ui.elements.graph;
+package com.crystalgui.widget.graph;
 
+import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.service.Drag;
 import com.crystalgui.graph.port.PortType;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgModifiers;
@@ -7,10 +10,10 @@ import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.graph.PortDirection;
 import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.UIWindow;
-import com.crystalgui.ui.elements.UIText;
-import com.crystalgui.ui.elements.canvas.WorldRect;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.widget.text.UIText;
+import com.crystalgui.widget.canvas.WorldRect;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.input.UIDragController;
@@ -59,7 +62,18 @@ import java.util.List;
  * selector — {@code graphnode.__collapsed__ nodeport:blank { display: none; }} — because
  * {@link NodePort#isBlank()} already publishes connection state to the cascade.</p>
  */
-public class GraphNode extends UIElement {
+public class GraphNode extends UINode {
+
+    /**
+     * This widget's kind.
+     *
+     * <p>Declared here rather than in a vocabulary class, and declared AT ALL because a subclass
+     * inherits its parent's kind unless it is given its own: without this, GraphNode reports
+     * {@code crystalgui:element} (or its supertype's) and every rule the sheets write for
+     * {@code graphnode} matches nothing at all — no background, no border, an unstyled widget that
+     * reads as one that was never built.</p>
+     */
+    public static final Name NAME = Name.of("graphnode");
 
     public static final String TITLE_BAR_CLASS = "__title-bar__";
     public static final String TITLE_CLASS = "__title__";
@@ -96,14 +110,14 @@ public class GraphNode extends UIElement {
      * target and must not revert mid-gesture. */
     public static final String MOVING_CLASS = "__moving__";
 
-    private final UIElement titleBar = new UIElement();
+    private final UINode titleBar = new UINode();
     private final UIText title;
-    private final UIElement collapseToggle = new UIElement();
-    private final UIElement ports = new UIElement();
-    private final UIElement inputs = new UIElement();
-    private final UIElement outputs = new UIElement();
-    private final UIElement controls = new UIElement();
-    private final UIElement preview = new UIElement();
+    private final UINode collapseToggle = new UINode();
+    private final UINode ports = new UINode();
+    private final UINode inputs = new UINode();
+    private final UINode outputs = new UINode();
+    private final UINode controls = new UINode();
+    private final UINode preview = new UINode();
 
     private final List<NodePort> inputPorts = new ArrayList<>();
     private final List<NodePort> outputPorts = new ArrayList<>();
@@ -122,7 +136,7 @@ public class GraphNode extends UIElement {
     /** @see #preview() */
     private boolean hasPreview;
 
-    /** @see #addControl(UIElement) */
+    /** @see #addControl(UINode) */
     private boolean hasControls;
 
     private boolean selected;
@@ -161,6 +175,7 @@ public class GraphNode extends UIElement {
     public final Signal.Value<Boolean> onCollapsedChanged = new Signal.Value<>();
 
     public GraphNode(String titleText) {
+        super(NAME);
         titleBar.addClass(TITLE_BAR_CLASS);
         title = new UIText(titleText);
         title.addClass(TITLE_CLASS);
@@ -171,26 +186,25 @@ public class GraphNode extends UIElement {
         // layout pass and intermittently latched the wrong (non-self-sizing) mode, which is why the
         // truncation this fixes only ever showed up on a page's FIRST open and never again once its
         // elements were torn down and rebuilt.
-        title.forceSelfSizeWidth();
         collapseToggle.addClass(COLLAPSE_CLASS);
         // A real vector chevron (overlay: shape("chevron-down") in default.css) rather than a text
         // glyph — same reasoning as ConfiguratorGroup's identical arrow, which this used to imitate
         // in letter form only. Rotated by .__collapsed__ on the node itself, not swapped, so the two
         // states are one drawable that can transition rather than a jump cut.
-        titleBar.addInternalChild(title);
-        titleBar.addInternalChild(collapseToggle);
+        titleBar.append(title);
+        titleBar.append(collapseToggle);
 
         ports.addClass(PORTS_CLASS);
         inputs.addClass(INPUTS_CLASS);
         outputs.addClass(OUTPUTS_CLASS);
-        ports.addInternalChild(inputs);
-        ports.addInternalChild(outputs);
+        ports.append(inputs);
+        ports.append(outputs);
 
         controls.addClass(CONTROLS_CLASS);
         preview.addClass(PREVIEW_CLASS);
 
-        addInternalChild(titleBar);
-        addInternalChild(ports);
+        append(titleBar);
+        append(ports);
         // NOT controls, NOT preview: both are attached lazily, by the first addControl()/preview() call
         // — see each. An always-present EMPTY slot still contributes a box: `.__controls__` carries its
         // own darker seam-tint and a real `padding-bottom` (see default.css), so a node with zero controls
@@ -212,7 +226,7 @@ public class GraphNode extends UIElement {
 
         this.events.getGroup(MouseEvent.Down.class).attachListener((el, event) -> {
             if (!isEnabled() || event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
-            if (isInsideControls(((UIElement) event.getTarget()))) return;
+            if (isInsideControls(((UINode) event.getTarget()))) return;
 
             GraphView view = graphView();
             if (view != null) {
@@ -247,11 +261,11 @@ public class GraphNode extends UIElement {
      * focus behaviour for every widget in the engine and one of them is mid-rewrite.</p>
      */
     private void focusOnPress() {
-        UIWindow window = getAttachedWindow();
+        UIDocument window = document();
         // The POINTER variant, so this does not ring — see the matching note in GraphView.
         // Runs after the handler's own focus pass, which has already blurred whatever was focused —
         // so this sets rather than fights.
-        if (window != null) window.getInputHandler().requestPointerFocus(this);
+        if (window != null) window.focus().requestPointerFocus(this);
     }
 
     private static boolean isShiftHeld() {
@@ -268,8 +282,8 @@ public class GraphNode extends UIElement {
      * node out from under the menu. Cheap to test for, and the alternative (asking every control to
      * stop propagation) puts the burden on whatever a caller happens to drop in.</p>
      */
-    private boolean isInsideControls(@Nullable UIElement target) {
-        for (UIElement e = target; e != null && e != this; e = e.getParent()) {
+    private boolean isInsideControls(@Nullable UINode target) {
+        for (UINode e = target; e != null && e != this; e = e.parent()) {
             if (e == controls) return true;
         }
         return false;
@@ -289,7 +303,7 @@ public class GraphNode extends UIElement {
      */
     private boolean beginMoveDrag(float rawX, float rawY) {
         GraphView view = graphView();
-        UIWindow window = getAttachedWindow();
+        UIDocument window = document();
         if (view == null || window == null) return false;
 
         // Everything selected moves, not just the node under the cursor — and if this node is not in
@@ -311,8 +325,8 @@ public class GraphNode extends UIElement {
         final float[] delta = {0f, 0f};
         this.moving = true;
         addClass(MOVING_CLASS);
-        window.getInputHandler().getDragController().startDrag(this, rawX, rawY,
-                new UIDragController.DragListener() {
+        Drag.start(this, rawX, rawY,
+                new Drag.Listener() {
                     @Override
                     public void onDragUpdate(float mx, float my, float sx, float sy, float dx, float dy) {
                         // Moved in place: left/top are rewritten, nothing is rebuilt. Rebuilding here
@@ -352,7 +366,7 @@ public class GraphNode extends UIElement {
 
     @Nullable
     private GraphView graphView() {
-        for (UIElement e = getParent(); e != null; e = e.getParent()) {
+        for (UINode e = parent(); e != null; e = e.parent()) {
             if (e instanceof GraphView view) return view;
         }
         return null;
@@ -374,8 +388,8 @@ public class GraphNode extends UIElement {
      * ring" instead of only ever being able to choose one side of that pair.</p>
      */
     @Override
-    protected void paintOverlay(CgUiPaintContext ctx) {
-        super.paintOverlay(ctx);
+    public void paintDecoration(CgUiPaintContext ctx, Box box) {
+        super.paintDecoration(ctx, box);
         GraphView view = graphView();
         if (view == null) return;
         for (NodePort port : inputPorts) view.paintPortEditorStub(ctx, port);
@@ -383,10 +397,6 @@ public class GraphNode extends UIElement {
 
     /** Ports and chrome are structure. A caller's element goes in {@link #preview()} or through
      * {@link #addControl}. */
-    @Override
-    public boolean acceptsPublicChildren() {
-        return false;
-    }
 
     // ── Ports ───────────────────────────────────────────────────────────────
 
@@ -401,10 +411,10 @@ public class GraphNode extends UIElement {
     public NodePort addPort(NodePort port) {
         if (port.getDirection().isInput()) {
             inputPorts.add(port);
-            inputs.addInternalChild(port);
+            inputs.append(port);
         } else {
             outputPorts.add(port);
-            outputs.addInternalChild(port);
+            outputs.append(port);
         }
         // An even 50/50 split matches Unity on every node that HAS inputs — but an inputless node
         // (UV, Position, Normal Vector, Time) has nothing in the input column to justify it a half, and
@@ -475,9 +485,9 @@ public class GraphNode extends UIElement {
      * A widget with no port — Unity's "Controls". The label sits left, the widget right, matching the
      * {@code Space [ World v ]} row in the reference.
      */
-    public GraphNode addControl(String labelText, UIElement widget) {
+    public GraphNode addControl(String labelText, UINode widget) {
         ensureControlsAttached();
-        UIElement row = new UIElement();
+        UINode row = new UINode();
         row.addClass(CONTROL_ROW_CLASS);
         // A widget may decline the label, and the decision belongs to the WIDGET rather than to this
         // method or its caller: only the control knows whether it describes itself. A colour swatch
@@ -488,18 +498,17 @@ public class GraphNode extends UIElement {
             rowLabel.addClass(NodePort.LABEL_CLASS);
             rowLabel.setHitTest(false);
             // Same reasoning as `GraphNode.title`/`NodePort.label` — see `UIText.forceSelfSizeWidth()`.
-            rowLabel.forceSelfSizeWidth();
-            row.addChild(rowLabel);
+            row.append(rowLabel);
         }
-        row.addChild(widget);
-        controls.addInternalChild(row);
+        row.append(widget);
+        controls.append(row);
         return this;
     }
 
     /** A widget occupying the whole control row, for something that needs no label. */
-    public GraphNode addControl(UIElement widget) {
+    public GraphNode addControl(UINode widget) {
         ensureControlsAttached();
-        controls.addInternalChild(widget);
+        controls.append(widget);
         return this;
     }
 
@@ -509,7 +518,7 @@ public class GraphNode extends UIElement {
     private void ensureControlsAttached() {
         if (hasControls) return;
         hasControls = true;
-        insertInternalChildAt(controls, ports.getSiblingIndex() + 1);
+        insertAt(indexOf(ports) + 1, controls);
     }
 
     /**
@@ -520,10 +529,10 @@ public class GraphNode extends UIElement {
      * other background in this engine. Shipping the slot without a pipeline behind it is the honest
      * half, rather than inventing a preview system the compiler would replace.</p>
      */
-    public UIElement preview() {
+    public UINode preview() {
         if (!hasPreview) {
             hasPreview = true;
-            addInternalChild(preview);
+            append(preview);
         }
         return preview;
     }
@@ -533,7 +542,7 @@ public class GraphNode extends UIElement {
         return hasPreview;
     }
 
-    public UIElement titleBar() {
+    public UINode titleBar() {
         return titleBar;
     }
 
@@ -587,7 +596,7 @@ public class GraphNode extends UIElement {
         return ports.isEmpty() || (collapsed && allBlank(ports));
     }
 
-    private void setEmptyOnCollapse(UIElement column, List<NodePort> ports) {
+    private void setEmptyOnCollapse(UINode column, List<NodePort> ports) {
         boolean empty = collapsed && allBlank(ports);
         if (empty) column.addClass(EMPTY_WHEN_COLLAPSED_CLASS);
         else column.removeClass(EMPTY_WHEN_COLLAPSED_CLASS);

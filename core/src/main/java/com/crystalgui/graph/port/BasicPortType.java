@@ -1,4 +1,4 @@
-package com.crystalgui.ui.elements.graph;
+package com.crystalgui.graph.port;
 
 /**
  * A {@link PortType} that is nothing but an id and an arity — the shape most types are.
