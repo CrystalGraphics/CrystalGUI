@@ -55,7 +55,7 @@ CLASS	ui/elements/DragGhost	248	widget/dnd	6.1	copy	ported
 CLASS	ui/elements/Dropdown	212	widget/overlay	6.1	copy	ported
 CLASS	ui/elements/InputDialog	178	widget/overlay	6.2	copy	pending
 CLASS	ui/elements/InsertionMarker	468	widget/dnd	6.1	copy	ported
-CLASS	ui/elements/MarkupView	1034	widget/text	6.1	copy	pending
+CLASS	ui/elements/MarkupView	1034	widget/text	6.1	copy	ported
 CLASS	ui/elements/Menu	572	widget/overlay	6.2	copy	ported
 CLASS	ui/elements/MenuItem	235	widget/overlay	6.2	copy	ported
 CLASS	ui/elements/Popover	519	widget/overlay	6.2	copy	ported
@@ -521,25 +521,25 @@ PART	MainPreviewPanel	main-preview	B	8	proposed	a rule selects through it (6)
 PART	MainPreviewPanel	orbiting	B	1	proposed	a rule selects through it (1)
 PART	MainPreviewPanel	surface	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
 PART	MainPreviewPanel	title	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	MarkupView	markup-bullet	A	0	proposed	leaf in every rule
-PART	MarkupView	markup-caption	A	0	proposed	leaf in every rule
-PART	MarkupView	markup-cell	A	0	proposed	leaf in every rule
-PART	MarkupView	markup-code	A	0	proposed	leaf in every rule
-PART	MarkupView	markup-definition	A	0	proposed	leaf in every rule
-PART	MarkupView	markup-definitions	A	0	proposed	leaf in every rule
-PART	MarkupView	markup-detail	A	0	proposed	leaf in every rule
-PART	MarkupView	markup-header-cell	A	0	proposed	leaf in every rule
-PART	MarkupView	markup-heading	A	0	proposed	leaf in every rule
-PART	MarkupView	markup-item	A	0	proposed	leaf in every rule
-PART	MarkupView	markup-item-body	A	0	proposed	leaf in every rule
-PART	MarkupView	markup-link-hover	A	0	proposed	leaf in every rule
-PART	MarkupView	markup-list	A	0	proposed	leaf in every rule
-PART	MarkupView	markup-paragraph	A	0	proposed	leaf in every rule
-PART	MarkupView	markup-quote	A	0	proposed	leaf in every rule
-PART	MarkupView	markup-quote-rule	A	0	proposed	leaf in every rule
-PART	MarkupView	markup-row	A	0	proposed	leaf in every rule
-PART	MarkupView	markup-table	A	0	proposed	leaf in every rule
-PART	MarkupView	markup-term	A	0	proposed	leaf in every rule
+PART	MarkupView	markup-bullet	B	0	confirmed	light tree: markupview hosts no shadow root
+PART	MarkupView	markup-caption	B	0	confirmed	light tree: markupview hosts no shadow root
+PART	MarkupView	markup-cell	B	0	confirmed	light tree: markupview hosts no shadow root
+PART	MarkupView	markup-code	B	0	confirmed	light tree: markupview hosts no shadow root
+PART	MarkupView	markup-definition	B	0	confirmed	light tree: markupview hosts no shadow root
+PART	MarkupView	markup-definitions	B	0	confirmed	light tree: markupview hosts no shadow root
+PART	MarkupView	markup-detail	B	0	confirmed	light tree: markupview hosts no shadow root
+PART	MarkupView	markup-header-cell	B	0	confirmed	light tree: markupview hosts no shadow root
+PART	MarkupView	markup-heading	B	0	confirmed	light tree: markupview hosts no shadow root
+PART	MarkupView	markup-item	B	0	confirmed	light tree: markupview hosts no shadow root
+PART	MarkupView	markup-item-body	B	0	confirmed	light tree: markupview hosts no shadow root
+PART	MarkupView	markup-link-hover	C	0	confirmed	state adjective, flipped by the hover listener
+PART	MarkupView	markup-list	B	0	confirmed	light tree: markupview hosts no shadow root
+PART	MarkupView	markup-paragraph	B	0	confirmed	light tree: markupview hosts no shadow root
+PART	MarkupView	markup-quote	B	0	confirmed	light tree: markupview hosts no shadow root
+PART	MarkupView	markup-quote-rule	B	0	confirmed	light tree: markupview hosts no shadow root
+PART	MarkupView	markup-row	B	0	confirmed	light tree: markupview hosts no shadow root
+PART	MarkupView	markup-table	B	0	confirmed	light tree: markupview hosts no shadow root
+PART	MarkupView	markup-term	B	0	confirmed	light tree: markupview hosts no shadow root
 PART	MaskControl	chevron	A	0	proposed	leaf in every rule
 PART	MaskControl	mask	B	6	proposed	a rule selects through it (6)
 PART	MaskControl	mask-panel	B	1	proposed	a rule selects through it (1)
@@ -919,7 +919,7 @@ PART	TreeView	leaf	C	0	proposed	state adjective
 PART	UIElement	resizer	A	1	proposed	leaf in every rule
 PART	UIElement	user-sized-height	B	1	proposed	a rule selects through it (1)
 PART	UIElement	user-sized-width	A	1	proposed	leaf in every rule
-PART	UIText	syntax	A	54	proposed	leaf in every rule
+PART	UIText	syntax	C	54	confirmed	capability marker on the run, never a child
 PART	UIWindow	overlays	A	0	proposed	leaf in every rule
 PART	VectorControl	axis	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	VectorControl	vector	B	4	proposed	a rule selects through it (3)

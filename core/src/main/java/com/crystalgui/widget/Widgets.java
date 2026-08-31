@@ -20,6 +20,7 @@ import com.crystalgui.widget.overlay.MenuItem;
 import com.crystalgui.widget.overlay.Popover;
 import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.widget.scroll.Scroller;
+import com.crystalgui.widget.text.MarkupView;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.widget.scroll.ScrollerView;
 
@@ -67,6 +68,10 @@ public final class Widgets implements NodeKinds {
         // The engine's one text leaf AND the widget layer's label -- D15 merged `ui.box.TextNode` into
         // it, so the `text` tag is registered here rather than from a static block in `ui.box`.
         UINodeRegistry.register(UIText.NAME, UIText::new, UIText.CONTRACT);
+        // NO CONTRACT: a MarkupDocument is not a StateType and never crosses a wire -- what travels is
+        // whatever produced it. Registered all the same, because `markupview { }` is how 35 rules in the
+        // sheets reach it and this engine has no lowercased-class-name fallback to match them by.
+        UINodeRegistry.register(MarkupView.NAME, MarkupView::new, NodeContract.INERT);
 
         // ── scroll ───────────────────────────────────────────────────────────
         UINodeRegistry.register(Scroller.NAME, Scroller::new, NodeContract.INERT);
