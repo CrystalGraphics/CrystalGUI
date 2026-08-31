@@ -1956,7 +1956,7 @@ recognise — the class-keyed gap again. Read them by hand; expect kind B, as ev
    Eleven copies of `origin + line * lineHeight - scrollTop` existed and exactly one was guarded;
    `topOfViewLine` is now the single spelling and must stay so through the copy.
 
-### 6.6 — The desktop · **L** · after: 6.2 (`Dialog`; `Popover` landed early in 6.1)
+### 6.6 — The desktop · **L** · after: 6.2 (`Dialog`; `Popover` landed early in 6.1) · **SHIPPED 2026-09-01**
 
 *Re-sized from **XL**. 27 files and 10,498 lines — smaller than 6.3 and 6.4 — and its budget is the
 lightest of the four widget batches: **19 copied, 8 moved, 32 hand sites**. What makes it worth doing
@@ -2091,6 +2091,68 @@ question being what a class names that is **not shipping**, which is what 6.4's 
 5. **`Desktop` must take up NO SPACE until a window is open.** The invariant is unchanged and its
    failure mode is the worst available — a transparent full-size overlay that eats every click on the
    application beneath it, with nothing on screen to explain why.
+
+#### What shipped, and where the plan above was wrong
+
+**27 files into `com.crystalgui.desktop` + `.window` + `.motion` + `.taskbar` + `.switcher` +
+`.host`, three classes to `core.window`.** Four classes at the layer root.
+
+**The price table was wrong by a factor of two, and the error is worth keeping.** §1 quoted `.window`
+at **97** published call sites and `.motion` at **24** and recommended taking neither. Taken together
+with `.taskbar` and `.switcher`, the real bill was **52 members and 4 types** — because most of those
+97 are pairs the split keeps on the *same* side (`WindowFrame`↔`SnapZones`, `WindowFrame`↔`WindowMove`,
+`WindowAnimator`↔`WindowAnimation`), and a per-package count charges every one of them twice.
+**Measure the partition, never a package**, and measure it by compiling: the answer took two minutes
+where the static count took an afternoon.
+
+**The copy/move split was wrong too, and dangerously.** The ledger's `touches` heuristic read six
+classes as pure — they name no `UIElement` and no paint context — and every one is named by the OLD
+`Desktop` or `WindowFrame`, which run the game until 6.9. `com/crystalgui/desktop/` is a
+`NEW_PACKAGES` prefix, so a *move* there is the old engine reaching into the new one: the boundary
+scan fails on the day it lands and the old engine stops compiling besides. **Only a NEUTRAL
+destination can take a move.** 24 copied, 3 moved — not 19/8.
+
+**`ScreenOverlay` is not neutral** and the plan said it was: it holds a document and reads its focus
+owner, so it is a facade *over* the engine rather than an SPI a host implements. `DesktopPresentation`
+— a bare enum with no imports at all — takes its place in `core.window`.
+
+**The budget was 48, not 32.** The plan's line omitted the sixteen `IMPORTANT` writes, which are the
+largest single group. All sixteen are gone: two became sheet rules keyed on a class the widget flips
+(`desktop.__live__`, `window > .__overlays__.__occupied__`, with the SAFE state as the base rule),
+three became `setDisplayed`, two became `__placing__` — the idiom `Popover` and `InputDialog` already
+use — and nine became `INLINE`, which is the slot a user resize writes.
+
+**What the engine gained**, because five of these were gaps rather than ports:
+
+| | |
+|---|---|
+| `BoxPainter.paintSubtree` | One subtree into a target the caller owns. The nine `mirrored` sites are **deletions** — a pose is composed per box and never written back |
+| `Box.setTransformOrigin` | Pinned beside the compositor's transform, for the reason the standing row gives |
+| `UIDocument.addDataProvider` | The document-level last resort `DataContext` documents and nothing had implemented |
+| `UINode.sourceOf` | Narrowed once rather than as an `instanceof` chain per command file |
+| `widget.dnd.Resizer` + `Resizable` | `UIResizer`, built by a widget. A style change that ADDS eight nodes is a structural change made from inside the style pass |
+
+**And the compositor names the document now.** `Desktop.of`/`ifPresent` replace `UIWindow.desktop()`,
+and HUD mode moves with them — every line of it is about this desktop's own windows. There is no
+cached field, which retires the `markAsInternal` recursion that once made windows uncloseable: a
+desktop is on screen exactly when it is a child of the document.
+
+**Hazard 3 was the sharpest and it was worse than predicted.** Three comments — `WindowMove`'s class
+javadoc, `snapZoneAt`'s and `beginTearLoose` — each explained the old coordinate space correctly and
+at length, one of them naming the bug a previous version had. All three are now inverted. See
+`AGENTS.md`'s M6.6 rows.
+
+**Coverage:** `DesktopBatchPortTest`, 16 tests with negative controls (a fixture that cannot tell an
+absolute reading from a parent-relative one; a mirror that produced no boxes; a live window keeping
+the surface). 1,727 headless tests and the old engine's ~40 desktop tests still green.
+`StyleParityTest` gains `desktop`/`taskbar`/`window`, which is how the sheets are known to be 1:1.
+
+**Two things the batch did NOT do**, both honestly out of scope rather than forgotten: no harness
+scene runs the new compositor (`cgui-desktop` drives the old one, and the harness submodule is pinned
+behind master), and D6's "resize mode over an edge band" was not built — `Resizer` is the eight
+handles ported faithfully, which keeps `ua/overlays.css` working unchanged.
+
+---
 
 ### 6.7 — Workbench, dock, the shell, the applications · **XL** · after: 6.3, 6.5, 6.6
 
