@@ -1,4 +1,4 @@
-package com.crystalgui.ui.elements.editor;
+package com.crystalgui.widget.texteditor.suggest;
 
 import com.crystalgui.core.search.SearchMatch;
 import com.crystalgui.text.lang.CompletionItem;

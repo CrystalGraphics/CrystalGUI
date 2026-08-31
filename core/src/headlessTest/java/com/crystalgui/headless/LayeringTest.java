@@ -97,13 +97,17 @@ public class LayeringTest {
             // no sub-package visibility, so splitting them means publishing ten "only the view may
             // call this" methods. The boundary is where the encapsulation already was.
             "com/crystalgui/widget/graph/node/",
-            // ONE TIER, and its four sub-packages get no entry: `widget/editor/` is a PREFIX, so
-            // `.suggest`, `.doc`, `.find` and `.lang` are already inside it. Listing them would claim
-            // an ORDER the code contradicts -- TextEditor holds an EditorSuggest and an EditorFind as
-            // fields, so the core names the features and the features name the core. That is what
-            // makes them sub-packages of the editor rather than tiers above it, and it is the same
-            // correction `chrome` needed at 6.3.
-            "com/crystalgui/widget/editor/");
+            "com/crystalgui/widget/texteditor/",
+            // THE EDITOR'S FOUR LANGUAGE FEATURES. Listed because `theTreeHasNoWidgetPackageThisFileHasNotHeardOf`
+            // wants every widget directory named -- and listing them claims NO order, because every
+            // entry past WIDGET_MIDDLE_TIER may name every other. That matters here more than
+            // anywhere: TextEditor holds an EditorSuggest and an EditorFind as FIELDS, so the core
+            // names the features and the features name the core. They are sub-packages OF the editor,
+            // not tiers above it, and an ordered claim either way would be false.
+            "com/crystalgui/widget/texteditor/suggest/",
+            "com/crystalgui/widget/texteditor/doc/",
+            "com/crystalgui/widget/texteditor/find/",
+            "com/crystalgui/widget/texteditor/lang/");
 
     /** Which tiers may name which: an index into {@link #WIDGET_TIERS}, and everything at or below it. */
     private static final int WIDGET_BOTTOM_TIER = 2; // control, text, scroll

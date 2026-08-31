@@ -40,7 +40,11 @@ LANGUAGE = os.path.join(ROOT, 'language', 'src', 'main', 'java', 'com', 'crystal
 # root held everything from a Button to a MarkupView.
 
 BY_DIR = [
-    ('ui/elements/editor',              'widget/editor'),
+    ('ui/elements/editor',              'widget/texteditor'),
+    # `ui/text/` is NOT one destination: SyntaxHighlighting writes colour spans onto UIText nodes, so
+    # it is engine-specific and is COPIED with the editor that needs it (BY_NAME below); TextRange and
+    # HighlightRegistry name no engine type and stay exactly where they are, because both engines
+    # already reach them. The directory was in no batch at all until 6.5 tried to compile without it.
     ('ui/elements/graph',               'widget/graph'),
     ('ui/elements/canvas',              'widget/canvas'),
     ('ui/elements/list',                'widget/collection/list'),
@@ -114,6 +118,7 @@ BY_NAME = {
     # in the editor package that reaches no sibling's package-private surface and whose own is reached
     # by nobody -- so it is the one thing a split can take, and it belongs beside CompletionItem
     # rather than inside a widget. @see plan_m6.md 6.5
+    'SyntaxHighlighting': 'widget/text',
     'CompletionRecency': 'text/lang',
     # THE EDITOR'S FOUR FEATURE PACKAGES (6.5). TextEditor and its 18 view parts are welded -- moving
     # the parts out alone costs 19 types and 65+ members, moving them WITH TextEditor costs zero -- so
@@ -122,12 +127,12 @@ BY_NAME = {
     # the whole bill for one file); DiffDecorations stays because its only readers are two view parts;
     # EditorCommands stays because it costs nothing either way and belongs beside its widget, as
     # GraphCommands and DesktopCommands do. @see plan_m6.md 6.5 section 1
-    'CompletionPopup': 'widget/editor/suggest', 'CompletionSession': 'widget/editor/suggest',
-    'CompletionRanking': 'widget/editor/suggest', 'EditorSuggest': 'widget/editor/suggest',
-    'DocumentationPopup': 'widget/editor/doc', 'HoverDocumentation': 'widget/editor/doc',
-    'SearchReplaceBar': 'widget/editor/find', 'EditorFind': 'widget/editor/find',
-    'EditorLanguageFeatures': 'widget/editor/lang', 'EditorDiagnostics': 'widget/editor/lang',
-    'DiagnosticActions': 'widget/editor/lang',
+    'CompletionPopup': 'widget/texteditor/suggest', 'CompletionSession': 'widget/texteditor/suggest',
+    'CompletionRanking': 'widget/texteditor/suggest', 'EditorSuggest': 'widget/texteditor/suggest',
+    'DocumentationPopup': 'widget/texteditor/doc', 'HoverDocumentation': 'widget/texteditor/doc',
+    'SearchReplaceBar': 'widget/texteditor/find', 'EditorFind': 'widget/texteditor/find',
+    'EditorLanguageFeatures': 'widget/texteditor/lang', 'EditorDiagnostics': 'widget/texteditor/lang',
+    'DiagnosticActions': 'widget/texteditor/lang',
     # 6.6's FIVE sub-packages, and the price table above them was wrong by a factor of two. It quoted
     # `.window` at 97 published call sites and `.motion` at 24 and recommended taking neither; taken
     # TOGETHER the whole partition cost 52 members and 4 types, because most of those 97 are pairs a
@@ -210,9 +215,9 @@ BATCH = [
     ('desktop/taskbar', '6.6'), ('desktop/switcher', '6.6'), ('core/window', '6.6'),
     ('desktop/motion', '6.6'), ('desktop/host', '6.6'),
     ('text/lang', '6.5'),
-    ('widget/editor', '6.5'),
-    ('widget/editor/suggest', '6.5'), ('widget/editor/doc', '6.5'),
-    ('widget/editor/find', '6.5'), ('widget/editor/lang', '6.5'),
+    ('widget/texteditor', '6.5'),
+    ('widget/texteditor/suggest', '6.5'), ('widget/texteditor/doc', '6.5'),
+    ('widget/texteditor/find', '6.5'), ('widget/texteditor/lang', '6.5'),
     ('desktop', '6.6'),
     ('workbench', '6.7'), ('editor', '6.7'), ('example/machine', '6.7'),
     ('net/window', '6.8'),
@@ -387,6 +392,18 @@ def destination(rel, stem):
 # lands, however neutral the class itself is. The exceptions are the two heading for `graph.port`,
 # which is a package BOTH engines may name.
 HOW_OVERRIDE = {
+    # 6.5: SEVEN more the heuristic reads as pure, and every one is named by the OLD editor package,
+    # which runs the game until 6.9. `com/crystalgui/widget/` is a NEW_PACKAGES prefix, so a move
+    # there is the old engine reaching into the new one. `CompletionRecency` is the ONE genuine move:
+    # it names nothing but `text.lang` types, and `text/lang` is a package both engines may name.
+    'SyntaxHighlighting': 'copy',
+    'CompletionRanking': 'copy',
+    'CompletionSession': 'copy',
+    'DiagnosticActions': 'copy',
+    'DiffDecorations': 'copy',
+    'EditorDiagnostics': 'copy',
+    'EditorFolding': 'copy',
+    'HoverDocumentation': 'copy',
     # 6.6: SIX classes the `touches` heuristic reads as pure, because they name no UIElement and no
     # paint context -- and every one of them is named by the OLD Desktop or WindowFrame, which still
     # run the game until 6.9. `com/crystalgui/desktop/` is a NEW_PACKAGES prefix, so a move there is
@@ -408,6 +425,13 @@ HOW_OVERRIDE = {
 
 
 BATCH_OVERRIDE = {
+    'SyntaxHighlighting': '6.5',
+    # NOT PORTED, EVER: TextRange and HighlightRegistry name no engine type and both engines
+    # already reach them where they are. Listed rather than filtered out, because a file the
+    # ledger omits is a file nobody notices is missing -- which is exactly how SyntaxHighlighting
+    # was in no batch at all until 6.5 failed to compile.
+    'TextRange': 'stays',
+    'HighlightRegistry': 'stays',
     # WindowIcon's destination moved from `desktop/window` to `desktop` at 6.6, and `desktop` is 6.6's
     # -- but the class itself shipped at 6.1 as the taskbar's leaf widget. A destination decides where
     # a class GOES, never when it went.
@@ -439,7 +463,10 @@ def classify_classes():
             # `ui/elements` itself has no BY_DIR entry -- its 28 root files are placed by NAME,
             # which is the whole reason the root is being split -- so it has to be admitted
             # here, or every leaf widget is filtered out before BY_NAME is ever consulted.
-            in_scope = rel == 'ui/elements' or any(
+            # `ui/text` is admitted the same way and for a narrower reason: exactly ONE of its three
+            # classes is engine-specific, so the directory has no single destination and BY_NAME
+            # places the one that moves. It was in no batch at all until 6.5 failed to compile.
+            in_scope = rel in ('ui/elements', 'ui/text') or any(
                     rel == p or rel.startswith(p + '/') for p, _ in BY_DIR)
             if not forced and not in_scope:
                 continue

@@ -39,6 +39,10 @@ import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.dnd.DragGhost;
 import com.crystalgui.widget.dnd.InsertionMarker;
 import com.crystalgui.widget.dnd.Resizer;
+import com.crystalgui.widget.texteditor.find.SearchReplaceBar;
+import com.crystalgui.widget.texteditor.doc.DocumentationPopup;
+import com.crystalgui.widget.texteditor.suggest.CompletionPopup;
+import com.crystalgui.widget.texteditor.TextEditor;
 import com.crystalgui.widget.form.ColorSelector;
 import com.crystalgui.widget.form.SearchField;
 import com.crystalgui.widget.graph.GraphNode;
@@ -232,6 +236,20 @@ public final class Widgets implements NodeKinds {
         // makes an UNBOUND one -- registered all the same, because a concrete node that declares no kind
         // inherits `crystalgui:element` and would match every bare `element` rule there is.
         UINodeRegistry.register(Resizer.NAME, Resizer::new, NodeContract.INERT);
+
+        // ── texteditor ───────────────────────────────────────────────────────
+        //
+        // The editor and its three popups. Only `texteditor`, `completionpopup` and
+        // `documentationpopup` are named by a shipped rule -- `searchreplacebar` is styled entirely by
+        // class -- and all four are registered regardless, because a concrete node declaring no kind
+        // inherits its supertype's and would match every `scrollerview` or `popover` rule there is.
+        UINodeRegistry.register(TextEditor.NAME, TextEditor::new, NodeContract.INERT);
+        UINodeRegistry.register(CompletionPopup.NAME, CompletionPopup::new, NodeContract.INERT);
+        UINodeRegistry.register(DocumentationPopup.NAME, DocumentationPopup::new, NodeContract.INERT);
+        // A find bar is built FOR an editor and never decoded, so the factory makes one over a fresh
+        // editor rather than pretending a bar can exist without one.
+        UINodeRegistry.register(SearchReplaceBar.NAME,
+                () -> new SearchReplaceBar(new TextEditor()), NodeContract.INERT);
 
         // ── form ─────────────────────────────────────────────────────────────
         UINodeRegistry.register(SearchField.NAME, SearchField::new, SearchField.CONTRACT);

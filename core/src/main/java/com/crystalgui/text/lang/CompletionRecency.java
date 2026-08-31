@@ -1,7 +1,5 @@
-package com.crystalgui.ui.elements.editor;
+package com.crystalgui.text.lang;
 
-import com.crystalgui.text.lang.CompletionItem;
-import com.crystalgui.text.lang.SymbolKind;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
