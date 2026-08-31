@@ -1,5 +1,6 @@
 package com.crystalgui.widget.graph;
 
+import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.ui.box.Box;
@@ -409,10 +410,8 @@ public class NodePort extends UINode {
 
     /** The dot's centre, in the plane's coordinate space — i.e. the same space a paint call inside the
      * canvas uses, and the space {@link UINode#screenToLocal} reports in. Read live; never cached. */
-    public Vector2f dotCenter() {
-        Box cache = dot.box();
-        return new Vector2f(cache.x() + cache.width() * 0.5f,
-                cache.y() + cache.height() * 0.5f);
+    public Vector2f dotCenterIn(@Nullable UINode space) {
+        return Box.centreIn(dot.box(), space == null ? null : space.box());
     }
 
     /** The dot's live outer radius (half its width) — what {@link NodeWireLayer} and {@link
@@ -421,7 +420,8 @@ public class NodePort extends UINode {
      * theme constant" reasoning as {@link #dotCenter()} — a themed {@code --graph-dot} change must not
      * need a matching Java constant kept in step by hand. */
     public float dotRadius() {
-        return dot.box().width() * 0.5f;
+        Box d = dot.box();
+        return d == null ? 0f : d.width() * 0.5f;
     }
 
     /** The colour of this port's type, taken from the dot's computed {@code border-color}.

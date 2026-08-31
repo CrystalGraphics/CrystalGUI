@@ -392,7 +392,7 @@ public class GraphNode extends UINode {
         super.paintDecoration(ctx, box);
         GraphView view = graphView();
         if (view == null) return;
-        for (NodePort port : inputPorts) view.paintPortEditorStub(ctx, port);
+        for (NodePort port : inputPorts) view.paintPortEditorStub(ctx, port, this);
     }
 
     /** Ports and chrome are structure. A caller's element goes in {@link #preview()} or through

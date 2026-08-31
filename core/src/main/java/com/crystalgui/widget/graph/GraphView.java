@@ -585,9 +585,9 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
      * case for most ports on most nodes, checked once via a map lookup rather than by every node walking
      * its own ports' state.</p>
      */
-    void paintPortEditorStub(CgUiPaintContext ctx, NodePort port) {
+    void paintPortEditorStub(CgUiPaintContext ctx, NodePort port, UINode space) {
         PortDefaultEditor editor = portEditors.get(port);
-        if (editor != null && editor.isMounted()) editor.paintStub(ctx);
+        if (editor != null && editor.isMounted()) editor.paintStub(ctx, space);
     }
 
     /** Drops a port's default editor from the plane and forgets it entirely — called when the port's own
@@ -1709,8 +1709,15 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
         Vector2f onScreen = worldToViewport(worldX, worldY);
         UIDocument window = document();
         if (window == null) return onScreen;
+        // `worldToViewport` answers in THIS view's local space; a promoted element's containing block
+        // is the root. Two different spaces, so the conversion goes through the world matrix rather
+        // than by subtracting the root's own `x()` -- which is the root's offset in its own parent and
+        // has nothing to do with this view's position.
+        Box self = box();
         Box rootCache = window.root().box();
-        return new Vector2f(onScreen.x() - rootCache.x(), onScreen.y() - rootCache.y());
+        if (self == null || rootCache == null) return onScreen;
+        Vector2f origin = Box.originIn(self, rootCache);
+        return new Vector2f(onScreen.x() + origin.x(), onScreen.y() + origin.y());
     }
 
     /**
