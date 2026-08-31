@@ -1403,6 +1403,22 @@ public class UINode implements EventTarget, Styleable {
         if (doc != null) {
             doc.unindex(this);
             doc.styles().onElementDetached(this);
+            // ANYTHING HOLDING THIS NODE HAS TO BE TOLD, or the reference outlives the tree it made
+            // sense in. The old engine's `unregisterElement` did all five and each has an invariant
+            // behind it: hover left in a detached subtree makes the next diff walk two trees that
+            // never converge; a press target or a pointer capture keeps routing events at something
+            // nobody can see; a drag whose SOURCE went converts every coordinate through a transform
+            // that no longer means anything; a detached modal leaves the whole document inert with
+            // nothing left to interact with; a popover that left the tree goes on taking Escape.
+            //
+            // Demotion is the fifth and is this engine's own: promotion is recorded on the DOCUMENT,
+            // so a node that leaves the tree while promoted stays in that set and is re-hosted the
+            // moment it comes back -- which is right for a hide/show and wrong for a close.
+            doc.input().forget(this);
+            doc.focus().forget(this);
+            doc.animation().forget(this);
+            doc.dismiss().forget(this);
+            doc.demote(this);
             doc.queue(this::disconnected);
         }
         document = null;

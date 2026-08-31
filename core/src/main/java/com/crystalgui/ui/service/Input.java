@@ -488,6 +488,17 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
             // ONE KEYSTROKE DOES ONE THING: traversal and activation are gated on the same answer.
             if (!consumed) consumed = document.focus().moveTabFocus(event.key(), modifiers);
             if (!consumed) activation(event, focused);
+            // ESCAPE IS A CASCADE, and this is its last rung.
+            //
+            // AFTER dispatch and only on a key nothing consumed, which is the same rule the keymap
+            // follows and for the same reason: a control gets first refusal on its own keystrokes, so
+            // a search box clears its query before the dialog around it closes. The mode stack above
+            // has already had it -- a live drag eats Escape before any of this -- and `Dismiss` walks
+            // the close-watcher stack from the top, so a dropdown opened inside a modal closes first
+            // and only a second Escape reaches the modal.
+            if (!consumed && event.key() == CgKeyCodes.KEY_ESCAPE) {
+                consumed = document.dismiss().escape(scopeFor(focused));
+            }
             // AND THE HOST IS TOLD. The platform acts on what is left over -- a GuiScreen closes on an
             // Escape nobody wanted -- so reporting a consumed key as untouched closes the screen under
             // whatever just handled it.
