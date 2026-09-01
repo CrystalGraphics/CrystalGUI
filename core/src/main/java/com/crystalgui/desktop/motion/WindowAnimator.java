@@ -457,6 +457,22 @@ public final class WindowAnimator {
                     settle.run();
                 });
         current = animation;
+        // AFTER LAYOUT, never before it -- which is what stopped a restore flickering.
+        //
+        // These animations write through `Box.setTransform`/`setOpacity`, and a box exists only after
+        // layout has run. `show()` reattaches the frame and starts the animation from an input
+        // handler, which `UIDocument.frame` dispatches AFTER this frame's layout -- so the reattached
+        // window had no box at all, `write()` dropped its start value on the floor (it returns early
+        // on a null box, silently), and the next frame's `every` hook ran BEFORE that frame's layout
+        // and so found no box either. The window therefore painted once at its resting geometry
+        // before anything moved: reported as "it opens exactly where it was with no animation, then
+        // disappears and plays properly", which is a rest frame followed by the real thing.
+        //
+        // `afterLayout` is the hook for exactly this -- it is documented for anything positioned FROM
+        // measured geometry, and `transform-origin` here is resolved against `box.width()`. It runs
+        // after layout and before paint, so the first frame a window is back is the first frame of
+        // its animation. It may not add a box, and this writes an override on one that exists.
+        //
         // OWNED BY THE FRAME, which is the whole of hazard 1 in one line. The old ticker was
         // registered one-way and stopped only by returning false, so an animation whose window had
         // been detached went on running invisibly and completed against nothing. Ownership drops it
@@ -465,7 +481,7 @@ public final class WindowAnimator {
         // somebody has just re-shown"). What a drop leaves behind is the ANIMATION-origin slots,
         // which `cancelCurrent()` clears on the next gesture; `show()` and every other entry point
         // here begin with it, so there is no route back on screen that skips the cleanup.
-        window.animation().every(frame, animation);
+        window.animation().afterLayout(frame, animation);
         return true;
     }
 
@@ -486,7 +502,7 @@ public final class WindowAnimator {
                     settle.run();
                 });
         current = animation;
-        window.animation().every(frame, animation);
+        window.animation().afterLayout(frame, animation);
         return true;
     }
 
@@ -527,7 +543,7 @@ public final class WindowAnimator {
                     if (then != null) then.run();
                 });
         current = animation;
-        window.animation().every(frame, animation);
+        window.animation().afterLayout(frame, animation);
     }
 
     /** A window stops being worth writing to once it is destroyed. @see WindowAnimation */
