@@ -4,6 +4,7 @@ import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.ui.UITransform;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.event.DragEvent;
 import java.util.ArrayList;
@@ -77,7 +78,6 @@ public final class Drag implements InputMode {
 
     private boolean activated;
     private @Nullable UINode ghost;
-    private @Nullable Box ghostBox;
     private float ghostOffsetX, ghostOffsetY;
     private @Nullable UINode dropTarget;
     private boolean dropAccepted;
@@ -155,17 +155,40 @@ public final class Drag implements InputMode {
         this.ghost = ghost;
         this.ghostOffsetX = offsetX;
         this.ghostOffsetY = offsetY;
-        Box box = ghost.box();
-        Box top = ghost.document() == null ? null : ghost.document().topLayer();
-        if (box != null && top != null) {
-            box.setHost(top);
-            // Unhittable for the gesture's life: it is under the cursor by construction, so a
-            // hittable ghost is a ghost that answers every drop query with itself.
-            ghost.setHitTest(false);
-            ghostBox = box;
-            moveGhost(pressSurfaceX, pressSurfaceY);
-        }
+        // RECORDED ONLY. This used to read `ghost.box()` here and give up when it was null -- which it
+        // always is, because a ghost is `display: none` until its drag and a node that is not
+        // displayed HAS NO BOX. So the whole body was skipped, `ghostBox` stayed null, and every
+        // `moveGhost` returned on its first line: the ghost was attached to the drag and never shown.
+        //
+        // It also wrote `box.setHost(top)`, which is the thing M6.0 records as not surviving: a box is
+        // destroyed and rebuilt whenever its subtree is hidden or restructured, and going from
+        // `display: none` to displayed is exactly that -- so even a box that HAD existed would have
+        // lost its host on the next sync. Promotion belongs on the NODE.
         return this;
+    }
+
+    /**
+     * Shows the ghost and promotes it — idempotent, from the per-move update.
+     *
+     * <p><b>Here rather than at {@code withGhost}</b>, for the reason the old controller states at its
+     * own call site: showing on the threshold transition misses a zero-threshold positional drag, which
+     * activates immediately and never passes through that branch, and misses a ghost handed over after
+     * the drag has already begun. Promotion is idempotent, so asking every move costs a set lookup.</p>
+     *
+     * <p>The two halves are what the old engine's {@code showGhost} did — {@code display: FLEX} and
+     * {@code addToTopLayer} — expressed as this engine's own: {@code setDisplayed} for the box, and
+     * {@code UIDocument.promote} for the layer, which is recorded on the node and therefore survives
+     * the box being rebuilt by the display change itself.</p>
+     */
+    private void showGhost() {
+        if (ghost == null) return;
+        UIDocument document = ghost.document();
+        if (document == null || document.isPromoted(ghost)) return;
+        ghost.setDisplayed(true);
+        // Unhittable for the gesture's life: it is under the cursor by construction, so a hittable
+        // ghost is a ghost that answers every drop query with itself.
+        ghost.setHitTest(false);
+        document.promote(ghost);
     }
 
     @Nullable
@@ -174,7 +197,10 @@ public final class Drag implements InputMode {
     }
 
     private void moveGhost(float surfaceX, float surfaceY) {
-        Box box = ghostBox;
+        // READ LIVE, never cached. The ghost's box comes into existence when it is shown and is
+        // rebuilt whenever anything restructures it, so a reference taken once is a reference to a box
+        // that may already be gone -- and, on the frame the ghost is first displayed, to no box at all.
+        Box box = ghost == null ? null : ghost.box();
         if (box == null) return;
         Box top = box.host();
         if (top == null) return;
@@ -187,14 +213,18 @@ public final class Drag implements InputMode {
     }
 
     private void releaseGhost() {
-        Box box = ghostBox;
-        if (box != null) {
-            box.setTransform(null);
-            box.setHost(null);
+        if (ghost != null) {
+            Box box = ghost.box();
+            if (box != null) box.setTransform(null);
+            UIDocument document = ghost.document();
+            if (document != null) document.demote(ghost);
+            // BACK TO HIDDEN, which is the state rule 2 says a ghost is constructed in: it is a
+            // permanent node in somebody's tree, and one left displayed is a stray label sitting in a
+            // panel between drags.
+            ghost.setDisplayed(false);
+            ghost.setHitTest(true);
         }
-        if (ghost != null) ghost.setHitTest(true);
         ghost = null;
-        ghostBox = null;
     }
 
     public boolean isActivated() {
@@ -244,6 +274,7 @@ public final class Drag implements InputMode {
             if (dx * dx + dy * dy < threshold * threshold) return true;
             activated = true;
         }
+        showGhost();
         moveGhost(x, y);
         float[] local = toLocal(source, x, y);
         // THE DELTA IS A VECTOR, NOT A DIFFERENCE OF TWO POINTS, and it has to be: `toLocal` puts the

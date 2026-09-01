@@ -121,11 +121,22 @@ public class DragGhost extends UINode {
         shadow.append(icon);
         shadow.append(label);
 
-        // RULE 2, and it must be here rather than in the stylesheet -- see the class note. INLINE,
-        // not IMPORTANT: the new engine may not use that origin, and INLINE already outranks every
-        // ordinary rule, which is all rule 2 needs.
+        // RULE 2, and it must be here rather than in the stylesheet -- see the class note.
+        //
+        // HIDDEN IS THE ATTRIBUTE, NOT A `display` VALUE, and the difference is the whole of why no
+        // drag in the application ever showed a ghost. The old engine hid with `display: none` at
+        // IMPORTANT and showed with `display: flex` at the same origin -- one channel, flipped both
+        // ways. The port kept the hiding half as an INLINE write and then showed the ghost with
+        // `setDisplayed(true)`, which clears the `hidden` ATTRIBUTE and says nothing about the
+        // cascade: the ghost came out promoted, unhidden and still resolving `display: none`, so the
+        // box tree gave it no box for the other reason and there was nothing to draw. Every
+        // observable said it was being shown.
+        //
+        // The attribute is also the stronger guarantee rule 2 is after: the box tree honours it
+        // unconditionally, above any sheet, where an INLINE write is merely hard to outrank.
+        setDisplayed(false);
         StyleGroup.inlinePipeline(getStyle().getLayoutGroup(),
-                l -> l.positionType(TaffyPosition.ABSOLUTE).display(TaffyDisplay.NONE));
+                l -> l.positionType(TaffyPosition.ABSOLUTE));
     }
 
     /**

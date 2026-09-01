@@ -1,7 +1,9 @@
 package com.crystalgui.ui.service;
 
 import static com.crystalgui.ui.service.ServiceFixtures.release;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertSame;
 
 import com.crystalgraphics.platform.input.CgMouseCodes;
@@ -40,6 +42,26 @@ public class DragGhostHandoffTest {
                 });
 
         assertSame("the drag did not claim the ghost offered on the way down", ghost, drag.ghost());
+
+        // ...AND IT IS ACTUALLY SHOWN. Claiming it is half the job: a ghost is `display: none` until
+        // its drag, so it has NO BOX -- which is why the first version of `withGhost` read `ghost.box()`
+        // there, found null, and skipped everything. Nothing displayed it and nothing promoted it, so
+        // every drag in the application carried an attached ghost that was never on screen.
+        ghost.setDisplayed(false);
+        document.frame(0.016f, 100f, 100f);
+        drag.pointerMoved(40f, 40f);
+        assertTrue("the ghost was never displayed", ghost.isDisplayed());
+        assertTrue("the ghost was never promoted to the top layer", document.isPromoted(ghost));
+        // WHETHER IT ACTUALLY DRAWS IS ASSERTED ELSEWHERE, over a real DragGhost -- see
+        // DragGhostShowsTest. A bare UINode is hidden only by the `hidden` attribute, so asserting a
+        // box here would pass against the bug that mattered: a DragGhost also hides itself in the
+        // CASCADE, and clearing the attribute says nothing about that.
+
+        // And it goes back to hidden when the gesture ends -- a ghost left displayed is a stray label
+        // sitting in somebody's panel between drags.
+        drag.cancel();
+        assertFalse("the ghost stayed displayed after the drag", ghost.isDisplayed());
+        assertFalse("the ghost stayed promoted after the drag", document.isPromoted(ghost));
     }
 
     /**
