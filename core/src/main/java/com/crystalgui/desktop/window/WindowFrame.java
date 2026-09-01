@@ -9,6 +9,7 @@ import com.crystalgui.desktop.motion.WindowAnimation;
 import com.crystalgui.desktop.motion.WindowAnimator;
 import com.crystalgui.desktop.motion.WindowGeometryAnimation;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.data.DataKey;
@@ -474,6 +475,19 @@ public class WindowFrame extends UINode implements Disposable, Resizable, DataPr
     public WindowFrame(String title) {
         super(NAME);
         addClass(WINDOW_CLASS);
+        // A FOCUS NAVIGATION SCOPE, which is what makes modality PER-WINDOW rather than per-document.
+        //
+        // `Focus.blockedScopeOf` asks for the nearest enclosing scope above a modal and makes exactly
+        // that inert; with nothing in the tree declaring one, the answer is always the document and a
+        // dialog opened in one window blocked every other window on the desktop. The service was
+        // written for this and `Attribute.FOCUS_SCOPE`'s own javadoc names a window frame as an
+        // example -- it was simply never set on anything, so the scoping had no effect it could have.
+        //
+        // A window is the right and only granularity here. Smaller and a modal stops blocking the
+        // window it belongs to, which is the whole of what a modal is for; larger is the document,
+        // which is where this started. A modal opened OUTSIDE every frame still blocks the whole
+        // document, which is what desktop chrome's own dialogs need.
+        set(Attribute.FOCUS_SCOPE, true);
         // Out of flow and positioned: a window is placed by left/top against the desktop's window layer,
         // not laid out among its siblings. This is also what earns the four LEADING resize handles --
         // an origin write only means anything for a box that is positioned.
