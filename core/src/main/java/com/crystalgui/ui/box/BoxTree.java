@@ -161,6 +161,7 @@ public final class BoxTree {
     public Box mirror(UINode subtree, Box host) {
         if (host.tree != this) throw new IllegalArgumentException("host belongs to another box tree");
         Box mirrorRoot = new Box(this, subtree, true);
+        mirrorRoot.mirrorRoot = true;
         mirrorRoot.hostOverride = host;
         mirrorRoot.hostedSequence = nextHostedSequence();
         mirrorRoot.taffyId = newLeaf(mirrorRoot);
@@ -199,7 +200,10 @@ public final class BoxTree {
         viewportWidth = width;
         viewportHeight = height;
         refreshStyles(root);
-        for (Mirror mirror : mirrors) refreshStyles(mirror.root);
+        for (Mirror mirror : mirrors) {
+            refreshStyles(mirror.root);
+            pinMirrorSize(mirror);
+        }
         // The document's box IS the viewport, whatever its style says -- written after the style
         // refresh, which would otherwise hand it back its sheet's `auto` on the next restyle. And it
         // is a BLOCK container unless a sheet says otherwise: CSS's root is one, so children stack
@@ -424,6 +428,43 @@ public final class BoxTree {
 
     // ── Style ────────────────────────────────────────────────────────────────
 
+    /**
+     * Gives a mirror root the size its source settled on, so the copy does not re-flow.
+     *
+     * <p><b>A mirror is a PICTURE of a layout, not a second participant in one.</b> Its root shares the
+     * source's node and therefore its computed style, and a style is full of things that resolve
+     * against whatever contains the box: {@code max-width: 100%} is on every window in the shipped
+     * sheet, and against a thumbnail a hundred pixels wide it squeezed a 200px window down to its own
+     * min-content — so the taskbar preview showed a NARROWER window than the one it was picturing, with
+     * its text re-wrapped and its content cut off at the bottom. Which reads as a clipped or badly
+     * scaled preview, when the picture was in fact drawn perfectly at a size nobody wanted.</p>
+     *
+     * <p>So the root is pinned to the source's measured border box and its minimums and maximums are
+     * cleared: nothing about the host may reach the copy. The scale down to thumbnail size is the
+     * caller's TRANSFORM, which is layout-free and cannot reflow anything — see {@link #mirror}.</p>
+     *
+     * <p>Pinned every pass rather than on a style change, because the source's size moves without its
+     * style moving: a window resized by a drag writes insets, and everything inside it settles from
+     * layout alone.</p>
+     */
+    private void pinMirrorSize(Mirror mirror) {
+        Box source = boxes.get(mirror.subtree);
+        if (source == null) return;
+        Box root = mirror.root;
+        float width = source.width();
+        float height = source.height();
+        if (width == root.pinnedWidth && height == root.pinnedHeight) return;
+        root.pinnedWidth = width;
+        root.pinnedHeight = height;
+        root.bridge.setWidth(TaffyDimension.length(width));
+        root.bridge.setHeight(TaffyDimension.length(height));
+        root.bridge.setMinWidth(TaffyDimension.length(0f));
+        root.bridge.setMinHeight(TaffyDimension.length(0f));
+        root.bridge.setMaxWidth(TaffyDimension.auto());
+        root.bridge.setMaxHeight(TaffyDimension.auto());
+        taffy.markDirty(root.taffyId);
+    }
+
     private void refreshStyles(Box box) {
         ComputedStyle computed = box.node.computedStyle();
         // The HOSTING is an input to the layout style as well as the computed style -- see
@@ -433,7 +474,7 @@ public final class BoxTree {
         if (computed != box.appliedStyle || hosted != box.appliedHosted) {
             box.appliedHosted = hosted;
             int zBefore = box.appliedStyle == null ? 0 : box.appliedStyle.get(StylePropertyRegistry.Z_INDEX);
-            BoxStyle.apply(box.bridge, computed, hosted);
+            BoxStyle.apply(box.bridge, computed, hosted, box.mirrorRoot);
             box.appliedStyle = computed;
             taffy.markDirty(box.taffyId);
             transformsDirty = true;
@@ -489,6 +530,24 @@ public final class BoxTree {
         box.localToWorld.set(hostWorld).translate(box.x - hostScrollLeft, box.y - hostScrollTop, 0f);
         UITransform transform = box.transform();
         if (!transform.isIdentity()) {
+            if (box.mirrorRoot) {
+                // A MIRROR ROOT SCALES ABOUT ITS OWN CORNER, never about its source's
+                // `transform-origin`. The transform on a mirror is a PLACEMENT written by whoever owns
+                // the copy -- fit it, then centre it in my box -- and it is expressed in the host's
+                // space from the corner out. Applied about the source's origin instead, the picture
+                // pivots about wherever that node happens to put it: a window's origin is written by
+                // the window animations (pinned for an animation's whole life, because it is not
+                // interpolable), so a taskbar preview scaled correctly and then hung outside its own
+                // panel, over the taskbar.
+                //
+                // The old engine had no way to get this wrong and that is the tell: it composed the
+                // pose by hand -- `translate(left, top); scale(s, s); translate(-src.getX(), -src.getY())`
+                // -- and a pose scales about ITS origin, with `transform-origin` nowhere in it.
+                transform.applyTo(box.localToWorld, 0f, 0f, box.width, box.height, 0f, 0f);
+                box.localToWorld.invert(box.worldToLocal);
+                for (Box child : box.hosted) compose(child, box.localToWorld, box.scrollLeft(), box.scrollTop());
+                return;
+            }
             ComputedStyle style = box.node.computedStyle();
             // THE COMPOSITOR'S ORIGIN OUTRANKS THE CASCADE'S, and is pinned for its animation's whole
             // life -- @see Box#setTransformOrigin, which records what a re-resolved one cost.
