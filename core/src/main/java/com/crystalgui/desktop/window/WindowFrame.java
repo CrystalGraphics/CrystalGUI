@@ -30,6 +30,7 @@ import com.crystalgui.ui.UITransform;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.service.Focus;
 import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.overlay.Dialog;
 import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.widget.scroll.ScrollerView;
 import com.crystalgui.widget.text.UIText;
@@ -466,6 +467,17 @@ public class WindowFrame extends UINode implements Disposable, Resizable, DataPr
 
     /** Which of the live owned windows are modal — the only ones that give the slot a box. */
     private final Set<UINode> blockers = new LinkedHashSet<>();
+
+    /**
+     * Dialogs whose {@code onClosed} has already been connected to {@link #releaseOwned}.
+     *
+     * <p>A dialog is closed and re-shown from where it already is, so {@code attachOwned} runs again
+     * on every {@code showModal()} — and {@code Signal} has no idempotent connect, so without this
+     * the release would be wired once per open and the connections would accumulate for the life of
+     * the window.</p>
+     */
+    private final java.util.Set<Dialog> ownedReleases =
+            java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
 
     /** What is currently SHOWING on the owned surface. @see #releaseOwned */
     private final Set<UINode> live = new LinkedHashSet<>();
@@ -964,6 +976,15 @@ public class WindowFrame extends UINode implements Disposable, Resizable, DataPr
         if (blocking) blockers.add(owned);
         else blockers.remove(owned);
         syncOverlaySlot();
+        // THE RELEASE IS WIRED HERE, and it has to be: `releaseOwned` is what ends the slot's claim
+        // on a box, and a `Dialog` cannot call it -- `widget.overlay` sits a layer below `desktop`,
+        // so naming a frame from a dialog is the upward reference LayeringTest refuses. The
+        // dependency points this way, so the wiring does too, and it is done ONCE per dialog rather
+        // than at every call site: a rule every caller has to remember is one somebody forgets, and
+        // the symptom is a window that has visibly closed its dialog and answers no click at all.
+        if (owned instanceof Dialog dialog && ownedReleases.add(dialog)) {
+            dialog.onClosed.connect(() -> releaseOwned(dialog));
+        }
     }
 
     /**

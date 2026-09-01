@@ -17,7 +17,6 @@ import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.elements.desktop.WindowFrame;
 import com.crystalgui.ui.event.CloseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.service.Animation;
@@ -168,7 +167,6 @@ public class Dialog extends UINode {
 
     /** The window this dialog is modal INSIDE, or null when it is modal over the whole screen. */
     @Nullable
-    private WindowFrame ownerFrame;
 
     /** Position at the moment a move began. Accumulating from here rather than from the live box
      * keeps the drag from compounding its own deltas — same reason {@code UIResizer} snapshots size. */
@@ -452,11 +450,12 @@ public class Dialog extends UINode {
             // left open with nothing showing swallows every click on the window's own content. The
             // dialog stays PARENTED there (it is `display: none` while closed and re-shown from where
             // it already is); only its claim on the slot ends.
-            // Nothing to release: the dialog is parented by `overlayHost` rather than claiming a
-            // frame's slot, so closing it demotes it and the slot question belongs to whatever hosted
-            // it. When 6.6 lands WindowFrame, the sizing rule the paragraph above states becomes the
-            // FRAME's -- an owned surface that is `display: none` takes no box, which is the same
-            // guarantee arrived at from the other side.
+            //
+            // ANNOUNCED, NOT CALLED. The old engine released the slot from here, which a dialog on
+            // this engine cannot do: `WindowFrame` is `desktop` and this is `widget.overlay`, one
+            // layer below, so naming it is the upward reference LayeringTest refuses. `onClosed`
+            // below is what a frame connects to in `attachOwned` -- the dependency points one way
+            // and the release goes with it.
         }
 
         UIDocument window = document();

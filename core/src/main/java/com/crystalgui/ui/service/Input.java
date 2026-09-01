@@ -107,6 +107,17 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
     private @Nullable CursorSink cursors;
     private CgCursor lastCursor = CgCursor.DEFAULT;
 
+    /**
+     * Whether the default sink has been resolved, and to what.
+     *
+     * <p>Three states rather than two, because "no host installed one" and "there is no platform" are
+     * different: the first wants the default, the second wants silence. {@code UNRESOLVED} until the
+     * pointer first needs a cursor, so a tree nobody points at never asks.</p>
+     */
+    private DefaultSink defaultSink = DefaultSink.UNRESOLVED;
+
+    private enum DefaultSink { UNRESOLVED, PLATFORM, NONE }
+
     public Input(UIDocument document) {
         this.document = document;
     }
@@ -158,6 +169,13 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         return this;
     }
 
+    /**
+     * Intercepts the resolved cursor, instead of letting it reach the platform.
+     *
+     * <p>Optional: with no sink the cursor goes to {@code CgPlatform.cursor()}, which is where one
+     * comes from anyway. A host installs one to take it somewhere else — a test that asserts on the
+     * cursor, or a loader presenting it through its own screen.</p>
+     */
     public Input setCursorSink(@Nullable CursorSink cursors) {
         this.cursors = cursors;
         return this;
@@ -210,11 +228,28 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
      * cursor because the node under it changed.</p>
      */
     private void presentCursor(@Nullable UINode hovered) {
-        if (cursors == null) return;
         CgCursor resolved = resolveCursor(hovered);
         if (resolved == lastCursor) return;
         lastCursor = resolved;
-        cursors.present(resolved);
+        if (cursors != null) {
+            cursors.present(resolved);
+            return;
+        }
+        // NO SINK INSTALLED, so ask the platform -- which is where a cursor comes from by this
+        // project's own rule, not a boundary this is stepping over. Without it every resize handle
+        // on this engine showed the default arrow: the cursor was resolved correctly on every frame
+        // and pushed into a sink nobody had installed.
+        if (defaultSink == DefaultSink.NONE) return;
+        try {
+            CgPlatform.cursor().setCursor(resolved);
+            defaultSink = DefaultSink.PLATFORM;
+        } catch (RuntimeException noPlatform) {
+            // A DEDICATED SERVER REGISTERS NO PLATFORM and `CgPlatform.cursor()` throws rather than
+            // answering an absent-value, so this is the probe rather than a guard: asked once, and a
+            // tree with nothing behind it stops asking. Not logged -- a headless tree having no
+            // cursor is the normal case, not a fault.
+            defaultSink = DefaultSink.NONE;
+        }
     }
 
     /**
