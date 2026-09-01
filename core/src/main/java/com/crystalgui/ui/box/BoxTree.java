@@ -297,6 +297,7 @@ public final class BoxTree {
         Box topLayer = boxes.get(document.topLayerNodeIfPresent());
         if (topLayer != null) {
             topLayer.setStacksByInsertion(true);
+            topLayer.stackingOnly = true;
             // BOTH DIRECTIONS, and the withdrawal is the half that is easy to miss: this pass is the
             // only writer of a top-layer override, so it must also be the only eraser. Applying
             // promotions alone leaves a demoted box hosted where the LAST sync put it -- demote()
@@ -475,6 +476,20 @@ public final class BoxTree {
             box.appliedHosted = hosted;
             int zBefore = box.appliedStyle == null ? 0 : box.appliedStyle.get(StylePropertyRegistry.Z_INDEX);
             BoxStyle.apply(box.bridge, computed, hosted, box.mirrorRoot);
+            // AND ANY PIN IS GONE WITH IT. `BoxStyle.apply` writes width, height and the minimums and
+            // maximums straight from the source's computed style, so re-applying a style silently
+            // undoes `pinMirrorSize` -- which then early-outs, because the SOURCE's size has not
+            // changed and that is all it was comparing. The mirror was left clamped by
+            // `window { max-width: 100% }` against its thumbnail, exactly as it was before the pin
+            // existed.
+            //
+            // It presents as intermittent, which is the tell: the pin holds until the first restyle of
+            // that node -- a hover, a selection class, the reveal -- and a switcher tile gets one
+            // within a frame or two of opening. Reported as "it sizes fine for the first frame or two,
+            // then breaks", and measured as a mirror alternating between its source's size and its
+            // host's on otherwise identical inputs.
+            box.pinnedWidth = Float.NaN;
+            box.pinnedHeight = Float.NaN;
             box.appliedStyle = computed;
             taffy.markDirty(box.taffyId);
             transformsDirty = true;

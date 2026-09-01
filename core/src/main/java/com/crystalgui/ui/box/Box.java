@@ -101,6 +101,13 @@ public final class Box {
      */
     boolean mirrorRoot;
 
+    /**
+     * Whether this box exists only to STACK what it hosts, and is never itself hit.
+     *
+     * <p>The top layer, and nothing else so far. @see #hitTest(float, float, Predicate)</p>
+     */
+    boolean stackingOnly;
+
     /** The source size a mirror root was last pinned to. @see BoxTree#pinMirrorSize */
     float pinnedWidth = Float.NaN, pinnedHeight = Float.NaN;
 
@@ -522,6 +529,16 @@ public final class Box {
         // but when the reason is a MODAL, the one box the pointer may still reach is inside the box
         // that is blocked, and skipping wholesale would put the modal out of reach as well.
         // `hit-test` is the property that IS subtree-wide, and it is checked above.
+        // A STACKING CONTAINER IS NOT A SURFACE. The top layer spans the viewport so that a promoted
+        // element's percentages mean the screen, which makes it the largest box in the tree -- and a
+        // full-size box that can be the answer to a hit test is this codebase's most-repeated failure:
+        // it eats every click that lands on background, with nothing on screen to explain why.
+        //
+        // `hit-test: false` is not the alternative. It is subtree-wide by design and returns above
+        // WITHOUT recursing, so it would make every popup, menu and dialog in the top layer unhittable.
+        // The distinction wanted here is the one `skip` already draws a line under: not the answer,
+        // and no statement at all about what is inside.
+        if (stackingOnly) return null;
         return inside && !skip.test(this) ? this : null;
     }
 

@@ -492,6 +492,19 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
                     sourceBox.width(), mirror.width(), 0.5f);
             assertEquals("the mirror re-flowed to fit its host instead of picturing its source",
                     sourceBox.height(), mirror.height(), 0.5f);
+            // AND IT SURVIVES A RESTYLE, which is the half that made this intermittent. `BoxStyle.apply`
+            // rewrites width, height and the maximums from the source's computed style, so re-applying
+            // one silently undid the pin -- and the re-pin then early-outed, because the SOURCE's size
+            // had not changed and that was all it compared. The mirror was left clamped by
+            // `window { max-width: 100% }` against its own thumbnail. It held until the first restyle
+            // of that node, so a switcher tile looked right for a frame or two and then broke.
+            source.addClass("__restyled__");
+            frame();
+            assertEquals("a restyle lost the mirror's pinned width",
+                    sourceBox.width(), mirror.width(), 0.5f);
+            assertEquals("a restyle lost the mirror's pinned height",
+                    sourceBox.height(), mirror.height(), 0.5f);
+
             // AND ITS TRANSFORM PIVOTS ABOUT ITS OWN CORNER. `transform-origin` defaults to 50%, so
             // without this a mirror scaled about the SOURCE's centre: the picture came out the right
             // size and hung outside the panel holding it, over the taskbar. The old engine could not
@@ -540,6 +553,57 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
         // it is let go, so releasing before this assertion would close it before it could be seen.
         assertTrue("Mod+Tab did not open the switcher", desktop().switcher().isOpen());
         releaseModifiers();
+    }
+
+    /**
+     * A promoted element sizing itself as a fraction of the screen gets the screen.
+     *
+     * <p>The old engine's {@code TopLayer.reparentTaffyNodeToRoot} made a promoted element a child of
+     * the ROOT, which is where "a promoted element's containing block is the root" comes from and why
+     * {@code width: 100%} there meant the viewport. This engine hosts promoted boxes on a top-layer
+     * node instead, and that node had no size of its own — so it shrank to its content and every
+     * promoted element asking for a fraction of the screen got a fraction of ITSELF.</p>
+     *
+     * <p>The window switcher is the clearest case: a full-screen overlay that centres its panel with
+     * flexbox precisely so it never has to measure anything, collapsed onto its own content in the
+     * top-left corner.</p>
+     */
+    @Test
+    public void aPromotedElementsPercentagesAreOfTheScreen() {
+        UINode overlay = new UINode();
+        overlay.layout(l -> l.widthPercent(100f).heightPercent(100f));
+        desktop().append(overlay);
+        document.promote(overlay);
+        frame();
+        frame();
+
+        Box root = boxOf(document);
+        Box box = boxOf(overlay);
+        assertEquals("a promoted overlay is not the width of the screen", root.width(), box.width(), 0.5f);
+        assertEquals("a promoted overlay is not the height of the screen", root.height(), box.height(), 0.5f);
+    }
+
+    /**
+     * ...and the layer that makes that possible never answers a hit test itself.
+     *
+     * <p>Sizing the top layer to the viewport makes it the largest box in the tree, and a full-size box
+     * that can be the answer to a hit test is this codebase's most-repeated failure: it eats every
+     * click that lands on background with nothing on screen to explain why. {@code hit-test: false} is
+     * not the alternative — it is subtree-wide and returns without recursing, so it would make every
+     * popup, menu and dialog in the layer unhittable. A stacking container is simply never the answer.
+     */
+    @Test
+    public void theTopLayerIsNotItselfAHitTarget() {
+        WindowFrame frame = open("One");
+        document.topLayerNode();
+        frame();
+
+        Box box = frame.box();
+        assertNotNull(box);
+        UINode under = hit(box.worldX() + box.width() / 2f, box.worldY() + box.height() / 2f);
+        assertNotNull("nothing at all is under the pointer", under);
+        assertNotSame("the top layer swallowed a press meant for the window beneath it",
+                document.topLayerNode(), under);
     }
 
     /** Whether {@code node} is the dialog, inside it, or the backdrop it owns. */
