@@ -10,6 +10,7 @@ import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.desktop.window.WindowIcon;
 import com.crystalgui.desktop.window.WindowRegistry;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.dom.UIDocument;
@@ -89,6 +90,15 @@ public class Taskbar extends UINode {
      * An internal child of the entry, built in its constructor, so it exists before the entry is attached.
      */
     public static final String INDICATOR_CLASS = "__indicator__";
+
+    /**
+     * The indicator's part name — what a sheet addresses it by.
+     *
+     * <p>It lives in the Button's shadow tree, so a descendant selector from {@code taskbar} reaches
+     * nothing: {@code taskbar .__entry__::part(indicator)} is the spelling, and the class beside it
+     * is kept only so the two engines' sheets can share a name while both run.</p>
+     */
+    public static final String INDICATOR_PART = "indicator";
     /**
      * The hairline along the bar's top edge. An ELEMENT rather than a border, because a one-sided
      * {@code border-width-top} draws nothing here and the left-hand spelling draws all four edges — the
@@ -567,8 +577,14 @@ public class Taskbar extends UINode {
             // and needs no auto-margin support from Taffy.
             UINode indicator = new UINode();
             indicator.addClass(INDICATOR_CLASS);
+            indicator.set(Attribute.PART, INDICATOR_PART);
             indicator.setHitTest(false);
-            append(indicator);
+            // THE SHADOW TREE, NOT `append`. A Button's shadow root ends in a UISlot, so a light child
+            // lands IN the slot -- in the flow after the label, with the slot as its containing block,
+            // which put `left: 50%; bottom: 0` just past the label at the label's baseline instead of
+            // centred under the entry. The old engine spelled this `addInternalChild` (a Button
+            // refused public children) and the codemod rewrote it to `append`.
+            shadow().append(indicator);
         }
 
         @Override

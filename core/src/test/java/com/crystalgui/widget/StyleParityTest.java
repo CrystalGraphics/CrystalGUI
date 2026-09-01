@@ -329,7 +329,19 @@ public class StyleParityTest extends UiDocumentTestBase {
             Map.entry("shown", "a state class on the find bar, which the fixture does not open"),
             // 6.7'S APPLICATION, styled through `texteditor` because CrystalEditor puts these on one.
             Map.entry("file-editor", "CrystalEditor marks its editors with this -- 6.7"),
-            Map.entry("shader-source", "the shader graph's source view, likewise -- 6.7"));
+            Map.entry("shader-source", "the shader graph's source view, likewise -- 6.7"),
+            // THE ICON PALETTE IS MUTUALLY EXCLUSIVE -- a tile wears exactly one of these, chosen from
+            // the window's identity, so a fixture can only ever carry one however many windows it
+            // opens the same way. `tile-mono` is deliberately NOT here and must stay reachable: it is
+            // what an iconless window gets, which is every window the fixture opens, so it is the one
+            // entry that proves the whole palette is wired rather than merely written.
+            Map.entry("tile-1", "one of seven mutually exclusive palette classes; see tile-mono"),
+            Map.entry("tile-2", "one of seven mutually exclusive palette classes; see tile-mono"),
+            Map.entry("tile-3", "one of seven mutually exclusive palette classes; see tile-mono"),
+            Map.entry("tile-4", "one of seven mutually exclusive palette classes; see tile-mono"),
+            Map.entry("tile-5", "one of seven mutually exclusive palette classes; see tile-mono"),
+            Map.entry("tile-6", "one of seven mutually exclusive palette classes; see tile-mono"),
+            Map.entry("branded", "WindowIcon sets this from the SVG -- artwork naming its own colours"));
 
     /**
      * <b>The check.</b> For each widget: every {@code __x__} a sheet selects under its tag is a class
