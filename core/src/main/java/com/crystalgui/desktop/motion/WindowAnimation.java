@@ -218,7 +218,23 @@ public final class WindowAnimation implements WindowMotion {
             // So it HOLDS at its start value (already written in the constructor, so there is nothing to
             // flash) until it sees one ordinary gap, then plays in full. Bounded, or a permanently slow
             // host would hold forever and never animate at all.
-            if (delta == 0L || (delta > STALL_NANOS && stalledTicks++ < MAX_STALLED_TICKS)) return true;
+            if (delta == 0L || (delta > STALL_NANOS && stalledTicks++ < MAX_STALLED_TICKS)) {
+                // RE-ASSERTED, not assumed. The line above used to return without writing, on the
+                // stated grounds that the start value was "already written in the constructor, so
+                // there is nothing to flash" -- true whenever the target has a box at that moment,
+                // and a RESTORE is exactly when it does not: `show()` reattaches the frame and starts
+                // the animation from an input handler, which is dispatched after layout, so the
+                // constructor's write hit a null box and `write()` dropped it silently. The next
+                // frame the box existed, this tick held without writing, and the window painted one
+                // frame at full size and full opacity before the animation began -- measured, on the
+                // frame after the box appears: `transform=none opacity=1.0`, then the real first
+                // value on the frame after that.
+                //
+                // Re-asserting costs one comparison per held tick, and there is at most one hold in
+                // an ordinary gesture.
+                write(from, fromOpacity);
+                return true;
+            }
             clockStarted = true;
             virtualNow = real;
             transform = new ActiveTransition<>(
@@ -261,8 +277,26 @@ public final class WindowAnimation implements WindowMotion {
 
     private void finish() {
         over = true;
-        clearSlots();
+        // THE CONTINUATION FIRST, AND THE WITHDRAWAL ONLY IF THE WINDOW IS STILL ON SCREEN.
+        //
+        // A minimise's continuation is the hide, and hiding is DETACHING -- which does not reach the
+        // box tree until the next sync. Clearing first therefore revealed exactly one frame of the
+        // window at its RESTING position, full size and full opacity, immediately after it had
+        // visibly flown into the taskbar and faded out. Measured: the last animated frame is
+        // `scale(0.34, 0.13) opacity=0.00002`, and the next is `state=HIDDEN box=yes transform=none
+        // opacity=1.0` -- a box that still exists, with nothing overriding it, so it paints.
+        //
+        // Reported as the window "flickering back to its main position" at the end of the gesture,
+        // which is what it is: not a jump in the animation, whose values converge to within a tenth
+        // of a pixel, but one frame of the thing the animation was hiding.
+        //
+        // Withdrawing is still right for an animation that LEAVES its window on screen -- a restore,
+        // a maximise -- because the resting state is the stylesheet's and writing our own copy of it
+        // is how the cascade-driven version came to have an INLINE identity transform outranking the
+        // class meant to start the next gesture. A detached window needs none of that: its box is
+        // destroyed and the overrides go with it.
         if (onDone != null) onDone.run();
+        if (target.isConnected()) clearSlots();
     }
 
     /**
