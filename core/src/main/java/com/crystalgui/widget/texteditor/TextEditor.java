@@ -5657,10 +5657,21 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         // bars are showing, so that question has to be answered once and held for the rest of the pass.
         // Answering it live is what made a parent-derived height loop forever.
         measureScrollbars();
-        // ScrollerView registers its ticker only when a scroll begins, so an editor that has never been
-        // scrolled would never tick — and the caret would never blink. Registration is a HashSet insert,
-        // so repeating it is free and there is deliberately no unregister in the SPI.
-        document().animation().every(this, this::tickFrame);
+        // NO RE-REGISTRATION HERE, and the comment this replaces is why it took a profiler to find.
+        //
+        // It read: "ScrollerView registers its ticker only when a scroll begins, so an editor that has
+        // never been scrolled would never tick -- and the caret would never blink. Registration is a
+        // HashSet insert, so repeating it is FREE and there is deliberately no unregister in the SPI."
+        // Every word was true of the old engine's `registerTicker`, which was HashSet-backed and
+        // idempotent. `Animation.every` is `hooks.add(...)` on a LIST, so it is not free at all: this
+        // line ran from `tickFrame`, which is itself a hook, so every hook registered another hook
+        // every frame and the count DOUBLED -- 15, 25, 106, 391, 775, 1543, 3079, 6151, 12295, 24583,
+        // 98311 -- until a frame took 3.6 seconds. Measured in `cgui-desktop`: 21 frames in 30
+        // seconds with the editor open, 1024 without it.
+        //
+        // What the old comment was protecting against is covered by `connected()`, which registers
+        // both standing hooks for the editor's whole life in the tree; it did not exist when this line
+        // was written. The justification survived the port and the mechanism it justified did not.
         float height = lineHeight();
         // Before ANY geometry is read: every position below goes through textOriginX, which needs these.
         refreshGutterMetrics();
