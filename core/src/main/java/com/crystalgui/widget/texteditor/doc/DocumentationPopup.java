@@ -920,7 +920,7 @@ public final class DocumentationPopup extends Popover {
     /**
      * Starts dragging the box, from a source that <b>does not move with it</b>.
      *
-     * <p>{@code UIDragController} reports its delta through {@link UINode#screenToLocal}, so the frame
+     * <p>{@code UIDragController} reports its delta through {@link UINode#toLocal}, so the frame
      * the delta is measured in is the drag <em>source</em>'s. Naming this popup as its own source would
      * therefore measure each frame's movement in a frame that has already moved by it, which is the trap
      * already recorded for a canvas pan: "a pan drag's source is the viewport, never the transformed

@@ -282,7 +282,7 @@ public class WindowFrame extends UINode implements Disposable, Resizable, DataPr
     /** This window's last frame, for previewing it once it is minimised. @see WindowSnapshot */
     private final WindowSnapshot snapshot = new WindowSnapshot();
 
-    /** Set by a minimise, cleared by the paint that acts on it. @see #paintOverlay */
+    /** Set by a minimise, cleared by the paint that acts on it. @see #paintDecoration */
     private boolean snapshotPending;
 
     /** Photograph this window on its next paint. @see WindowSnapshot */

@@ -231,7 +231,7 @@ public class StatusBarView extends UINode {
      *
      * <p><b>The window hook, not {@code onLayoutChanged}.</b> This was written against layout, which fires
      * on every pass and therefore had to guard itself with "have I already subscribed?" — a poll wearing a
-     * callback, and the exact workaround {@link #onWindowChanged} was added to retire. Disconnecting
+     * callback, and the exact workaround {@link #connected} was added to retire. Disconnecting
      * unconditionally also covers a move <em>between</em> windows, where both arguments are non-null and
      * the "am I attached?" question answers yes on the way in and out.</p>
      */

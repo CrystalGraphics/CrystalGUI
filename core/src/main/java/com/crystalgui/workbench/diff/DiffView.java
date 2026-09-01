@@ -112,7 +112,7 @@ public final class DiffView extends UINode  {
         recompute();
     }
 
-    /** @see MergeView#onLayoutChanged */
+    /** @see MergeView#connected */
     @Override
     protected void connected() {
         super.connected();

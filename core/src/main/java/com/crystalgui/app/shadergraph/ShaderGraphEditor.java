@@ -94,7 +94,7 @@ import javax.annotation.Nullable;
  *
  * <p>{@link ShaderGraphPreviews#attach()} registers a frame ticker, so it needs a window — and at
  * construction there is none. The scene that owned this had two booleans and a per-frame check to manage
- * that. Doing it from {@link #onLayoutChanged()} makes it the widget's own business, the same way
+ * that. Doing it from {@link #connected()} makes it the widget's own business, the same way
  * {@code ListView} starts its ticker: by the time layout has run, the element is attached by definition.</p>
  */
 public class ShaderGraphEditor extends UINode implements FileDocument, Disposable.Gl, DataProvider {
@@ -1110,7 +1110,7 @@ public class ShaderGraphEditor extends UINode implements FileDocument, Disposabl
      * wire is colourless. A requirement that every consumer has to remember is a requirement that gets
      * forgotten, and it was: the dock scene shipped without it and looked broken.</p>
      *
-     * <p>From the ticker rather than {@link #onLayoutChanged()}, because adding a sheet invalidates style
+     * <p>From the ticker rather than {@link #connected()}, because adding a sheet invalidates style
      * matching and doing that inside the layout pass is how this widget hung the window once already. The
      * cost is that the first frame or two are unthemed, which is invisible.</p>
      *

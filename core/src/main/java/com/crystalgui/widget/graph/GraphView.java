@@ -574,7 +574,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
 
     /**
      * Draws the stub joining {@code port}'s floating default editor to its own dot — called from
-     * {@link GraphNode#paintOverlay}, never invoked directly by anything on the plane. See
+     * {@link GraphNode#paintDecoration}, never invoked directly by anything on the plane. See
      * {@link PortDefaultEditor#paintStub} for why the paint call has to originate from the TARGET node
      * itself: {@code paintOverlay} is the only hook that runs after a node's own children and before its
      * own outline, which is what makes "over the body, under the ring" possible at all — no sibling

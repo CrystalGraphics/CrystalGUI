@@ -138,7 +138,7 @@ public class Inspector extends UINode  {
         pending = true;
     }
 
-    /** Everything this inspector subscribed to that outlives it. @see #onWindowChanged */
+    /** Everything this inspector subscribed to that outlives it. @see #connected */
     private final ConnectionGroup subscriptions = new ConnectionGroup();
 
     /**
