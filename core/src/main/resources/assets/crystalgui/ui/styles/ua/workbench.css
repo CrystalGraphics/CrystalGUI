@@ -323,6 +323,7 @@ workbench .__activity-bar__ .__stripe-separator__ {
 }
 
 /* The count over a rail icon. */
+.__activity-bar__ .__activity-item__::part(badge),
 .__activity-bar__ .__badge__ {
     font-size: 9px;
     color: var(--activitybar-badge-fg, #FFFFFF);
@@ -342,6 +343,7 @@ workbench .__activity-bar__ .__stripe-separator__ {
  * was describing the symptom. Two identical drawings is what a one-colour icon's light/dark pair always
  * is: the twin exists only to restate a colour, which is what `color` says. The drawing is currentColor
  * now and the pair is gone. */
+.__activity-bar__ .__activity-item__::part(badge).__dot__,
 .__activity-bar__ .__badge__.__dot__ {
     position: absolute;
     right: -0px;
@@ -367,6 +369,7 @@ workbench .__activity-bar__ .__stripe-separator__ {
  * the rail: styling the running state there would turn the Problems count green too. The class arrives
  * through `ViewContainerRegistry.setBadge(id, text, styleClass)` and the rail SWAPS it, so a badge that
  * changes kind does not end up wearing both. */
+.__activity-bar__ .__activity-item__::part(badge).__dot__.__running__,
 .__activity-bar__ .__badge__.__dot__.__running__ {
     color: var(--run-live-fg, #5FAD65);
 }
@@ -1473,6 +1476,11 @@ workbench .__activity-item__ {
     border-radius: 2px;
 }
 
+/* AND THE PART TWIN, without which this reaches nothing: an activity item is a Button and its icon is
+ * the button's `pre-icon` part, inside the button's shadow tree. The rail drew its buttons at the right
+ * size with no icons in them at all. Same shape as the taskbar entry's tile, which is the other consumer
+ * of `setPreIcon` an outer rule was trying to size. */
+workbench .__activity-item__::part(pre-icon),
 workbench .__activity-item__ .__pre-icon__ {
     /* 1:1 WITH THE ARTWORK, and this one is not a taste decision.
      *
@@ -1852,8 +1860,14 @@ crystaleditor > .__editor-content__ {
  * The 24px moved to PADDING because an auto margin contributes nothing to min-content: as a margin it
  * stopped reserving the gap while the menu was being measured, so the widest row -- the one with no free
  * space left to push with -- would have had its label touching its shortcut. */
+/* THE TWIN NAMES THE PART THAT EXISTS. A MenuItem is a Button and hands its accelerator to
+ * `setPostIcon`, so the node lives in the BUTTON's shadow tree as its `post-icon` part -- the class is
+ * still on it, but no outer descendant selector can reach across a shadow boundary to see it. The
+ * twin generated at the port took the part's name from the CLASS (`__accelerator__` -> `accelerator`),
+ * which is a part nothing exposes, so both halves of this rule addressed nothing and every accelerator
+ * drew as plain text jammed against its label with no gap and no alignment. */
 menuitem .__accelerator__,
-menuitem::part(accelerator) {
+menuitem::part(post-icon) {
     color: var(--menu-accelerator, #8A8A8A);
     margin-left: auto;
     padding-left: 24px;

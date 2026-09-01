@@ -330,8 +330,13 @@ menu::part(separator) {
  * same size as each other for free.
  *
  * Not on `menu text`, which would also catch anything a caller puts in a row. */
+/* AND THE ACCELERATOR, which is a `text` too and is NOT reached by `menuitem text`: it is handed to
+ * `setPostIcon`, so it sits in the Button's shadow tree where a descendant selector cannot go. Without
+ * this the label shrank to 8 and the shortcut beside it stayed at the universal 10 -- the one pair in
+ * the row that the comment above says stays the same size as each other for free. */
 menuitem text,
-menuitem::part(label) {
+menuitem::part(label),
+menuitem::part(post-icon) {
     font-size: 8;
 }
 
@@ -416,8 +421,12 @@ menuitem:focus {
  * space is left. */
 /* Dimmer than the label — it is an affordance, not content. Colour is inheritable, so this only needs to
  * override, not restate. */
+/* THE TWIN NAMES THE PART THAT EXISTS, and scopes itself by the HOST's class. The arrow is handed to
+ * `setPostIcon`, so it is the Button's `post-icon` part -- the same slot an accelerator uses, which is
+ * why this cannot be a bare `menuitem::part(post-icon)`: that would put a chevron overlay on every row
+ * with a shortcut. A row has one or the other, and `__has-submenu__` is which. */
 menuitem .__submenu-arrow__,
-menuitem::part(submenu-arrow) {
+menuitem.__has-submenu__::part(post-icon) {
     margin-left: auto;
     width: 8px;
     height: 8px;
@@ -455,7 +464,10 @@ menuitem:disabled {
  * it zero width here (rather than leaving the check up to `dropdown .__menu__` alone) means an ordinary
  * menu's rows stay exactly as wide as their label, with no dead gutter reserved for a checkmark that
  * item can never show. */
+/* THE MARK IS THE PRE-ICON, which is the part name that exists -- `::part(mark)` was generated from the
+ * CLASS and names nothing. @see the accelerator, which had the same slip. */
 menuitem .__mark__,
+menuitem::part(pre-icon),
 menuitem::part(mark) {
     width: 0;
     margin-right: 0;
@@ -466,6 +478,7 @@ menuitem::part(mark) {
  * gutter is reserved for ALL of them, checked or not. Without a shared gutter the checked row's label
  * would sit one glyph to the right of every other row's, which reads as misaligned text rather than as
  * "this one has a mark". `:checked` only ever changes the overlay, never the box. */
+dropdown .__menu__ menuitem::part(pre-icon),
 dropdown .__menu__ menuitem .__mark__,
 dropdown .__menu__ menuitem::part(mark) {
     width: 12px;
@@ -479,6 +492,7 @@ dropdown .__menu__ menuitem::part(mark) {
     margin-right: 1px;
     color: var(--menu-mark, #DDDDDD);
 }
+dropdown .__menu__ menuitem:checked::part(pre-icon),
 dropdown .__menu__ menuitem:checked .__mark__,
 dropdown .__menu__ menuitem:checked::part(mark) {
     overlay: shape("checkmark");
@@ -495,7 +509,11 @@ dropdown .__menu__ menuitem:checked::part(mark) {
  *
  * The gutter is reserved whether or not a row is currently checked, so ticking one does not shift its
  * label sideways. */
+/* THE GUTTER, and it is what a menu's left inset actually IS. With the part unreachable every row's
+ * mark measured zero, so labels sat flush against the row's own 6px padding instead of a glyph's width
+ * further in -- which reads as the menu having lost its padding rather than its gutter. */
 menu.__has-checkable__ menuitem .__mark__,
+menu.__has-checkable__ menuitem::part(pre-icon),
 menu.__has-checkable__ menuitem::part(mark) {
     width: 12px;
     height: 12px;
@@ -507,6 +525,7 @@ menu.__has-checkable__ menuitem::part(mark) {
 }
 /* The mark itself is still the ITEM's business: only a checkable row ever shows one, even though every
  * row in the menu reserves the space for it. */
+menu.__has-checkable__ menuitem.__checkable__:checked::part(pre-icon),
 menu.__has-checkable__ menuitem.__checkable__:checked .__mark__,
 menu.__has-checkable__ menuitem.__checkable__:checked::part(mark) {
     overlay: shape("checkmark");

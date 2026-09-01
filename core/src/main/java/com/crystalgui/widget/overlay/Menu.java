@@ -74,6 +74,9 @@ public class Menu extends Popover {
     /** A grouping rule between items. @see #addSeparator() */
     public static final String SEPARATOR_PART = "separator";
 
+    /** The same rule's other half, for the light tree this actually lives in. @see #addSeparator */
+    public static final String SEPARATOR_CLASS = "__separator__";
+
     /**
      * On a menu that contains at least one checkable row, so <b>every</b> row reserves the mark gutter.
      *
@@ -225,6 +228,12 @@ public class Menu extends Popover {
      */
     public UINode addSeparator() {
         UINode separator = new UINode();
+        // THE CLASS AS WELL AS THE PART, because this is a LIGHT child: `append` puts it in the menu's
+        // SLOT, and a `part` attribute names something only inside a shadow root. So `menu::part(separator)`
+        // reached nothing, `menu .__separator__` had no class to match, and every separator in every menu
+        // was an unstyled zero-height node -- present, correct, and invisible. The menus ran together as
+        // one undifferentiated list, which reads as the builder never having emitted them.
+        separator.addClass(SEPARATOR_CLASS);
         separator.set(Attribute.PART, SEPARATOR_PART);
         separator.setHitTest(false);
         append(separator);

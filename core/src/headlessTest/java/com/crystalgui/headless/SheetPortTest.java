@@ -134,6 +134,15 @@ public class SheetPortTest {
     public void noRuleTargetsAShadowPartByItsClass() throws IOException {
         // Host -> the part names it exposes. Mirrors tools/port/twins.py; a widget ported without
         // adding itself to both is a widget whose rules quietly stop matching.
+        //
+        // A CLASS IS NOT ALWAYS THE PART NAME, and reading it as one is how four twins shipped
+        // addressing parts that do not exist. A MenuItem is a Button: its mark goes to `setPreIcon` and
+        // its accelerator and submenu arrow to `setPostIcon`, so the nodes wear `__mark__`,
+        // `__accelerator__` and `__submenu-arrow__` and live in the `pre-icon` and `post-icon` parts.
+        // The generated twins took the part name from the class, so `menuitem::part(accelerator)` and
+        // `menuitem::part(mark)` named nothing -- they parsed, matched nothing, and read as correctly
+        // ported rules. On screen: accelerators at the wrong size jammed against their labels, no
+        // submenu chevron, and no left gutter. @see PART_OF for the pairs that differ.
         var hosts = new java.util.LinkedHashMap<String, Set<String>>();
         hosts.put("switch", Set.of("spacer", "knob"));
         hosts.put("slider", Set.of("fill", "thumb", "spacer"));
@@ -143,6 +152,14 @@ public class SheetPortTest {
         hosts.put("tooltip", Set.of("label"));
         hosts.put("menu", Set.of("items", "separator"));
         hosts.put("menuitem", Set.of("mark", "checkable", "accelerator", "submenu-arrow"));
+        // The classes whose part is NOT their own name. Everything absent from this map twins onto a
+        // part called the same thing, which is the ordinary case.
+        // KEYED BY HOST, because the same class is a different part on different widgets: a Checkbox
+        // really does expose a part called `mark`, while a MenuItem's mark is a Button's `pre-icon`.
+        var partOf = java.util.Map.of(
+                "menuitem/mark", "pre-icon",
+                "menuitem/accelerator", "post-icon",
+                "menuitem/submenu-arrow", "post-icon");
         hosts.put("dropdown", Set.of("chevron", "menu"));
         hosts.put("searchfield", Set.of("icon", "field", "clear", "options"));
         hosts.put("checkbox", Set.of("mark", "label"));
@@ -162,10 +179,13 @@ public class SheetPortTest {
                 if (exposed == null || !exposed.contains(part)) continue;
                 // THE ORIGINAL STAYS -- it is what the OLD engine reads, and both ship until 6.9.
                 // What must not be missing is its TWIN, beside it in the same rule.
-                String twin = String.join(" ",
-                        java.util.Arrays.copyOf(compounds, compounds.length - 1))
-                        + "::part(" + part + ")";
-                if (rule.stream().noneMatch(other -> other.trim().startsWith(twin))) {
+                // MATCHED ON THE PART, not on the whole selector. A twin is allowed to be MORE specific
+                // than the rule it stands in for: the submenu arrow and the accelerator are the same
+                // `post-icon` slot, so the arrow's twin has to carry `.__has-submenu__` or every row
+                // with a shortcut would get a chevron overlay. Demanding a character-for-character
+                // prefix would forbid the one thing that makes those two expressible at all.
+                String twinPart = "::part(" + partOf.getOrDefault(host + "/" + part, part) + ")";
+                if (rule.stream().noneMatch(other -> other.contains(twinPart))) {
                     unreachable.add(sel);
                 }
             }
