@@ -340,9 +340,27 @@ public class Dialog extends UINode {
         // children, which is the document while there is no desktop and is the WindowFrame the moment
         // 6.6 lands one. So this class needs no forward reference to a batch that depends on it, and
         // the owner/owned behaviour arrives with the frame rather than with an edit here.
-        window.addOverlay(ensureBackdrop(), this);
-        window.promote(ensureBackdrop());
-        window.promote(this);
+        // PROMOTED ONLY IF NOTHING OWNS IT. The paragraph above is right that the owner/owned
+        // behaviour belongs to the frame, and the two `promote` calls under it contradicted it: the top
+        // layer is the DOCUMENT's, so an owned modal was hauled out of its window and laid out against
+        // the whole screen. That is the standing rule stated backwards -- "a window's modal is OWNED by
+        // it, never promoted to the global top layer", because the top layer paints after the entire
+        // main tree, so a dialog promoted from one window floats above whichever window is raised next.
+        //
+        // An owned dialog needs none of it: it is already an out-of-flow child of its frame, which puts
+        // it above that frame's content and nowhere else. What it gains by staying there is the frame as
+        // its containing block -- so it centres and clamps against the window it belongs to rather than
+        // against the screen, which is what "owned" is supposed to mean.
+        if (!owned) {
+            window.addOverlay(ensureBackdrop(), this);
+            window.promote(ensureBackdrop());
+            window.promote(this);
+        } else if (backdrop == null) {
+            // THE BACKDROP GOES BESIDE THE DIALOG, not inside it: the sheet sizes it to 100% of its
+            // containing block, and inside the dialog that is the dialog.
+            UINode host = parent();
+            if (host != null) host.append(ensureBackdrop());
+        }
         window.focus().pushModal(this);
         // Modality and Escape are separate registrations because they are separate concerns: a popover has
         // a close watcher without being modal, and a MANUAL popover is neither. Escape asks the topmost
@@ -495,8 +513,43 @@ public class Dialog extends UINode {
 
     /** Places the dialog against its containing block, clamped so it cannot be put out of reach. */
     public Dialog moveTo(float left, float top) {
+        placed = true;
         applyPosition(left, top);
         return this;
+    }
+
+    /**
+     * Whether anything has said where this dialog goes.
+     *
+     * <p>Until something does it centres itself, which is what every toolkit does with a dialog nobody
+     * placed and what this engine's own windows do ({@code Desktop.placeByCascade}). The alternative is
+     * the {@code left}/{@code top} initial of zero, which puts it in the corner of its containing block
+     * -- indistinguishable on screen from a dialog whose placement was never run at all, which is the
+     * failure the compositor already records for an unplaced window.</p>
+     */
+    private boolean placed;
+
+    /**
+     * Centres an unplaced dialog, once there is something to measure.
+     *
+     * <p><b>Not at {@code show()}</b>: a dialog that has just been displayed has never been laid out,
+     * so both its own size and its containing block's are unknown -- the "measures zero on the same
+     * frame" trap. Centring against zeroes is centring at the origin, which is exactly the corner this
+     * exists to avoid, and it would then be {@code placed} and never corrected.</p>
+     */
+    private void centreIfUnplaced() {
+        if (placed) return;
+        Box self = box();
+        Box container = self == null ? null : self.host();
+        if (container == null) return;
+        // A ZERO-SIZED BOX IS NOT A MEASURED ONE. Both are legal answers from a laid-out tree, and
+        // waiting costs a frame in which the dialog is at the corner; centring on them costs the
+        // placement for good.
+        if (self.width() <= 0f || self.height() <= 0f) return;
+        if (container.width() <= 0f || container.height() <= 0f) return;
+        placed = true;
+        applyPosition((container.width() - self.width()) * 0.5f,
+                (container.height() - self.height()) * 0.5f);
     }
 
     /**
@@ -557,13 +610,16 @@ public class Dialog extends UINode {
      * so an author's {@code !important} still wins.</p>
      */
     private void applyPosition(float left, float top) {
-        // The CONTAINING BLOCK of a promoted node is whatever HOSTS it, not its node parent --
-        // the two diverge exactly here, which is the standing rule about promotion. Today that is the
-        // document; at 6.6 it is the WindowFrame, and this reads it rather than naming either.
-        UINode container = document();
-        float maxLeft = Float.MAX_VALUE, maxTop = Float.MAX_VALUE;
-        Box containerBox = container == null ? null : container.box();
+        // THE CONTAINING BLOCK IS THE BOX'S HOST, and asking the box is what makes that true for both
+        // cases at once: a dialog promoted to the top layer is hosted by the document, and one owned by
+        // a window is an out-of-flow child of the frame and hosted by it. The two diverge exactly here
+        // -- the standing rule that a promoted node's containing block is not its node parent -- and
+        // neither is named. This used to read `document()` with a note that at 6.6 it would become the
+        // WindowFrame; 6.6 landed and the note stayed, so every owned modal was clamped, and centred,
+        // against the whole screen rather than against the window it belongs to.
         Box self = box();
+        Box containerBox = self == null ? null : self.host();
+        float maxLeft = Float.MAX_VALUE, maxTop = Float.MAX_VALUE;
         // UNCLAMPED until both have been laid out, rather than clamped to zero: a dialog positioned
         // before its first layout would otherwise be pinned to the corner and stay there, which is
         // the shape the standing row warns about -- "zero-sized" and "never laid out" are different
@@ -606,14 +662,37 @@ public class Dialog extends UINode {
         UIDocument window = document();
         if (window == null) return;
         clampTickerRunning = true;
-        window.animation().every(this, delta -> {
+        // AFTER LAYOUT, because every question this hook asks is about a MEASURED box: the clamp needs
+        // the containing block's size and this dialog's own, and the centring needs both to exist at
+        // all. Run BEFORE layout it reads the previous frame's answer -- which on the frame a dialog is
+        // first shown is no answer at all, since a box that was `display: none` is not a box. That is
+        // the whole of why an owned modal appeared in its window's corner for one frame before
+        // centring; `UIDocument.settleAfterLayout` is what carries what this writes into the same
+        // frame's picture rather than the next one's.
+        window.animation().afterLayout(this, delta -> {
             if (!open) {
                 clampTickerRunning = false;
                 return false;
             }
+            centreIfUnplaced();
             applyPosition(posLeft, posTop);
             return true;
         });
+    }
+
+    /**
+     * Whether a host has taken responsibility for placing this dialog — set by {@code attachOwned}.
+     *
+     * <p>The one thing a dialog cannot work out for itself. Being parented somewhere is not the same
+     * as being OWNED there: every overlay is parented somewhere. What the flag records is that whoever
+     * did it intends to host the dialog, which is exactly what promotion would undo.</p>
+     */
+    private boolean owned;
+
+    /** Declared by whatever hosts this dialog, so {@code showModal} leaves it where it was put. */
+    public Dialog setOwned(boolean owned) {
+        this.owned = owned;
+        return this;
     }
 
     private boolean clampTickerRunning;
