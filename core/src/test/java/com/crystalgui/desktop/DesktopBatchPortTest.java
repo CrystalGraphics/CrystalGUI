@@ -445,6 +445,67 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
                 blocked, desktop().activeWindow());
     }
 
+    /**
+     * A mirror is laid out at its host's origin, not at the position its source sits on the desktop.
+     *
+     * <p>A mirror shares the source's NODE and therefore its computed style, and a window's style
+     * carries the {@code left}/{@code top} that place it on the desktop. Applied to the copy those
+     * become an offset inside the thumbnail, so a taskbar preview drew its picture at the window's own
+     * desktop position scaled down — a window near the left edge came out slightly off-centre, and one
+     * near the right was drawn outside the preview panel entirely, over the taskbar.</p>
+     *
+     * <p>The old engine cancelled it explicitly: its thumbnail's pose ended
+     * {@code translate(-src.getX(), -src.getY())}, commented "put the window's own origin at zero".
+     * That line had no counterpart in the port — the two before it became the caller's transform and
+     * were carried over, and the one that cancels the origin was the one with nowhere to go.</p>
+     *
+     * <p><b>The window has to be somewhere other than the origin</b> or the test passes against no fix
+     * at all, which is why it is moved before it is mirrored.</p>
+     */
+    @Test
+    public void aMirrorIsLaidOutAtItsHostOriginAndNotItsSources() {
+        WindowFrame source = open("Source");
+        source.moveTo(120, 90).resizeTo(200, 150);
+        UINode host = new UINode();
+        host.layout(l -> l.width(80f).height(60f));
+        desktop().append(host);
+        frame();
+        frame();
+
+        Box sourceBox = boxOf(source);
+        assertTrue("the fixture did not move the window off the origin",
+                sourceBox.x() > 1f && sourceBox.y() > 1f);
+
+        Box mirror = document.boxes().mirror(source, boxOf(host));
+        try {
+            frame();
+            assertEquals("the mirror took its source's left inset", 0f, mirror.x(), 0.01f);
+            assertEquals("the mirror took its source's top inset", 0f, mirror.y(), 0.01f);
+            // AND IT IS THE SOURCE'S SIZE, not something the host squeezed it into. A mirror shares the
+            // source's computed style, and `window { max-width: 100% }` in the shipped sheet resolves
+            // against the HOST -- so against an 80px thumbnail a 200px window laid out at its own
+            // min-content instead, and the preview showed a narrower window with its text re-wrapped
+            // and its content cut off. The picture was drawn perfectly, at a size nobody wanted.
+            assertEquals("the mirror re-flowed to fit its host instead of picturing its source",
+                    sourceBox.width(), mirror.width(), 0.5f);
+            assertEquals("the mirror re-flowed to fit its host instead of picturing its source",
+                    sourceBox.height(), mirror.height(), 0.5f);
+            // AND ITS TRANSFORM PIVOTS ABOUT ITS OWN CORNER. `transform-origin` defaults to 50%, so
+            // without this a mirror scaled about the SOURCE's centre: the picture came out the right
+            // size and hung outside the panel holding it, over the taskbar. The old engine could not
+            // get this wrong -- it composed `translate(left, top); scale(s, s)` into a pose by hand,
+            // and a pose scales about its origin.
+            mirror.setTransform(UITransform.of(UITransform.Op.scale(0.5f, 0.5f)));
+            frame();
+            assertEquals("a mirror pivots about its source's centre, not its own corner",
+                    boxOf(host).worldX(), mirror.worldX(), 0.01f);
+            assertEquals("a mirror pivots about its source's centre, not its own corner",
+                    boxOf(host).worldY(), mirror.worldY(), 0.01f);
+        } finally {
+            document.boxes().unmirror(mirror);
+        }
+    }
+
     /** Whether {@code node} is the dialog, inside it, or the backdrop it owns. */
     private static boolean partOf(UINode node, Dialog dialog) {
         if (node.hasClass(Dialog.BACKDROP_CLASS)) return true;

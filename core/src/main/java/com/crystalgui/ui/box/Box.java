@@ -92,6 +92,18 @@ public final class Box {
     }
 
     /** A second box for a node that already has one — a thumbnail's copy. Never the node's own. */
+    /**
+     * Whether this is the ROOT of a mirror, as opposed to a box inside one.
+     *
+     * <p>The distinction is only about INSETS: a mirror root is placed by its owner's transform and
+     * must not take the {@code left}/{@code top} its source node carries, while everything under it
+     * lays out exactly as the original does. @see BoxStyle#apply(TaffyBridge, ComputedStyle, boolean, boolean)
+     */
+    boolean mirrorRoot;
+
+    /** The source size a mirror root was last pinned to. @see BoxTree#pinMirrorSize */
+    float pinnedWidth = Float.NaN, pinnedHeight = Float.NaN;
+
     public boolean isMirror() {
         return mirror;
     }

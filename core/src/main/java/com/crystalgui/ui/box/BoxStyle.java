@@ -74,6 +74,14 @@ public final class BoxStyle {
      * is the box tree's fact rather than a style a widget has to remember.</p>
      */
     public static void apply(TaffyBridge bridge, ComputedStyle c, boolean hosted) {
+        apply(bridge, c, hosted, false);
+    }
+
+    /**
+     * @param mirrorRoot whether this box is the root of a MIRROR, which is laid out at its host's
+     *                   origin rather than at the insets its source node carries
+     */
+    public static void apply(TaffyBridge bridge, ComputedStyle c, boolean hosted, boolean mirrorRoot) {
         bridge.setDisplay(c.get(LayoutProperties.DISPLAY));
         bridge.setOverflow(StylePropertyRegistry.toTaffyOverflow(c.get(StylePropertyRegistry.OVERFLOW)));
         bridge.setDirection(c.get(LayoutProperties.LAYOUT_DIRECTION));
@@ -98,8 +106,29 @@ public final class BoxStyle {
         bridge.setAspectRate(c.isSet(LayoutProperties.ASPECT_RATE) ? c.get(LayoutProperties.ASPECT_RATE) : Float.NaN);
 
         // Box -- min-size back to CSS's `auto`.
-        bridge.setLeft(c.get(LayoutProperties.LEFT));
-        bridge.setTop(c.get(LayoutProperties.TOP));
+        // A MIRROR ROOT TAKES NO INSETS FROM ITS SOURCE. It shares the source node, so it shares the
+        // source's computed style -- and a window's style carries the `left`/`top` that place it on the
+        // DESKTOP. Applied to the copy those became an offset inside the thumbnail, so a taskbar
+        // preview drew its picture at the window's own desktop position scaled down: a window near the
+        // left edge came out slightly off-centre and one near the right was drawn outside the preview
+        // panel entirely, over the taskbar. Which reads as a broken preview rather than a correctly
+        // drawn picture in the wrong place.
+        //
+        // THE OLD ENGINE DID THE SAME THING IN THE OTHER COORDINATE SYSTEM, which is what confirms this
+        // is the right seam rather than a patch. Its thumbnail composed a pose by hand and its third
+        // line was `pose.translate(-src.getX(), -src.getY(), 0f)`, commented "put the window's own
+        // origin at zero" -- there, elements drew at ABSOLUTE layout coordinates, so cancelling the
+        // source's position was a translation. Here geometry is host-relative and the same statement is
+        // made by not applying the source's insets at all. That line simply had no counterpart in the
+        // port: the two before it (translate to the picture, then scale) became the caller's transform
+        // and were carried over, and the one that cancels the origin was the one with nowhere to go.
+        //
+        // Zero rather than `auto`, because `auto` on an absolutely positioned box means the STATIC
+        // position -- where it would have sat in flow -- and a mirror root has no flow to fall back on.
+        // Where the picture actually goes is the caller's business, written as a TRANSFORM on the
+        // returned box; see BoxTree.mirror, which says so for exactly this reason.
+        bridge.setLeft(mirrorRoot ? LengthPercentageAuto.ZERO : c.get(LayoutProperties.LEFT));
+        bridge.setTop(mirrorRoot ? LengthPercentageAuto.ZERO : c.get(LayoutProperties.TOP));
         bridge.setRight(c.get(LayoutProperties.RIGHT));
         bridge.setBottom(c.get(LayoutProperties.BOTTOM));
         bridge.setWidth(c.get(LayoutProperties.WIDTH));
