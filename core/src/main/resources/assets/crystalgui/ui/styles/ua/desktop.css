@@ -280,7 +280,7 @@ taskbar .__entry__.__hidden__ {
  * support from Taffy. The width and the translate change TOGETHER for the active state or the pill
  * slides off-centre; neither is transitioned, because an inset does not interpolate and a pill that
  * grows from one end reads worse than one that switches. */
-taskbar .__entry__ .__indicator__ {
+taskbar .__entry__::part(indicator) {
     position: absolute;
     left: 50%;
     bottom: 0px;
@@ -292,11 +292,11 @@ taskbar .__entry__ .__indicator__ {
     transition: background-color 150ms ease-out;
 }
 
-taskbar .__entry__.__hidden__ .__indicator__ {
+taskbar .__entry__.__hidden__::part(indicator) {
     background-color: var(--taskbar-indicator-hidden, #5A5D63);
 }
 
-taskbar .__entry__.__active__ .__indicator__ {
+taskbar .__entry__.__active__::part(indicator) {
     width: 16px;
     transform: translate(-8px, 0);
     background-color: var(--taskbar-indicator-active, #3574F0);
@@ -306,14 +306,23 @@ taskbar .__entry__.__active__ .__indicator__ {
  * `.__window-icon__` further down, shared with the preview and the switcher; this rule is only how
  * big, and how far the glyph sits in from the tile's edge (the padding is what the overlay's
  * `content-box` origin measures against). */
-taskbar .__entry__ .__icon__ {
+taskbar .__entry__::part(pre-icon) {
     width: 18px;
     height: 18px;
     padding-all: 3px;
     border-radius: 5px;
 }
 
-taskbar .__entry__ .__icon__ .__monogram__ {
+/* HOSTLESS, because the monogram is a part under a part: it is WindowIcon's, and WindowIcon is the
+ * Button's. `taskbar .__entry__ .__icon__ .__monogram__` reached through both boundaries and matched
+ * nothing. A bare `::part(monogram)` says "whoever exposes this", which is the same translation
+ * `.__v-scroller__` took -- and it needs no list of hosts to go stale.
+ *
+ * It has to be a RULE and cannot be a default the widget writes: `ua/core.css` opens with
+ * `* { font-size: 10 }`, which is a STYLESHEET-origin candidate on the monogram itself, and a
+ * DEFAULT-origin write loses to it. The universal rule is why `font-size` does not effectively
+ * inherit here at all. */
+::part(monogram) {
     font-size: 9;
 }
 
@@ -440,6 +449,39 @@ taskbar .__entry__.__busy__ .__progress__ {
 .__window-icon__.__tile-4__ { background-color: var(--window-icon-tile-4, #8B63D9); }
 .__window-icon__.__tile-5__ { background-color: var(--window-icon-tile-5, #2FA7B8); }
 .__window-icon__.__tile-6__ { background-color: var(--window-icon-tile-6, #D85A7A); }
+
+/* THE SAME TILE, ADDRESSED AS A PART -- for the taskbar, and only the taskbar.
+ *
+ * Its entry hands the tile to `Button.setPreIcon`, which puts it in the button's SHADOW tree; every
+ * rule above is a bare class selector and no outer one reaches in. The glyph still drew, because
+ * `color` inherits across a shadow boundary exactly as the DOM says it does, so the symptom was a
+ * white mark on nothing rather than a missing icon -- which reads as artwork with no background
+ * instead of a rule that never matched.
+ *
+ * Scoped under `taskbar .__entry__` so this cannot reach a pre-icon that is not a window tile, and
+ * left as TWINS rather than a rewrite because the class rules serve four other consumers -- the
+ * preview, the switcher, the thumbnail and a window's own caption -- which hold the tile as a light
+ * child and reach it fine. */
+taskbar .__entry__::part(pre-icon) {
+    flex-shrink: 0;
+    justify-content: center;
+    align-items: center;
+    overlay-fit: contain;
+    overlay-origin: content-box;
+    color: var(--window-icon-glyph, #FFFFFF);
+}
+
+taskbar .__entry__::part(pre-icon).__branded__ {
+    overlay-origin: border-box;
+}
+
+taskbar .__entry__::part(pre-icon).__tile-mono__ { background-color: var(--window-icon-mono-bg, #DE2A4D); }
+taskbar .__entry__::part(pre-icon).__tile-1__ { background-color: var(--window-icon-tile-1, #4A7CE0); }
+taskbar .__entry__::part(pre-icon).__tile-2__ { background-color: var(--window-icon-tile-2, #3FA36B); }
+taskbar .__entry__::part(pre-icon).__tile-3__ { background-color: var(--window-icon-tile-3, #D98A3A); }
+taskbar .__entry__::part(pre-icon).__tile-4__ { background-color: var(--window-icon-tile-4, #8B63D9); }
+taskbar .__entry__::part(pre-icon).__tile-5__ { background-color: var(--window-icon-tile-5, #2FA7B8); }
+taskbar .__entry__::part(pre-icon).__tile-6__ { background-color: var(--window-icon-tile-6, #D85A7A); }
 
 /* ── A window ───────────────────────────────────────────────────────────────────────────────────
  * `resize: both` is what gives a frame its eight handles — UIResizer builds them from this property,
