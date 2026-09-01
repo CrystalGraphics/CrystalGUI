@@ -1,6 +1,6 @@
-package com.crystalgui.chrome.palette;
+package com.crystalgui.workbench.chrome.palette;
 
-import com.crystalgui.chrome.menu.MenuBarView;
+import com.crystalgui.workbench.chrome.menu.MenuBarView;
 import com.crystalgui.core.collection.pick.QuickPickItem;
 import com.crystalgui.core.collection.pick.QuickPickSource;
 import com.crystalgui.core.command.Command;

@@ -1,6 +1,6 @@
 package com.crystalgui.widget.form;
 
-import com.crystalgui.chrome.menu.MenuBarView;
+import com.crystalgui.workbench.chrome.menu.MenuBarView;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.contract.Event;

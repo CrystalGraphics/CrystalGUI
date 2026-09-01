@@ -1,9 +1,9 @@
 package com.crystalgui.widget.collection.tree;
 
-import com.crystalgui.chrome.palette.QuickPick;
-import com.crystalgui.chrome.preferences.NavigatorView;
-import com.crystalgui.chrome.preferences.Preferences;
-import com.crystalgui.chrome.problems.ProblemsPanel;
+import com.crystalgui.workbench.chrome.palette.QuickPick;
+import com.crystalgui.workbench.chrome.preferences.NavigatorView;
+import com.crystalgui.workbench.chrome.preferences.Preferences;
+import com.crystalgui.workbench.chrome.problems.ProblemsPanel;
 import com.crystalgui.core.collection.tree.FilteredTreeSource;
 import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.core.collection.tree.TreeRow;

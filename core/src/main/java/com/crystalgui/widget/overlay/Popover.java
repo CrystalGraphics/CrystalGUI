@@ -1,6 +1,6 @@
 package com.crystalgui.widget.overlay;
 
-import com.crystalgui.chrome.status.ProcessesPopover;
+import com.crystalgui.workbench.chrome.status.ProcessesPopover;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.contract.State;

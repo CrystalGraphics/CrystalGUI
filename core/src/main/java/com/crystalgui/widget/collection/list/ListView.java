@@ -4,7 +4,7 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
-import com.crystalgui.chrome.palette.QuickPick;
+import com.crystalgui.workbench.chrome.palette.QuickPick;
 import com.crystalgui.core.collection.list.FixedHeightStrategy;
 import com.crystalgui.core.collection.list.ItemSizeStrategy;
 import com.crystalgui.core.collection.list.SelectionMode;
