@@ -8,6 +8,7 @@ import com.crystalgui.core.notify.StatusBarEntryAccessor;
 import com.crystalgui.text.LineEnding;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
+import com.crystalgui.ui.box.Box;
 import javax.annotation.Nullable;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.core.signal.Connection;
@@ -216,7 +217,14 @@ public record TextFileDocument(TextEditor editor, Resource resource)
         float scroll = in.getFloat(SCROLL, 0f);
         // setScrollImmediate, not setScrollTop: the smooth-scroll path would animate from 0 to wherever
         // the file was left, so reopening a file scrolls itself down in front of you.
-        if (scroll > 0f) editor.box().setScroll(editor.scrollLeft(), scroll);
+        // A DOCUMENT IS RESTORED BEFORE IT IS SHOWN, so the editor routinely has no box here -- a
+        // session comes back on the frame the workbench joins a document and nothing has been laid
+        // out. The offset is the node's, not the box's, which is why there is a setter to fall back to.
+        Box box = editor.box();
+        if (scroll > 0f) {
+            if (box != null) box.setScroll(editor.scrollLeft(), scroll);
+            else editor.setScrollOffsets(editor.scrollLeft(), scroll);
+        }
     }
 
     /**

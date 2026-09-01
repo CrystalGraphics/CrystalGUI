@@ -13,6 +13,7 @@ import com.crystalgui.desktop.taskbar.WindowThumbnail;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.desktop.window.WindowIcon;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.service.Animation;
@@ -347,10 +348,15 @@ public class WindowSwitcher extends UINode {
      */
     private int columnsPerRow() {
         if (entries.isEmpty()) return 1;
-        float top = entries.get(0).box().y();
+        Box first = entries.get(0).box();
+        // ONE COLUMN until the tiles have been laid out. The row count is read from their y offsets,
+        // so before the first layout there is nothing to read and one row is the honest answer.
+        if (first == null) return 1;
+        float top = first.y();
         int count = 0;
         for (Tile tile : entries) {
-            if (Math.abs(tile.box().y() - top) > 0.5f) break;
+            Box box = tile.box();
+            if (box == null || Math.abs(box.y() - top) > 0.5f) break;
             count++;
         }
         return Math.max(1, count);

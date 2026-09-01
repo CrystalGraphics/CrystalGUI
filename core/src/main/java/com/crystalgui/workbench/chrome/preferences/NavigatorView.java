@@ -221,7 +221,8 @@ public class NavigatorView<T> extends UINode {
         // OPENS AT ITS CONTENT rather than at a fraction somebody picked: a settings tree holds short
         // names, so any hardcoded share is wasteful on a narrow one and clipping on a wide one -- and the
         // width that fits is already being computed right here.
-            float total = split.box().width();
+            Box splitBox = split.box();
+            float total = splitBox == null ? 0f : splitBox.width();
             if (total > 0f && !userSizedSidebar) {
                 split.setPercentage(Math.min(90f, sidebarMinimum / total * 100f));
             }

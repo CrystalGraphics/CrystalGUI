@@ -355,8 +355,10 @@ public class QuickPick extends Popover {
     private void beginMove(MouseEvent.Down event) {
         UIDocument window = document();
         if (window == null) return;
-        dragStartLeft = box().x();
-        dragStartTop = box().y();
+        Box box = box();
+        if (box == null) return;
+        dragStartLeft = box.x();
+        dragStartTop = box.y();
         // Zero threshold: a window must track the very first pixel, and a header has no competing click
         // interpretation to protect.
         Drag.start(header,
@@ -370,9 +372,11 @@ public class QuickPick extends Popover {
         // while there is no desktop and the WindowFrame once 6.6 lands one.
         UINode container = document();
         float maxLeft = Float.MAX_VALUE, maxTop = Float.MAX_VALUE;
-        if (container != null) {
-            maxLeft = Math.max(0f, container.box().width() - box().width());
-            maxTop = Math.max(0f, container.box().height() - box().height());
+        Box containerBox = container == null ? null : container.box();
+        Box box = box();
+        if (containerBox != null && box != null) {
+            maxLeft = Math.max(0f, containerBox.width() - box.width());
+            maxTop = Math.max(0f, containerBox.height() - box.height());
         }
         moveTo(Math.min(Math.max(0f, left), maxLeft), Math.min(Math.max(0f, top), maxTop));
     }

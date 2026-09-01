@@ -426,8 +426,10 @@ public class MainPreviewPanel extends UINode implements Disposable.Gl {
      * draws nothing at all.</p>
      */
     private float surfaceAspect() {
-        float w = surface.box().width();
-        float h = surface.box().height();
+        // The 1f fallback already says what an unmeasured surface means; a null box means the same.
+        Box box = surface.box();
+        float w = box == null ? 0f : box.width();
+        float h = box == null ? 0f : box.height();
         return w > 0f && h > 0f ? w / h : 1f;
     }
 

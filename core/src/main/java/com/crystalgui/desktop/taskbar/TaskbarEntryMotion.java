@@ -150,7 +150,9 @@ final class TaskbarEntryMotion implements WindowMotion {
             StyleGroup.inlinePipeline(entry.getStyle().getLayoutGroup(),
                     l -> l.positionType(TaffyPosition.ABSOLUTE).widthMaxContent());
         } else {
-            span = Math.max(0f, entry.box().width());
+            // The `Math.max(0f, ...)` says what a missing width means; a null box means the same.
+            Box box = entry.box();
+            span = box == null ? 0f : Math.max(0f, box.width());
             capturePadding();
             startNanos = System.nanoTime();
             apply(0f);
@@ -202,7 +204,8 @@ final class TaskbarEntryMotion implements WindowMotion {
             // which looks exactly like the animation not being wired up at all.
             if (measureTicks++ == 0) return true;
             // The measure frame has been laid out: take the content width and drop into the row at zero.
-            span = Math.max(0f, entry.box().width());
+            Box measured = entry.box();
+            span = measured == null ? 0f : Math.max(0f, measured.width());
             capturePadding();
             StyleGroup.inlinePipeline(entry.getStyle().getLayoutGroup(),
                     l -> l.positionType(TaffyPosition.RELATIVE).widthAuto());
