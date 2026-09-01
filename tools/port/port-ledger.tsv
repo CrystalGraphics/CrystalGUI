@@ -3,16 +3,16 @@
 # leaving the rest alone; the generator preserves confirmations by name.
 #
 # CLASS	path	lines	destination	batch	how	status
-CLASS	editor/CrystalEditor	500	app/editor	6.7	copy	pending
-CLASS	editor/CrystalEditorCommands	94	app/editor	6.7	copy	pending
-CLASS	example/machine/EngineModel	111	app/machine	6.7	copy	pending
-CLASS	example/machine/MachineDemo	330	app/machine	6.7	copy	pending
-CLASS	example/machine/MachineModel	130	app/machine	6.7	copy	pending
-CLASS	example/machine/MachineTrace	54	app/machine	6.7	copy	pending
-CLASS	example/machine/ui/EnginePanel	259	app/machine/ui	6.7	copy	pending
-CLASS	example/machine/ui/MachinePanel	736	app/machine/ui	6.7	copy	pending
-CLASS	example/machine/ui/MachineRows	70	app/machine/ui	6.7	copy	pending
-CLASS	example/machine/ui/MachineStyles	154	app/machine/ui	6.7	copy	pending
+CLASS	editor/CrystalEditor	500	app/editor	6.7	copy	ported
+CLASS	editor/CrystalEditorCommands	94	app/editor	6.7	copy	ported
+CLASS	example/machine/EngineModel	111	app/machine	6.8	copy	pending
+CLASS	example/machine/MachineDemo	330	app/machine	6.8	copy	pending
+CLASS	example/machine/MachineModel	130	app/machine	6.8	copy	pending
+CLASS	example/machine/MachineTrace	54	app/machine	6.8	copy	pending
+CLASS	example/machine/ui/EnginePanel	259	app/machine/ui	6.8	copy	pending
+CLASS	example/machine/ui/MachinePanel	736	app/machine/ui	6.8	copy	pending
+CLASS	example/machine/ui/MachineRows	70	app/machine/ui	6.8	copy	pending
+CLASS	example/machine/ui/MachineStyles	154	app/machine/ui	6.8	copy	pending
 CLASS	graph/shader/BlackboardPanel	1361	app/shadergraph/blackboard	6.4	copy	ported
 CLASS	graph/shader/CategoryHeader	134	app/shadergraph/blackboard	6.4	copy	ported
 CLASS	graph/shader/InlineRename	166	app/shadergraph/blackboard	6.4	copy	ported
@@ -20,11 +20,11 @@ CLASS	graph/shader/MainPreviewPanel	466	app/shadergraph/preview	6.4	copy	ported
 CLASS	graph/shader/PropertyPill	296	app/shadergraph/blackboard	6.4	copy	ported
 CLASS	graph/shader/ShaderColorFieldWidget	112	app/shadergraph/node	6.4	copy	ported
 CLASS	graph/shader/ShaderGraphBridge	490	app/shadergraph	6.4	copy	ported
-CLASS	graph/shader/ShaderGraphContribution	167	app/shadergraph	6.7	copy	pending
-CLASS	graph/shader/ShaderGraphEditor	1309	app/shadergraph	6.7	copy	pending
+CLASS	graph/shader/ShaderGraphContribution	167	app/shadergraph	6.7	copy	ported
+CLASS	graph/shader/ShaderGraphEditor	1309	app/shadergraph	6.7	copy	ported
 CLASS	graph/shader/ShaderGraphPreviews	247	app/shadergraph/preview	6.4	copy	ported
 CLASS	graph/shader/ShaderGraphSettings	95	app/shadergraph	6.4	copy	ported
-CLASS	graph/shader/ShaderInspectorSections	668	app/shadergraph	6.7	copy	pending
+CLASS	graph/shader/ShaderInspectorSections	668	app/shadergraph	6.7	copy	ported
 CLASS	graph/shader/ShaderNodeLibrary	46	graph/shader	6.4	move	in-place
 CLASS	graph/shader/ShaderNodePreview	82	app/shadergraph/preview	6.4	copy	ported
 CLASS	graph/shader/ShaderPortArity	284	app/shadergraph/node	6.4	copy	ported
@@ -73,7 +73,7 @@ CLASS	ui/elements/TabView	605	widget/layout	6.2	copy	ported
 CLASS	ui/elements/TextField	1240	widget/control	6.1	copy	ported
 CLASS	ui/elements/Tooltip	605	widget/overlay	6.2	copy	ported
 CLASS	ui/elements/UIText	1244	widget/text	6.1	copy	ported
-CLASS	ui/elements/WidgetCensus	222	widget	6.7	copy	pending
+CLASS	ui/elements/WidgetCensus	222	app	6.7	copy	ported
 CLASS	ui/elements/canvas/CanvasOverlayMove	232	widget/canvas	6.4	copy	ported
 CLASS	ui/elements/canvas/CanvasView	725	widget/canvas	6.4	copy	ported
 CLASS	ui/elements/canvas/WorldRect	77	widget/canvas	6.4	copy	ported
@@ -393,8 +393,8 @@ PART	ConflictDialog	conflict	B	4	confirmed	a rule selects through it (3)
 PART	ConflictDialog	conflict-actions	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	ConflictDialog	conflict-message	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	ConflictDialog	conflict-who	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
-PART	CrystalEditor	content	A	0	proposed	leaf in every rule
-PART	CrystalEditor	editor-content	A	0	proposed	leaf in every rule
+PART	CrystalEditor	content	A	0	confirmed	leaf in every rule
+PART	CrystalEditor	editor-content	A	0	confirmed	leaf in every rule
 PART	Desktop	live	C	1	confirmed	state adjective
 PART	Desktop	snap-preview	B	1	confirmed	leaf in every rule
 PART	Desktop	windows	B	0	confirmed	leaf in every rule
@@ -756,10 +756,10 @@ PART	SearchReplaceBar	option-preserve-case	B	1	confirmed	leaf in every rule
 PART	SearchReplaceBar	option-regex	B	1	confirmed	leaf in every rule
 PART	SearchReplaceBar	option-words	B	1	confirmed	leaf in every rule
 PART	SelectControl	select	B	2	confirmed	a rule selects through it (1)
-PART	ShaderGraphEditor	content	A	0	proposed	leaf in every rule
-PART	ShaderGraphEditor	shader-content	A	0	proposed	leaf in every rule
-PART	ShaderGraphEditor	shader-graph	A	0	proposed	leaf in every rule
-PART	ShaderGraphEditor	shader-source	A	1	proposed	leaf in every rule
+PART	ShaderGraphEditor	content	A	0	confirmed	leaf in every rule
+PART	ShaderGraphEditor	shader-content	A	0	confirmed	leaf in every rule
+PART	ShaderGraphEditor	shader-graph	A	0	confirmed	leaf in every rule
+PART	ShaderGraphEditor	shader-source	A	1	confirmed	leaf in every rule
 PART	ShaderNodePreview	preview-image	B	0	confirmed	leaf in every rule
 PART	ShaderPropertyNodes	exposed-dot	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	ShaderPropertyNodes	property-linked	B	4	confirmed	leaf in every rule
