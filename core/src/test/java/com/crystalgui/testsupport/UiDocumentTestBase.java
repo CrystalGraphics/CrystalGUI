@@ -130,6 +130,32 @@ public abstract class UiDocumentTestBase extends UiTestBase {
         document.input().consumeMouseEvent(mouse(0f, 0f, -1, false, notches));
     }
 
+    /**
+     * Presses {@code keyCode} with {@code modifiers} held, as a real chord arrives.
+     *
+     * <p>The modifier state is the PLATFORM's — {@code Input} reads {@code getCurrentModifiers} rather
+     * than taking it from the event — so a test that does not hold one is sending an unmodified key
+     * whatever it thinks it is sending. Without this every chord in every test was silently unmodified,
+     * which is why nothing ever noticed that no keymap was installed.</p>
+     */
+    protected final boolean chord(int keyCode, int modifiers) {
+        TestPlatformService.install();
+        TestPlatformService.holdModifiers(modifiers);
+        return key(keyCode, true);
+    }
+
+    /**
+     * Lets go of whatever {@link #chord} was holding.
+     *
+     * <p><b>Not folded into {@code chord}</b>, and the difference is the whole of a switcher: a
+     * held-modifier gesture POLLS the modifier rather than listening for a key-up, so releasing it in
+     * the same breath as the press opens the switcher and commits it before a frame is drawn. A test
+     * that wants to see the gesture on screen has to keep holding, exactly as a user does.</p>
+     */
+    protected final void releaseModifiers() {
+        TestPlatformService.holdModifiers(0);
+    }
+
     /** @return whether anything consumed it — which is what a host acts on. */
     protected final boolean key(int keyCode, boolean pressed) {
         return document.input().consumeKeyboardEvent(

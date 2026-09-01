@@ -49,7 +49,7 @@ public final class TestPlatformService implements CgPlatformService {
 
     /** A keyboard and mouse that report nothing pressed — what a test needs unless it says otherwise. */
     public static final CgInputService STUB_INPUT = new CgInputService() {
-        @Override public int getCurrentModifiers() { return 0; }
+        @Override public int getCurrentModifiers() { return modifiers; }
         @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
         @Override public boolean isKeyDown(int localKeyCode) { return false; }
         @Override public int translateMouseCodes(int platformCode) { return platformCode; }
@@ -64,6 +64,27 @@ public final class TestPlatformService implements CgPlatformService {
 
     private static String clipboard = "";
 
+    private static int modifiers;
+
+    /**
+     * Holds a modifier bitmask down, as though the user were holding the keys.
+     *
+     * <p><b>Without this a chord could not be tested at all, and that is not a gap in the tests — it is
+     * why an entire mechanism shipped unwired.</b> {@code Input.modifiers()} reads the platform and
+     * falls back to zero when there is none, so headlessly every keystroke looked unmodified,
+     * {@code isChord} was always false, and the keymap path was unreachable. {@code KeymapTest} says as
+     * much in its own comment — it drives the resolver directly because "the full path through
+     * {@code consumeKeyboardEvent} needs a frame and a platform" — so the resolver was covered, the
+     * bindings were covered, and the one thing nobody could reach was whether anything CALLED it. It
+     * did not: {@code setChords} had no callers, so every shortcut in the application was inert.</p>
+     *
+     * <p>Reset by {@link #install()}, like the three services, so a test that holds Ctrl down cannot
+     * leak it into the next one.</p>
+     */
+    public static void holdModifiers(int mask) {
+        modifiers = mask;
+    }
+
     private static final TestPlatformService INSTANCE = new TestPlatformService();
 
     private CgInputService input = STUB_INPUT;
@@ -77,6 +98,7 @@ public final class TestPlatformService implements CgPlatformService {
         INSTANCE.input = STUB_INPUT;
         INSTANCE.sound = SILENT_SOUND;
         INSTANCE.cursor = NO_CURSOR;
+        modifiers = 0;
         CgPlatform.register(INSTANCE);
         return INSTANCE;
     }
