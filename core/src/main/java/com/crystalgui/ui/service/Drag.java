@@ -119,6 +119,10 @@ public final class Drag implements InputMode {
                              @Nullable Object payload, float thresholdPx, Listener listener) {
         Input input = source.document().input();
         Drag drag = new Drag(input, source, surfaceX, surfaceY, button, payload, thresholdPx, listener);
+        // THE GHOST OFFERED ON THE WAY DOWN, which is the only moment a caller has: `DragGhost.follow`
+        // runs from the mouse-down handler that is about to call this, so it had no drag to hand it to.
+        UINode offered = input.takePendingGhost();
+        if (offered != null) drag.withGhost(offered, input.pendingGhostX(), input.pendingGhostY());
         input.setPointerCapture(source);
         input.pushMode(drag);
         return drag;

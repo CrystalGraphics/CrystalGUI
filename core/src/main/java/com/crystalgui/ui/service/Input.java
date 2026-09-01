@@ -101,6 +101,47 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
     private boolean hoverValid;
     private @Nullable UINode hover;
     private @Nullable UINode lastFrameHover;
+    /**
+     * A ghost offered before its drag existed, waiting for {@code Drag.start} to claim it.
+     *
+     * <p><b>The one ordering a caller cannot avoid.</b> A ghost is offered from the mouse-DOWN handler
+     * and the drag is started from the same handler a few lines later, so at the moment
+     * {@code DragGhost.follow} runs there is no drag to hand it to — its own comment says as much
+     * ("null when nothing is dragging, which is the ordinary case") and then relies on
+     * {@code Drag.start} re-reading it, which nothing did. The ghost was set on nothing, every drag in
+     * the application carried none, and there was no error to explain it.</p>
+     *
+     * <p>Dropped when a drag claims it, and dropped again when a press ends without one — a ghost
+     * belongs to a single gesture, and the old engine's controller once let one outlive its drag and
+     * reappear on an unrelated screen.</p>
+     */
+    private @Nullable UINode pendingGhost;
+
+    private float pendingGhostX, pendingGhostY;
+
+    /** Offers a ghost to whatever drag starts next from this press. @see #takePendingGhost */
+    public void offerGhost(@Nullable UINode ghost, float offsetX, float offsetY) {
+        pendingGhost = ghost;
+        pendingGhostX = offsetX;
+        pendingGhostY = offsetY;
+    }
+
+    /** Claims the offered ghost, if any, and forgets it. Called by {@code Drag.start}. */
+    @Nullable
+    UINode takePendingGhost() {
+        UINode ghost = pendingGhost;
+        pendingGhost = null;
+        return ghost;
+    }
+
+    float pendingGhostX() {
+        return pendingGhostX;
+    }
+
+    float pendingGhostY() {
+        return pendingGhostY;
+    }
+
     private @Nullable UINode pressTarget;
     private @Nullable UINode keyboardPressTarget;
     private @Nullable UINode capture;
@@ -554,6 +595,11 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
             // Implicit release AFTER the up is delivered -- the spec's ordering, and what lets a drag
             // end anywhere on screen rather than only over its source.
             if (!anyButtonDown()) releasePointerCapture();
+            // AND A GHOST NOBODY CLAIMED GOES WITH THE PRESS. Offered on the way down, and if the
+            // gesture turned out to be an ordinary click there is no drag to have taken it -- leaving
+            // it would hand it to the next drag, which is how the old engine's controller once let a
+            // ghost outlive its drag and turn up on an unrelated screen.
+            if (!anyButtonDown()) pendingGhost = null;
         }
         return false;
     }

@@ -164,6 +164,10 @@ public class DragGhost extends UINode {
         // from -- rule 3 says to call it BEFORE the drag starts, and `Drag.start` re-reads the ghost.
         Drag live = window.input().mode(Drag.class);
         if (live != null) live.withGhost(this, ghostOffsetX(), ghostOffsetY());
+        // ...AND OTHERWISE OFFERED, which is the ordinary case and used to be the end of it: this is
+        // called BEFORE the drag starts (rule 3), so there is nothing to hand it to and the line above
+        // did nothing at all. `Drag.start` claims the offer.
+        else window.input().offerGhost(this, ghostOffsetX(), ghostOffsetY());
         return this;
     }
 
