@@ -2242,7 +2242,7 @@ handles ported faithfully, which keeps `ua/overlays.css` working unchanged.
 
 ---
 
-### 6.7 — Workbench, dock, the shell, the applications · **XL** · after: 6.3, 6.5, 6.6
+### 6.7 — Workbench, dock, the shell, the applications · **XL** · after: 6.3, 6.5, 6.6 · **SHIPPED 2026-09-01**
 
 **Ports.** `Workbench` (3,212 lines, 76 members), `WorkbenchRegions`, `RegionHost`,
 `RegionDropOverlay`, `RegionDropZones`, `SplitFill`, `StripeView`, `StripeRail`, `ViewContainer`,
@@ -2322,6 +2322,14 @@ but only after the cascade-shared retention of `appliedByElement` is confirmed t
 module and its tests run under `:language:test` with natives — skip cleanly there.
 
 ### 6.8 — Networking on the new engine · **L** · after: 6.7
+
+> **Gained the Machine example from 6.7, and the dependency decided it.** It is a `Networked` panel:
+> it names `ServerWindows`, `UiType`, `MountedWindow` and `ServerScope`, every one of which lives in
+> `net.window` and stays typed on `UIElement` until this milestone retypes them. 6.7 placed it on the
+> reasoning that it is an application and applications are 6.7's, which is a taxonomy rather than a
+> dependency — compiling a panel against an engine its own framework has not reached is not a batch
+> boundary anybody chose. Eight classes: `EngineModel`, `MachineDemo`, `MachineModel`,
+> `MachineTrace`, and `ui/`'s `EnginePanel`, `MachinePanel`, `MachineRows`, `MachineStyles`.
 
 **Ports.** `ServerUiSession<N,T>`, `ClientUiSession<N,T>`, `ClientUiSessions`, `UiWindowMux` over
 `TreeSource<N>` + `NodeMirror<N,T>` (D11); `UINodeMirror` as the only mirror; `ElementNodeMirror`,
