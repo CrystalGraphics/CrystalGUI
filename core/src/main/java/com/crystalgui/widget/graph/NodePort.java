@@ -43,7 +43,7 @@ import javax.annotation.Nullable;
  * field waiting for a value.</p>
  *
  * <h3>Where the wire's endpoint comes from</h3>
- * <p>{@link #dotCenter()} reads the dot's <b>live</b> layout every time it is asked. Nothing caches an
+ * <p>{@link #dotCenterIn()} reads the dot's <b>live</b> layout every time it is asked. Nothing caches an
  * anchor point: a cache is only correct until the node moves, the node resizes, a port is added, or the
  * theme changes a padding — and each of those is a thing a user does routinely. The same lesson as
  * {@code resizeOriginLeft()} reading the live Taffy inset rather than a field.</p>
@@ -409,7 +409,7 @@ public class NodePort extends UINode {
     }
 
     /** The dot's centre, in the plane's coordinate space — i.e. the same space a paint call inside the
-     * canvas uses, and the space {@link UINode#screenToLocal} reports in. Read live; never cached. */
+     * canvas uses, and the space {@link UINode#toLocal} reports in. Read live; never cached. */
     public Vector2f dotCenterIn(@Nullable UINode space) {
         return Box.centreIn(dot.box(), space == null ? null : space.box());
     }
@@ -417,7 +417,7 @@ public class NodePort extends UINode {
     /** The dot's live outer radius (half its width) — what {@link NodeWireLayer} and {@link
      * PortDefaultEditor} trim a wire/stub endpoint back by, so the line stops at the ring's edge like
      * Unity's own rather than running under it into the centre. Same "read the live layout, never a
-     * theme constant" reasoning as {@link #dotCenter()} — a themed {@code --graph-dot} change must not
+     * theme constant" reasoning as {@link #dotCenterIn()} — a themed {@code --graph-dot} change must not
      * need a matching Java constant kept in step by hand. */
     public float dotRadius() {
         Box d = dot.box();

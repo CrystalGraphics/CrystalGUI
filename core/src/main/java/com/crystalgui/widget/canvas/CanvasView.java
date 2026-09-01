@@ -54,7 +54,7 @@ import java.util.Set;
  * <ul>
  *   <li><b>World</b> — where nodes live. Unaffected by pan or zoom. What you author.</li>
  *   <li><b>Logical</b> — the engine's layout space, what {@code RuntimeCache.getX()} and
- *       {@link UINode#screenToLocal} speak. {@link #getPanX()} is in these units.</li>
+ *       {@link UINode#toLocal} speak. {@link #getPanX()} is in these units.</li>
  *   <li><b>Physical</b> — raw pointer pixels, as delivered by {@code MouseEvent.getPosition()}.
  *       Differs from logical by {@code uiScale}.</li>
  * </ul>
@@ -455,7 +455,7 @@ public class CanvasView extends UINode  {
     /**
      * Physical pointer position → world coordinates.
      *
-     * <p>Routed through {@link UINode#screenToLocal}, so it stays correct under {@code uiScale},
+     * <p>Routed through {@link UINode#toLocal}, so it stays correct under {@code uiScale},
      * an ancestor transform, and an ancestor's scroll offset — none of which this widget knows
      * about.</p>
      */
@@ -468,7 +468,7 @@ public class CanvasView extends UINode  {
 
     /**
      * World coordinates → the engine's logical space — the same frame {@code RuntimeCache.getX()} and
-     * {@link UINode#screenToLocal} report in, <b>not</b> physical pixels.
+     * {@link UINode#toLocal} report in, <b>not</b> physical pixels.
      */
     public Vector2f worldToViewport(float worldX, float worldY) {
         return new Vector2f(contentOriginX() + panX + zoom * worldX,
@@ -477,7 +477,7 @@ public class CanvasView extends UINode  {
 
     /**
      * The exact inverse of {@link #worldToViewport}: a point in the engine's logical space — what
-     * {@link UINode#screenToLocal} returns and what a {@code DragListener} on this canvas reports —
+     * {@link UINode#toLocal} returns and what a {@code DragListener} on this canvas reports —
      * back into world coordinates.
      *
      * <p>Distinct from {@link #screenToWorld}, which starts from <em>physical</em> pointer pixels. Both

@@ -4914,7 +4914,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      *
      * <h3>Why a container at all</h3>
      *
-     * <p>{@link UINode#applyScrollOffset} says it plainly: <em>"Position only — no relayout. The
+     * <p>{@link UINode#setScrollOffsets} says it plainly: <em>"Position only — no relayout. The
      * offset never reaches Taffy; it lives purely in the transform chain."</em> A scroll container moves
      * its children by one matrix, and that is why scrolling a list costs nothing. The text viewport
      * opts out of that — it is {@code setScrollExempt(true)} because it has to be a <em>window</em>

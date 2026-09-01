@@ -564,7 +564,7 @@ public class Desktop extends UINode implements DataProvider {
 
     private final ConnectionGroup subscriptions = new ConnectionGroup();
 
-    /** @see #onWindowChanged — the window-level fallback for {@link WindowFrame#WINDOW_FRAME}. */
+    /** @see #connected — the window-level fallback for {@link WindowFrame#WINDOW_FRAME}. */
     @Override
     @Nullable
     public Object getData(DataKey<?> key) {
@@ -1428,7 +1428,7 @@ public class Desktop extends UINode implements DataProvider {
      * no per-element type test, and the list costs one {@code instanceof} per <em>mutation</em> instead.</p>
      *
      * <p>Both public mutation paths are covered and there are exactly two: {@code addChild} delegates to
-     * {@link #addChildAt}, and {@code removeSelf}, {@code clearAllChildren} and a reparent to another
+     * {@link #insertAt}, and {@code removeSelf}, {@code clearAllChildren} and a reparent to another
      * parent all go through {@link #removeChild}. Internal children never reach either, which is why a
      * resize handle or an overlay slot cannot desynchronise the list.</p>
      *

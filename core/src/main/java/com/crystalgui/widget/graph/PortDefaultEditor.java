@@ -58,7 +58,7 @@ import javax.annotation.Nullable;
  * <p>Unity draws that line over a node's body but under its selection ring — sandwiched between two
  * steps of the SAME node's own atomic paint call ({@code paintSelf}, children, {@code paintOverlay},
  * THEN {@code paintOutline}), which no sibling element can land inside of no matter how it is z-ordered.
- * {@link #paintStub} exists to be called from {@link GraphNode#paintOverlay} — the target node drawing
+ * {@link #paintStub} exists to be called from {@link GraphNode#paintDecoration} — the target node drawing
  * its own incoming stub, at exactly the point in its own paint sequence that sits after its children and
  * before its ring. {@link #box} and {@link #dot} still need an explicit z ({@link #WIDGET_Z}) above any
  * node's, raised or not — see that constant's own note — but the stub itself never does.</p>
@@ -302,7 +302,7 @@ final class PortDefaultEditor {
      * resolves a concrete type for it, with no separate invalidation to wire up. No-op-safe to call
      * whether or not {@link #isMounted()} — callers only do so while mounted, but nothing here assumes it.
      *
-     * <p><b>{@link NodePort#dotCenter()} is not itself a world coordinate — it is a raw layout position,
+     * <p><b>{@link NodePort#dotCenterIn()} is not itself a world coordinate — it is a raw layout position,
      * accumulated through every ancestor down to the dot, exactly like {@link CanvasView#worldBoundsOf}
      * reads for a node's own bounds and exactly why that method subtracts the plane's own origin before
      * calling the result "world".</b> {@code moveNode}'s {@code left}/{@code top}, by contrast, ARE world
@@ -370,7 +370,7 @@ final class PortDefaultEditor {
     }
 
     /**
-     * Draws the stub joining {@link #dot} to the real port — called from {@link GraphNode#paintOverlay},
+     * Draws the stub joining {@link #dot} to the real port — called from {@link GraphNode#paintDecoration},
      * never from this class's own paint and never from a plane sibling. {@code paintOverlay} is the only
      * hook that runs after a node's own children and before its own outline, which is what makes "over
      * the body, under the ring" possible at all; see {@link #WIDGET_Z}'s own note for the other half of
