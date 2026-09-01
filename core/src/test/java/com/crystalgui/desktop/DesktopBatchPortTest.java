@@ -406,6 +406,45 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
         return box.worldY() + box.height() / 2f;
     }
 
+    /**
+     * Pressing a modally blocked window still brings it forward.
+     *
+     * <p>Everything in a blocked window is inert and inertness is {@code pointer-events: none}, so the
+     * press resolves to nothing — which is also precisely what a press on bare desktop looks like.
+     * Treating the two alike meant a blocked window could not be raised, could not be focused, and left
+     * the desktop reporting no active window at all: on screen, indistinguishable from a hung
+     * application, and reachable only by clicking the dialog itself.</p>
+     *
+     * <p>Asserted on the CAPTION, which is the part a user reaches for to bring a window forward and
+     * the part that is most obviously dead when this is wrong.</p>
+     */
+    @Test
+    public void pressingABlockedWindowStillRaisesIt() {
+        WindowFrame blocked = open("Blocked");
+        blocked.moveTo(20, 20).resizeTo(160, 120);
+        WindowFrame other = open("Other");
+        other.moveTo(300, 20).resizeTo(160, 120);
+        frame();
+
+        Dialog dialog = new Dialog("Owned");
+        blocked.attachOwned(dialog);
+        dialog.showModal();
+        frame();
+        frame();
+
+        desktop().activate(other, true);
+        frame();
+        assertSame("the fixture did not manage to activate the other window",
+                other, desktop().activeWindow());
+
+        Box caption = boxOf(blocked.titleBar());
+        press(caption.worldX() + caption.width() / 2f, caption.worldY() + caption.height() / 2f);
+        frame();
+
+        assertSame("pressing a blocked window's caption did not bring it forward",
+                blocked, desktop().activeWindow());
+    }
+
     /** Whether {@code node} is the dialog, inside it, or the backdrop it owns. */
     private static boolean partOf(UINode node, Dialog dialog) {
         if (node.hasClass(Dialog.BACKDROP_CLASS)) return true;

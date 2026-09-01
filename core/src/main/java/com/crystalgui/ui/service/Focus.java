@@ -172,7 +172,13 @@ public final class Focus {
     }
 
     /** The scope a modal makes inert: the nearest one ABOVE it. */
-    private UINode blockedScopeOf(UINode modal) {
+    /**
+     * The scope {@code modal} makes inert: the nearest one ABOVE it, never its own.
+     *
+     * <p>A dialog is a focus scope itself, so asking {@code scopeOf(modal)} answers the dialog — which
+     * contains nothing but the modal, so nothing would ever be blocked.</p>
+     */
+    public UINode blockedScopeOf(UINode modal) {
         UINode above = modal.composedParent();
         return above == null ? document : scopeOf(above);
     }
@@ -278,12 +284,19 @@ public final class Focus {
      * choose it — and a list that drives its selection from focus would otherwise have its selection
      * destroyed by the menu opened over it.</p>
      */
-    void pressed(@Nullable UINode target, int button) {
+    void pressed(@Nullable UINode target, int button, boolean absorbedByModal) {
         if (button != CgMouseCodes.LEFT_BUTTON) return;
         // A press that hit nothing normally blurs, as a browser does. But while a modal is open, "hit
         // nothing" can mean inertness ATE the press, and dropping the caret out of a dialog's field
         // when its backdrop is clicked is what no dialog anywhere does.
-        if (target == null && blockingModal(document) != null) return;
+        //
+        // TOLD, NOT ASKED. This used to test `blockingModal(document)` itself, which was right while
+        // modality was global and became permanently false the moment a window became a focus scope:
+        // a modal inside a window does not block the DOCUMENT's scope, so the guard never fired and
+        // every press on a blocked window blurred the focus owner as if it were bare desktop. Only the
+        // caller knows WHERE the press landed, and that is the whole question -- so the caller answers
+        // it. @see Input
+        if (target == null && absorbedByModal) return;
 
         UINode focusTarget = target;
         while (focusTarget != null && !focusTarget.focusPolicy().focusesOnClick()) {
