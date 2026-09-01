@@ -1782,8 +1782,9 @@ public class WindowFrame extends UINode implements Disposable, Resizable, DataPr
     }
 
     private void captureVisibleSize() {
-        float width = box().width();
-        float height = box().height();
+        Box box = box();
+        float width = box == null ? 0f : box.width();
+        float height = box == null ? 0f : box.height();
         // A NON-POSITIVE BOX IS REFUSED rather than stored: a window hidden before it was ever laid out
         // has nothing to remember, and overwriting a good remembered size with a zero is worse than
         // keeping a slightly old one.
@@ -1916,8 +1917,9 @@ public class WindowFrame extends UINode implements Disposable, Resizable, DataPr
         snappedZone = null;
         restoreLeft = placedLeft;
         restoreTop = placedTop;
-        restoreWidth = box().width();
-        restoreHeight = box().height();
+        Box current = box();
+        restoreWidth = current == null ? 0f : current.width();
+        restoreHeight = current == null ? 0f : current.height();
         maximized = true;
         addClass(MAXIMIZED_CLASS);
         maximizeTooltip.setText(RESTORE_TOOLTIP);
@@ -2452,7 +2454,12 @@ public class WindowFrame extends UINode implements Disposable, Resizable, DataPr
 
     /** The caption's measured height — the cascade step, and the sliver the clamp keeps on screen. */
     public float captionHeight() {
-        return titleBar.box().height();
+        // ZERO WHEN THERE IS NO BOX, which every caller already handles: the clamp in
+        // `applyPosition` guards on `caption > 0f` and the cascade step falls back to a constant.
+        // A frame that has not been laid out has no title bar box, and `moveTo` before `addWindow`
+        // reaches here first.
+        Box bar = titleBar.box();
+        return bar == null ? 0f : bar.height();
     }
 
     /**
@@ -2510,13 +2517,18 @@ public class WindowFrame extends UINode implements Disposable, Resizable, DataPr
         float clampedTop = top;
 
         UINode area = resizeContainingBlock();
-        float areaWidth = area == null ? 0f : area.box().width();
-        float areaHeight = area == null ? 0f : area.box().height();
-        float frameWidth = box().width();
+        Box areaBox = area == null ? null : area.box();
+        Box frameBox = box();
+        float areaWidth = areaBox == null ? 0f : areaBox.width();
+        float areaHeight = areaBox == null ? 0f : areaBox.height();
+        float frameWidth = frameBox == null ? 0f : frameBox.width();
         float caption = captionHeight();
 
         // A ZERO BOX CARRIES NO INFORMATION, so the intent is written through unclamped rather than
-        // clamped against nothing. CanvasOverlayMove's version returns early instead and loses the write
+        // clamped against nothing -- AND A NULL ONE IS THE SAME STATEMENT. A node that is not laid
+        // out has no box at all, where the old engine's cache always answered, so `moveTo` before
+        // `addWindow` threw here: the most natural call order there is, and the first thing the
+        // desktop scene did. Zero and null mean one thing to the clamp below and both must reach it. CanvasOverlayMove's version returns early instead and loses the write
         // entirely -- which is survivable there because something re-places the panel every frame, and
         // would strand a window here on the one frame that matters, its first.
         if (areaWidth > 0f && areaHeight > 0f && frameWidth > 0f && caption > 0f) {
