@@ -352,6 +352,60 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
                 (host.height() - self.height()) / 2f, self.y(), 0.5f);
     }
 
+    /**
+     * A modal blocks the window it belongs to, and <b>only</b> that window.
+     *
+     * <p>Modality here is a question about a FOCUS NAVIGATION SCOPE: a modal makes the nearest scope
+     * enclosing it inert, minus itself. The service was written that way from the start and nothing in
+     * the tree ever declared a scope, so {@code scopeOf} always answered the document — and a dialog
+     * opened in one window made every other window on the desktop unclickable. A window is a scope
+     * now, which is the granularity the old engine settled on: smaller and a modal stops blocking the
+     * window it belongs to, larger is the document again.</p>
+     *
+     * <p><b>A one-window fixture cannot see any of this</b> — scoped and unscoped agree when there is
+     * only one window to block — which is why the modality tests that already existed were green
+     * against it.</p>
+     */
+    @Test
+    public void aModalBlocksItsOwnWindowAndNoOther() {
+        WindowFrame blocked = open("Blocked");
+        blocked.moveTo(20, 20).resizeTo(160, 120);
+        WindowFrame other = open("Other");
+        other.moveTo(300, 20).resizeTo(160, 120);
+        frame();
+
+        Dialog dialog = new Dialog("Owned");
+        blocked.attachOwned(dialog);
+        dialog.showModal();
+        frame();
+        frame();
+
+        move(centreX(other), centreY(other));
+        frame();
+        UINode reachable = document.input().hoverTarget();
+        assertNotNull("the OTHER window is unreachable while a modal is open elsewhere", reachable);
+        assertNull("the other window is being blamed on a modal it does not contain",
+                document.focus().blockingModal(reachable));
+
+        move(centreX(blocked), centreY(blocked));
+        frame();
+        UINode owner = document.input().hoverTarget();
+        assertFalse("the modal does not block its own window",
+                owner != null && !partOf(owner, dialog));
+    }
+
+    private static float centreX(WindowFrame frame) {
+        Box box = frame.box();
+        assertNotNull(box);
+        return box.worldX() + box.width() / 2f;
+    }
+
+    private static float centreY(WindowFrame frame) {
+        Box box = frame.box();
+        assertNotNull(box);
+        return box.worldY() + box.height() / 2f;
+    }
+
     /** Whether {@code node} is the dialog, inside it, or the backdrop it owns. */
     private static boolean partOf(UINode node, Dialog dialog) {
         if (node.hasClass(Dialog.BACKDROP_CLASS)) return true;
