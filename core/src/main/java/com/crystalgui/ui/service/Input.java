@@ -17,6 +17,9 @@ import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.event.PropagationPhase;
 import com.crystalgui.ui.event.UIEvent;
 import com.crystalgui.ui.input.ButtonState;
+import com.crystalgui.ui.input.keymap.KeyEventType;
+import com.crystalgui.ui.input.keymap.KeyStroke;
+import com.crystalgui.ui.input.keymap.KeymapResolver;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -104,6 +107,50 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
     private float scrollDelta;
 
     private @Nullable Chords chords;
+
+    /**
+     * The keymap every document has, built on first use — see {@link #chords()}.
+     *
+     * <p>Lazy so a tree nobody presses a chord in never builds a resolver, and per document because a
+     * {@code CommandRegistry} is.</p>
+     */
+    private @Nullable Chords defaultChords;
+
+    /**
+     * The keymap in force: whatever a host installed, else the document's own.
+     *
+     * <p><b>A seam a host has to remember is a seam that stays empty.</b> Nothing ever called
+     * {@link #setChords}, so {@code chords} was permanently null and no chord resolved anywhere — every
+     * keyboard shortcut in the application was inert, and the failure was silent in the worst way,
+     * because an unresolved chord falls through to ordinary dispatch and then to Tab traversal. So
+     * {@code Ctrl+Tab} did not "do nothing": it cycled focus between windows, which looks like a
+     * deliberate and slightly wrong feature rather than a missing one.</p>
+     *
+     * <p>The document already owns the {@code CommandRegistry} the keymap resolves against, so there is
+     * nothing for a host to supply that is not already here. {@code setChords} stays as the override —
+     * a host presenting shortcuts its own way, or a test asserting on them.</p>
+     */
+    private @Nullable Chords chords() {
+        if (chords != null) return chords;
+        if (defaultChords == null) {
+            KeymapResolver resolver = new KeymapResolver(document.getCommands());
+            defaultChords = new Chords() {
+                @Override
+                public boolean resolve(@Nullable UINode from, int key, int modifiers,
+                                       boolean pressed, boolean repeat, long millis) {
+                    return resolver.resolve(from, new KeyStroke(key, modifiers),
+                            pressed ? KeyEventType.PRESS : KeyEventType.RELEASE, millis, repeat);
+                }
+
+                @Override
+                public boolean wheel(@Nullable UINode from, float notches, int modifiers) {
+                    return resolver.resolve(from, KeyStroke.ofWheel(notches, modifiers),
+                            KeyEventType.PRESS, System.currentTimeMillis());
+                }
+            };
+        }
+        return defaultChords;
+    }
     private @Nullable CursorSink cursors;
     private CgCursor lastCursor = CgCursor.DEFAULT;
 
@@ -209,8 +256,9 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
             // AFTER dispatch, like a keystroke, and scoped from the POINTER rather than from focus:
             // a wheel is a pointing gesture, so zooming the editor you are hovering -- not the one
             // that happens to hold the caret -- is what every editor does.
-            if (!scroll.isDefaultPrevented() && chords != null) {
-                chords.wheel(scopeFor(current), scrollDelta, modifiers());
+            Chords wheelChords = chords();
+            if (!scroll.isDefaultPrevented() && wheelChords != null) {
+                wheelChords.wheel(scopeFor(current), scrollDelta, modifiers());
             }
             scrollDelta = 0f;
         }
@@ -537,8 +585,9 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         // to CLAIM what it wants inverts that: the list is of what a widget takes, which it knows.
         boolean chorded = event.pressed() && isChord(modifiers)
                 && (focused == null || !focused.claimsChord(event.key(), modifiers));
-        if (chorded && chords != null
-                && chords.resolve(scopeFor(focused), event.key(), modifiers, true, event.repeat(), event.millis())) {
+        Chords keymap = chords();
+        if (chorded && keymap != null
+                && keymap.resolve(scopeFor(focused), event.key(), modifiers, true, event.repeat(), event.millis())) {
             return true;
         }
 

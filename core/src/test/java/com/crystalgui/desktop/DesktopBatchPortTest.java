@@ -1,5 +1,7 @@
 package com.crystalgui.desktop;
 
+import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgui.ui.input.keymap.KeyStroke;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -504,6 +506,40 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
         } finally {
             document.boxes().unmirror(mirror);
         }
+    }
+
+    /**
+     * {@code Mod+Tab} opens the window switcher, rather than tabbing between windows.
+     *
+     * <p><b>The whole keymap was unreachable.</b> {@code Input.Chords} is the seam a keymap installs
+     * into and nothing ever called {@code setChords}, so it was permanently null and no chord resolved
+     * anywhere — every shortcut in the application was inert. It did not look inert: an unresolved
+     * chord falls through to ordinary dispatch and then to Tab traversal, so {@code Ctrl+Tab} cycled
+     * focus between windows, which reads as a deliberate and slightly wrong feature rather than a
+     * missing one.</p>
+     *
+     * <p><b>The modifier has to be HELD on the platform</b>, not passed in the event: {@code Input}
+     * reads {@code getCurrentModifiers}, and the test stub used to answer a hard-coded zero. So every
+     * chord any test ever sent was silently unmodified and the keymap path could not be reached at all
+     * — {@code KeymapTest} says so in its own comment and drives the resolver directly instead. The
+     * resolver was covered, the bindings were covered, and the one thing nobody could ask was whether
+     * anything called them.</p>
+     */
+    @Test
+    public void modTabOpensTheSwitcherInsteadOfTabbingBetweenWindows() {
+        open("One");
+        open("Two");
+        frame();
+
+        assertFalse("the switcher is open before anything was pressed", desktop().switcher().isOpen());
+        int mod = KeyStroke.parse("Mod+Tab").modifiers();
+        assertTrue("Mod+Tab was not consumed", chord(CgKeyCodes.KEY_TAB, mod));
+        frame();
+
+        // STILL HOLDING, as a user is: the switcher is held open by the modifier and commits the moment
+        // it is let go, so releasing before this assertion would close it before it could be seen.
+        assertTrue("Mod+Tab did not open the switcher", desktop().switcher().isOpen());
+        releaseModifiers();
     }
 
     /** Whether {@code node} is the dialog, inside it, or the backdrop it owns. */
