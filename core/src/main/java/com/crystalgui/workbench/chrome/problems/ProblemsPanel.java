@@ -1,6 +1,6 @@
-package com.crystalgui.chrome.problems;
+package com.crystalgui.workbench.chrome.problems;
 
-import com.crystalgui.chrome.preferences.Preferences;
+import com.crystalgui.workbench.chrome.preferences.Preferences;
 import com.crystalgui.core.collection.tree.FilteredTreeSource;
 import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.core.command.ClipboardCommands;

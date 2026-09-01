@@ -1,4 +1,4 @@
-package com.crystalgui.chrome.palette;
+package com.crystalgui.workbench.chrome.palette;
 
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;

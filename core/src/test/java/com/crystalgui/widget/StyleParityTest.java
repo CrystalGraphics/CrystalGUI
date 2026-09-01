@@ -1,11 +1,11 @@
 package com.crystalgui.widget;
 
-import com.crystalgui.chrome.notification.NotificationsView;
-import com.crystalgui.chrome.palette.QuickPick;
-import com.crystalgui.chrome.preferences.NavigatorView;
-import com.crystalgui.chrome.problems.ProblemsPanel;
-import com.crystalgui.chrome.status.Breadcrumbs;
-import com.crystalgui.chrome.status.StatusBarView;
+import com.crystalgui.workbench.chrome.notification.NotificationsView;
+import com.crystalgui.workbench.chrome.palette.QuickPick;
+import com.crystalgui.workbench.chrome.preferences.NavigatorView;
+import com.crystalgui.workbench.chrome.problems.ProblemsPanel;
+import com.crystalgui.workbench.chrome.status.Breadcrumbs;
+import com.crystalgui.workbench.chrome.status.StatusBarView;
 import com.crystalgui.core.collection.pick.QuickPickItem;
 import com.crystalgui.core.collection.pick.QuickPickSource;
 import com.crystalgui.core.collection.tree.TreeDataSource;

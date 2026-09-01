@@ -1,6 +1,6 @@
-package com.crystalgui.chrome.notification;
+package com.crystalgui.workbench.chrome.notification;
 
-import com.crystalgui.chrome.status.StatusBarView;
+import com.crystalgui.workbench.chrome.status.StatusBarView;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.NotificationEvent;

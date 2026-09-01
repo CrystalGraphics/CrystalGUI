@@ -1,7 +1,7 @@
-package com.crystalgui.chrome.menu;
+package com.crystalgui.workbench.chrome.menu;
 
-import com.crystalgui.chrome.palette.CommandPalette;
-import com.crystalgui.chrome.problems.ProblemsCommands;
+import com.crystalgui.workbench.chrome.palette.CommandPalette;
+import com.crystalgui.workbench.chrome.problems.ProblemsCommands;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;

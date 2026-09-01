@@ -1,7 +1,7 @@
-package com.crystalgui.chrome.menu;
+package com.crystalgui.workbench.chrome.menu;
 
-import com.crystalgui.chrome.notification.NotificationBalloons;
-import com.crystalgui.chrome.status.StatusBarView;
+import com.crystalgui.workbench.chrome.notification.NotificationBalloons;
+import com.crystalgui.workbench.chrome.status.StatusBarView;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.core.data.DataKey;

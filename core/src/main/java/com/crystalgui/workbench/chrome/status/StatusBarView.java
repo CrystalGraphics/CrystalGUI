@@ -1,4 +1,4 @@
-package com.crystalgui.chrome.status;
+package com.crystalgui.workbench.chrome.status;
 
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.core.command.CommandContext;

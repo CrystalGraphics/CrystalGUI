@@ -42,15 +42,27 @@ public class LayeringTest {
     /** A layer, and everything it may not name. Ordered bottom-up; each may name only what precedes it. */
     private static final List<String> LAYERS = List.of(
             "com/crystalgui/widget/",
-            // ONE LAYER, and its six sub-packages are organisational rather than ordered:
-            // `chrome/` is a prefix, so palette, menu, problems, notification,
-            // preferences and status are already inside it. Listing them as LAYERS made
-            // each one "above" the layer root, and ChromeKinds -- the layer's own
-            // registrar, which must name everything in it -- became a layer reaching
-            // upward. Ordering WITHIN a layer is a separate question and has its own
-            // list; see WIDGET_TIERS, which is the only layer that needs one.
-            "com/crystalgui/chrome/",
+            // THE DOCUMENT LAYER -- above `widget` because a document says what SHOWS it
+            // (`FileDocument.view()` answers a node), and below everything that opens one. It is
+            // deliberately NOT in `fs`, which has zero imports of any UI package across its 37
+            // files: putting a class that names a node there would put the engine on a dedicated
+            // server's classpath, which is the one thing `headlessTest` exists to prevent. And it
+            // is not the workbench's, because four things outside the workbench open documents --
+            // CrystalEditor, the shader graph, the dock and WorkbenchSettings.
+            "com/crystalgui/document/",
             "com/crystalgui/desktop/",
+            // ONE LAYER, and its sub-packages are organisational rather than ordered: a prefix
+            // covers them, so region, toolwindow, explorer, dock, chrome and the rest are already
+            // inside it. Listing one as a LAYER made it read as "above" the layer root, and the
+            // layer's own registrar -- which must name everything in it -- became a layer reaching
+            // upward. Ordering WITHIN a layer is a separate question and has its own list; see
+            // WIDGET_TIERS, which is the only layer that needs one.
+            //
+            // `chrome` WAS its own layer here and is now `workbench.chrome`, because the split was
+            // in the wrong place and there was a cycle proving it: `ProblemsPanel implements
+            // HeaderContributor`, a workbench interface, so chrome reached UP. Nothing below the
+            // workbench wanted it either -- the desktop's four chrome imports were all
+            // `ContextMenu`/`MenuBuilder`, which 6.3 had already put in `widget.overlay`.
             "com/crystalgui/workbench/",
             // THE APPLICATIONS, and the layer the doctrine has always named without anything
             // enforcing it: `graph.shader` was reachable from a leaf widget because nothing in this

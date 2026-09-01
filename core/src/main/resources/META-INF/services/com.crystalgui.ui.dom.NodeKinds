@@ -3,9 +3,9 @@
 #
 # One line per layer, added when that layer's first widget is ported:
 #   6.1  com.crystalgui.widget.Widgets
-#   6.3  com.crystalgui.chrome.ChromeKinds
+#   6.3  com.crystalgui.workbench.chrome.ChromeKinds  (folded under the workbench at 6.7)
 #   6.1  com.crystalgui.desktop.DesktopKinds  (WindowIcon came early: Taskbar needs it)
 #   6.7  com.crystalgui.workbench.WorkbenchKinds
 com.crystalgui.widget.Widgets
-com.crystalgui.chrome.ChromeKinds
+com.crystalgui.workbench.chrome.ChromeKinds
 com.crystalgui.desktop.DesktopKinds

@@ -1,4 +1,4 @@
-package com.crystalgui.chrome.preferences;
+package com.crystalgui.workbench.chrome.preferences;
 
 import com.crystalgui.core.collection.tree.FilteredTreeSource;
 import com.crystalgui.core.settings.Setting;

@@ -1,4 +1,4 @@
-package com.crystalgui.chrome.problems;
+package com.crystalgui.workbench.chrome.problems;
 
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;

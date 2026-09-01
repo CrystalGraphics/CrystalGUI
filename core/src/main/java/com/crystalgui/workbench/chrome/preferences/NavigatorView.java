@@ -1,8 +1,8 @@
-package com.crystalgui.chrome.preferences;
+package com.crystalgui.workbench.chrome.preferences;
 
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.chrome.palette.QuickPick;
-import com.crystalgui.chrome.status.Breadcrumbs;
+import com.crystalgui.workbench.chrome.palette.QuickPick;
+import com.crystalgui.workbench.chrome.status.Breadcrumbs;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.core.collection.tree.FilteredTreeSource;
 import com.crystalgui.core.collection.tree.TreeDataSource;
