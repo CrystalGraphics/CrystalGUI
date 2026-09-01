@@ -22,6 +22,7 @@ import com.crystalgui.ui.UITransform;
 import com.crystalgui.ui.dom.UINode;
 import org.joml.Vector2f;
 import com.crystalgui.widget.dnd.Resizer;
+import com.crystalgui.widget.overlay.Dialog;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -264,20 +265,100 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
                 edge.hasClass(Resizer.RESIZER_CLASS));
     }
 
-    /** The overlay slot takes no space until something is showing on it — the desktop's rule, one level down. */
+    /**
+     * A closed owned dialog leaves NOTHING over the window it belonged to.
+     *
+     * <p>The property the {@code __overlays__} slot existed to provide, asserted against the mechanism
+     * that provides it now. The slot took a full-size box from an {@code __occupied__} class that Java
+     * toggled from a set of what was showing, so a dialog that closed without the matching release left
+     * a transparent sheet over the whole window — reported as a window whose caption buttons and
+     * content had all stopped responding after a modal had been opened once.</p>
+     *
+     * <p>There is no set now: an owned surface is an ordinary out-of-flow child of the frame, a modal
+     * blocks through its own backdrop, and <b>a node that is not displayed has no box</b> — so the
+     * question answers itself on every layout and cannot go stale.</p>
+     *
+     * <p><b>The open half is the counter-assertion and is not a formality</b>: a change that simply
+     * stopped the dialog covering anything would satisfy the closed half perfectly and destroy
+     * modality, which is the more expensive of the two failures.</p>
+     */
     @Test
-    public void theOverlaySlotIsSizedOnlyWhileOccupied() {
+    public void aClosedOwnedDialogLeavesNothingOverTheWindow() {
         WindowFrame frame = open("One");
-        UINode overlays = null;
-        for (UINode child : frame.children()) {
-            if (child.hasClass(WindowFrame.OVERLAY_CLASS)) overlays = child;
-        }
-        assertNotNull("the frame has no overlay slot", overlays);
-        assertFalse("an empty slot claims to be occupied",
-                overlays.hasClass(WindowFrame.OVERLAY_OCCUPIED_CLASS));
-        Box box = overlays.box();
+        Dialog dialog = new Dialog("Owned");
+        frame.attachOwned(dialog);
+        dialog.showModal();
+        frame();
+        frame();
+
+        Box box = frame.box();
         assertNotNull(box);
-        assertEquals("an empty overlay slot covers the window", 0f, box.width(), 0.01f);
+        float x = box.worldX() + box.width() / 2f;
+        float y = box.worldY() + box.height() / 2f;
+
+        // THROUGH THE POINTER, not through the raw box test. Modality on this engine is `pushModal`
+        // plus the inertness predicate the input service consults -- not a covering box -- so
+        // `boxes().hitTest` answers what is geometrically there and knows nothing about being blocked.
+        // Asserting on it would pass against a window that is completely dead.
+        move(x, y);
+        frame();
+        UINode blocked = document.input().hoverTarget();
+        assertFalse("the window's own content is reachable while its modal is open",
+                blocked != null && !partOf(blocked, dialog));
+
+        dialog.close();
+        frame();
+        frame();
+
+        move(x, y);
+        frame();
+        UINode after = document.input().hoverTarget();
+        assertNotNull("the window is unreachable after its modal closed", after);
+        assertFalse("a closed dialog is still blocking the window: " + after.classes(),
+                partOf(after, dialog));
+    }
+
+    /**
+     * A modal is centred on the window it opens over <b>on its very first frame</b>.
+     *
+     * <p>The fifth appearance of one engine gap and the reason it was finally closed there: anything
+     * whose position depends on its own measured size has to place itself after layout, and with layout
+     * running exactly once that write landed on the NEXT frame — so the thing was drawn once, at full
+     * opacity, at its containing block's origin. Reported here as a modal appearing in the corner of the
+     * Geometry window for one frame before snapping to the middle.</p>
+     *
+     * <p><b>One {@code frame()} is the whole assertion.</b> Two would pass against no fix at all, which
+     * is exactly how this survived four previous encounters — each widget parked itself off-screen until
+     * placed, so the misplacement became an invisible frame instead of a visible one and every test that
+     * settled for a couple of frames went green.</p>
+     */
+    @Test
+    public void anOwnedModalIsCentredOnItsWindowOnTheFirstFrame() {
+        WindowFrame frame = open("Geometry");
+        Dialog dialog = new Dialog("Owned");
+        frame.attachOwned(dialog);
+        dialog.showModal();
+        frame();
+
+        Box self = boxOf(dialog);
+        Box host = self.host();
+        assertNotNull("the modal is hosted by nothing", host);
+        assertSame("an owned modal was promoted away from its window", frame.box(), host);
+        assertTrue("the modal has not been laid out", self.width() > 0f && self.height() > 0f);
+
+        assertEquals("not centred horizontally on its window",
+                (host.width() - self.width()) / 2f, self.x(), 0.5f);
+        assertEquals("not centred vertically on its window",
+                (host.height() - self.height()) / 2f, self.y(), 0.5f);
+    }
+
+    /** Whether {@code node} is the dialog, inside it, or the backdrop it owns. */
+    private static boolean partOf(UINode node, Dialog dialog) {
+        if (node.hasClass(Dialog.BACKDROP_CLASS)) return true;
+        for (UINode walk = node; walk != null; walk = walk.parent()) {
+            if (walk == dialog) return true;
+        }
+        return false;
     }
 
     // ── Ownership replaces the one-way ticker ────────────────────────────────

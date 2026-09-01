@@ -247,14 +247,6 @@ public class WindowFrame extends UINode implements Disposable, Resizable, DataPr
     public static final String MAXIMIZED_CLASS = "__maximized__";
 
     /**
-     * Where this window's <b>owned</b> windows live — its modal dialogs, and from W8 its floating tool
-     * windows. The same class the window-level layer uses, because it is the same role one level down.
-     *
-     * @see #overlaySlot()
-     */
-    public static final String OVERLAY_CLASS = "__overlays__";
-
-    /**
      * Emitted when the window comes back, carrying <b>{@code persisted}</b> — whether it was restored
      * from retention rather than shown for the first time.
      *
@@ -393,7 +385,6 @@ public class WindowFrame extends UINode implements Disposable, Resizable, DataPr
         }
     }
     private final UINode captionChrome;
-    private final UINode overlays;
     private final UIText titleLabel;
     private final WindowIcon icon;
     private final Button closeButton;
@@ -466,21 +457,6 @@ public class WindowFrame extends UINode implements Disposable, Resizable, DataPr
     }
 
     /** Which of the live owned windows are modal — the only ones that give the slot a box. */
-    private final Set<UINode> blockers = new LinkedHashSet<>();
-
-    /**
-     * Dialogs whose {@code onClosed} has already been connected to {@link #releaseOwned}.
-     *
-     * <p>A dialog is closed and re-shown from where it already is, so {@code attachOwned} runs again
-     * on every {@code showModal()} — and {@code Signal} has no idempotent connect, so without this
-     * the release would be wired once per open and the connections would accumulate for the life of
-     * the window.</p>
-     */
-    private final java.util.Set<Dialog> ownedReleases =
-            java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
-
-    /** What is currently SHOWING on the owned surface. @see #releaseOwned */
-    private final Set<UINode> live = new LinkedHashSet<>();
 
     /** @see #adoptChrome */
     @Nullable
@@ -589,11 +565,6 @@ public class WindowFrame extends UINode implements Disposable, Resizable, DataPr
         content = new ScrollerView();
         content.addClass(CONTENT_CLASS);
         append(content);
-
-        overlays = new UINode();
-        overlays.addClass(OVERLAY_CLASS);
-        append(overlays);
-        syncOverlaySlot();
 
         // THE EIGHT RESIZE HANDLES, BUILT HERE RATHER THAN BY THE CASCADE.
         //
@@ -918,96 +889,52 @@ public class WindowFrame extends UINode implements Disposable, Resizable, DataPr
     // ── Owned windows ───────────────────────────────────────────────────────
 
     /**
-     * The surface this window's <b>owned</b> windows are parented on — a modal dialog today, a floating
-     * tool window at W8.
+     * Where this window's <b>owned</b> surfaces live: the window itself.
      *
-     * <h3>Owned, not promoted</h3>
-     * <p>Win32's rule decides this: an owned window stays above its owner <em>and travels with it</em>.
-     * A modal in the global top layer would float above whichever window happened to be raised next,
-     * because the top layer paints after the whole main tree by construction — so a dialog opened in
-     * one window would end up over another. Parenting it <em>inside</em> the frame gets the whole group
-     * raising, lowering and hiding as one with no bookkeeping at all: the owner's {@code z-index}
-     * carries its owned windows with it, and detaching the owner detaches them.</p>
+     * <p><b>There is no slot, and removing it is the fix rather than a simplification.</b> An owned
+     * surface is {@code position: absolute} over the frame, so the frame is already the containing
+     * block, already the paint parent (an out-of-flow child draws above the content), and already the
+     * hit-test entry. A slot in between added nothing but a second box that had to be told when to
+     * exist.</p>
      *
-     * <p>The slot sits above {@code __content__} within the frame (a {@code z-index} in the sheet), and
-     * the frame itself keeps {@code overflow: visible} while only the content clips — so an owned
-     * window may legally overhang its owner's edge, which a dialog wider than a narrow window must.</p>
+     * <p>What that cost is the whole reason this is worth writing down. The slot took its size from a
+     * class, the class from a set of what was showing, and the set from somebody remembering to call a
+     * release — so a dialog that closed without one left a full-size transparent box over the window,
+     * and every click on the window's own chrome went into it. That is not a bookkeeping slip: the
+     * engine already answers "is this showing" exactly, because <b>a node that is not displayed has no
+     * box at all</b>, and the slot was a hand-maintained copy of that answer which could disagree with
+     * it. A copy of a fact the engine owns is a fact that goes stale.</p>
      *
-     * <h3>Sized only while it holds something</h3>
-     * <p>The same rule the desktop follows, for the same reason: a full-size slot hit-tests, so an
-     * empty one would sit over the window's own content and swallow every click. Use
-     * {@link #attachOwned}/{@link #detachOwned} rather than parenting into it by hand — they are what
-     * keep that in step.</p>
+     * <p>Blocking needs none of it either. A modal blocks because its own {@code __backdrop__} is
+     * {@code 100%} of its containing block — which is now the frame — and that backdrop goes away with
+     * the dialog. Nothing has to be told.</p>
      */
     public UINode overlaySlot() {
-        return overlays;
+        return this;
     }
 
-    /** Parents an owned window onto this frame. Blocking — the caller is a modal. @see #attachOwned(UINode, boolean) */
+    /**
+     * Parents an owned surface onto this frame — a modal dialog, or a floating tool window.
+     *
+     * <p>The whole implementation, and that is the point: an owned surface is out of flow, so being a
+     * child of the frame already gives it the frame as its containing block, a place above the content
+     * in paint order, and a hit-test entry. @see #overlaySlot()</p>
+     *
+     * <p><b>There is no {@code blocking} flag and no counterpart to this method.</b> The flag chose
+     * whether a slot took a full-size box; a modal blocks through its own backdrop instead, which is
+     * sized by the sheet and destroyed with the dialog. And nothing has to announce that an owned
+     * surface has stopped showing, because a node that is not displayed has no box — the question the
+     * old {@code releaseOwned} existed to answer is one the engine answers on every layout.</p>
+     */
     public void attachOwned(UINode owned) {
-        attachOwned(owned, true);
-    }
-
-    /**
-     * Parents an owned window onto this frame.
-     *
-     * <h3>{@code blocking} decides whether the slot has a box, and it is not a detail</h3>
-     *
-     * <p>The slot is sized to the whole frame while it holds something, which is exactly right for a
-     * <b>modal</b>: a modal's business is that nothing behind it can be reached, and a full-size
-     * transparent slot over the content is how that is spelled here.</p>
-     *
-     * <p>For a non-modal owned window — a floating tool window — it is a bug wearing modality's
-     * clothes. The window itself works, and every click anywhere else in the owner lands on the slot
-     * and does nothing: the panel reads as having opened <em>as a dialog</em>, which is what it was
-     * reported as. It also confines the thing, because a frame clamps against its containing block and
-     * that block is this slot.</p>
-     *
-     * <p>So a non-blocking owned window leaves the slot at zero, and <b>that does not hide it</b>:
-     * {@code elementHitTest} recurses into children before it ever consults the parent's own box, gated
-     * only on clipping, and the slot does not clip. A zero-sized non-clipping parent is therefore fully
-     * transparent to the pointer while its children stay hittable — which is the property this needs
-     * and the reason it can be spelled at all.</p>
-     */
-    public void attachOwned(UINode owned, boolean blocking) {
         if (owned == null) return;
-        if (owned.parent() != overlays) overlays.append(owned);
-        live.add(owned);
-        if (blocking) blockers.add(owned);
-        else blockers.remove(owned);
-        syncOverlaySlot();
-        // THE RELEASE IS WIRED HERE, and it has to be: `releaseOwned` is what ends the slot's claim
-        // on a box, and a `Dialog` cannot call it -- `widget.overlay` sits a layer below `desktop`,
-        // so naming a frame from a dialog is the upward reference LayeringTest refuses. The
-        // dependency points this way, so the wiring does too, and it is done ONCE per dialog rather
-        // than at every call site: a rule every caller has to remember is one somebody forgets, and
-        // the symptom is a window that has visibly closed its dialog and answers no click at all.
-        if (owned instanceof Dialog dialog && ownedReleases.add(dialog)) {
-            dialog.onClosed.connect(() -> releaseOwned(dialog));
-        }
-    }
-
-    /**
-     * The counterpart — {@code owned} is no longer showing, so it stops holding the slot open.
-     *
-     * <p><b>It stays parented</b>, and that is not an oversight: a {@code Dialog} is closed with
-     * {@code display: none} and re-shown from wherever it already is, so removing it from the tree
-     * would make the second {@code show()} put it nowhere. What has to end is the slot's <em>box</em> —
-     * a full-size slot hit-tests, so one left open over a window with nothing in it swallows every
-     * click on that window's content. Hence a set of what is live rather than a look at the children:
-     * "parented here" and "currently showing" are different questions and only the second one sizes
-     * anything.</p>
-     */
-    public void releaseOwned(UINode owned) {
-        if (owned == null) return;
-        live.remove(owned);
-        blockers.remove(owned);
-        syncOverlaySlot();
-    }
-
-    /** Whether anything is currently showing on this frame's owned surface. */
-    public boolean hasOwnedWindows() {
-        return !live.isEmpty();
+        if (owned.parent() != this) append(owned);
+        // AND IT IS TOLD, because being parented here is not something it can read as ownership --
+        // every overlay is parented somewhere. Without this a modal promotes itself to the DOCUMENT's
+        // top layer on show and is laid out against the whole screen, which is the standing rule
+        // inverted: a window's modal is owned by it and never globally promoted. Idempotent, so the
+        // repeated attach a re-shown dialog makes costs a field write.
+        if (owned instanceof Dialog dialog) dialog.setOwned(true);
     }
 
     /**
@@ -1315,19 +1242,6 @@ public class WindowFrame extends UINode implements Disposable, Resizable, DataPr
         return false;
     }
 
-    private void syncOverlaySlot() {
-        // THE BLOCKERS, not the live set. Everything owned is live; only a modal wants the owner's
-        // whole surface covered. See attachOwned(UINode, boolean).
-        boolean occupied = !blockers.isEmpty();
-        // A CLASS, for the reason Desktop.syncPresence records: the geometry is the sheet's and the
-        // state is the widget's. The empty case is the BASE rule, so a slot whose class is forgotten
-        // takes no space rather than covering the window it belongs to.
-        if (occupied) overlays.addClass(OVERLAY_OCCUPIED_CLASS);
-        else overlays.removeClass(OVERLAY_OCCUPIED_CLASS);
-    }
-
-    /** On the overlay slot exactly while something is showing on it. @see #syncOverlaySlot */
-    public static final String OVERLAY_OCCUPIED_CLASS = "__occupied__";
 
     /**
      * The window {@code element} belongs to, or null — its nearest frame ancestor.
@@ -1609,7 +1523,9 @@ public class WindowFrame extends UINode implements Disposable, Resizable, DataPr
         // minimise, from dispose and from a caller, and only one of those is a place to remember it.
         WindowFrame ownedBy = null;
         UINode above = layer.parent();
-        if (above instanceof WindowFrame candidate && candidate.overlaySlot() == layer) ownedBy = candidate;
+        // AN OWNED FRAME IS A CHILD OF ITS OWNER, with no slot in between since the slot was
+        // deleted -- so the question is simply whether the layer it is leaving IS a window.
+        if (layer instanceof WindowFrame candidate) ownedBy = candidate;
 
         // The layer's removeChild is what flips the state and tells the registry -- so a bare
         // removeSelf() by some other caller means exactly the same thing as hide(), rather than leaving
@@ -1617,7 +1533,6 @@ public class WindowFrame extends UINode implements Disposable, Resizable, DataPr
         // MEASURED BEFORE THE DETACH, which is the whole of it -- see recordedWidth().
         captureVisibleSize();
         layer.remove(this);
-        if (ownedBy != null) ownedBy.releaseOwned(this);
         // ...WHICH ONLY HOLDS FOR A WINDOW LAYER. An OWNED frame's parent is its owner's overlay slot,
         // an ordinary UINode whose removeChild detaches and nothing else -- so the delegation above
         // silently did neither half of what hide() promises: the frame left the tree still claiming to

@@ -598,7 +598,7 @@ public final class ToolWindowManager {
             // legitimate host, and refusing there would make the gesture work in the application and
             // not in a test.
             UINode scope = window.focus().scopeOf(anchor);
-            if (scope instanceof WindowFrame owner) owner.attachOwned(frame, false);
+            if (scope instanceof WindowFrame owner) owner.attachOwned(frame);
             else Desktop.of(window).addWindow(frame);
         } else {
             Desktop.of(window).addWindow(frame);

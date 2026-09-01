@@ -785,37 +785,22 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background-color: var(--window-i
     resize: none;
 }
 
-/* ── The owned surface ──────────────────────────────────────────────────────────────────────────
- * Where a window's own modal dialogs live, and from W8 its floating tool windows. Above the content
- * and below nothing else in the frame — an owned window is always over its owner, which is Win32's
- * rule and the reason it is parented here rather than promoted to the global top layer (that paints
- * above EVERY window, so a dialog would float over whichever one was raised next).
+/* ── The owned surface ─────────────────────────────────────────────────────────────────
+ * A window's own modal dialogs, and its floating tool windows, are ORDINARY CHILDREN of the frame —
+ * out of flow, so the frame is their containing block and they paint above its content by being later
+ * in it. An owned window is always over its owner, which is Win32's rule and the reason it is parented
+ * here rather than promoted to the global top layer (that paints above EVERY window, so a dialog would
+ * float over whichever one was raised next).
  *
- * Its geometry is written from Java: absolute, pinned to the frame's corner, and sized 100% only
- * while something is actually showing on it. A full-size slot hit-tests, so one left open with
- * nothing in it swallows every click on the window's own content — the same rule, and the same
- * reason, as the desktop's own presence. See WindowFrame.releaseOwned.
+ * THERE IS NO SLOT, AND THERE ARE NO RULES HERE. A `.__overlays__` box used to sit between the frame
+ * and what it owned, sized 100% by an `.__occupied__` class that Java added and removed from a set of
+ * what was showing — which meant "is this dialog on screen" had a second answer, kept by hand, that
+ * could disagree with the engine's. It did: a dialog closed without the matching release left a
+ * full-size transparent box over the window and every click on the window's own chrome went into it.
  *
- * The z-index is not decoration: the slot happens to be a later sibling than the content and would
- * paint above it anyway, so getting this wrong fails NOTHING today and fails the first time anything
- * reorders the frame's parts. */
-.__window__ > .__overlays__ {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 0;
-    height: 0;
-    z-index: 10;
-}
-
-/* SIZED ONLY WHILE SOMETHING IS SHOWING ON IT. A full-size slot with nothing in it swallows every click
- * on the window's own content -- the desktop's own rule, one level down. `WindowFrame.syncOverlaySlot`
- * adds and removes the class; the base rule above is the empty state, so forgetting it leaves an owned
- * dialog unsized rather than leaving a window dead. */
-.__window__ > .__overlays__.__occupied__ {
-    width: 100%;
-    height: 100%;
-}
+ * The engine's answer is exact and needs no help: a node that is not displayed HAS NO BOX. So a closed
+ * dialog covers nothing because it is not there, and a modal blocks because its own `__backdrop__` is
+ * 100% of its containing block — which is the frame. See WindowFrame.overlaySlot for the whole of it. */
 
 /* THE CHILD COMBINATOR IS NOT OPTIONAL HERE. `window .__content__` would reach CrystalEditor's,
  * ProjectFileTree's and every ConfiguratorGroup's `__content__` inside any window and zero their
