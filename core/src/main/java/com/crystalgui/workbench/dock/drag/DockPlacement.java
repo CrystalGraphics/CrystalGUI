@@ -76,20 +76,20 @@ public sealed interface DockPlacement {
         return new InRegion(Objects.requireNonNull(region, "region"));
     }
 
-    record Side(DockDropZone zone) implements DockPlacement {
+    public record Side(DockDropZone zone) implements DockPlacement {
     }
 
-    record With(UINode element) implements DockPlacement {
+    public record With(UINode element) implements DockPlacement {
     }
 
-    record Leaf(DockLeaf leaf) implements DockPlacement {
+    public record Leaf(DockLeaf leaf) implements DockPlacement {
     }
 
     /** @see DockPlacement#in(DockRegion) */
-    record InRegion(DockRegion region) implements DockPlacement {
+    public record InRegion(DockRegion region) implements DockPlacement {
     }
 
-    final class Active implements DockPlacement {
+    public final class Active implements DockPlacement {
         static final Active INSTANCE = new Active();
 
         private Active() {
@@ -101,7 +101,7 @@ public sealed interface DockPlacement {
         }
     }
 
-    final class Central implements DockPlacement {
+    public final class Central implements DockPlacement {
         static final Central INSTANCE = new Central();
 
         private Central() {

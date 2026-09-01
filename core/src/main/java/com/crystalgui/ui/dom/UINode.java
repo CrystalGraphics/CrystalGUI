@@ -1,6 +1,8 @@
 package com.crystalgui.ui.dom;
 
 import com.crystalgui.core.data.DataProvider;
+import com.crystalgui.core.settings.Settings;
+import com.crystalgui.core.settings.SettingsScope;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.GeneralGroup;
 import com.crystalgui.style.LayoutGroup;
@@ -76,7 +78,7 @@ import org.joml.Vector2f;
  * lifecycle callback is an ordinary new mutation. A reparent is one {@code moved}, which the old tree
  * could not spell (M2).</p>
  */
-public class UINode implements EventTarget, Styleable, KeymapScope {
+public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScope {
 
     private final Name name;
 
@@ -228,6 +230,44 @@ public class UINode implements EventTarget, Styleable, KeymapScope {
     @Override
     public List<DataProvider> scopeProviders() {
         return List.of();
+    }
+
+    // ── SettingsScope: a value resolves by walking OUT through the tree ─────────
+
+    @Nullable
+    private Settings settings;
+
+    /**
+     * This node's own settings, created on first ask.
+     *
+     * <p>VS Code resolves a setting's scope by URI; this resolves it by the TREE, which is why the
+     * scope chain is the parent chain and every node is a scope rather than only the few that
+     * happen to own a store today.</p>
+     */
+    @Override
+    public Settings settings() {
+        if (settings == null) settings = new Settings();
+        return settings;
+    }
+
+    /**
+     * The store <b>if one exists</b>, without bringing one into being.
+     *
+     * <p>Load-bearing, not an optimisation: {@code resolveRaw} visits every ancestor on every read,
+     * so a walk that went through {@link #settings()} would allocate an empty store for each one and
+     * keep it — turning a read into a write and giving the whole tree a store per node.</p>
+     */
+    @Override
+    @Nullable
+    public Settings settingsOrNull() {
+        return settings;
+    }
+
+    /** The enclosing scope is the LIGHT parent — the same chain {@link #commandParent()} walks. */
+    @Override
+    @Nullable
+    public SettingsScope settingsParent() {
+        return parent;
     }
 
     /**
@@ -1463,6 +1503,13 @@ public class UINode implements EventTarget, Styleable, KeymapScope {
             // a chord that did nothing once. Both run in the same drain, so a widget's own
             // connected() sees its commands already registered.
             doc.queue(this::runCommandHooks);
+            // SEEDED BEFORE connected(), so a widget's own hook sees the state it is being restored
+            // with rather than the state it was constructed with. Queued like the rest: applying a
+            // payload runs a widget's setters, and those may mutate.
+            doc.queue(() -> {
+                SessionState<?> session = doc.sessionState();
+                if (session != null) session.applyTo(this);
+            });
             doc.queue(this::connected);
         }
         for (UINode child : children) child.propagate(doc, shadow, observer);
@@ -1480,6 +1527,12 @@ public class UINode implements EventTarget, Styleable, KeymapScope {
         if (shadowRoot != null) shadowRoot.detachedKeepingParent();
         UIDocument doc = document;
         if (doc != null) {
+            // HARVESTED HERE AND NOWHERE ELSE. A hidden tool window is DETACHED, so a save afterwards
+            // walks a tree this widget is no longer in and writes nothing -- drag the Run panel's
+            // divider, close the panel, quit, and the width is gone. This is the last moment the
+            // value exists to be read.
+            SessionState<?> session = doc.sessionState();
+            if (session != null) session.captureFrom(this);
             doc.unindex(this);
             doc.styles().onElementDetached(this);
             // ANYTHING HOLDING THIS NODE HAS TO BE TOLD, or the reference outlives the tree it made

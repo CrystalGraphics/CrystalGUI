@@ -1,4 +1,4 @@
-package com.crystalgui.workbench.toolwindow;
+package com.crystalgui.workbench.view;
 
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import java.util.Map;
