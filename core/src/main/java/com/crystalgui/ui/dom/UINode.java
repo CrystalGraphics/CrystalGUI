@@ -939,6 +939,22 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
     }
 
     /**
+     * A press landed inside this scope and a modal ate it — this node decides what that means.
+     *
+     * <p>Called on the scope the modal BLOCKS, not on the modal, because the interesting answers
+     * belong to the scope: a window raises itself and flashes the dialog responsible, which is what
+     * Windows does and the only way a modally blocked window is distinguishable from a hung one. The
+     * engine cannot do either itself — it may not name a compositor or a dialog — so it reports the
+     * press and the modal that absorbed it, and layers above decide.</p>
+     *
+     * <p>Default is to do nothing, which is right for a scope with nothing to raise.</p>
+     *
+     * @param modal the modal that absorbed the press
+     */
+    public void pressBlocked(UINode modal) {
+    }
+
+    /**
      * Asks the engine to re-run selector matching for this node on the next style pass.
      *
      * <p>A FROZEN node matches nothing: it is not live, so re-matching is work for a subtree nobody

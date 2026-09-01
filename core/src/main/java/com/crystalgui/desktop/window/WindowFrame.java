@@ -2391,6 +2391,31 @@ public class WindowFrame extends UINode implements Disposable, Resizable, DataPr
     }
 
     /**
+     * A press landed on this window and its own modal ate it: raise, and flash the dialog.
+     *
+     * <p><b>This window's mouse-down listener never runs for that press.</b> Everything in a blocked
+     * window is inert, inertness is {@code pointer-events: none}, so the hit resolves to nothing at all
+     * -- which is also exactly what a press on bare desktop looks like. So clicking a blocked window's
+     * caption did nothing whatsoever: it did not come forward, it did not take focus, and the desktop
+     * reported no active window, which is indistinguishable from the application having hung. The only
+     * way to reach the window was to click the dialog itself.</p>
+     *
+     * <p>Every desktop raises the owner group and draws attention to the dialog instead -- Windows
+     * flashes it and dings -- because the one thing the user needs told is <em>where the click went</em>.
+     * Raising is safe while blocked: it is a {@code z-index} write and a focus restore, and focus can
+     * only land inside the modal because {@code requestFocus} consults the full inertness predicate.</p>
+     */
+    @Override
+    public void pressBlocked(UINode modal) {
+        Desktop desktop = desktop();
+        if (desktop != null) desktop.activate(this, false, true);
+        // THE FRAME KNOWS WHAT A DIALOG IS and the engine does not -- `desktop` sits above
+        // `widget.overlay`, so this is the legal direction for the type check, and it is why the hook
+        // is on the SCOPE rather than on the modal.
+        if (modal instanceof Dialog dialog) dialog.pulse();
+    }
+
+    /**
      * The desktop this window belongs to, or null once it has been destroyed.
      *
      * <p><b>Not a tree walk.</b> A hidden window is detached and still belongs to its desktop — that is

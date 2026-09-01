@@ -330,6 +330,31 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         return box == null ? null : box.node();
     }
 
+    /**
+     * The modal that a click here would land under, or null.
+     *
+     * <p><b>Inertness makes a hit FALL THROUGH, and for modality that is the wrong answer.</b> Skipping
+     * an inert subtree is right for {@code pointer-events: none} -- the pointer passes over a node, it
+     * does not punch a hole in the document -- so a press on a blocked window resolved to whatever sat
+     * behind it, which on a desktop is the window LAYER, whose own listener treats a press as "the user
+     * clicked bare background" and deactivates. So clicking a blocked window's caption did not merely
+     * fail to raise it: it took the active window away entirely, leaving a desktop reporting nothing
+     * active with a dialog plainly on screen. The only way back in was to click the dialog.</p>
+     *
+     * <p>A modal has to SWALLOW the press instead. It is asked of the RAW hit -- the geometry, with no
+     * inertness filter -- because the question is "what did the user aim at", and then of that node's
+     * own scope, never the globally topmost modal: with per-window modality that would flash a window
+     * the user is not looking at while the one they clicked stayed silent.</p>
+     *
+     * <p>Null while a pointer is captured: a drag routes every event to its capture target by
+     * definition, and a drag cannot have started inside something inert.</p>
+     */
+    private @Nullable UINode modalAbsorbing() {
+        if (capture != null) return null;
+        Box under = document.boxes().hitTest(position.x, position.y);
+        return document.focus().blockingModal(under == null ? null : under.node());
+    }
+
     private boolean anyButtonDown() {
         for (ButtonState state : buttons) {
             if (state != null && state.isPressed()) return true;
@@ -443,6 +468,12 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
     }
 
     private boolean button(Mouse.Event event) {
+        UINode absorbedBy = modalAbsorbing();
+        if (absorbedBy != null) {
+            // SWALLOWED, and only a press is worth reporting -- a release has no gesture in it.
+            if (event.state()) document.focus().blockedScopeOf(absorbedBy).pressBlocked(absorbedBy);
+            return true;
+        }
         UINode target = hoverTarget();
         int ordinal = event.button();
         ButtonState state = buttonState(ordinal);
@@ -461,7 +492,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
             // stack as it was when the press landed, not as it is once the press has been delivered.
             int shownBefore = document.dismiss().showSeq();
             if (target != null && ordinal == 0) target.setPressed(true);
-            document.focus().pressed(target, ordinal);
+            document.focus().pressed(target, ordinal, false);
             send(target, new MouseEvent.Down(target, pointer, ordinal, detail));
             // AFTER the dispatch, which is the spec's order and browsers': dismissing first tears down
             // the tree under an undelivered event, so the press would never reach what it landed on.
