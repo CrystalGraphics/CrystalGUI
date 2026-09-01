@@ -1172,6 +1172,9 @@ menu.__jump-list__.__rising__ {
 }
 
 /* The window's tile, at a header's size. @see .__window-icon__ for what a tile is. */
+/* THE PART TWIN, for the reason the taskbar entry's tile above already carries one: the icon is a
+ * Button's `pre-icon`, in the button's shadow tree, and a descendant selector cannot cross that. */
+.__window-preview__::part(pre-icon),
 .__window-preview__ .__pre-icon__ {
     width: 14px;
     height: 14px;
