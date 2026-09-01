@@ -297,7 +297,7 @@ BY_NAME = {
     'Tooltip': 'widget/overlay', 'Dialog': 'widget/overlay', 'DialogManager': 'widget/overlay',
     'InputDialog': 'widget/overlay',
     'DragGhost': 'widget/dnd', 'InsertionMarker': 'widget/dnd',
-    'WidgetCensus': 'widget',  # a diagnostic, not a widget -- ported last, with 6.7's applications
+    'WidgetCensus': 'app',  # a diagnostic, not a widget -- ported last, with 6.7's applications
     # chrome, which is a layer rather than a directory: a few of these are overlay/layout widgets.
     'ContextMenu': 'widget/overlay', 'MenuBuilder': 'widget/overlay', 'PageStack': 'widget/layout',
     # desktop's one leaf widget. It landed at 6.1 as `desktop/window` and moved UP at 6.6, when the
@@ -338,11 +338,22 @@ BATCH = [
     # `workbench` is a prefix, so its seven sub-packages need no entry; the applications DO,
     # because retargeting them under `app/` left no prefix matching -- the same half-a-table
     # slip the config-kit note above records, met again one rename later.
-    ('workbench', '6.7'), ('app/editor', '6.7'), ('app/machine', '6.7'),
+    ('workbench', '6.7'), ('app/editor', '6.7'),
+    # THE MACHINE EXAMPLE IS 6.8's, not 6.7's. It is a `Networked` panel: it names `ServerWindows`,
+    # `UiType`, `MountedWindow` and `ServerScope`, every one of which lives in `net.window` and is
+    # typed on `UIElement` until 6.8 retypes them. Porting it here compiles the panel against an
+    # engine its framework has not reached, which is not a batch boundary anybody chose -- the plan
+    # put it here on the reasoning that it is an application, and applications are 6.7's. The
+    # dependency decides, and it points at the networking.
+    ('app/machine', '6.8'),
     ('document', '6.7'),
     ('net/window', '6.8'),
     ('language/run/view', '6.7'),
-    ('widget', '6.7'),  # the bare `widget` destination is WidgetCensus alone; everything else is a tier
+    # `WidgetCensus` names EVERY widget in the application -- that is what a census is -- so it cannot
+    # sit in `widget`, which is the BOTTOM layer: nine references reaching into `desktop` and
+    # `workbench` are nine layers reached upward, and LayeringTest says so. It belongs at the top,
+    # with the applications, which is the only layer allowed to name everything.
+    ('app', '6.7'),
 ]
 
 # ── Part classification (D1) ────────────────────────────────────────────────────────────────────
