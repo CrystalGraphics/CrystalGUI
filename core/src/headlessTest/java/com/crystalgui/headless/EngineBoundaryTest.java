@@ -42,9 +42,15 @@ public class EngineBoundaryTest {
             // needed updating. The OLD widget layer keeps its own prefix
             // (`com/crystalgui/ui/elements/`) in OLD_ENGINE below, so the two never overlap.
             "com/crystalgui/widget/",
-            "com/crystalgui/chrome/",
             "com/crystalgui/desktop/",
             "com/crystalgui/workbench/",
+            // THE DOCUMENT LAYER (6.7) is a NEW-ENGINE package and not a neutral one, and the reason
+            // is one method: `FileDocument.view()` answers the node that shows the document, and
+            // there is no supertype `UIElement` and `UINode` share. So it cannot be ONE class both
+            // engines name -- the three genuinely neutral members (DocumentType, DocumentViewState,
+            // RecentFiles) are copied with it rather than moved, because the old engine still names
+            // them and a move into a new-engine package is what this test exists to catch.
+            "com/crystalgui/document/",
             // THE APPLICATIONS (6.4). Without this the shader graph is classified as OLD engine, and
             // every reference it makes into `widget` reads as the old engine reaching into the new
             // one -- which is the opposite of what it is.

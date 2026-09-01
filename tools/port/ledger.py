@@ -63,12 +63,24 @@ BY_DIR = [
     ('ui/elements/desktop',             'desktop'),
     ('ui/elements/dock',                'workbench/dock'),
     ('ui/elements/workbench/decoration','workbench/decoration'),
-    ('ui/elements/workbench/document',  'workbench/document'),
+    # THE DOCUMENT LAYER, out of the UI tree entirely -- see LayeringTest's LAYERS for why it is
+    # neither `fs` (UI-free by measurement, and a document names the node that shows it) nor
+    # the workbench's (four things outside the workbench open one).
+    ('ui/elements/workbench/document',  'document'),
     ('ui/elements/workbench',           'workbench'),
-    ('ui/elements/chrome',              'chrome'),
+    # `chrome` folded under the workbench at 6.7. The split was in the wrong place and a cycle
+    # proved it -- `ProblemsPanel implements HeaderContributor`, a workbench interface, so
+    # chrome reached UP a layer. Nothing below the workbench wanted it: the desktop's four
+    # chrome imports were all ContextMenu/MenuBuilder, which 6.3 put in `widget.overlay`.
+    ('ui/elements/chrome',              'workbench/chrome'),
     ('graph/shader',                    'graph/shader'),
-    ('editor',                          'editor'),
-    ('example/machine',                 'example/machine'),
+    # THE APPLICATIONS. `LayeringTest`'s LAYERS names `com/crystalgui/app/` as one prefix covering
+    # all of them -- app.shadergraph at 6.4, app.editor and app.machine here -- rather than an entry
+    # each, for the reason the chrome note there records: a sub-package listed as its own layer reads
+    # as a layer ABOVE the layer root, and the root's own registrar then reaches upward.
+    ('editor',                          'app/editor'),
+    ('example/machine/ui',              'app/machine/ui'),
+    ('example/machine',                 'app/machine'),
     ('net/window',                      'net/window'),
 ]
 
@@ -179,6 +191,72 @@ BY_NAME = {
     # it -- a bare enum with no imports at all, read by UIWindow and by the taskbar.
     'WindowState': 'core/window', 'WindowPolicy': 'core/window',
     'DesktopPresentation': 'core/window',
+    # ------------------------------------------------------------------------------------------
+    # 6.7 -- the WORKBENCH split (38 classes, 14,238 lines) and the DOCK split (29, 5,497).
+    #
+    # `LayeringTest` walks only `com/crystalgui/widget` for its coverage assertion, so a workbench
+    # sub-package needs no entry there; `com/crystalgui/workbench/` is already a LAYER and a prefix
+    # covers everything under it. What decides these boundaries is therefore the same thing 6.5's
+    # did -- what a class IS, measured by who names it -- and not the test.
+    #
+    # DockRegion and RegionSide sit in `ui/elements/dock` today and are REGION vocabulary, not the
+    # dock's: 11 and 10 of the files naming them are in `workbench`, against 5 and 2 in `dock`.
+    # ViewId is the identity of a TOOL WINDOW by its own javadoc. All three cross over.
+    # ------------------------------------------------------------------------------------------
+
+    # The workbench's own layout: the regions, what hosts one, where a drop lands in one, and the
+    # stripe rail down its edge. ViewContainer is what a region SHOWS, so it belongs with them.
+    'WorkbenchRegions': 'workbench/region', 'RegionHost': 'workbench/region',
+    'RegionDropOverlay': 'workbench/region', 'RegionDropZones': 'workbench/region',
+    'SplitFill': 'workbench/region', 'StripeView': 'workbench/region',
+    'StripeRail': 'workbench/region', 'ViewContainer': 'workbench/region',
+    'ViewContainerRegistry': 'workbench/region', 'HeaderContributor': 'workbench/region',
+    'DockRegion': 'workbench/region', 'RegionSide': 'workbench/region',
+
+    # A tool window: what exists, where it belongs, how it is presented, and the frame a float uses.
+    'ToolWindowManager': 'workbench/toolwindow', 'ToolWindowFrame': 'workbench/toolwindow',
+    'ToolWindowState': 'workbench/toolwindow', 'ToolWindowLayout': 'workbench/toolwindow',
+    'ToolWindowType': 'workbench/toolwindow', 'ViewId': 'workbench/toolwindow',
+
+    # The file panel, split the way VS Code's explorer is -- the view, the row renderer, and one
+    # class per interaction, with the MODEL beside them (explorerModel.ts).
+    'ProjectFileTree': 'workbench/explorer', 'FilesRenderer': 'workbench/explorer',
+    'ExplorerDragAndDrop': 'workbench/explorer', 'ExplorerEditing': 'workbench/explorer',
+    'ExplorerFind': 'workbench/explorer', 'ExplorerCommands': 'workbench/explorer',
+    'ExplorerClipboard': 'workbench/explorer', 'WorkspaceTreeSource': 'workbench/explorer',
+
+    # What is open, what KIND of thing it is, and what a view remembers about looking at it --
+    # `com.crystalgui.document`, a layer of its own between `widget` and everything that opens one.
+    'OpenDocuments': 'document', 'FileDocument': 'document',
+    'DocumentType': 'document', 'DocumentViewState': 'document',
+    'RecentFiles': 'document',
+
+    'DiffView': 'workbench/diff', 'MergeView': 'workbench/diff',
+    'ConflictDialog': 'workbench/diff',
+
+    # Go to File and the index behind it. QueryLocation is what a hit RESOLVES to.
+    'GoToFile': 'workbench/search', 'ProjectIndex': 'workbench/search',
+    'QueryLocation': 'workbench/search',
+
+    # THE DOCK. Four classes at the root -- the layout drawn, one leaf drawn, a torn-out one in a
+    # window of its own, and the commands over them. Everything else is model.
+    'DockLayout': 'workbench/dock/layout', 'DockNode': 'workbench/dock/layout',
+    'DockBranch': 'workbench/dock/layout', 'DockLeaf': 'workbench/dock/layout',
+    'DockPath': 'workbench/dock/layout', 'DockOrientation': 'workbench/dock/layout',
+    'DockLayoutCodec': 'workbench/dock/layout', 'DockPanelRef': 'workbench/dock/layout',
+
+    # What a panel TYPE is, and the VS Code EditorInput/EditorPane pair -- a view pointed at things
+    # rather than built for one, plus what decides which pane shows which input.
+    'DockPanelRegistry': 'workbench/dock/panel', 'DockPanelDescriptor': 'workbench/dock/panel',
+    'DockPanelKind': 'workbench/dock/panel', 'DockPane': 'workbench/dock/panel',
+    'DockPaneProvider': 'workbench/dock/panel', 'DockInput': 'workbench/dock/panel',
+    'DockOpenOptions': 'workbench/dock/panel',
+
+    'DockDropZones': 'workbench/dock/drag', 'DockDropZone': 'workbench/dock/drag',
+    'DockDragPayload': 'workbench/dock/drag', 'DockPlacement': 'workbench/dock/drag',
+
+    'DockBannerBar': 'workbench/dock/banner', 'DockBanners': 'workbench/dock/banner',
+    'DockBannerProvider': 'workbench/dock/banner',
     # `widget.graph.node` is the four that reach nothing package-private. GraphNode, NodePort and
     # PortDefaultEditor CANNOT be here: they share package-private members with GraphView by design,
     # and Java has no sub-package visibility, so moving them means publishing ten "only the view may
@@ -190,7 +268,11 @@ BY_NAME = {
     # ui/elements root -- by kind, which is the whole reason the root is being split.
     'Button': 'widget/control', 'Checkbox': 'widget/control', 'CheckboxGroup': 'widget/control',
     'Switch': 'widget/control', 'Slider': 'widget/control', 'ProgressBar': 'widget/control',
-    'TextField': 'widget/control', 'Dropdown': 'widget/control',
+    'TextField': 'widget/control',
+    # A dropdown COMPOSES a Menu, and a tier is a fact about the dependency graph rather than
+    # about what the word means -- so the control tier could never hold it. It shipped in
+    # `widget.overlay` at 6.1 and this said `control` until the derived status compared the two.
+    'Dropdown': 'widget/overlay',
     'SymbolIcon': 'widget/control',
     # A WIDGET'S TIER IS DECIDED BY WHAT IT COMPOSES (M6.1): SearchField holds a Tooltip and
     # ColorSelector a Dropdown, both of which are `overlay` -- so neither can be in `control`,
@@ -229,7 +311,7 @@ BATCH = [
     # tables here and changing one is changing half of it.
     ('widget/config', '6.2'),
     ('chrome/status', '6.2'), ('chrome/notification', '6.2'),
-    ('widget/collection', '6.3'), ('chrome', '6.3'),
+    ('widget/collection', '6.3'), ('workbench/chrome', '6.3'),
     ('widget/canvas', '6.4'), ('widget/graph', '6.4'), ('graph/shader', '6.4'),
     ('graph/port', '6.4'), ('app/shadergraph', '6.4'), ('widget/graph/node', '6.4'),
     ('desktop/taskbar', '6.6'), ('desktop/switcher', '6.6'), ('core/window', '6.6'),
@@ -241,7 +323,11 @@ BATCH = [
     ('widget/texteditor/part', '6.5'),
     ('widget/texteditor/fold', '6.5'), ('widget/texteditor/diff', '6.5'),
     ('desktop', '6.6'),
-    ('workbench', '6.7'), ('editor', '6.7'), ('example/machine', '6.7'),
+    # `workbench` is a prefix, so its seven sub-packages need no entry; the applications DO,
+    # because retargeting them under `app/` left no prefix matching -- the same half-a-table
+    # slip the config-kit note above records, met again one rename later.
+    ('workbench', '6.7'), ('app/editor', '6.7'), ('app/machine', '6.7'),
+    ('document', '6.7'),
     ('net/window', '6.8'),
     ('language/run/view', '6.7'),
     ('widget', '6.7'),  # the bare `widget` destination is WidgetCensus alone; everything else is a tier
@@ -413,36 +499,45 @@ def destination(rel, stem):
 # and `graph/shader` -- so a move into `widget.*` or `app.*` fails the boundary scan on the day it
 # lands, however neutral the class itself is. The exceptions are the two heading for `graph.port`,
 # which is a package BOTH engines may name.
+# WHERE 6.3's CHROME ACTUALLY WENT. The old package is FLAT and the new one is six sub-packages, so
+# a directory rule cannot express it -- and the ledger kept the flat destination, pointing all
+# nineteen classes at a directory that has never held one of them. Three did not even stay in the
+# layer: `ContextMenu` and `MenuBuilder` are general-purpose and went to `widget.overlay`,
+# `PageStack` to `widget.layout`. Derived from the tree, which is the only authority on where a file
+# is; the ledger's own claim was wrong for two milestones without anything noticing.
+CHROME_DESTS = {
+    'Breadcrumbs': 'workbench/chrome/status',
+    'ChromeCommands': 'workbench/chrome/menu',
+    'CommandPalette': 'workbench/chrome/palette',
+    'ContextMenu': 'widget/overlay',
+    'MainMenuCommands': 'workbench/chrome/menu',
+    'MenuBarView': 'workbench/chrome/menu',
+    'MenuBuilder': 'widget/overlay',
+    'NavigatorView': 'workbench/chrome/preferences',
+    'NotificationBalloons': 'workbench/chrome/notification',
+    'NotificationCard': 'workbench/chrome/notification',
+    'NotificationsView': 'workbench/chrome/notification',
+    'PageStack': 'widget/layout',
+    'Preferences': 'workbench/chrome/preferences',
+    'ProblemsCommands': 'workbench/chrome/problems',
+    'ProblemsPanel': 'workbench/chrome/problems',
+    'ProcessesPopover': 'workbench/chrome/status',
+    'ProgressStatusItem': 'workbench/chrome/status',
+    'QuickPick': 'workbench/chrome/palette',
+    'StatusBarView': 'workbench/chrome/status',
+}
+
+BY_NAME.update(CHROME_DESTS)
+
 HOW_OVERRIDE = {
-    # 6.5: SEVEN more the heuristic reads as pure, and every one is named by the OLD editor package,
-    # which runs the game until 6.9. `com/crystalgui/widget/` is a NEW_PACKAGES prefix, so a move
-    # there is the old engine reaching into the new one. `CompletionRecency` is the ONE genuine move:
-    # it names nothing but `text.lang` types, and `text/lang` is a package both engines may name.
-    'SyntaxHighlighting': 'copy',
-    'CompletionRanking': 'copy',
-    'CompletionSession': 'copy',
-    'DiagnosticActions': 'copy',
-    'DiffDecorations': 'copy',
-    'EditorDiagnostics': 'copy',
-    'EditorFolding': 'copy',
-    'HoverDocumentation': 'copy',
-    # 6.6: SIX classes the `touches` heuristic reads as pure, because they name no UIElement and no
-    # paint context -- and every one of them is named by the OLD Desktop or WindowFrame, which still
-    # run the game until 6.9. `com/crystalgui/desktop/` is a NEW_PACKAGES prefix, so a move there is
-    # the old engine reaching into the new one: the boundary scan fails on the day it lands, and the
-    # old engine stops compiling besides. Only a NEUTRAL destination can take a move.
-    'DesktopSession': 'copy',
-    'SnapZones': 'copy',
-    'WindowKeyboardMove': 'copy',
-    'WindowMotion': 'copy',
-    'WindowRegistry': 'copy',
-    'WorldRect': 'copy',
-    'GraphConnection': 'copy',
-    'GraphSelection': 'copy',
-    'NodeWidgetFactory': 'copy',
-    'ShaderGraphBridge': 'copy',
-    'ShaderGraphSettings': 'copy',
-    'ShaderPropertyForm': 'copy',
+    # EMPTY, and it earned that. This dictionary held twenty-seven entries -- seven from 6.5, six
+    # from 6.6, fourteen from 6.7 -- every one of them a class the purity heuristic read as a MOVE
+    # that had to be a COPY, and every one carrying its own paragraph restating the same reason: a
+    # move into a new-engine package is the old engine reaching into the new one, whatever the class
+    # itself names. Three batches wrote that paragraph before anybody noticed it was one rule; it is
+    # now `how_of` above, and regenerating with this dictionary empty produces a byte-identical
+    # ledger. The hook stays for a genuine one-off, and a new entry should be read as evidence that
+    # `how_of` is missing a case rather than that the class is special.
 }
 
 
@@ -476,6 +571,59 @@ def batch_of(dest):
     return best[1] or '?'
 
 
+# The destinations that hold ONLY new-engine code -- EngineBoundaryTest's NEW_PACKAGES, mirrored.
+NEW_ENGINE_DESTS = ('widget', 'desktop', 'workbench', 'app', 'document')
+
+_OLD_ROOTS = ('ui', 'graph', 'editor', 'example', 'net', 'core', 'fs', 'text', 'style', 'render',
+              'serialization', 'lifecycle')
+_old_names = None
+
+
+def named_by_old_engine(stem):
+    """Does anything still living in the OLD tree mention this simple name?
+
+    A word scan of the old roots' source. It OVER-reports -- a javadoc mention counts -- and that is
+    the safe direction: over-reporting costs a duplicated class until 6.9, under-reporting ships a
+    boundary violation that compiles.
+    """
+    global _old_names
+    if _old_names is None:
+        _old_names = set()
+        for root in _OLD_ROOTS:
+            base = os.path.join(SRC, root)
+            if not os.path.isdir(base):
+                continue
+            for dirpath, _d, files in os.walk(base):
+                for f in files:
+                    if not f.endswith('.java'):
+                        continue
+                    text = io.open(os.path.join(dirpath, f), encoding='utf-8',
+                                   errors='replace').read()
+                    _old_names.update(re.findall(r'[A-Z][A-Za-z0-9_]*', text))
+    return stem in _old_names
+
+
+def how_of(dest, stem, touches):
+    """`copy` or `move` -- and the DESTINATION decides it as much as the class does.
+
+    The purity heuristic (does this name `UIElement`) answers "could ONE copy serve both engines",
+    and that is only half the question. The other half is WHERE it lands: a move into a new-engine
+    package is the old engine reaching into the new one, which is exactly what `EngineBoundaryTest`
+    catches -- however pure the class is. `DockNode` names no UI type at all, and the old
+    `DockLayout` sitting beside it names `DockNode` in nearly every method, so moving it breaks the
+    boundary while reading as the safest possible change.
+
+    Hand-corrected three times before it was written down -- seven classes at 6.5, six at 6.6,
+    fourteen at 6.7 -- with a `HOW_OVERRIDE` entry each and the same paragraph rewritten in every
+    one's comment. It is a rule, not a run of exceptions. A genuinely NEUTRAL destination
+    (`core/window`, `text/lang`, `graph/port`, `core/collection`) still moves, which is what keeps
+    the shared-type cases working.
+    """
+    if dest.split('/')[0] not in NEW_ENGINE_DESTS:
+        return 'copy' if touches else 'move'
+    return 'copy' if (touches or named_by_old_engine(stem)) else 'move'
+
+
 def classify_classes():
     rows = []
     roots = [(SRC, ''), (LANGUAGE, 'language/run/view')]
@@ -503,7 +651,7 @@ def classify_classes():
                 touches = bool(re.search(r'\bUIElement\b|\bUIWindow\b|getRuntimeCache|CgUiPaintContext', text))
                 dest = forced or destination(rel, stem)
                 batch = BATCH_OVERRIDE.get(stem) or batch_of(dest)
-                how = HOW_OVERRIDE.get(stem) or ('copy' if touches else 'move')
+                how = HOW_OVERRIDE.get(stem) or how_of(dest, stem, touches)
                 rows.append((rel + '/' + stem, lines, dest or rel, batch, how, 'pending'))
     return rows
 
@@ -532,14 +680,31 @@ def render():
 
 
 def existing_statuses():
-    """Which classes have been ported, so regenerating never silently un-ports one."""
-    if not os.path.exists(LEDGER):
-        return {}
+    """Which classes have been ported -- DERIVED from the tree, never carried forward from the file.
+
+    It used to read the previous ledger's status column back, which made "ported" a thing somebody
+    had to remember to write down. Nobody did: thirty-five classes of 6.7 were on disk, compiling and
+    under test while the ledger still called every one of them pending, so the progress line stayed at
+    exactly the figure the last batch left it at. A number that only moves when a human moves it is
+    not a measurement.
+
+    The destination file existing is the whole test, and it is right for both kinds of port: a copy
+    leaves the original in place and a move does not, but either way the thing that says the work
+    happened is that the new file is there.
+    """
     statuses = {}
-    for line in io.open(LEDGER, encoding='utf-8'):
-        parts = line.rstrip('\n').split('\t')
-        if len(parts) >= 7 and parts[0] == 'CLASS':
-            statuses[parts[1]] = parts[6]
+    for path, _lines, dest, _batch, _how, _status in classify_classes():
+        head, stem = path.rsplit('/', 1)
+        if dest == head:
+            # RETYPED IN PLACE -- `net/window`, `language/run/view`, `graph/shader`, `ui/text`. The
+            # file is at its destination before any work happens, so "does the destination exist" is
+            # not a question about this class at all and answering `ported` would have counted the
+            # whole of 6.8 as finished before it began. Its own status, rather than a guess in either
+            # direction.
+            statuses[path] = 'in-place'
+            continue
+        landed = os.path.join(SRC, dest.replace('/', os.sep), stem + '.java')
+        statuses[path] = 'ported' if os.path.isfile(landed) else 'pending'
     return statuses
 
 

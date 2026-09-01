@@ -3,16 +3,16 @@
 # leaving the rest alone; the generator preserves confirmations by name.
 #
 # CLASS	path	lines	destination	batch	how	status
-CLASS	editor/CrystalEditor	500	editor	6.7	copy	pending
-CLASS	editor/CrystalEditorCommands	94	editor	6.7	copy	pending
-CLASS	example/machine/EngineModel	111	example/machine	6.7	move	pending
-CLASS	example/machine/MachineDemo	330	example/machine	6.7	copy	pending
-CLASS	example/machine/MachineModel	130	example/machine	6.7	copy	pending
-CLASS	example/machine/MachineTrace	54	example/machine	6.7	move	pending
-CLASS	example/machine/ui/EnginePanel	259	example/machine	6.7	copy	pending
-CLASS	example/machine/ui/MachinePanel	736	example/machine	6.7	copy	pending
-CLASS	example/machine/ui/MachineRows	70	example/machine	6.7	copy	pending
-CLASS	example/machine/ui/MachineStyles	154	example/machine	6.7	move	pending
+CLASS	editor/CrystalEditor	500	app/editor	6.7	copy	pending
+CLASS	editor/CrystalEditorCommands	94	app/editor	6.7	copy	pending
+CLASS	example/machine/EngineModel	111	app/machine	6.7	copy	pending
+CLASS	example/machine/MachineDemo	330	app/machine	6.7	copy	pending
+CLASS	example/machine/MachineModel	130	app/machine	6.7	copy	pending
+CLASS	example/machine/MachineTrace	54	app/machine	6.7	copy	pending
+CLASS	example/machine/ui/EnginePanel	259	app/machine/ui	6.7	copy	pending
+CLASS	example/machine/ui/MachinePanel	736	app/machine/ui	6.7	copy	pending
+CLASS	example/machine/ui/MachineRows	70	app/machine/ui	6.7	copy	pending
+CLASS	example/machine/ui/MachineStyles	154	app/machine/ui	6.7	copy	pending
 CLASS	graph/shader/BlackboardPanel	1361	app/shadergraph/blackboard	6.4	copy	ported
 CLASS	graph/shader/CategoryHeader	134	app/shadergraph/blackboard	6.4	copy	ported
 CLASS	graph/shader/InlineRename	166	app/shadergraph/blackboard	6.4	copy	ported
@@ -25,27 +25,27 @@ CLASS	graph/shader/ShaderGraphEditor	1309	app/shadergraph	6.7	copy	pending
 CLASS	graph/shader/ShaderGraphPreviews	247	app/shadergraph/preview	6.4	copy	ported
 CLASS	graph/shader/ShaderGraphSettings	95	app/shadergraph	6.4	copy	ported
 CLASS	graph/shader/ShaderInspectorSections	668	app/shadergraph	6.7	copy	pending
-CLASS	graph/shader/ShaderNodeLibrary	46	graph/shader	6.4	move	ported
+CLASS	graph/shader/ShaderNodeLibrary	46	graph/shader	6.4	move	in-place
 CLASS	graph/shader/ShaderNodePreview	82	app/shadergraph/preview	6.4	copy	ported
 CLASS	graph/shader/ShaderPortArity	284	app/shadergraph/node	6.4	copy	ported
 CLASS	graph/shader/ShaderPropertyForm	261	app/shadergraph	6.4	copy	ported
 CLASS	graph/shader/ShaderPropertyNodes	241	app/shadergraph/node	6.4	copy	ported
 CLASS	graph/shader/ShaderVectorFieldWidget	89	app/shadergraph/node	6.4	copy	ported
-CLASS	net/window/ClientScope	91	net/window	6.8	move	pending
-CLASS	net/window/ClientWindowContext	96	net/window	6.8	copy	pending
-CLASS	net/window/ClientWindows	591	net/window	6.8	copy	pending
-CLASS	net/window/CloseReason	53	net/window	6.8	move	pending
-CLASS	net/window/Networked	257	net/window	6.8	copy	pending
-CLASS	net/window/OpenResolver	58	net/window	6.8	move	pending
-CLASS	net/window/ScopedSheets	249	net/window	6.8	move	pending
-CLASS	net/window/ServerScope	514	net/window	6.8	copy	pending
-CLASS	net/window/ServerWindow	265	net/window	6.8	copy	pending
-CLASS	net/window/ServerWindows	515	net/window	6.8	copy	pending
-CLASS	net/window/SheetSupply	230	net/window	6.8	move	pending
-CLASS	net/window/UiType	298	net/window	6.8	copy	pending
-CLASS	net/window/ViewCommands	119	net/window	6.8	copy	pending
-CLASS	net/window/WindowMount	74	net/window	6.8	copy	pending
-CLASS	net/window/WindowProtocol	57	net/window	6.8	move	pending
+CLASS	net/window/ClientScope	91	net/window	6.8	move	in-place
+CLASS	net/window/ClientWindowContext	96	net/window	6.8	copy	in-place
+CLASS	net/window/ClientWindows	591	net/window	6.8	copy	in-place
+CLASS	net/window/CloseReason	53	net/window	6.8	move	in-place
+CLASS	net/window/Networked	257	net/window	6.8	copy	in-place
+CLASS	net/window/OpenResolver	58	net/window	6.8	move	in-place
+CLASS	net/window/ScopedSheets	249	net/window	6.8	move	in-place
+CLASS	net/window/ServerScope	514	net/window	6.8	copy	in-place
+CLASS	net/window/ServerWindow	265	net/window	6.8	copy	in-place
+CLASS	net/window/ServerWindows	515	net/window	6.8	copy	in-place
+CLASS	net/window/SheetSupply	230	net/window	6.8	move	in-place
+CLASS	net/window/UiType	298	net/window	6.8	copy	in-place
+CLASS	net/window/ViewCommands	119	net/window	6.8	copy	in-place
+CLASS	net/window/WindowMount	74	net/window	6.8	copy	in-place
+CLASS	net/window/WindowProtocol	57	net/window	6.8	move	in-place
 CLASS	ui/elements/Button	208	widget/control	6.1	copy	ported
 CLASS	ui/elements/Checkbox	156	widget/control	6.1	copy	ported
 CLASS	ui/elements/CheckboxGroup	58	widget/control	6.1	copy	ported
@@ -53,7 +53,7 @@ CLASS	ui/elements/ColorSelector	767	widget/form	6.2	copy	ported
 CLASS	ui/elements/Dialog	605	widget/overlay	6.2	copy	ported
 CLASS	ui/elements/DialogManager	144	widget/overlay	6.2	copy	ported
 CLASS	ui/elements/DragGhost	248	widget/dnd	6.1	copy	ported
-CLASS	ui/elements/Dropdown	212	widget/control	6.1	copy	ported
+CLASS	ui/elements/Dropdown	212	widget/overlay	6.2	copy	ported
 CLASS	ui/elements/InputDialog	178	widget/overlay	6.2	copy	ported
 CLASS	ui/elements/InsertionMarker	468	widget/dnd	6.1	copy	ported
 CLASS	ui/elements/MarkupView	1034	widget/text	6.1	copy	ported
@@ -73,49 +73,49 @@ CLASS	ui/elements/TabView	605	widget/layout	6.2	copy	ported
 CLASS	ui/elements/TextField	1240	widget/control	6.1	copy	ported
 CLASS	ui/elements/Tooltip	605	widget/overlay	6.2	copy	ported
 CLASS	ui/elements/UIText	1244	widget/text	6.1	copy	ported
-CLASS	ui/elements/WidgetCensus	222	widget	6.7	move	pending
+CLASS	ui/elements/WidgetCensus	222	widget	6.7	copy	pending
 CLASS	ui/elements/canvas/CanvasOverlayMove	232	widget/canvas	6.4	copy	ported
 CLASS	ui/elements/canvas/CanvasView	725	widget/canvas	6.4	copy	ported
 CLASS	ui/elements/canvas/WorldRect	77	widget/canvas	6.4	copy	ported
-CLASS	ui/elements/chrome/Breadcrumbs	166	chrome	6.3	copy	ported
-CLASS	ui/elements/chrome/ChromeCommands	63	chrome	6.3	copy	ported
-CLASS	ui/elements/chrome/CommandPalette	153	chrome	6.3	copy	ported
+CLASS	ui/elements/chrome/Breadcrumbs	166	workbench/chrome/status	6.3	copy	ported
+CLASS	ui/elements/chrome/ChromeCommands	63	workbench/chrome/menu	6.3	copy	ported
+CLASS	ui/elements/chrome/CommandPalette	153	workbench/chrome/palette	6.3	copy	ported
 CLASS	ui/elements/chrome/ContextMenu	309	widget/overlay	6.2	copy	ported
-CLASS	ui/elements/chrome/MainMenuCommands	89	chrome	6.3	move	ported
-CLASS	ui/elements/chrome/MenuBarView	645	chrome	6.3	copy	ported
+CLASS	ui/elements/chrome/MainMenuCommands	89	workbench/chrome/menu	6.3	copy	ported
+CLASS	ui/elements/chrome/MenuBarView	645	workbench/chrome/menu	6.3	copy	ported
 CLASS	ui/elements/chrome/MenuBuilder	231	widget/overlay	6.2	copy	ported
-CLASS	ui/elements/chrome/NavigatorView	623	chrome	6.3	copy	ported
-CLASS	ui/elements/chrome/NotificationBalloons	314	chrome	6.3	copy	ported
-CLASS	ui/elements/chrome/NotificationCard	217	chrome	6.3	copy	ported
-CLASS	ui/elements/chrome/NotificationsView	200	chrome	6.3	copy	ported
+CLASS	ui/elements/chrome/NavigatorView	623	workbench/chrome/preferences	6.3	copy	ported
+CLASS	ui/elements/chrome/NotificationBalloons	314	workbench/chrome/notification	6.3	copy	ported
+CLASS	ui/elements/chrome/NotificationCard	217	workbench/chrome/notification	6.3	copy	ported
+CLASS	ui/elements/chrome/NotificationsView	200	workbench/chrome/notification	6.3	copy	ported
 CLASS	ui/elements/chrome/PageStack	149	widget/layout	6.2	copy	ported
-CLASS	ui/elements/chrome/Preferences	288	chrome	6.3	copy	ported
-CLASS	ui/elements/chrome/ProblemsCommands	84	chrome	6.3	move	ported
-CLASS	ui/elements/chrome/ProblemsPanel	932	chrome	6.3	copy	ported
-CLASS	ui/elements/chrome/ProcessesPopover	214	chrome	6.3	copy	ported
-CLASS	ui/elements/chrome/ProgressStatusItem	215	chrome	6.3	copy	ported
-CLASS	ui/elements/chrome/QuickPick	795	chrome	6.3	copy	ported
-CLASS	ui/elements/chrome/StatusBarView	427	chrome	6.3	copy	ported
+CLASS	ui/elements/chrome/Preferences	288	workbench/chrome/preferences	6.3	copy	ported
+CLASS	ui/elements/chrome/ProblemsCommands	84	workbench/chrome/problems	6.3	copy	ported
+CLASS	ui/elements/chrome/ProblemsPanel	932	workbench/chrome/problems	6.3	copy	ported
+CLASS	ui/elements/chrome/ProcessesPopover	214	workbench/chrome/status	6.3	copy	ported
+CLASS	ui/elements/chrome/ProgressStatusItem	215	workbench/chrome/status	6.3	copy	ported
+CLASS	ui/elements/chrome/QuickPick	795	workbench/chrome/palette	6.3	copy	ported
+CLASS	ui/elements/chrome/StatusBarView	427	workbench/chrome/status	6.3	copy	ported
 CLASS	ui/elements/config/ConfigControl	243	widget/config	6.2	copy	ported
-CLASS	ui/elements/config/ConfigControlContracts	93	widget/config	6.2	move	ported
-CLASS	ui/elements/config/ConfigControls	83	widget/config	6.2	move	ported
+CLASS	ui/elements/config/ConfigControlContracts	93	widget/config	6.2	copy	ported
+CLASS	ui/elements/config/ConfigControls	83	widget/config	6.2	copy	ported
 CLASS	ui/elements/config/Configurator	82	widget/config	6.2	copy	ported
 CLASS	ui/elements/config/ConfiguratorGroup	125	widget/config	6.2	copy	ported
 CLASS	ui/elements/config/ConfiguratorPanel	195	widget/config	6.2	copy	ported
 CLASS	ui/elements/config/SettingsConfigurator	173	widget/config	6.2	copy	ported
-CLASS	ui/elements/config/ValueControl	85	widget/config	6.2	move	ported
+CLASS	ui/elements/config/ValueControl	85	widget/config	6.2	copy	ported
 CLASS	ui/elements/config/control/ArrayControl	155	widget/config/control	6.2	copy	ported
-CLASS	ui/elements/config/control/AssetControl	80	widget/config/control	6.2	move	ported
-CLASS	ui/elements/config/control/BooleanControl	54	widget/config/control	6.2	move	ported
+CLASS	ui/elements/config/control/AssetControl	80	widget/config/control	6.2	copy	ported
+CLASS	ui/elements/config/control/BooleanControl	54	widget/config/control	6.2	copy	ported
 CLASS	ui/elements/config/control/ColorControl	151	widget/config/control	6.2	copy	ported
-CLASS	ui/elements/config/control/HeaderControl	55	widget/config/control	6.2	move	ported
-CLASS	ui/elements/config/control/InfoControl	69	widget/config/control	6.2	move	ported
+CLASS	ui/elements/config/control/HeaderControl	55	widget/config/control	6.2	copy	ported
+CLASS	ui/elements/config/control/InfoControl	69	widget/config/control	6.2	copy	ported
 CLASS	ui/elements/config/control/MaskControl	159	widget/config/control	6.2	copy	ported
 CLASS	ui/elements/config/control/MatrixControl	109	widget/config/control	6.2	copy	ported
 CLASS	ui/elements/config/control/NumberControl	295	widget/config/control	6.2	copy	ported
-CLASS	ui/elements/config/control/SelectControl	68	widget/config/control	6.2	move	ported
-CLASS	ui/elements/config/control/SliderControl	92	widget/config/control	6.2	move	ported
-CLASS	ui/elements/config/control/TextControl	87	widget/config/control	6.2	move	ported
+CLASS	ui/elements/config/control/SelectControl	68	widget/config/control	6.2	copy	ported
+CLASS	ui/elements/config/control/SliderControl	92	widget/config/control	6.2	copy	ported
+CLASS	ui/elements/config/control/TextControl	87	widget/config/control	6.2	copy	ported
 CLASS	ui/elements/config/control/VectorControl	123	widget/config/control	6.2	copy	ported
 CLASS	ui/elements/desktop/Desktop	1360	desktop	6.6	copy	ported
 CLASS	ui/elements/desktop/DesktopCommands	158	desktop	6.6	copy	ported
@@ -142,35 +142,35 @@ CLASS	ui/elements/desktop/WindowRegistry	214	desktop/window	6.6	copy	ported
 CLASS	ui/elements/desktop/WindowSnapshot	210	desktop/window	6.6	copy	ported
 CLASS	ui/elements/desktop/WindowSwitcher	628	desktop/switcher	6.6	copy	ported
 CLASS	ui/elements/desktop/WindowThumbnail	337	desktop/taskbar	6.6	copy	ported
-CLASS	ui/elements/dock/DockArea	1192	workbench/dock	6.7	copy	pending
-CLASS	ui/elements/dock/DockBannerBar	56	workbench/dock	6.7	copy	pending
-CLASS	ui/elements/dock/DockBannerProvider	43	workbench/dock	6.7	move	pending
-CLASS	ui/elements/dock/DockBanners	49	workbench/dock	6.7	move	pending
-CLASS	ui/elements/dock/DockBranch	104	workbench/dock	6.7	move	pending
-CLASS	ui/elements/dock/DockCommands	208	workbench/dock	6.7	copy	pending
-CLASS	ui/elements/dock/DockDragPayload	61	workbench/dock	6.7	move	pending
-CLASS	ui/elements/dock/DockDropZone	46	workbench/dock	6.7	move	pending
-CLASS	ui/elements/dock/DockDropZones	159	workbench/dock	6.7	move	pending
-CLASS	ui/elements/dock/DockGroup	863	workbench/dock	6.7	copy	pending
-CLASS	ui/elements/dock/DockInput	103	workbench/dock	6.7	move	pending
-CLASS	ui/elements/dock/DockLayout	521	workbench/dock	6.7	copy	pending
-CLASS	ui/elements/dock/DockLayoutCodec	213	workbench/dock	6.7	move	pending
-CLASS	ui/elements/dock/DockLeaf	182	workbench/dock	6.7	move	pending
-CLASS	ui/elements/dock/DockNode	101	workbench/dock	6.7	move	pending
-CLASS	ui/elements/dock/DockOpenOptions	60	workbench/dock	6.7	move	pending
-CLASS	ui/elements/dock/DockOrientation	21	workbench/dock	6.7	copy	pending
-CLASS	ui/elements/dock/DockPane	66	workbench/dock	6.7	copy	pending
-CLASS	ui/elements/dock/DockPaneProvider	23	workbench/dock	6.7	move	pending
-CLASS	ui/elements/dock/DockPanelDescriptor	202	workbench/dock	6.7	move	pending
-CLASS	ui/elements/dock/DockPanelKind	50	workbench/dock	6.7	move	pending
-CLASS	ui/elements/dock/DockPanelRef	119	workbench/dock	6.7	move	pending
-CLASS	ui/elements/dock/DockPanelRegistry	368	workbench/dock	6.7	copy	pending
-CLASS	ui/elements/dock/DockPath	131	workbench/dock	6.7	move	pending
-CLASS	ui/elements/dock/DockPlacement	141	workbench/dock	6.7	copy	pending
-CLASS	ui/elements/dock/DockRegion	74	workbench/dock	6.7	move	pending
-CLASS	ui/elements/dock/DockWindow	199	workbench/dock	6.7	copy	pending
-CLASS	ui/elements/dock/RegionSide	58	workbench/dock	6.7	move	pending
-CLASS	ui/elements/dock/ViewId	84	workbench/dock	6.7	move	pending
+CLASS	ui/elements/dock/DockArea	1192	workbench/dock	6.7	copy	ported
+CLASS	ui/elements/dock/DockBannerBar	56	workbench/dock/banner	6.7	copy	ported
+CLASS	ui/elements/dock/DockBannerProvider	43	workbench/dock/banner	6.7	copy	ported
+CLASS	ui/elements/dock/DockBanners	49	workbench/dock/banner	6.7	copy	ported
+CLASS	ui/elements/dock/DockBranch	104	workbench/dock/layout	6.7	copy	ported
+CLASS	ui/elements/dock/DockCommands	208	workbench/dock	6.7	copy	ported
+CLASS	ui/elements/dock/DockDragPayload	61	workbench/dock/drag	6.7	copy	ported
+CLASS	ui/elements/dock/DockDropZone	46	workbench/dock/drag	6.7	copy	ported
+CLASS	ui/elements/dock/DockDropZones	159	workbench/dock/drag	6.7	copy	ported
+CLASS	ui/elements/dock/DockGroup	863	workbench/dock	6.7	copy	ported
+CLASS	ui/elements/dock/DockInput	103	workbench/dock/panel	6.7	copy	ported
+CLASS	ui/elements/dock/DockLayout	521	workbench/dock/layout	6.7	copy	ported
+CLASS	ui/elements/dock/DockLayoutCodec	213	workbench/dock/layout	6.7	copy	ported
+CLASS	ui/elements/dock/DockLeaf	182	workbench/dock/layout	6.7	copy	ported
+CLASS	ui/elements/dock/DockNode	101	workbench/dock/layout	6.7	copy	ported
+CLASS	ui/elements/dock/DockOpenOptions	60	workbench/dock/panel	6.7	copy	ported
+CLASS	ui/elements/dock/DockOrientation	21	workbench/dock/layout	6.7	copy	ported
+CLASS	ui/elements/dock/DockPane	66	workbench/dock/panel	6.7	copy	ported
+CLASS	ui/elements/dock/DockPaneProvider	23	workbench/dock/panel	6.7	copy	ported
+CLASS	ui/elements/dock/DockPanelDescriptor	202	workbench/dock/panel	6.7	copy	ported
+CLASS	ui/elements/dock/DockPanelKind	50	workbench/dock/panel	6.7	copy	ported
+CLASS	ui/elements/dock/DockPanelRef	119	workbench/dock/layout	6.7	copy	ported
+CLASS	ui/elements/dock/DockPanelRegistry	368	workbench/dock/panel	6.7	copy	ported
+CLASS	ui/elements/dock/DockPath	131	workbench/dock/layout	6.7	copy	ported
+CLASS	ui/elements/dock/DockPlacement	141	workbench/dock/drag	6.7	copy	ported
+CLASS	ui/elements/dock/DockRegion	74	workbench/region	6.7	copy	ported
+CLASS	ui/elements/dock/DockWindow	199	workbench/dock	6.7	copy	ported
+CLASS	ui/elements/dock/RegionSide	58	workbench/region	6.7	copy	ported
+CLASS	ui/elements/dock/ViewId	84	workbench/toolwindow	6.7	copy	ported
 CLASS	ui/elements/editor/CompletionPopup	897	widget/texteditor/suggest	6.5	copy	ported
 CLASS	ui/elements/editor/CompletionRanking	174	widget/texteditor/suggest	6.5	copy	ported
 CLASS	ui/elements/editor/CompletionSession	521	widget/texteditor/suggest	6.5	copy	ported
@@ -218,71 +218,71 @@ CLASS	ui/elements/graph/NodeWireLayer	285	widget/graph	6.4	copy	ported
 CLASS	ui/elements/graph/PortDefaultEditor	395	widget/graph	6.4	copy	ported
 CLASS	ui/elements/inspector/Inspector	448	widget/config/inspector	6.2	copy	ported
 CLASS	ui/elements/inspector/InspectorForm	129	widget/config/inspector	6.2	copy	ported
-CLASS	ui/elements/inspector/InspectorRegistry	75	widget/config/inspector	6.2	move	ported
-CLASS	ui/elements/inspector/InspectorSection	92	widget/config/inspector	6.2	move	ported
+CLASS	ui/elements/inspector/InspectorRegistry	75	widget/config/inspector	6.2	copy	ported
+CLASS	ui/elements/inspector/InspectorSection	92	widget/config/inspector	6.2	copy	ported
 CLASS	ui/elements/list/ListRenderer	74	widget/collection/list	6.3	copy	ported
 CLASS	ui/elements/list/ListView	1411	widget/collection/list	6.3	copy	ported
 CLASS	ui/elements/table/TableCellRenderer	18	widget/collection/table	6.3	copy	ported
-CLASS	ui/elements/table/TableColumn	156	widget/collection/table	6.3	move	ported
+CLASS	ui/elements/table/TableColumn	156	widget/collection/table	6.3	copy	ported
 CLASS	ui/elements/table/TableView	522	widget/collection/table	6.3	copy	ported
 CLASS	ui/elements/tree/TreeRenderer	41	widget/collection/tree	6.3	copy	ported
 CLASS	ui/elements/tree/TreeSearch	1145	widget/collection/tree	6.3	copy	ported
 CLASS	ui/elements/tree/TreeView	451	widget/collection/tree	6.3	copy	ported
-CLASS	ui/elements/workbench/ConflictDialog	167	workbench	6.7	copy	pending
-CLASS	ui/elements/workbench/DiffView	303	workbench	6.7	copy	pending
-CLASS	ui/elements/workbench/DocumentType	101	workbench	6.7	move	pending
-CLASS	ui/elements/workbench/DocumentViewState	48	workbench	6.7	move	pending
-CLASS	ui/elements/workbench/ExplorerClipboard	95	workbench	6.7	move	pending
-CLASS	ui/elements/workbench/ExplorerCommands	578	workbench	6.7	copy	pending
-CLASS	ui/elements/workbench/ExplorerDragAndDrop	195	workbench	6.7	copy	pending
-CLASS	ui/elements/workbench/ExplorerEditing	247	workbench	6.7	copy	pending
-CLASS	ui/elements/workbench/ExplorerFind	140	workbench	6.7	copy	pending
-CLASS	ui/elements/workbench/FileDocument	178	workbench	6.7	copy	pending
-CLASS	ui/elements/workbench/FilesRenderer	300	workbench	6.7	copy	pending
-CLASS	ui/elements/workbench/GoToFile	352	workbench	6.7	copy	pending
-CLASS	ui/elements/workbench/HeaderContributor	30	workbench	6.7	copy	pending
-CLASS	ui/elements/workbench/MergeView	531	workbench	6.7	copy	pending
-CLASS	ui/elements/workbench/OpenDocuments	266	workbench	6.7	copy	pending
-CLASS	ui/elements/workbench/ProjectFileTree	837	workbench	6.7	copy	pending
-CLASS	ui/elements/workbench/ProjectIndex	382	workbench	6.7	move	pending
-CLASS	ui/elements/workbench/QueryLocation	115	workbench	6.7	move	pending
-CLASS	ui/elements/workbench/RecentFiles	94	workbench	6.7	move	pending
-CLASS	ui/elements/workbench/RegionDropOverlay	367	workbench	6.7	copy	pending
-CLASS	ui/elements/workbench/RegionDropZones	193	workbench	6.7	move	pending
-CLASS	ui/elements/workbench/RegionHost	213	workbench	6.7	copy	pending
-CLASS	ui/elements/workbench/SplitFill	76	workbench	6.7	copy	pending
-CLASS	ui/elements/workbench/StripeRail	63	workbench	6.7	move	pending
-CLASS	ui/elements/workbench/StripeView	962	workbench	6.7	copy	pending
-CLASS	ui/elements/workbench/ToolWindowFrame	258	workbench	6.7	copy	pending
-CLASS	ui/elements/workbench/ToolWindowLayout	212	workbench	6.7	move	pending
-CLASS	ui/elements/workbench/ToolWindowManager	650	workbench	6.7	copy	pending
-CLASS	ui/elements/workbench/ToolWindowState	266	workbench	6.7	move	pending
-CLASS	ui/elements/workbench/ToolWindowType	81	workbench	6.7	copy	pending
-CLASS	ui/elements/workbench/ViewContainer	245	workbench	6.7	copy	pending
-CLASS	ui/elements/workbench/ViewContainerRegistry	151	workbench	6.7	copy	pending
+CLASS	ui/elements/workbench/ConflictDialog	167	workbench/diff	6.7	copy	pending
+CLASS	ui/elements/workbench/DiffView	303	workbench/diff	6.7	copy	pending
+CLASS	ui/elements/workbench/DocumentType	101	document	6.7	copy	ported
+CLASS	ui/elements/workbench/DocumentViewState	48	document	6.7	copy	ported
+CLASS	ui/elements/workbench/ExplorerClipboard	95	workbench/explorer	6.7	copy	pending
+CLASS	ui/elements/workbench/ExplorerCommands	578	workbench/explorer	6.7	copy	pending
+CLASS	ui/elements/workbench/ExplorerDragAndDrop	195	workbench/explorer	6.7	copy	pending
+CLASS	ui/elements/workbench/ExplorerEditing	247	workbench/explorer	6.7	copy	pending
+CLASS	ui/elements/workbench/ExplorerFind	140	workbench/explorer	6.7	copy	pending
+CLASS	ui/elements/workbench/FileDocument	178	document	6.7	copy	ported
+CLASS	ui/elements/workbench/FilesRenderer	300	workbench/explorer	6.7	copy	pending
+CLASS	ui/elements/workbench/GoToFile	352	workbench/search	6.7	copy	pending
+CLASS	ui/elements/workbench/HeaderContributor	30	workbench/region	6.7	copy	pending
+CLASS	ui/elements/workbench/MergeView	531	workbench/diff	6.7	copy	pending
+CLASS	ui/elements/workbench/OpenDocuments	266	document	6.7	copy	ported
+CLASS	ui/elements/workbench/ProjectFileTree	837	workbench/explorer	6.7	copy	pending
+CLASS	ui/elements/workbench/ProjectIndex	382	workbench/search	6.7	copy	pending
+CLASS	ui/elements/workbench/QueryLocation	115	workbench/search	6.7	copy	pending
+CLASS	ui/elements/workbench/RecentFiles	94	document	6.7	copy	ported
+CLASS	ui/elements/workbench/RegionDropOverlay	367	workbench/region	6.7	copy	pending
+CLASS	ui/elements/workbench/RegionDropZones	193	workbench/region	6.7	copy	pending
+CLASS	ui/elements/workbench/RegionHost	213	workbench/region	6.7	copy	pending
+CLASS	ui/elements/workbench/SplitFill	76	workbench/region	6.7	copy	pending
+CLASS	ui/elements/workbench/StripeRail	63	workbench/region	6.7	copy	pending
+CLASS	ui/elements/workbench/StripeView	962	workbench/region	6.7	copy	pending
+CLASS	ui/elements/workbench/ToolWindowFrame	258	workbench/toolwindow	6.7	copy	pending
+CLASS	ui/elements/workbench/ToolWindowLayout	212	workbench/toolwindow	6.7	copy	pending
+CLASS	ui/elements/workbench/ToolWindowManager	650	workbench/toolwindow	6.7	copy	pending
+CLASS	ui/elements/workbench/ToolWindowState	266	workbench/toolwindow	6.7	copy	pending
+CLASS	ui/elements/workbench/ToolWindowType	81	workbench/toolwindow	6.7	copy	pending
+CLASS	ui/elements/workbench/ViewContainer	245	workbench/region	6.7	copy	pending
+CLASS	ui/elements/workbench/ViewContainerRegistry	151	workbench/region	6.7	copy	pending
 CLASS	ui/elements/workbench/Workbench	3212	workbench	6.7	copy	pending
-CLASS	ui/elements/workbench/WorkbenchMenus	137	workbench	6.7	move	pending
-CLASS	ui/elements/workbench/WorkbenchRegions	270	workbench	6.7	copy	pending
+CLASS	ui/elements/workbench/WorkbenchMenus	137	workbench	6.7	copy	pending
+CLASS	ui/elements/workbench/WorkbenchRegions	270	workbench/region	6.7	copy	pending
 CLASS	ui/elements/workbench/WorkbenchSession	749	workbench	6.7	copy	pending
 CLASS	ui/elements/workbench/WorkbenchSettings	313	workbench	6.7	copy	pending
-CLASS	ui/elements/workbench/WorkspaceTreeSource	861	workbench	6.7	move	pending
-CLASS	ui/elements/workbench/decoration/DiagnosticDecorations	102	workbench/decoration	6.7	move	pending
-CLASS	ui/elements/workbench/decoration/FileDecoration	70	workbench/decoration	6.7	move	pending
-CLASS	ui/elements/workbench/decoration/FileDecorationProvider	41	workbench/decoration	6.7	move	pending
-CLASS	ui/elements/workbench/decoration/FileDecorations	136	workbench/decoration	6.7	move	pending
-CLASS	ui/elements/workbench/document/TextFileDocument	272	workbench/document	6.7	copy	pending
-CLASS	ui/text/HighlightRegistry	117	ui/text	stays	move	pending
+CLASS	ui/elements/workbench/WorkspaceTreeSource	861	workbench/explorer	6.7	copy	pending
+CLASS	ui/elements/workbench/decoration/DiagnosticDecorations	102	workbench/decoration	6.7	copy	pending
+CLASS	ui/elements/workbench/decoration/FileDecoration	70	workbench/decoration	6.7	copy	pending
+CLASS	ui/elements/workbench/decoration/FileDecorationProvider	41	workbench/decoration	6.7	copy	pending
+CLASS	ui/elements/workbench/decoration/FileDecorations	136	workbench/decoration	6.7	copy	pending
+CLASS	ui/elements/workbench/document/TextFileDocument	272	document	6.7	copy	ported
+CLASS	ui/text/HighlightRegistry	117	ui/text	stays	move	in-place
 CLASS	ui/text/SyntaxHighlighting	283	widget/text	6.5	copy	ported
-CLASS	ui/text/TextRange	44	ui/text	stays	move	pending
-CLASS	language/run/view/MappingCommands	174	language/run/view	6.7	move	pending
-CLASS	language/run/view/RunConsoleView	622	language/run/view	6.7	move	pending
-CLASS	language/run/view/RunDecorations	124	language/run/view	6.7	move	pending
-CLASS	language/run/view/RunIndicators	114	language/run/view	6.7	copy	pending
-CLASS	language/run/view/RunPanel	1033	language/run/view	6.7	copy	pending
-CLASS	language/run/view/RunPanels	253	language/run/view	6.7	copy	pending
-CLASS	language/run/view/RunRail	353	language/run/view	6.7	copy	pending
-CLASS	language/run/view/ScriptWorkbench	567	language/run/view	6.7	move	pending
-CLASS	language/run/view/TailFollow	127	language/run/view	6.7	copy	pending
+CLASS	ui/text/TextRange	44	ui/text	stays	move	in-place
+CLASS	language/run/view/MappingCommands	174	language/run/view	6.7	move	in-place
+CLASS	language/run/view/RunConsoleView	622	language/run/view	6.7	move	in-place
+CLASS	language/run/view/RunDecorations	124	language/run/view	6.7	move	in-place
+CLASS	language/run/view/RunIndicators	114	language/run/view	6.7	copy	in-place
+CLASS	language/run/view/RunPanel	1033	language/run/view	6.7	copy	in-place
+CLASS	language/run/view/RunPanels	253	language/run/view	6.7	copy	in-place
+CLASS	language/run/view/RunRail	353	language/run/view	6.7	copy	in-place
+CLASS	language/run/view/ScriptWorkbench	567	language/run/view	6.7	move	in-place
+CLASS	language/run/view/TailFollow	127	language/run/view	6.7	copy	in-place
 #
 # PART	owner	name	kind	uses	source	why
 PART	(unowned)	error	A	1	proposed	leaf in every rule
@@ -923,20 +923,21 @@ PART	WindowFrame	active	C	3	confirmed	state adjective
 PART	WindowFrame	caption-adopted	C	2	confirmed	state adjective
 PART	WindowFrame	caption-chrome	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	WindowFrame	close	B	7	confirmed	a rule selects through it (1)
-PART	WindowFrame	content	B	0	confirmed	leaf in every rule
-PART	WindowFrame	controls	B	1	confirmed	a rule selects through it (1)
+PART	WindowFrame	content	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	WindowFrame	controls	B	2	confirmed	a rule selects through it (1)
 PART	WindowFrame	fullscreen	C	1	confirmed	state adjective
 PART	WindowFrame	hud	C	0	confirmed	state adjective
 PART	WindowFrame	icon	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	WindowFrame	maximize	B	5	confirmed	leaf in every rule, scoped by an ancestor in 5
 PART	WindowFrame	maximized	C	2	confirmed	state adjective
 PART	WindowFrame	minimize	B	3	confirmed	leaf in every rule, scoped by an ancestor in 3
-PART	WindowFrame	occupied	C	0	confirmed	state adjective
-PART	WindowFrame	overlays	B	0	confirmed	leaf in every rule
+PART	WindowFrame	occupied	C	1	confirmed	state adjective
+PART	WindowFrame	overlays	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	WindowFrame	pin	B	5	confirmed	leaf in every rule, scoped by an ancestor in 5
 PART	WindowFrame	pinned	C	1	confirmed	state adjective
 PART	WindowFrame	title	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
-PART	WindowFrame	title-bar	B	4	confirmed	a rule selects through it (2)
+PART	WindowFrame	title-bar	B	28	confirmed	a rule selects through it (24)
+PART	WindowFrame	window	B	37	confirmed	a rule selects through it (33)
 PART	WindowIcon	branded	C	1	confirmed	state adjective
 PART	WindowIcon	monogram	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	WindowIcon	tile-mono	A	1	confirmed	leaf in every rule

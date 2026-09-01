@@ -2267,9 +2267,27 @@ rules, 162 parts — the largest), `runpanel`'s rules wherever they live.
 `Viewer`), `CrystalEditorPanels`, `DiffView`, `MergeView`, `GoToFile`, `ProjectIndex`, `ExternalChange`,
 `UndoWiring`, `FrameThreadOwnership`, `StyleSettlesWithinTheFrame`, the `language/` run-view tests.
 
-**Destination.** `workbench` + `.dock` + `.toolwindow` + `.explorer` + `.document` + `.diff` +
-`.decoration`; `editor` and `example.machine` and `language.run.view` as they are. The dock model
+**Destination.** **Four classes at `workbench`** — `Workbench`, `WorkbenchSession`,
+`WorkbenchSettings`, `WorkbenchMenus` — and seven feature packages beside them: `.region` (12: the
+regions, what hosts one, where a drop lands, the stripe rail, and what a region SHOWS), `.toolwindow`
+(6), `.explorer` (8, split the way VS Code's explorer is — the view, the row renderer, one class per
+interaction, the model beside them), `.document` (6), `.diff` (3), `.search` (3: Go to File and the
+index behind it), `.decoration` (4). **The dock splits five ways**: four at `.dock` (the layout drawn,
+one leaf drawn, a torn-out one in a window, the commands), then `.layout` (8 — the tree and every
+structural operation), `.panel` (7 — what a panel TYPE is, plus VS Code's `EditorInput`/`EditorPane`
+pair), `.drag` (4), `.banner` (3). **Three classes cross from `dock` to `workbench`**: `DockRegion` and
+`RegionSide` are region vocabulary rather than the dock's (11 and 10 of the files naming them are in
+`workbench`, against 5 and 2 in `dock`) and `ViewId` is a tool window's identity by its own javadoc.
+The applications go under **`app/`** — `app.editor`, `app.machine` (+ `.ui`) — which is what
+`LayeringTest`'s LAYERS already names; `language.run.view` stays in its own module. The dock model
 (25 files) and the sessions/settings/tree-source classes are **moved**.
+
+> `LayeringTest` walks only `com/crystalgui/widget` for its coverage assertion, so none of these
+> sub-packages needs an entry in it — `com/crystalgui/workbench/` is a LAYER and a prefix covers what
+> is under it. What decides these boundaries is therefore what a class IS, measured by who names it,
+> and not the test. The `BATCH` prefix table is the half that DOES need editing: retargeting the two
+> applications under `app/` left no prefix matching them and both fell out of the batch entirely,
+> which is the same slip the config kit's rename cost at 6.4.
 
 **Budget, measured:** **44 copied, 39 moved, 566 mechanical, 35 hand sites** — the largest batch by
 lines and the smallest by hand work, because the workbench is mostly logic over widgets it does not
