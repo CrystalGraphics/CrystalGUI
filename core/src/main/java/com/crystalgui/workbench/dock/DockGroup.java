@@ -822,7 +822,10 @@ public class DockGroup extends UINode {
      */
     public int insertionIndexAt(float screenX) {
         List<Tab> strip = tabs.getTabs();
-        float y = strip.isEmpty() ? 0f : strip.get(0).box().y();
+        // The empty case already answers 0; a tab that has not been laid out answers the same. The
+        // strip's own band is what `stripBandContains` reads for exactly this reason.
+        Box firstTab = strip.isEmpty() ? null : strip.get(0).box();
+        float y = firstTab == null ? 0f : firstTab.y();
         return insertion.indexFor(this, strip, screenX, y);
     }
 

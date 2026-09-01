@@ -9,6 +9,7 @@ import com.crystalgui.text.diff.ThreeWayMerge.Region;
 import com.crystalgui.text.diff.ThreeWayMerge.Kind;
 import com.crystalgui.text.diff.ThreeWayMerge.Region;
 import com.crystalgui.text.diff.RegionState;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.service.Animation;
@@ -491,7 +492,8 @@ public final class MergeView extends UINode  {
         // and fights the wheel -- the pane under the cursor would stutter while the two following it
         // moved smoothly, which is the opposite of what the sync is for.
         if (pane == moved) return;
-        pane.box().setScroll(pane.scrollLeft(), line * Math.max(1f, pane.lineHeight()) + fraction);
+        Box paneBox = pane.box();
+        if (paneBox != null) paneBox.setScroll(pane.scrollLeft(), line * Math.max(1f, pane.lineHeight()) + fraction);
     }
 
     private ThreeWayMerge.Side sideOf(TextEditor pane) {

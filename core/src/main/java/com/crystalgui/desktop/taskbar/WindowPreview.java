@@ -233,7 +233,12 @@ public class WindowPreview extends UINode {
      * @return whether the width changed, so the caller knows a measurement it holds is stale
      */
     private boolean matchHeaderToThumbnail() {
-        float width = thumbnail.box().width();
+        // A NULL BOX IS THE SAME STATEMENT AS A ZERO ONE, and the guard below only ever said one of
+        // them. A thumbnail that has not been laid out has no box at all -- which is every frame
+        // between a minimise starting and the preview's first layout, so minimising a window threw
+        // here rather than showing a preview.
+        Box box = thumbnail.box();
+        float width = box == null ? 0f : box.width();
         if (width <= 0f || Math.abs(width - headerWidth) < 0.5f) return false;
         headerWidth = width;
         StyleGroup.inlinePipeline(header.getStyle().getLayoutGroup(), l -> l.width(width));

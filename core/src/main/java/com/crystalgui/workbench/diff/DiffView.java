@@ -5,6 +5,7 @@ import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.diff.DetailedDiff;
 import com.crystalgui.text.diff.LineDiff;
 import com.crystalgui.text.diff.LinesDiff;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.service.Animation;
@@ -278,8 +279,11 @@ public final class DiffView extends UINode  {
             int topLine = (int) Math.floor(moved.scrollTop() / lineHeight);
             float fraction = moved.scrollTop() - topLine * lineHeight;
             int mapped = mapLine(topLine, moved == leftPane);
-            follower.box().setScroll(follower.scrollLeft(),
-                    mapped * Math.max(1f, follower.lineHeight()) + fraction);
+            Box followerBox = follower.box();
+            if (followerBox != null) {
+                followerBox.setScroll(follower.scrollLeft(),
+                        mapped * Math.max(1f, follower.lineHeight()) + fraction);
+            }
         }
 
         lastLeft = leftPane.scrollTop();

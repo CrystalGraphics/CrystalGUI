@@ -2,6 +2,7 @@ package com.crystalgui.workbench.toolwindow;
 
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.window.WindowPolicy;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.overlay.Tooltip;
@@ -258,8 +259,11 @@ public class ToolWindowFrame extends WindowFrame {
     }
 
     private void measure() {
-        float width = box().width();
-        float height = box().height();
+        // A NON-POSITIVE RECT IS REFUSED on the way back in -- a 0x0 frame at the origin is a legal
+        // encoding and an unusable window -- so a frame with no box yet simply has nothing to snapshot.
+        Box box = box();
+        float width = box == null ? 0f : box.width();
+        float height = box == null ? 0f : box.height();
         if (width > 0f && height > 0f) {
             lastMeasured = new ToolWindowState.Bounds(getWantedLeft(), getWantedTop(), width, height);
         }

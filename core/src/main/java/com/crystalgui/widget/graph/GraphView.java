@@ -1687,7 +1687,9 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
         // The drag reports PLANE space (the port's own), which is world plus the plane's origin - and the
         // wire layer sits at world (0,0), so its origin is that offset. The same conversion the layer
         // itself uses, rather than a second one that could drift from it.
-        float ox = wireLayer.box().x(), oy = wireLayer.box().y();
+        Box layerBox = wireLayer.box();
+        float ox = layerBox == null ? 0f : layerBox.x();
+        float oy = layerBox == null ? 0f : layerBox.y();
         pendingWorldX = planeX - ox;
         pendingWorldY = planeY - oy;
 

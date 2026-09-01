@@ -1383,10 +1383,15 @@ public class Desktop extends UINode implements DataProvider {
      */
     public void placeByCascade(WindowFrame frame) {
         float step = frame.captionHeight();
-        float areaWidth = windows.box().width();
-        float areaHeight = windows.box().height();
-        float frameWidth = frame.box().width();
-        float frameHeight = frame.box().height();
+        // A NULL BOX IS A ZERO ONE HERE. The guard below already refuses a non-positive size -- the
+        // first window on an empty desktop cannot be placed because nothing has been measured yet --
+        // and a node that has not been laid out has no box at all, which is the same statement.
+        Box area = windows.box();
+        Box frameBox = frame.box();
+        float areaWidth = area == null ? 0f : area.width();
+        float areaHeight = area == null ? 0f : area.height();
+        float frameWidth = frameBox == null ? 0f : frameBox.width();
+        float frameHeight = frameBox == null ? 0f : frameBox.height();
         if (step <= 0f || areaWidth <= 0f || areaHeight <= 0f || frameWidth <= 0f || frameHeight <= 0f) {
             return;
         }

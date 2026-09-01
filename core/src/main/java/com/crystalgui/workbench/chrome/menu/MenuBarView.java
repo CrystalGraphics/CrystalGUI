@@ -318,7 +318,10 @@ public class MenuBarView extends UINode  {
 
     private boolean shouldAutoCollapse() {
         if (naturalWidth <= 0) return false;
-        float available = box().contentBoxWidth();
+        // The `<= 0` guard below is what an unmeasured bar means, and a null box is the same: hold
+        // whatever collapse state we already had rather than deciding from nothing.
+        Box box = box();
+        float available = box == null ? 0f : box.contentBoxWidth();
         if (available <= 0) return collapsed;
         // Hysteresis: expanding needs a little more room than collapsing gave up, so a window dragged to
         // exactly the boundary does not flicker between the two on every frame.

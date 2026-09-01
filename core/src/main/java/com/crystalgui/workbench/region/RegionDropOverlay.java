@@ -238,8 +238,12 @@ public class RegionDropOverlay extends UINode {
     private float leftBand(UINode host) {
         RegionHost region = visible(DockRegion.SIDEBAR);
         if (region == null) return 0f;
-        return region.box().x() + region.box().width()
-                - host.box().x();
+        Box hostBox = host.box();
+        if (hostBox == null || region.box() == null) return 0f;
+        // The region's origin IN THE HOST'S SPACE -- `Box.x()` is parent-relative, so subtracting two
+        // boxes' raw offsets only means anything when they share a parent. The same conversion the
+        // right and bottom bands beside this one use.
+        return Box.originIn(region.box(), hostBox).x() + region.box().width();
     }
 
     /** @see #leftBand */
@@ -332,7 +336,8 @@ public class RegionDropOverlay extends UINode {
      */
     private float railInset() {
         for (StripeView stripe : workbench.stripes()) {
-            float width = stripe.box().width();
+            Box box = stripe.box();
+            float width = box == null ? 0f : box.width();
             if (width > 0f) return width;
         }
         return 0f;

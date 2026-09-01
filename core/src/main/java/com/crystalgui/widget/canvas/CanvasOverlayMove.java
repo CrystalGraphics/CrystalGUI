@@ -1,5 +1,6 @@
 package com.crystalgui.widget.canvas;
 
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.UINode;
@@ -98,8 +99,11 @@ public final class CanvasOverlayMove {
             UINode container = block.get();
             if (window == null || container == null) return;
 
-            move.dragLeft = panel.box().x() - container.box().x();
-            move.dragTop = panel.box().y() - container.box().y();
+            Box panelBox = panel.box();
+            Box containerBox = container.box();
+            if (panelBox == null || containerBox == null) return;
+            move.dragLeft = panelBox.x() - containerBox.x();
+            move.dragTop = panelBox.y() - containerBox.y();
             Drag.start(handle, rawX, rawY,
                     (mouseX, mouseY, startX, startY, deltaX, deltaY) -> move.moveBy(deltaX, deltaY));
             event.stopPropagation();
@@ -128,10 +132,15 @@ public final class CanvasOverlayMove {
         UINode container = block.get();
         if (container == null) return;
 
-        float containerWidth = container.box().width();
-        float containerHeight = container.box().height();
-        float panelWidth = panel.box().width();
-        float panelHeight = panel.box().height();
+        // NEITHER BOX MAY BE ZERO says the note below, and a null box is the same statement -- the
+        // node is checked above and its box was not, which is the difference between the old engine's
+        // always-present cache and this one's.
+        Box containerBox = container.box();
+        Box panelBox = panel.box();
+        float containerWidth = containerBox == null ? 0f : containerBox.width();
+        float containerHeight = containerBox == null ? 0f : containerBox.height();
+        float panelWidth = panelBox == null ? 0f : panelBox.width();
+        float panelHeight = panelBox == null ? 0f : panelBox.height();
 
         // NEITHER BOX MAY BE ZERO, and this is the whole of the bug it fixes.
         //
@@ -206,8 +215,10 @@ public final class CanvasOverlayMove {
         // The arguments are IGNORED, and kept only so the call site reads unchanged.
         UINode container = block.get();
         if (container == null) return;
-        placeAt(panel.box().x() - container.box().x(),
-                panel.box().y() - container.box().y());
+        Box panelBox = panel.box();
+        Box containerBox = container.box();
+        if (panelBox == null || containerBox == null) return;
+        placeAt(panelBox.x() - containerBox.x(), panelBox.y() - containerBox.y());
     }
 
     /**
