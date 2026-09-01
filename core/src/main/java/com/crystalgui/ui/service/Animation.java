@@ -66,7 +66,11 @@ public final class Animation {
             this.easing = easing;
             this.body = body;
             this.onDone = onDone;
-            body.apply(0f);
+            // THROUGH THE EASING, like every other write. A raw `0f` is the same number for every
+            // easing that passes through the origin and a different one for any that does not, so the
+            // start value and the first re-assert of it would disagree — a jump on the first held
+            // frame, under exactly the easing chosen to hold a value constant.
+            body.apply(easedProgress());
         }
 
         public boolean isRunning() {
@@ -97,6 +101,13 @@ public final class Animation {
         private void advance(float delta) {
             if (delta > MAX_STEP && held < MAX_HELD_FRAMES) {
                 held++;
+                // RE-ASSERTED, NOT ASSUMED. A held frame advances the timeline by nothing, which is
+                // not the same as writing nothing: what a body writes is a COMPOSITOR OVERRIDE, and
+                // an override lives on the BOX rather than on the node -- so it does not survive the
+                // box being destroyed and rebuilt, which is what a node leaving and rejoining the
+                // tree does. The constructor's `body.apply(0f)` is therefore not a value that can be
+                // relied on to still be there by the first advancing tick.
+                body.apply(easedProgress());
                 return;
             }
             held = 0;
@@ -105,7 +116,12 @@ public final class Animation {
                 finish();
                 return;
             }
-            body.apply((float) easing.ease(elapsed / duration));
+            body.apply(easedProgress());
+        }
+
+        /** The value this timeline stands at — written on an advancing frame AND re-asserted on a held one. */
+        private float easedProgress() {
+            return (float) easing.ease(progress());
         }
     }
 
@@ -186,14 +202,27 @@ public final class Animation {
     }
 
     /** Runs the post-layout hooks. Called by the document once layout has settled. */
-    public void tickAfterLayout(float deltaSeconds) {
+    /** How many post-layout hooks are live. The counterpart to {@link #hookCount}. */
+    public int afterLayoutCount() {
+        return afterLayout.size();
+    }
+
+    public boolean tickAfterLayout(float deltaSeconds) {
+        boolean ran = false;
         for (OwnedHook owned : new ArrayList<>(afterLayout)) {
             if (!owned.owner().isConnected() || owned.owner().isFrozen()) {
                 afterLayout.remove(owned);
                 continue;
             }
+            ran = true;
             if (!owned.hook().frame(deltaSeconds)) afterLayout.remove(owned);
         }
+        // WHETHER ANY RAN, which is the only cheap signal that the frame may need settling. What a
+        // post-layout hook writes goes into the CASCADE, and the cascade does not reach Taffy until the
+        // next `refreshStyles` -- which happens inside layout. So there is nothing to test afterwards:
+        // "is layout dirty" answers no for a write that has not been carried across yet, and the pass
+        // that would carry it is the pass being decided on. @see UIDocument#settleAfterLayout
+        return ran;
     }
 
     /** Drops the hooks a subtree owns — the lifecycle service, freezing or destroying it. */

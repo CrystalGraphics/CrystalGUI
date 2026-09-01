@@ -218,10 +218,41 @@ public final class BoxTree {
             clampScrolls(root);
             transformsDirty = true;
         }
-        if (transformsDirty) {
-            compose(root, rootTransform, 0f, 0f);
-            transformsDirty = false;
-        }
+        composeIfDirty();
+    }
+
+    /**
+     * Whether another {@link #layout} pass would actually compute anything.
+     *
+     * <p>What a post-layout hook leaves behind when it writes geometry: the style resolves, the
+     * property listener reaches {@code TaffyBridge}, and the node is marked dirty — with this frame's
+     * layout already over. Asked by {@code UIDocument.frame} so the write lands on the frame that made
+     * it rather than the one after.</p>
+     */
+    public boolean isLayoutDirty() {
+        return root == null || structureDirty || taffy.isDirty(root.taffyId);
+    }
+
+    /**
+     * Re-composes every world matrix if anything has dirtied them since the last pass.
+     *
+     * <p><b>Called again after the post-layout hooks, and that is not tidiness.</b> The compose is
+     * part of {@link #layout}, so a hook that runs after layout and moves a box — which is precisely
+     * what {@code Animation.afterLayout} is documented for — wrote into a tree whose matrices were
+     * already composed, and the paint that followed drew the box where layout had left it. The move
+     * then appeared on the NEXT frame, one frame late, every time.</p>
+     *
+     * <p>It cost a window's restore animation a visible rest frame: {@code show()} reattaches from an
+     * input handler, which is dispatched after layout, so the frame had no box at all; the animation's
+     * first write landed after the following frame's compose, and the window painted once at its
+     * resting geometry before anything moved.</p>
+     *
+     * <p>Free when nothing moved — the flag is false and this returns.</p>
+     */
+    public void composeIfDirty() {
+        if (!transformsDirty) return;
+        compose(root, rootTransform, 0f, 0f);
+        transformsDirty = false;
     }
 
     /**

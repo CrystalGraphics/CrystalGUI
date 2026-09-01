@@ -351,8 +351,71 @@ public final class UIDocument extends UINode {
         layout(width, height);
         // AFTER layout, for the hooks that READ geometry -- see Animation.afterLayout. Before
         // endFrame, so a placement made here is what the hover diff and the paint both see.
-        animation().tickAfterLayout(deltaSeconds);
+        settleAfterLayout(width, height, deltaSeconds);
         input().endFrame();
+    }
+
+    /**
+     * How many times layout may be re-run for what a post-layout hook wrote. @see #settleAfterLayout
+     *
+     * <p>Two, because that is what the worst real case needs and it is a fixed point rather than a
+     * convergence: pass one creates the box a hook is waiting for, pass two carries the position that
+     * hook then writes. A third would find nothing left to do. The bound is there so a hook that
+     * answers differently every pass costs a constant rather than the frame.</p>
+     */
+    public static final int MAX_SETTLE_PASSES = 2;
+
+    /**
+     * Re-runs style and layout for whatever the post-layout hooks just wrote.
+     *
+     * <p><b>The one place in the engine where layout is allowed to feed back into itself, and the
+     * reason it has to exist.</b> A node whose position depends on its own measured size cannot be
+     * placed before it has been measured — a popup flips and clamps against its own width, a window
+     * steps its cascade offset from a measured caption, a dialog centres on half its own height. So
+     * they all place themselves in an {@code afterLayout} hook, and with layout running exactly once
+     * that write landed on the NEXT frame: for one frame each of them was drawn at its containing
+     * block's origin, at full opacity, before jumping to where it belonged.</p>
+     *
+     * <p>It reached four widgets before it was fixed here, and every one of them worked around it the
+     * same way — parking itself off-screen until placed, which is a hack each had to remember, could
+     * not be shared, and left the thing invisible for a frame instead of misplaced for one. The old
+     * engine had no such problem: {@code calculateLayout} ran {@code while (isLayoutDirty())}, so a
+     * placement written from {@code onLayoutChanged} settled inside the same pass. This is that loop,
+     * bounded, and run only when something actually asked for it.</p>
+     *
+     * <p><b>Style is re-run, not only layout.</b> A hook writes a position through the cascade, so the
+     * candidate has to be resolved before Taffy can hear about it — and it is re-run with a delta of
+     * zero, because transitions have already been ticked for this frame and advancing them again would
+     * make an animation run at the number of settle passes times its proper speed.</p>
+     *
+     * <p><b>The hooks themselves are NOT re-run.</b> They have had their frame; a placer that ran once
+     * against measured geometry has its answer, and running it again against the geometry its own write
+     * produced is how a fixed point turns into an oscillation.</p>
+     */
+    private void settleAfterLayout(float width, float height, float deltaSeconds) {
+        for (int pass = 0; pass < MAX_SETTLE_PASSES; pass++) {
+            // THE HOOKS ARE INSIDE THE LOOP, which is the half that took longest to get right. Running
+            // them once and then settling is not enough: a hook reads a box, and the pass that CREATES
+            // a box is itself a layout. A modal shown this frame has no box when the hooks first run --
+            // its `display` is resolved but the box tree syncs during layout -- so a placer that ran
+            // only once found nothing to measure, declined, and placed on the following frame. Which is
+            // the bug, one layer further in.
+            //
+            // ZERO DELTA on every pass but the first. A hook is free to be an animation tick, and time
+            // passes once per frame however many times layout runs.
+            if (!animation().tickAfterLayout(pass == 0 ? deltaSeconds : 0f)) break;
+            int before = boxes().layoutPasses();
+            calculateStyle(0f);
+            layout(width, height);
+            // NOTHING RECOMPUTED, so another round of hooks would be handed the tree they have already
+            // seen. Exact rather than a heuristic -- the counter moves only when Taffy actually ran --
+            // and it is what keeps a settled frame at ONE extra style pass instead of the full bound.
+            if (boxes().layoutPasses() == before) break;
+        }
+        // AND COMPOSE, for a hook that moved a box without dirtying layout at all -- a compositor
+        // transform is layout-free by design, so no pass above would have run for it. Free when
+        // nothing moved.
+        boxes().composeIfDirty();
     }
 
     /** Lays the document out at the viewport size -- the box tree's one pass. Run style first. */
