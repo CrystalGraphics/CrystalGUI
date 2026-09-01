@@ -460,7 +460,7 @@ taskbar .__entry__.__busy__ .__progress__ {
  * corners poking out of the rounded body, because the bar paints its own rect on top. Rounding a
  * window means rounding the bar's top two corners to match, which is a theme's job and needs the
  * per-corner properties. */
-window {
+.__window__ {
     min-width: 120px;
     min-height: 48px;
     /* NEVER LARGER THAN THE WORK AREA. A window nobody sized takes its content's size (see
@@ -488,7 +488,7 @@ window {
  * chrome (a menu bar is 22px) a fixed 18 would clip it, and hard-coding 22 here would make every
  * window carry the height of a bar most of them do not have. Growing to the tallest thing in it is
  * the one rule that is right in both cases. */
-window > .__title-bar__ {
+.__window__ > .__title-bar__ {
     /* 20px = a 16px control plus the 2px gap above and below it, which is the same 2px the controls
      * put between themselves and to the right of the last one. That is the whole derivation: the
      * caption is as tall as its furniture needs, so the strip is evenly spaced on all four sides.
@@ -525,7 +525,7 @@ window > .__title-bar__ {
  * This is a CLASS the compositor flips, never a pseudo-class -- see WindowFrame.ACTIVE_CLASS. And it
  * is why `window` is in ua/core.css's focus-ring carve-out: a rectangle round the whole pane would
  * say the same thing again, louder and in the wrong place. */
-window.__active__ > .__title-bar__ {
+.__window__.__active__ > .__title-bar__ {
     background: var(--window-title-active-bg, #26282B);
     color: var(--window-title-active-fg, #DFE1E5);
 }
@@ -543,7 +543,7 @@ window.__active__ > .__title-bar__ {
  *
  * The slot itself is bare: it exists to be a stable hook and to be hidden while empty, and whatever it
  * hosts brings its own layout. */
-window > .__title-bar__ > .__caption-chrome__ {
+.__window__ > .__title-bar__ > .__caption-chrome__ {
     flex-direction: row;
     align-items: center;
     flex-shrink: 0;
@@ -581,7 +581,7 @@ window > .__title-bar__ > .__caption-chrome__ {
  * scaled — so the caption reads as the same object at caption size. The FOOTPRINT is unchanged at 12px,
  * which is why the glyph inside it is now 8: a tile needs its inset, and growing the slot instead would
  * move every title in the application. */
-window > .__title-bar__ > .__icon__ {
+.__window__ > .__title-bar__ > .__icon__ {
     width: 12px;
     height: 12px;
     padding-all: 2px;
@@ -590,7 +590,7 @@ window > .__title-bar__ > .__icon__ {
     margin-right: 4px;
 }
 
-window > .__title-bar__ > .__title__ {
+.__window__ > .__title-bar__ > .__title__ {
     flex-grow: 1;
     flex-basis: 0;
     min-width: 0;
@@ -624,7 +624,7 @@ window > .__title-bar__ > .__title__ {
  * 24px block with 4px of padding put the X 16px in against the rail's 10, a visible 6px of
  * disagreement between two things sitting one above the other. The single pixel that remains is the
  * frame border's own width, and it buys something the alignment cannot: see the caption rule. */
-window .__controls__ {
+.__window__ .__controls__ {
     flex-direction: row;
     align-self: stretch;
     align-items: stretch;
@@ -644,10 +644,10 @@ window .__controls__ {
  * `min-height`/`min-width` are cleared because `button` carries `min-height: 14px` in the base sheet,
  * and a minimum is a DIFFERENT PROPERTY from a height: it wins at any specificity without appearing
  * to compete, which is how three rounds of shrinking a height once changed nothing at all. */
-window .__title-bar__ .__pin__,
-window .__title-bar__ .__minimize__,
-window .__title-bar__ .__maximize__,
-window .__title-bar__ .__close__ {
+.__window__ .__title-bar__ .__pin__,
+.__window__ .__title-bar__ .__minimize__,
+.__window__ .__title-bar__ .__maximize__,
+.__window__ .__title-bar__ .__close__ {
     width: var(--activity-bar-w, 20px);
     align-self: stretch;
     min-height: 0px;
@@ -671,9 +671,9 @@ window .__title-bar__ .__close__ {
     color: var(--window-control-fg, #9DA0A8);
 }
 
-window .__title-bar__ .__minimize__ { overlay: icon("crystalgui:window-minimize"); }
-window .__title-bar__ .__maximize__ { overlay: icon("crystalgui:window-maximize"); }
-window .__title-bar__ .__close__    { overlay: icon("crystalgui:x"); }
+.__window__ .__title-bar__ .__minimize__ { overlay: icon("crystalgui:window-minimize"); }
+.__window__ .__title-bar__ .__maximize__ { overlay: icon("crystalgui:window-maximize"); }
+.__window__ .__title-bar__ .__close__    { overlay: icon("crystalgui:x"); }
 
 /* THE PIN, in IntelliJ's three states -- W14. The artwork already draws the difference between "you
  * could pin this", "you are about to" and "it is pinned", so the rule is three overlays rather than a
@@ -688,9 +688,9 @@ window .__title-bar__ .__close__    { overlay: icon("crystalgui:x"); }
  * through to the base `button` sheet instead -- `min-height: 14px`, no `overlay-origin`, no padding
  * split -- and the glyph came out a quarter of the size with none of the gap. The controls read as one
  * flow or they read as a mistake. */
-window .__title-bar__ .__pin__          { overlay: icon("crystalgui:general/action/pin"); }
-window .__title-bar__ .__pin__:hover    { overlay: icon("crystalgui:general/action/pinHovered"); }
-window.__pinned__ .__title-bar__ .__pin__ { overlay: icon("crystalgui:general/action/pinSelected"); }
+.__window__ .__title-bar__ .__pin__          { overlay: icon("crystalgui:general/action/pin"); }
+.__window__ .__title-bar__ .__pin__:hover    { overlay: icon("crystalgui:general/action/pinHovered"); }
+.__window__.__pinned__ .__title-bar__ .__pin__ { overlay: icon("crystalgui:general/action/pinSelected"); }
 
 /* THE CONTROLS STAY ON THE HUD, and the first version hid them -- worth recording, because the
  * argument for hiding them is a good one that does not apply here.
@@ -710,7 +710,7 @@ window.__pinned__ .__title-bar__ .__pin__ { overlay: icon("crystalgui:general/ac
 /* THE GLYPH SAYS WHAT THE BUTTON WILL DO, not what the window is — so on a maximised window it turns
  * into "restore". Every window manager swaps it; a control whose mark never changes leaves the user
  * guessing which of two states a press will produce. */
-window.__maximized__ .__title-bar__ .__maximize__ {
+.__window__.__maximized__ .__title-bar__ .__maximize__ {
     overlay: icon("crystalgui:window-restore");
 }
 
@@ -718,9 +718,9 @@ window.__maximized__ .__title-bar__ .__maximize__ {
  * whole button, which is the half that was missing: minimise and maximise had no hover state at all
  * and close had a small rounded one, so two of the three gave no feedback and the third looked like a
  * different kind of control. */
-window .__title-bar__ .__pin__:hover,
-window .__title-bar__ .__minimize__:hover,
-window .__title-bar__ .__maximize__:hover {
+.__window__ .__title-bar__ .__pin__:hover,
+.__window__ .__title-bar__ .__minimize__:hover,
+.__window__ .__title-bar__ .__maximize__:hover {
     color: var(--window-control-hover-fg, #DFE1E5);
     background: none;
     background-color: var(--window-control-hover-bg, #35373B);
@@ -729,7 +729,7 @@ window .__title-bar__ .__maximize__:hover {
 /* Red on hover, which is Windows' and VS Code's convention for the one control that is destructive.
  * The fill carries it — the glyph goes white on top rather than red, or a hovered close button reads
  * as an error state rather than as a target. */
-window .__title-bar__ .__close__:hover {
+.__window__ .__title-bar__ .__close__:hover {
     color: var(--window-close-hover-fg, #FFFFFF);
     background: none;
     background-color: var(--window-close-hover-bg, #F14C4C);
@@ -739,7 +739,7 @@ window .__title-bar__ .__close__:hover {
  * makes it true: `resize` is a cascade-driven property, so UIResizer drops all eight handles the
  * moment this rule applies and rebuilds them when it stops. Specificity 11 against the base rule's 1,
  * so it wins without an !important the user-agent sheet is not allowed to write anyway. */
-window.__maximized__ {
+.__window__.__maximized__ {
     resize: none;
 }
 
@@ -757,7 +757,7 @@ window.__maximized__ {
  * The z-index is not decoration: the slot happens to be a later sibling than the content and would
  * paint above it anyway, so getting this wrong fails NOTHING today and fails the first time anything
  * reorders the frame's parts. */
-window > .__overlays__ {
+.__window__ > .__overlays__ {
     position: absolute;
     left: 0;
     top: 0;
@@ -770,7 +770,7 @@ window > .__overlays__ {
  * on the window's own content -- the desktop's own rule, one level down. `WindowFrame.syncOverlaySlot`
  * adds and removes the class; the base rule above is the empty state, so forgetting it leaves an owned
  * dialog unsized rather than leaving a window dead. */
-window > .__overlays__.__occupied__ {
+.__window__ > .__overlays__.__occupied__ {
     width: 100%;
     height: 100%;
 }
@@ -785,7 +785,7 @@ window > .__overlays__.__occupied__ {
  * content grew -- scrolls it with a bar, and one that fits shows nothing. (It was `hidden`, which
  * scrolls programmatically and draws no bar: a panel unfolding past the desktop's edge was cut off
  * with nothing to grab.) */
-window > .__content__ {
+.__window__ > .__content__ {
     width: 100%;
     flex-grow: 1;
     flex-shrink: 1;
@@ -814,7 +814,7 @@ window > .__content__ {
  * SMALLER THAN A DOCUMENT WINDOW's minimum, because a tool window legitimately is: the Inspector
  * docked is a 200px column, and a float that could not be made as narrow as its docked form would be
  * a worse version of the thing it was torn out of. */
-window.__tool-window__ {
+.__window__.__tool-window__ {
     min-width: 140px;
     min-height: 80px;
     background: var(--panel-bg, #26282B);
@@ -830,8 +830,8 @@ window.__tool-window__ {
  * Both states, because the base rule paints the INACTIVE look and a tool window that is merely not
  * focused should not suddenly grow a header in a different colour. Activity is still said -- by the
  * text, by the taskbar entry, and by which window is on top. */
-window.__tool-window__ > .__title-bar__,
-window.__tool-window__.__active__ > .__title-bar__ {
+.__window__.__tool-window__ > .__title-bar__,
+.__window__.__tool-window__.__active__ > .__title-bar__ {
     background: var(--panel-bg, #26282B);
 }
 
@@ -864,7 +864,7 @@ window.__tool-window__.__active__ > .__title-bar__ {
  * The label keeps the base rule's `flex-grow: 1; flex-basis: 0` and is simply EMPTIED, in Java, by
  * ToolWindowFrame -- so the space between the adopted header and the window controls is a real,
  * pointer-transparent box, which is precisely what a drag region is. */
-window.__tool-window__ > .__title-bar__ > .__caption-chrome__ {
+.__window__.__tool-window__ > .__title-bar__ > .__caption-chrome__ {
     flex-grow: 0;
     flex-shrink: 0;
 }
@@ -872,7 +872,7 @@ window.__tool-window__ > .__title-bar__ > .__caption-chrome__ {
 /* Dock: put it back in the region it never stopped belonging to. Sized and coloured exactly as the
  * window controls beside it -- it sits in the same strip, and any difference reads as one of them
  * being broken rather than as a different kind of button. */
-window.__tool-window__ .__title-bar__ .__dock__ {
+.__window__.__tool-window__ .__title-bar__ .__dock__ {
     width: var(--activity-bar-w, 20px);
     align-self: stretch;
     min-height: 0px;
@@ -891,7 +891,7 @@ window.__tool-window__ .__title-bar__ .__dock__ {
     color: var(--window-control-fg, #9DA0A8);
 }
 
-window.__tool-window__ .__title-bar__ .__dock__:hover {
+.__window__.__tool-window__ .__title-bar__ .__dock__:hover {
     color: var(--window-control-hover-fg, #DFE1E5);
     background: none;
     background-color: var(--window-control-hover-bg, #35373B);
@@ -914,8 +914,8 @@ window.__tool-window__ .__title-bar__ .__dock__:hover {
  * rule, which is the mark every window manager and IntelliJ alike draw for hide, and it already
  * routes through the frame's own hide -> onHidden -> hidePanel. The difference between "minimise"
  * and "hide" here is only that a tool window has somewhere better than a taskbar to come back from. */
-window.__tool-window__ .__title-bar__ .__close__,
-window.__tool-window__ .__title-bar__ .__maximize__ {
+.__window__.__tool-window__ .__title-bar__ .__close__,
+.__window__.__tool-window__ .__title-bar__ .__maximize__ {
     display: none;
 }
 
@@ -933,7 +933,7 @@ window.__tool-window__ .__title-bar__ .__maximize__ {
  * distinction the delay exists to draw. Dock is the one that is not obvious, and it keeps the same
  * wait as its neighbours: four controls in a strip that answered at different speeds would read as
  * three of them being broken. */
-window .__title-bar__ .__controls__ tooltip {
+.__window__ .__title-bar__ .__controls__ tooltip {
     tooltip-delay: 2;
 }
 
@@ -946,7 +946,7 @@ window .__title-bar__ .__controls__ tooltip {
  * frame's border, and a tab whose left edge is the window's edge reads as clipped rather than as
  * flush. IntelliJ indents its detached editor's strip for the same reason -- there is nothing to the
  * left of it, so the gap has to be drawn rather than inherited from a neighbour. */
-window.__dock-window__ .__strip__ {
+.__window__.__dock-window__ .__strip__ {
     padding-left: 4px;
 }
 
@@ -1018,7 +1018,7 @@ window.__dock-window__ .__strip__ {
  * it from, and a 1px rule down the edge of the screen reads as a rendering artefact. The taskbar's
  * absence is not styled here — the strip is LAID OUT, so hiding it re-flows the work area and the
  * window follows for free. */
-window.__fullscreen__ {
+.__window__.__fullscreen__ {
     border-width: 0;
     border-radius: 0;
 }

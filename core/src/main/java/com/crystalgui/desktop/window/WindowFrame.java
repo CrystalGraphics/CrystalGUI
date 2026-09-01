@@ -99,6 +99,21 @@ public class WindowFrame extends UINode implements Disposable, Resizable, DataPr
     /** The cascade identity `ua/desktop.css` names. @see com.crystalgui.ui.dom.Name */
     public static final Name NAME = Name.of("window");
 
+    /**
+     * The class every frame wears, and what {@code ua/desktop.css} actually keys on.
+     *
+     * <p><b>Not the tag.</b> A {@code Name} is registered to a factory, so a subclass cannot answer
+     * {@code window} the way the old engine's {@code tagName()} let it — two classes claiming one
+     * name makes a description ambiguous to decode, and {@code NodeKindsCoverageTest} says so. A
+     * subclass therefore has a kind of its own and would match none of the {@code window} rules,
+     * which is exactly the failure {@code ToolWindowFrame} is on record for: no background, no
+     * border, unstyled controls, and it reads as the widget not having been built.</p>
+     *
+     * <p>Keyed on a class instead, every subclass is styled as a window by construction and states
+     * only what differs. {@code .__v-scroller__} is the same decision for the same reason.</p>
+     */
+    public static final String WINDOW_CLASS = "__window__";
+
     /** The drag handle, and everything drawn in it. */
     public static final String TITLE_BAR_CLASS = "__title-bar__";
     /**
@@ -470,6 +485,7 @@ public class WindowFrame extends UINode implements Disposable, Resizable, DataPr
 
     public WindowFrame(String title) {
         super(NAME);
+        addClass(WINDOW_CLASS);
         // Out of flow and positioned: a window is placed by left/top against the desktop's window layer,
         // not laid out among its siblings. This is also what earns the four LEADING resize handles --
         // an origin write only means anything for a box that is positioned.
