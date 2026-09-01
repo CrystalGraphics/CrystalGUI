@@ -12,6 +12,7 @@ import com.crystalgui.ui.service.Dismiss;
 import com.crystalgui.ui.service.Focus;
 import com.crystalgui.ui.service.Input;
 import com.crystalgui.ui.service.Lifecycle;
+import dev.vfyjxf.taffy.style.TaffyPosition;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -229,7 +230,28 @@ public final class UIDocument extends UINode {
     public UINode topLayerNode() {
         if (topLayerNode == null) {
             topLayerNode = new UINode(TOP_LAYER);
+            // THE SIZE OF THE VIEWPORT, because a promoted element's percentages resolve against
+            // whatever HOSTS it -- and on this engine that is this node rather than the root.
+            //
+            // The old engine had no such node: `TopLayer.reparentTaffyNodeToRoot` made a promoted
+            // element a child of the ROOT, which is where "a promoted element's containing block is
+            // the root" comes from and why `width: 100%` there meant the screen. Introducing a layer
+            // between the two quietly broke that: this node had no size of its own, so it shrank to
+            // its content, and every promoted element sizing itself as a fraction of the screen got a
+            // fraction of ITSELF instead. The window switcher is the clearest case -- it is a
+            // full-screen overlay that centres its panel with flexbox precisely so it never has to
+            // measure anything, and it collapsed onto its own content in the top-left corner.
+            //
+            // WRITTEN THROUGH THE NODE, which is an INLINE write, and after the append: a style set on
+            // a DETACHED node is a candidate nothing resolves, so the first version of this stayed at
+            // `auto` and measured nothing. It is the layer's own geometry rather than a look, so
+            // there is nothing here a theme should be overriding.
             append(topLayerNode);
+            topLayerNode.layout(l -> l.positionType(TaffyPosition.ABSOLUTE)
+                    .left(0f)
+                    .top(0f)
+                    .widthPercent(100f)
+                    .heightPercent(100f));
         }
         return topLayerNode;
     }
