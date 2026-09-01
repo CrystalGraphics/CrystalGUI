@@ -109,6 +109,7 @@ public class DockGroup extends UINode {
     private final Map<DockPanelRef, Tab> tabByPanel = new LinkedHashMap<>();
 
     public DockGroup(DockArea area, DockLeaf leaf) {
+        super(NAME);
         this.area = area;
         this.leaf = leaf;
 

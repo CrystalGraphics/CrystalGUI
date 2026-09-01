@@ -170,10 +170,22 @@ public class ScrollerView extends UINode {
         // view -- measured at 42px inside a 776px scroller, which reads as the rows being unstyled
         // rather than as the box around them having collapsed.
         //
-        // Height is deliberately NOT constrained: the content must be free to exceed the viewport,
+        // HEIGHT IS A MINIMUM, NEVER A SIZE, and the distinction is the whole of a scroll container:
+        // `min-height: 100%` fills the viewport when the content is shorter and gets out of the way the
+        // moment it is taller, which is exactly what a viewport is for. Leaving it unconstrained is what
+        // the comment below argued for and it is only half right -- content must be free to EXCEED the
+        // viewport, and it must also be able to FILL one.
+        //
+        // Nothing inside could fill before this. A window's content slot is a ScrollerView, so the whole
+        // Crystal Editor -- rails, project panel, tab strip, editor, console, status bar -- was laid out
+        // at its own natural height inside a 490px window: measured at `slot 582x78` under a
+        // `scrollerview 582x468`, which on screen is a menu bar, a 78px sliver and nothing else. It reads
+        // as the workbench having failed to build rather than as the box around it having no height.
+        //
+        // Height is deliberately not a fixed size: the content must be free to exceed the viewport,
         // which is the whole point of a scroll container.
         StyleGroup.defaultPipeline(viewport.getStyle().getLayoutGroup(),
-                l -> l.widthPercent(100f));
+                l -> l.widthPercent(100f).minHeightPercent(100f));
         mirrorDirection();
         shadow.append(viewport);
 

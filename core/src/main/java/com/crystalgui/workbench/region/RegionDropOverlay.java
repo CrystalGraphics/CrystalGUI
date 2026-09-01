@@ -110,6 +110,7 @@ public class RegionDropOverlay extends UINode {
     }
 
     public RegionDropOverlay(Workbench workbench) {
+        super(NAME);
         this.workbench = workbench;
         addClass(OVERLAY_CLASS);
         setHitTest(false);

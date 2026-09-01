@@ -124,6 +124,7 @@ public class DockArea extends UINode  {
     private int previewTabIndex = -1;
 
     public DockArea(DockPanelRegistry<UINode> registry, DockLayout layout) {
+        super(NAME);
         this.registry = registry;
         this.layout = layout;
         setFocusPolicy(FocusPolicy.CLICK_NOT_TABBABLE);

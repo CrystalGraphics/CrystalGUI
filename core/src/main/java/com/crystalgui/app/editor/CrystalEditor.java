@@ -216,6 +216,7 @@ public class CrystalEditor extends UINode implements Disposable, WindowChrome, D
     }
 
     public CrystalEditor(WorkspaceClient<?> client) {
+        super(NAME);
         setFocusPolicy(FocusPolicy.NONE);
         workbench = new Workbench(client);
         // BOTH CHANNELS INTO ONE LINE. A notification is an event and wins the line when it arrives; the

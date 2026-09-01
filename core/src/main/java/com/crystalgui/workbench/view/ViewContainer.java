@@ -91,6 +91,7 @@ public class ViewContainer extends UINode implements WindowChrome {
             new com.crystalgui.core.signal.Signal.Action();
 
     public ViewContainer(String containerId, String titleText) {
+        super(NAME);
         this.containerId = containerId;
         addClass(CONTAINER_CLASS);
         header.addClass(HEADER_CLASS);

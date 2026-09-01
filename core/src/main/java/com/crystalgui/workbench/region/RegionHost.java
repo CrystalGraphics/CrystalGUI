@@ -85,6 +85,7 @@ public class RegionHost extends UINode {
     private boolean capturing;
 
     public RegionHost(DockRegion region) {
+        super(NAME);
         this.region = region;
         addClass(HOST_CLASS);
         // Per-region class so the sheet can size the sidebar differently from the panel without the
