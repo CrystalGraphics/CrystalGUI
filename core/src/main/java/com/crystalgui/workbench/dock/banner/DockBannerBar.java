@@ -34,6 +34,7 @@ public class DockBannerBar extends UINode {
     }
 
     public DockBannerBar(Notification banner) {
+        super(NAME);
         addClass(BANNER_CLASS);
         addClass(severityClass(banner.getSeverity()));
         UIText message = new UIText(banner.getMessage());

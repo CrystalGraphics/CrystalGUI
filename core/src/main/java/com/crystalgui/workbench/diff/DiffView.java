@@ -69,6 +69,7 @@ public final class DiffView extends UINode  {
     private float lastLeft, lastRight;
 
     public DiffView(String leftTitle, String leftText, String rightTitle, String rightText) {
+        super(NAME);
         this.left = LineDiff.lines(leftText);
         addClass(CLASS);
 

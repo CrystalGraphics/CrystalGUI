@@ -1526,7 +1526,20 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
                 SessionState<?> session = doc.sessionState();
                 if (session != null) session.applyTo(this);
             });
-            doc.queue(this::connected);
+            // NOT DELIVERED IF IT HAS SINCE LEFT. These callbacks are queued and drained once the
+            // outermost mutation finishes, so a node can be attached and detached again before its own
+            // `connected` runs -- and a widget's hook reasonably assumes it has a document, because
+            // being connected is what the callback MEANS. Eight of them dereference `document()` on
+            // the first line and every one is an NPE out of the drain, which surfaces as a crash in
+            // `UIDocument.settle` naming a widget nothing was doing anything to.
+            //
+            // The DOM's own rule: `connectedCallback` is not delivered to an element that is no longer
+            // connected by the time the reactions queue is processed. `disconnected` below needs no
+            // such guard -- it is the departure itself, and a node that has come BACK has already
+            // queued a fresh `connected` behind it.
+            doc.queue(() -> {
+                if (isConnected()) connected();
+            });
         }
         for (UINode child : children) child.propagate(doc, shadow, observer);
         if (shadowRoot != null) shadowRoot.propagate(doc, true, null);

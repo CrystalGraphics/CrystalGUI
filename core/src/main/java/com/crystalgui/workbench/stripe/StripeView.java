@@ -8,6 +8,7 @@ import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.service.AnchoredPlacement;
 import com.crystalgui.ui.dom.UINode;
@@ -108,6 +109,15 @@ public class StripeView extends UINode {
 
     /** The count over a rail icon. @see ItemButton#setBadge */
     public static final String BADGE_CLASS = "__badge__";
+
+    /**
+     * The badge's part name — what a sheet addresses it by.
+     *
+     * <p>It lives in the Button's shadow tree, so a descendant selector from {@code .__activity-bar__}
+     * reaches nothing; the class beside it is kept only so both engines' sheets can share a name while
+     * both run.</p>
+     */
+    public static final String BADGE_PART = "badge";
 
     /**
      * On the badge while it is a dot rather than a count — {@link ViewContainerRegistry#DOT}.
@@ -224,6 +234,7 @@ public class StripeView extends UINode {
     private boolean ticking;
 
     public StripeView(Workbench workbench, StripeRail rail) {
+        super(NAME);
         this.workbench = workbench;
         this.rail = rail;
         addClass(BAR_CLASS);
@@ -831,6 +842,7 @@ public class StripeView extends UINode {
             this.title = title;
             this.lastKnownOpen = workbench.isPanelOpen(typeId);
             badge.addClass(BADGE_CLASS);
+            badge.set(Attribute.PART, BADGE_PART);
             // Never a click target: the badge sits over the icon, and a press on it means the button.
             badge.setHitTest(false);
         }
@@ -853,7 +865,7 @@ public class StripeView extends UINode {
 
         void setBadge(@Nullable String text, @Nullable String styleClass) {
             if (text == null || text.isEmpty()) {
-                remove(badge);
+                shadow().remove(badge);
                 // AND THE DOT CLASS. The element is pooled rather than discarded, so a class left on it
                 // is a class the next badge inherits -- a later count would come back wearing the dot's
                 // absolute positioning and its 10px box.
@@ -882,7 +894,17 @@ public class StripeView extends UINode {
             if (dot) badge.addClass(DOT_CLASS);
             else badge.removeClass(DOT_CLASS);
             swapStyle(styleClass);
-            if (badge.parent() == null) append(badge);
+            // THE SHADOW TREE, NOT `append`. A Button's shadow root ends in a UISlot, so a light child
+            // lands IN the slot -- and an absolutely positioned box resolves against the box that HOSTS
+            // it, which is then the slot rather than the button. The slot has no size of its own and an
+            // out-of-flow child contributes nothing to it, so it measured 0x0 wherever it happened to
+            // sit in the button's row, and `right: 0; top: -2` put the dot over the middle of the bell
+            // instead of against its top-right corner. The rule's own comment states the assumption
+            // this broke: "Taffy resolves an absolute child against its parent, which is the rail
+            // button itself".
+            //
+            // Same fix, same reason, as the taskbar entry's running indicator.
+            if (badge.parent() == null) shadow().append(badge);
         }
 
         /**

@@ -91,6 +91,7 @@ public final class MergeView extends UINode  {
     private float lastMineFont, lastResultFont, lastTheirsFont;
 
     public MergeView(ThreeWayMerge merge) {
+        super(NAME);
         this.merge = merge;
         addClass(CLASS);
         // NOT markAsInternal() on this: it makes the widget unstyleable as a SELECTOR SUBJECT, so

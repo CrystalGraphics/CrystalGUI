@@ -33,6 +33,7 @@ import com.crystalgui.text.syntax.LanguageRegistry;
 import com.crystalgui.text.syntax.SyntaxTokenizer;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.workbench.chrome.palette.CommandPalette;
 import com.crystalgui.workbench.chrome.status.Breadcrumbs;
 import com.crystalgui.workbench.chrome.palette.QuickPick;
 import com.crystalgui.workbench.chrome.status.StatusBarView;
@@ -617,6 +618,23 @@ public class Workbench extends UINode implements DataProvider {
         // the content everything is focused inside -- so a command resolving outward from a focused editor
         // would never reach it. The workbench is the nearest thing that is an ancestor of both.
         if (key == UiDataKeys.MENU_BAR) return menuBar;
+        // THE SURFACE, which nothing answered and every command gated on it was therefore disabled.
+        //
+        // The old engine's palette took `UiDataKeys.WINDOW`, a `DataKey<UIWindow>`; a key's TYPE is the
+        // thing it names, so an engine and its copy cannot share one and the port had to declare
+        // `CommandPalette.SURFACE` as a `DataKey<UIDocument>`. The consumers came across with it --
+        // `ChromeCommands`, `ExplorerCommands`, `CrystalEditorCommands` all read it -- and no provider
+        // was ever written, so `context.data().get(SURFACE)` answered null everywhere.
+        //
+        // What that looks like is not a missing key. `Show All Commands` is `enabledWhen(surface !=
+        // null)`, so the row greyed out and Mod+Shift+P did nothing: the chord resolved, found its
+        // command, and declined to run a disabled one. Every row that reaches for the surface greyed
+        // with it, which reads as the whole menu being broken rather than as one unanswered key.
+        //
+        // ANSWERED HERE for the reason the two above are: the walk only finds ancestors, and this is
+        // registered as a document-level provider (`addDataProvider`), so it is reachable with nothing
+        // focused at all -- which is exactly when the palette is opened.
+        if (key == CommandPalette.SURFACE) return document();
         return null;
     }
 
@@ -766,6 +784,7 @@ public class Workbench extends UINode implements DataProvider {
     public static final String SHOW_NOTIFICATIONS = "workbench.showNotifications";
 
     public Workbench(WorkspaceClient<?> client) {
+        super(NAME);
         if (client == null) throw new IllegalArgumentException("A Workbench needs a workspace client");
         this.client = client;
         // AFTER `client`, and it has to be: a field initialiser capturing a constructor-assigned final is

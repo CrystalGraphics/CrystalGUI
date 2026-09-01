@@ -204,6 +204,7 @@ public class ShaderGraphEditor extends UINode implements FileDocument, Disposabl
     private CgShaderEmitter.Result lastCompile;
 
     public ShaderGraphEditor() {
+        super(NAME);
         // Explicit, like every command set in this engine -- a registry that quietly acquired
         // declarations nobody asked for surprises anything that walks it, and a generated settings panel
         // is precisely such a thing. Idempotent, since registering replaces.

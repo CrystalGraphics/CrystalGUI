@@ -222,6 +222,7 @@ public class ProjectFileTree extends UINode implements UndoScope, DataProvider {
     }
 
     public ProjectFileTree(WorkspaceClient<?> client) {
+        super(NAME);
         this.source = new WorkspaceTreeSource(client);
         this.tree = new TreeView<>(source);
         tree.addClass(TREE_CLASS);

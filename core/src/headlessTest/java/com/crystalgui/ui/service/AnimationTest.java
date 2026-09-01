@@ -57,9 +57,22 @@ public class AnimationTest {
         Animation.Timeline timeline = animation.start(0.2f, LINEAR, written::add, null);
 
         for (int i = 0; i < Animation.MAX_HELD_FRAMES; i++) animation.tick(0.4f);
-        assertEquals("the first windows of a session open into the worst stall there is; wall time "
-                + "would charge a gesture its whole duration for frames nobody saw",
-                1, written.size());
+        // ASSERTED ON THE VALUE, not on how many times it was written. A held frame advances the
+        // timeline by nothing -- which is what "the first windows of a session open into the worst
+        // stall there is, and wall time would charge a gesture its whole duration for frames nobody
+        // saw" means -- and it RE-ASSERTS what it is holding rather than writing nothing at all.
+        //
+        // The difference is not academic. A body writes a compositor override, an override lives on the
+        // BOX, and a box is destroyed and rebuilt whenever its node leaves the tree and comes back --
+        // which is exactly what restoring a hidden window does, and the frames right after a reattach
+        // are the stall this branch exists for. Writing nothing there left the box at REST for up to
+        // MAX_HELD_FRAMES: the window appeared instantly at full size, vanished, and only then played
+        // its entry animation. Counting writes pins the old mechanism; this pins the property.
+        for (Float value : written) {
+            assertEquals("a held frame advanced the timeline", 0f, value, 0f);
+        }
+        assertTrue("nothing was written at all, so a rebuilt box keeps whatever it was born with",
+                written.size() >= 1);
         assertTrue(timeline.isRunning());
 
         for (int i = 0; i < 40; i++) animation.tick(0.4f);
