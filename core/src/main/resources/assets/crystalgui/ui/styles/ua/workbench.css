@@ -45,7 +45,7 @@ dockgroup {
  * pointer-events property, and an overlay that takes the pointer ends the drag on top of itself. */
 dockgroup .__drop-overlay__ {
     background: var(--dock-drop-overlay, #4A88C766);
-    border-all-radius: 2px;
+    border-radius: 2px;
 }
 
 /* The caret between two tabs during a reorder. Deliberately brighter than the overlay: it marks a
@@ -401,7 +401,13 @@ workbench .__activity-bar__ .__stripe-separator__ {
     gap: 8px;
     padding: 4px 8px;
     flex-shrink: 0;
-    border-bottom-width: 1px;
+    /* A UNIFORM WIDTH, and the other three edges transparent -- the spelling `search.css` names as
+       the reference and `.__view-content__` above uses. The rounded-background path takes its stroke
+       width from `border().left` ALONE, so `border-bottom-width` on its own resolves, lays out and
+       paints nothing; the property is not even registered, so it was skipped with a warning nobody
+       was reading a log to see. */
+    border-width: 1px;
+    border-color: #00000000;
     border-bottom-color: var(--banner-border, #00000040);
 }
 
