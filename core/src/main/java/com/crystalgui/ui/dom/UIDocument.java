@@ -51,6 +51,25 @@ import lombok.Getter;
 public final class UIDocument extends UINode {
 
     /**
+     * Widget state that outlives its widget, or null when the host is not persisting any.
+     *
+     * <p>Held here rather than by whoever is saving, because the two moments a widget's state can be
+     * read are attaching and detaching, and only the document sees those. A host installs one and
+     * the tree seeds and harvests itself.</p>
+     */
+    @Nullable
+    private SessionState<?> sessionState;
+
+    public void setSessionState(@Nullable SessionState<?> state) {
+        this.sessionState = state;
+    }
+
+    @Nullable
+    public SessionState<?> sessionState() {
+        return sessionState;
+    }
+
+    /**
      * This surface's own commands.
      *
      * <p>The counterpart of {@code UIWindow.getCommands()}, and the second half of the seam that kept

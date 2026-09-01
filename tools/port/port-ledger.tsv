@@ -170,7 +170,7 @@ CLASS	ui/elements/dock/DockPlacement	141	workbench/dock/drag	6.7	copy	ported
 CLASS	ui/elements/dock/DockRegion	74	workbench/region	6.7	copy	ported
 CLASS	ui/elements/dock/DockWindow	199	workbench/dock	6.7	copy	ported
 CLASS	ui/elements/dock/RegionSide	58	workbench/region	6.7	copy	ported
-CLASS	ui/elements/dock/ViewId	84	workbench/toolwindow	6.7	copy	ported
+CLASS	ui/elements/dock/ViewId	84	workbench/view	6.7	copy	ported
 CLASS	ui/elements/editor/CompletionPopup	897	widget/texteditor/suggest	6.5	copy	ported
 CLASS	ui/elements/editor/CompletionRanking	174	widget/texteditor/suggest	6.5	copy	ported
 CLASS	ui/elements/editor/CompletionSession	521	widget/texteditor/suggest	6.5	copy	ported
@@ -228,48 +228,48 @@ CLASS	ui/elements/table/TableView	522	widget/collection/table	6.3	copy	ported
 CLASS	ui/elements/tree/TreeRenderer	41	widget/collection/tree	6.3	copy	ported
 CLASS	ui/elements/tree/TreeSearch	1145	widget/collection/tree	6.3	copy	ported
 CLASS	ui/elements/tree/TreeView	451	widget/collection/tree	6.3	copy	ported
-CLASS	ui/elements/workbench/ConflictDialog	167	workbench/diff	6.7	copy	pending
-CLASS	ui/elements/workbench/DiffView	303	workbench/diff	6.7	copy	pending
+CLASS	ui/elements/workbench/ConflictDialog	167	workbench/diff	6.7	copy	ported
+CLASS	ui/elements/workbench/DiffView	303	workbench/diff	6.7	copy	ported
 CLASS	ui/elements/workbench/DocumentType	101	document	6.7	copy	ported
 CLASS	ui/elements/workbench/DocumentViewState	48	document	6.7	copy	ported
-CLASS	ui/elements/workbench/ExplorerClipboard	95	workbench/explorer	6.7	copy	pending
-CLASS	ui/elements/workbench/ExplorerCommands	578	workbench/explorer	6.7	copy	pending
-CLASS	ui/elements/workbench/ExplorerDragAndDrop	195	workbench/explorer	6.7	copy	pending
-CLASS	ui/elements/workbench/ExplorerEditing	247	workbench/explorer	6.7	copy	pending
-CLASS	ui/elements/workbench/ExplorerFind	140	workbench/explorer	6.7	copy	pending
+CLASS	ui/elements/workbench/ExplorerClipboard	95	workbench/explorer	6.7	copy	ported
+CLASS	ui/elements/workbench/ExplorerCommands	578	workbench/explorer	6.7	copy	ported
+CLASS	ui/elements/workbench/ExplorerDragAndDrop	195	workbench/explorer	6.7	copy	ported
+CLASS	ui/elements/workbench/ExplorerEditing	247	workbench/explorer	6.7	copy	ported
+CLASS	ui/elements/workbench/ExplorerFind	140	workbench/explorer	6.7	copy	ported
 CLASS	ui/elements/workbench/FileDocument	178	document	6.7	copy	ported
-CLASS	ui/elements/workbench/FilesRenderer	300	workbench/explorer	6.7	copy	pending
-CLASS	ui/elements/workbench/GoToFile	352	workbench/search	6.7	copy	pending
-CLASS	ui/elements/workbench/HeaderContributor	30	workbench/region	6.7	copy	pending
-CLASS	ui/elements/workbench/MergeView	531	workbench/diff	6.7	copy	pending
+CLASS	ui/elements/workbench/FilesRenderer	300	workbench/explorer	6.7	copy	ported
+CLASS	ui/elements/workbench/GoToFile	352	workbench/search	6.7	copy	ported
+CLASS	ui/elements/workbench/HeaderContributor	30	workbench/view	6.7	copy	ported
+CLASS	ui/elements/workbench/MergeView	531	workbench/diff	6.7	copy	ported
 CLASS	ui/elements/workbench/OpenDocuments	266	document	6.7	copy	ported
-CLASS	ui/elements/workbench/ProjectFileTree	837	workbench/explorer	6.7	copy	pending
-CLASS	ui/elements/workbench/ProjectIndex	382	workbench/search	6.7	copy	pending
-CLASS	ui/elements/workbench/QueryLocation	115	workbench/search	6.7	copy	pending
+CLASS	ui/elements/workbench/ProjectFileTree	837	workbench/explorer	6.7	copy	ported
+CLASS	ui/elements/workbench/ProjectIndex	382	workbench/search	6.7	copy	ported
+CLASS	ui/elements/workbench/QueryLocation	115	workbench/search	6.7	copy	ported
 CLASS	ui/elements/workbench/RecentFiles	94	document	6.7	copy	ported
-CLASS	ui/elements/workbench/RegionDropOverlay	367	workbench/region	6.7	copy	pending
-CLASS	ui/elements/workbench/RegionDropZones	193	workbench/region	6.7	copy	pending
-CLASS	ui/elements/workbench/RegionHost	213	workbench/region	6.7	copy	pending
-CLASS	ui/elements/workbench/SplitFill	76	workbench/region	6.7	copy	pending
-CLASS	ui/elements/workbench/StripeRail	63	workbench/region	6.7	copy	pending
-CLASS	ui/elements/workbench/StripeView	962	workbench/region	6.7	copy	pending
-CLASS	ui/elements/workbench/ToolWindowFrame	258	workbench/toolwindow	6.7	copy	pending
-CLASS	ui/elements/workbench/ToolWindowLayout	212	workbench/toolwindow	6.7	copy	pending
-CLASS	ui/elements/workbench/ToolWindowManager	650	workbench/toolwindow	6.7	copy	pending
-CLASS	ui/elements/workbench/ToolWindowState	266	workbench/toolwindow	6.7	copy	pending
-CLASS	ui/elements/workbench/ToolWindowType	81	workbench/toolwindow	6.7	copy	pending
-CLASS	ui/elements/workbench/ViewContainer	245	workbench/region	6.7	copy	pending
-CLASS	ui/elements/workbench/ViewContainerRegistry	151	workbench/region	6.7	copy	pending
-CLASS	ui/elements/workbench/Workbench	3212	workbench	6.7	copy	pending
-CLASS	ui/elements/workbench/WorkbenchMenus	137	workbench	6.7	copy	pending
-CLASS	ui/elements/workbench/WorkbenchRegions	270	workbench/region	6.7	copy	pending
-CLASS	ui/elements/workbench/WorkbenchSession	749	workbench	6.7	copy	pending
-CLASS	ui/elements/workbench/WorkbenchSettings	313	workbench	6.7	copy	pending
-CLASS	ui/elements/workbench/WorkspaceTreeSource	861	workbench/explorer	6.7	copy	pending
-CLASS	ui/elements/workbench/decoration/DiagnosticDecorations	102	workbench/decoration	6.7	copy	pending
-CLASS	ui/elements/workbench/decoration/FileDecoration	70	workbench/decoration	6.7	copy	pending
-CLASS	ui/elements/workbench/decoration/FileDecorationProvider	41	workbench/decoration	6.7	copy	pending
-CLASS	ui/elements/workbench/decoration/FileDecorations	136	workbench/decoration	6.7	copy	pending
+CLASS	ui/elements/workbench/RegionDropOverlay	367	workbench/region	6.7	copy	ported
+CLASS	ui/elements/workbench/RegionDropZones	193	workbench/region	6.7	copy	ported
+CLASS	ui/elements/workbench/RegionHost	213	workbench/region	6.7	copy	ported
+CLASS	ui/elements/workbench/SplitFill	76	workbench/region	6.7	copy	ported
+CLASS	ui/elements/workbench/StripeRail	63	workbench/stripe	6.7	copy	ported
+CLASS	ui/elements/workbench/StripeView	962	workbench/stripe	6.7	copy	ported
+CLASS	ui/elements/workbench/ToolWindowFrame	258	workbench/toolwindow	6.7	copy	ported
+CLASS	ui/elements/workbench/ToolWindowLayout	212	workbench/toolwindow	6.7	copy	ported
+CLASS	ui/elements/workbench/ToolWindowManager	650	workbench/toolwindow	6.7	copy	ported
+CLASS	ui/elements/workbench/ToolWindowState	266	workbench/toolwindow	6.7	copy	ported
+CLASS	ui/elements/workbench/ToolWindowType	81	workbench/toolwindow	6.7	copy	ported
+CLASS	ui/elements/workbench/ViewContainer	245	workbench/view	6.7	copy	ported
+CLASS	ui/elements/workbench/ViewContainerRegistry	151	workbench/view	6.7	copy	ported
+CLASS	ui/elements/workbench/Workbench	3212	workbench	6.7	copy	ported
+CLASS	ui/elements/workbench/WorkbenchMenus	137	workbench	6.7	copy	ported
+CLASS	ui/elements/workbench/WorkbenchRegions	270	workbench/region	6.7	copy	ported
+CLASS	ui/elements/workbench/WorkbenchSession	749	workbench	6.7	copy	ported
+CLASS	ui/elements/workbench/WorkbenchSettings	313	workbench	6.7	copy	ported
+CLASS	ui/elements/workbench/WorkspaceTreeSource	861	workbench/explorer	6.7	copy	ported
+CLASS	ui/elements/workbench/decoration/DiagnosticDecorations	102	workbench/decoration	6.7	copy	ported
+CLASS	ui/elements/workbench/decoration/FileDecoration	70	workbench/decoration	6.7	copy	ported
+CLASS	ui/elements/workbench/decoration/FileDecorationProvider	41	workbench/decoration	6.7	copy	ported
+CLASS	ui/elements/workbench/decoration/FileDecorations	136	workbench/decoration	6.7	copy	ported
 CLASS	ui/elements/workbench/document/TextFileDocument	272	document	6.7	copy	ported
 CLASS	ui/text/HighlightRegistry	117	ui/text	stays	move	in-place
 CLASS	ui/text/SyntaxHighlighting	283	widget/text	6.5	copy	ported
@@ -389,10 +389,10 @@ PART	ConfiguratorGroup	content	B	7	confirmed	a rule selects through it (5)
 PART	ConfiguratorGroup	head	B	6	confirmed	a rule selects through it (3)
 PART	ConfiguratorGroup	title	B	3	confirmed	leaf in every rule, scoped by an ancestor in 3
 PART	ConfiguratorPanel	configurator-panel	B	1	confirmed	leaf in every rule
-PART	ConflictDialog	conflict	B	4	proposed	a rule selects through it (3)
-PART	ConflictDialog	conflict-actions	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	ConflictDialog	conflict-message	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	ConflictDialog	conflict-who	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	ConflictDialog	conflict	B	4	confirmed	a rule selects through it (3)
+PART	ConflictDialog	conflict-actions	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	ConflictDialog	conflict-message	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	ConflictDialog	conflict-who	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	CrystalEditor	content	A	0	proposed	leaf in every rule
 PART	CrystalEditor	editor-content	A	0	proposed	leaf in every rule
 PART	Desktop	live	C	1	confirmed	state adjective
@@ -405,26 +405,26 @@ PART	Dialog	label	B	4	confirmed	leaf in every rule, scoped by an ancestor in 4
 PART	Dialog	open	C	1	confirmed	state adjective
 PART	Dialog	pulse	C	1	confirmed	leaf in every rule
 PART	Dialog	title-bar	B	0	confirmed	leaf in every rule
-PART	DiffView	diff	B	8	proposed	a rule selects through it (7)
-PART	DiffView	diff-actions	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	DiffView	diff-editor	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	DiffView	diff-pane	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	DiffView	diff-pane-title	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	DiffView	diff-panes	B	4	proposed	a rule selects through it (3)
-PART	DiffView	diff-status	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	DiffView	diff-toolbar	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	DockArea	dock-dragging	C	0	proposed	state adjective
-PART	DockArea	tab-ghost	B	5	proposed	a rule selects through it (2)
-PART	DockBannerBar	action	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	DockBannerBar	dock-banner	B	6	proposed	a rule selects through it (2)
-PART	DockBannerBar	message	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	DockGroup	active	C	3	proposed	state adjective
-PART	DockGroup	dock-bannered	C	1	proposed	state adjective
-PART	DockGroup	drop-overlay	A	0	proposed	leaf in every rule
+PART	DiffView	diff	B	8	confirmed	a rule selects through it (7)
+PART	DiffView	diff-actions	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	DiffView	diff-editor	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	DiffView	diff-pane	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	DiffView	diff-pane-title	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	DiffView	diff-panes	B	4	confirmed	a rule selects through it (3)
+PART	DiffView	diff-status	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	DiffView	diff-toolbar	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	DockArea	dock-dragging	C	0	confirmed	state adjective
+PART	DockArea	tab-ghost	B	5	confirmed	a rule selects through it (2)
+PART	DockBannerBar	action	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	DockBannerBar	dock-banner	B	6	confirmed	a rule selects through it (2)
+PART	DockBannerBar	message	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	DockGroup	active	C	3	confirmed	state adjective
+PART	DockGroup	dock-bannered	C	1	confirmed	state adjective
+PART	DockGroup	drop-overlay	A	0	confirmed	leaf in every rule
 PART	DockGroup	empty	C	2	confirmed	state adjective
-PART	DockGroup	missing	C	0	proposed	state adjective
-PART	DockGroup	pane-host	A	0	proposed	leaf in every rule
-PART	DockWindow	dock-window	B	1	proposed	a rule selects through it (1)
+PART	DockGroup	missing	C	0	confirmed	state adjective
+PART	DockGroup	pane-host	A	0	confirmed	leaf in every rule
+PART	DockWindow	dock-window	B	1	confirmed	a rule selects through it (1)
 PART	DocumentationPopup	doc-body	B	0	confirmed	leaf in every rule
 PART	DocumentationPopup	doc-definition	B	0	confirmed	leaf in every rule
 PART	DocumentationPopup	doc-definition-box	B	0	confirmed	leaf in every rule
@@ -546,15 +546,15 @@ PART	MenuItem	checkable	A	0	confirmed	leaf in every rule
 PART	MenuItem	has-submenu	C	0	confirmed	state adjective
 PART	MenuItem	mark	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	MenuItem	submenu-arrow	A	0	confirmed	leaf in every rule
-PART	MergeView	dialog-actions	A	1	proposed	leaf in every rule
-PART	MergeView	merge	B	8	proposed	a rule selects through it (7)
-PART	MergeView	merge-actions	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	MergeView	merge-editor	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	MergeView	merge-pane	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	MergeView	merge-pane-title	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	MergeView	merge-panes	B	4	proposed	a rule selects through it (3)
-PART	MergeView	merge-status	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	MergeView	merge-toolbar	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	MergeView	dialog-actions	A	1	confirmed	leaf in every rule
+PART	MergeView	merge	B	8	confirmed	a rule selects through it (7)
+PART	MergeView	merge-actions	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	MergeView	merge-editor	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	MergeView	merge-pane	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	MergeView	merge-pane-title	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	MergeView	merge-panes	B	4	confirmed	a rule selects through it (3)
+PART	MergeView	merge-status	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	MergeView	merge-toolbar	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	NavigatorView	nav-arrow	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	NavigatorView	nav-back	B	0	confirmed	leaf in every rule
 PART	NavigatorView	nav-detail	B	0	confirmed	leaf in every rule
@@ -648,16 +648,16 @@ PART	ProgressStatusItem	cancel	B	3	confirmed	leaf in every rule, scoped by an an
 PART	ProgressStatusItem	count	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	ProgressStatusItem	label	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	ProgressStatusItem	progress-item	B	7	confirmed	a rule selects through it (5)
-PART	ProjectFileTree	badge	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
-PART	ProjectFileTree	content	A	0	proposed	leaf in every rule
-PART	ProjectFileTree	drop-target	A	0	proposed	leaf in every rule
-PART	ProjectFileTree	editing	C	0	proposed	state adjective
-PART	ProjectFileTree	pre-icon	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	ProjectFileTree	project-row	B	1	proposed	a rule selects through it (1)
-PART	ProjectFileTree	project-tree	A	0	proposed	leaf in every rule
-PART	ProjectFileTree	row-editor	A	0	proposed	leaf in every rule
-PART	ProjectFileTree	tree-content	A	0	proposed	leaf in every rule
-PART	ProjectFileTree	twisty	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
+PART	ProjectFileTree	badge	A	4	confirmed	leaf in every rule, scoped by an ancestor in 4
+PART	ProjectFileTree	content	A	0	confirmed	leaf in every rule
+PART	ProjectFileTree	drop-target	A	0	confirmed	leaf in every rule
+PART	ProjectFileTree	editing	C	0	confirmed	state adjective
+PART	ProjectFileTree	pre-icon	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	ProjectFileTree	project-row	B	1	confirmed	a rule selects through it (1)
+PART	ProjectFileTree	project-tree	A	0	confirmed	leaf in every rule
+PART	ProjectFileTree	row-editor	A	0	confirmed	leaf in every rule
+PART	ProjectFileTree	tree-content	A	0	confirmed	leaf in every rule
+PART	ProjectFileTree	twisty	A	4	confirmed	leaf in every rule, scoped by an ancestor in 4
 PART	PropertyPill	capsule	B	6	confirmed	leaf in every rule, scoped by an ancestor in 6
 PART	PropertyPill	dot	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	PropertyPill	ghost	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
@@ -686,13 +686,13 @@ PART	QuickPick	qp-title	B	0	confirmed	leaf in every rule
 PART	QuickPick	qp-truncated	B	0	confirmed	leaf in every rule
 PART	QuickPick	results	B	0	confirmed	leaf in every rule
 PART	QuickPick	search	B	0	confirmed	leaf in every rule
-PART	RegionDropOverlay	region-drop-overlay	A	1	proposed	leaf in every rule
-PART	RegionDropOverlay	region-drop-preview	A	1	proposed	leaf in every rule
-PART	RegionHost	region-half	A	2	proposed	leaf in every rule
-PART	RegionHost	region-host	A	2	proposed	leaf in every rule
-PART	RegionHost	region-primary	A	0	proposed	leaf in every rule
-PART	RegionHost	region-secondary	A	0	proposed	leaf in every rule
-PART	RegionHost	region-split	A	1	proposed	leaf in every rule
+PART	RegionDropOverlay	region-drop-overlay	A	1	confirmed	leaf in every rule
+PART	RegionDropOverlay	region-drop-preview	A	1	confirmed	leaf in every rule
+PART	RegionHost	region-half	A	2	confirmed	leaf in every rule
+PART	RegionHost	region-host	A	2	confirmed	leaf in every rule
+PART	RegionHost	region-primary	A	0	confirmed	leaf in every rule
+PART	RegionHost	region-secondary	A	0	confirmed	leaf in every rule
+PART	RegionHost	region-split	A	1	confirmed	leaf in every rule
 PART	Resizable	user-sized-height	B	1	proposed	a rule selects through it (1)
 PART	Resizable	user-sized-width	A	1	proposed	leaf in every rule
 PART	Resizer	resizer	A	1	proposed	leaf in every rule
@@ -786,15 +786,15 @@ PART	StatusBarView	spacer	B	0	confirmed	leaf in every rule
 PART	StatusBarView	status-bar	B	6	confirmed	a rule selects through it (6)
 PART	StatusBarView	status-item	B	4	confirmed	leaf in every rule, scoped by an ancestor in 4
 PART	StatusBarView	status-sep	B	0	confirmed	leaf in every rule
-PART	StripeView	activity-bar	B	4	proposed	a rule selects through it (4)
-PART	StripeView	activity-item	A	0	proposed	leaf in every rule
-PART	StripeView	badge	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	StripeView	dot	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	StripeView	panel-focused	C	0	proposed	state adjective
-PART	StripeView	stripe-left	A	0	proposed	leaf in every rule
-PART	StripeView	stripe-right	A	0	proposed	leaf in every rule
-PART	StripeView	stripe-separator	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	StripeView	stripe-spacer	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	StripeView	activity-bar	B	4	confirmed	a rule selects through it (4)
+PART	StripeView	activity-item	A	0	confirmed	leaf in every rule
+PART	StripeView	badge	A	3	confirmed	leaf in every rule, scoped by an ancestor in 3
+PART	StripeView	dot	A	2	confirmed	leaf in every rule, scoped by an ancestor in 2
+PART	StripeView	panel-focused	C	0	confirmed	state adjective
+PART	StripeView	stripe-left	A	0	confirmed	leaf in every rule
+PART	StripeView	stripe-right	A	0	confirmed	leaf in every rule
+PART	StripeView	stripe-separator	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	StripeView	stripe-spacer	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	SvgGradient	tag	A	0	proposed	leaf in every rule
 PART	SvgResolver	tag	A	0	proposed	leaf in every rule
 PART	Switch	knob	A	0	confirmed	leaf in every rule
@@ -880,10 +880,10 @@ PART	TextEditor	whitespace	B	0	confirmed	leaf in every rule
 PART	TextEditor	zoom-indicator	B	0	confirmed	leaf in every rule
 PART	TextEditor	zoom-label	B	0	confirmed	leaf in every rule
 PART	TextEditor	zoom-reset	B	0	confirmed	leaf in every rule
-PART	ToolWindowFrame	dock	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	ToolWindowFrame	floating	C	0	proposed	state adjective
-PART	ToolWindowFrame	tool-window	B	10	proposed	a rule selects through it (9)
-PART	ToolWindowFrame	windowed	C	0	proposed	state adjective
+PART	ToolWindowFrame	dock	A	2	confirmed	leaf in every rule, scoped by an ancestor in 2
+PART	ToolWindowFrame	floating	C	0	confirmed	state adjective
+PART	ToolWindowFrame	tool-window	B	10	confirmed	a rule selects through it (9)
+PART	ToolWindowFrame	windowed	C	0	confirmed	state adjective
 PART	Tooltip	label	A	0	confirmed	leaf in every rule
 PART	TreeSearch	dimmed	C	1	confirmed	state adjective
 PART	TreeSearch	find-bar	B	32	confirmed	a rule selects through it (31)
@@ -912,13 +912,13 @@ PART	UIWindow	overlays	A	0	proposed	leaf in every rule
 PART	VectorControl	axis	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	VectorControl	vector	B	4	confirmed	a rule selects through it (3)
 PART	VectorControl	vector-cell	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
-PART	ViewContainer	content	A	0	proposed	leaf in every rule
-PART	ViewContainer	header	B	3	proposed	a rule selects through it (2)
-PART	ViewContainer	hide	B	4	proposed	a rule selects through it (1)
-PART	ViewContainer	panel-header	B	5	proposed	a rule selects through it (4)
-PART	ViewContainer	title	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	ViewContainer	view-container	B	4	proposed	a rule selects through it (3)
-PART	ViewContainer	view-content	B	6	proposed	a rule selects through it (4)
+PART	ViewContainer	content	A	0	confirmed	leaf in every rule
+PART	ViewContainer	header	B	3	confirmed	a rule selects through it (2)
+PART	ViewContainer	hide	B	4	confirmed	a rule selects through it (1)
+PART	ViewContainer	panel-header	B	5	confirmed	a rule selects through it (4)
+PART	ViewContainer	title	A	2	confirmed	leaf in every rule, scoped by an ancestor in 2
+PART	ViewContainer	view-container	B	4	confirmed	a rule selects through it (3)
+PART	ViewContainer	view-content	B	6	confirmed	a rule selects through it (4)
 PART	WindowFrame	active	C	3	confirmed	state adjective
 PART	WindowFrame	caption-adopted	C	2	confirmed	state adjective
 PART	WindowFrame	caption-chrome	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
@@ -958,12 +958,12 @@ PART	WindowSwitcher	switcher-title	B	1	confirmed	leaf in every rule
 PART	WindowSwitcher	window-switcher	B	2	confirmed	a rule selects through it (1)
 PART	WindowThumbnail	placeholder	B	4	confirmed	a rule selects through it (2)
 PART	WindowThumbnail	thumbnail	B	0	confirmed	leaf in every rule
-PART	Workbench	content	A	0	proposed	leaf in every rule
-PART	Workbench	dock	A	0	proposed	leaf in every rule
-PART	Workbench	file-editor	A	1	proposed	leaf in every rule
-PART	Workbench	missing	C	0	proposed	state adjective
-PART	Workbench	viewer	A	0	proposed	leaf in every rule
-PART	Workbench	workbench-content	A	0	proposed	leaf in every rule
-PART	WorkbenchRegions	workbench-centre	A	1	proposed	leaf in every rule
-PART	WorkbenchRegions	workbench-regions	A	0	proposed	leaf in every rule
-PART	WorkbenchRegions	workbench-split	A	1	proposed	leaf in every rule
+PART	Workbench	content	A	0	confirmed	leaf in every rule
+PART	Workbench	dock	A	0	confirmed	leaf in every rule
+PART	Workbench	file-editor	A	1	confirmed	leaf in every rule
+PART	Workbench	missing	C	0	confirmed	state adjective
+PART	Workbench	viewer	A	0	confirmed	leaf in every rule
+PART	Workbench	workbench-content	A	0	confirmed	leaf in every rule
+PART	WorkbenchRegions	workbench-centre	A	1	confirmed	leaf in every rule
+PART	WorkbenchRegions	workbench-regions	A	0	confirmed	leaf in every rule
+PART	WorkbenchRegions	workbench-split	A	1	confirmed	leaf in every rule

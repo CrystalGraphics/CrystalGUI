@@ -42,7 +42,7 @@ import javax.annotation.Nullable;
  * anyway: "differs from disk" is a question about the disk, and the document only ever knew its own
  * content.</p>
  */
-final class OpenDocuments {
+public final class OpenDocuments {
 
     /** One open file. Mutable, deliberately: it is the single owner of everything per-path. */
     private static final class Entry {
@@ -79,7 +79,7 @@ final class OpenDocuments {
     @Nullable
     private Markers markers;
 
-    void indexInto(@Nullable Markers into) {
+    public void indexInto(@Nullable Markers into) {
         this.markers = into;
         if (into == null) return;
         for (Entry entry : byPath.values()) index(entry);
@@ -100,7 +100,7 @@ final class OpenDocuments {
      * one place a document comes into existence, and therefore one place its subscription can be paired
      * with its {@link #close}.</p>
      */
-    FileDocument documentFor(CgPath path, Function<CgPath, FileDocument> factory) {
+    public FileDocument documentFor(CgPath path, Function<CgPath, FileDocument> factory) {
         Entry entry = byPath.get(path);
         if (entry != null) return entry.document;
         entry = new Entry(factory.apply(path));
@@ -128,21 +128,21 @@ final class OpenDocuments {
      * <p><b>Over-fires by design.</b> It means "content moved", not "dirtiness flipped" — deciding the
      * latter needs the encode this exists to avoid doing eagerly.</p>
      */
-    final Signal.Value<CgPath> onDidChangeDirty = new Signal.Value<>();
+    public final Signal.Value<CgPath> onDidChangeDirty = new Signal.Value<>();
 
     /** The document already open for a path, or null. */
     @Nullable
-    FileDocument get(CgPath path) {
+    public FileDocument get(CgPath path) {
         Entry entry = byPath.get(path);
         return entry == null ? null : entry.document;
     }
 
-    boolean isOpen(CgPath path) {
+    public boolean isOpen(CgPath path) {
         return byPath.containsKey(path);
     }
 
     /** Every open path. */
-    List<CgPath> paths() {
+    public List<CgPath> paths() {
         return new ArrayList<>(byPath.keySet());
     }
 
@@ -152,7 +152,7 @@ final class OpenDocuments {
      * <p>The dock rebuilds a panel on every split, drag and close, and each rebuild would otherwise start
      * another read — landing on top of whatever is unsaved in the document.</p>
      */
-    boolean requestRead(CgPath path) {
+    public boolean requestRead(CgPath path) {
         Entry entry = byPath.get(path);
         if (entry == null || entry.requested) return false;
         entry.requested = true;
@@ -168,7 +168,7 @@ final class OpenDocuments {
      * @return the failure message when the document refused, else null
      */
     @Nullable
-    String adopt(CgPath path, byte[] bytes) {
+    public String adopt(CgPath path, byte[] bytes) {
         Entry entry = byPath.get(path);
         if (entry == null) return null;
         try {
@@ -184,13 +184,13 @@ final class OpenDocuments {
     }
 
     /** Whether this file may be written at all — false once its document has refused to load it. */
-    boolean isSaveable(CgPath path) {
+    public boolean isSaveable(CgPath path) {
         Entry entry = byPath.get(path);
         return entry != null && !entry.unreadable;
     }
 
     /** Records what was actually written as the new baseline. */
-    void markSaved(CgPath path, byte[] written) {
+    public void markSaved(CgPath path, byte[] written) {
         Entry entry = byPath.get(path);
         if (entry != null) entry.onDisk = written;
     }
@@ -206,13 +206,13 @@ final class OpenDocuments {
      * dock built while the read is still in flight is empty because it is loading, not because it was
      * emptied.</p>
      */
-    boolean isDirty(CgPath path) {
+    public boolean isDirty(CgPath path) {
         Entry entry = byPath.get(path);
         if (entry == null || entry.unreadable || entry.onDisk == null) return false;
         return !Arrays.equals(entry.document.encode(), entry.onDisk);
     }
 
-    List<CgPath> dirtyPaths() {
+    public List<CgPath> dirtyPaths() {
         List<CgPath> dirty = new ArrayList<>();
         for (CgPath path : byPath.keySet()) {
             if (isDirty(path)) dirty.add(path);
@@ -232,7 +232,7 @@ final class OpenDocuments {
      * document. Closing a tab does not come through here yet, so a closed tab still keeps its document
      * alive — see the plan's step 3, where the dock gains a close event to route it.</p>
      */
-    void close(CgPath path) {
+    public void close(CgPath path) {
         Entry entry = byPath.remove(path);
         if (entry == null) return;
         // A CLOSED FILE'S PROBLEMS ARE NOT THE WORKSPACE'S, and the index holds a listener on every set in
@@ -259,7 +259,7 @@ final class OpenDocuments {
      * baseline filed under the old name, so a renamed file reported itself modified against nothing and
      * the next Save All wrote it back for no reason.</p>
      */
-    void retarget(CgPath from, CgPath to) {
+    public void retarget(CgPath from, CgPath to) {
         Entry entry = byPath.remove(from);
         if (entry != null) byPath.put(to, entry);
     }

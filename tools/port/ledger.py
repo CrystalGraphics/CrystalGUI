@@ -204,19 +204,31 @@ BY_NAME = {
     # ViewId is the identity of a TOOL WINDOW by its own javadoc. All three cross over.
     # ------------------------------------------------------------------------------------------
 
-    # The workbench's own layout: the regions, what hosts one, where a drop lands in one, and the
-    # stripe rail down its edge. ViewContainer is what a region SHOWS, so it belongs with them.
+    # VS Code's PART GRID -- the fixed frame the workbench is arranged in, one host per part
+    # (SIDEBAR_PART / PANEL_PART / AUXILIARYBAR_PART), and where a drop lands in one. `SplitFill`
+    # is here because its whole job is putting a region's parts into a SplitView.
     'WorkbenchRegions': 'workbench/region', 'RegionHost': 'workbench/region',
     'RegionDropOverlay': 'workbench/region', 'RegionDropZones': 'workbench/region',
-    'SplitFill': 'workbench/region', 'StripeView': 'workbench/region',
-    'StripeRail': 'workbench/region', 'ViewContainer': 'workbench/region',
-    'ViewContainerRegistry': 'workbench/region', 'HeaderContributor': 'workbench/region',
+    'SplitFill': 'workbench/region',
     'DockRegion': 'workbench/region', 'RegionSide': 'workbench/region',
 
-    # A tool window: what exists, where it belongs, how it is presented, and the frame a float uses.
+    # IntelliJ's TOOL WINDOW STRIPE, VS Code's Activity Bar -- the rail of buttons that summons a
+    # view. It knows nothing about how a region is laid out, which is why it is not in `region`.
+    'StripeView': 'workbench/stripe', 'StripeRail': 'workbench/stripe',
+
+    # VS Code's VIEW CONTAINER -- what a tool window IS, as opposed to where it is being shown. A
+    # `ViewContainer` does not know whether it is docked or floating; `ToolWindowFrame` "hosts the
+    # same ViewContainer the region shows", which is the sentence that separates these two packages.
+    # `ViewId` is a VIEW's identity by its own javadoc, so it belongs here rather than beside the
+    # presentation record.
+    'ViewContainer': 'workbench/view', 'ViewContainerRegistry': 'workbench/view',
+    'HeaderContributor': 'workbench/view', 'ViewId': 'workbench/view',
+
+    # WHERE AND HOW a view is presented -- docked in a region half, floating in an owned frame, or
+    # windowed in a top-level one -- plus the placement record that survives a hide.
     'ToolWindowManager': 'workbench/toolwindow', 'ToolWindowFrame': 'workbench/toolwindow',
     'ToolWindowState': 'workbench/toolwindow', 'ToolWindowLayout': 'workbench/toolwindow',
-    'ToolWindowType': 'workbench/toolwindow', 'ViewId': 'workbench/toolwindow',
+    'ToolWindowType': 'workbench/toolwindow',
 
     # The file panel, split the way VS Code's explorer is -- the view, the row renderer, and one
     # class per interaction, with the MODEL beside them (explorerModel.ts).

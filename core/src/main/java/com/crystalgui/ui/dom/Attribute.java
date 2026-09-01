@@ -88,6 +88,17 @@ public final class Attribute<T> {
      */
     public static final Attribute<String> REPORTS = of("reports", String.class, "");
 
+    /**
+     * Whether this node's state should outlive it across a session.
+     *
+     * <p>An ATTRIBUTE rather than a Java flag, so a description can carry it: a tool window built
+     * from a stylesheet-driven layout keeps its divider across a restart without its panel class
+     * knowing {@link SessionState} exists. Read only by that class, which asks the node's contract
+     * for the payload -- so opting in costs nothing for a widget whose contract carries no state.</p>
+     */
+    public static final Attribute<Boolean> SESSION_PERSISTENT =
+            of("session-persistent", Boolean.class, false);
+
     private final String name;
     private final Class<T> type;
     private final T initial;

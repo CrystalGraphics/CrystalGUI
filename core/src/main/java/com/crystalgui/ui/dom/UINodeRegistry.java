@@ -8,6 +8,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
+import javax.annotation.Nullable;
+
 /**
  * {@link Name} → how to build a node of that kind, and its {@link NodeContract}.
  *
@@ -32,7 +34,8 @@ public final class UINodeRegistry {
      */
     private static final Map<Name, Entry> ENTRIES = new ConcurrentHashMap<>();
 
-    private record Entry(Supplier<? extends UINode> factory, NodeContract contract) {
+    /** {@code factory} is null for a cascade-only kind — see {@link #registerTag}. */
+    private record Entry(@Nullable Supplier<? extends UINode> factory, NodeContract contract) {
     }
 
     /**
@@ -100,6 +103,36 @@ public final class UINodeRegistry {
         ENTRIES.put(name, new Entry(factory, contract));
     }
 
+    /**
+     * A kind that exists for the CASCADE and cannot be built.
+     *
+     * <p>A widget's cascade identity is its tag, so a node declaring no kind inherits
+     * {@code crystalgui:element} and matches every bare {@code element} rule there is — and one
+     * declaring a kind nothing registered matches nothing at all, which is the
+     * {@code ToolWindowFrame} failure: no background, no border, and it reads as the widget never
+     * having been built.</p>
+     *
+     * <p>But plenty of kinds are never DECODED. Nothing describes a workbench, a window, a switcher
+     * or a dock over a wire; they are built by an application with collaborators a description could
+     * not carry. Those registered a factory that invented an argument — {@code new
+     * WindowSwitcher(null)}, {@code new WindowFrame("")} — which works until a widget refuses the
+     * invention. {@code Workbench} refuses a null client on its first line, correctly.</p>
+     *
+     * <p>So: registered, styleable, and {@link #create} refuses it by name.</p>
+     */
+    public static void registerTag(Name name, NodeContract contract) {
+        Objects.requireNonNull(name, "name");
+        Objects.requireNonNull(contract, "contract");
+        ENTRIES.put(name, new Entry(null, contract));
+    }
+
+    /** Whether this kind can be BUILT, as opposed to merely existing for the cascade. */
+    public static boolean isBuildable(Name name) {
+        bootstrap();
+        Entry entry = ENTRIES.get(name);
+        return entry != null && entry.factory() != null;
+    }
+
     public static boolean isRegistered(Name name) {
         bootstrap();
         return ENTRIES.containsKey(name);
@@ -112,6 +145,11 @@ public final class UINodeRegistry {
         if (entry == null) {
             throw new IllegalArgumentException("No node kind is registered as <" + name + ">; registered: "
                     + ENTRIES.keySet());
+        }
+        if (entry.factory() == null) {
+            throw new IllegalArgumentException("<" + name + "> is a cascade-only kind and cannot be "
+                    + "built: it is registered so a sheet can name it, and nothing describes one over "
+                    + "a wire. @see UINodeRegistry#registerTag");
         }
         return entry.factory().get();
     }

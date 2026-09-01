@@ -146,6 +146,11 @@ public class NodeKindsCoverageTest {
         List<String> wrong = new ArrayList<>();
         for (Map.Entry<Class<?>, Name> entry : declared.entrySet()) {
             if (!UINodeRegistry.isRegistered(entry.getValue())) continue;
+            // A CASCADE-ONLY kind has no factory on purpose: nothing describes a workbench, a window
+            // or a dock over a wire, and inventing an argument to satisfy this walk is what
+            // `registerTag` exists to stop. Still REGISTERED -- the check above is the one that
+            // matters for it, since an unregistered tag matches nothing in any sheet.
+            if (!UINodeRegistry.isBuildable(entry.getValue())) continue;
             UINode built = UINodeRegistry.create(entry.getValue());
             if (!entry.getKey().isInstance(built)) {
                 wrong.add(entry.getValue() + " builds a " + built.getClass().getSimpleName()
