@@ -355,12 +355,26 @@ final class PortDefaultEditor {
         float dotWorldX = portDot.x();
         float dotWorldY = portDot.y();
 
+        // NOT YET LAID OUT IS NOT AN ERROR, and this runs before layout by construction.
+        //
+        // `setMounted` repositions the moment the editor is mounted, which happens from an ordinary
+        // per-frame hook -- so on the frame a graph is built neither of these nodes has a box yet and
+        // `box()` is null. It cost a crash out of the frame loop the first time a `.shadergraph` was
+        // opened on this engine: `NullPointerException ... because "boxCache" is null`, from
+        // `ShaderGraphPreviews.attach` inside `Animation.tick`, taking the whole document down with it.
+        //
+        // Returning is right rather than merely safe: there is no geometry to place against, and
+        // `onLayoutSettled` calls this again the moment there is. Guarded here rather than by handing
+        // out a zero, because "zero-sized" and "never laid out" are different facts and only the caller
+        // knows which one it is looking at.
         Box boxCache = box.box();
+        Box dotBox = dot.box();
+        if (boxCache == null || dotBox == null) return;
         float boxX = dotWorldX - GAP - boxCache.width();
         float boxY = dotWorldY - boxCache.height() * 0.5f;
         view.moveNode(box, boxX, boxY);
 
-        Box dotCache = dot.box();
+        Box dotCache = dotBox;
         float boxRightEdge = boxX + boxCache.width();
         float dotX = boxRightEdge - DOT_OVERLAP - dotCache.width() * 0.5f;
         float dotY = dotWorldY - dotCache.height() * 0.5f;
