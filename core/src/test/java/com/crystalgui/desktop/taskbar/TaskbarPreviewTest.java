@@ -70,8 +70,8 @@ public class TaskbarPreviewTest extends UiDocumentTestBase {
         var box = entry.box();
         assertTrue("the entry has no box, so hovering it means nothing",
                 box.width() > 0f && box.height() > 0f);
-        int x = Math.round((box.x() + box.width() / 2f) * 2f);
-        int y = Math.round((box.y() + box.height() / 2f) * 2f);
+        int x = Math.round(box.worldX() + box.width() / 2f * uiScale());
+        int y = Math.round(box.worldY() + box.height() / 2f * uiScale());
         input.consumeMouseEvent(new CgSystemInput.Mouse.Event(x, y, 0, 0, -1, false, 0f, -1L));
         frame();
     }
@@ -89,7 +89,6 @@ public class TaskbarPreviewTest extends UiDocumentTestBase {
      * <p>Both halves are the feature. Without the wait the strip strobes as the pointer crosses it;
      * without the preview there is nothing to wait for.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void restingOnAnEntryRaisesItsPreviewAfterTheDelay() {
         WindowFrame frame = open("One");
@@ -119,7 +118,6 @@ public class TaskbarPreviewTest extends UiDocumentTestBase {
      * frame with nothing hovered made the preview unreachable, vanishing the instant you set off
      * towards it.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void leavingEverythingTakesThePreviewDown() {
         WindowFrame frame = open("One");

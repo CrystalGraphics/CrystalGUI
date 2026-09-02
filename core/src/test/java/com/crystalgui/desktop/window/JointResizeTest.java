@@ -12,6 +12,7 @@ import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.service.Input;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -38,10 +39,31 @@ import static org.junit.Assert.assertTrue;
  */
 public class JointResizeTest extends UiDocumentTestBase {
 
+    /**
+     * Animations OFF for the fixture. Several tests below turn them back on for the thing they are
+     * about and restore this in a finally; without a @Before the class relied on that restore having
+     * run, i.e. on another test having gone first. A window's state change is DEFERRED while a
+     * timeline plays, so the assertions here read VISIBLE for a window that has been closed.
+     */
+    @Before
+    public void quietTheCompositor() {
+        Desktop.setAnimationsEnabled(false);
+    }
+
     private Desktop desktop;
+
+    @After
+    public void animationsBackOn() {
+        Desktop.setAnimationsEnabled(true);
+    }
 
     @Before
     public void setUpDesktop() {
+        // Animations OFF, stated rather than inherited. Every assertion in this fixture reads a
+        // geometry or a state straight after a gesture, and a running timeline defers both -- `hide()`
+        // detaches and `close()` destroys only once the flight ends, so the assertion reads the state
+        // BEFORE the gesture took effect and the numbers it does get are mid-flight fractions.
+        Desktop.setAnimationsEnabled(false);
         CommandRegistry.global().resetForTesting();
         WindowCommands.resetForTesting();
 
@@ -84,7 +106,6 @@ public class JointResizeTest extends UiDocumentTestBase {
     // ── The pair ────────────────────────────────────────────────────────────────────────────────
 
     /** <b>Snapping two windows to facing halves tiles the work area exactly.</b> The premise. */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void twoFacingHalvesTileTheWorkArea() {
         WindowFrame left = snapped("L", SnapZones.Zone.LEFT);
@@ -100,7 +121,6 @@ public class JointResizeTest extends UiDocumentTestBase {
      * <b>Dragging the shared edge gives one document the space the other gives up</b> — {@code n} and
      * {@code 1 − n}.
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void draggingTheDividerResizesBoth() {
         WindowFrame left = snapped("L", SnapZones.Zone.LEFT);
@@ -138,7 +158,6 @@ public class JointResizeTest extends UiDocumentTestBase {
     }
 
     /** A document that is not snapped at all has no divider to move. */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void anUnsnappedWindowJointResizesNothing() {
         WindowFrame left = snapped("L", SnapZones.Zone.LEFT);
@@ -164,7 +183,6 @@ public class JointResizeTest extends UiDocumentTestBase {
      * handle reporting both axes is already two divider moves, and the grid stays a grid with no
      * four-document special case anywhere.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void theCentreCornerDragsBothDividers() {
         WindowFrame topLeft = snapped("TL", SnapZones.Zone.TOP_LEFT);
@@ -194,7 +212,6 @@ public class JointResizeTest extends UiDocumentTestBase {
      * not what a tiled desktop is — the moment the rows disagree, the corner where four windows meet
      * stops being one place.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void theVerticalCutIsSharedByBothRows() {
         snapped("TL", SnapZones.Zone.TOP_LEFT);
@@ -225,7 +242,6 @@ public class JointResizeTest extends UiDocumentTestBase {
      * re-tile a document sitting somewhere else. A resize is the opposite: the cell stays and its edge
      * moves, which is the entire gesture.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void movingLeavesTheGroupAndResizingDoesNot() {
         WindowFrame left = snapped("L", SnapZones.Zone.LEFT);
@@ -264,7 +280,6 @@ public class JointResizeTest extends UiDocumentTestBase {
      * gives it 250px. Tiling it against the centre instead would silently undo a layout somebody had
      * arranged, and would leave it overlapping the neighbour it is supposed to sit beside.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void snappingIntoAnOccupiedZoneUsesTheGroupsCut() {
         WindowFrame left = snapped("L", SnapZones.Zone.LEFT);
@@ -287,7 +302,6 @@ public class JointResizeTest extends UiDocumentTestBase {
      * been dragged to 3:1 and then snapping a single document left hands it that ratio, with nothing left
      * on screen to explain where the number came from.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void aFreshGroupStartsAtHalves() {
         WindowFrame left = snapped("L", SnapZones.Zone.LEFT);
@@ -313,7 +327,6 @@ public class JointResizeTest extends UiDocumentTestBase {
      * failure that matters — a document resized out of existence with no way to get it back — cannot
      * happen, in one number rather than a size argument between two windows.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void aDividerCannotBeDraggedPastTheMinimumSplit() {
         WindowFrame left = snapped("L", SnapZones.Zone.LEFT);
@@ -337,7 +350,6 @@ public class JointResizeTest extends UiDocumentTestBase {
      * seam — {@code onUserResize} was added to {@code UINode} for this, and a hook nobody calls looks
      * exactly like a hook that works.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void draggingTheRealHandleResizesTheNeighbour() {
         WindowFrame left = snapped("L", SnapZones.Zone.LEFT);
@@ -369,7 +381,7 @@ public class JointResizeTest extends UiDocumentTestBase {
         clock += ButtonState.MULTI_CLICK_INTERVAL_MS + 20L;
         Input input = document.input();
         input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
-                Math.round(x * 2f), Math.round(y * 2f), 0, 0, button, down, 0f, clock));
+                Math.round(x * uiScale()), Math.round(y * uiScale()), 0, 0, button, down, 0f, clock));
         input.beginFrame();
         input.endFrame();
         settle();

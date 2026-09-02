@@ -345,7 +345,10 @@ public class EditorFoldingTest extends EditorTestBase {
         UINode arrow = arrows.get(0);
 
         float[] at = screenCentreOf(arrow);
-        UINode hit = hit(at[0], at[1]);
+        // RETARGETED, as dispatch does before it calls anyone. The editor hosts a shadow tree, so
+        // the box under a point in the text area is its SLOT -- a real node with a real box that no
+        // listener outside the editor ever sees.
+        UINode hit = hitTarget(at[0], at[1]);
 
         assertNotNull("the pointer hits something at the arrow", hit);
         assertTrue("and it is the arrow, not the editor behind it -- got " + hit.classes(),
@@ -360,7 +363,10 @@ public class EditorFoldingTest extends EditorTestBase {
 
         UINode arrow = visibleFoldArrows().get(0);
         float[] at = screenCentreOf(arrow);
-        UINode hit = hit(at[0], at[1]);
+        // RETARGETED, as dispatch does before it calls anyone. The editor hosts a shadow tree, so
+        // the box under a point in the text area is its SLOT -- a real node with a real box that no
+        // listener outside the editor ever sees.
+        UINode hit = hitTarget(at[0], at[1]);
         assertNotNull(hit);
 
         var press = new com.crystalgui.ui.event.MouseEvent.Down(hit,
@@ -380,7 +386,6 @@ public class EditorFoldingTest extends EditorTestBase {
      * the entire subtree. A chip that paints correctly and cannot be hovered is indistinguishable from one
      * that works, in every test that does not ask the hit test itself.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void theCollapsedChipBehavesLikeAButton() {
         buildFoldable();
@@ -391,7 +396,10 @@ public class EditorFoldingTest extends EditorTestBase {
         assertNotNull("there is a chip", chip);
 
         float[] at = screenCentreOf(chip);
-        UINode hit = hit(at[0], at[1]);
+        // RETARGETED, as dispatch does before it calls anyone. The editor hosts a shadow tree, so
+        // the box under a point in the text area is its SLOT -- a real node with a real box that no
+        // listener outside the editor ever sees.
+        UINode hit = hitTarget(at[0], at[1]);
         assertNotNull(hit);
         assertTrue("the pointer reaches the chip, not the text behind it -- got " + hit.classes(),
                 hit.hasClass(TextEditor.FOLD_PLACEHOLDER_CLASS));
@@ -495,7 +503,6 @@ public class EditorFoldingTest extends EditorTestBase {
      * a character. The old rule had its own test; this is that test, rewritten rather than deleted, so the
      * reversal is on the record.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void theChipStartsWhereTheBracketWasSoTheGapSurvives() {
         buildFoldable();
@@ -510,9 +517,13 @@ public class EditorFoldingTest extends EditorTestBase {
         assertNotNull("the chip is on screen", chip);
         assertNotNull("and so is the caret", caret);
 
-        float braceX = caret.box().x() + caret.box().width();
+        // WORLD coordinates for both, because `Box.x()` is the offset inside the HOST and these two
+        // do not share one -- the caret and the chip are drawn by different view parts, so comparing
+        // their local offsets compares two different spaces and the difference is whatever the two
+        // hosts happen to be apart.
+        float braceX = caret.box().worldX() + caret.box().width() * uiScale();
         assertEquals("the box begins at the bracket, not before it",
-                braceX, chip.box().x(), 1.5f);
+                braceX, chip.box().worldX(), 1.5f * uiScale());
         assertTrue("and the bracket itself is inset within the box",
                 chip.box().padding().left > 0f);
     }
@@ -610,11 +621,10 @@ public class EditorFoldingTest extends EditorTestBase {
      * worked, the rows hid, the model was right. What broke was everything <em>else</em>, which is exactly
      * what a feature's own tests do not look at.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void theEditorStillTakesClicksWhileSomethingIsFolded() {
         buildFoldable();
-        UINode beforeHit = hit(screenCentreOf(editor)[0], screenCentreOf(editor)[1]);
+        UINode beforeHit = hitTarget(screenCentreOf(editor)[0], screenCentreOf(editor)[1]);
         assertNotNull(beforeHit);
 
         editor.toggleFoldAt(1);
@@ -623,7 +633,10 @@ public class EditorFoldingTest extends EditorTestBase {
         // A point in the text area, well clear of the gutter and of the collapsed row's chip.
         UINode line = linesOf().get(0);
         float[] at = screenCentreOf(line);
-        UINode hit = hit(at[0], at[1]);
+        // RETARGETED, as dispatch does before it calls anyone. The editor hosts a shadow tree, so
+        // the box under a point in the text area is its SLOT -- a real node with a real box that no
+        // listener outside the editor ever sees.
+        UINode hit = hitTarget(at[0], at[1]);
 
         assertNotNull("a press over the text must reach something", hit);
         assertFalse("and it must not be swallowed by folding furniture: " + hit.classes(),
@@ -632,7 +645,6 @@ public class EditorFoldingTest extends EditorTestBase {
     }
 
     /** And the caret genuinely moves, which is the thing the user actually lost. */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void clickingTheTextMovesTheCaretWhileFolded() {
         buildFoldable();
@@ -644,7 +656,10 @@ public class EditorFoldingTest extends EditorTestBase {
 
         UINode line = linesOf().get(0);
         float[] at = screenCentreOf(line);
-        UINode hit = hit(at[0], at[1]);
+        // RETARGETED, as dispatch does before it calls anyone. The editor hosts a shadow tree, so
+        // the box under a point in the text area is its SLOT -- a real node with a real box that no
+        // listener outside the editor ever sees.
+        UINode hit = hitTarget(at[0], at[1]);
         assertSame(editor, hit);
 
         var press = new com.crystalgui.ui.event.MouseEvent.Down(hit,

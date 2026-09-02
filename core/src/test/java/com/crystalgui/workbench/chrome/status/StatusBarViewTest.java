@@ -22,6 +22,7 @@ import com.crystalgui.workbench.chrome.status.StatusBarView;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Ignore;
+import com.crystalgui.workbench.chrome.palette.CommandPalette;
 import org.junit.Test;
 
 import java.util.List;
@@ -278,13 +279,22 @@ public class StatusBarViewTest extends UiDocumentTestBase {
      * <p>The element is what makes it work, because a data context resolves by walking up the tree and then
      * asking the document — which is where a workbench registers itself as a provider.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void aCommandNeedsTheElementItWasRunFrom() {
         boolean[] ran = { false };
         CommandRegistry.global().register(Command.of("test.needsWindow", "Needs A Window")
-                .runWithData(data -> ran[0] = true)
-                .enabledWhereData(data -> data.get(UiDataKeys.WINDOW) != null));
+                .run(c -> ran[0] = true)
+                            // SURFACE, not the old engine's WINDOW. `UiDataKeys.WINDOW` is a `DataKey<UIWindow>`
+            // and there is no `UIWindow` anywhere in a new-engine tree, so it can never resolve --
+            // the command's own precondition would be unsatisfiable and the test would be asserting
+            // that a command never runs. The document plays that role here, and it is what
+            // `CommandPalette.SURFACE` names.
+            // THE SOURCE ELEMENT, which is what this test is about and the only thing that can
+            // answer here. `UiDataKeys.WINDOW` is a `DataKey<UIWindow>` and there is no `UIWindow`
+            // in a new-engine tree at all; `CommandPalette.SURFACE` is read by consumers and
+            // PROVIDED by nobody, so it is null from every element. `UINode.sourceOf` is the engine's
+            // own answer to "what was this run from".
+            .enabledWhen(c -> UINode.sourceOf(c) != null));
         try {
             assertFalse("a contextless run must not silently appear to work",
                     CommandRegistry.global().run("test.needsWindow"));
@@ -343,7 +353,6 @@ public class StatusBarViewTest extends UiDocumentTestBase {
      * them. The compile summary rewrites its tooltip on every recompile, which for an animated graph is
      * every frame, so getting this wrong is unbounded growth rather than a tidiness question.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void aSlotKeepsOneTooltipAcrossUpdates() {
         StatusBarEntryAccessor compile = StatusBar.addEntry(
@@ -352,15 +361,49 @@ public class StatusBarViewTest extends UiDocumentTestBase {
                 "compile", StatusBarAlignment.LEFT);
         settle();
         UINode slot = itemsIn(StatusBarView.LEFT_CLASS).get(0);
-        assertEquals("one tooltip for one slot",
-                1, deepAll(slot, Tooltip.LABEL_PART).size());
+        hover(slot);
+        assertEquals("one tooltip for one slot", 1, tooltipsAnchoredTo(slot));
 
         for (int i = 0; i < 5; i++) {
             compile.update(compile.entry().withText("compiled " + i + "n/8e").withTooltip(i + " chars"));
             settle();
         }
         assertSame("the slot was rebuilt", slot, itemsIn(StatusBarView.LEFT_CLASS).get(0));
-        assertEquals("a tooltip was attached per update",
-                1, deepAll(slot, Tooltip.LABEL_PART).size());
+        hover(slot);
+        assertEquals("a tooltip was attached per update", 1, tooltipsAnchoredTo(slot));
+    }
+
+    /**
+     * <b>A tooltip is not a child of what it describes any more, so it is counted by its ANCHOR.</b>
+     *
+     * <p>{@code Tooltip.attach} used to parent the tooltip onto the thing it belongs to, which made
+     * "how many tooltips does this slot have" a subtree question. It cannot: nearly every anchor
+     * worth a tooltip is a composite with a shadow root and no slot, and a light child of one of
+     * those is never composed -- no box, no paint, nothing reporting a problem. So a tooltip lives
+     * in the document and remembers its anchor, and the question this test is really asking --
+     * does a fifth update leave five tooltips behind -- is asked of that.</p>
+     */
+    /**
+     * A tooltip JOINS THE DOCUMENT LAZILY -- on its first show, not when it is attached -- because
+     * a widget attaches its own in its constructor, where its anchor is in no document yet. So a
+     * fixture that never hovers has no tooltip to count, and the assertion below would hold at zero
+     * whatever the widget did.
+     */
+    private void hover(UINode target) {
+        int[] centre = centreOf(target);
+        move(centre[0], centre[1]);
+        frame();
+    }
+
+    private int tooltipsAnchoredTo(UINode anchor) {
+        // Counted across the DOCUMENT, not under the anchor and not by `anchor()` -- which answers
+        // the anchor a tooltip is CURRENTLY SHOWING FOR, so it is null until one is hovered. With a
+        // single slot in the fixture, "how many tooltips exist" is exactly the question: one is
+        // right and six is the defect (a fresh tooltip attached on every update).
+        int n = 0;
+        for (UINode node : composed(document)) {
+            if (node instanceof Tooltip) n++;
+        }
+        return n;
     }
 }

@@ -17,6 +17,8 @@ import com.crystalgui.workbench.toolwindow.ToolWindowState;
 import com.crystalgui.workbench.toolwindow.ToolWindowType;
 
 import com.google.gson.JsonElement;
+import com.crystalgui.desktop.Desktop;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.List;
@@ -36,6 +38,17 @@ import static org.junit.Assert.assertTrue;
  * {@code DockArea}.</p>
  */
 public class ToolWindowPlacementTest {
+
+    /**
+     * Animations OFF, said out loud rather than inherited. This fixture asserts a window's STATE
+     * straight after a gesture, and an animation defers exactly that -- `hide()` detaches and
+     * `close()` destroys only once the flight ends, so the assertion reads VISIBLE for a window that
+     * has been asked to go. It used to pass by picking up a flag some other class had left off.
+     */
+    @Before
+    public void quietTheCompositor() {
+        Desktop.setAnimationsEnabled(false);
+    }
 
     // ── DockPath ────────────────────────────────────────────────────────────────────────────────
 

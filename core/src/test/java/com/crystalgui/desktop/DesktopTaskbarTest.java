@@ -12,6 +12,7 @@ import com.crystalgui.desktop.taskbar.Taskbar;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.ui.service.Input;
 import org.junit.Ignore;
+import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -31,12 +32,25 @@ import static org.junit.Assert.assertTrue;
  */
 public class DesktopTaskbarTest extends UiDocumentTestBase {
 
+    /**
+     * Animations OFF for the fixture. Several tests below turn them back on for the thing they are
+     * about and restore this in a finally; without a @Before the class relied on that restore having
+     * run, i.e. on another test having gone first. A window's state change is DEFERRED while a
+     * timeline plays, so the assertions here read VISIBLE for a window that has been closed.
+     */
+    @Before
+    public void quietTheCompositor() {
+        Desktop.setAnimationsEnabled(false);
+    }
+
     private UINode root;
     private Desktop desktop;
     private Taskbar taskbar;
     private Input input;
 
     private void build() {
+        // The compositor fills the VIEWPORT, not a node inside it -- see DesktopWindowTest.
+        viewport(400f, 300f);
         root = new UINode().layout(l -> l.width(400).height(300));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
@@ -69,7 +83,6 @@ public class DesktopTaskbarTest extends UiDocumentTestBase {
 
     // ── The strip is the registry, rendered ─────────────────────────────────
 
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void everyLiveWindowHasAnEntryAndADestroyedOneDoesNot() {
         build();
@@ -195,7 +208,6 @@ public class DesktopTaskbarTest extends UiDocumentTestBase {
      * already in minimises it; without that every entry restores, nothing puts anything away, and the
      * strip is a one-way trip.
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void clickingTheActiveWindowsEntryMinimisesIt() {
         build();
@@ -242,7 +254,6 @@ public class DesktopTaskbarTest extends UiDocumentTestBase {
      * signal-driven test cannot answer. A strip that is laid out under the work area, or behind it, or
      * with no hit-testable box, passes every assertion above and cannot be used.
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void anEntryIsHittableWhereItIsPainted() {
         build();
@@ -252,16 +263,20 @@ public class DesktopTaskbarTest extends UiDocumentTestBase {
 
         Button target = entry(first);
         assertTrue("the entry has to have a box for this to mean anything",
-                target.box().width() > 0f && target.box().height() > 0f);
+                widthOf(target) > 0f && heightOf(target) > 0f);
 
-        float x = target.box().x() + target.box().width() / 2f;
-        float y = target.box().y() + target.box().height() / 2f;
+        // WORLD, not parent-relative: an entry's `x()`/`y()` are its offset inside the STRIP, so
+        // scaling them as if they were page coordinates aims at the top-left of the screen. The world
+        // pair is already in surface pixels, which is what `consumeMouseEvent` takes -- so only the
+        // half-extent is scaled, and the `* uiScale()` on the whole expression below goes.
+        float x = target.box().worldX() + target.box().width() / 2f * uiScale();
+        float y = target.box().worldY() + target.box().height() / 2f * uiScale();
         input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
-                Math.round(x * 2f), Math.round(y * 2f), 0, 0, 0, true, 0f, 1L));
+                Math.round(x), Math.round(y), 0, 0, 0, true, 0f, 1L));
         input.beginFrame();
         input.endFrame();
         input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
-                Math.round(x * 2f), Math.round(y * 2f), 0, 0, 0, false, 0f, 1L));
+                Math.round(x), Math.round(y), 0, 0, 0, false, 0f, 1L));
         input.beginFrame();
         input.endFrame();
         settle();
@@ -329,7 +344,6 @@ public class DesktopTaskbarTest extends UiDocumentTestBase {
      * with it. Reported from the harness as "the bar goes off screen to the top left", which is exactly
      * what that looks like.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void minimisingEveryWindowLeavesTheTaskbarOnScreen() {
         build();
@@ -342,7 +356,7 @@ public class DesktopTaskbarTest extends UiDocumentTestBase {
 
         assertTrue("a desktop with retained windows is a desktop in use", desktop.isLive());
         assertEquals("and it still fills the root", 400f, desktop.box().width(), 0.01f);
-        assertTrue("the strip is still there", taskbar.box().height() > 0f);
+        assertTrue("the strip is still there", heightOf(taskbar) > 0f);
         assertTrue("...and its entries are still clickable",
                 entry(first).box().width() > 0f);
 

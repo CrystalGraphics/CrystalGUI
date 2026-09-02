@@ -103,9 +103,13 @@ public class HoverDocumentationTest extends UiDocumentTestBase {
 
     /** Puts the pointer over an offset and lets the rest timer run past the delay. */
     private void hoverOver(int offset, float seconds) {
+        // LAYOUT FIRST, then the hover -- never the other way round. `settle()` runs whole frames, and
+        // a frame ends by diffing the pointer against the layout that just ran: the real pointer is
+        // nowhere near the text, so the editor is told the hover LEFT and the dwell it had been
+        // accumulating is reset. Ticking and then settling therefore threw away exactly what the tick
+        // had just built, and a two-part dwell over one word never reached the delay.
         editor.hoverPointerForTest(offset);
         editor.tickFrame(seconds);
-        settle();
     }
 
     private boolean popupOpen() {
@@ -189,7 +193,6 @@ public class HoverDocumentationTest extends UiDocumentTestBase {
         hoverOver(6, 0.1f);
         assertFalse("a tenth of a second is not a hover", popupOpen());
         editor.tickFrame(PAST_THE_DELAY);
-        settle();
         assertTrue(popupOpen());
     }
 
@@ -200,7 +203,6 @@ public class HoverDocumentationTest extends UiDocumentTestBase {
      * than it in total. Restarting on every move would mean the popup only ever appears if the pointer is
      * perfectly still, which reads as the feature working intermittently.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void driftingWithinOneWordDoesNotRestartTheDelay() {
         hoverOver(6, 0.25f);
@@ -225,7 +227,6 @@ public class HoverDocumentationTest extends UiDocumentTestBase {
         // A few frames over a different word — a traversal, not a rest.
         editor.hoverPointerForTest(0);
         editor.tickFrame(0.05f);
-        settle();
 
         assertTrue("the box must survive being crossed on the way to it", popupOpen());
     }
@@ -246,7 +247,6 @@ public class HoverDocumentationTest extends UiDocumentTestBase {
      * Leaving the text does not hide immediately — the grace is what makes the box reachable, since it
      * sits below the token and moving towards it leaves the token at once.
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void leavingTheWordHidesOnlyAfterTheGrace() {
         hoverOver(6, PAST_THE_DELAY);
@@ -254,11 +254,9 @@ public class HoverDocumentationTest extends UiDocumentTestBase {
 
         editor.hoverPointerForTest(-1);
         editor.tickFrame(0.1f);
-        settle();
         assertTrue("hiding this fast makes the popup impossible to reach", popupOpen());
 
         editor.tickFrame(0.3f);
-        settle();
         assertFalse(popupOpen());
     }
 
@@ -286,7 +284,6 @@ public class HoverDocumentationTest extends UiDocumentTestBase {
 
         editor.hoverPointerForTest(-1);
         editor.tickFrame(2f);
-        settle();
         assertTrue("Ctrl+Q is a request, not a hover", popupOpen());
     }
 

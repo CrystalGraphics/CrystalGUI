@@ -227,6 +227,18 @@
 .__config-control__.__mask__ .__mask-row__:checked .__mark__ { overlay: shape("checkmark"); }
 .__config-control__.__mask__ .__mask-row__:hover .__mark__ { background: var(--configkit-check-hover-bg, #3A3A3A); }
 .__config-control__.__mask__ .__mask-row__:checked:hover .__mark__ { background: var(--configkit-check-hover-bg, #3A3A3A); }
+/* The same four for the NEW ENGINE, where a checkbox's mark is a shadow PART and no descendant
+ * selector can reach one. Expressible here only because the comment above is true: `.__mask-row__`
+ * sits on the CHECKBOX ITSELF, so the class and the part are on the same element and `::part()` can
+ * name it. The rules a step further out -- `.__control-row__ checkbox .__mark__` and its kind -- have
+ * no such spelling, and are among the shipped rules the port counts rather than converts.
+ *
+ * A pseudo-class after `::part()` would describe the PART; these belong to the host, so they go
+ * before it. */
+.__config-control__.__mask__ .__mask-row__::part(mark) { background: var(--cfg-field); }
+.__config-control__.__mask__ .__mask-row__:checked::part(mark) { overlay: shape("checkmark"); }
+.__config-control__.__mask__ .__mask-row__:hover::part(mark) { background: var(--configkit-check-hover-bg, #3A3A3A); }
+.__config-control__.__mask__ .__mask-row__:checked:hover::part(mark) { background: var(--configkit-check-hover-bg, #3A3A3A); }
 
 /* ── Matrix ─────────────────────────────────────────────────────────────────────────────────────
  * A grid: one row per `.__matrix-row__`, cells stretching evenly across it. Unlabelled by design —

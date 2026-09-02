@@ -41,6 +41,17 @@ import static org.junit.Assert.assertTrue;
  */
 public class ToolWindowIsNotACitizenTest extends UiDocumentTestBase {
 
+    /**
+     * Animations OFF for the fixture. Several tests below turn them back on for the thing they are
+     * about and restore this in a finally; without a @Before the class relied on that restore having
+     * run, i.e. on another test having gone first. A window's state change is DEFERRED while a
+     * timeline plays, so the assertions here read VISIBLE for a window that has been closed.
+     */
+    @Before
+    public void quietTheCompositor() {
+        Desktop.setAnimationsEnabled(false);
+    }
+
     private static final String INSPECTOR = "inspector";
 
     private WindowFrame workbenchWindow;

@@ -61,7 +61,7 @@ public class SquigglesTest extends UiDocumentTestBase {
 
     private static void collect(UINode element, String severityClass, List<UINode> out) {
         if (element.hasClass("__squiggle__") && element.hasClass(severityClass)
-                && element.box().height() > 0f) {
+                && heightOf(element) > 0f) {
             out.add(element);
         }
         for (UINode child : element.children()) collect(child, severityClass, out);
@@ -320,7 +320,6 @@ public class SquigglesTest extends UiDocumentTestBase {
      * compiled it, and they stay on screen while you keep typing. Deleting the end of a file must not
      * throw out of a render pass; the next compile replaces the set anyway.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void aDiagnosticPastTheEndOfAShrunkenBufferIsDroppedRatherThanThrowing() {
         build("alpha\nbeta\ngamma\ndelta\nepsilon");
@@ -337,7 +336,6 @@ public class SquigglesTest extends UiDocumentTestBase {
 
     /** Bands are recycled, so clearing has to retire them — a stale band left laid out is a squiggle under
      * text that has no problem, which reads as the editor being wrong rather than the diagnostic. */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void clearingTheSetRetiresEveryBand() {
         build("alpha\nbeta\ngamma");

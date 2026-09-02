@@ -170,7 +170,7 @@ public class TaskbarEntryMotionTest extends UiDocumentTestBase {
         settle();
 
         assertTrue("a capped entry still occupies its padding — this is what the motion must also ramp",
-                entry.box().width() > 0f);
+                widthOf(entry) > 0f);
     }
 
     /**

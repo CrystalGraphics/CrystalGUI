@@ -789,21 +789,29 @@ quickpick ::highlight(quickpick-match) {
 /* A PERCENTAGE, so it stays proportionate at any uiScale and the groove's own height is the only
  * geometry the part needs. Read back like the squiggle above: the mark's TOP is clamped against its
  * height so the last problem in a file cannot hang off the end, so the two must be one number. */
-.__error-stripe__ {
+.__error-stripe__,
+/* The shadow-crossing twin. A stripe mark is appended into the scrollbar's TRACK, which is inside the
+ * Scroller's shadow tree, so the class selector above reaches it on the old engine and nothing at all
+ * on the new one -- `::part()` is how a rule addresses a node in a tree it does not own. The severity
+ * colours below need the same pair for the same reason. */
+scroller::part(error-stripe) {
     height: 1.2%;
     z-index: 1;
     opacity: 0.85;
 }
 
-.__error-stripe-error__ {
+.__error-stripe-error__,
+scroller::part(error-stripe-error) {
     background-color: var(--stripe-error, #F14C4C);
 }
 
-.__error-stripe-warning__ {
+.__error-stripe-warning__,
+scroller::part(error-stripe-warning) {
     background-color: var(--stripe-warning, #CCA700);
 }
 
-.__error-stripe-information__ {
+.__error-stripe-information__,
+scroller::part(error-stripe-information) {
     background-color: var(--stripe-info, #3794FF);
 }
 

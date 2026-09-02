@@ -130,14 +130,13 @@ public class CompletionEscapeTest extends UiDocumentTestBase {
      * {@code getComputed} answers null for a property nothing has written — so a test asking "what is its
      * display" passes by accident on a popup that was never styled at all.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void anEmptyListTakesUpNoSpace() {
         Object[] open = openList(List.of());
         CompletionPopup popup = (CompletionPopup) open[1];
 
         assertEquals("an empty list still drew a box over the editor",
-                0f, popup.box().height(), 0.5f);
+                0f, heightOf(popup), 0.5f);
     }
 
     /** ...and one with rows does, which is the counter-assertion. */
@@ -147,7 +146,7 @@ public class CompletionEscapeTest extends UiDocumentTestBase {
         CompletionPopup popup = (CompletionPopup) open[1];
 
         assertTrue("a list with rows drew nothing at all",
-                popup.box().height() > 0f);
+                heightOf(popup) > 0f);
     }
 
     /**

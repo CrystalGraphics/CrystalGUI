@@ -36,6 +36,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.UINode;
 
 /**
@@ -143,7 +144,6 @@ public class MenuBarViewTest extends UiDocumentTestBase {
         assertEquals(List.of("New", "Save", "Close"), labelsOf(menu));
     }
 
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void sectionsAreSeparatedAndTheSeparatorIsNeverDeclared() {
         Menu menu = MenuBuilder.build(fileMenu, registry, root);
@@ -280,7 +280,6 @@ public class MenuBarViewTest extends UiDocumentTestBase {
      * Split Right, Next Tab, Close Panel and every Graph and Edit entry were greyed out in the running
      * application.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void aMenuResolvesAgainstWhatWasFocusedBeforeThePress() {
         UINode subject = new UINode().layout(l -> l.width(100).height(100));
@@ -301,7 +300,6 @@ public class MenuBarViewTest extends UiDocumentTestBase {
                 sources.contains(subject));
     }
 
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void aRowOfTheOpenMenuNeverBecomesTheRememberedFocus() {
         UINode subject = new UINode().layout(l -> l.width(100).height(100));
@@ -332,8 +330,12 @@ public class MenuBarViewTest extends UiDocumentTestBase {
     private void rawPress(UINode target) {
         frame();
         var cache = target.box();
+        // THE BOX'S OWN SPACE STARTS AT ZERO. `localToWorld` maps this box's local origin to the
+        // surface, so it already carries the offset that `x()`/`y()` report -- adding them composes
+        // the same displacement twice and the press lands one title along, which is why this opened
+        // Edit when it pressed File.
         org.joml.Vector2f centre = com.crystalgui.core.data.Transform2D.apply(cache.localToWorld(),
-                cache.x() + cache.width() / 2f, cache.y() + cache.height() / 2f);
+                cache.width() / 2f, cache.height() / 2f);
         document.input().consumeMouseEvent(
                 new com.crystalgraphics.platform.input.CgSystemInput.Mouse.Event(
                         Math.round(centre.x()), Math.round(centre.y()), 0, 0,
@@ -346,7 +348,7 @@ public class MenuBarViewTest extends UiDocumentTestBase {
         UINode focused = document.focus().focused();
         UINode target = focused != null ? focused : root;
         document.input().send(target,
-                new com.crystalgui.ui.event.KeyboardEvent.Down(target, keyCode, ' ', false, 0, 0L));
+                new com.crystalgui.ui.event.KeyboardEvent.Down(target, keyCode, '\0', false, 0, 0L));
     }
 
     /** The root of the open chain — what the bar actually put on screen. */
@@ -368,7 +370,7 @@ public class MenuBarViewTest extends UiDocumentTestBase {
         frame();
         var cache = target.box();
         org.joml.Vector2f centre = com.crystalgui.core.data.Transform2D.apply(cache.localToWorld(),
-                cache.x() + cache.width() / 2f, cache.y() + cache.height() / 2f);
+                cache.width() / 2f, cache.height() / 2f);
         document.input().consumeMouseEvent(
                 new com.crystalgraphics.platform.input.CgSystemInput.Mouse.Event(
                         Math.round(centre.x()), Math.round(centre.y()), 0, 0,
@@ -434,7 +436,6 @@ public class MenuBarViewTest extends UiDocumentTestBase {
 
     // ── Interaction the bar owns ────────────────────────────────────────────────────────────────
 
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void arrowsMoveBetweenMenus() {
         rawPress(titleAt(0));
@@ -472,7 +473,6 @@ public class MenuBarViewTest extends UiDocumentTestBase {
      * <p>{@code MenuItem} inherits {@code Button}'s {@code isWasPressTarget()} guard, which refuses this
      * on its own — so the arming is the whole feature. @see Menu#armForRelease
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void pressDragReleaseChoosesTheRowItIsReleasedOver() {
         rawPress(titleAt(0));
@@ -494,7 +494,6 @@ public class MenuBarViewTest extends UiDocumentTestBase {
 
     // ── The burger ──────────────────────────────────────────────────────────────────────────────
 
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void collapsingHidesTheTitlesAndShowsTheBurger() {
         bar.setCollapsed(true);
@@ -503,7 +502,7 @@ public class MenuBarViewTest extends UiDocumentTestBase {
         assertTrue("the bar says so, so a theme can restyle the whole row",
                 bar.hasClass(MenuBarView.COLLAPSED_CLASS));
         assertEquals("a collapsed title takes no space", 0f,
-                titleAt(1).box().width(), 0.01f);
+                widthOf(titleAt(1)), 0.01f);
     }
 
     @Test
@@ -539,8 +538,13 @@ public class MenuBarViewTest extends UiDocumentTestBase {
 
     private static int separatorsIn(Menu menu) {
         int count = 0;
-        for (UINode child : menu.itemsContainer().children()) {
-            if (child.hasClass(Menu.SEPARATOR_PART)) count++;
+        // A PART, not a class, and found by a DEEP query rather than a child walk. The codemod
+        // renamed the constant and left `hasClass`, so this asked whether a separator carried a CSS
+        // class called "separator" -- nothing does, so it counted zero and the sibling test asserting
+        // "no separator here" passed for free. And a menu's rows are composed through a slot, so the
+        // separators are not direct children of the items container either.
+        for (UINode child : deepAll(menu, "." + Menu.SEPARATOR_PART)) {
+            if (Menu.SEPARATOR_PART.equals(child.get(Attribute.PART))) count++;
         }
         return count;
     }

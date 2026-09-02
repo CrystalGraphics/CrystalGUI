@@ -363,7 +363,7 @@ public class HighlightTest extends UiDocumentTestBase {
         settle();
 
         assertEquals("short", text.getText());
-        assertTrue("still laid out rather than having thrown", text.box().height() > 0f);
+        assertTrue("still laid out rather than having thrown", heightOf(text) > 0f);
     }
 
     /** The same hazard from the other side: `text-overflow: ellipsis` paints a prefix. */
@@ -379,7 +379,7 @@ public class HighlightTest extends UiDocumentTestBase {
 
         assertNotEquals("fixture must genuinely be truncating", text.getText(), text.displayedText());
         assertTrue("and the range straddling the cut must not have thrown",
-                text.box().height() > 0f);
+                heightOf(text) > 0f);
     }
 
     // ── TextRange ────────────────────────────────────────────────────────────

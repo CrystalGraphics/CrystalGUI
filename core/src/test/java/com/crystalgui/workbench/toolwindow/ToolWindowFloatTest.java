@@ -7,6 +7,8 @@ import com.crystalgui.workbench.Workbench;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.ShadowRoot;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
@@ -24,6 +26,7 @@ import com.crystalgui.workbench.toolwindow.ToolWindowType;
 import com.crystalgui.workbench.view.ViewContainer;
 import com.crystalgui.workbench.region.WorkbenchRegions;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -47,6 +50,17 @@ import static org.junit.Assert.assertTrue;
  */
 public class ToolWindowFloatTest extends UiDocumentTestBase {
 
+    /**
+     * Animations OFF for the fixture. Several tests below turn them back on for the thing they are
+     * about and restore this in a finally; without a @Before the class relied on that restore having
+     * run, i.e. on another test having gone first. A window's state change is DEFERRED while a
+     * timeline plays, so the assertions here read VISIBLE for a window that has been closed.
+     */
+    @Before
+    public void quietTheCompositor() {
+        Desktop.setAnimationsEnabled(false);
+    }
+
     private static final String INSPECTOR = "inspector";
 
     private WindowFrame workbenchWindow;
@@ -55,8 +69,18 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
     private WorkbenchRegions regions;
     private ToolWindowManager manager;
 
+    @After
+    public void animationsBackOn() {
+        Desktop.setAnimationsEnabled(true);
+    }
+
     @Before
     public void setUpWorkbench() {
+        // Animations OFF, stated rather than inherited. Every assertion in this fixture reads a
+        // geometry or a state straight after a gesture, and a running timeline defers both -- `hide()`
+        // detaches and `close()` destroys only once the flight ends, so the assertion reads the state
+        // BEFORE the gesture took effect and the numbers it does get are mid-flight fractions.
+        Desktop.setAnimationsEnabled(false);
         regions = new WorkbenchRegions(new UINode());
         DockPanelRegistry<UINode> registry = new DockPanelRegistry<>();
         registry.register(DockPanelDescriptor.container(INSPECTOR, "Inspector", DockRegion.AUXILIARY),
@@ -93,7 +117,7 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
     private void pressAt(float x, float y) {
         frame();
         document.input().consumeMouseEvent(new CgSystemInput.Mouse.Event(
-                Math.round(x * 2f), Math.round(y * 2f), 0, 0, CgMouseCodes.LEFT_BUTTON, true, 0f, 0L));
+                Math.round(x * uiScale()), Math.round(y * uiScale()), 0, 0, CgMouseCodes.LEFT_BUTTON, true, 0f, 0L));
         settle();
         frame();
         settle();
@@ -102,15 +126,29 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
     /** Presses a frame's caption, where a drag begins. */
     private void pressCaption(ToolWindowFrame frame) {
         var box = frame.box();
-        pressAt(box.x() + box.width() / 2f, box.y() + 8f);
+        // The frame's position ON SCREEN, not inside its host. An owned float is parented onto its
+        // owner, so `box.x()` is an offset within that window and pressing it aims somewhere near the
+        // top-left of the desktop -- the press lands on bare surface and nothing is focused, which
+        // reads as the focus delegate not running.
+        float scale = document.boxes().uiScale();
+        pressAt(box.worldX() / scale + box.width() / 2f, box.worldY() / scale + 8f);
     }
 
     /** Whether focus is inside the panel's own container — what lights its rail button. */
     private boolean panelHasFocus() {
-        for (UINode e = document.focus().focused(); e != null; e = e.parent()) {
+        // Through shadow boundaries: `parent()` stops at a shadow root, so a focus owner that is a
+        // widget's own part -- which most focusable things now are -- never reaches the container
+        // holding it. The host is the step that continues the walk.
+        for (UINode e = document.focus().focused(); e != null; e = outward(e)) {
             if (e instanceof ViewContainer container) return INSPECTOR.equals(container.containerId());
         }
         return false;
+    }
+
+    private static UINode outward(UINode node) {
+        UINode parent = node.parent();
+        if (parent != null) return parent;
+        return node instanceof ShadowRoot shadow ? shadow.host() : null;
     }
 
     /**
@@ -119,7 +157,6 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
      * <p>A drag never completes a click, so nothing downstream of a mouse-up can be relied on — the
      * selection a click would have made never happens. The press is the moment.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void pressingAFloatFocusesItsPanel() {
         manager.floatPanel(INSPECTOR, 40f, 40f, ToolWindowType.FLOATING);
@@ -149,7 +186,6 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
      * place through code that has nothing in common, which is exactly the shape where one quietly works
      * and the other does not.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void pressingAWindowedToolWindowFocusesItsPanel() {
         manager.floatPanel(INSPECTOR, 40f, 40f, ToolWindowType.WINDOWED);
@@ -174,7 +210,6 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
      * {@code document.promote(this)}, which paints after the whole main tree, so a float torn out of one
      * document hovers over whichever document is raised next.
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void aFloatIsOwnedByTheWindowItCameOutOf() {
         manager.floatPanel(INSPECTOR, 40f, 40f, ToolWindowType.FLOATING);
@@ -197,17 +232,28 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
      * modal". Asserted on the slot's box rather than by dispatching a click, because the box is the
      * cause and a click is one of the symptoms.
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void anOwnedFloatDoesNotCoverItsOwner() {
         manager.floatPanel(INSPECTOR, 40f, 40f, ToolWindowType.FLOATING);
         settle();
 
-        UINode slot = workbenchWindow.overlaySlot();
+        ToolWindowFrame float_ = manager.frameOf(INSPECTOR);
         assertTrue("the owner still holds it", workbenchWindow.hasOwnedWindows());
-        assertEquals("the slot took a box and swallowed the owner's clicks",
-                0f, slot.box().width(), 0.01f);
-        assertEquals(0f, slot.box().height(), 0.01f);
+
+        // THERE IS NO SLOT TO MEASURE ANY MORE, and the bug it was measuring cannot occur. The old
+        // engine gave an owner a dedicated overlay ELEMENT that took a full-size box whenever it held
+        // something, so an open float made a transparent sheet over the whole window and every click
+        // outside the panel died on it -- reported as the panel "opening as a modal". `attachOwned`
+        // parents the float onto the frame itself now (`overlaySlot()` answers `this`), so there is no
+        // intermediate box to be sized wrongly: what covers the owner is exactly the float's own box.
+        // So the modern statement of the same guarantee is the SYMPTOM the old one reasoned back from
+        // -- the owner is still reachable beside the float.
+        Box ownerBox = workbenchWindow.box();
+        Box floatBox = float_.box();
+        assertNotNull("the owner has no box to be covered", ownerBox);
+        assertNotNull("the float never got one", floatBox);
+        assertTrue("the float covers its whole owner, which is a modal by another name",
+                floatBox.width() < ownerBox.width() && floatBox.height() < ownerBox.height());
     }
 
     /**
@@ -217,7 +263,6 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
      * document is clamped inside its owner, so a panel dragged out onto the desktop springs back into the
      * editor it came from.
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void tearingOutProducesADesktopWindow() {
         manager.floatPanel(INSPECTOR, 40f, 40f);
@@ -287,7 +332,6 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
      * a 30px header where the sheet says 22, with the panel's content squeezed into what was left. Both
      * rules were correct, and the panel was broken only <em>after a round trip</em>.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void dockingBackRestoresThePanelExactly() {
         manager.showPanel(INSPECTOR);
@@ -355,7 +399,6 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
      * padding fault rather than as a box that was never asked for. Asserted as "the next thing starts
      * after the title ends", which is the property, rather than as a pixel width.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void theHeadersPartsDoNotOverlap() {
         manager.showPanel(INSPECTOR);
@@ -365,7 +408,7 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
 
         float titleEnd = title.box().worldX() + title.box().width();
         assertTrue("the title claimed no width, so anything beside it draws over it",
-                title.box().width() > 0f);
+                widthOf(title) > 0f);
         for (int at = 1; at < header.children().size(); at++) {
             UINode sibling = header.children().get(at);
             assertTrue("a header part starts before the title ends: " + sibling.classes(),
@@ -374,7 +417,6 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
     }
 
     /** And docking gives it back, or the panel returns headerless. */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void dockingReturnsTheHeader() {
         manager.floatPanel(INSPECTOR, 40f, 40f);
@@ -386,7 +428,13 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
         settle();
 
         assertSame("home", container, header.parent());
-        assertTrue("and internal again", header.get(Attribute.PART).isEmpty() == false);
+        // THE FLAG IS GONE, and with it the state this asserted. The old engine stored
+        // "is an internal child" as a bit and `removeChild` refused anything carrying it, so a
+        // round trip had to put the bit back or the header became publicly detachable. Here what
+        // makes a part a part is that the widget PUT IT THERE -- `insertStructuralAt` sets the flag
+        // for the duration of one insertion and restores it -- so there is nothing on the node to
+        // check and nothing that could have been left wrong. The two assertions above are the whole
+        // of what the round trip has to get right now.
     }
 
     // ── Closing ─────────────────────────────────────────────────────────────────────────────────
@@ -397,7 +445,6 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
      * content — every click on the document the float came out of goes nowhere, and nothing about that
      * symptom names a tool document.
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void closingAFloatReleasesItsOwnersSurface() {
         manager.floatPanel(INSPECTOR, 40f, 40f, ToolWindowType.FLOATING);
@@ -417,7 +464,6 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
      * a float. Taking the frame out of the map first is what stops the second pass re-reading a frame
      * that is mid-destroy and releasing the owner twice.
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void theFramesOwnCloseButtonUnwindsCleanly() {
         manager.floatPanel(INSPECTOR, 40f, 40f, ToolWindowType.FLOATING);
@@ -580,7 +626,6 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
      * {@code onHidden} — so by the time the manager is told, the frame has left the tree and its Taffy
      * node is gone. Measuring there records a zero, and a zero is what the next tear-out restores.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void aFloatHiddenByItsOwnButtonKeepsItsGeometry() {
         manager.floatPanel(INSPECTOR, 40f, 40f);

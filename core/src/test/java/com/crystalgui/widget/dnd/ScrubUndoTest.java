@@ -81,7 +81,7 @@ public class ScrubUndoTest extends UiDocumentTestBase {
     private Vector2f centre() {
         var cache = label.box();
         return Transform2D.apply(cache.localToWorld(),
-                cache.x() + cache.width() / 2f, cache.y() + cache.height() / 2f);
+                cache.width() / 2f, cache.height() / 2f);
     }
 
     private void press() {

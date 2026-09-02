@@ -139,7 +139,6 @@ public class NodeControlKitTest extends UiDocumentTestBase {
      * in three places rather than three unrelated bugs — this test pins all three so a fourth spot
      * doesn't need its own screenshot to find.
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void labelsClipInsteadOfWrappingEverywhereTheSameGapExisted() {
         openWindow();
@@ -153,11 +152,12 @@ public class NodeControlKitTest extends UiDocumentTestBase {
 
         UINode title = deepAll(node, ".__title__").get(0);
         UINode controlLabel = deepAll(node, ".__control-row__ .__label__").get(0);
-        // Not a bare "text" query — the dropdown's own (closed) menu holds MenuItems, each a Button
-        // with its own internal text, so the first match is not reliably the dropdown's own label.
-        UINode dropdownLabel = deepAll(dropdown, "text").stream()
-                .filter(e -> e.parent() == dropdown)
-                .findFirst().orElseThrow();
+        // NAMED, not filtered by parentage. The original picked the dropdown's own label out of a
+        // "text" sweep by asking which one was a direct child -- the closed menu holds a MenuItem per
+        // option, each with its own text, so the first match was not reliably the right one. Every one
+        // of those is a shadow PART now, so none of them is a child of the dropdown and the filter
+        // matched nothing at all. The part name says exactly which label is meant.
+        UINode dropdownLabel = part(dropdown, Button.LABEL_PART);
 
         for (UINode label : List.of(title, controlLabel, dropdownLabel)) {
             assertEquals("must not wrap onto a second line: " + label,
@@ -202,7 +202,6 @@ public class NodeControlKitTest extends UiDocumentTestBase {
      * sampler-state pair. Each is a panel of parts sized against each other, and each is one ambient
      * selector away from the same failure.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void aCompositeKeepsItsInternalGeometryInsideANode() {
         List<String> diverged = new ArrayList<>();

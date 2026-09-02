@@ -10,6 +10,7 @@ import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.scroll.ScrollerView;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -31,9 +32,30 @@ import org.junit.Test;
  */
 public class WindowInitialPlacementTest extends UiDocumentTestBase {
 
+    /**
+     * Animations OFF for the fixture. Several tests below turn them back on for the thing they are
+     * about and restore this in a finally; without a @Before the class relied on that restore having
+     * run, i.e. on another test having gone first. A window's state change is DEFERRED while a
+     * timeline plays, so the assertions here read VISIBLE for a window that has been closed.
+     */
+    @Before
+    public void quietTheCompositor() {
+        Desktop.setAnimationsEnabled(false);
+    }
+
+
+    @After
+    public void animationsBackOn() {
+        Desktop.setAnimationsEnabled(true);
+    }
 
     @Before
     public void setUpDesktop() {
+        // Animations OFF, stated rather than inherited. Every assertion in this fixture reads a
+        // geometry or a state straight after a gesture, and a running timeline defers both -- `hide()`
+        // detaches and `close()` destroys only once the flight ends, so the assertion reads the state
+        // BEFORE the gesture took effect and the numbers it does get are mid-flight fractions.
+        Desktop.setAnimationsEnabled(false);
         UINode root = new UINode().layout(l -> l.width(800).height(600));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
@@ -95,12 +117,13 @@ public class WindowInitialPlacementTest extends UiDocumentTestBase {
 
     // ── Scroll ──────────────────────────────────────────────────────────────
 
-    private static float barHeight(WindowFrame frame) {
-        // A bar that is display: none measures 0 -- the question every state can answer.
-        return ((ScrollerView) frame.content()).verticalScroller().box().height();
+    private float barHeight(WindowFrame frame) {
+        // ...and a bar that is `display: none` has NO BOX AT ALL here, which is the same answer and
+        // the reason this cannot dereference one. The comment below was right about the question;
+        // the old engine just always had a box to ask.
+        return heightOf(((ScrollerView) frame.content()).verticalScroller());
     }
 
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void aWindowThatFitsItsContentShowsNoBar() {
         WindowFrame frame = open(300, 400);
@@ -122,7 +145,6 @@ public class WindowInitialPlacementTest extends UiDocumentTestBase {
      * The reported shape: a content-sized document whose content GROWS after it opened -- the machine
      * panel's engine section unfolding -- runs into the work-area cap and must scroll from there.
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void contentGrowingPastTheWorkAreaScrollsInsideTheWindow() {
         UINode body = new UINode().layout(l -> l.width(300).height(400));
@@ -143,7 +165,6 @@ public class WindowInitialPlacementTest extends UiDocumentTestBase {
 
     // ── Place ───────────────────────────────────────────────────────────────
 
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void aWindowNobodyPlacedOpensCentred() {
         WindowFrame frame = open(300, 400);
@@ -170,7 +191,6 @@ public class WindowInitialPlacementTest extends UiDocumentTestBase {
     }
 
     /** The reported shape: open, close, open again — and the second must be the first over again. */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void aWindowReopenedAfterTheLastOneClosedIsCentredAndFullSized() {
         WindowFrame first = open(300, 400);

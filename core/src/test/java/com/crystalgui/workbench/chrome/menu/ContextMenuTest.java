@@ -12,6 +12,7 @@ import com.crystalgui.widget.overlay.MenuItem;
 import com.crystalgui.widget.overlay.ContextMenu;
 import org.junit.Before;
 import org.junit.Ignore;
+import com.crystalgui.widget.control.Button;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -200,7 +201,6 @@ public class ContextMenuTest extends UiDocumentTestBase {
      * <p>Asserted as "the same x as a plain row", not against a number: the padding is the sheet's to
      * choose, and what must hold is that owning a submenu changes nothing about where the text begins.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void aSubmenuRowsLabelIsNotCentred() {
         Menu menu = new Menu();
@@ -230,13 +230,13 @@ public class ContextMenuTest extends UiDocumentTestBase {
 
     /** Where the row's text actually begins, in the row's own space. */
     private static float labelXOf(MenuItem item) {
-        for (UINode child : item.children()) {
-            if (child instanceof UIText text && !text.getText().isEmpty()
-                    && !child.hasClass(MenuItem.ACCELERATOR_CLASS)) {
-                return child.box().x();
-            }
-        }
-        throw new AssertionError("no label found on " + item.getText());
+        // NAMED, not walked. A MenuItem extends Button and its label is a shadow PART, so
+        // `children()` holds none of its structure at all -- the walk found nothing and every row
+        // reported "no label". The accelerator carve-out below goes with it: the part name already
+        // says which text is the label, so there is nothing to exclude.
+        UINode label = deepOrNull(item, "." + Button.LABEL_PART);
+        if (label == null) throw new AssertionError("no label found on " + item.getText());
+        return label.box().worldX();
     }
 
     // ── Contributions: the menu nobody writes ───────────────────────────────────────────────────

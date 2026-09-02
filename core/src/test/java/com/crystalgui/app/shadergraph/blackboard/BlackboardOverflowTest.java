@@ -130,7 +130,7 @@ public class BlackboardOverflowTest extends UiDocumentTestBase {
         float typeRight = type.box().x() + type.box().width();
         float rowRight = pill.box().x() + pill.box().width();
         assertTrue("the type column must have a width of its own; got " + type.box().width(),
-                type.box().width() > 0f);
+                widthOf(type) > 0f);
         assertTrue("the type column hangs outside its row: " + typeRight + " > " + rowRight,
                 typeRight <= rowRight + 0.5f);
         assertTrue("...and the row must therefore be inside the scrollable width",

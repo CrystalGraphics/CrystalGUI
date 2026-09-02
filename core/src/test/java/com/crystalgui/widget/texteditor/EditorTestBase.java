@@ -59,6 +59,21 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
 
     protected String clipboard = "";
 
+    /**
+     * <b>The editor's commands, registered by this fixture rather than inherited.</b>
+     *
+     * <p>{@code EditorCommands.register()} contributes into the GLOBAL registry, and several other
+     * fixtures call {@code CommandRegistry.global().resetForTesting()} in their own setup -- so
+     * whether {@code editor.foldAll} exists here depended entirely on which class JUnit happened to
+     * run first. Seven fold tests failed with "must be registered" on a build where nothing about
+     * folding had changed, which reads as the commands having been dropped. Registration is
+     * idempotent, so a fixture asserting on a command declares it.</p>
+     */
+    @Before
+    public void registerEditorCommands() {
+        EditorCommands.register();
+    }
+
     @Before
     public void installInputStub() {
         // PRISTINE SHEETS FIRST. A theme swap is process-wide and refills StyleSheet.DEFAULT in place, so
@@ -201,7 +216,7 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
         for (UINode child : root.children()) {
             if (child.hasClass(TextEditor.LINE_NUMBER_CLASS)) {
                 UIText label = (UIText) child.children().get(0);
-                if (child.box().height() > 0f) out.add(label.getText());
+                if (heightOf(child) > 0f) out.add(label.getText());
             }
             collectNumbers(child, out);
         }
@@ -412,7 +427,7 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
         for (UINode child : allWithClass(className)) {
             // hide() collapses an unused pooled element to zero height, so a laid-out height is what
             // separates "drawn this frame" from "pooled and idle".
-            if (child.box().contentBoxHeight() > 0f) n++;
+            if (contentBoxHeightOf(child) > 0f) n++;
         }
         return n;
     }
@@ -538,7 +553,7 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
     protected java.util.List<UINode> visibleFoldArrows() {
         java.util.List<UINode> shown = new java.util.ArrayList<>();
         for (UINode arrow : allWithClass(TextEditor.FOLD_CLASS)) {
-            if (arrow.box().contentBoxHeight() > 0f) shown.add(arrow);
+            if (contentBoxHeightOf(arrow) > 0f) shown.add(arrow);
         }
         return shown;
     }

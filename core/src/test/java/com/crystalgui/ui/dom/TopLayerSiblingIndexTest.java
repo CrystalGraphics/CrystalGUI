@@ -87,7 +87,7 @@ public class TopLayerSiblingIndexTest extends UiDocumentTestBase {
         settle();
 
         assertSame(host, newcomer.parent());
-        assertTrue("the newcomer never laid out", newcomer.box().width() > 0f);
+        assertTrue("the newcomer never laid out", widthOf(newcomer) > 0f);
     }
 
     /**
@@ -134,7 +134,7 @@ public class TopLayerSiblingIndexTest extends UiDocumentTestBase {
         UINode newcomer = new UINode().layout(l -> l.width(50).height(20));
         host.append(newcomer);
         settle();
-        assertTrue("the host's child list never recovered", newcomer.box().width() > 0f);
+        assertTrue("the host's child list never recovered", widthOf(newcomer) > 0f);
     }
 
     /**
