@@ -1,5 +1,8 @@
 package com.crystalgui.ui.dom;
 
+import com.crystalgui.style.StyleOrigin;
+import com.crystalgui.style.StyleGroup;
+import com.crystalgui.style.property.visual.Resize;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.settings.Settings;
 import com.crystalgui.core.settings.SettingsScope;
@@ -936,6 +939,11 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
         }
         // display: none is a structural fact -- a box exists or it does not.
         if (property == LayoutProperties.DISPLAY) structureChanged();
+        // RESIZE IS AMBIENT, like overflow making any element a scroll container. The engine says WHEN
+        // the handles should exist; the widget layer supplies them. @see ResizeHandles
+        if (property == StylePropertyRegistry.RESIZE) {
+            ResizeHandles.apply(this, (Resize) newValue);
+        }
     }
 
     /**
@@ -1633,5 +1641,130 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
     @Override
     public String toString() {
         return "<" + name + (id.isEmpty() ? "" : " #" + id) + (classes.isEmpty() ? "" : " ." + String.join(".", classes)) + ">";
+    }
+
+    // ── Being resized ────────────────────────────────────────────────────────
+    //
+    // AMBIENT, like scrolling. `resize` is a CSS property that applies to elements generally, so a node
+    // grows handles because a sheet says so -- see ResizeHandles -- and everything a drag needs to ask
+    // it is answered here, correctly, by default. A widget that positions itself some other way
+    // overrides one method; nothing has to be implemented, registered or looked up to be resizable.
+
+    /** On a node whose WIDTH the reader has taken. @see #markUserSized */
+    public static final String USER_SIZED_WIDTH_CLASS = "__user-sized-width__";
+
+    /** On a node whose HEIGHT the reader has taken. @see #markUserSized */
+    public static final String USER_SIZED_HEIGHT_CLASS = "__user-sized-height__";
+
+    /**
+     * The box a resize is kept inside, or {@code null} for no clamp.
+     *
+     * <p>Only meaningful for an out-of-flow node, which is the same set that has leading handles at
+     * all — for anything in flow, {@code left}/{@code top} are a relative nudge rather than a position
+     * and there is nothing to clamp against.</p>
+     */
+    @Nullable
+    public UINode resizeContainingBlock() {
+        return parent();
+    }
+
+    /**
+     * Whether a leading edge may move this node's origin.
+     *
+     * <p>{@code false} keeps the trailing three handles — bottom, right and the corner — which is
+     * CSS's own default grabber, and drops the five that would have to reposition anything.</p>
+     */
+    public boolean canMoveResizeOrigin() {
+        return true;
+    }
+
+    /**
+     * Where this node's left edge sits within its containing block.
+     *
+     * <p><b>The box, never a written inset.</b> The old engine read the {@code left} inset and answered
+     * {@code 0} for {@code auto}, which is the teleport-to-the-corner bug: {@code auto} means "wherever
+     * the static position put it", and that is only zero for a box with no inset on that axis at all —
+     * a panel anchored by {@code right}/{@code bottom} has an {@code auto} {@code left} and is nowhere
+     * near it. {@code Box.x()} is the offset from the host's border-box origin, which is exactly the
+     * {@code left} a leading drag has to write back.</p>
+     */
+    public float resizeOriginLeft() {
+        Box box = box();
+        return box == null ? 0f : box.x();
+    }
+
+    /** @see #resizeOriginLeft */
+    public float resizeOriginTop() {
+        Box box = box();
+        return box == null ? 0f : box.y();
+    }
+
+    /**
+     * Moves the origin, so a leading edge pins the opposite one.
+     *
+     * <p><b>The one method a widget overrides.</b> Written at INLINE, the origin CSS gives a user
+     * resize, so an author's {@code !important} still wins — and that is right for any node that
+     * positions itself with {@code left}/{@code top}. A node whose position is owned by something else
+     * says so here instead: an anchored popup hands it to its own move, so placement stops competing
+     * for the property, and a window clamps it to the work area.</p>
+     */
+    public void applyResizeOrigin(float left, float top) {
+        StyleGroup.inlinePipeline(getStyle().getLayoutGroup(), l -> l.left(left).top(top));
+    }
+
+    /**
+     * A drag has claimed an axis, and anything that sizes this node itself must stand down.
+     *
+     * <p><b>Records only; it never clears anything.</b> A resize writes at INLINE, per spec, and a
+     * widget that sizes itself writes higher — so without this the handle would look dead on that axis:
+     * the drag writes a width and the widget writes over it on the next frame. Withdrawing the widget's
+     * own declarations instead would beat an AUTHOR's {@code !important} in the same stroke, because
+     * those share one origin bucket.</p>
+     *
+     * <p><b>The classes ARE the state</b>, which is why this needs no field. A sheet can see it —
+     * that is what lets a documentation popup release its width floor and ceiling the moment the
+     * reader takes hold of an edge — and state a node flips from its own code belongs on a class
+     * rather than a pseudo-class.</p>
+     */
+    public void markUserSized(boolean width, boolean height) {
+        if (width) addClass(USER_SIZED_WIDTH_CLASS);
+        if (height) addClass(USER_SIZED_HEIGHT_CLASS);
+    }
+
+    /** @see #markUserSized */
+    public boolean isUserSizedWidth() {
+        return hasClass(USER_SIZED_WIDTH_CLASS);
+    }
+
+    /** @see #markUserSized */
+    public boolean isUserSizedHeight() {
+        return hasClass(USER_SIZED_HEIGHT_CLASS);
+    }
+
+    /**
+     * Forgets both, for a node that has been given genuinely new content to size to.
+     *
+     * <p><b>And the size itself, which is the whole of what "clear" means.</b> A resize writes
+     * {@code width}/{@code height} at INLINE, so dropping the classes alone leaves that size winning
+     * every cascade for the rest of the node's life: the sheet's floor and ceiling come back and
+     * neither can be seen underneath it. On screen the node reopens at whatever it was last dragged to
+     * — for a documentation popup, the previous SYMBOL's size.</p>
+     *
+     * <p>Withdrawn rather than written back: writing the resting value would be a second INLINE
+     * candidate outranking the sheet for good.</p>
+     */
+    public void clearUserSizing() {
+        if (!isUserSizedWidth() && !isUserSizedHeight()) return;
+        removeClass(USER_SIZED_WIDTH_CLASS);
+        removeClass(USER_SIZED_HEIGHT_CLASS);
+        getStyle().removeCandidates(LayoutProperties.WIDTH, slot -> slot.origin() == StyleOrigin.INLINE);
+        getStyle().removeCandidates(LayoutProperties.HEIGHT, slot -> slot.origin() == StyleOrigin.INLINE);
+    }
+
+    /**
+     * The drag settled on this geometry — called LAST, so an override sees the size the resize
+     * actually achieved rather than the one it asked for.
+     */
+    public void onUserResize(int handleDx, int handleDy, float width, float height) {
     }
 }

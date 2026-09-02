@@ -232,10 +232,14 @@ public final class Widgets implements NodeKinds {
         // ── dnd ──────────────────────────────────────────────────────────────
         UINodeRegistry.register(DragGhost.NAME, DragGhost::new, NodeContract.INERT);
         UINodeRegistry.register(InsertionMarker.NAME, InsertionMarker::new, NodeContract.INERT);
-        // A grab handle. Built by `Resizer.install` for a Resizable rather than decoded, so the factory
+        // A grab handle. Built by `Resizer.install` for a resizable node rather than decoded, so the factory
         // makes an UNBOUND one -- registered all the same, because a concrete node that declares no kind
         // inherits `crystalgui:element` and would match every bare `element` rule there is.
         UINodeRegistry.register(Resizer.NAME, Resizer::new, NodeContract.INERT);
+        // AND THE CASCADE DRIVES THEM. `resize` is ambient, like `overflow` making any element a scroll
+        // container, so a node grows handles because a sheet says so rather than because it was
+        // constructed as a resizable kind. @see Resizer#driveFromStyle
+        Resizer.driveFromStyle();
 
         // ── texteditor ───────────────────────────────────────────────────────
         //
