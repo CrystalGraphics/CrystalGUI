@@ -1,5 +1,6 @@
 package com.crystalgui.headless;
 
+import com.crystalgui.widget.text.UIText;
 import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
@@ -8,9 +9,9 @@ import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.ElementRegistry;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.Button;
-import com.crystalgui.ui.elements.Slider;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.control.Slider;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -29,13 +30,13 @@ import static org.junit.Assert.fail;
  *
  * <p><i>"One session, one client"</i> was the first thing a real server invalidated. The tree belongs to
  * the session rather than to a viewer, so a fan-out is a list of <b>routers</b>, not a list of sessions
- * over one tree — {@code UIElement.setObserver} holds one observer, so the latter is not available and
+ * over one tree — {@code UINode.setObserver} holds one observer, so the latter is not available and
  * making it a list would cost every mutation in the application to serve a case most windows never
  * have.</p>
  */
 public class MultiViewerTest {
 
-    private UIElement root;
+    private UINode root;
     private Slider slider;
     private Button button;
 
@@ -45,9 +46,9 @@ public class MultiViewerTest {
     private ProtocolConnection<Object> serverB;
     private ProtocolConnection<Object> clientA;
     private ProtocolConnection<Object> clientB;
-    private ServerUiSession<Object> server;
-    private ClientUiSession<Object> viewerA;
-    private ClientUiSession<Object> viewerB;
+    private ServerUiSession<UINode, Object> server;
+    private ClientUiSession<UINode, Object> viewerA;
+    private ClientUiSession<UINode, Object> viewerB;
     private long clock;
 
     @Before
@@ -55,12 +56,12 @@ public class MultiViewerTest {
         Protocols.resetForTesting();
         ElementRegistry.bootstrapBuiltins();
 
-        root = new UIElement();
+        root = new UINode();
         button = new Button("Press me");
         slider = new Slider();
         slider.setRange(0f, 10f);
-        root.addChild(button);
-        root.addChild(slider);
+        root.append(button);
+        root.append(slider);
 
         linkA = InMemoryTransport.pair();
         linkB = InMemoryTransport.pair();
@@ -69,10 +70,10 @@ public class MultiViewerTest {
         serverB = Protocols.open(linkB[0], PlainOps.INSTANCE, () -> { }, "bob");
         clientB = Protocols.open(linkB[1], PlainOps.INSTANCE, () -> { }, null);
 
-        server = new ServerUiSession<>(1, root, serverA);
+        server = Sessions.serveOn(1, root, serverA);
         clock = 10_000L;
-        viewerA = new ClientUiSession<>(clientA).setClock(() -> clock);
-        viewerB = new ClientUiSession<>(clientB).setClock(() -> clock);
+        viewerA = Sessions.viewOn(clientA).setClock(() -> clock);
+        viewerB = Sessions.viewOn(clientB).setClock(() -> clock);
     }
 
     @After
@@ -106,8 +107,8 @@ public class MultiViewerTest {
         assertEquals("two viewers", 2, server.viewerCount());
         assertNotNull("alice must have the tree", viewerA.root());
         assertNotNull("bob must have the tree", viewerB.root());
-        assertEquals(2, viewerA.root().getChildren().size());
-        assertEquals(2, viewerB.root().getChildren().size());
+        assertEquals(2, viewerA.root().children().size());
+        assertEquals(2, viewerB.root().children().size());
     }
 
     /** A mutation reaches everyone, from one dirty set and one encode. */
@@ -120,8 +121,8 @@ public class MultiViewerTest {
         slider.setValue(7f);
         settle();
 
-        assertEquals(7f, ((Slider) viewerA.root().getChildren().get(1)).getValue(), 0.001f);
-        assertEquals(7f, ((Slider) viewerB.root().getChildren().get(1)).getValue(), 0.001f);
+        assertEquals(7f, ((Slider) viewerA.root().children().get(1)).getValue(), 0.001f);
+        assertEquals(7f, ((Slider) viewerB.root().children().get(1)).getValue(), 0.001f);
     }
 
     /**
@@ -146,8 +147,8 @@ public class MultiViewerTest {
         server.open();
         settle();
 
-        Slider onAlice = (Slider) viewerA.root().getChildren().get(1);
-        Slider onBob = (Slider) viewerB.root().getChildren().get(1);
+        Slider onAlice = (Slider) viewerA.root().children().get(1);
+        Slider onBob = (Slider) viewerB.root().children().get(1);
 
         // ALICE drives it. The server applies it and its own widget follows.
         onAlice.setValue(7f);
@@ -185,7 +186,7 @@ public class MultiViewerTest {
         server.open();
         settle();
 
-        Slider onAlice = (Slider) viewerA.root().getChildren().get(1);
+        Slider onAlice = (Slider) viewerA.root().children().get(1);
         clock += 200;
         onAlice.setValue(9f);
         settle();
@@ -215,9 +216,9 @@ public class MultiViewerTest {
         settle();
 
         assertEquals("alice is still watching and must still be told", 7f,
-                ((Slider) viewerA.root().getChildren().get(1)).getValue(), 0.001f);
+                ((Slider) viewerA.root().children().get(1)).getValue(), 0.001f);
         assertEquals("bob looked away, so bob is not told", 0f,
-                ((Slider) viewerB.root().getChildren().get(1)).getValue(), 0.001f);
+                ((Slider) viewerB.root().children().get(1)).getValue(), 0.001f);
     }
 
     /**
@@ -237,13 +238,13 @@ public class MultiViewerTest {
         server.setViewerVisible("bob", false);
         slider.setValue(7f);
         settle();
-        assertEquals(0f, ((Slider) viewerB.root().getChildren().get(1)).getValue(), 0.001f);
+        assertEquals(0f, ((Slider) viewerB.root().children().get(1)).getValue(), 0.001f);
 
         server.setViewerVisible("bob", true);
         settle();
 
         assertEquals("everything missed, not merely everything since", 7f,
-                ((Slider) viewerB.root().getChildren().get(1)).getValue(), 0.001f);
+                ((Slider) viewerB.root().children().get(1)).getValue(), 0.001f);
     }
 
     /** Nobody watching at all: the older rule, still true. */
@@ -272,7 +273,7 @@ public class MultiViewerTest {
         settle();
 
         assertNotNull("a viewer added after open must still receive the window", viewerB.root());
-        assertEquals(2, viewerB.root().getChildren().size());
+        assertEquals(2, viewerB.root().children().size());
     }
 
     /**
@@ -293,16 +294,16 @@ public class MultiViewerTest {
         assertNotNull(viewerA.root());
 
         // Reshape: this renumbers and re-hashes the description.
-        root.addChildAt(new com.crystalgui.ui.elements.UIText("inserted"), 0);
+        root.insertAt(0, new UIText("inserted"));
         settle();
-        assertEquals(3, viewerA.root().getChildren().size());
+        assertEquals(3, viewerA.root().children().size());
 
         server.addViewer(serverB);
         settle();
 
         assertNotNull("a viewer added after a reshape must still receive the window", viewerB.root());
         assertEquals("and the CURRENT tree, not the one open() described",
-                3, viewerB.root().getChildren().size());
+                3, viewerB.root().children().size());
     }
 
     /** An event from either client runs the server's one lambda. */
@@ -314,11 +315,11 @@ public class MultiViewerTest {
         server.open();
         settle();
 
-        ((Button) viewerA.root().getChildren().get(0)).onPressed.emit();
+        ((Button) viewerA.root().children().get(0)).onPressed.emit();
         settle();
         assertEquals("alice's press", 1, presses.get());
 
-        ((Button) viewerB.root().getChildren().get(0)).onPressed.emit();
+        ((Button) viewerB.root().children().get(0)).onPressed.emit();
         settle();
         assertEquals("and bob's", 2, presses.get());
     }
@@ -364,8 +365,8 @@ public class MultiViewerTest {
         assertEquals("a real interaction must still be reported", 1, reports.get());
     }
 
-    private static Slider sliderOf(ClientUiSession<Object> viewer) {
-        return (Slider) viewer.root().getChildren().get(1);
+    private static Slider sliderOf(ClientUiSession<UINode, Object> viewer) {
+        return (Slider) viewer.root().children().get(1);
     }
 
     /**
@@ -456,8 +457,8 @@ public class MultiViewerTest {
         settle();
 
         assertEquals("the remaining viewer still updates",
-                3f, ((Slider) viewerA.root().getChildren().get(1)).getValue(), 0.001f);
+                3f, ((Slider) viewerA.root().children().get(1)).getValue(), 0.001f);
         assertEquals("the removed one is frozen where it was",
-                0f, ((Slider) viewerB.root().getChildren().get(1)).getValue(), 0.001f);
+                0f, ((Slider) viewerB.root().children().get(1)).getValue(), 0.001f);
     }
 }

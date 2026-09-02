@@ -1,11 +1,12 @@
 package com.crystalgui.headless;
 
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.dom.UINodeTreeSource;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.dom.ElementTreeSource;
 import com.crystalgui.ui.dom.TreeObserver;
-import com.crystalgui.ui.elements.Button;
-import com.crystalgui.ui.elements.Checkbox;
-import com.crystalgui.ui.elements.Slider;
+import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.control.Checkbox;
+import com.crystalgui.widget.control.Slider;
 import com.crystalgui.ui.input.FocusPolicy;
 import org.junit.Before;
 import org.junit.Test;
@@ -36,18 +37,18 @@ import static org.junit.Assert.*;
 public class TreeObserverBehaviourTest {
 
     /** Records what it is told, in order. */
-    private static final class Recorder implements TreeObserver<UIElement> {
+    private static final class Recorder implements TreeObserver<UINode> {
         final List<String> events = new ArrayList<>();
 
-        @Override public void inserted(UIElement e, UIElement p, int i) { events.add("attach:" + name(e)); }
-        @Override public void removed(UIElement e, UIElement p) { events.add("detach:" + name(e)); }
-        @Override public void moved(UIElement e, UIElement p, int i) { events.add("move:" + name(e)); }
-        @Override public void stateChanged(UIElement e) { events.add("state:" + name(e)); }
-        @Override public void attributeChanged(UIElement e) { events.add("identity:" + name(e)); }
-        @Override public void inlineStyleChanged(UIElement e) { events.add("inline:" + name(e)); }
+        @Override public void inserted(UINode e, UINode p, int i) { events.add("attach:" + name(e)); }
+        @Override public void removed(UINode e, UINode p) { events.add("detach:" + name(e)); }
+        @Override public void moved(UINode e, UINode p, int i) { events.add("move:" + name(e)); }
+        @Override public void stateChanged(UINode e) { events.add("state:" + name(e)); }
+        @Override public void attributeChanged(UINode e) { events.add("identity:" + name(e)); }
+        @Override public void inlineStyleChanged(UINode e) { events.add("inline:" + name(e)); }
 
-        private static String name(UIElement e) {
-            return e.getId().isEmpty() ? e.tagName() : e.getId();
+        private static String name(UINode e) {
+            return e.id().isEmpty() ? e.tagName() : e.id();
         }
 
         void clear() { events.clear(); }
@@ -58,15 +59,15 @@ public class TreeObserverBehaviourTest {
     }
 
     private Recorder recorder;
-    private UIElement root;
-    private ElementTreeSource source;
+    private UINode root;
+    private UINodeTreeSource source;
 
     @Before
     public void setUp() {
         recorder = new Recorder();
-        root = new UIElement();
+        root = new UINode();
         root.setId("root");
-        source = new ElementTreeSource(root);
+        source = new UINodeTreeSource(root);
         source.observe(recorder);
         // No clear() needed any more, and that is the change: installing an observer used to emit an
         // attach for every element it walked, so every consumer had to discard its own installation
@@ -78,13 +79,13 @@ public class TreeObserverBehaviourTest {
     /** A grafted subtree reports every node, parents first — the session never walks the tree itself. */
     @Test
     public void attachingASubtreeReportsTheWholeThingInOrder() {
-        UIElement branch = new UIElement();
+        UINode branch = new UINode();
         branch.setId("branch");
-        UIElement leaf = new UIElement();
+        UINode leaf = new UINode();
         leaf.setId("leaf");
-        branch.addChild(leaf);
+        branch.append(leaf);
 
-        root.addChild(branch);
+        root.append(branch);
 
         assertEquals(List.of("attach:branch", "attach:leaf"), recorder.only("attach"));
     }
@@ -97,13 +98,13 @@ public class TreeObserverBehaviourTest {
      */
     @Test
     public void detachingASubtreeNamesOnlyItsRoot() {
-        UIElement branch = new UIElement();
+        UINode branch = new UINode();
         branch.setId("branch");
-        branch.addChild(new UIElement().setId("leaf"));
-        root.addChild(branch);
+        branch.append(new UINode().setId("leaf"));
+        root.append(branch);
         recorder.clear();
 
-        root.removeChild(branch);
+        root.remove(branch);
 
         assertEquals(List.of("detach:branch"), recorder.only("detach"));
     }
@@ -112,8 +113,8 @@ public class TreeObserverBehaviourTest {
     @Test
     public void aDetachedSubtreeGoesSilent() {
         Checkbox checkbox = new Checkbox("x");
-        root.addChild(checkbox);
-        root.removeChild(checkbox);
+        root.append(checkbox);
+        root.remove(checkbox);
         recorder.clear();
 
         checkbox.setChecked(true);
@@ -130,21 +131,21 @@ public class TreeObserverBehaviourTest {
      */
     @Test
     public void aCompositeArrivesAsOneNode() {
-        root.addChild(new Button("hi"));
+        root.append(new Button("hi"));
         assertEquals(List.of("attach:button"), recorder.only("attach"));
     }
 
     /** The counterpart to the above: a composite's own state still travels, attributed to it. */
     @Test
     public void aReparentIsAMoveRatherThanADetachAndAttach() {
-        UIElement from = new UIElement().setId("from");
-        UIElement to = new UIElement().setId("to");
-        UIElement moving = new UIElement().setId("moving");
-        root.addChildren(from, to);
-        from.addChild(moving);
+        UINode from = new UINode().setId("from");
+        UINode to = new UINode().setId("to");
+        UINode moving = new UINode().setId("moving");
+        root.append(from, to);
+        from.append(moving);
         recorder.clear();
 
-        to.addChild(moving);
+        to.append(moving);
 
         assertEquals(List.of("move:moving"), recorder.events);
     }
@@ -154,7 +155,7 @@ public class TreeObserverBehaviourTest {
     @Test
     public void aRealStateChangeReportsExactlyOnce() {
         Checkbox checkbox = new Checkbox("agree");
-        root.addChild(checkbox);
+        root.append(checkbox);
         recorder.clear();
 
         checkbox.setChecked(true);
@@ -167,7 +168,7 @@ public class TreeObserverBehaviourTest {
     public void aNoOpMutationReportsNothing() {
         Checkbox checkbox = new Checkbox("agree");
         checkbox.setChecked(true);
-        root.addChild(checkbox);
+        root.append(checkbox);
         recorder.clear();
 
         checkbox.setChecked(true);
@@ -186,7 +187,7 @@ public class TreeObserverBehaviourTest {
     @Test
     public void internalChildChangesAreAttributedToTheirComposite() {
         Button button = new Button("before");
-        root.addChild(button);
+        root.append(button);
         recorder.clear();
 
         button.setText("after");
@@ -198,7 +199,7 @@ public class TreeObserverBehaviourTest {
     @Test
     public void checkboxLabelIsAlsoAttributedToTheCheckbox() {
         Checkbox checkbox = new Checkbox("before");
-        root.addChild(checkbox);
+        root.append(checkbox);
         recorder.clear();
 
         checkbox.setLabel("after");
@@ -209,7 +210,7 @@ public class TreeObserverBehaviourTest {
     @Test
     public void sliderReportsValueRangeAndStep() {
         Slider slider = new Slider();
-        root.addChild(slider);
+        root.append(slider);
         recorder.clear();
 
         slider.setRange(0f, 10f);
@@ -224,9 +225,9 @@ public class TreeObserverBehaviourTest {
 
     @Test
     public void identityMutationsReport() {
-        UIElement element = new UIElement();
+        UINode element = new UINode();
         element.setId("target");
-        root.addChild(element);
+        root.append(element);
         recorder.clear();
 
         element.addClass("highlighted");
@@ -239,10 +240,10 @@ public class TreeObserverBehaviourTest {
 
     @Test
     public void redundantIdentityMutationsReportNothing() {
-        UIElement element = new UIElement();
+        UINode element = new UINode();
         element.setId("target");
         element.addClass("a");
-        root.addChild(element);
+        root.append(element);
         recorder.clear();
 
         element.addClass("a");          // already present
@@ -260,15 +261,14 @@ public class TreeObserverBehaviourTest {
     /** A purely client-side UI installs no observer, and must behave exactly as before. */
     @Test
     public void anUnobservedTreeIsUnaffected() {
-        UIElement plain = new UIElement();
+        UINode plain = new UINode();
         Checkbox checkbox = new Checkbox("x");
-        plain.addChild(checkbox);
+        plain.append(checkbox);
 
         checkbox.setChecked(true);
         checkbox.addClass("c");
-        plain.removeChild(checkbox);
+        plain.remove(checkbox);
 
-        assertNull(plain.getDomObserver());
-        assertNull(checkbox.getDomObserver());
+        assertNull(new UINodeTreeSource(plain).observer());
     }
 }

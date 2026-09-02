@@ -5,11 +5,11 @@ import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.Button;
-import com.crystalgui.ui.elements.Checkbox;
-import com.crystalgui.ui.elements.Slider;
-import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.control.Checkbox;
+import com.crystalgui.widget.control.Slider;
+import com.crystalgui.widget.text.UIText;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -36,7 +36,7 @@ public class SessionSoakTest {
 
     private static final int ROUNDS = 250;
 
-    private UIElement root;
+    private UINode root;
     private Slider slider;
     private Checkbox checkbox;
     private UIText label;
@@ -44,27 +44,27 @@ public class SessionSoakTest {
 
     private InMemoryTransport<Object> serverLink;
     private InMemoryTransport<Object> clientLink;
-    private ServerUiSession<Object> server;
-    private ClientUiSession<Object> client;
+    private ServerUiSession<UINode, Object> server;
+    private ClientUiSession<UINode, Object> client;
 
     @Before
     public void setUp() {
-        root = new UIElement();
+        root = new UINode();
         label = new UIText("round 0");
         button = new Button("Press me");
         checkbox = new Checkbox("Enabled");
         slider = new Slider();
         slider.setRange(0f, 1000f);
-        root.addChild(label);
-        root.addChild(button);
-        root.addChild(checkbox);
-        root.addChild(slider);
+        root.append(label);
+        root.append(button);
+        root.append(checkbox);
+        root.append(slider);
 
         InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
         serverLink = pair[0];
         clientLink = pair[1];
-        server = new ServerUiSession<>(1, root, serverLink, PlainOps.INSTANCE);
-        client = new ClientUiSession<>(clientLink, PlainOps.INSTANCE);
+        server = Sessions.serve(1, root, serverLink);
+        client = Sessions.view(clientLink);
     }
 
     private void settle() {
@@ -76,8 +76,8 @@ public class SessionSoakTest {
         }
     }
 
-    private <E extends UIElement> E clientChild(int index, Class<E> type) {
-        return type.cast(client.root().getChildren().get(index));
+    private <E extends UINode> E clientChild(int index, Class<E> type) {
+        return type.cast(client.root().children().get(index));
     }
 
     /**

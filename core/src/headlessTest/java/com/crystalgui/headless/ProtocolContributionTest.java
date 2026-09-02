@@ -7,8 +7,8 @@ import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.Button;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.control.Button;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -126,12 +126,12 @@ public class ProtocolContributionTest {
                 }));
         connect();
 
-        UIElement root = new UIElement();
-        root.addChild(new Button("Press me"));
-        ServerUiSession<Object> server = new ServerUiSession<>(1, root, a);
-        ClientUiSession<Object> client = new ClientUiSession<>(b);
+        UINode root = new UINode();
+        root.append(new Button("Press me"));
+        ServerUiSession<UINode, Object> server = Sessions.serveOn(1, root, a);
+        ClientUiSession<UINode, Object> client = Sessions.viewOn(b);
 
-        AtomicReference<UIElement> arrived = new AtomicReference<>();
+        AtomicReference<UINode> arrived = new AtomicReference<>();
         client.onWindowOpened(arrived::set);
 
         AtomicReference<String> body = new AtomicReference<>();
@@ -153,7 +153,7 @@ public class ProtocolContributionTest {
         assertEquals("the workspace answered on the shared wire",
                 "contents of src/Main.java", body.get());
         assertEquals("and the window arrived on the same one",
-                1, arrived.get() == null ? -1 : arrived.get().getChildren().size());
+                1, arrived.get() == null ? -1 : arrived.get().children().size());
     }
 
     /**

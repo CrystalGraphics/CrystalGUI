@@ -10,11 +10,11 @@ import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.serialization.Codecs;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.Checkbox;
-import com.crystalgui.ui.elements.Slider;
-import com.crystalgui.ui.elements.TextField;
-import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.control.Checkbox;
+import com.crystalgui.widget.control.Slider;
+import com.crystalgui.widget.control.TextField;
+import com.crystalgui.widget.text.UIText;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -33,28 +33,28 @@ public class SessionHandshakeTest {
 
     private InMemoryTransport<Object> serverLink;
     private InMemoryTransport<Object> clientLink;
-    private ServerUiSession<Object> server;
-    private ClientUiSession<Object> client;
+    private ServerUiSession<UINode, Object> server;
+    private ClientUiSession<UINode, Object> client;
 
-    private static UIElement buildUi() {
-        UIElement root = new UIElement();
+    private static UINode buildUi() {
+        UINode root = new UINode();
         root.setId("settings").addClass("panel");
         root.layout(l -> l.width(220).height(140));
 
-        root.addChild(new UIText("Server Settings"));
+        root.append(new UIText("Server Settings"));
 
         Checkbox pvp = new Checkbox("Enable PvP");
         pvp.setChecked(true);
-        root.addChild(pvp);
+        root.append(pvp);
 
         Slider difficulty = new Slider();
         difficulty.setRange(0f, 3f).setStep(1f).setValue(2f);
-        root.addChild(difficulty);
+        root.append(difficulty);
 
         TextField motd = new TextField();
         motd.setPlaceholder("message of the day");
         motd.setText("Welcome!");
-        root.addChild(motd);
+        root.append(motd);
         return root;
     }
 
@@ -63,8 +63,8 @@ public class SessionHandshakeTest {
         InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
         serverLink = pair[0];
         clientLink = pair[1];
-        server = new ServerUiSession<>(7, buildUi(), serverLink, PlainOps.INSTANCE);
-        client = new ClientUiSession<>(clientLink, PlainOps.INSTANCE);
+        server = Sessions.serve(7, buildUi(), serverLink);
+        client = Sessions.view(clientLink);
     }
 
     /** Runs the exchange to completion: deliver, tick, repeat until nothing is in flight. */
@@ -116,23 +116,23 @@ public class SessionHandshakeTest {
         server.open();
         settle();
 
-        UIElement rebuilt = client.root();
+        UINode rebuilt = client.root();
         assertNotNull("the client should have a tree", rebuilt);
-        assertEquals("settings", rebuilt.getId());
+        assertEquals("settings", rebuilt.id());
         assertTrue(rebuilt.hasClass("panel"));
-        assertEquals(4, rebuilt.getChildren().size());
+        assertEquals(4, rebuilt.children().size());
 
         // Concrete types, not just tags — the whole point of registry-based reconstruction.
-        assertTrue(rebuilt.getChildren().get(0) instanceof UIText);
-        assertTrue(rebuilt.getChildren().get(1) instanceof Checkbox);
-        assertTrue(rebuilt.getChildren().get(2) instanceof Slider);
-        assertTrue(rebuilt.getChildren().get(3) instanceof TextField);
+        assertTrue(rebuilt.children().get(0) instanceof UIText);
+        assertTrue(rebuilt.children().get(1) instanceof Checkbox);
+        assertTrue(rebuilt.children().get(2) instanceof Slider);
+        assertTrue(rebuilt.children().get(3) instanceof TextField);
 
         // ...and their state came with them.
-        assertEquals("Server Settings", ((UIText) rebuilt.getChildren().get(0)).getText());
-        assertTrue(((Checkbox) rebuilt.getChildren().get(1)).isChecked());
-        assertEquals(2f, ((Slider) rebuilt.getChildren().get(2)).getValue(), 0.001f);
-        assertEquals("Welcome!", ((TextField) rebuilt.getChildren().get(3)).getText());
+        assertEquals("Server Settings", ((UIText) rebuilt.children().get(0)).getText());
+        assertTrue(((Checkbox) rebuilt.children().get(1)).isChecked());
+        assertEquals(2f, ((Slider) rebuilt.children().get(2)).getValue(), 0.001f);
+        assertEquals("Welcome!", ((TextField) rebuilt.children().get(3)).getText());
     }
 
     @Test
@@ -187,8 +187,8 @@ public class SessionHandshakeTest {
 
         // A second server session over the same link, for an identical UI — identical content, so
         // identical hash. The client, and therefore its cache, is the same object.
-        ServerUiSession<Object> second =
-                new ServerUiSession<>(8, buildUi(), serverLink, PlainOps.INSTANCE);
+        ServerUiSession<UINode, Object> second =
+                Sessions.serve(8, buildUi(), serverLink);
         second.open();
         assertEquals("precondition: an identical UI must hash the same",
                 server.descHash(), second.descHash());
@@ -202,14 +202,14 @@ public class SessionHandshakeTest {
                 0, countMethod(clientLink, UiMethods.DESCRIPTION));
         assertEquals("and must not be sent again", 0, countResponses(serverLink));
         assertNotNull("yet the client still rebuilt the tree", client.root());
-        assertEquals(4, client.root().getChildren().size());
+        assertEquals(4, client.root().children().size());
     }
 
     /** The same UI built twice hashes the same, which is what makes a cache hit possible at all. */
     @Test
     public void anIdenticalUiProducesAnIdenticalHash() {
         InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
-        ServerUiSession<Object> other = new ServerUiSession<>(9, buildUi(), pair[0], PlainOps.INSTANCE);
+        ServerUiSession<UINode, Object> other = Sessions.serve(9, buildUi(), pair[0]);
         server.open();
         other.open();
         assertEquals(server.descHash(), other.descHash());
@@ -217,11 +217,11 @@ public class SessionHandshakeTest {
 
     @Test
     public void aDifferentUiProducesADifferentHash() {
-        UIElement changed = buildUi();
-        ((Checkbox) changed.getChildren().get(1)).setChecked(false);
+        UINode changed = buildUi();
+        ((Checkbox) changed.children().get(1)).setChecked(false);
 
         InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
-        ServerUiSession<Object> other = new ServerUiSession<>(9, changed, pair[0], PlainOps.INSTANCE);
+        ServerUiSession<UINode, Object> other = Sessions.serve(9, changed, pair[0]);
         server.open();
         other.open();
         assertNotEquals(server.descHash(), other.descHash());
@@ -240,7 +240,7 @@ public class SessionHandshakeTest {
         Object bogus = EnvelopeCodec.encode(PlainOps.INSTANCE,
                 new Envelope.Notification<>(UiMethods.OPEN_WINDOW, open.encode()));
         clientLink.setReceiver(raw -> { });
-        ClientUiSession<Object> isolated = new ClientUiSession<>(clientLink, PlainOps.INSTANCE);
+        ClientUiSession<UINode, Object> isolated = Sessions.view(clientLink);
         serverLink.send(bogus);
         clientLink.deliver();
         isolated.tick();

@@ -27,10 +27,10 @@ import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.ElementRegistry;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.Button;
-import com.crystalgui.ui.elements.Switch;
-import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.control.Switch;
+import com.crystalgui.widget.text.UIText;
 
 import org.junit.After;
 import org.junit.Before;
@@ -261,7 +261,7 @@ public class WindowLifecycleTest {
     public void openingUnderAKeyThatIsAlreadyOpenBringsTheExistingWindowForward() {
         ServerWindow<TestPanel> first = server.open(TestPanel.TYPE, "test:one");
         settle();
-        UIElement firstRoot = mount.mounted.get(0).root();
+        UINode firstRoot = mount.mounted.get(0).root();
 
         ServerWindow<TestPanel> again = server.open(TestPanel.TYPE, "test:one");
         settle();
@@ -687,15 +687,15 @@ public class WindowLifecycleTest {
     @Test
     public void aFieldWithAnInitializerIsKeptAndStillNamed() {
         DeclaredPanel panel = DeclaredPanel.TYPE.build(null);
-        assertEquals("press", panel.press.getId());
+        assertEquals("press", panel.press.id());
         assertEquals("the initializer's own label survived", "press-label", panel.press.getText());
         assertNotNull("and the null field was created for us", panel.power);
-        assertEquals("power", panel.power.getId());
+        assertEquals("power", panel.power.id());
     }
 
     // ── Fixtures ────────────────────────────────────────────────────────────
 
-    private static String textOf(@Nullable UIElement element) {
+    private static String textOf(@Nullable UINode element) {
         return element instanceof UIText ? ((UIText) element).getText() : null;
     }
 
@@ -703,7 +703,7 @@ public class WindowLifecycleTest {
      * The workhorse: one class, both sides, per-instance counters. Its MODEL is its key — which is
      * the honest general shape anyway, a key naming the window's subject.
      */
-    public static class TestPanel extends UIElement implements Networked<String> {
+    public static class TestPanel extends UINode implements Networked<String> {
 
         static final UiType<TestPanel, String> TYPE = UiType.of("test:panel", TestPanel::new);
 
@@ -720,8 +720,8 @@ public class WindowLifecycleTest {
 
         @Override
         public void build(String key) {
-            addChild(press);
-            addChild(label);
+            append(press);
+            append(label);
         }
 
         @Override
@@ -762,7 +762,7 @@ public class WindowLifecycleTest {
     }
 
     /** The auto-creation case: a null field the framework instantiates and names. */
-    public static class DeclaredPanel extends UIElement implements Networked<String> {
+    public static class DeclaredPanel extends UINode implements Networked<String> {
 
         static final UiType<DeclaredPanel, String> TYPE = UiType.of("test:declared", DeclaredPanel::new);
 
@@ -771,13 +771,13 @@ public class WindowLifecycleTest {
 
         @Override
         public void build(String model) {
-            addChild(power);
-            addChild(press);
+            append(power);
+            append(press);
         }
     }
 
     /** A declared part its layout forgot to add — the shape a binding must refuse loudly. */
-    public static class SabotagedPanel extends UIElement implements Networked<String> {
+    public static class SabotagedPanel extends UINode implements Networked<String> {
 
         static final UiType<SabotagedPanel, String> TYPE = UiType.of("test:sabotaged", SabotagedPanel::new);
 
@@ -789,7 +789,7 @@ public class WindowLifecycleTest {
 
         @Override
         public void build(String model) {
-            addChild(press);   // orphan forgotten
+            append(press);   // orphan forgotten
         }
 
         @Override
@@ -803,7 +803,7 @@ public class WindowLifecycleTest {
         }
     }
 
-    public static class NotifyingPanel extends UIElement implements Networked<String> {
+    public static class NotifyingPanel extends UINode implements Networked<String> {
 
         static final UiType<NotifyingPanel, String> TYPE = UiType.of("test:notifying", NotifyingPanel::new);
 
@@ -813,7 +813,7 @@ public class WindowLifecycleTest {
 
         @Override
         public void build(String model) {
-            addChild(press);
+            append(press);
         }
 
         @Override
@@ -827,7 +827,7 @@ public class WindowLifecycleTest {
      * whoever holds it. No {@code UiType} of its own needed for the field case: the parent's
      * registration registers its tag.
      */
-    public static class SavePanel extends UIElement implements Networked<String> {
+    public static class SavePanel extends UINode implements Networked<String> {
 
         public Button late = new Button("late");
 
@@ -844,7 +844,7 @@ public class WindowLifecycleTest {
 
         @Override
         public void build(String slice) {
-            addChild(late);
+            append(late);
         }
 
         @Override
@@ -872,7 +872,7 @@ public class WindowLifecycleTest {
     }
 
     /** A parent with a nested panel. The child is BUILT in layout, with the slice only it knows. */
-    public static class ParentPanel extends UIElement implements Networked<String> {
+    public static class ParentPanel extends UINode implements Networked<String> {
 
         static final UiType<ParentPanel, String> TYPE = UiType.of("test:parent", ParentPanel::new);
         static final UiType<SavePanel, String> CHILD = UiType.of("test:save", SavePanel::new);
@@ -882,9 +882,9 @@ public class WindowLifecycleTest {
 
         @Override
         public void build(String model) {
-            addChild(press);
+            append(press);
             save = CHILD.build(sliceOf(model));
-            addChild(save);   // the field name becomes its id, after layout, by the same rule
+            append(save);   // the field name becomes its id, after layout, by the same rule
         }
 
         @Override
@@ -898,7 +898,7 @@ public class WindowLifecycleTest {
     }
 
     /** Attaches the same child id twice — the collision the scope set exists to refuse. */
-    public static class DoubleAttachPanel extends UIElement implements Networked<String> {
+    public static class DoubleAttachPanel extends UINode implements Networked<String> {
 
         static final UiType<DoubleAttachPanel, String> TYPE =
                 UiType.of("test:double", DoubleAttachPanel::new);
@@ -908,7 +908,7 @@ public class WindowLifecycleTest {
         @Override
         public void build(String model) {
             save = ParentPanel.CHILD.build(model);
-            addChild(save);
+            append(save);
         }
 
         @Override
@@ -919,7 +919,7 @@ public class WindowLifecycleTest {
     }
 
     /** A parent reaching into a child's element — the boundary that used to be silently crossed. */
-    public static class OverridingPanel extends UIElement implements Networked<String> {
+    public static class OverridingPanel extends UINode implements Networked<String> {
 
         static final UiType<OverridingPanel, String> TYPE =
                 UiType.of("test:overriding", OverridingPanel::new);
@@ -929,7 +929,7 @@ public class WindowLifecycleTest {
         @Override
         public void build(String model) {
             save = ParentPanel.CHILD.build(model);
-            addChild(save);
+            append(save);
         }
 
         @Override
@@ -940,7 +940,7 @@ public class WindowLifecycleTest {
     }
 
     /** A child that arrives AFTER the window opened — dynamic content, named by hand. */
-    public static class LateChildPanel extends UIElement implements Networked<String> {
+    public static class LateChildPanel extends UINode implements Networked<String> {
 
         static final UiType<LateChildPanel, String> TYPE =
                 UiType.of("test:late-parent", LateChildPanel::new);
@@ -957,8 +957,8 @@ public class WindowLifecycleTest {
 
         @Override
         public void build(String model) {
-            addChild(press);
-            addChild(label);
+            append(press);
+            append(label);
         }
 
         @Override
@@ -970,7 +970,7 @@ public class WindowLifecycleTest {
             if (scope == null) throw new IllegalStateException("not served yet");
             child = ParentPanel.CHILD.build("late-slice");
             child.setId("child");   // dynamic content names itself; a field would have been named for it
-            addChild(child);
+            append(child);
             scope.attach(child, "late-slice");
         }
     }
@@ -1022,7 +1022,7 @@ public class WindowLifecycleTest {
                 }
 
                 @Override
-                public void contentReplaced(UIElement newRoot) {
+                public void contentReplaced(UINode newRoot) {
                 }
             };
         }

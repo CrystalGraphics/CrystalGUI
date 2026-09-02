@@ -14,7 +14,7 @@ import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.dom.UINode;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -41,8 +41,8 @@ import static org.junit.Assert.assertTrue;
 public class WorkspaceProtocolTest {
 
     private InMemoryFileSystem files;
-    private ClientUiSession<Object> client;
-    private ServerUiSession<Object> server;
+    private ClientUiSession<UINode, Object> client;
+    private ServerUiSession<UINode, Object> server;
     private InMemoryTransport<Object> toServer;
     private InMemoryTransport<Object> toClient;
 
@@ -66,11 +66,11 @@ public class WorkspaceProtocolTest {
         toServer = pair[0];
         toClient = pair[1];
 
-        server = new ServerUiSession<>(1, new UIElement(), toServer, PlainOps.INSTANCE);
+        server = Sessions.serve(1, new UINode(), toServer);
         new WorkspaceRpc<Object>(service, WorkspaceActor.LOCAL).installOn(server::onCall);
         server.open();
 
-        client = new ClientUiSession<>(toClient, PlainOps.INSTANCE);
+        client = Sessions.view(toClient);
         pump();
     }
 
@@ -281,10 +281,10 @@ public class WorkspaceProtocolTest {
                 new WorkspaceService(registry, files, WorkspacePermission.DENY_ALL);
 
         InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
-        server = new ServerUiSession<>(2, new UIElement(), pair[0], PlainOps.INSTANCE);
+        server = Sessions.serve(2, new UINode(), pair[0]);
         new WorkspaceRpc<Object>(denied, WorkspaceActor.LOCAL).installOn(server::onCall);
         server.open();
-        client = new ClientUiSession<>(pair[1], PlainOps.INSTANCE);
+        client = Sessions.view(pair[1]);
         toServer = pair[0];
         toClient = pair[1];
         pump();

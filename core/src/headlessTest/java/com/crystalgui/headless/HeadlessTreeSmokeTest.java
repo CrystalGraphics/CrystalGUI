@@ -1,17 +1,19 @@
 package com.crystalgui.headless;
 
+import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.dom.UINodeRegistry;
 import com.crystalgui.style.sheet.DeclarationParser;
 import com.crystalgui.ui.ElementRegistry;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.Button;
-import com.crystalgui.ui.elements.Checkbox;
-import com.crystalgui.ui.elements.Slider;
-import com.crystalgui.ui.elements.SplitView;
-import com.crystalgui.ui.elements.Switch;
-import com.crystalgui.ui.elements.Tab;
-import com.crystalgui.ui.elements.TabView;
-import com.crystalgui.ui.elements.TextField;
-import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.control.Checkbox;
+import com.crystalgui.widget.control.Slider;
+import com.crystalgui.widget.layout.SplitView;
+import com.crystalgui.widget.control.Switch;
+import com.crystalgui.widget.layout.Tab;
+import com.crystalgui.widget.layout.TabView;
+import com.crystalgui.widget.control.TextField;
+import com.crystalgui.widget.text.UIText;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -25,7 +27,7 @@ import static org.junit.Assert.*;
  * reach a CrystalGraphics type. Assertions are there to stop the JIT or a future refactor from
  * eliding the calls entirely.</p>
  *
- * <p><b>No {@code UIWindow} is constructed anywhere.</b> That is the structural rule the whole
+ * <p><b>No {@code UIDocument} is constructed anywhere.</b> That is the structural rule the whole
  * server design rests on: no window means no Taffy tree, no style engine, no layout pass, and so no
  * path into text measurement. It is enforced by absence rather than by a flag, because a flag is
  * only ever an assertion that something <em>else</em> is supposed to honour.</p>
@@ -36,7 +38,7 @@ public class HeadlessTreeSmokeTest {
     public void everyBuiltinWidgetConstructsWithoutGraphics() {
         ElementRegistry.bootstrapBuiltins();
         for (String tag : ElementRegistry.tags()) {
-            UIElement element = ElementRegistry.create(tag);
+            UINode element = UINodeRegistry.create(Name.parse(tag));
             assertNotNull(tag + " failed to construct", element);
             assertEquals("tag must survive construction", tag, element.tagName());
         }
@@ -81,28 +83,28 @@ public class HeadlessTreeSmokeTest {
      */
     @Test
     public void coordinateTransformsWorkWithoutGraphics() {
-        UIElement element = new UIElement();
-        var local = element.screenToLocal(120f, 80f);
+        UINode element = new UINode();
+        var local = element.toLocal(120f, 80f);
         assertNotNull(local);
-        assertFalse(element.containsScreenPoint(120f, 80f)); // no layout ⇒ zero-sized ⇒ no hit
+        assertFalse(element.containsSurfacePoint(120f, 80f)); // no layout ⇒ zero-sized ⇒ no hit
     }
 
     /** Tree surgery, identity and queries — the operations a server session actually performs. */
     @Test
     public void treeMutationAndQueriesWorkWithoutGraphics() {
-        UIElement root = new UIElement();
+        UINode root = new UINode();
         root.setId("root");
 
         Checkbox checkbox = new Checkbox("agree");
         checkbox.addClass("row");
-        root.addChild(checkbox);
+        root.append(checkbox);
 
         Switch toggle = new Switch();
         toggle.addClass("row");
-        root.addChild(toggle);
+        root.append(toggle);
 
         Slider slider = new Slider();
-        root.addChild(slider);
+        root.append(slider);
 
         assertSame(checkbox, root.querySelector("#root .row"));
         assertEquals(2, root.querySelectorAll(".row").size());
@@ -112,8 +114,8 @@ public class HeadlessTreeSmokeTest {
         slider.setValue(0.5f);
         assertTrue(checkbox.isChecked());
 
-        root.removeChild(slider);
-        assertEquals(2, root.getChildren().size());
+        root.remove(slider);
+        assertEquals(2, root.children().size());
     }
 
     /** Composite widgets build their internal structure in their constructors — all of it headless. */
@@ -122,12 +124,12 @@ public class HeadlessTreeSmokeTest {
         TabView tabs = new TabView();
         Tab first = tabs.addTab("one");
         Tab second = tabs.addTab("two");
-        first.content().addChild(new UIText("pane content"));
+        first.content().append(new UIText("pane content"));
         tabs.selectTab(second);
         assertSame(second, tabs.getSelectedTab());
 
         SplitView split = new SplitView();
-        split.first(new UIElement());
+        split.first(new UINode());
         split.setPercentage(30f);
         assertEquals(30f, split.getPercentage(), 0.001f);
     }

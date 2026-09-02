@@ -11,21 +11,21 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.contract.WidgetContract;
-import com.crystalgui.ui.elements.Button;
-import com.crystalgui.ui.elements.Checkbox;
-import com.crystalgui.ui.elements.ColorSelector;
-import com.crystalgui.ui.elements.Dropdown;
-import com.crystalgui.ui.elements.ProgressBar;
-import com.crystalgui.ui.elements.Slider;
-import com.crystalgui.ui.elements.SplitView;
-import com.crystalgui.ui.elements.Switch;
-import com.crystalgui.ui.elements.TabView;
-import com.crystalgui.ui.elements.TextField;
-import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.control.Checkbox;
+import com.crystalgui.widget.form.ColorSelector;
+import com.crystalgui.widget.overlay.Dropdown;
+import com.crystalgui.widget.control.ProgressBar;
+import com.crystalgui.widget.control.Slider;
+import com.crystalgui.widget.layout.SplitView;
+import com.crystalgui.widget.control.Switch;
+import com.crystalgui.widget.layout.TabView;
+import com.crystalgui.widget.control.TextField;
+import com.crystalgui.widget.text.UIText;
 import org.junit.Test;
 
 /**
@@ -43,7 +43,7 @@ import org.junit.Test;
 public class WidgetContractRoundTripTest {
 
     /** Writes {@code from} through its contract and applies it to {@code to}. */
-    private static <W extends UIElement> W roundTrip(WidgetContract<W> contract, W from, W to) {
+    private static <W extends UINode> W roundTrip(WidgetContract<W> contract, W from, W to) {
         StateMap<Object> wire = new StateMap<>(PlainOps.INSTANCE);
         contract.write(from, wire);
         contract.read(to, new StateMap<>(PlainOps.INSTANCE, wire.encode()));

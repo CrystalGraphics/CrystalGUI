@@ -15,9 +15,9 @@ import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.ElementRegistry;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.Button;
-import com.crystalgui.ui.elements.TextField;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.control.TextField;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.After;
@@ -37,9 +37,9 @@ public class ViewCommandTest {
     private InMemoryTransport<Object>[] link;
     private ProtocolConnection<Object> serverEnd;
     private ProtocolConnection<Object> clientEnd;
-    private ServerUiSession<Object> server;
-    private ClientUiSession<Object> client;
-    private UIElement root;
+    private ServerUiSession<UINode, Object> server;
+    private ClientUiSession<UINode, Object> client;
+    private UINode root;
     private TextField field;
     private Button button;
 
@@ -50,19 +50,19 @@ public class ViewCommandTest {
         Protocols.resetForTesting();
         ElementRegistry.bootstrapBuiltins();
 
-        root = new UIElement();
+        root = new UINode();
         field = new TextField();
         button = new Button("Press");
-        root.addChild(field);
-        root.addChild(button);
+        root.append(field);
+        root.append(button);
 
         link = InMemoryTransport.pair();
         serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "alice");
         clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
-        server = new ServerUiSession<>(1, root, serverEnd);
-        client = new ClientUiSession<>(clientEnd);
+        server = Sessions.serveOn(1, root, serverEnd);
+        client = Sessions.viewOn(clientEnd);
         // Stands in for ClientWindows' applier: this test is about what CROSSES, and applying a focus
-        // needs a UIWindow, fonts and a style engine -- none of which exist here by design.
+        // needs a UIDocument, fonts and a style engine -- none of which exist here by design.
         client.onViewCommand((command, args) -> applied.add(command + ":" + args.getInt("nid", -1)));
         server.open();
         settle();
@@ -139,7 +139,7 @@ public class ViewCommandTest {
     /** An element the client has never been described cannot be named. */
     @Test
     public void aCommandAboutAnUndescribedElementIsNotSent() {
-        UIElement stranger = new UIElement();
+        UINode stranger = new UINode();
         server.viewOn(ViewCommand.FOCUS, stranger, null);
         settle();
         assertTrue(applied.isEmpty());

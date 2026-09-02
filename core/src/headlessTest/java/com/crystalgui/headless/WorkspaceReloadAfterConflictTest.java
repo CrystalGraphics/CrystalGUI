@@ -13,7 +13,7 @@ import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.dom.UINode;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -36,8 +36,8 @@ import static org.junit.Assert.assertTrue;
 public class WorkspaceReloadAfterConflictTest {
 
     private InMemoryFileSystem files;
-    private ServerUiSession<Object> server;
-    private ClientUiSession<Object> session;
+    private ServerUiSession<UINode, Object> server;
+    private ClientUiSession<UINode, Object> session;
     private WorkspaceClient<Object> client;
     private InMemoryTransport<Object> a;
     private InMemoryTransport<Object> b;
@@ -55,10 +55,10 @@ public class WorkspaceReloadAfterConflictTest {
         InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
         a = pair[0];
         b = pair[1];
-        server = new ServerUiSession<>(1, new UIElement(), a, PlainOps.INSTANCE);
+        server = Sessions.serve(1, new UINode(), a);
         new WorkspaceRpc<Object>(service, WorkspaceActor.LOCAL).installOn(server::onCall);
         server.open();
-        session = new ClientUiSession<>(b, PlainOps.INSTANCE);
+        session = Sessions.view(b);
         client = new WorkspaceClient<>(session, PlainOps.INSTANCE);
         pump();
     }

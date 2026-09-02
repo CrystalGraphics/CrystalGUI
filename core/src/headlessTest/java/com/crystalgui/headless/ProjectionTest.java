@@ -6,11 +6,11 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.ProgressBar;
-import com.crystalgui.ui.elements.Slider;
-import com.crystalgui.ui.elements.Switch;
-import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.control.ProgressBar;
+import com.crystalgui.widget.control.Slider;
+import com.crystalgui.widget.control.Switch;
+import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.projection.AutoProjection;
 import com.crystalgui.ui.projection.Projections;
 import java.util.ArrayList;
@@ -140,7 +140,7 @@ public class ProjectionTest {
 
     private record Row(int id, String text) { }
 
-    private static Projections rows(List<Row> items, UIElement into) {
+    private static Projections rows(List<Row> items, UINode into) {
         return Projections.create().each(() -> items, into, Row::id,
                 item -> new UIText(item.text()),
                 (element, item) -> ((UIText) element).setText(item.text()));
@@ -149,62 +149,62 @@ public class ProjectionTest {
     @Test
     public void anInsertKeepsEveryOtherRowsInstance() {
         List<Row> items = new ArrayList<>(List.of(new Row(1, "one"), new Row(2, "two")));
-        UIElement list = new UIElement();
+        UINode list = new UINode();
         Projections projections = rows(items, list);
         projections.run();
 
-        UIElement firstBefore = list.describedChildrenFor().get(0);
-        UIElement secondBefore = list.describedChildrenFor().get(1);
+        UINode firstBefore = list.children().get(0);
+        UINode secondBefore = list.children().get(1);
 
         items.add(1, new Row(3, "inserted"));
         projections.run();
 
-        assertEquals(3, list.describedChildrenFor().size());
+        assertEquals(3, list.children().size());
         assertSame("an untouched row must keep its ELEMENT -- over a wire this is one insert op "
                         + "rather than a rebuilt child list", firstBefore,
-                list.describedChildrenFor().get(0));
-        assertEquals("inserted", ((UIText) list.describedChildrenFor().get(1)).getText());
-        assertSame(secondBefore, list.describedChildrenFor().get(2));
+                list.children().get(0));
+        assertEquals("inserted", ((UIText) list.children().get(1)).getText());
+        assertSame(secondBefore, list.children().get(2));
     }
 
     @Test
     public void aRemoveTakesOnlyTheRowItNames() {
         List<Row> items = new ArrayList<>(List.of(new Row(1, "one"), new Row(2, "two")));
-        UIElement list = new UIElement();
+        UINode list = new UINode();
         Projections projections = rows(items, list);
         projections.run();
-        UIElement secondBefore = list.describedChildrenFor().get(1);
+        UINode secondBefore = list.children().get(1);
 
         items.remove(0);
         projections.run();
 
-        assertEquals(1, list.describedChildrenFor().size());
-        assertSame(secondBefore, list.describedChildrenFor().get(0));
+        assertEquals(1, list.children().size());
+        assertSame(secondBefore, list.children().get(0));
     }
 
     /** A reorder moves the same elements; it does not rebuild them. */
     @Test
     public void aReorderMovesRatherThanRebuilds() {
         List<Row> items = new ArrayList<>(List.of(new Row(1, "one"), new Row(2, "two")));
-        UIElement list = new UIElement();
+        UINode list = new UINode();
         Projections projections = rows(items, list);
         projections.run();
-        UIElement one = list.describedChildrenFor().get(0);
-        UIElement two = list.describedChildrenFor().get(1);
+        UINode one = list.children().get(0);
+        UINode two = list.children().get(1);
 
         items.clear();
         items.add(new Row(2, "two"));
         items.add(new Row(1, "one"));
         projections.run();
 
-        assertSame(two, list.describedChildrenFor().get(0));
-        assertSame(one, list.describedChildrenFor().get(1));
+        assertSame(two, list.children().get(0));
+        assertSame(one, list.children().get(1));
     }
 
     @Test
     public void anUnchangedListDoesNothing() {
         List<Row> items = new ArrayList<>(List.of(new Row(1, "one")));
-        UIElement list = new UIElement();
+        UINode list = new UINode();
         Projections projections = rows(items, list);
         projections.run();
         assertEquals("a settled list must not churn its children every tick", 0, projections.run());
@@ -212,11 +212,11 @@ public class ProjectionTest {
 
     @Test
     public void aNullListIsEmptyRatherThanAFailure() {
-        UIElement list = new UIElement();
+        UINode list = new UINode();
         Projections projections = Projections.create().each(() -> null, list, Object::toString,
                 item -> new UIText(""), (element, item) -> { });
         projections.run();
-        assertTrue(list.describedChildrenFor().isEmpty());
+        assertTrue(list.children().isEmpty());
     }
 
     /**
@@ -230,12 +230,12 @@ public class ProjectionTest {
     @Test
     public void duplicateKeysAreRefused() {
         List<Row> items = new ArrayList<>(List.of(new Row(1, "one"), new Row(1, "again")));
-        UIElement list = new UIElement();
+        UINode list = new UINode();
         Projections projections = rows(items, list);
 
         // Refused, and -- per the no-throw rule -- it does not take the frame with it.
         assertEquals(0, projections.run());
-        assertTrue("nothing may be half-built from a refused list", list.describedChildrenFor().size() <= 1);
+        assertTrue("nothing may be half-built from a refused list", list.children().size() <= 1);
     }
 
     /**
@@ -253,7 +253,7 @@ public class ProjectionTest {
     @Test
     public void anUnchangedRowIsNotRewrittenWhenTheModelReSnapshots() {
         List<Row> items = new ArrayList<>(List.of(new Row(1, "one")));
-        UIElement list = new UIElement();
+        UINode list = new UINode();
         int[] applies = { 0 };
         Projections projections = Projections.create().each(() -> items, list, Row::id,
                 item -> new UIText(item.text()),
@@ -273,7 +273,7 @@ public class ProjectionTest {
         items.set(0, new Row(1, "renamed"));
         projections.run();
         assertEquals(2, applies[0]);
-        assertEquals("renamed", ((UIText) list.describedChildrenFor().get(0)).getText());
+        assertEquals("renamed", ((UIText) list.children().get(0)).getText());
     }
 
     /** The mirror of the rule above, stated so a future "optimisation" has to argue with it. */
@@ -281,7 +281,7 @@ public class ProjectionTest {
     public void theSameInstanceIsReAppliedBecauseItMayHaveMutated() {
         Row shared = new Row(1, "one");
         List<Row> items = new ArrayList<>(List.of(shared));
-        UIElement list = new UIElement();
+        UINode list = new UINode();
         int[] applies = { 0 };
         Projections projections = Projections.create().each(() -> items, list, Row::id,
                 item -> new UIText(item.text()),
@@ -298,7 +298,7 @@ public class ProjectionTest {
     @Test
     public void closingDropsEverythingItHeld() {
         List<Row> items = new ArrayList<>(List.of(new Row(1, "one")));
-        UIElement list = new UIElement();
+        UINode list = new UINode();
         Projections projections = rows(items, list);
         projections.run();
         assertEquals(1, projections.size());

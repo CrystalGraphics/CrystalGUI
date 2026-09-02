@@ -13,7 +13,7 @@ import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.dom.UINode;
 import org.junit.Test;
 
 import java.nio.file.Paths;
@@ -38,7 +38,7 @@ import static org.junit.Assert.assertNotNull;
  */
 public class WorkspaceSceneOrderTest {
 
-    private record Rig(ServerUiSession<Object> server, ClientUiSession<Object> session,
+    private record Rig(ServerUiSession<UINode, Object> server, ClientUiSession<UINode, Object> session,
                        WorkspaceClient<Object> client, InMemoryTransport<Object>[] pair) {
 
         void pump(int times) {
@@ -59,12 +59,12 @@ public class WorkspaceSceneOrderTest {
                 new WorkspaceService(registry, files, WorkspacePermission.ALLOW_ALL);
 
         InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
-        ServerUiSession<Object> server =
-                new ServerUiSession<>(1, new UIElement(), pair[0], PlainOps.INSTANCE);
+        ServerUiSession<UINode, Object> server =
+                Sessions.serve(1, new UINode(), pair[0]);
         new WorkspaceRpc<Object>(service, WorkspaceActor.LOCAL).installOn(server::onCall);
         server.open();
 
-        ClientUiSession<Object> session = new ClientUiSession<>(pair[1], PlainOps.INSTANCE);
+        ClientUiSession<UINode, Object> session = Sessions.view(pair[1]);
         return new Rig(server, session, new WorkspaceClient<>(session, PlainOps.INSTANCE), pair);
     }
 

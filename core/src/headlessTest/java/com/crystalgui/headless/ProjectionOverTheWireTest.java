@@ -5,8 +5,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
-import com.crystalgui.example.machine.MachineModel;
-import com.crystalgui.example.machine.ui.MachinePanel;
+import com.crystalgui.app.machine.MachineModel;
+import com.crystalgui.app.machine.ui.MachinePanel;
 import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
@@ -17,7 +17,7 @@ import com.crystalgui.net.window.ServerWindows;
 import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.net.window.WindowProtocol;
 import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.dom.UINode;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -255,7 +255,7 @@ public class ProjectionOverTheWireTest {
             return new MountedWindow() {
                 @Override public void closedByServer(String reason) { }
                 @Override public void focus() { }
-                @Override public void contentReplaced(UIElement newRoot) { }
+                @Override public void contentReplaced(UINode newRoot) { }
             };
         }
     }

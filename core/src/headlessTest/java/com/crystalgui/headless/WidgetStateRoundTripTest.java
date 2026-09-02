@@ -1,15 +1,16 @@
 package com.crystalgui.headless;
 
+import com.crystalgui.net.mirror.UINodeMirror;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.Button;
-import com.crystalgui.ui.elements.Checkbox;
-import com.crystalgui.ui.elements.Slider;
-import com.crystalgui.ui.elements.Switch;
-import com.crystalgui.ui.elements.Tab;
-import com.crystalgui.ui.elements.TextField;
-import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.control.Checkbox;
+import com.crystalgui.widget.control.Slider;
+import com.crystalgui.widget.control.Switch;
+import com.crystalgui.widget.layout.Tab;
+import com.crystalgui.widget.control.TextField;
+import com.crystalgui.widget.text.UIText;
 import com.google.gson.JsonElement;
 import org.junit.Test;
 
@@ -29,15 +30,15 @@ import static org.junit.Assert.*;
 public class WidgetStateRoundTripTest {
 
     /** Mutate → write → read into a fresh instance → assert. The shape every case below uses. */
-    private <E extends UIElement> E roundTrip(Supplier<E> factory, Consumer<E> mutate) {
+    private <E extends UINode> E roundTrip(Supplier<E> factory, Consumer<E> mutate) {
         E original = factory.get();
         mutate.accept(original);
 
-        StateMap<JsonElement> written = new StateMap<>(JsonOps.INSTANCE);
-        original.writeStateTo(written);
+        UINodeMirror<JsonElement> mirror = new UINodeMirror<>(JsonOps.INSTANCE);
+        JsonElement written = mirror.encodeState(original);
 
         E restored = factory.get();
-        restored.readStateFrom(new StateMap<>(JsonOps.INSTANCE, written.encode()));
+        mirror.applyState(written, restored);
         return restored;
     }
 
@@ -104,13 +105,10 @@ public class WidgetStateRoundTripTest {
     /** A default-valued widget should carry nothing, so the common node stays small on the wire. */
     @Test
     public void anUnmodifiedWidgetWritesNoState() {
-        StateMap<JsonElement> out = new StateMap<>(JsonOps.INSTANCE);
-        new Checkbox().writeStateTo(out);
-        assertTrue("a default Checkbox should serialize to nothing at all", out.isEmpty());
-
-        StateMap<JsonElement> textOut = new StateMap<>(JsonOps.INSTANCE);
-        new UIText("").writeStateTo(textOut);
-        assertTrue(textOut.isEmpty());
+        UINodeMirror<JsonElement> mirror = new UINodeMirror<>(JsonOps.INSTANCE);
+        assertEquals("a default Checkbox should serialize to nothing at all",
+                0, mirror.encodeState(new Checkbox()).getAsJsonObject().size());
+        assertEquals(0, mirror.encodeState(new UIText("")).getAsJsonObject().size());
     }
 
     /** Reading a description written before a key existed must not wipe the widget's defaults. */
@@ -118,8 +116,8 @@ public class WidgetStateRoundTripTest {
     public void readingAnEmptyStateLeavesDefaultsIntact() {
         Slider slider = new Slider();
         slider.setRange(0f, 10f).setValue(7f);
-        slider.readStateFrom(new StateMap<>(JsonOps.INSTANCE,
-                new StateMap<JsonElement>(JsonOps.INSTANCE).encode()));
+        new UINodeMirror<>(JsonOps.INSTANCE)
+                .applyState(new StateMap<JsonElement>(JsonOps.INSTANCE).encode(), slider);
         // Absent keys fall back to the documented defaults rather than throwing.
         assertEquals(0f, slider.getValue(), 0.001f);
     }
@@ -127,8 +125,7 @@ public class WidgetStateRoundTripTest {
     /** The base element has no state of its own — it is pure structure. */
     @Test
     public void aPlainElementHasNoState() {
-        StateMap<JsonElement> out = new StateMap<>(JsonOps.INSTANCE);
-        new UIElement().writeStateTo(out);
-        assertTrue(out.isEmpty());
+        assertEquals(0, new UINodeMirror<>(JsonOps.INSTANCE)
+                .encodeState(new UINode()).getAsJsonObject().size());
     }
 }

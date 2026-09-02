@@ -15,25 +15,25 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import com.crystalgui.example.machine.ui.EnginePanel;
-import com.crystalgui.example.machine.ui.MachinePanel;
-import com.crystalgui.example.machine.MachineModel;
+import com.crystalgui.app.machine.ui.EnginePanel;
+import com.crystalgui.app.machine.ui.MachinePanel;
+import com.crystalgui.app.machine.MachineModel;
 import com.crystalgui.net.window.ClientWindows;
 import com.crystalgui.net.window.ClientWindowContext;
 import com.crystalgui.net.window.ServerWindow;
 import com.crystalgui.net.window.ServerWindows;
 import com.crystalgui.net.window.WindowProtocol;
 import com.crystalgui.net.window.WindowMount;
-import com.crystalgui.example.machine.ui.MachineStyles;
+import com.crystalgui.app.machine.ui.MachineStyles;
 import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.Button;
-import com.crystalgui.ui.elements.ProgressBar;
-import com.crystalgui.ui.elements.Switch;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.control.ProgressBar;
+import com.crystalgui.widget.control.Switch;
 
 /**
  * The worked example in {@code com.crystalgui.example}, run end to end.
@@ -150,7 +150,7 @@ public class MachineExampleTest {
                 }
 
                 @Override
-                public void contentReplaced(UIElement newRoot) {
+                public void contentReplaced(UINode newRoot) {
                 }
             };
         }
@@ -162,7 +162,7 @@ public class MachineExampleTest {
     public void theClientRebuildsTheServersTree() {
         Loopback net = new Loopback().open();
 
-        UIElement root = net.client;
+        UINode root = net.client;
         assertNotNull("the client never received a window", root);
 
         // Element COUNT, not a spot check. The two sides derive network ids from a document-order
@@ -402,7 +402,7 @@ public class MachineExampleTest {
      * <p>Nothing on the client registered {@code EnginePanel}: {@code MachinePanel.TYPE}'s own
      * declaration walks its fields and registers the tag of every nested panel it finds, which is what
      * lets a description saying {@code <enginepanel>} decode into the class. Without that the tree
-     * would still rebuild — as a {@link UIElement} — and every field on it would be null.</p>
+     * would still rebuild — as a {@link UINode} — and every field on it would be null.</p>
      */
     @Test
     public void theClientRebuildsTheNestedPanelToo() {
@@ -625,9 +625,9 @@ public class MachineExampleTest {
         }
     }
 
-    private static int countElements(UIElement element) {
+    private static int countElements(UINode element) {
         int total = 1;
-        for (UIElement child : element.getChildren()) total += countElements(child);
+        for (UINode child : element.children()) total += countElements(child);
         return total;
     }
 }
