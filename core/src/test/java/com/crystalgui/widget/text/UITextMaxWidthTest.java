@@ -1,0 +1,93 @@
+package com.crystalgui.widget.text;
+
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.text.UIText;
+import com.crystalgui.testsupport.UiDocumentTestBase;
+import org.junit.Test;
+
+import static org.junit.Assert.*;
+
+/**
+ * {@link UIText} honours its own {@code max-width} while self-sizing — CSS shrink-to-fit.
+ *
+ * <p>{@code width: auto} plus a {@code max-width} wraps at the max on the web. This engine used to
+ * treat "self-sizing" as "unbounded", so a {@code max-width} could only ever clip the <em>box</em>
+ * while the glyphs kept their full unwrapped run and spilled straight out of it. It showed up as a
+ * tooltip that ran off the side of the screen, and it silently broke edge-clamping too — placement
+ * measures the box, so a box that doesn't match what's drawn makes every placement decision wrong.</p>
+ *
+ * <p>These assert against {@link UIText} directly rather than through a widget: it is the element
+ * that owns the wrap decision, and a test one layer up would pass or fail for reasons that have
+ * nothing to do with it.</p>
+ */
+public class UITextMaxWidthTest extends UiDocumentTestBase {
+
+    private static final String LONG = "Long enough that it has to wrap onto several lines instead of one.";
+
+    /** Root is wide and the text is a free-standing child, so nothing but max-width can bound it. */
+    private UIText textIn(UINode root, java.util.function.Consumer<UIText> configure) {
+        UIText text = new UIText(LONG);
+        configure.accept(text);
+        root.append(text);
+        document.append(root);// uiScale 2 -> 800x800 logical
+        frame();
+        return text;
+    }
+
+    @Test
+    public void aMaxWidthWrapsSelfSizingText() {
+        UINode root = new UINode().layout(l -> l.width(800).height(800));
+        UIText text = textIn(root, t -> t.layout(l -> l.maxWidth(80)));
+
+        assertTrue("must not exceed its max-width, was " + text.box().width(),
+                text.box().width() <= 80.5f);
+        assertTrue("wrapping must make it multiple lines tall, was " + text.box().height(),
+                text.box().height() > 40f);
+    }
+
+    /** A tighter bound must wrap harder — proves the bound is actually feeding the shaper rather
+     * than the box merely being clamped after the fact. */
+    @Test
+    public void aTighterMaxWidthProducesMoreLines() {
+        UINode wideRoot = new UINode().layout(l -> l.width(800).height(800));
+        float tallAt80 = textIn(wideRoot, t -> t.layout(l -> l.maxWidth(80)))
+                .box().height();
+
+        UINode narrowRoot = new UINode().layout(l -> l.width(800).height(800));
+        float tallAt40 = textIn(narrowRoot, t -> t.layout(l -> l.maxWidth(40)))
+                .box().height();
+
+        assertTrue("40px must wrap to more lines than 80px (" + tallAt40 + " vs " + tallAt80 + ")",
+                tallAt40 > tallAt80);
+    }
+
+    /** Only a definite length is a usable bound. A percentage would have to resolve against a
+     * containing block that, by definition of self-sizing, never gave this element a width. */
+    @Test
+    public void anAutoMaxWidthLeavesTextUnbounded() {
+        UINode root = new UINode().layout(l -> l.width(800).height(800));
+        UIText text = textIn(root, t -> { });
+
+        assertTrue("with no max-width it should stay on one line, was "
+                        + text.box().height(),
+                text.box().height() < 40f);
+    }
+
+    /** The bound is the content box, so the element's own padding comes off first — otherwise a
+     * padded text element wraps exactly its horizontal padding too late and overflows. */
+    @Test
+    public void paddingIsSubtractedFromTheWrapBound() {
+        UINode bare = new UINode().layout(l -> l.width(800).height(800));
+        float heightWithoutPadding = textIn(bare, t -> t.layout(l -> l.maxWidth(80)))
+                .box().height();
+
+        UINode padded = new UINode().layout(l -> l.width(800).height(800));
+        float heightWithPadding = textIn(padded, t -> t.layout(l -> l.maxWidth(80).paddingLeft(20).paddingRight(20)))
+                .box().height();
+
+        assertTrue("padding must shrink the usable wrap width, giving more lines ("
+                        + heightWithPadding + " vs " + heightWithoutPadding + ")",
+                heightWithPadding > heightWithoutPadding);
+    }
+}
