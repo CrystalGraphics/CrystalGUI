@@ -2387,6 +2387,74 @@ deleted (M8's job, done here because there is nothing left to port).
 
 ---
 
+### 6.10 — The Node/Element seam · **M** · after: 6.9
+
+**Why, measured.** `UINode` carries **154 public members**. The old `UIElement` it replaced carried
+166. The class §0 introduced to be *"identity, attributes, children, shadow root, events — and
+NOTHING else: no layout, no paint, no geometry"* now answers `box()`, `setBox`, `scrollTo`,
+`toLocal`, `paintContent`, nine pseudo-class state flags, the whole style surface and — since 6.7 —
+ten resize members. It arrived there one defensible commit at a time, which is exactly how the class
+it replaced got to 166. A seam is the only thing that stops the drift, because it makes every new
+capability answer *Node or Element?* rather than defaulting to "the node class".
+
+**The bottom of the chain already exists.** `EventTarget` is an empty marker interface and
+`UINode implements EventTarget`, so the web's `EventTarget → Node → Element → HTMLElement` is half
+built. This milestone adds the middle join: `UIElement extends UINode`, with the name coming back to
+what 303 ported files and every reader already call it.
+
+**The split**, from the DOM as it actually is rather than by analogy:
+
+| stays on `UINode` (Node) | moves to `UIElement` (Element) |
+|---|---|
+| `name()` (nodeName), `document()`, `parent()`, `root()`, `isConnected()` | `tagName()`, `matchesType()`, `typeKeys()` |
+| `children()`, `childCount()`, `indexOf`, `contains`, `depth()` | attributes (`get`/`set`/`has`/`setAttributes`), `id`, every class method |
+| `append`, `insertAt`, `remove`, `removeAll`, `removeSelf`, `moveTo`, `setOnlyChild` | `attachShadow`, `shadowRoot`, `containingShadowRoot`, `shadowHost`, `partName` |
+| the composed tree — `composedParent/Children/Subtree`, `assignedSlot`, `retarget`, `isInShadowTree` | style — `getStyle`, `style`/`layout`/`generalStyle`, `computedStyle`, `styleEngine`, `invalidateStyleMatch`, `computedChanged` |
+| events, because they are `EventTarget`'s and that is below Node | geometry (CSSOM View) — `box`, `setBox`, `toLocal`, `containsSurfacePoint`, `scroll*`, `scrollExtent`, `setScrollExempt` |
+| freeze/thaw, `markStructureChanged`, `markTreeDirty` | state — hovered, pressed, focused, focus-visible, focus-within, enabled, checked, blank, invalid |
+| `querySelector*`, `getElementById`, `getElementsByClassName` — see below | policy — focus, hit-test, inert, displayed, popover, resize |
+| | `paintContent`/`paintDecoration`, `consumesTextInput`, `claimsChord`, `pressBlocked`, the scope accessors |
+
+Roughly **40 on Node and 110 on Element**, and Node's forty are all tree.
+
+**Two judgement calls, both taken from the spec rather than from taste.** The query methods are
+`ParentNode`'s, which `Document`, `DocumentFragment` and `Element` all implement — so they stay on
+`UINode`, or a shadow root loses the ability to search itself. And inline style is strictly
+`HTMLElement`'s; it goes on `UIElement` regardless, because a third class earns nothing here.
+
+**The payoff is the subclasses, not the rename.**
+
+- `ShadowRoot extends UINode` — a shadow root is a `DocumentFragment`, not an element. Today it
+  inherits attributes, classes, a part name and `attachShadow`, none of which mean anything on it.
+- `UISlot extends UIElement` — `HTMLSlotElement` is an element. The cursor's `auto` rule keys on
+  `instanceof UISlot` and is unaffected.
+- `UIDocument` — the one place the seam costs something. See below.
+
+**`UIDocument` is a Document AND the root element, and the web says those are two things.** There,
+`Document` is a Node and the root is `document.documentElement`; here one class is both, and
+`document.append(...)` and `document.box()` appear in hundreds of places including every fixture.
+
+> **Decision: `UIDocument extends UIElement`, as a documented divergence** — *our Document is also
+> the root element*. It keeps the whole value of the split (the two subclasses above, and 154 → 40 +
+> 110) for one sentence of divergence, where the faithful form — `extends UINode` plus a
+> `root()` returning a `UIElement` — is a mechanical rewrite of every call site whose RECEIVER
+> changes, which no IDE rename performs. Left as a follow-up rather than refused: if the day comes
+> that a document needs to stop being styleable, this is the shape.
+
+**Why after 6.9 and not before.** `UIElement` is the old engine's class until 6.9 deletes it, and two
+classes of that name in one workspace is a shape this milestone has already paid for: `DataKey` is
+interned by name, so `GraphView` existing in two packages threw *"already declared as …, not …"* in
+any test that touched both (6.4). `EngineBoundaryTest`'s class lists are string literals, so a rename
+slides past them without failing. **The split and the rename are independent** — only the rename
+carries the collision — so a split done earlier under the current name is safe if it is wanted sooner.
+
+**Accepts.** Every surviving test green with no behaviour change of any kind: this milestone moves
+members between two classes in one hierarchy and renames one. `ShadowRoot` no longer compiles against
+any attribute, class or part method. `UINode`'s public count is under fifty, and a new capability
+landing on it fails review with the table above as the reason.
+
+---
+
 ## 6. Dependency view
 
 ```
@@ -2396,12 +2464,13 @@ M5 ──► 6.0 machinery + ledger + fixtures
          │                                  │                            └─► 6.5 editor
          │                                  └─► 6.6 desktop (needs 6.0's D16 hooks, Dialog, Popover)
          └───────────────────────────────────────────────────────────────────┐
-                                    6.3 + 6.5 + 6.6 ──► 6.7 workbench + dock + apps ──► 6.8 networking ──► 6.9 cutover
+                                    6.3 + 6.5 + 6.6 ──► 6.7 workbench + dock + apps ──► 6.8 networking ──► 6.9 cutover ──► 6.10 Node/Element seam
 ```
 
 6.4 and 6.5 can be worked in either order after 6.3; 6.6 can start after 6.2 and run beside 6.3–6.5.
 Nothing in 6.7 starts before the desktop is on the new engine, because the workbench's tool windows
-are windows. The game is on the old engine until 6.9.
+are windows. The game is on the old engine until 6.9. 6.10 is last because it takes the name
+`UIElement` back, and that name belongs to the old engine until 6.9 has deleted it.
 
 ---
 
