@@ -1079,7 +1079,8 @@ completionpopup {
  * a space between the name and its own parameter list -- `arraycopy (Object, int, ...)`, which reads as two
  * things rather than one signature. The one place a gap is wanted is after the icon, so it is a margin
  * there instead. Everything else is separated by the grow-only spacer. */
-.__completion-icon__ {
+.__completion-icon__,
+::part(pre-icon).__completion-icon__ {
     margin-right: 4px;
 }
 
@@ -1103,7 +1104,8 @@ completionpopup {
  *
  * A fixed box so every label starts at the same x -- a ragged left edge is what makes a list of
  * identifiers hard to scan. The DRAWING comes from the kind class below; this only reserves the space. */
-.__completion-icon__ {
+.__completion-icon__,
+::part(pre-icon).__completion-icon__ {
     width: 12px;
     height: 12px;
 }
@@ -1260,27 +1262,44 @@ completionpopup text::highlight(completion-match) {
  * an abstract method and a concrete one are the same kind and simply draw differently; static is an overlay
  * (see .__completion-badge__) for the same reason. */
 .completion-kind-method,
-.completion-kind-function       { background: icon("crystalgui:nodes/java/method"); }
-.completion-kind-constructor    { background: icon("crystalgui:nodes/java/constructor"); }
-.completion-kind-field          { background: icon("crystalgui:nodes/java/field"); }
-.completion-kind-property       { background: icon("crystalgui:nodes/java/field"); }
-.completion-kind-constant       { background: icon("crystalgui:nodes/java/field"); }
-.completion-kind-enum_member    { background: icon("crystalgui:nodes/java/enum"); }
-.completion-kind-local_variable { background: icon("crystalgui:nodes/java/variable"); }
-.completion-kind-parameter      { background: icon("crystalgui:nodes/java/parameter"); }
-.completion-kind-class          { background: icon("crystalgui:nodes/java/class"); }
-.completion-kind-record         { background: icon("crystalgui:nodes/java/record"); }
-.completion-kind-interface      { background: icon("crystalgui:nodes/java/interface"); }
-.completion-kind-enum           { background: icon("crystalgui:nodes/java/enum"); }
-.completion-kind-annotation     { background: icon("crystalgui:nodes/java/annotation"); }
+::part(pre-icon).completion-kind-method,
+.completion-kind-function,
+::part(pre-icon).completion-kind-function       { background: icon("crystalgui:nodes/java/method"); }
+.completion-kind-constructor,
+::part(pre-icon).completion-kind-constructor    { background: icon("crystalgui:nodes/java/constructor"); }
+.completion-kind-field,
+::part(pre-icon).completion-kind-field          { background: icon("crystalgui:nodes/java/field"); }
+.completion-kind-property,
+::part(pre-icon).completion-kind-property       { background: icon("crystalgui:nodes/java/field"); }
+.completion-kind-constant,
+::part(pre-icon).completion-kind-constant       { background: icon("crystalgui:nodes/java/field"); }
+.completion-kind-enum_member,
+::part(pre-icon).completion-kind-enum_member    { background: icon("crystalgui:nodes/java/enum"); }
+.completion-kind-local_variable,
+::part(pre-icon).completion-kind-local_variable { background: icon("crystalgui:nodes/java/variable"); }
+.completion-kind-parameter,
+::part(pre-icon).completion-kind-parameter      { background: icon("crystalgui:nodes/java/parameter"); }
+.completion-kind-class,
+::part(pre-icon).completion-kind-class          { background: icon("crystalgui:nodes/java/class"); }
+.completion-kind-record,
+::part(pre-icon).completion-kind-record         { background: icon("crystalgui:nodes/java/record"); }
+.completion-kind-interface,
+::part(pre-icon).completion-kind-interface      { background: icon("crystalgui:nodes/java/interface"); }
+.completion-kind-enum,
+::part(pre-icon).completion-kind-enum           { background: icon("crystalgui:nodes/java/enum"); }
+.completion-kind-annotation,
+::part(pre-icon).completion-kind-annotation     { background: icon("crystalgui:nodes/java/annotation"); }
 /* A throwable is a CLASS with its own drawing -- see SymbolKind.EXCEPTION, which says why that is a display
  * refinement rather than a language kind. */
-.completion-kind-exception      { background: icon("crystalgui:nodes/java/exception"); }
-.completion-kind-type_parameter { background: icon("crystalgui:nodes/java/class"); }
+.completion-kind-exception,
+::part(pre-icon).completion-kind-exception      { background: icon("crystalgui:nodes/java/exception"); }
+.completion-kind-type_parameter,
+::part(pre-icon).completion-kind-type_parameter { background: icon("crystalgui:nodes/java/class"); }
 /* Not reachable from a completion list -- nothing offers a package as an item -- but the Quick
  * Documentation popup draws its OWNER band with this vocabulary, and a top-level class is owned by a
  * package. Here rather than in a second prefix of its own, so one kind means one glyph everywhere. */
-.completion-kind-package        { background: icon("crystalgui:nodes/java/package"); }
+.completion-kind-package,
+::part(pre-icon).completion-kind-package        { background: icon("crystalgui:nodes/java/package"); }
 /* A MODULE IS A FILE, so it takes the file's own picture rather than a package's.
  *
  * The only thing that reports this kind is a JavaScript project script reached through an `import`
@@ -1292,15 +1311,20 @@ completionpopup text::highlight(completion-match) {
  * and not a name -- so the day something reports a MODULE that is not a `.js` file (a `module-info`, a
  * JavaScript engine that grows real ES modules) this needs to become a per-item icon instead. Until then
  * a second mechanism would be a table saying what this one already says. */
-.completion-kind-module         { background: icon("crystalgui:filetypes/javaScript"); }
+.completion-kind-module,
+::part(pre-icon).completion-kind-module         { background: icon("crystalgui:filetypes/javaScript"); }
 
-.completion-kind-method.completion-mod-abstract { background: icon("crystalgui:nodes/java/methodAbstract"); }
-.completion-kind-class.completion-mod-abstract  { background: icon("crystalgui:nodes/java/classAbstract"); }
+.completion-kind-method.completion-mod-abstract,
+::part(pre-icon).completion-kind-method.completion-mod-abstract { background: icon("crystalgui:nodes/java/methodAbstract"); }
+.completion-kind-class.completion-mod-abstract,
+::part(pre-icon).completion-kind-class.completion-mod-abstract  { background: icon("crystalgui:nodes/java/classAbstract"); }
 
 /* A keyword is not a node and JetBrains has no icon for one -- an empty box is the honest answer, and it
  * keeps the labels aligned with every other row. */
 .completion-kind-keyword,
-.completion-kind-unknown        { background: none; }
+::part(pre-icon).completion-kind-keyword,
+.completion-kind-unknown,
+::part(pre-icon).completion-kind-unknown        { background: none; }
 
 /* The bottom strip -- IntelliJ's "Press Enter to insert, Tab to replace".
  *
@@ -1767,6 +1791,16 @@ documentationpopup .__doc-separator__ {
  * one height bound — Taffy resolves the box against it and then distributes what is left, so the fill
  * idiom has the definite parent it needs — and `UIResizer` releases that bound on a vertical drag, which
  * is what lets both the box and this grow together. */
+/* ONCE THE READER HAS TAKEN THE WIDTH, the prose follows the box again.
+ *
+ * The cap above exists to stop prose SIZING the popup; it has no business limiting a popup somebody has
+ * deliberately dragged wider. Without this, widening left the paragraphs at their old measure with a
+ * growing empty margin beside them -- which is the failure `.__doc-body__` was already carrying a note
+ * about, from the last time a cap was tried here. */
+documentationpopup.__user-sized-width__ .__doc-body__ {
+    max-width: auto;
+}
+
 documentationpopup .__doc-scroll__ {
     flex-direction: column;
     width: 100%;
@@ -1795,6 +1829,25 @@ documentationpopup.__user-sized-height__ .__doc-scroll__ {
  * `color` genuinely does inherit and stays here, where it covers bullets and headings too. */
 documentationpopup .__doc-body__ {
     color: var(--doc-body-fg, #DFE1E5);
+    /* THE PROSE DOES NOT WIDEN THE POPUP, which is what the old engine got for nothing.
+     *
+     * There, `UIText` had no measure function -- it re-wrapped after layout against the box it had been
+     * given -- so a paragraph contributed NOTHING to any ancestor's width and the box was sized by the
+     * declaration alone. Measured on the old engine with eight paragraphs of ordinary prose: the popup
+     * settles at exactly 420, its `min-width`. On this engine text is `Measurable` and answers
+     * max-content, so the same paragraphs reported their whole unwrapped length and dragged the box out
+     * to the full width of the surface -- every sentence edge to edge, wrapping once at the screen.
+     *
+     * 402 is DERIVED, not chosen: the popup's floor is 420 and its padding 9 a side, so a body that stops
+     * there is a body that cannot push the box past the floor. The same fixture now measures 420 on this
+     * engine.
+     *
+     * A LENGTH, and that is load-bearing -- `UIText.measure` clamps its wrap width by `max-width` only
+     * when `isLength()`, so a percentage is ignored and `max-width: 100%` here changed nothing at all
+     * (measured: 798 on an 800px surface). It is also why this belongs on the band the text is in rather
+     * than on the popup: a cap on the BOX is applied after `width` whatever origin the width came from,
+     * so it would silently beat a resize drag -- the trap this file's `min-width` note already records. */
+    max-width: 402px;
     /* NO `max-width`. It capped the prose at 300px, so widening the popup left the paragraphs at their
      * old measure with a growing empty margin beside them — the box resized and the text did not. The
      * width now comes entirely from the box, whose floor is `min-width` above and whose ceiling is the

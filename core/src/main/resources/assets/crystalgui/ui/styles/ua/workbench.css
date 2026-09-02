@@ -1318,9 +1318,15 @@ workbench splitview.__vertical__ > .__divider__ {
  * is what makes GhostAnchor.GRAB work at a window edge: the box never grows, so the icon stays exactly
  * under the point you grabbed, and it is the LABEL that moves aside. Putting the label in flow and
  * clamping the box was the first attempt -- it slid the icon out from under the cursor. */
+/* THE SIZE OF THE THING BEING CARRIED, which is the rail button: 16px square with a 12px glyph, the
+ * same numbers `workbench .__activity-item__` and its `pre-icon` state below. It was 20/14 -- visibly
+ * larger than what you picked up, which reads as the button having grown on the way out of the rail
+ * rather than as a stand-in for it. Deliberate at 16: a ghost that is an exact copy of its source is
+ * the strongest statement that this IS the thing, and the tinted background is what says it is in
+ * flight. */
 .__drag-ghost__ {
-    width: 20px;
-    height: 20px;
+    width: 16px;
+    height: 16px;
     flex-shrink: 0;
     align-items: center;
     justify-content: center;
@@ -1330,8 +1336,8 @@ workbench splitview.__vertical__ > .__divider__ {
 
 .__drag-ghost__ .__pre-icon__,
 .__drag-ghost__::part(pre-icon) {
-    width: 14px;
-    height: 14px;
+    width: 12px;
+    height: 12px;
     flex-shrink: 0;
     overlay-fit: contain;
 }
