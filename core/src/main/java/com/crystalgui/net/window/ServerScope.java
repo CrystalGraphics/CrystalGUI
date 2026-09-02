@@ -22,7 +22,7 @@ import java.util.function.Supplier;
 import com.crystalgui.ui.projection.Projections;
 import java.util.Objects;
 import com.crystalgui.net.ViewCommand;
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.contract.Event;
 
 /**
@@ -56,7 +56,7 @@ import com.crystalgui.ui.contract.Event;
  */
 public final class ServerScope {
 
-    private final ServerUiSession<Object> session;
+    private final ServerUiSession<UINode, Object> session;
     private final ServerWindow<?> window;
 
     /** {@code ""} for the root panel, {@code "engines/"} for a nested one, and so on down. */
@@ -68,7 +68,7 @@ public final class ServerScope {
     @Nullable
     private AutoProjection.Report lastAutoReport;
 
-    ServerScope(ServerUiSession<Object> session, ServerWindow<?> window, String prefix) {
+    ServerScope(ServerUiSession<UINode, Object> session, ServerWindow<?> window, String prefix) {
         this.session = session;
         this.window = window;
         this.prefix = prefix;
@@ -101,7 +101,7 @@ public final class ServerScope {
      * <p><b>Your model is not touched</b> — {@code model::isRunning} is a method reference to an
      * accessor it already has. No interface, no annotations, no fields to convert.</p>
      */
-    public <W extends UIElement, V> ServerScope project(W widget, State<W, V> slot, Supplier<V> from) {
+    public <W extends UINode, V> ServerScope project(W widget, State<W, V> slot, Supplier<V> from) {
         Objects.requireNonNull(slot, "slot");
         projections().onto(widget, from, value -> slot.set(widget, value));
         return this;
@@ -119,7 +119,7 @@ public final class ServerScope {
      * <p>The widget comes first for the same reason it does above: it is what {@link #autoProject}
      * checks against, so anything stated here is left alone whatever order the two are called in.</p>
      */
-    public <W extends UIElement, V> ServerScope project(W widget, Supplier<V> from,
+    public <W extends UINode, V> ServerScope project(W widget, Supplier<V> from,
                                                         java.util.function.BiConsumer<W, V> to) {
         Objects.requireNonNull(to, "to");
         projections().onto(widget, from, value -> to.accept(widget, value));
@@ -136,9 +136,9 @@ public final class ServerScope {
      * <p>The container is the projection's alone: nothing else may add children to it, and keys must be
      * unique — a duplicate is refused rather than quietly collapsing two items onto one row.</p>
      */
-    public <T> ServerScope projectEach(Supplier<? extends List<T>> items, UIElement into,
-                                       Function<T, Object> key, Function<T, UIElement> create,
-                                       BiConsumer<UIElement, T> apply) {
+    public <T> ServerScope projectEach(Supplier<? extends List<T>> items, UINode into,
+                                       Function<T, Object> key, Function<T, UINode> create,
+                                       BiConsumer<UINode, T> apply) {
         projections().each(items, into, key, create, apply);
         return this;
     }
@@ -203,7 +203,7 @@ public final class ServerScope {
      * outlives the window — would hold a listener holding a widget holding the whole tree, which is the
      * ordinary shape of a listener leak.</p>
      */
-    public <W extends UIElement, V> ServerScope bind(Property<V> source, W widget, State<W, V> slot) {
+    public <W extends UINode, V> ServerScope bind(Property<V> source, W widget, State<W, V> slot) {
         slot.set(widget, source.get());
         window.bindings.add(source.changed.connect((old, now) -> slot.set(widget, now)));
         return this;
@@ -227,25 +227,25 @@ public final class ServerScope {
      * <p>Focus that rings, deliberately: {@code :focus-visible} marks focus the user did not place with
      * a pointer, and focus arriving from a server is the clearest case there is.</p>
      */
-    public ServerScope focus(UIElement widget) {
+    public ServerScope focus(UINode widget) {
         session.viewOn(ViewCommand.FOCUS, widget, null);
         return this;
     }
 
     /** Scrolls a widget into view, honouring whatever scroll behaviour the sheet asked for. */
-    public ServerScope scrollIntoView(UIElement widget) {
+    public ServerScope scrollIntoView(UINode widget) {
         session.viewOn(ViewCommand.SCROLL_INTO_VIEW, widget, null);
         return this;
     }
 
     /** Shows a {@code Dialog} that is already in the tree. Modal or not is the dialog's own business. */
-    public ServerScope showDialog(UIElement dialog) {
+    public ServerScope showDialog(UINode dialog) {
         session.viewOn(ViewCommand.SHOW_DIALOG, dialog, null);
         return this;
     }
 
     /** Hides it again. Silent if it was not showing. */
-    public ServerScope hideDialog(UIElement dialog) {
+    public ServerScope hideDialog(UINode dialog) {
         session.viewOn(ViewCommand.HIDE_DIALOG, dialog, null);
         return this;
     }
@@ -256,7 +256,7 @@ public final class ServerScope {
      * <p>The anchor is required rather than optional: a popover exists relative to something, and one
      * opened at no position lands wherever the layout happened to leave it.</p>
      */
-    public ServerScope openMenu(UIElement menu, UIElement anchor) {
+    public ServerScope openMenu(UINode menu, UINode anchor) {
         StateMap<Object> args = newMap();
         args.putInt(ViewCommand.ANCHOR, session.idOf(anchor));
         session.viewOn(ViewCommand.OPEN_MENU, menu, args);
@@ -269,7 +269,7 @@ public final class ServerScope {
      * <p>Text, not a subtree — a tooltip is a sentence about a control, and a server able to graft an
      * arbitrary tree at a screen position would be a different feature with a different threat model.</p>
      */
-    public ServerScope tooltip(UIElement widget, String text) {
+    public ServerScope tooltip(UINode widget, String text) {
         StateMap<Object> args = newMap();
         args.putString(ViewCommand.TEXT, text);
         session.viewOn(ViewCommand.TOOLTIP, widget, args);
@@ -341,7 +341,7 @@ public final class ServerScope {
      *
      * <p>Not prefixed, and does not need to be: the element <em>is</em> the key.</p>
      */
-    public ServerScope on(UIElement element, String kind, Consumer<ServerUiSession.UiEventContext<Object>> handler) {
+    public ServerScope on(UINode element, String kind, Consumer<ServerUiSession.UiEventContext<UINode, Object>> handler) {
         session.on(element, kind, handler);
         return this;
     }
@@ -353,18 +353,18 @@ public final class ServerScope {
      *
      * <p><b>The form to reach for.</b> No kind vocabulary to consult, no string to misspell, a decoded
      * payload, and an event belonging to another widget will not compile. @see
-     * ServerUiSession#on(UIElement, Event, java.util.function.BiConsumer)</p>
+     * ServerUiSession#on(UINode, Event, java.util.function.BiConsumer)</p>
      */
-    public <W extends UIElement, P> ServerScope on(
+    public <W extends UINode, P> ServerScope on(
             W element, Event<W, P> event,
-          BiConsumer<ServerUiSession.UiEventContext<Object>, P> handler) {
+          BiConsumer<ServerUiSession.UiEventContext<UINode, Object>, P> handler) {
         session.on(element, event, handler);
         return this;
     }
 
     /** Subscribes to an event that carries nothing — a press, a close request. */
-    public <W extends UIElement> ServerScope on(
-            W element, Event<W, Void> event, Consumer<ServerUiSession.UiEventContext<Object>> handler) {
+    public <W extends UINode> ServerScope on(
+            W element, Event<W, Void> event, Consumer<ServerUiSession.UiEventContext<UINode, Object>> handler) {
         session.on(element, event, handler);
         return this;
     }
@@ -468,9 +468,9 @@ public final class ServerScope {
      *                               things claiming one namespace is a wiring mistake, not something
      *                               to resolve by letting the second win
      */
-    public <C extends UIElement & Networked<S>, S> ServerScope attach(C child, @Nullable S slice) {
+    public <C extends UINode & Networked<S>, S> ServerScope attach(C child, @Nullable S slice) {
         if (child == null) throw new IllegalArgumentException("child is null");
-        String name = child.getId();
+        String name = child.id();
         if (name == null || name.isEmpty()) {
             throw new IllegalArgumentException("a nested " + child.getClass().getSimpleName()
                     + " needs an id to scope its methods under — declare it as a field of the parent "
@@ -493,7 +493,7 @@ public final class ServerScope {
     // ── Odds and ends a handler reaches for ─────────────────────────────────
 
     /** The session underneath, for anything this view does not cover. Methods on it are UNQUALIFIED. */
-    public ServerUiSession<Object> session() {
+    public ServerUiSession<UINode, Object> session() {
         return session;
     }
 

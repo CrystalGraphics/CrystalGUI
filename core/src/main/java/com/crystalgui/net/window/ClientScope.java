@@ -1,5 +1,6 @@
 package com.crystalgui.net.window;
 
+import com.crystalgui.ui.dom.UINode;
 import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
@@ -25,13 +26,13 @@ import com.crystalgui.serialization.StateMap;
  */
 public final class ClientScope {
 
-    private final ClientUiSession<Object> session;
+    private final ClientUiSession<UINode, Object> session;
     private final ClientWindowContext window;
 
     /** {@code ""} for the root panel, {@code "engines/"} for a nested one, and so on down. */
     private final String prefix;
 
-    ClientScope(ClientUiSession<Object> session, ClientWindowContext window, String prefix) {
+    ClientScope(ClientUiSession<UINode, Object> session, ClientWindowContext window, String prefix) {
         this.session = session;
         this.window = window;
         this.prefix = prefix;
@@ -70,7 +71,7 @@ public final class ClientScope {
     // ── Odds and ends a handler reaches for ─────────────────────────────────
 
     /** This window's session, for anything this view does not cover. Methods on it are UNQUALIFIED. */
-    public ClientUiSession<Object> session() {
+    public ClientUiSession<UINode, Object> session() {
         return session;
     }
 

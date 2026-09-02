@@ -1,5 +1,6 @@
 package com.crystalgui.fs;
 
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.serialization.StateMap;
@@ -91,7 +92,7 @@ public final class WorkspaceClient<T> {
      * @param ops the wire format. Taken here rather than read off the session, which does not expose
      *            its own — widening {@code ClientUiSession} for one caller would be the worse trade.
      */
-    public WorkspaceClient(ClientUiSession<T> session, com.crystalgui.serialization.DynamicOps<T> ops) {
+    public WorkspaceClient(ClientUiSession<UINode, T> session, com.crystalgui.serialization.DynamicOps<T> ops) {
         this(session::call, session::onCall, ops);
         // RECORDED, or the first rebind to this same wire would not recognise it and would re-register
         // the push handlers on a router that already has them -- which MessageRouter refuses outright.
@@ -197,7 +198,7 @@ public final class WorkspaceClient<T> {
     }
 
     /** The session-shaped rebind, mirroring the session constructor. @see #rebind(ProtocolConnection) */
-    public boolean rebind(ClientUiSession<T> session) {
+    public boolean rebind(ClientUiSession<UINode, T> session) {
         if (session == null || session == boundTo) return false;
         boundTo = session;
         bind(session::call, session::onCall);

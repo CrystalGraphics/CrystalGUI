@@ -1,5 +1,10 @@
 package com.crystalgui.net.window;
 
+import com.crystalgui.ui.contract.WidgetContracts;
+import com.crystalgui.ui.dom.UINodeRegistry;
+import com.crystalgui.ui.dom.NodeContract;
+import com.crystalgui.ui.dom.Name;
+import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
@@ -11,8 +16,7 @@ import java.util.function.Supplier;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.ui.ElementRegistry;
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.dom.UINode;
 
 /**
  * <b>A networked UI's identity</b> — the one value both sides reference, and the engine's
@@ -36,7 +40,7 @@ import com.crystalgui.ui.UIElement;
  * <h3>What declaring one does</h3>
  *
  * <p>Beyond naming the wire id, {@code of} registers the panel class in {@link ElementRegistry} under
- * its own tag — the lowercased simple class name, exactly what {@link UIElement#tagName()} already
+ * its own tag — the lowercased simple class name, exactly what {@link UINode#tagName()} already
  * answers for an unregistered class — so a description whose root says {@code "machinepanel"} decodes
  * into a {@code MachinePanel} rather than throwing. That registration is also what makes the tag a
  * cascade identity: {@code machinepanel { }} in a stylesheet matches the panel.</p>
@@ -64,9 +68,9 @@ import com.crystalgui.ui.UIElement;
  * @param <P> the panel: an element that is {@link Networked}
  * @param <M> what it is a view of
  */
-public final class UiType<P extends UIElement & Networked<M>, M> {
+public final class UiType<P extends UINode & Networked<M>, M> {
 
-    /** Panel class → its declared {@link UIElement} fields, resolved once. */
+    /** Panel class → its declared {@link UINode} fields, resolved once. */
     private static final Map<Class<?>, List<Field>> PARTS = new ConcurrentHashMap<>();
 
     private final String id;
@@ -90,9 +94,7 @@ public final class UiType<P extends UIElement & Networked<M>, M> {
         // customElements.define: what lets a description's root say this tag and decode into this
         // class. Idempotent for the same class; a DIFFERENT class on the same tag is the registry's
         // own duplicate-key throw, which is the right answer to two mods naming panels alike.
-        if (!tag.equals(ElementRegistry.tagOf(made))) {
-            ElementRegistry.register(tag, made, create::get);
-        }
+        defineKind(tag, made, create::get);
 
         // ...and the same for every nested panel this one declares as a field, recursively — or the
         // CLIENT cannot decode a description whose subtree names their tags, because nothing on that
@@ -106,16 +108,61 @@ public final class UiType<P extends UIElement & Networked<M>, M> {
         for (Field part : partsOf(owner)) {
             if (!Networked.class.isAssignableFrom(part.getType())) continue;
             @SuppressWarnings("unchecked")
-            Class<? extends UIElement> nested = (Class<? extends UIElement>) part.getType();
+            Class<? extends UINode> nested = (Class<? extends UINode>) part.getType();
             String tag = nested.getSimpleName().toLowerCase(Locale.ROOT);
-            if (tag.equals(ElementRegistry.tagOf(nested))) continue;
-            ElementRegistry.register(tag, nested, () -> bareInstance(nested));
+            if (!defineKind(tag, nested, () -> bareInstance(nested))) continue;
             registerNested(nested);
         }
     }
 
+    /**
+     * {@code customElements.define}, on this engine's registry.
+     *
+     * <p>Answers whether it registered, so the nested walk stops where it has been before rather than
+     * recursing over a tree of fields it has already seen.</p>
+     *
+     * <p><b>The contract comes from the class, not from the tag.</b> A panel that declares a
+     * {@link WidgetContract} gets it; one that does not gets a plain contract that accepts described
+     * children, which is what a panel is — a container whose subtree IS the description.</p>
+     */
+    private static boolean defineKind(String tag, Class<?> type, Supplier<? extends UINode> factory) {
+        Name kind = declaredKind(type, tag);
+        if (UINodeRegistry.isRegistered(kind)) return false;
+        NodeContract contract = WidgetContracts.of(type);
+        UINodeRegistry.register(kind, factory, contract != null ? contract : UINodeRegistry.plain(kind, true));
+        return true;
+    }
+
+    /**
+     * The kind the panel's own class declares.
+     *
+     * <p>READ, never invented. A node answers the {@code NAME} its class declares and nothing else,
+     * so a tag derived here from the class's simple name would register a factory under one name
+     * while every instance described itself under another -- and the failure is silent in the worst
+     * way: the description encodes, sends, and decodes into a plain node, so the client rebuilds a
+     * tree of the right shape whose root is not the panel. The first symptom is a
+     * {@code ClassCastException} in the host's own bind, pointing at the host.</p>
+     *
+     * <p>One field, by handle -- never {@code getDeclaredFields()}, which resolves the type of every
+     * field and throws on a classpath CrystalGraphics core is deliberately absent from.</p>
+     */
+    private static Name declaredKind(Class<?> type, String tag) {
+        try {
+            return (Name) MethodHandles.lookup()
+                    .findStaticGetter(type, "NAME", Name.class).invoke();
+        } catch (NoSuchFieldException | IllegalAccessException absent) {
+            throw new IllegalStateException(type.getSimpleName() + " must declare "
+                    + "`public static final Name NAME = Name.of(\"" + tag + "\")` and pass it to "
+                    + "super(NAME). A panel is a kind of node, and a node answers the name its class "
+                    + "declares -- without one it answers `element`, and its description decodes into "
+                    + "a plain node rather than into this class.", absent);
+        } catch (Throwable failed) {
+            throw new IllegalStateException("reading " + type.getSimpleName() + ".NAME failed", failed);
+        }
+    }
+
     /** The decode factory for a nested panel that declared no {@code UiType} of its own. */
-    private static UIElement bareInstance(Class<? extends UIElement> type) {
+    private static UINode bareInstance(Class<? extends UINode> type) {
         try {
             return type.getDeclaredConstructor().newInstance();
         } catch (ReflectiveOperationException | RuntimeException cannot) {
@@ -128,7 +175,7 @@ public final class UiType<P extends UIElement & Networked<M>, M> {
      * @param id     namespaced, and the only thing that crosses the wire — {@code "mymod:machine"}
      * @param create the panel's no-argument constructor, used for building, binding and decoding
      */
-    public static <P extends UIElement & Networked<M>, M> UiType<P, M> of(String id, Supplier<P> create) {
+    public static <P extends UINode & Networked<M>, M> UiType<P, M> of(String id, Supplier<P> create) {
         return new UiType<>(id, create);
     }
 
@@ -156,7 +203,7 @@ public final class UiType<P extends UIElement & Networked<M>, M> {
     public P build(@Nullable M model) {
         P panel = create.get();
         for (Field part : partsOf(type)) {
-            UIElement value = read(panel, part);
+            UINode value = read(panel, part);
             if (value == null) {
                 // A nested PANEL is deliberately not auto-created: building one needs its slice of
                 // the model, and only the parent's layout knows which slice that is --
@@ -167,15 +214,15 @@ public final class UiType<P extends UIElement & Networked<M>, M> {
             }
             // ONLY IF UNNAMED, so an initializer that set its own id keeps it -- the field name is a
             // default, not a seizure.
-            if (value.getId().isEmpty()) value.setId(part.getName());
+            if (value.id().isEmpty()) value.setId(part.getName());
         }
         panel.build(model);
         // Nested panels the layout just built get the same rule, after the fact -- the id is what
         // scopes their methods and what the client resolves the field by.
         for (Field part : partsOf(type)) {
             if (!Networked.class.isAssignableFrom(part.getType())) continue;
-            UIElement value = read(panel, part);
-            if (value != null && value.getId().isEmpty()) value.setId(part.getName());
+            UINode value = read(panel, part);
+            if (value != null && value.id().isEmpty()) value.setId(part.getName());
         }
         return panel;
     }
@@ -188,9 +235,9 @@ public final class UiType<P extends UIElement & Networked<M>, M> {
      *
      * <p>Throws when the root is not this type's class or a field cannot be found — which is the
      * point: a binding that quietly returned a panel with null fields would put the silent-skip
-     * failure one level down, where it is harder to see. @see UIElement#require</p>
+     * failure one level down, where it is harder to see. @see UINode#require</p>
      */
-    public P bind(UIElement root) {
+    public P bind(UINode root) {
         if (root == null) throw new IllegalArgumentException("nothing to bind <" + id + "> to");
         if (!type.isInstance(root)) {
             throw new IllegalStateException("<" + id + "> arrived as <" + root.tagName() + "> ("
@@ -208,7 +255,7 @@ public final class UiType<P extends UIElement & Networked<M>, M> {
      * panel's rebuilt tree, where the class is already correct by construction (decode built it from
      * its registered tag).
      */
-    public static void bindFields(UIElement panel) {
+    public static void bindFields(UINode panel) {
         for (Field part : partsOf(panel.getClass())) {
             write(panel, part, panel.require("#" + part.getName(), asElement(part.getType())));
         }
@@ -248,7 +295,7 @@ public final class UiType<P extends UIElement & Networked<M>, M> {
                 level = level.getSuperclass()) {
             for (Field field : level.getDeclaredFields()) {
                 if (Modifier.isStatic(field.getModifiers())) continue;
-                if (!UIElement.class.isAssignableFrom(field.getType())) continue;
+                if (!UINode.class.isAssignableFrom(field.getType())) continue;
                 field.setAccessible(true);
                 found.add(field);
             }
@@ -257,15 +304,15 @@ public final class UiType<P extends UIElement & Networked<M>, M> {
     }
 
     @Nullable
-    private static UIElement read(UIElement panel, Field part) {
+    private static UINode read(UINode panel, Field part) {
         try {
-            return (UIElement) part.get(panel);
+            return (UINode) part.get(panel);
         } catch (IllegalAccessException blocked) {
             throw new IllegalStateException("cannot read " + describe(part), blocked);
         }
     }
 
-    private static void write(UIElement panel, Field part, UIElement value) {
+    private static void write(UINode panel, Field part, UINode value) {
         try {
             part.set(panel, value);
         } catch (IllegalAccessException blocked) {
@@ -276,9 +323,9 @@ public final class UiType<P extends UIElement & Networked<M>, M> {
         }
     }
 
-    private static UIElement instantiate(Field part) {
+    private static UINode instantiate(Field part) {
         try {
-            return (UIElement) part.getType().getDeclaredConstructor().newInstance();
+            return (UINode) part.getType().getDeclaredConstructor().newInstance();
         } catch (ReflectiveOperationException | RuntimeException cannot) {
             throw new IllegalStateException(describe(part) + " has no no-argument constructor, so it "
                     + "cannot be created for you — give the field an initializer "
@@ -288,8 +335,8 @@ public final class UiType<P extends UIElement & Networked<M>, M> {
     }
 
     @SuppressWarnings("unchecked")
-    private static Class<UIElement> asElement(Class<?> type) {
-        return (Class<UIElement>) type;
+    private static Class<UINode> asElement(Class<?> type) {
+        return (Class<UINode>) type;
     }
 
     private static String describe(Field part) {

@@ -13,7 +13,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.net.protocol.UiMethods;
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.projection.Projections;
 
 /**
@@ -47,7 +47,7 @@ import com.crystalgui.ui.projection.Projections;
  *
  * @param <P> the panel this window serves
  */
-public final class ServerWindow<P extends UIElement> {
+public final class ServerWindow<P extends UINode> {
 
     /** Which {@link UiType} opened this. Identity — what the key-dedup check compares. */
     final UiType<?, ?> uiType;
@@ -124,7 +124,7 @@ public final class ServerWindow<P extends UIElement> {
     ServerWindows host;
 
     @Nullable
-    ServerUiSession<Object> session;
+    ServerUiSession<UINode, Object> session;
 
     int windowId = -1;
 
@@ -181,7 +181,7 @@ public final class ServerWindow<P extends UIElement> {
 
     /** This window's session, or {@code null} before it is opened and after it ends. */
     @Nullable
-    public ServerUiSession<Object> session() {
+    public ServerUiSession<UINode, Object> session() {
         return session;
     }
 
@@ -220,7 +220,7 @@ public final class ServerWindow<P extends UIElement> {
      * @param onDecided told {@code true} if it closed, {@code false} if somebody refused
      */
     public void requestClose(String reason, @Nullable java.util.function.Consumer<Boolean> onDecided) {
-        ServerUiSession<Object> live = session;
+        ServerUiSession<UINode, Object> live = session;
         if (live == null || !live.isOpen()) {
             if (onDecided != null) onDecided.accept(true);
             return;

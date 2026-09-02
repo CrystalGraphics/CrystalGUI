@@ -14,13 +14,14 @@ import javax.annotation.Nullable;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.ClientUiSessions;
+import com.crystalgui.net.mirror.UINodeMirror;
 import com.crystalgui.net.SheetRef;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.ui.ElementRegistry;
 import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.dom.UINode;
 
 /**
  * Every window this client is showing over one connection — <b>the mirror of {@link ServerWindows}</b>.
@@ -52,6 +53,7 @@ public final class ClientWindows {
     static {
         // The moment the window layer is loaded on a client, openWindow panel names start resolving.
         ClientUiSessions.setUiClassLoader(ClientWindows::ensureUiClass);
+        ClientUiSessions.setMirrorFactory(UINodeMirror::new);
     }
 
     private final ProtocolConnection<Object> connection;
@@ -65,10 +67,10 @@ public final class ClientWindows {
      * window is never taken off screen. The session object is the one identity that is stable for the
      * whole of a window's life.</p>
      */
-    private final Map<ClientUiSession<Object>, Mounted> mounted = new LinkedHashMap<>();
+    private final Map<ClientUiSession<UINode, Object>, Mounted> mounted = new LinkedHashMap<>();
 
     /** Sessions whose tree is ready and which have nowhere to go yet. @see #setMount */
-    private final List<ClientUiSession<Object>> waiting = new ArrayList<>();
+    private final List<ClientUiSession<UINode, Object>> waiting = new ArrayList<>();
 
     @Nullable
     private WindowMount mount;
@@ -90,7 +92,7 @@ public final class ClientWindows {
          * it in silence. A contributor binding at connection open is the only moment that cannot be
          * late.
          */
-        ClientUiSessions.forConnection(connection).onSession(this::adopt);
+        ClientUiSessions.<UINode, Object>forConnection(connection).onSession(this::adopt);
         connection.onClosed(this::onConnectionClosed);
     }
 
@@ -164,9 +166,9 @@ public final class ClientWindows {
     public ClientWindows setMount(@Nullable WindowMount mount) {
         this.mount = mount;
         if (mount == null || waiting.isEmpty()) return this;
-        List<ClientUiSession<Object>> pending = new ArrayList<>(waiting);
+        List<ClientUiSession<UINode, Object>> pending = new ArrayList<>(waiting);
         waiting.clear();
-        for (ClientUiSession<Object> session : pending) present(session);
+        for (ClientUiSession<UINode, Object> session : pending) present(session);
         return this;
     }
 
@@ -209,7 +211,7 @@ public final class ClientWindows {
      * @param onGranted told {@code true} if a window was opened, {@code false} if it was refused,
      *                  unanswered, or this client is not connected to anything
      */
-    public static <P extends UIElement & Networked<M>, M> void requestOpen(
+    public static <P extends UINode & Networked<M>, M> void requestOpen(
             UiType<P, M> type, @Nullable StateMap<Object> args,
             @Nullable Consumer<Boolean> onGranted) {
         ClientWindows windows = CLIENT;
@@ -223,7 +225,7 @@ public final class ClientWindows {
         windows.ask(type, args, onGranted);
     }
 
-    private <P extends UIElement & Networked<M>, M> void ask(
+    private <P extends UINode & Networked<M>, M> void ask(
             UiType<P, M> type, @Nullable StateMap<Object> args,
             @Nullable java.util.function.Consumer<Boolean> onGranted) {
         StateMap<Object> out = new StateMap<>(connection.ops());
@@ -274,7 +276,7 @@ public final class ClientWindows {
 
     // ── Adoption ────────────────────────────────────────────────────────────
 
-    private void adopt(ClientUiSession<Object> session) {
+    private void adopt(ClientUiSession<UINode, Object> session) {
         session.onWindowOpened(root -> present(session));
         session.onWindowClosed((code, detail) -> closedByServer(session, code, detail));
         session.onCall(UiMethods.REQUEST_CLOSE, (args, respond) -> {
@@ -298,8 +300,8 @@ public final class ClientWindows {
      *
      * <p>The three cases are exactly the three states this can be in, and none of them is a poll.</p>
      */
-    private void present(ClientUiSession<Object> session) {
-        UIElement root = session.root();
+    private void present(ClientUiSession<UINode, Object> session) {
+        UINode root = session.root();
         if (root == null) return;
 
         Mounted live = mounted.get(session);
@@ -373,7 +375,7 @@ public final class ClientWindows {
      * <p>A panel that throws is taken to have consented. Refusing on its behalf would make a bug in one
      * panel into a window nobody can shut.</p>
      */
-    private boolean mayClose(ClientUiSession<Object> session) {
+    private boolean mayClose(ClientUiSession<UINode, Object> session) {
         Mounted live = mounted.get(session);
         if (live == null) return true;
         for (Networked<?> panel : live.panels) {
@@ -391,11 +393,11 @@ public final class ClientWindows {
      * Finds every {@link Networked} element under {@code element}, carrying the id-path prefix its
      * scope derives from — the client half of {@link ServerScope#attach}'s naming rule.
      */
-    private static void collectNested(UIElement element, String prefix,
+    private static void collectNested(UINode element, String prefix,
                                       List<Networked<?>> panels, List<String> prefixes) {
-        for (UIElement child : element.getChildren()) {
+        for (UINode child : element.children()) {
             if (child instanceof Networked) {
-                String path = prefix + child.getId() + "/";
+                String path = prefix + child.id() + "/";
                 UiType.bindFields(child);
                 panels.add((Networked<?>) child);
                 prefixes.add(path);
@@ -408,7 +410,7 @@ public final class ClientWindows {
 
     // ── Endings ─────────────────────────────────────────────────────────────
 
-    private void closedByServer(ClientUiSession<Object> session, String code, String detail) {
+    private void closedByServer(ClientUiSession<UINode, Object> session, String code, String detail) {
         Mounted live = mounted.remove(session);
         waiting.remove(session);
         if (live == null) return;
@@ -433,8 +435,8 @@ public final class ClientWindows {
     /** The context handed out, and the bookkeeping behind it. One object so the two cannot disagree. */
     private final class Mounted implements ClientWindowContext {
 
-        private final ClientUiSession<Object> session;
-        private UIElement root;
+        private final ClientUiSession<UINode, Object> session;
+        private UINode root;
 
         @Nullable
         private WindowMount.MountedWindow handle;
@@ -448,7 +450,7 @@ public final class ClientWindows {
         private boolean ended;
         private boolean visible = true;
 
-        Mounted(ClientUiSession<Object> session, UIElement root) {
+        Mounted(ClientUiSession<UINode, Object> session, UINode root) {
             this.session = session;
             this.root = root;
         }
@@ -495,7 +497,7 @@ public final class ClientWindows {
         }
 
         @Override
-        public UIElement root() {
+        public UINode root() {
             return root;
         }
 
@@ -526,7 +528,7 @@ public final class ClientWindows {
         }
 
         @Override
-        public ClientUiSession<Object> session() {
+        public ClientUiSession<UINode, Object> session() {
             return session;
         }
 
