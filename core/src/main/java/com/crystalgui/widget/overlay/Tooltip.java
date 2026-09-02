@@ -228,6 +228,17 @@ public class Tooltip extends UINode {
      * used to say was "separate work". {@link #showAfterDelay} has the argument for why it exists at
      * all; the asymmetry with hiding is deliberate and is explained there too.</p>
      */
+    /**
+     * What this tooltip describes, or {@code null} while it belongs to nothing.
+     *
+     * <p>Public because the tooltip is no longer a CHILD of its anchor -- it joins the document, so
+     * walking an anchor's children can no longer answer "does this have a tooltip". This can.</p>
+     */
+    @Nullable
+    public UINode anchor() {
+        return anchor;
+    }
+
     public static Tooltip attach(UINode anchor, String text) {
         Objects.requireNonNull(anchor, "anchor");
         Tooltip tooltip = new Tooltip(text);

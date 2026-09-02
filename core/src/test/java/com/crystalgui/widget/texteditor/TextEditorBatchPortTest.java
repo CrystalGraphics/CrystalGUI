@@ -233,7 +233,7 @@ public class TextEditorBatchPortTest extends UiDocumentTestBase {
      * The post-layout pass runs, which is what realises the visible lines.
      *
      * <p>An ordinary per-frame hook runs BEFORE layout, so on the frame an editor first appears it
-     * would realise a window against a viewport of zero — the "measures zero on the same frame" trap.
+     * would realise a document against a viewport of zero — the "measures zero on the same frame" trap.
      * Asserting that SOMETHING was realised is what separates the two.</p>
      */
     @Test

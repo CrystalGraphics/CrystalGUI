@@ -148,6 +148,10 @@ TEST_RULES = [
     (r'@Test\(\s*timeout\s*=[^)]*\)', '@Test', 'frame thread'),
     # `Ui` was a trivial {rootElement} holder on the window; the document IS the root here.
     (r'\w+\.ui\.rootElement', 'document', 'root'),
+    # THE COMPOSITOR NAMES THE DOCUMENT, not the other way round: the engine may not name a
+    # compositor, so `UIWindow.desktop()` became `Desktop.of(document)`.
+    (r'\w+\.desktop\(\)', 'Desktop.of(document)', 'desktop'),
+    (r'\w+\.getRootTransform\(\)', 'document.boxes().rootTransform()', 'geometry'),
     # A ticker is OWNED now -- dropped when its owner disconnects, dormant while frozen.
     (r'(\w+)\.registerTicker\(', r'document.animation().every(\1, ', 'ticker'),
     # The old `ui` field on a test fixture was the window.
@@ -176,6 +180,7 @@ NEEDED_IMPORTS = [
     ('UITransform', 'com.crystalgui.ui.UITransform'),
     ('UINodeRegistry', 'com.crystalgui.ui.dom.UINodeRegistry'),
     ('StylePropertyRegistry', 'com.crystalgui.style.property.StylePropertyRegistry'),
+    ('Desktop', 'com.crystalgui.desktop.Desktop'),
 ]
 
 
@@ -262,7 +267,7 @@ def _alias_one_window(text):
         name = local.group(2)
         text = (text[:local.start()] + '\n' + local.group(1)
                 + 'document.append(' + local.group(3) + ');' + text[local.end():])
-        text = re.sub(r'\b' + name + r'\.', 'document.', text)
+        text = re.sub(r'(?<![.\w])' + name + r'\.', 'document.', text)
         text = re.sub(r'(?<![.\w])' + name + r'(?![\w(])', 'document', text)
         return text
     name = match.group(1)
@@ -276,7 +281,7 @@ def _alias_one_window(text):
     # and the rename below then turns the assignment into `document = root;`, which does not compile.
     text = re.sub(r'(?m)^([ \t]*)' + name + r' = (\w+);[ \t]*(?://[^\r\n]*)?\r*$',
                   r'\1document.append(\2);', text)
-    text = re.sub(r'\b' + name + r'\.', 'document.', text)
+    text = re.sub(r'(?<![.\w])' + name + r'\.', 'document.', text)
     text = re.sub(r'(?<![.\w])' + name + r'(?![\w(])', 'document', text)
     return text
 
