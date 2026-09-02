@@ -1,5 +1,6 @@
 package com.crystalgui.ui;
 
+import com.crystalgui.support.OldEngineSessions;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.fs.InMemoryFileSystem;
 import com.crystalgui.fs.ProjectRegistry;
@@ -76,11 +77,11 @@ public class WorkbenchViewerTest extends UiTestBase {
                 new WorkspaceProject("mymod.proj", "My Project", Paths.get("/srv/proj"))));
         WorkspaceService service = new WorkspaceService(projects, files, WorkspacePermission.ALLOW_ALL);
         InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
-        ServerUiSession<Object> server =
-                new ServerUiSession<>(1, new UIElement(), pair[0], PlainOps.INSTANCE);
+        ServerUiSession<UIElement, Object> server =
+                OldEngineSessions.serve(1, new UIElement(), pair[0]);
         new WorkspaceRpc<Object>(service, WorkspaceActor.LOCAL).installOn(server::onCall);
         server.open();
-        return new WorkspaceClient<>(new ClientUiSession<>(pair[1], PlainOps.INSTANCE), PlainOps.INSTANCE);
+        return new WorkspaceClient<>(OldEngineSessions.view(pair[1]), PlainOps.INSTANCE);
     }
 
     @Before

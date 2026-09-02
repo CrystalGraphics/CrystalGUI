@@ -125,7 +125,7 @@ public class WidgetStateRoundTripTest {
     /** The base element has no state of its own — it is pure structure. */
     @Test
     public void aPlainElementHasNoState() {
-        assertEquals(0, new UINodeMirror<>(JsonOps.INSTANCE)
-                .encodeState(new UINode()).getAsJsonObject().size());
+        assertNull("a plain node carries no state at all, which the mirror spells as null",
+                new UINodeMirror<>(JsonOps.INSTANCE).encodeState(new UINode()));
     }
 }

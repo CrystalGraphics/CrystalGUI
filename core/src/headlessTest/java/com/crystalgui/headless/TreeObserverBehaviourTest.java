@@ -48,7 +48,10 @@ public class TreeObserverBehaviourTest {
         @Override public void inlineStyleChanged(UINode e) { events.add("inline:" + name(e)); }
 
         private static String name(UINode e) {
-            return e.id().isEmpty() ? e.tagName() : e.id();
+            // The LOCAL half: `tagName()` is qualified on this engine (`crystalgui:button`) and every
+            // node in this fixture shares the namespace, so it is noise here. What is under test is
+            // which node a report names.
+            return e.id().isEmpty() ? e.name().local() : e.id();
         }
 
         void clear() { events.clear(); }

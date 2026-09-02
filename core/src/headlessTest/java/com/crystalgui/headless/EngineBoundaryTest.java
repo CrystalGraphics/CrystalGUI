@@ -54,7 +54,13 @@ public class EngineBoundaryTest {
             // THE APPLICATIONS (6.4). Without this the shader graph is classified as OLD engine, and
             // every reference it makes into `widget` reads as the old engine reaching into the new
             // one -- which is the opposite of what it is.
-            "com/crystalgui/app/");
+            "com/crystalgui/app/",
+            // THE WIRE (6.8). `net/window` holds the panels, so it is typed on the node tree
+            // concretely; `ui/projection` reaches the widgets a panel shows. `net` ITSELF is
+            // deliberately absent: the sessions and the mirror seam are generic over `Styleable` and
+            // name neither engine, which is what makes them one implementation rather than two.
+            "com/crystalgui/net/window/",
+            "com/crystalgui/ui/projection/");
 
     /**
      * The classes in {@code ui/dom} that are the SEAM rather than the node tree — everything else in
@@ -81,7 +87,8 @@ public class EngineBoundaryTest {
      * engine, so the node tree's sits in {@code net/mirror} beside the old engine's.</p>
      */
     private static final List<String> NEW_CLASSES = List.of(
-            "com/crystalgui/net/mirror/UINodeMirror");
+            "com/crystalgui/net/mirror/UINodeMirror",
+            "com/crystalgui/net/mirror/UINodeMirror$Companion");
 
     /** What the new engine must never name. */
     private static final List<String> OLD_ENGINE = List.of(

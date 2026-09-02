@@ -1,5 +1,6 @@
 package com.crystalgui.ui;
 
+import com.crystalgui.support.OldEngineSessions;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.InMemoryFileSystem;
 import com.crystalgui.fs.ProjectRegistry;
@@ -51,8 +52,8 @@ public class WorkbenchReconnectTest extends UiTestBase {
 
     private InMemoryTransport<Object> serverSide;
     private InMemoryTransport<Object> clientSide;
-    private ClientUiSession<Object> clientSession;
-    private ServerUiSession<Object> serverSession;
+    private ClientUiSession<UIElement, Object> clientSession;
+    private ServerUiSession<UIElement, Object> serverSession;
 
     @Before
     public void setUp() {
@@ -80,10 +81,10 @@ public class WorkbenchReconnectTest extends UiTestBase {
         InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
         serverSide = pair[0];
         clientSide = pair[1];
-        serverSession = new ServerUiSession<>(1, new UIElement(), pair[0], PlainOps.INSTANCE);
+        serverSession = OldEngineSessions.serve(1, new UIElement(), pair[0]);
         new WorkspaceRpc<Object>(service, WorkspaceActor.LOCAL).installOn(serverSession::onCall);
         serverSession.open();
-        clientSession = new ClientUiSession<>(pair[1], PlainOps.INSTANCE);
+        clientSession = OldEngineSessions.view(pair[1]);
         return client == null ? new WorkspaceClient<>(clientSession, PlainOps.INSTANCE) : client;
     }
 
@@ -138,7 +139,7 @@ public class WorkbenchReconnectTest extends UiTestBase {
     }
 
     /** Stands up a second world with a different file in it, and returns the session onto it. */
-    private ClientUiSession<Object> connectElsewhere() {
+    private ClientUiSession<UIElement, Object> connectElsewhere() {
         connect(new InMemoryFileSystem()
                 .seed("mymod.proj:README.md", "# hello")
                 .seed("mymod.proj:after.txt", "here now"));

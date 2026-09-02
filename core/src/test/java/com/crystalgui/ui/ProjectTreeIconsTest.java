@@ -1,5 +1,6 @@
 package com.crystalgui.ui;
 
+import com.crystalgui.support.OldEngineSessions;
 import com.crystalgui.core.collection.table.SortOrder;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.InMemoryFileSystem;
@@ -52,8 +53,8 @@ public class ProjectTreeIconsTest extends UiTestBase {
     private ProjectFileTree tree;
     private InMemoryTransport<Object> a;
     private InMemoryTransport<Object> b;
-    private ClientUiSession<Object> session;
-    private ServerUiSession<Object> server;
+    private ClientUiSession<UIElement, Object> session;
+    private ServerUiSession<UIElement, Object> server;
 
     @Before
     public void setUp() {
@@ -75,10 +76,10 @@ public class ProjectTreeIconsTest extends UiTestBase {
         InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
         a = pair[0];
         b = pair[1];
-        server = new ServerUiSession<>(1, new UIElement(), a, PlainOps.INSTANCE);
+        server = OldEngineSessions.serve(1, new UIElement(), a);
         new WorkspaceRpc<Object>(service, WorkspaceActor.LOCAL).installOn(server::onCall);
         server.open();
-        session = new ClientUiSession<>(b, PlainOps.INSTANCE);
+        session = OldEngineSessions.view(b);
 
         tree = new ProjectFileTree(new WorkspaceClient<>(session, PlainOps.INSTANCE));
         tree.layout(l -> l.widthPercent(100f).height(0).flexGrow(1f));

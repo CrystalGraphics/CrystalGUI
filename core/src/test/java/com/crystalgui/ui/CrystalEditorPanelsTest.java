@@ -1,5 +1,6 @@
 package com.crystalgui.ui;
 
+import com.crystalgui.support.OldEngineSessions;
 import com.crystalgui.editor.CrystalEditor;
 import com.crystalgui.ui.elements.workbench.Workbench;
 import com.crystalgui.ui.elements.workbench.FileDocument;
@@ -61,10 +62,10 @@ public class CrystalEditorPanelsTest extends UiTestBase {
         WorkspaceService service = new WorkspaceService(projects, files, WorkspacePermission.ALLOW_ALL);
 
         InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
-        ServerUiSession<Object> server = new ServerUiSession<>(1, new UIElement(), pair[0], PlainOps.INSTANCE);
+        ServerUiSession<UIElement, Object> server = OldEngineSessions.serve(1, new UIElement(), pair[0]);
         new WorkspaceRpc<Object>(service, WorkspaceActor.LOCAL).installOn(server::onCall);
         server.open();
-        return new WorkspaceClient<>(new ClientUiSession<>(pair[1], PlainOps.INSTANCE), PlainOps.INSTANCE);
+        return new WorkspaceClient<>(OldEngineSessions.view(pair[1]), PlainOps.INSTANCE);
     }
 
     private static DockLeaf leafOf(CrystalEditor editor, String typeId) {
