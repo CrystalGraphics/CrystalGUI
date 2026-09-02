@@ -17,6 +17,7 @@ import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.easing.ProgressFunctions;
 import com.crystalgui.style.property.layout.LayoutProperties;
+import dev.vfyjxf.taffy.style.TaffyPosition;
 import com.crystalgui.style.property.visual.ScrollBehavior;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
@@ -1695,13 +1696,28 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
     }
 
     /**
-     * Whether a leading edge may move this node's origin.
+     * Whether a leading edge may move this node's origin — i.e. whether it is out of flow.
      *
      * <p>{@code false} keeps the trailing three handles — bottom, right and the corner — which is
-     * CSS's own default grabber, and drops the five that would have to reposition anything.</p>
+     * CSS's own default grabber, and drops the five that would have to reposition anything. A top or
+     * left handle has to shift the origin as it resizes, or the opposite edge would travel instead of
+     * staying put, and that only works where {@code left}/{@code top} genuinely place the box. On an
+     * in-flow node they are a <em>relative offset</em>: the box slides but its flow position does not,
+     * so it silently overlaps the sibling above while everything below carries on as if nothing moved.
+     * Refusing the handle is the faithful answer, because <b>CSS {@code resize} never moves a box at
+     * all</b> — eight handles are our extension, and it applies where it is meaningful.</p>
+     *
+     * <p><b>It also decides whether a resize is CLAMPED to the containing block</b>, which is the half
+     * that is silent when this answers wrongly. Returning {@code true} unconditionally — as the port
+     * first did — bounds an in-flow box by its own parent, and a parent sized BY THAT BOX is exactly as
+     * tall as it already is: {@code height = min(desired, parent.height() - y)} is then a no-op, so the
+     * bottom edge is dead while the right edge, in a full-width row, still works. It reads as one axis
+     * of the widget being unwired rather than as a clamp that should never have run.</p>
      */
     public boolean canMoveResizeOrigin() {
-        return true;
+        UIDocument document = document();
+        if (document != null && document.isPromoted(this)) return true;
+        return computedStyle().get(LayoutProperties.POSITION) == TaffyPosition.ABSOLUTE;
     }
 
     /**
