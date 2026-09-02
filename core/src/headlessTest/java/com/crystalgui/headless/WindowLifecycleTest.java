@@ -1,5 +1,6 @@
 package com.crystalgui.headless;
 
+import com.crystalgui.ui.dom.Name;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -705,6 +706,12 @@ public class WindowLifecycleTest {
      */
     public static class TestPanel extends UINode implements Networked<String> {
 
+        public static final Name NAME = Name.of("testpanel");
+
+        public TestPanel() {
+            super(NAME);
+        }
+
         static final UiType<TestPanel, String> TYPE = UiType.of("test:panel", TestPanel::new);
 
         public Button press = new Button("press");
@@ -764,6 +771,12 @@ public class WindowLifecycleTest {
     /** The auto-creation case: a null field the framework instantiates and names. */
     public static class DeclaredPanel extends UINode implements Networked<String> {
 
+        public static final Name NAME = Name.of("declaredpanel");
+
+        public DeclaredPanel() {
+            super(NAME);
+        }
+
         static final UiType<DeclaredPanel, String> TYPE = UiType.of("test:declared", DeclaredPanel::new);
 
         public Switch power;                                  // created and named for us
@@ -778,6 +791,12 @@ public class WindowLifecycleTest {
 
     /** A declared part its layout forgot to add — the shape a binding must refuse loudly. */
     public static class SabotagedPanel extends UINode implements Networked<String> {
+
+        public static final Name NAME = Name.of("sabotagedpanel");
+
+        public SabotagedPanel() {
+            super(NAME);
+        }
 
         static final UiType<SabotagedPanel, String> TYPE = UiType.of("test:sabotaged", SabotagedPanel::new);
 
@@ -805,6 +824,12 @@ public class WindowLifecycleTest {
 
     public static class NotifyingPanel extends UINode implements Networked<String> {
 
+        public static final Name NAME = Name.of("notifyingpanel");
+
+        public NotifyingPanel() {
+            super(NAME);
+        }
+
         static final UiType<NotifyingPanel, String> TYPE = UiType.of("test:notifying", NotifyingPanel::new);
 
         public Button press = new Button("press");
@@ -828,6 +853,12 @@ public class WindowLifecycleTest {
      * registration registers its tag.
      */
     public static class SavePanel extends UINode implements Networked<String> {
+
+        public static final Name NAME = Name.of("savepanel");
+
+        public SavePanel() {
+            super(NAME);
+        }
 
         public Button late = new Button("late");
 
@@ -874,6 +905,12 @@ public class WindowLifecycleTest {
     /** A parent with a nested panel. The child is BUILT in layout, with the slice only it knows. */
     public static class ParentPanel extends UINode implements Networked<String> {
 
+        public static final Name NAME = Name.of("parentpanel");
+
+        public ParentPanel() {
+            super(NAME);
+        }
+
         static final UiType<ParentPanel, String> TYPE = UiType.of("test:parent", ParentPanel::new);
         static final UiType<SavePanel, String> CHILD = UiType.of("test:save", SavePanel::new);
 
@@ -900,6 +937,12 @@ public class WindowLifecycleTest {
     /** Attaches the same child id twice — the collision the scope set exists to refuse. */
     public static class DoubleAttachPanel extends UINode implements Networked<String> {
 
+        public static final Name NAME = Name.of("doubleattachpanel");
+
+        public DoubleAttachPanel() {
+            super(NAME);
+        }
+
         static final UiType<DoubleAttachPanel, String> TYPE =
                 UiType.of("test:double", DoubleAttachPanel::new);
 
@@ -921,6 +964,12 @@ public class WindowLifecycleTest {
     /** A parent reaching into a child's element — the boundary that used to be silently crossed. */
     public static class OverridingPanel extends UINode implements Networked<String> {
 
+        public static final Name NAME = Name.of("overridingpanel");
+
+        public OverridingPanel() {
+            super(NAME);
+        }
+
         static final UiType<OverridingPanel, String> TYPE =
                 UiType.of("test:overriding", OverridingPanel::new);
 
@@ -941,6 +990,12 @@ public class WindowLifecycleTest {
 
     /** A child that arrives AFTER the window opened — dynamic content, named by hand. */
     public static class LateChildPanel extends UINode implements Networked<String> {
+
+        public static final Name NAME = Name.of("latechildpanel");
+
+        public LateChildPanel() {
+            super(NAME);
+        }
 
         static final UiType<LateChildPanel, String> TYPE =
                 UiType.of("test:late-parent", LateChildPanel::new);

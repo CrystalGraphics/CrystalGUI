@@ -1,5 +1,6 @@
 package com.crystalgui.ui;
 
+import com.crystalgui.support.OldEngineSessions;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.InMemoryFileSystem;
 import com.crystalgui.fs.ProjectRegistry;
@@ -48,8 +49,8 @@ public class ExternalChangeTest extends UiTestBase {
 
     private InMemoryFileSystem files;
     private InMemoryTransport<Object>[] pair;
-    private ServerUiSession<Object> server;
-    private ClientUiSession<Object> session;
+    private ServerUiSession<UIElement, Object> server;
+    private ClientUiSession<UIElement, Object> session;
     private WorkspaceService service;
     private WorkspaceRpc<Object> rpc;
 
@@ -66,12 +67,12 @@ public class ExternalChangeTest extends UiTestBase {
         service = new WorkspaceService(projects, files, WorkspacePermission.ALLOW_ALL);
 
         pair = InMemoryTransport.pair();
-        server = new ServerUiSession<>(1, new UIElement(), pair[0], PlainOps.INSTANCE);
+        server = OldEngineSessions.serve(1, new UIElement(), pair[0]);
         rpc = new WorkspaceRpc<>(service, WorkspaceActor.LOCAL);
         rpc.installOn(server::onCall);
         server.open();
 
-        session = new ClientUiSession<>(pair[1], PlainOps.INSTANCE);
+        session = OldEngineSessions.view(pair[1]);
         workbench = new Workbench(new WorkspaceClient<>(session, PlainOps.INSTANCE));
         workbench.layout(l -> l.widthPercent(100f).heightPercent(100f));
 

@@ -135,7 +135,7 @@ public class TabViewDescriptionTest {
     public void aTabViewRefusesANonTabChild() {
         TabView view = new TabView();
         try {
-            view.append(new UIText("not a tab"));
+            view.adoptDescribedChild(new UIText("not a tab"));
             fail("a <tabview> must refuse a described child that is not a <tab>");
         } catch (IllegalArgumentException expected) {
             assertTrue(expected.getMessage().contains("tab"));

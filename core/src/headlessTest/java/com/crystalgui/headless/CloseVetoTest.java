@@ -1,5 +1,6 @@
 package com.crystalgui.headless;
 
+import com.crystalgui.ui.dom.Name;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertFalse;
@@ -41,6 +42,12 @@ public class CloseVetoTest {
 
     /** Refuses on demand, and counts how often it was asked. */
     public static class GuardedPanel extends UINode implements Networked<String> {
+
+        public static final Name NAME = Name.of("guardedpanel");
+
+        public GuardedPanel() {
+            super(NAME);
+        }
         static final AtomicBoolean REFUSE = new AtomicBoolean(false);
         static final List<String> ASKED = new ArrayList<>();
 
@@ -78,6 +85,12 @@ public class CloseVetoTest {
      * against it.</p>
      */
     public static class PlainPanel extends UINode implements Networked<String> {
+
+        public static final Name NAME = Name.of("plainpanel");
+
+        public PlainPanel() {
+            super(NAME);
+        }
         @Override
         public void build(String model) {
             append(new UIText(model));

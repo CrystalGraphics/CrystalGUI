@@ -1,5 +1,6 @@
 package com.crystalgui.ui;
 
+import com.crystalgui.support.OldEngineSessions;
 import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.fs.CgPath;
@@ -77,8 +78,8 @@ public class WorkbenchSessionTest extends UiTestBase {
         WorkbenchSession session;
         InMemoryTransport<Object> serverSide;
         InMemoryTransport<Object> clientSide;
-        ClientUiSession<Object> clientSession;
-        ServerUiSession<Object> serverSession;
+        ClientUiSession<UIElement, Object> clientSession;
+        ServerUiSession<UIElement, Object> serverSession;
 
         /**
          * Moves the workbench into a {@code WindowFrame} on the desktop — the shape W7 made real.
@@ -148,10 +149,10 @@ public class WorkbenchSessionTest extends UiTestBase {
         InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
         harness.serverSide = pair[0];
         harness.clientSide = pair[1];
-        harness.serverSession = new ServerUiSession<>(1, new UIElement(), pair[0], PlainOps.INSTANCE);
+        harness.serverSession = OldEngineSessions.serve(1, new UIElement(), pair[0]);
         new WorkspaceRpc<Object>(service, WorkspaceActor.LOCAL).installOn(harness.serverSession::onCall);
         harness.serverSession.open();
-        harness.clientSession = new ClientUiSession<>(pair[1], PlainOps.INSTANCE);
+        harness.clientSession = OldEngineSessions.view(pair[1]);
 
         harness.workbench = new Workbench(new WorkspaceClient<>(harness.clientSession, PlainOps.INSTANCE));
         UIElement root = new UIElement().layout(l -> l.widthPercent(100f).heightPercent(100f)

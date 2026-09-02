@@ -219,7 +219,10 @@ public class ServerBehaviourLoopTest {
          */
         UINode composite = null;
         for (UINode candidate : root.children()) {
-            if (candidate.children().size() > candidate.children().size()) {
+            // Undescribed parts are a SHADOW TREE here, so "has scaffolding of its own" is a
+            // question about the shadow root -- not a comparison of the light children with
+            // themselves, which is what the port left behind and is false for every node.
+            if (candidate.shadowRoot() != null && !candidate.shadowRoot().children().isEmpty()) {
                 composite = candidate;
                 break;
             }

@@ -5,14 +5,6 @@
 # CLASS	path	lines	destination	batch	how	status
 CLASS	editor/CrystalEditor	500	app/editor	6.7	copy	ported
 CLASS	editor/CrystalEditorCommands	94	app/editor	6.7	copy	ported
-CLASS	example/machine/EngineModel	111	app/machine	6.8	copy	pending
-CLASS	example/machine/MachineDemo	330	app/machine	6.8	copy	pending
-CLASS	example/machine/MachineModel	130	app/machine	6.8	copy	pending
-CLASS	example/machine/MachineTrace	54	app/machine	6.8	copy	pending
-CLASS	example/machine/ui/EnginePanel	259	app/machine/ui	6.8	copy	pending
-CLASS	example/machine/ui/MachinePanel	736	app/machine/ui	6.8	copy	pending
-CLASS	example/machine/ui/MachineRows	70	app/machine/ui	6.8	copy	pending
-CLASS	example/machine/ui/MachineStyles	154	app/machine/ui	6.8	copy	pending
 CLASS	graph/shader/BlackboardPanel	1361	app/shadergraph/blackboard	6.4	copy	ported
 CLASS	graph/shader/CategoryHeader	134	app/shadergraph/blackboard	6.4	copy	ported
 CLASS	graph/shader/InlineRename	166	app/shadergraph/blackboard	6.4	copy	ported
@@ -31,20 +23,20 @@ CLASS	graph/shader/ShaderPortArity	284	app/shadergraph/node	6.4	copy	ported
 CLASS	graph/shader/ShaderPropertyForm	261	app/shadergraph	6.4	copy	ported
 CLASS	graph/shader/ShaderPropertyNodes	241	app/shadergraph/node	6.4	copy	ported
 CLASS	graph/shader/ShaderVectorFieldWidget	89	app/shadergraph/node	6.4	copy	ported
-CLASS	net/window/ClientScope	91	net/window	6.8	move	in-place
-CLASS	net/window/ClientWindowContext	96	net/window	6.8	copy	in-place
-CLASS	net/window/ClientWindows	591	net/window	6.8	copy	in-place
+CLASS	net/window/ClientScope	92	net/window	6.8	move	in-place
+CLASS	net/window/ClientWindowContext	96	net/window	6.8	move	in-place
+CLASS	net/window/ClientWindows	593	net/window	6.8	move	in-place
 CLASS	net/window/CloseReason	53	net/window	6.8	move	in-place
-CLASS	net/window/Networked	257	net/window	6.8	copy	in-place
+CLASS	net/window/Networked	257	net/window	6.8	move	in-place
 CLASS	net/window/OpenResolver	58	net/window	6.8	move	in-place
 CLASS	net/window/ScopedSheets	249	net/window	6.8	move	in-place
-CLASS	net/window/ServerScope	514	net/window	6.8	copy	in-place
-CLASS	net/window/ServerWindow	265	net/window	6.8	copy	in-place
-CLASS	net/window/ServerWindows	515	net/window	6.8	copy	in-place
-CLASS	net/window/SheetSupply	230	net/window	6.8	move	in-place
-CLASS	net/window/UiType	298	net/window	6.8	copy	in-place
-CLASS	net/window/ViewCommands	119	net/window	6.8	copy	in-place
-CLASS	net/window/WindowMount	74	net/window	6.8	copy	in-place
+CLASS	net/window/ServerScope	514	net/window	6.8	move	in-place
+CLASS	net/window/ServerWindow	265	net/window	6.8	move	in-place
+CLASS	net/window/ServerWindows	517	net/window	6.8	move	in-place
+CLASS	net/window/SheetSupply	231	net/window	6.8	move	in-place
+CLASS	net/window/UiType	345	net/window	6.8	move	in-place
+CLASS	net/window/ViewCommands	123	net/window	6.8	move	in-place
+CLASS	net/window/WindowMount	74	net/window	6.8	move	in-place
 CLASS	net/window/WindowProtocol	57	net/window	6.8	move	in-place
 CLASS	ui/elements/Button	208	widget/control	6.1	copy	ported
 CLASS	ui/elements/Checkbox	156	widget/control	6.1	copy	ported
@@ -303,12 +295,12 @@ PART	(unowned)	resizer-right	A	3	proposed	leaf in every rule
 PART	(unowned)	resizer-top	A	3	proposed	leaf in every rule
 PART	(unowned)	resizer-top-left	A	3	proposed	leaf in every rule
 PART	(unowned)	resizer-top-right	A	3	proposed	leaf in every rule
-PART	(unowned)	tile-1	A	1	proposed	leaf in every rule
-PART	(unowned)	tile-2	A	1	proposed	leaf in every rule
-PART	(unowned)	tile-3	A	1	proposed	leaf in every rule
-PART	(unowned)	tile-4	A	1	proposed	leaf in every rule
-PART	(unowned)	tile-5	A	1	proposed	leaf in every rule
-PART	(unowned)	tile-6	A	1	proposed	leaf in every rule
+PART	(unowned)	tile-1	A	2	proposed	leaf in every rule
+PART	(unowned)	tile-2	A	2	proposed	leaf in every rule
+PART	(unowned)	tile-3	A	2	proposed	leaf in every rule
+PART	(unowned)	tile-4	A	2	proposed	leaf in every rule
+PART	(unowned)	tile-5	A	2	proposed	leaf in every rule
+PART	(unowned)	tile-6	A	2	proposed	leaf in every rule
 PART	(unowned)	warning	A	1	proposed	leaf in every rule
 PART	ArrayControl	add	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	ArrayControl	array	B	10	confirmed	a rule selects through it (9)
@@ -370,7 +362,7 @@ PART	CompletionPopup	completion-deprecated	B	2	confirmed	a rule selects through 
 PART	CompletionPopup	completion-detail	B	1	confirmed	leaf in every rule
 PART	CompletionPopup	completion-hint	B	1	confirmed	leaf in every rule
 PART	CompletionPopup	completion-hint-text	B	1	confirmed	leaf in every rule
-PART	CompletionPopup	completion-icon	B	2	confirmed	leaf in every rule
+PART	CompletionPopup	completion-icon	B	4	confirmed	leaf in every rule
 PART	CompletionPopup	completion-inherited	B	1	confirmed	a rule selects through it (1)
 PART	CompletionPopup	completion-label	B	3	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	CompletionPopup	completion-mark-final	B	2	confirmed	leaf in every rule
@@ -468,6 +460,7 @@ PART	GraphNode	inputs	B	0	confirmed	leaf in every rule
 PART	GraphNode	moving	C	0	confirmed	state adjective
 PART	GraphNode	no-input-gap	C	0	confirmed	state adjective
 PART	GraphNode	no-inputs	C	0	confirmed	state adjective
+PART	GraphNode	no-outputs	C	0	confirmed	state adjective
 PART	GraphNode	outputs	B	0	confirmed	leaf in every rule
 PART	GraphNode	ports	B	0	confirmed	leaf in every rule
 PART	GraphNode	ports-empty	C	0	confirmed	state adjective
@@ -532,7 +525,7 @@ PART	MaskControl	toggle	B	1	confirmed	leaf in every rule, scoped by an ancestor 
 PART	MatrixControl	matrix	B	3	confirmed	a rule selects through it (2)
 PART	MatrixControl	matrix-cell	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	MatrixControl	matrix-row	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
-PART	Menu	has-checkable	C	5	confirmed	state adjective
+PART	Menu	has-checkable	C	7	confirmed	state adjective
 PART	Menu	items	A	0	confirmed	leaf in every rule
 PART	Menu	separator	A	0	confirmed	leaf in every rule
 PART	MenuBarView	burger	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
@@ -543,7 +536,7 @@ PART	MenuBarView	menu-title	B	4	confirmed	a rule selects through it (1)
 PART	MenuBarView	open	C	2	confirmed	state adjective
 PART	MenuItem	accelerator	A	0	confirmed	leaf in every rule
 PART	MenuItem	checkable	A	0	confirmed	leaf in every rule
-PART	MenuItem	has-submenu	C	0	confirmed	state adjective
+PART	MenuItem	has-submenu	C	1	confirmed	state adjective
 PART	MenuItem	mark	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	MenuItem	submenu-arrow	A	0	confirmed	leaf in every rule
 PART	MergeView	dialog-actions	A	1	confirmed	leaf in every rule
@@ -693,8 +686,6 @@ PART	RegionHost	region-host	A	2	confirmed	leaf in every rule
 PART	RegionHost	region-primary	A	0	confirmed	leaf in every rule
 PART	RegionHost	region-secondary	A	0	confirmed	leaf in every rule
 PART	RegionHost	region-split	A	1	confirmed	leaf in every rule
-PART	Resizable	user-sized-height	B	1	proposed	a rule selects through it (1)
-PART	Resizable	user-sized-width	A	1	proposed	leaf in every rule
 PART	Resizer	resizer	A	1	proposed	leaf in every rule
 PART	RunConsoleView	over-link	A	0	proposed	leaf in every rule
 PART	RunConsoleView	run-console	A	0	proposed	leaf in every rule
@@ -786,10 +777,10 @@ PART	StatusBarView	spacer	B	0	confirmed	leaf in every rule
 PART	StatusBarView	status-bar	B	6	confirmed	a rule selects through it (6)
 PART	StatusBarView	status-item	B	4	confirmed	leaf in every rule, scoped by an ancestor in 4
 PART	StatusBarView	status-sep	B	0	confirmed	leaf in every rule
-PART	StripeView	activity-bar	B	4	confirmed	a rule selects through it (4)
-PART	StripeView	activity-item	A	0	confirmed	leaf in every rule
+PART	StripeView	activity-bar	B	7	confirmed	a rule selects through it (7)
+PART	StripeView	activity-item	A	3	confirmed	leaf in every rule, scoped by an ancestor in 3
 PART	StripeView	badge	A	3	confirmed	leaf in every rule, scoped by an ancestor in 3
-PART	StripeView	dot	A	2	confirmed	leaf in every rule, scoped by an ancestor in 2
+PART	StripeView	dot	A	4	confirmed	leaf in every rule, scoped by an ancestor in 4
 PART	StripeView	panel-focused	C	0	confirmed	state adjective
 PART	StripeView	stripe-left	A	0	confirmed	leaf in every rule
 PART	StripeView	stripe-right	A	0	confirmed	leaf in every rule
@@ -799,7 +790,7 @@ PART	SvgGradient	tag	A	0	proposed	leaf in every rule
 PART	SvgResolver	tag	A	0	proposed	leaf in every rule
 PART	Switch	knob	A	0	confirmed	leaf in every rule
 PART	Switch	spacer	A	0	confirmed	leaf in every rule
-PART	SymbolIcon	completion-icon	A	2	confirmed	leaf in every rule
+PART	SymbolIcon	completion-icon	A	4	confirmed	leaf in every rule
 PART	SymbolIcon	completion-mark-final	A	2	confirmed	leaf in every rule
 PART	SymbolIcon	completion-mark-static	A	2	confirmed	leaf in every rule
 PART	SystemMenu	jump-list	B	2	confirmed	leaf in every rule
@@ -832,8 +823,8 @@ PART	Taskbar	entry	B	0	confirmed	leaf in every rule
 PART	Taskbar	exiting	C	0	confirmed	state adjective
 PART	Taskbar	glow	B	0	confirmed	leaf in every rule
 PART	Taskbar	hidden	C	0	confirmed	state adjective
-PART	Taskbar	icon	B	2	confirmed	a rule selects through it (1)
-PART	Taskbar	indicator	B	4	confirmed	leaf in every rule, scoped by an ancestor in 4
+PART	Taskbar	icon	B	0	confirmed	leaf in every rule
+PART	Taskbar	indicator	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	Taskbar	progress	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	TaskbarDesigner	designer	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	TaskbarDesigner	designer-actions	B	1	confirmed	leaf in every rule
@@ -906,7 +897,9 @@ PART	TreeView	expanded	C	0	confirmed	state adjective
 PART	TreeView	leaf	C	0	confirmed	state adjective
 PART	UIElement	resizer	A	1	proposed	leaf in every rule
 PART	UIElement	user-sized-height	B	1	proposed	a rule selects through it (1)
-PART	UIElement	user-sized-width	A	1	proposed	leaf in every rule
+PART	UIElement	user-sized-width	B	2	proposed	a rule selects through it (1)
+PART	UINode	user-sized-height	B	1	proposed	a rule selects through it (1)
+PART	UINode	user-sized-width	B	2	proposed	a rule selects through it (1)
 PART	UIText	syntax	C	54	confirmed	leaf in every rule
 PART	UIWindow	overlays	A	0	proposed	leaf in every rule
 PART	VectorControl	axis	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
@@ -931,13 +924,12 @@ PART	WindowFrame	icon	B	1	confirmed	leaf in every rule, scoped by an ancestor in
 PART	WindowFrame	maximize	B	5	confirmed	leaf in every rule, scoped by an ancestor in 5
 PART	WindowFrame	maximized	C	2	confirmed	state adjective
 PART	WindowFrame	minimize	B	3	confirmed	leaf in every rule, scoped by an ancestor in 3
-PART	WindowFrame	occupied	C	1	confirmed	state adjective
-PART	WindowFrame	overlays	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
+PART	WindowFrame	overlays	B	0	confirmed	leaf in every rule
 PART	WindowFrame	pin	B	5	confirmed	leaf in every rule, scoped by an ancestor in 5
 PART	WindowFrame	pinned	C	1	confirmed	state adjective
 PART	WindowFrame	title	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	WindowFrame	title-bar	B	28	confirmed	a rule selects through it (24)
-PART	WindowFrame	window	B	37	confirmed	a rule selects through it (33)
+PART	WindowFrame	window	B	35	confirmed	a rule selects through it (31)
 PART	WindowIcon	branded	C	1	confirmed	state adjective
 PART	WindowIcon	monogram	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	WindowIcon	tile-mono	A	1	confirmed	leaf in every rule
@@ -947,7 +939,7 @@ PART	WindowPreview	pre-icon	B	2	confirmed	a rule selects through it (1)
 PART	WindowPreview	preview-close	B	3	confirmed	leaf in every rule, scoped by an ancestor in 3
 PART	WindowPreview	preview-header	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	WindowPreview	preview-title	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
-PART	WindowPreview	window-preview	B	13	confirmed	a rule selects through it (11)
+PART	WindowPreview	window-preview	B	14	confirmed	a rule selects through it (11)
 PART	WindowSwitcher	icon	B	2	confirmed	a rule selects through it (1)
 PART	WindowSwitcher	selected	C	7	confirmed	state adjective
 PART	WindowSwitcher	switcher-close	B	4	confirmed	leaf in every rule, scoped by an ancestor in 4

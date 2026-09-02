@@ -1,6 +1,7 @@
 package com.crystalgui.headless;
 
 import com.crystalgui.serialization.PlainOps;
+import com.crystalgui.ui.dom.ShadowRoot;
 import com.crystalgui.ui.dom.UINodeTreeSource;
 import com.crystalgui.net.mirror.UINodeMirror;
 import static org.junit.Assert.assertFalse;
@@ -49,7 +50,13 @@ public class TreeSourceContractTest extends TreeSourceContract<UINode> {
             }
 
             @Override public void addScaffolding(UINode parent, UINode child) {
-                parent.append(child);
+                // A composite's own parts live in a SHADOW TREE on this engine, which is what makes
+                // them undescribed: the far side rebuilds them from the kind. The codemod mapped the
+                // old engine's addInternalChild to append, which is a LIGHT child -- described, and
+                // so the opposite of what this contract is asserting.
+                ShadowRoot shadow = parent.shadowRoot();
+                if (shadow == null) shadow = parent.attachShadow();
+                shadow.append(child);
             }
 
             @Override public void addClass(UINode node, String className) {
@@ -65,7 +72,7 @@ public class TreeSourceContractTest extends TreeSourceContract<UINode> {
             }
 
             @Override public String plainKindName() {
-                return "element";
+                return "crystalgui:element";
             }
         };
     }

@@ -1,5 +1,6 @@
 package com.crystalgui.ui;
 
+import com.crystalgui.support.OldEngineSessions;
 import com.crystalgui.editor.CrystalEditor;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.InMemoryConfigStorage;
@@ -55,8 +56,8 @@ public class EditorSelfSaveTest extends UiTestBase {
 
     private InMemoryTransport<Object> serverSide;
     private InMemoryTransport<Object> clientSide;
-    private ClientUiSession<Object> clientSession;
-    private ServerUiSession<Object> serverSession;
+    private ClientUiSession<UIElement, Object> clientSession;
+    private ServerUiSession<UIElement, Object> serverSession;
 
     @Before
     public void setUp() {
@@ -68,10 +69,10 @@ public class EditorSelfSaveTest extends UiTestBase {
         InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
         serverSide = pair[0];
         clientSide = pair[1];
-        serverSession = new ServerUiSession<>(1, new UIElement(), pair[0], PlainOps.INSTANCE);
+        serverSession = OldEngineSessions.serve(1, new UIElement(), pair[0]);
         new WorkspaceRpc<Object>(service, WorkspaceActor.LOCAL).installOn(serverSession::onCall);
         serverSession.open();
-        clientSession = new ClientUiSession<>(pair[1], PlainOps.INSTANCE);
+        clientSession = OldEngineSessions.view(pair[1]);
 
         editor = new CrystalEditor(new WorkspaceClient<>(clientSession, PlainOps.INSTANCE));
         editor.useConfig(storage);

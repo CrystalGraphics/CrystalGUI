@@ -1,5 +1,6 @@
 package com.crystalgui.ui;
 
+import com.crystalgui.support.OldEngineSessions;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.fs.CgPath;
@@ -61,8 +62,8 @@ public class WorkbenchCloseReleasesTest extends UiTestBase {
 
     private static InMemoryTransport<Object> serverSide;
     private static InMemoryTransport<Object> clientSide;
-    private static ClientUiSession<Object> clientSession;
-    private static ServerUiSession<Object> serverSession;
+    private static ClientUiSession<UIElement, Object> clientSession;
+    private static ServerUiSession<UIElement, Object> serverSession;
 
     /** A document that records its own release, so disposal is observable rather than inferred. */
     private static final class Tracked implements FileDocument, Disposable {
@@ -95,10 +96,10 @@ public class WorkbenchCloseReleasesTest extends UiTestBase {
         InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
         serverSide = pair[0];
         clientSide = pair[1];
-        serverSession = new ServerUiSession<>(1, new UIElement(), pair[0], PlainOps.INSTANCE);
+        serverSession = OldEngineSessions.serve(1, new UIElement(), pair[0]);
         new WorkspaceRpc<Object>(service, WorkspaceActor.LOCAL).installOn(serverSession::onCall);
         serverSession.open();
-        clientSession = new ClientUiSession<>(pair[1], PlainOps.INSTANCE);
+        clientSession = OldEngineSessions.view(pair[1]);
         return new WorkspaceClient<>(clientSession, PlainOps.INSTANCE);
     }
 

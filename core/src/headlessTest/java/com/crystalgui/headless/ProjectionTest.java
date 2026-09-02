@@ -1,5 +1,6 @@
 package com.crystalgui.headless;
 
+import com.crystalgui.widget.layout.SplitView;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -395,7 +396,7 @@ public class ProjectionTest {
     @Test
     public void aWidgetWithNoPrimaryStateIsReportedRatherThanGuessedAt() {
         final class WithSplit {
-            com.crystalgui.ui.elements.SplitView weights = new com.crystalgui.ui.elements.SplitView();
+            SplitView weights = new SplitView();
         }
         final class Model {
             public List<Float> weights() { return List.of(0.5f, 0.5f); }

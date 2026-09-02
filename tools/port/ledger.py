@@ -366,7 +366,7 @@ STATE_NAMES = {
     'collapsed', 'dimmed', 'dock-dragging', 'dragging', 'editing', 'empty', 'empty-collapsed',
     'exiting', 'expanded', 'first', 'flipped', 'focused', 'fullscreen', 'has-checkable',
     'has-submenu', 'hidden', 'hud', 'inline', 'invalid', 'keyboard-moving', 'leaf', 'match',
-    'maximized', 'missing', 'moving', 'no-input-gap', 'no-inputs', 'off', 'on', 'open',
+    'maximized', 'missing', 'moving', 'no-input-gap', 'no-inputs', 'no-outputs', 'off', 'on', 'open',
     'panel-focused', 'panning', 'pinned', 'ports-empty', 'preferred-action', 'rising', 'searching',
     'second', 'selected', 'shown', 'sorted-asc', 'sorted-desc', 'truncated', 'unlabelled',
     'vertical', 'windowed', 'floating', 'full-width', 'problem-only', 'no-message', 'disabled',

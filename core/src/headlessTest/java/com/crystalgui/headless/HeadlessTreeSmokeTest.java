@@ -36,11 +36,14 @@ public class HeadlessTreeSmokeTest {
 
     @Test
     public void everyBuiltinWidgetConstructsWithoutGraphics() {
-        ElementRegistry.bootstrapBuiltins();
-        for (String tag : ElementRegistry.tags()) {
-            UINode element = UINodeRegistry.create(Name.parse(tag));
-            assertNotNull(tag + " failed to construct", element);
-            assertEquals("tag must survive construction", tag, element.tagName());
+        UINodeRegistry.bootstrap();
+        for (Name kind : UINodeRegistry.names()) {
+            // A cascade-only kind is registered so a sheet can name it and has no factory at all --
+            // nothing describes one over a wire, so there is nothing here to smoke-test.
+            if (!UINodeRegistry.isBuildable(kind)) continue;
+            UINode element = UINodeRegistry.create(kind);
+            assertNotNull(kind + " failed to construct", element);
+            assertEquals("the kind must survive construction", kind, element.name());
         }
     }
 

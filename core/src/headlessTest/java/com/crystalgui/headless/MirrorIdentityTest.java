@@ -223,12 +223,13 @@ public class MirrorIdentityTest {
         server.open();
         settle();
 
-        // A Button has internal children (its label). If they were numbered, the described count and
-        // the id space would disagree.
+        // A Button builds its parts in a SHADOW TREE (its label among them). If those were numbered,
+        // the described count and the id space would disagree.
         assertEquals("only described elements are numbered", 3,
                 new UINodeTreeSource(root).describedCount(root));
-        assertTrue("the button really does have internals",
-                root.children().get(1).children().size() > 0);
+        UINode button = root.children().get(1);
+        assertNotNull("the button really does have a shadow tree", button.shadowRoot());
+        assertTrue("...with parts in it", !button.shadowRoot().children().isEmpty());
     }
 
     // ── Nothing is sent when nothing happens ────────────────────────────────
