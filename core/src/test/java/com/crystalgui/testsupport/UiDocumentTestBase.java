@@ -6,6 +6,8 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.ShadowRoot;
+import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.event.UIEvent;
 import dev.vfyjxf.taffy.style.TaffyPosition;
@@ -89,7 +91,20 @@ public abstract class UiDocumentTestBase extends UiTestBase {
 
     /** A whole frame: motion, cascade, layout, paint-free, and the pointer diffed against it. */
     protected final void frame() {
-        document.frame(0.016f, W, H);
+        frame(0.016f);
+    }
+
+    /**
+     * A frame of a stated length -- for anything on a CLOCK: a caret blink, a tooltip delay, a
+     * transition, a repeat.
+     *
+     * <p>Load-bearing for the port. The old engine drove these through {@code tickAnimations(0.6f)},
+     * and collapsing that to a bare {@code frame()} advances 16ms instead of 600 -- so the thing
+     * under test never fires and the failure reads as the FEATURE being broken rather than the clock
+     * never having been advanced.</p>
+     */
+    protected final void frame(float deltaSeconds) {
+        document.frame(deltaSeconds, W, H);
     }
 
     /** Layout only — no motion, no input. For a geometry assertion that should not need a frame. */
@@ -172,6 +187,30 @@ public abstract class UiDocumentTestBase extends UiTestBase {
 
     // ── Reading ──────────────────────────────────────────────────────────────
 
+    /**
+     * A node's centre in SURFACE pixels -- what {@code press}/{@code move}/{@code click} take.
+     *
+     * <p>Here rather than in each test because the two ways of getting it wrong are both silent and
+     * both arrive together in a ported file. {@code Box.x()} is PARENT-RELATIVE on this engine where
+     * the old runtime cache was absolute, so a thumb inside its own scrollbar reads 0 and the press
+     * lands near the origin; and the old {@code UIWindow} defaulted to {@code uiScale} 2, so ported
+     * arithmetic multiplies by a 2 this fixture does not have. {@code worldX()} already carries the
+     * root transform, so only the HALF-EXTENT is scaled -- scaling the origin too doubles it again.</p>
+     */
+    protected final int[] centreOf(UINode node) {
+        Box box = boxOf(node);
+        float scale = document.boxes().uiScale();
+        return new int[]{
+                Math.round(box.worldX() + box.width() / 2f * scale),
+                Math.round(box.worldY() + box.height() / 2f * scale)
+        };
+    }
+
+    /** The document's scale, so a test can express a distance in surface pixels without pinning it. */
+    protected final float uiScale() {
+        return document.boxes().uiScale();
+    }
+
     /** What is under a point, or null over nothing. The hit test needs no paint to have happened. */
     protected final UINode hit(float x, float y) {
         Box box = document.boxes().hitTest(x, y);
@@ -185,6 +224,36 @@ public abstract class UiDocumentTestBase extends UiTestBase {
             throw new AssertionError("no box for " + node + " -- hidden, frozen, or laid out yet?");
         }
         return box;
+    }
+
+    /**
+     * A widget's PART by name, searched through its shadow tree.
+     *
+     * <p>The old engine gave every internal child a `__double-underscore__` class, so a test found
+     * one with an ordinary selector. A part is not a class and it is not in the light tree, so no
+     * outer selector reaches it -- `querySelector(".thumb")` answers nothing, which reads as the
+     * widget not having been built. Fails loudly rather than returning null, because every caller
+     * is about to dereference it.</p>
+     */
+    protected static UINode part(UINode host, String partName) {
+        ShadowRoot root = host.shadowRoot();
+        if (root == null) {
+            throw new AssertionError(host + " has no shadow tree, so it has no parts");
+        }
+        UINode found = findPart(root, partName);
+        if (found == null) {
+            throw new AssertionError("no part named " + partName + " in " + host);
+        }
+        return found;
+    }
+
+    private static UINode findPart(UINode at, String partName) {
+        for (UINode child : at.children()) {
+            if (partName.equals(child.get(Attribute.PART))) return child;
+            UINode deeper = findPart(child, partName);
+            if (deeper != null) return deeper;
+        }
+        return null;
     }
 
     /** Every node under {@code scope} carrying {@code className}, in document order. */
