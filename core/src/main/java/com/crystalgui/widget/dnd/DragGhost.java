@@ -178,7 +178,8 @@ public class DragGhost extends UINode {
         // ...AND OTHERWISE OFFERED, which is the ordinary case and used to be the end of it: this is
         // called BEFORE the drag starts (rule 3), so there is nothing to hand it to and the line above
         // did nothing at all. `Drag.start` claims the offer.
-        else window.input().offerGhost(this, ghostOffsetX(), ghostOffsetY());
+        else if (anchor == Anchor.GRAB) window.input().offerGhost(this);
+        else window.input().offerGhost(this, 0f, 0f);
         return this;
     }
 

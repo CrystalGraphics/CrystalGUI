@@ -1,5 +1,6 @@
 package com.crystalgui.widget;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
@@ -28,6 +29,10 @@ public class DragGhostShowsTest extends UiDocumentTestBase {
 
     @Test
     public void aGhostHasABoxWhileItsDragRuns() {
+        // THE SHEET IS OPT-IN in this fixture, and without it every rule in this test's subject is
+        // absent -- which is how a first pass measured the ghost at its content size and read it as a
+        // rule that would not match.
+        withDefaultStyles();
         UINode source = new UINode();
         document.append(source);
         DragGhost ghost = new DragGhost();
@@ -49,6 +54,13 @@ public class DragGhostShowsTest extends UiDocumentTestBase {
 
         assertNotNull("the ghost has no box while its drag runs, so there is nothing to draw",
                 ghost.box());
+        // AND IT IS THE SIZE OF WHAT IT STANDS FOR -- the rail button's 16px square. Asserted because
+        // the two numbers live in different rules and nothing else pairs them: a ghost that drifts away
+        // from `workbench .__activity-item__` stops being a stand-in and starts being a second widget.
+        assertEquals("the ghost is not the size of the thing being carried", 16f,
+                ghost.box().width(), 0.01f);
+        assertEquals("the ghost is not the size of the thing being carried", 16f,
+                ghost.box().height(), 0.01f);
 
         drag.cancel();
         frame();

@@ -1,9 +1,11 @@
 package com.crystalgui.ui.service;
 
+import dev.vfyjxf.taffy.style.TaffyDisplay;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UINode;
@@ -85,8 +87,40 @@ public final class Focus {
         // Not rendered is not focusable -- the DOM's rule for `display: none`, asked of the box tree,
         // which is the one thing that knows. Before the first layout there are no boxes at all, and a
         // host may legitimately focus something then, so the question is only put once there are.
-        if (node.box() == null && document.boxes().root() != null) return false;
+        //
+        // NO BOX IS TWO DIFFERENT ANSWERS, and only one of them means "not rendered". A node that has
+        // just been ATTACHED has no box either, and will have one the moment layout next runs -- so the
+        // box alone refuses focus to anything focused in the same breath as being added.
+        //
+        // Which is the ordinary case, not a corner: `UIDocument.frame` runs layout and dispatches input
+        // in `endFrame` AFTER it, so a popup opened by a chord builds its tree at the very end of a
+        // frame and cannot be laid out until the next one. Every such widget focuses its field the
+        // moment it opens -- `QuickPick.onOpened` calls `requestFocus` and the caret is the whole point
+        // of the widget -- and every one of those requests was refused in silence: the command palette
+        // and Go to Class both opened with the caret nowhere, so typing went to whatever held focus
+        // before.
+        //
+        // So ask what "not rendered" actually means, and ask it of the CASCADE, which has an answer
+        // before layout does. Only reached when there is no box, so nothing on the hot path pays for it.
+        if (node.box() == null && document.boxes().root() != null && !willBeLaidOut(node)) return false;
         return !isInert(node);
+    }
+
+
+    /**
+     * Whether a node with no box is merely waiting for layout rather than switched off.
+     *
+     * <p>A box is absent for two unrelated reasons — the subtree is not displayed, or it has not been
+     * laid out yet — and {@link #focusable} must separate them. {@code display} and the {@code hidden}
+     * attribute are both answerable from the cascade the instant a node is attached, which is what makes
+     * this the question layout cannot yet answer.</p>
+     */
+    private boolean willBeLaidOut(UINode node) {
+        for (UINode at = node; at != null; at = at.composedParent()) {
+            if (!at.isDisplayed()) return false;
+            if (at.computedStyle().get(LayoutProperties.DISPLAY) == TaffyDisplay.NONE) return false;
+        }
+        return true;
     }
 
     /** Is this node in the Tab sequence? {@code CLICK_NOT_TABBABLE} is focusable and is not. */

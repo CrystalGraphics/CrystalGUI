@@ -11,6 +11,7 @@ import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UISlot;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
@@ -119,11 +120,40 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
 
     private float pendingGhostX, pendingGhostY;
 
-    /** Offers a ghost to whatever drag starts next from this press. @see #takePendingGhost */
+    /** Offers a ghost at an explicit cursor offset, in the ghost's own space. */
     public void offerGhost(@Nullable UINode ghost, float offsetX, float offsetY) {
         pendingGhost = ghost;
         pendingGhostX = offsetX;
         pendingGhostY = offsetY;
+        pendingGhostGrab = false;
+    }
+
+    /**
+     * Offers a ghost anchored where the press landed inside the SOURCE — the drag resolves the offset.
+     *
+     * <p><b>Not the ghost's own centre</b>, which is the mistake the old controller's javadoc warns
+     * about in as many words: "anchored by where inside the source the press landed, not by the ghost's
+     * own centre, so the ghost sits exactly where the source visually was relative to the pointer.
+     * Grabbing a card by its corner and having it jump to centre-on-cursor is the classic tell of a
+     * ghost positioned the wrong way." The port computed the centre, and computed it from a box the
+     * ghost does not have while it is hidden — so the offset was zero and every ghost hung below and
+     * right of the cursor.</p>
+     *
+     * <p>Resolved by the drag because only the drag knows it: the press within the source is exactly
+     * what {@code Drag}'s own start point is.</p>
+     */
+    public void offerGhost(@Nullable UINode ghost) {
+        pendingGhost = ghost;
+        pendingGhostX = 0f;
+        pendingGhostY = 0f;
+        pendingGhostGrab = true;
+    }
+
+    private boolean pendingGhostGrab;
+
+    /** Whether the offered ghost wants the press-within-source offset. @see #offerGhost(UINode) */
+    boolean pendingGhostGrab() {
+        return pendingGhostGrab;
     }
 
     /** Claims the offered ghost, if any, and forgets it. Called by {@code Drag.start}. */
@@ -350,7 +380,25 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         CgCursor declared = hovered.computedStyle().get(StylePropertyRegistry.CURSOR);
         if (declared == null) return CgCursor.DEFAULT;
         if (!declared.needsResolution()) return declared;
-        return hovered.consumesTextInput() ? CgCursor.TEXT : CgCursor.DEFAULT;
+        // OVER EDITABLE CONTENT, and a SLOT is not a control -- it is a placeholder for one.
+        //
+        // The old engine asked the hit node and nothing else, and that was right because a composite made
+        // its parts unhittable, so a press in a text control landed on the CONTROL. This engine puts a
+        // caller's content in a slot, and the slot is what the pointer lands on, so asking the hit node
+        // answered `default` over every line of text in the application.
+        //
+        // Walking all the way up is the obvious repair and over-reaches: an editor's scrollbars and its
+        // fold chevrons are inside it too, and the I-beam then follows the pointer onto a scrollbar,
+        // which nothing does. A slot is the only node that genuinely stands for something else, so it is
+        // the only one whose question is passed on -- everything else answers for itself, exactly as it
+        // did before.
+        //
+        // The tell for the original bug was that the I-beam appeared on press and held while dragging: a
+        // press takes pointer capture, and capture substitutes the hit for the capturing element, which
+        // is the control. So the resolution was correct exactly when it was asked about the right node.
+        UINode at = hovered;
+        while (at instanceof UISlot) at = at.composedParent();
+        return at != null && at.consumesTextInput() ? CgCursor.TEXT : CgCursor.DEFAULT;
     }
 
     /** The cursor currently presented. Resolved, so never {@link CgCursor#AUTO}. */

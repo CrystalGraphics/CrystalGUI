@@ -122,7 +122,16 @@ public final class Drag implements InputMode {
         // THE GHOST OFFERED ON THE WAY DOWN, which is the only moment a caller has: `DragGhost.follow`
         // runs from the mouse-down handler that is about to call this, so it had no drag to hand it to.
         UINode offered = input.takePendingGhost();
-        if (offered != null) drag.withGhost(offered, input.pendingGhostX(), input.pendingGhostY());
+        if (offered != null) {
+            // GRAB RESOLVES TO THE PRESS WITHIN THE SOURCE, which is what `startX`/`startY` already are:
+            // `toLocal` puts the source's own origin at zero, so the press point in the source's space
+            // IS how far into it the cursor was. That is the offset the ghost has to keep, or the thing
+            // being carried jumps out from under the hand.
+            boolean grab = input.pendingGhostGrab();
+            drag.withGhost(offered,
+                    grab ? drag.startX : input.pendingGhostX(),
+                    grab ? drag.startY : input.pendingGhostY());
+        }
         input.setPointerCapture(source);
         input.pushMode(drag);
         return drag;
