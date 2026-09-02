@@ -586,6 +586,13 @@ public class Desktop extends UINode implements DataProvider {
                 // command -- each of which calls activate directly. This one is incidental by
                 // construction, so it is the one that must not.
                 if (((WindowFrame) walk).state() != WindowState.VISIBLE) return;
+                // MINIMISING IS NOT WORKING IN A WINDOW. Click-focus lands on the minimise BUTTON, so
+                // this route brought a background window forward on the way to putting it away -- and it
+                // is the route that does it, not the frame's own press listener: focus moves before any
+                // listener runs, so a guard there is both too late and unable to see which control was
+                // pressed (a listener on a shadow host is retargeted to the host).
+                // @see WindowFrame#isMinimizeControl
+                if (((WindowFrame) walk).isMinimizeControl(focused)) return;
                 // FOLLOWING FOCUS, NEVER OVERRULING IT. Focus has just moved, so something has already
                 // decided where it goes; activation here brings the window forward and must not then
                 // consult the window's focus memory on top of that decision. It did, and the "frame
