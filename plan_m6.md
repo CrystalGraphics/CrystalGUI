@@ -2384,6 +2384,17 @@ the loader compiling against a framework its own engine has not reached — the 
 mistake 6.7 made with the Machine example and this milestone inherited. The other five mc1710 files
 are the client surface and belong to 6.9a.
 
+> **CORRECTED WHILE SHIPPING (6.8).** `CgUiWindowMount` is in this milestone's list on the sound
+> grounds that it is typed on the classes this milestone retypes -- and it **cannot be finished
+> here**. It reaches `CgUiScreen.window()`, which hands out a `UIWindow`, so typing the mount on the
+> node tree requires the screen to answer with a `UIDocument` -- and the screen is 6.9a's centrepiece
+> and *"the whole of the milestone's risk"*. The two are not separable in this direction: 6.9a's
+> engine SWITCH is what unblocks the mount, so the mount and `CgUiSessionProbe` move to 6.9a and are
+> its first step rather than 6.8's last. **`:mc1710:compileJava` is red until then**, which it has
+> been since 6.6 for an unrelated reason (see 97492f86) -- and the general lesson is that one: a
+> module nothing in the loop builds is a module whose breakage is discovered by the milestone that
+> was going to run it.
+
 **Accepts.** `cgui-workspace`; the seam suite unchanged on `UINodeTreeSource`;
 `MirrorIsEngineAgnosticTest`; every `net/` and `net/window/` test; `WidgetContractRoundTripTest`;
 `ScopedSheetParseTest` (now asserting `@scope`); the two-viewer fixtures; `serverSmoke`; and
@@ -2428,6 +2439,10 @@ that mis-parsed it is deleted); *"a NETWORKED ELEMENT'S IDENTITY IS NO LONGER IT
 > mods directory and the static F6 flag were each invisible to the whole suite. So the loader's FIRST
 > RUN on the new engine is the single highest-information event left in M6 — and 6.9 had it landing
 > in the same commit as the removal of the engine it would fall back to.
+
+**Takes 6.8's two with it.** `CgUiWindowMount` and `CgUiSessionProbe` were 6.8's and reach
+`CgUiScreen`, so they are the first thing the switch makes possible rather than something that could
+precede it. Seven files, not five.
 
 **Contents.** The five client-surface files, 27 references and ~1,350 lines:
 `CgUiScreen` (720 lines, 18 refs — the viewport the desktop attaches to, and the whole of the
