@@ -33,6 +33,7 @@ import com.crystalgui.ui.event.FocusEvent;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.ui.input.keymap.Keymap;
 import com.crystalgui.ui.input.keymap.KeymapScope;
 import java.util.Collection;
 import java.util.ArrayDeque;
@@ -210,6 +211,39 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
 
     // ── CommandTarget / KeymapScope: how a command finds its subject (M6.3) ─────
 
+    /**
+     * This node's own keymap, created on first ask.
+     *
+     * <p><b>Lazy, and null until asked</b>, which is what {@link #keymapOrNull()} answers: a keymap
+     * per node would be a map on every one of thousands, for the handful that bind anything. The
+     * same reasoning {@code SettingsScope} records for its own store.</p>
+     *
+     * <p>The walk that reads these was already here -- {@code KeymapResolver} and {@code Keymap} both
+     * climb {@code commandParent()} asking each scope for one -- and NOTHING implemented it, so every
+     * scope answered null and a widget-scoped binding could never resolve. Live machinery with no
+     * supplier: nothing failed, the shortcut simply did nothing, which reads as the binding being
+     * wrong rather than as there being nowhere to put it.</p>
+     */
+    public Keymap keymap() {
+        // THROUGH `keymapOrNull()`, so a widget that already keeps its own -- TextEditor, GraphView,
+        // ProjectFileTree all do, and they override that one -- hands back the keymap its commands
+        // are actually bound in. Creating a second one here instead would answer an EMPTY keymap to
+        // anyone asking the widget for its bindings, while the real ones still resolved: the widget
+        // works and every query about it lies.
+        Keymap existing = keymapOrNull();
+        if (existing != null) return existing;
+        if (keymap == null) keymap = new Keymap();
+        return keymap;
+    }
+
+    /** The keymap this node ALREADY has, without making one. @see #keymap() */
+    @Override
+    @Nullable
+    public Keymap keymapOrNull() {
+        return keymap;
+    }
+
+    private @Nullable Keymap keymap;
     /**
      * {@inheritDoc}
      *

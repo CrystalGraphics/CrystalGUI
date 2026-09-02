@@ -261,6 +261,53 @@ public abstract class UiDocumentTestBase extends UiTestBase {
         return scope.getElementsByClassName(className);
     }
 
+    /**
+     * The first node under {@code scope} matching {@code selector}, <b>crossing shadow boundaries</b>.
+     *
+     * <p>This is a TEST helper and deliberately not an engine one. On the web -- and here --
+     * {@code querySelector} stops at a shadow root, because that is what encapsulation MEANS: a rule
+     * or a query from outside cannot reach in. A test is the one caller with a legitimate reason to
+     * look anyway, since it is asserting about structure the widget owns.</p>
+     *
+     * <p>It is what most ported tests need. They were written when every internal child was an
+     * ordinary light child carrying a {@code __class__}, so {@code querySelector("." + X)} found it;
+     * now the same node is a shadow PART and the light-tree query answers nothing -- which reads as
+     * the widget not having been built rather than as the query not reaching it.</p>
+     *
+     * <p>{@code selector} takes the shapes those tests already use: {@code .class}, a bare class
+     * name, a {@code tag}, or a part name.</p>
+     */
+    protected static UINode deep(UINode scope, String selector) {
+        List<UINode> found = deepAll(scope, selector);
+        if (found.isEmpty()) {
+            throw new AssertionError("nothing matching \"" + selector + "\" under " + scope
+                    + " -- if it is a shadow part, that is expected of querySelector and not of this");
+        }
+        return found.get(0);
+    }
+
+    /** As {@link #deep}, but {@code null} for no match -- what {@code querySelector} answers. */
+    protected static UINode deepOrNull(UINode scope, String selector) {
+        List<UINode> found = deepAll(scope, selector);
+        return found.isEmpty() ? null : found.get(0);
+    }
+
+    /** As {@link #deep}, every match, in composed order; empty rather than failing. */
+    protected static List<UINode> deepAll(UINode scope, String selector) {
+        String want = selector.startsWith(".") ? selector.substring(1) : selector;
+        List<UINode> out = new ArrayList<>();
+        for (UINode node : scope.composedSubtree()) {
+            if (node == scope) continue;
+            if (node.hasClass(want)
+                    || want.equals(node.get(Attribute.PART))
+                    || want.equals(node.name().local())
+                    || want.equals(node.name().toString())) {
+                out.add(node);
+            }
+        }
+        return out;
+    }
+
     /** Every node in the COMPOSED subtree, shadow trees included — what paint and hit-testing walk. */
     protected static List<UINode> composed(UINode scope) {
         List<UINode> out = new ArrayList<>();
