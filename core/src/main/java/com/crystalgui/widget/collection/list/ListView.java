@@ -179,6 +179,13 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
 
     /** The constructor a subclass hands its own kind to. @see Button#Button(Name, String) */
     protected ListView(Name name, ObservableList<T> model) {
+        // HAND IT UP. Without this the parameter was accepted and discarded: the implicit super()
+        // is ScrollerView's no-arg one, so every ListView, TreeView and TableView in the application
+        // answered `crystalgui:scrollerview` and every rule a sheet writes for those tags matched
+        // nothing at all. A widget answers the kind its class declares -- the same M6.6 rule that
+        // caught Dropdown, MenuItem and Menu, reached here through a constructor that looks like it
+        // is doing the work.
+        super(name);
         this.model = model;
         // NOT markAsInternal() — that marks THIS element internal, which would hide the whole list from
         // public traversal and from UIDescriptionCodec. Rows are made internal individually by

@@ -146,6 +146,23 @@ public class Tab extends Button {
      *
      * <p>Locally nothing changes — every scene, and every test that builds a TabView and clicks it.</p>
      */
+    /**
+     * A tab's CONTENT, which is not a child of it.
+     *
+     * <p>{@link #content()} sits in the {@code TabView}'s panes container rather than under the tab,
+     * so a peer told about this node's light children would hear about nothing at all — and a
+     * described tab would arrive labelled and empty.</p>
+     */
+    @Override
+    public List<UINode> describedChildren() {
+        return content().children();
+    }
+
+    @Override
+    public void adoptDescribedChild(UINode child) {
+        content().append(child);
+    }
+
     public UINode content() {
         return pane;
     }

@@ -107,7 +107,7 @@ public final class UINodeTreeSource implements TreeSource<UINode> {
     /** The light children — the described tree. A shadow tree is not part of it. */
     @Override
     public List<UINode> childrenOf(UINode node) {
-        return node.children();
+        return node.describedChildren();
     }
 
     @Override
