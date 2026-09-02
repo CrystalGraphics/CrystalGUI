@@ -901,6 +901,13 @@ public class DockArea extends UINode  {
      */
     void installTabDrag(DockGroup group, DockPanelRef panel, Tab tab) {
         tab.events.getGroup(MouseEvent.Down.class).attachListener((el, event) -> {
+            // LEFT ONLY. `Drag.start` is told the button so it knows which release ENDS the drag, and
+            // nothing asked which one began it — so a right-click selected the tab, lit the dragging
+            // class and started a drag that no right-release could finish. The same gap `Button`
+            // already paid for: it activated on any button until a taskbar entry got a context menu.
+            // Present on the old engine too, and only visible once a tab had something else on its
+            // right button.
+            if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
             UIDocument window = document();
             if (window == null) return;
             parkGhost();

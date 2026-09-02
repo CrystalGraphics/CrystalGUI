@@ -138,6 +138,9 @@ public class Tooltip extends UINode {
     private float pendingDelay;
     private boolean delayTickerRunning;
 
+    /** Whether the cascade has been run for this node since it joined. @see #resolveStyleOnce */
+    private boolean styleResolved;
+
     public Tooltip() {
         this("");
     }
@@ -463,6 +466,17 @@ public class Tooltip extends UINode {
         if (anchor == null || anchor.document() == null) return this;
         if (dragIsLive(anchor)) return hide();
 
+        // JOINED AND STYLED BEFORE THE DELAY IS READ, and both halves are the point.
+        //
+        // A widget tooltips itself in its own constructor, where its anchor is in no document yet, so
+        // `attach` cannot join and the first join happens here. `tooltipDelay()` is a CASCADED value:
+        // on a node the cascade has never seen it answers the property's initial, which is 0 — read
+        // as "no delay", so the FIRST hover of every tooltip in the application appeared instantly and
+        // every hover after it waited properly. The old engine did not have this because a tooltip was
+        // a CHILD of its anchor, in the tree and styled long before anything hovered it.
+        joinDocumentOf(anchor);
+        resolveStyleOnce();
+
         float delay = getStyle().getGeneralGroup().tooltipDelay();
         // `!(delay > 0)` rather than `delay <= 0`, which is FALSE for NaN -- so a NaN would be taken as a
         // real wait and counted down forever, and the tooltip would simply never appear. The engine has
@@ -489,6 +503,23 @@ public class Tooltip extends UINode {
      * such tooltip is silently never shown; doing it only at show time means one that COULD have been
      * placed early is not. Both, and the second is a no-op whenever the first worked.</p>
      */
+    /**
+     * Runs the cascade once, for a tooltip that has only just joined.
+     *
+     * <p>One pass, once per tooltip, on the frame it first joins — and only then, because it is
+     * asking a question about a node the frame's own style pass could not have seen. It is called
+     * from input dispatch, which runs after this frame's style and layout, so nothing this frame is
+     * invalidated by it: what it produces is a value to read, and the box follows next frame with
+     * everything else.</p>
+     */
+    private void resolveStyleOnce() {
+        if (styleResolved) return;
+        UIDocument host = document();
+        if (host == null) return;
+        styleResolved = true;
+        host.calculateStyle(0f);
+    }
+
     private void joinDocumentOf(UINode anchor) {
         if (parent() != null) return;
         UIDocument host = anchor.document();
@@ -608,7 +639,10 @@ public class Tooltip extends UINode {
     private boolean tickDelay(float deltaSeconds) {
         {
             UINode target = pendingAnchor;
-            if (target == null) {
+            // Same rule as the placement ticker: an anchor that has gone sends no leave, and a wait
+            // that fired against one would put a tip over whatever took its place.
+            if (target == null || !target.isConnected()) {
+                cancelPendingShow();
                 delayTickerRunning = false;
                 return false;
             }
@@ -627,6 +661,15 @@ public class Tooltip extends UINode {
     private boolean tickPlacement(float deltaSeconds) {
         {
             if (!isShown()) {
+                placementTickerRunning = false;
+                return false;
+            }
+            // AN ANCHOR THAT HAS GONE CANNOT SEND A LEAVE. `hide()` hangs off the anchor's
+            // onMouseLeave, and a node that leaves the tree emits nothing — so a tooltip whose anchor
+            // was rebuilt stayed on screen for ever, and every rebuild stranded another. Three of them
+            // were visible over one panel at once.
+            if (anchor == null || !anchor.isConnected()) {
+                hide();
                 placementTickerRunning = false;
                 return false;
             }
