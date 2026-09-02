@@ -146,6 +146,31 @@ public final class BoxTree {
         transformsDirty = true;
     }
 
+    /**
+     * The scale a host draws at, as a number rather than a matrix.
+     *
+     * <p>{@link #setRootTransform} is the general form and this is the case every host actually has:
+     * a uniform scale from logical units to surface pixels. Keeping it here rather than on the host
+     * is what stops a second definition appearing -- the old engine's rule that {@code getRootTransform()}
+     * is the ONE statement of what {@code uiScale} means, in the place this engine keeps it.</p>
+     *
+     * <p>It belongs on the transform and NOT on the projection: the text renderer picks its glyph
+     * raster size from the pose scale, so moving it into the ortho matrix would rasterise glyphs at
+     * logical size and let the projection magnify them -- blurry text.</p>
+     */
+    public void setUiScale(float scale) {
+        if (!(scale > 0f)) throw new IllegalArgumentException("uiScale must be positive, was " + scale);
+        uiScale = scale;
+        setRootTransform(new Matrix4f().scaling(scale, scale, 1f));
+    }
+
+    /** @see #setUiScale */
+    public float uiScale() {
+        return uiScale;
+    }
+
+    private float uiScale = 1f;
+
     public Matrix4f rootTransform() {
         return new Matrix4f(rootTransform);
     }
