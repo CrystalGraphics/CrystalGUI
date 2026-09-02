@@ -27,6 +27,7 @@ public class SplitViewDragTest extends UiDocumentTestBase {
 
     private static final float EPS = 0.001f;
 
+
     private SplitView split;
 
     /** A split view filling a fixed-size root, laid out at the given scale. */
@@ -45,9 +46,11 @@ public class SplitViewDragTest extends UiDocumentTestBase {
         document.append(root);
         document.boxes().setUiScale(uiScale);
         document.styleEngine().addStylesheet(StyleSheetRegistry.of("crystalgui:ore"));
+
         frame();
         return split;
     }
+
 
 
     private void mouseTo(int physX, int physY) {
@@ -99,7 +102,7 @@ public class SplitViewDragTest extends UiDocumentTestBase {
         setUp(2f, SplitView.Orientation.HORIZONTAL);
         var pane = split.first().box();
         int physX = Math.round((pane.x() + pane.width() / 4f) * 2f);
-        int physY = Math.round((pane.y() + pane.height() / 2f) * 2f);
+        int physY = Math.round(pane.worldY() + pane.height() / 2f * uiScale());
 
         mouseTo(physX, physY);
         frame();

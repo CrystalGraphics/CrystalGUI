@@ -174,7 +174,6 @@ public class CommandPaletteTest extends UiDocumentTestBase {
         assertTrue("a disabled row must not run", invokedWith.isEmpty());
     }
 
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void clickingADisabledRowRunsNothing() {
         document.focus().requestFocus(null);
@@ -292,7 +291,6 @@ public class CommandPaletteTest extends UiDocumentTestBase {
      * handler at real coordinates, because the failure is necessarily in hit testing or dispatch — the
      * model half is already covered by {@link #enterAcceptsTheFocusedRow}, which passes.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void clickingARowRunsIt() {
         document.focus().requestFocus(inner);
@@ -314,8 +312,12 @@ public class CommandPaletteTest extends UiDocumentTestBase {
      * coordinates fed straight to {@code consumeMouseEvent} land at half the intended position. */
     private void clickCentreOf(UINode element) {
         var cache = element.box();
-        int x = Math.round((cache.x() + cache.width() / 2f) * UI_SCALE);
-        int y = Math.round((cache.y() + cache.height() / 2f) * UI_SCALE);
+        // worldX/worldY, because `Box.x()` is the offset inside the HOST -- a palette row reports
+        // its position within the list, so the press landed near the corner of the screen and the
+        // row's own listener never saw it. The world coordinate is already in surface pixels, so
+        // only the half-extent is scaled.
+        int x = Math.round(cache.worldX() + cache.width() / 2f * uiScale());
+        int y = Math.round(cache.worldY() + cache.height() / 2f * uiScale());
         document.input().consumeMouseEvent(
                 new CgSystemInput.Mouse.Event(x, y, 0, 0, -1, false, 0f, -1L));
         frame();
@@ -444,7 +446,6 @@ public class CommandPaletteTest extends UiDocumentTestBase {
      * <p>Nothing else in this fixture can see that: a command with no guard at all is enabled against any
      * context, empty or not, so it answers the same either way.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void aCommandTheWindowAnswersForIsNotContextual() {
         DataKey<String> key = DataKey.create("test.windowScoped", String.class);

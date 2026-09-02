@@ -261,15 +261,23 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
     /**
      * {@inheritDoc}
      *
-     * <p>Empty until something registers a document-level provider. The old engine hangs these off
-     * {@code UIWindow} for the case {@code DataContext} documents at length — a workbench is a
-     * DESCENDANT of the root, so with nothing focused the outward walk never reaches it — and the
-     * new engine has no such consumer yet. Answering honestly is the point: a wrong provider is
-     * worse than none, because it shadows a correct one further out.</p>
+     * <p><b>The DOCUMENT's, because that is where a document-level provider is registered and this
+     * node is what gets asked.</b> {@code DataContext.fromWindow} calls this on the element a command
+     * was invoked FROM, never on the document — so a node answering its own (empty) list means a
+     * provider registered through {@link UIDocument#addDataProvider} is never consulted by anything,
+     * and the two that exist ({@code Desktop}, {@code CrystalEditor}) were both silently inert.</p>
+     *
+     * <p>This javadoc used to say the new engine had no such consumer yet, which was true when it was
+     * written and stopped being true without the sentence changing. The failure is the shape that
+     * makes it: the provider registers, the command resolves, and it resolves to nothing.</p>
+     *
+     * <p>{@link UIDocument} overrides this with its own list, so there is no recursion — and a
+     * detached node has no document and correctly answers with nothing.</p>
      */
     @Override
     public List<DataProvider> scopeProviders() {
-        return List.of();
+        UIDocument host = document();
+        return host == null || host == this ? List.of() : host.scopeProviders();
     }
 
     // ── SettingsScope: a value resolves by walking OUT through the tree ─────────

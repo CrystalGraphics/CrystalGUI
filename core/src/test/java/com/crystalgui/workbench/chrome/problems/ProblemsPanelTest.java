@@ -796,7 +796,6 @@ public class ProblemsPanelTest extends UiDocumentTestBase {
      * <p>Driven through {@code emitMouseDown}'s own route rather than {@code sendInputEvent}: focus
      * resolution is the thing under test and dispatching straight at the element skips it entirely.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void foldingAHeadingLandsFocusOnTheRow() {
         give(shader, error(3, "one"), error(9, "two"));
@@ -897,7 +896,6 @@ public class ProblemsPanelTest extends UiDocumentTestBase {
      * The whole gesture goes through real presses, because the hover the pooling carries is the one the
      * pointer left on the chevron.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void unfoldingDoesNotBringARowBackHovered() {
         give(shader, error(3, "one"), error(9, "two"));
@@ -1045,8 +1043,8 @@ public class ProblemsPanelTest extends UiDocumentTestBase {
     /** A secondary-button press, through the same accumulate-and-dispatch route as a real one. */
     private void rightPress(UINode target) {
         frame();
-        int cx = (int) (target.box().x() + target.box().width() / 2f);
-        int cy = (int) (target.box().y() + target.box().height() / 2f);
+        int cx = (int) (target.box().worldX() + target.box().width() / 2f * uiScale());
+        int cy = (int) (target.box().worldY() + target.box().height() / 2f * uiScale());
         document.input().beginFrame();
         document.input().consumeMouseEvent(
                 new CgSystemInput.Mouse.Event(cx, cy, 0, 0, 1, true, 0f, 0L));
@@ -1084,8 +1082,8 @@ public class ProblemsPanelTest extends UiDocumentTestBase {
     /** A press through the real route — accumulated and dispatched by the frame pair, as input is. */
     private void press(UINode target) {
         frame();
-        int cx = (int) (target.box().x() + target.box().width() / 2f);
-        int cy = (int) (target.box().y() + target.box().height() / 2f);
+        int cx = (int) (target.box().worldX() + target.box().width() / 2f * uiScale());
+        int cy = (int) (target.box().worldY() + target.box().height() / 2f * uiScale());
         document.input().beginFrame();
         document.input().consumeMouseEvent(
                 new CgSystemInput.Mouse.Event(cx, cy, 0, 0, 0, true, 0f, 0L));

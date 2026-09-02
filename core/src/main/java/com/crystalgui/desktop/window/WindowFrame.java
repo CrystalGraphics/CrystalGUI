@@ -1027,10 +1027,15 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
      * owner's content swallowing every click.</p>
      */
     public boolean hasOwnedWindows() {
-        Desktop desktop = desktop();
-        if (desktop == null) return false;
-        for (WindowFrame other : desktop.registry().windows()) {
-            if (other.ownerWindow() == this) return true;
+        // ATTACHED surfaces only -- never the `setOwnerWindow` relation, which is a different claim
+        // and the distinction this whole pair exists to make. `attachOwned` parents a surface INTO
+        // this frame, so it is clamped inside it, has no registry entry and no taskbar button: a
+        // modal, or a FLOATING tool window. `setOwnerWindow` is the same belonging WITHOUT the
+        // parenting -- a first-class top-level window that merely belongs to another, which is what
+        // a torn-out tool window is. Counting the relation makes a tear-out report the editor as
+        // still holding it, which is precisely what the gesture was supposed to end.
+        for (UINode child : children()) {
+            if (child instanceof WindowFrame) return true;
         }
         return false;
     }

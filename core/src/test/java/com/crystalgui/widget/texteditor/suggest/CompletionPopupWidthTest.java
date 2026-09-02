@@ -218,7 +218,7 @@ public class CompletionPopupWidthTest extends UiDocumentTestBase {
             UIText detail = detailOf(row);
             if (detail == null || detail.getText().isEmpty()) continue;
             assertTrue("'" + detail.getText() + "' has no width, so only the first few pixels can paint",
-                    detail.box().width() > 0f);
+                    widthOf(detail) > 0f);
         }
         assertTrue("no rows were realised, so nothing was checked", checked >= 5);
     }

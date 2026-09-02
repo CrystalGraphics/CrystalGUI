@@ -115,7 +115,7 @@ public class BlackboardStyleTest extends UiDocumentTestBase {
     private static org.joml.Vector2f screenCentreOf(UINode element) {
         var cache = element.box();
         return com.crystalgui.core.data.Transform2D.apply(cache.localToWorld(),
-                cache.x() + cache.width() / 2f, cache.y() + cache.height() / 2f);
+                cache.width() / 2f, cache.height() / 2f);
     }
 
     /** A press at a point, through real hit testing. */

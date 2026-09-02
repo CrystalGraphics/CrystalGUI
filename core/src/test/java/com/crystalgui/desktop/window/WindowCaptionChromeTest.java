@@ -12,6 +12,7 @@ import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.window.WindowChrome;
 import com.crystalgui.desktop.window.WindowFrame;
 import org.junit.Ignore;
+import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -32,6 +33,17 @@ import static org.junit.Assert.assertTrue;
  * tree with every listener and every piece of state on the wrong one — and it would look right.</p>
  */
 public class WindowCaptionChromeTest extends UiDocumentTestBase {
+
+    /**
+     * Animations OFF, said out loud rather than inherited. This fixture asserts a window's STATE
+     * straight after a gesture, and an animation defers exactly that -- `hide()` detaches and
+     * `close()` destroys only once the flight ends, so the assertion reads VISIBLE for a window that
+     * has been asked to go. It used to pass by picking up a flag some other class had left off.
+     */
+    @Before
+    public void quietTheCompositor() {
+        Desktop.setAnimationsEnabled(false);
+    }
 
     private Desktop desktop;
 
@@ -102,7 +114,6 @@ public class WindowCaptionChromeTest extends UiDocumentTestBase {
 
     /** And it goes home when the document lets go — with its internal-child status restored, or it would
      * come back publicly removable by anything that walked the tree. */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void releasingPutsItBackWhereItCameFrom() {
         build();
@@ -119,7 +130,13 @@ public class WindowCaptionChromeTest extends UiDocumentTestBase {
         assertNull(frame.adoptedChrome());
         assertSame("back in the application", app, header.parent());
         assertEquals("at the same index", originalIndex, app.children().indexOf(header));
-        assertTrue("and internal again", header.get(Attribute.PART).isEmpty() == false);
+        // THE FLAG IS GONE, and with it the state this asserted. The old engine stored
+        // "is an internal child" as a bit and `removeChild` refused anything carrying it, so a
+        // round trip had to put the bit back or the header became publicly detachable. Here what
+        // makes a part a part is that the widget PUT IT THERE -- `insertStructuralAt` sets the flag
+        // for the duration of one insertion and restores it -- so there is nothing on the node to
+        // check and nothing that could have been left wrong. The two assertions above are the whole
+        // of what the round trip has to get right now.
     }
 
     /** Destroying a document returns what it borrowed rather than taking it down too. */
@@ -189,7 +206,7 @@ public class WindowCaptionChromeTest extends UiDocumentTestBase {
         UINode bar = frame.titleBar();
         UINode chrome = frame.adoptedChrome();
         assertTrue("the chrome has a box, or this proves nothing",
-                chrome.box().width() > 0f);
+                widthOf(chrome) > 0f);
         assertTrue("and it does not fill the caption",
                 chrome.box().width() < bar.box().width() - 8f);
     }

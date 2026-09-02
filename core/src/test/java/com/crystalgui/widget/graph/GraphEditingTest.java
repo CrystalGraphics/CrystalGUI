@@ -98,7 +98,7 @@ public class GraphEditingTest extends UiDocumentTestBase {
     private Vector2f physicalCenterOf(UINode element) {
         var cache = element.box();
         return Transform2D.apply(cache.localToWorld(),
-                cache.x() + cache.width() * 0.5f, cache.y() + cache.height() * 0.5f);
+                cache.width() * 0.5f, cache.height() * 0.5f);
     }
 
     private void press(Vector2f p) {

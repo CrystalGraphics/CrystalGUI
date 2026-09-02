@@ -45,6 +45,17 @@ import static org.junit.Assert.assertTrue;
  */
 public class PreviewPicturelessTest extends UiDocumentTestBase {
 
+    /**
+     * Animations OFF for the fixture. Several tests below turn them back on for the thing they are
+     * about and restore this in a finally; without a @Before the class relied on that restore having
+     * run, i.e. on another test having gone first. A window's state change is DEFERRED while a
+     * timeline plays, so the assertions here read VISIBLE for a window that has been closed.
+     */
+    @Before
+    public void quietTheCompositor() {
+        Desktop.setAnimationsEnabled(false);
+    }
+
     private Input input;
     private Desktop desktop;
 
@@ -104,8 +115,8 @@ public class PreviewPicturelessTest extends UiDocumentTestBase {
     private void hover(WindowFrame target) {
         var box = entryOf(target).box();
         input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
-                Math.round((box.x() + box.width() / 2f) * 2f),
-                Math.round((box.y() + box.height() / 2f) * 2f), 0, 0, -1, false, 0f, -1L));
+                Math.round(box.worldX() + box.width() / 2f * uiScale()),
+                Math.round(box.worldY() + box.height() / 2f * uiScale()), 0, 0, -1, false, 0f, -1L));
     }
 
     private void leave() {
@@ -138,7 +149,6 @@ public class PreviewPicturelessTest extends UiDocumentTestBase {
         assertEquals(what + ": the picture is not the height it fits to", fit[1], thumb.height(), 0.5f);
     }
 
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void aWindowWithNoPictureShowsItsIconOnACardAndTheHeaderMatchesIt() {
         // A LONG title on purpose: longer than the card is wide, so it has to elide. The title is `width: 0;
@@ -165,13 +175,14 @@ public class PreviewPicturelessTest extends UiDocumentTestBase {
         // measured at all -- asserted on a hidden button, the check below is vacuously true.
         UINode close = deepOrNull(p, ".__preview-close__");
         assertNotNull(close);
-        assertEquals("the close is hidden while only the entry is hovered", 0f, close.box().width(), 0.01f);
+        // ...and a hidden node has NO box here, which is the same answer the comment above describes.
+        assertEquals("the close is hidden while only the entry is hovered", 0f, widthOf(close), 0.01f);
         var self = p.box();
         float heightAtRest = self.height();
         float pictureTopAtRest = thumb.y();
         input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
-                Math.round((self.x() + self.width() / 2f) * 2f),
-                Math.round((self.y() + self.height() / 2f) * 2f), 0, 0, -1, false, 0f, -1L));
+                Math.round(self.worldX() + self.width() / 2f * uiScale()),
+                Math.round(self.worldY() + self.height() / 2f * uiScale()), 0, 0, -1, false, 0f, -1L));
         frames(120);
         assertSame("hovering the panel must keep it up", hidden, desktop.taskbar().previewedWindow());
         var closeBox = close.box();
@@ -184,7 +195,6 @@ public class PreviewPicturelessTest extends UiDocumentTestBase {
                 closeBox.x() + closeBox.width() <= headerBox.x() + headerBox.width() + 0.5f);
     }
 
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void movingOntoAPicturelessWindowStillMovesThePanel() {
         WindowFrame wide = open("Wide", 320f, 160f);
@@ -208,7 +218,6 @@ public class PreviewPicturelessTest extends UiDocumentTestBase {
         assertTrue(offCentreBy(wide) < 3f);
     }
 
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void anAbandonedMoveDoesNotFreezeThePicture() {
         WindowFrame wide = open("Wide", 320f, 160f);

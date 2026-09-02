@@ -83,7 +83,9 @@ public class ConfigKitTest extends UiDocumentTestBase {
     }
 
     private static float height(UINode e) {
-        return e.box().height();
+        // Zero for a control that is not on screen: a hidden node has no box here, where the old
+        // engine's runtime cache always answered one.
+        return heightOf(e);
     }
 
     /** True when {@code e} sits inside a {@code dialog}/{@code popover}/{@code menu} between itself and
@@ -104,7 +106,6 @@ public class ConfigKitTest extends UiDocumentTestBase {
      * widgets instead: an array is a header plus n rows plus a footer and is legitimately tall. What
      * must match is the thing a user compares — the editable box on each line.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void everyControlLandsOnTheKitHeight() {
         List<String> wrong = new ArrayList<>();
@@ -139,6 +140,14 @@ public class ConfigKitTest extends UiDocumentTestBase {
             // without this filter the row rhythm would be checked against a picker that was never meant
             // to sit in it. The row rhythm applies to what IS the row, not to what the row can summon.
             leaves.removeIf(leaf -> isInsidePopup(leaf, control));
+            // ...AND ANYTHING WITH NO BOX, which is the same carve-out stated in the engine's own
+            // terms and now the one that does the work. A COLOR control summons a whole ColorSelector
+            // inside a Dialog it is not showing, and the popup filter above was written when a
+            // `display: none` subtree still LAID OUT -- it had a box of zero size, so it could be
+            // recognised by walking to its Dialog. Here it has no box at all, so it is not laid out,
+            // so it is not in the row: four hex/channel fields were being measured at 0.0px and
+            // reported as controls that had missed the kit height.
+            leaves.removeIf(leaf -> leaf.box() == null);
             if (leaves.isEmpty()) leaves.add(control);
 
             for (UINode leaf : leaves) {
@@ -318,11 +327,11 @@ public class ConfigKitTest extends UiDocumentTestBase {
                 .element(ConfigDescriptor.text("entries.e", "")), null);
         frame();
 
-        UINode headerTitle = header.control().querySelectorAll(".__title__").get(0);
-        UINode groupTitle = group.head().querySelectorAll(".__title__").get(0);
+        UINode headerTitle = deepAll(header.control(), ".__title__").get(0);
+        UINode groupTitle = deepAll(group.head(), ".__title__").get(0);
         // Scoped to `.__head__ text`, not a bare "text" query — an empty array ALSO shows a
         // `.__empty__` placeholder, itself a `text` tag, and the two must not be confused.
-        UINode arrayTitle = array.control().querySelectorAll(".__head__ text").get(0);
+        UINode arrayTitle = deepAll(array.control(), ".__head__ text").get(0);
         for (UINode title : List.of(headerTitle, groupTitle, arrayTitle)) {
             assertEquals("must not wrap onto a second line",
                     com.crystalgui.style.property.visual.text.WhiteSpace.NOWRAP,
@@ -351,7 +360,6 @@ public class ConfigKitTest extends UiDocumentTestBase {
      * A panel that throws on build, or lays out to nothing, is then a test failure rather than a
      * harness launch that ends in a stack trace.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void theGalleryPageArrangementBuildsAndLaysOut() {
         ConfiguratorPanel panel = openPanel();
@@ -392,6 +400,9 @@ public class ConfigKitTest extends UiDocumentTestBase {
         // Every row shares the panel's width, which is the property a ragged label column breaks.
         float panelWidth = panel.box().width();
         for (UINode row : deepAll(panel, "." + Configurator.ROW_CLASS)) {
+            // A row inside something that is not showing -- a folded group, an unshown picker -- has
+            // NO box here rather than a zero one, and it is not on screen to be too wide.
+            if (row.box() == null) continue;
             assertTrue("a row wider than its panel means the label column is not shrinking: "
                             + row.box().width() + " > " + panelWidth,
                     row.box().width() <= panelWidth + 0.5f);
@@ -474,7 +485,6 @@ public class ConfigKitTest extends UiDocumentTestBase {
      * the size and forgot the colour: the size looked deliberate, so the green looked deliberate too.
      * Asserting the resolved value is the only way that fails instead of merely looking odd.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void theKitsColoursWinOverTheBaseWidgetRules() {
         ConfiguratorPanel panel = openPanel();
@@ -485,14 +495,14 @@ public class ConfigKitTest extends UiDocumentTestBase {
         frame();
 
         assertEquals("a dropdown must take the RAISED popup face, not the base sheet's button grey",
-                0xFF4B4B4B, backgroundOf(select.control().querySelectorAll("dropdown").get(0)));
+                0xFF4B4B4B, backgroundOf(deepAll(select.control(), "dropdown").get(0)));
         assertEquals("a text field must take the RECESSED field face",
-                0xFF1E1E1E, backgroundOf(text.control().querySelectorAll("textfield").get(0)));
+                0xFF1E1E1E, backgroundOf(deepAll(text.control(), "textfield").get(0)));
 
         // The inset bevel: this is the property most likely to resolve-but-not-paint, since
         // border-top-color/border-bottom-color only DO anything when border-width is also non-zero —
         // a theme could set the colours and forget the width (or vice versa) and nothing would warn.
-        UINode field = text.control().querySelectorAll("textfield").get(0);
+        UINode field = deepAll(text.control(), "textfield").get(0);
         assertEquals("the field must carry a non-zero border for the bevel colours to have anything "
                         + "to stroke", 1f, field.box().border().left, 0.01f);
         assertEquals("top edge must be the DARK bevel colour",
@@ -505,9 +515,9 @@ public class ConfigKitTest extends UiDocumentTestBase {
                 field.getStyle().getGeneralGroup().borderBottomColor());
         assertEquals("a checked box must not be the base sheet's semantic green — the kit draws a "
                         + "real checkmark on the SAME dark field colour instead of colour-swapping",
-                0xFF1E1E1E, backgroundOf(bool.control().querySelectorAll(".__mark__").get(0)));
+                0xFF1E1E1E, backgroundOf(deepAll(bool.control(), "." + Checkbox.MARK_PART).get(0)));
 
-        UINode mark = bool.control().querySelectorAll(".__mark__").get(0);
+        UINode mark = deepAll(bool.control(), "." + Checkbox.MARK_PART).get(0);
         var overlay = mark.getStyle().getGeneralGroup().overlay();
         assertTrue("the on/off distinction must be the vector checkmark, not a colour swap",
                 overlay instanceof com.crystalgui.render.texture.CgUiShape
@@ -520,7 +530,13 @@ public class ConfigKitTest extends UiDocumentTestBase {
         // base sheet's green squares sitting right next to a BooleanControl drawing the neutral one.
         Configurator mask = panel.add(ConfigDescriptor.mask("m", "M", List.of("X")), Set.of("X"));
         frame();
-        UINode maskMark = mask.control().querySelectorAll(".__mask-row__ .__mark__").get(0);
+        // TWO STEPS, because one selector cannot make this journey any more: `.__mask-row__ .__mark__`
+        // reaches through a CLASS into what is now a PART, and `::part()` has no spelling for a part
+        // under a descendant -- it is one of the shipped rules the port counts as unexpressible.
+        // Finding the row and then querying inside it crosses the boundary the same way the cascade
+        // will have to when `exportparts` exists.
+        UINode maskRow = deepAll(mask.control(), ".__mask-row__").get(0);
+        UINode maskMark = deepAll(maskRow, "." + Checkbox.MARK_PART).get(0);
         assertEquals("a checked mask row must match BooleanControl's neutral field colour, not the "
                         + "base sheet's green",
                 0xFF1E1E1E, backgroundOf(maskMark));
@@ -546,7 +562,7 @@ public class ConfigKitTest extends UiDocumentTestBase {
         Configurator mask = panel.add(ConfigDescriptor.mask("m", "M", List.of("X")), Set.of());
         frame();
 
-        UINode dropdown = select.control().querySelectorAll("dropdown").get(0);
+        UINode dropdown = deepAll(select.control(), "dropdown").get(0);
         dropdown.setHovered(true);
         assertNotEquals("a hovered dropdown must not be the base sheet's placeholder red",
                 0xFFFF0000, backgroundOf(dropdown));
@@ -567,14 +583,13 @@ public class ConfigKitTest extends UiDocumentTestBase {
     }
 
     /** The checkbox's own size — the kit's one deliberate exception, so it needs its own assertion. */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void aCheckboxIsSquareAndSmallerThanTheRow() {
         ConfiguratorPanel panel = openPanel();
         Configurator row = panel.add(ConfigDescriptor.bool("b", "B"), true);
         frame();
 
-        UINode mark = row.control().querySelectorAll(".__mark__").get(0);
+        UINode mark = deepAll(row.control(), "." + Checkbox.MARK_PART).get(0);
         var c = mark.box();
         assertEquals("a checkbox must be square", c.width(), c.height(), 0.5f);
         assertEquals("...at the checkbox token, not the kit height", 13f, c.height(), 0.5f);

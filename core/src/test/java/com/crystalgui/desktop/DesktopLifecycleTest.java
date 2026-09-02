@@ -15,6 +15,7 @@ import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.ui.service.Input;
 import org.junit.Ignore;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -38,6 +39,17 @@ import static org.junit.Assert.fail;
  * rather than left to a widget to remember.</p>
  */
 public class DesktopLifecycleTest extends UiDocumentTestBase {
+
+    /**
+     * Animations OFF for the fixture. Several tests below turn them back on for the thing they are
+     * about and restore this in a finally; without a @Before the class relied on that restore having
+     * run, i.e. on another test having gone first. A window's state change is DEFERRED while a
+     * timeline plays, so the assertions here read VISIBLE for a window that has been closed.
+     */
+    @Before
+    public void quietTheCompositor() {
+        Desktop.setAnimationsEnabled(false);
+    }
 
     private UINode root;
     private Desktop desktop;
@@ -174,7 +186,6 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
 
     // ── Close is a request, routed through the policy ───────────────────────
 
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void closeDestroysByDefault() {
         build();
@@ -186,7 +197,6 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
         assertTrue("a destroyed document leaves the registry", desktop.windows().isEmpty());
     }
 
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void closeHidesWhenThePolicySaysSo() {
         build();
@@ -409,7 +419,6 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
      * changing state — a resume has to know which of them were on screen, and hiding each one loses
      * exactly that.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void suspendingTheDesktopRetainsEveryWindowAndResumingPutsThemBack() {
         build();
@@ -500,7 +509,6 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
 
     /** The minimise button hides and never destroys, whatever the policy says — the two controls mean
      * different things and a document manager that conflated them would lose work. */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void theMinimizeButtonHidesEvenUnderADestroyingPolicy() {
         build();

@@ -33,6 +33,7 @@ public class SliderDragTest extends UiDocumentTestBase {
 
     private static final float EPS = 0.001f;
 
+
     private Slider slider;
 
     /** {@code Input}'s constructor asks the adapter how many mouse buttons the platform
@@ -47,9 +48,11 @@ public class SliderDragTest extends UiDocumentTestBase {
         document.append(slider);
         document.boxes().setUiScale(uiScale);
         document.styleEngine().addStylesheet(StyleSheetRegistry.of("crystalgui:ore"));
+
         frame();
         return slider;
     }
+
 
 
     private void mouseTo(int physX, int physY) {
@@ -80,8 +83,8 @@ public class SliderDragTest extends UiDocumentTestBase {
     public void pressOnTheSliderStartsADragAtDefaultUiScale() {
         setUp(2f);
         var cache = slider.box();
-        int physX = Math.round((cache.x() + cache.width() / 2f) * 2f);
-        int physY = Math.round(cache.worldY() + cache.height() / 2f * 2f);
+        int physX = Math.round(cache.worldX() + cache.width() / 2f * uiScale());
+        int physY = Math.round(cache.worldY() + cache.height() / 2f * uiScale());
 
         mouseTo(physX, physY);
         frame();
@@ -100,7 +103,7 @@ public class SliderDragTest extends UiDocumentTestBase {
         // Three-quarters along the content box, in physical pixels.
         float localX = cache.x() + layout.border().left + layout.padding().left
                 + layout.contentBoxWidth() * 0.75f;
-        int physY = Math.round(cache.worldY() + cache.height() / 2f * 2f);
+        int physY = Math.round(cache.worldY() + cache.height() / 2f * uiScale());
 
         mouseTo(Math.round(localX * 2f), physY);
         frame();
@@ -117,7 +120,7 @@ public class SliderDragTest extends UiDocumentTestBase {
         frame();
 
         var cache = slider.box();
-        int physY = Math.round(cache.worldY() + cache.height() / 2f * 2f);
+        int physY = Math.round(cache.worldY() + cache.height() / 2f * uiScale());
         int grabX = thumbCentrePhysX(2f);
 
         mouseTo(grabX, physY);

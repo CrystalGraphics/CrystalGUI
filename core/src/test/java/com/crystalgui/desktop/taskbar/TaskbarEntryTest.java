@@ -13,6 +13,7 @@ import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.control.Button;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -35,10 +36,31 @@ import static org.junit.Assert.assertTrue;
  */
 public class TaskbarEntryTest extends UiDocumentTestBase {
 
+    /**
+     * Animations OFF for the fixture. Several tests below turn them back on for the thing they are
+     * about and restore this in a finally; without a @Before the class relied on that restore having
+     * run, i.e. on another test having gone first. A window's state change is DEFERRED while a
+     * timeline plays, so the assertions here read VISIBLE for a window that has been closed.
+     */
+    @Before
+    public void quietTheCompositor() {
+        Desktop.setAnimationsEnabled(false);
+    }
+
     private UINode root;
+
+    @After
+    public void animationsBackOn() {
+        Desktop.setAnimationsEnabled(true);
+    }
 
     @Before
     public void setUpDesktop() {
+        // Animations OFF, stated rather than inherited. Every assertion in this fixture reads a
+        // geometry or a state straight after a gesture, and a running timeline defers both -- `hide()`
+        // detaches and `close()` destroys only once the flight ends, so the assertion reads the state
+        // BEFORE the gesture took effect and the numbers it does get are mid-flight fractions.
+        Desktop.setAnimationsEnabled(false);
         root = new UINode().layout(l -> l.width(800).height(600));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
@@ -134,7 +156,6 @@ public class TaskbarEntryTest extends UiDocumentTestBase {
      * <p>The disappearing half is the one that rots: a badge slot built on first use and then only ever
      * shown is a badge that says "3 errors" for the rest of the session after they are fixed.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void aBadgeReachesTheEntryAndCanBeTakenAway() {
         WindowFrame frame = Desktop.of(document).addWindow(new WindowFrame("Editor"));
@@ -195,7 +216,6 @@ public class TaskbarEntryTest extends UiDocumentTestBase {
      * on mouse-DOWN and depends on which button, and a fixture that dispatches straight at the element
      * would skip the whole button-resolution path it is written against.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void middleClickingAnEntryClosesTheWindow() {
         WindowFrame frame = Desktop.of(document).addWindow(new WindowFrame("Editor"));
@@ -215,7 +235,6 @@ public class TaskbarEntryTest extends UiDocumentTestBase {
      * button-agnostic, so hanging close off {@code onPressed} would have closed the document on an
      * ordinary click — a taskbar you cannot click.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void aLeftClickOnAnEntryDoesNotCloseTheWindow() {
         WindowFrame first = Desktop.of(document).addWindow(new WindowFrame("Editor"));
@@ -239,8 +258,8 @@ public class TaskbarEntryTest extends UiDocumentTestBase {
         // A click is a pair, and a Button activates on the UP.
         var box = target.box();
         document.input().consumeMouseEvent(new CgSystemInput.Mouse.Event(
-                Math.round((box.x() + box.width() / 2f) * 2f),
-                Math.round((box.y() + box.height() / 2f) * 2f),
+                Math.round(box.worldX() + box.width() / 2f * uiScale()),
+                Math.round(box.worldY() + box.height() / 2f * uiScale()),
                 0, 0, CgMouseCodes.LEFT_BUTTON, false, 0f, 0L));
         settle();
     }
@@ -249,8 +268,8 @@ public class TaskbarEntryTest extends UiDocumentTestBase {
         var box = target.box();
         frame();
         document.input().consumeMouseEvent(new CgSystemInput.Mouse.Event(
-                Math.round((box.x() + box.width() / 2f) * 2f),
-                Math.round((box.y() + box.height() / 2f) * 2f),
+                Math.round(box.worldX() + box.width() / 2f * uiScale()),
+                Math.round(box.worldY() + box.height() / 2f * uiScale()),
                 0, 0, button, true, 0f, 0L));
         settle();
     }
@@ -264,6 +283,7 @@ public class TaskbarEntryTest extends UiDocumentTestBase {
      * {@code NONE} passes by accident. A box is a question every state can answer.</p>
      */
     private static boolean onScreen(UINode element) {
-        return element != null && element.box().width() > 0f;
+        // ...and NO box is the same answer as a zero-wide one: a hidden node has none at all here.
+        return widthOf(element) > 0f;
     }
 }

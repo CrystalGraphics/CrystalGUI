@@ -12,6 +12,7 @@ import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.event.UIEvent;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.function.Consumer;
 import com.crystalgui.desktop.Desktop;
@@ -43,6 +44,35 @@ import org.junit.Before;
  * animation misses it by an amount that depends on the machine.</p>
  */
 public abstract class UiDocumentTestBase extends UiTestBase {
+
+    /**
+     * <b>How wide it is on screen, and zero when it is not on screen at all.</b>
+     *
+     * <p>{@code box()} is nullable: a node that is hidden, frozen, {@code display: none} or simply
+     * not in a document has NO box, where the old engine's runtime cache always answered. So a
+     * visibility check written as {@code node.box().width() > 0} does not read false, it throws --
+     * and it throws for exactly the state it was asked about.</p>
+     *
+     * <p>Only for asking whether something is showing. A measurement that must exist should read
+     * {@code box()} directly and fail loudly if it is null, because "zero-sized" and "never laid
+     * out" are different facts and a helper that flattens them hides the second.</p>
+     */
+    protected static float widthOf(UINode node) {
+        Box box = node == null ? null : node.box();
+        return box == null ? 0f : box.width();
+    }
+
+    /** The content-box height, zero when there is no box. @see #widthOf */
+    protected static float contentBoxHeightOf(UINode node) {
+        Box box = node == null ? null : node.box();
+        return box == null ? 0f : box.contentBoxHeight();
+    }
+
+    /** @see #widthOf */
+    protected static float heightOf(UINode node) {
+        Box box = node == null ? null : node.box();
+        return box == null ? 0f : box.height();
+    }
 
     /**
      * <b>Animations back on after every test, wherever the test left them.</b>
@@ -125,12 +155,28 @@ public abstract class UiDocumentTestBase extends UiTestBase {
      * never having been advanced.</p>
      */
     protected final void frame(float deltaSeconds) {
-        document.frame(deltaSeconds, W, H);
+        document.frame(deltaSeconds, viewportW, viewportH);
     }
+
+    /**
+     * <b>The surface this fixture presents, which a compositor test has to be able to state.</b>
+     *
+     * <p>{@link Desktop} is the document's, not any node's -- {@code Desktop.of(document)} -- so it
+     * fills the VIEWPORT and not whatever wrapper a fixture happened to build. A test that wraps its
+     * content in a 400x300 node and then asserts the desktop is 400 wide is asserting against the
+     * wrong box, and gets the viewport's 800 instead.</p>
+     */
+    protected final void viewport(float width, float height) {
+        viewportW = width;
+        viewportH = height;
+    }
+
+    private float viewportW = W;
+    private float viewportH = H;
 
     /** Layout only — no motion, no input. For a geometry assertion that should not need a frame. */
     protected final void layoutOnly() {
-        document.layout(W, H);
+        document.layout(viewportW, viewportH);
     }
 
     protected final void move(float x, float y) {
@@ -232,6 +278,20 @@ public abstract class UiDocumentTestBase extends UiTestBase {
         return document.boxes().uiScale();
     }
 
+    /**
+     * <b>What a listener OUTSIDE the widget would see under a point</b> — the raw hit, retargeted.
+     *
+     * <p>{@link #hit} answers the box that is actually under the pointer, which inside a composite is
+     * routinely a {@code <slot>} or a part: real nodes, with real boxes, and invisible to anyone
+     * outside the tree that owns them. Dispatch retargets before it calls a listener, so "who takes
+     * this press" is a question about the retargeted node — asking the raw one makes every composite
+     * answer with its own plumbing.</p>
+     */
+    protected final UINode hitTarget(float x, float y) {
+        UINode raw = hit(x, y);
+        return raw == null ? null : UINode.retarget(raw, document);
+    }
+
     /** What is under a point, or null over nothing. The hit test needs no paint to have happened. */
     protected final UINode hit(float x, float y) {
         Box box = document.boxes().hitTest(x, y);
@@ -315,18 +375,53 @@ public abstract class UiDocumentTestBase extends UiTestBase {
 
     /** As {@link #deep}, every match, in composed order; empty rather than failing. */
     protected static List<UINode> deepAll(UINode scope, String selector) {
-        String want = selector.startsWith(".") ? selector.substring(1) : selector;
-        List<UINode> out = new ArrayList<>();
-        for (UINode node : scope.composedSubtree()) {
-            if (node == scope) continue;
-            if (node.hasClass(want)
-                    || want.equals(node.get(Attribute.PART))
-                    || want.equals(node.name().local())
-                    || want.equals(node.name().toString())) {
-                out.add(node);
+        // THE REAL SELECTOR ENGINE FIRST, run once per tree. `querySelectorAll` stops at a shadow
+        // boundary by design -- that is the encapsulation the engine exists to provide -- so a deep
+        // query is that same query repeated inside every shadow root beneath the scope. Written as a
+        // single-token match at first, which silently answered NOTHING for any selector with a
+        // combinator in it (`.nested .item` matched no node, because no node has a class of that
+        // name) and read as the tree not containing what it plainly contained.
+        // A BARE `__x__` IS A CLASS, not a type. The ported tests inherited both spellings from the
+        // old engine's token matcher, which accepted either; the real selector engine parses an
+        // undotted token as a TYPE and rejects one starting with underscores outright -- twelve
+        // status-bar tests failed with `Unparseable selector fragment` rather than finding nothing.
+        String query = selector.startsWith("__") ? "." + selector : selector;
+        LinkedHashSet<UINode> out = new LinkedHashSet<>();
+        try {
+            out.addAll(scope.querySelectorAll(query));
+            for (UINode node : scope.composedSubtree()) {
+                ShadowRoot shadow = node.shadowRoot();
+                if (shadow != null) out.addAll(shadow.querySelectorAll(query));
+            }
+        } catch (RuntimeException unparseable) {
+            // Anything the engine will not parse falls through to the token match below, which is
+            // what every one of these queries used to be. Degrading beats throwing out of a helper.
+        }
+        // ...and then PART NAMES, which no selector can spell from outside the tree that owns them:
+        // `::part(x)` is a rule's vocabulary, not a query's. Only for a bare single token, so a real
+        // selector is never second-guessed.
+        if (selector.indexOf(' ') < 0 && selector.indexOf('>') < 0) {
+            String want = selector.startsWith(".") ? selector.substring(1) : selector;
+            // ...AND THE SAME NAME WITHOUT ITS WRAPPER. The old engine's parts were internal children
+            // wearing a `__double-underscore__` class, and the port turned each into a part named by
+            // the bare word -- `__mark__` became `mark`. Every ported test still asks for the old
+            // spelling, and a query that answers nothing for it reads as the part having been dropped
+            // rather than renamed.
+            for (UINode node : scope.composedSubtree()) {
+                if (node != scope && want.equals(node.get(Attribute.PART))) out.add(node);
+            }
+            // The bare name is a LAST RESORT, never a widening. Part names are short and shared --
+            // `label`, `mark`, `items`, `content` belong to a dozen widgets each -- so matching
+            // `__label__` against every part called `label` turns one status item into every label in
+            // the bar. Only when nothing else answered at all, which is the case it was added for.
+            if (out.isEmpty() && want.startsWith("__") && want.endsWith("__") && want.length() > 4) {
+                String bare = want.substring(2, want.length() - 2);
+                for (UINode node : scope.composedSubtree()) {
+                    if (node != scope && bare.equals(node.get(Attribute.PART))) out.add(node);
+                }
             }
         }
-        return out;
+        return new ArrayList<>(out);
     }
 
     /** Every node in the COMPOSED subtree, shadow trees included — what paint and hit-testing walk. */

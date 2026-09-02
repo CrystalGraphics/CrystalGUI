@@ -10,6 +10,7 @@ import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.window.WindowFrame;
 import org.junit.Ignore;
+import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -29,10 +30,24 @@ import static org.junit.Assert.fail;
  */
 public class DesktopWindowTest extends UiDocumentTestBase {
 
+    /**
+     * Animations OFF, said out loud rather than inherited. This fixture asserts a window's STATE
+     * straight after a gesture, and an animation defers exactly that -- `hide()` detaches and
+     * `close()` destroys only once the flight ends, so the assertion reads VISIBLE for a window that
+     * has been asked to go. It used to pass by picking up a flag some other class had left off.
+     */
+    @Before
+    public void quietTheCompositor() {
+        Desktop.setAnimationsEnabled(false);
+    }
+
     private UINode root;
 
     /** Logical 400x300 — {@code init} takes real pixels and the default {@code uiScale} is 2. */
     private void build() {
+        // THE SURFACE, not a wrapper. The compositor belongs to the document, so it fills the
+        // viewport -- sizing a node inside the document says nothing about how big the desktop is.
+        viewport(400f, 300f);
         root = new UINode().layout(l -> l.width(400).height(300));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
@@ -66,14 +81,17 @@ public class DesktopWindowTest extends UiDocumentTestBase {
      * like the overlay layer beside it — an application that had to assemble one would be an
      * application that assembled it slightly differently.
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void everyWindowOwnsADesktopAndHandsOutTheSameOne() {
         build();
         Desktop desktop = Desktop.of(document);
         assertNotNull("a UIDocument must always have a desktop", desktop);
         assertSame("desktop() must not build a second one", desktop, Desktop.of(document));
-        assertSame("the desktop belongs to the document's root", root, desktop.parent());
+        // THE DOCUMENT, not a node in it. The engine may not name a compositor, so the compositor
+        // names the document -- `Desktop.of(document)` -- and attaches itself there. Under the old
+        // engine it was an internal child of whatever root a `UIWindow` had been given, which is what
+        // this used to assert.
+        assertSame("the desktop belongs to the document itself", document, desktop.parent());
 
         WindowFrame frame = Desktop.of(document).addWindow(new WindowFrame("One"));
         assertEquals(1, desktop.windows().size());
@@ -86,7 +104,6 @@ public class DesktopWindowTest extends UiDocumentTestBase {
      * that landed on background — a UI that had never opened a document would simply stop responding,
      * with nothing about the symptom pointing at a compositor.
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void anEmptyDesktopClaimsNoSurfaceAndGivesItBackWhenTheLastWindowGoes() {
         build();
@@ -201,7 +218,6 @@ public class DesktopWindowTest extends UiDocumentTestBase {
      * stored value instead, which is what a single field forces, quietly rewrites what the user asked
      * for, and the document never comes back.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void aWindowPushedInByAShrinkingDesktopReturnsWhenTheRoomDoes() {
         build();
@@ -211,12 +227,14 @@ public class DesktopWindowTest extends UiDocumentTestBase {
         settle();
         assertEquals(260f, frame.left(), 0.01f);
 
-        root.layout(l -> l.width(200));
+        // THE SURFACE SHRINKS, not a node inside it -- the work area is the viewport's, so resizing
+        // a wrapper leaves the compositor exactly as wide as it was and the window is never pushed.
+        viewport(200f, 300f);
         settle();
         assertTrue("the shrinking work area must pull it in: left=" + frame.left(),
                 frame.left() < 260f);
 
-        root.layout(l -> l.width(400));
+        viewport(400f, 300f);
         settle();
         assertEquals("and the room coming back restores what the user asked for",
                 260f, frame.left(), 0.01f);
@@ -229,7 +247,6 @@ public class DesktopWindowTest extends UiDocumentTestBase {
      * from the bug. The step is measured from the title bar rather than written as a constant, so a
      * theme that changes the caption's height moves the cascade with it.
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void aWindowNobodyPlacedIsCentredAndTheNextCascadedFromIt() {
         build();

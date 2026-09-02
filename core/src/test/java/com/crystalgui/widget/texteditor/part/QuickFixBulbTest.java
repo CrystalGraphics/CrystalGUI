@@ -70,7 +70,7 @@ public class QuickFixBulbTest extends UiDocumentTestBase {
 
     private boolean bulbVisible() {
         UINode found = bulb();
-        return found != null && found.box().height() > 0f;
+        return found != null && heightOf(found) > 0f;
     }
 
     private void putCaretOn(int row) {
@@ -92,7 +92,6 @@ public class QuickFixBulbTest extends UiDocumentTestBase {
     }
 
     /** <b>Only on the caret's row.</b> A bulb that follows the caret onto clean rows says nothing true. */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void theBulbAppearsOnlyWhileTheCaretIsOnTheProblem() {
         problemOnRow(1);
@@ -126,7 +125,7 @@ public class QuickFixBulbTest extends UiDocumentTestBase {
     }
 
     private static UINode findClass(UINode element, String className) {
-        if (element.hasClass(className) && element.box().height() > 0f) return element;
+        if (element.hasClass(className) && heightOf(element) > 0f) return element;
         for (UINode child : element.children()) {
             UINode found = findClass(child, className);
             if (found != null) return found;

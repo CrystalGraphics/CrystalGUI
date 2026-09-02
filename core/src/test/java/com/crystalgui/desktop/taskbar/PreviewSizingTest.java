@@ -70,8 +70,8 @@ public class PreviewSizingTest extends UiDocumentTestBase {
         assertNotNull("no taskbar entry for " + target.getTitle(), entry);
         var box = entry.box();
         input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
-                Math.round((box.x() + box.width() / 2f) * 2f),
-                Math.round((box.y() + box.height() / 2f) * 2f), 0, 0, -1, false, 0f, -1L));
+                Math.round(box.worldX() + box.width() / 2f * uiScale()),
+                Math.round(box.worldY() + box.height() / 2f * uiScale()), 0, 0, -1, false, 0f, -1L));
         long until = System.nanoTime() + 700L * 1_000_000L;
         while (System.nanoTime() < until) {
             frame();
@@ -89,7 +89,6 @@ public class PreviewSizingTest extends UiDocumentTestBase {
      * <p>Which is the same statement as "nothing is letterboxed": the picture is drawn fitted into this
      * box, so a box that matches the document's aspect leaves no bars.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void aThumbnailKeepsItsWindowsShape() {
         WindowFrame tall = open("Tall", 200f, 300f);
@@ -110,7 +109,6 @@ public class PreviewSizingTest extends UiDocumentTestBase {
      * differ in BOTH dimensions — matching on either axis means something other than the document is
      * deciding that axis.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void differentlyShapedWindowsGetDifferentlySizedPreviews() {
         WindowFrame tall = open("Tall", 200f, 300f);
@@ -132,7 +130,6 @@ public class PreviewSizingTest extends UiDocumentTestBase {
      * around a long title, almost none around a short one. The second document here is deliberately named
      * far longer than the first.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void theGapAroundThePictureIsTheSameForEveryWindow() {
         WindowFrame first = open("A", 200f, 300f);
@@ -157,7 +154,6 @@ public class PreviewSizingTest extends UiDocumentTestBase {
      * <p>Hence three hops rather than two. The panel returns to the document it started on and its picture
      * has to be the shape it was the first time.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void movingBetweenEntriesDoesNotFreezeThePicture() {
         WindowFrame tall = open("Tall", 200f, 300f);

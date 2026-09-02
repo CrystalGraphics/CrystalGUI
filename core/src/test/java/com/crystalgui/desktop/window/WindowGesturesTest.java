@@ -48,6 +48,17 @@ import static org.junit.Assert.assertTrue;
  */
 public class WindowGesturesTest extends UiDocumentTestBase {
 
+    /**
+     * Animations OFF for the fixture. Several tests below turn them back on for the thing they are
+     * about and restore this in a finally; without a @Before the class relied on that restore having
+     * run, i.e. on another test having gone first. A window's state change is DEFERRED while a
+     * timeline plays, so the assertions here read VISIBLE for a window that has been closed.
+     */
+    @Before
+    public void quietTheCompositor() {
+        Desktop.setAnimationsEnabled(false);
+    }
+
     private WindowFrame frame;
 
     @After
@@ -57,6 +68,12 @@ public class WindowGesturesTest extends UiDocumentTestBase {
 
     @Before
     public void setUpDesktop() {
+        // ANIMATIONS OFF, said out loud. This fixture asserts geometry on the frame after a gesture,
+        // and every one of those numbers is mid-flight while a timeline is running -- a snap preview
+        // read one frame in measures 301.6 where the half it is easing towards is 400. It used to pass
+        // by INHERITING somebody else's leaked flag, so it broke the moment the leak was closed; the
+        // two tests that are ABOUT the animation turn it back on themselves, in a finally.
+        Desktop.setAnimationsEnabled(false);
         CommandRegistry.global().resetForTesting();
         WindowCommands.resetForTesting();
 
@@ -74,7 +91,7 @@ public class WindowGesturesTest extends UiDocumentTestBase {
     }
 
     private boolean barVisible() {
-        return Desktop.of(document).taskbar().box().height() > 0f;
+        return heightOf(Desktop.of(document).taskbar()) > 0f;
     }
 
     // ── Fullscreen ──────────────────────────────────────────────────────────────────────────────
@@ -86,7 +103,6 @@ public class WindowGesturesTest extends UiDocumentTestBase {
      * hiding the taskbar re-flows the layer to full height and a maximised document follows it. That is
      * Windows' model exactly: maximise respects the taskbar, fullscreen covers it.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void fullscreenMaximisesAndHidesTheStrip() {
         assertTrue("the fixture started with no taskbar", barVisible());
@@ -141,7 +157,6 @@ public class WindowGesturesTest extends UiDocumentTestBase {
      * field holding "the fullscreen document" would need every exit to know whether it was the one being
      * remembered. The registry can simply be asked.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void theStripStaysHiddenWhileASecondWindowIsStillFullscreen() {
         WindowFrame other = Desktop.of(document).addWindow(new WindowFrame("Other"));
@@ -197,7 +212,6 @@ public class WindowGesturesTest extends UiDocumentTestBase {
      * reported by a stub: the listener is in the CAPTURE phase and reads the live modifier state, and a
      * fixture that dispatched straight at an element would skip both.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void altDraggingTheContentStartsAMove() {
         UINode inside = new UINode().layout(l -> l.width(120).height(60));
@@ -219,7 +233,6 @@ public class WindowGesturesTest extends UiDocumentTestBase {
      * test or it is only a comment</b> — a setter nothing exercises is indistinguishable from a
      * hardcoded constant with a public mutator in front of it.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void theMoveModifierIsRebindable() {
         UINode inside = new UINode().layout(l -> l.width(120).height(60));
@@ -283,8 +296,8 @@ public class WindowGesturesTest extends UiDocumentTestBase {
         var box = target.box();
         frame();
         document.input().consumeMouseEvent(new CgSystemInput.Mouse.Event(
-                Math.round((box.x() + box.width() / 2f) * 2f),
-                Math.round((box.y() + box.height() / 2f) * 2f),
+                Math.round(box.worldX() + box.width() / 2f * uiScale()),
+                Math.round(box.worldY() + box.height() / 2f * uiScale()),
                 0, 0, CgMouseCodes.LEFT_BUTTON, true, 0f, 0L));
         settle();
     }
@@ -299,22 +312,21 @@ public class WindowGesturesTest extends UiDocumentTestBase {
      * {@code display: none} for every frame it is not drawn, which is also what keeps it out of the
      * layer-FBO path.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void theSnapPreviewIsAbsentUntilItIsNeeded() {
         // UiTestBase already runs with animations OFF, which is what this test wants: the preview now
         // morphs into and out of place on a nanoTime-driven timeline that a settle loop cannot step, and
         // this test is about presence rather than motion.
         assertEquals("the snap preview is taking up space before any drag", 0f,
-                previewBox().width(), 0.01f);
+                previewWidth(), 0.01f);
 
         Desktop.of(document).showSnapPreview(SnapZones.Zone.LEFT, frame);
         settle();
-        assertTrue("the preview did not appear", previewBox().width() > 0f);
+        assertTrue("the preview did not appear", previewWidth() > 0f);
 
         Desktop.of(document).hideSnapPreview();
         settle();
-        assertEquals("the preview stayed on screen", 0f, previewBox().width(), 0.01f);
+        assertEquals("the preview stayed on screen", 0f, previewWidth(), 0.01f);
     }
 
     /**
@@ -348,7 +360,7 @@ public class WindowGesturesTest extends UiDocumentTestBase {
             // 150ms timeline, so the rect has already eased a fraction of the way — asserting equality
             // with the start value fails on a build that is working. What separates a timeline from an
             // instant apply is which END it is near, so that is what is asked.
-            assertNearer("width", previewBox().width(), 300f, Math.floor(area.width() / 2f));
+            assertNearer("width", previewWidth(), 300f, Math.floor(area.width() / 2f));
             assertNearer("height", previewBox().height(), 200f, area.height());
             assertNearer("left", previewBox().x(), area.x() + 120f, area.x());
         } finally {
@@ -361,11 +373,10 @@ public class WindowGesturesTest extends UiDocumentTestBase {
         Desktop.of(document).showSnapPreview(SnapZones.Zone.LEFT, frame);
         settle();
         assertEquals("animations off did not settle the preview immediately",
-                (float) Math.floor(area.width() / 2f), previewBox().width(), 1f);
+                (float) Math.floor(area.width() / 2f), previewWidth(), 1f);
     }
 
     /** <b>A LEFT snap covers the left half of the work area, and stops at the middle.</b> */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void theSnapPreviewCoversTheHalfItNames() {
         Desktop.of(document).showSnapPreview(SnapZones.Zone.LEFT, frame);
@@ -379,7 +390,6 @@ public class WindowGesturesTest extends UiDocumentTestBase {
     }
 
     /** <b>...and a quarter covers half of each axis</b>, which nothing else here asserts about a rect. */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void theSnapPreviewCoversTheQuarterItNames() {
         Desktop.of(document).showSnapPreview(SnapZones.Zone.BOTTOM_RIGHT, frame);
@@ -410,7 +420,6 @@ public class WindowGesturesTest extends UiDocumentTestBase {
      * centre, the doubled sum crosses the old right-hand band at nineteen — so this fails against the
      * old code and passes against any correct one.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void aDragToTheMiddleOfTheDesktopArmsNoSnap() {
         // OPENED WELL TO THE RIGHT, and that is what makes this test able to fail. The double-count was
@@ -428,7 +437,7 @@ public class WindowGesturesTest extends UiDocumentTestBase {
         dragToArea(midWidth, midHeight);
 
         assertEquals("the middle of the desktop armed a snap",
-                0f, previewBox().width(), 0.01f);
+                0f, previewWidth(), 0.01f);
 
         releaseAt(area.x() + midWidth, area.y() + midHeight);
         assertEquals("and it resized the document on release",
@@ -436,7 +445,6 @@ public class WindowGesturesTest extends UiDocumentTestBase {
     }
 
     /** <b>Contacting the left edge tiles to the left half</b>, through the same resize/move a caller uses. */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void draggingToTheLeftEdgeSnapsToTheLeftHalf() {
         frame.resizeTo(300, 200).moveTo(300, 200);
@@ -448,7 +456,7 @@ public class WindowGesturesTest extends UiDocumentTestBase {
         pressPoint(grab[0], grab[1]);
         dragToArea(0f, midHeight);
 
-        assertTrue("no snap preview appeared at the edge", previewBox().width() > 0f);
+        assertTrue("no snap preview appeared at the edge", previewWidth() > 0f);
 
         releaseAt(area.x(), area.y() + midHeight);
 
@@ -466,7 +474,6 @@ public class WindowGesturesTest extends UiDocumentTestBase {
      * {@code ElectricBorderCornerRatio}. It is also the case that used to resolve to maximise, so a
      * build with no quadrants passes every other test here and fails this one.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void draggingToACornerSnapsToTheQuarter() {
         frame.resizeTo(300, 200).moveTo(300, 200);
@@ -552,7 +559,6 @@ public class WindowGesturesTest extends UiDocumentTestBase {
      * the first simply ends up underneath it. Anything else would make the gesture depend on what is
      * already on screen, which is not something a hand reaching for an edge is thinking about.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void aZoneAlreadyOccupiedStillAcceptsAnotherWindow() {
         frame.resizeTo(300, 200).moveTo(300, 200);
@@ -628,9 +634,26 @@ public class WindowGesturesTest extends UiDocumentTestBase {
         return captionCentreOf(frame);
     }
 
+    /**
+     * The caption's centre in LOGICAL DOCUMENT space, which is what {@link #sendMouse} scales.
+     *
+     * <p>Not {@code bar.x()}: {@code Box.x()} is the offset from the host's border-box origin, so a
+     * caption reports its position INSIDE ITS FRAME -- a couple of pixels -- where the old engine's
+     * runtime cache accumulated through every ancestor and answered the position on screen. Pressing
+     * the parent-relative point aims at the top-left of the desktop, which is off the window
+     * entirely: the press lands on bare surface, no drag begins, and every snap assertion downstream
+     * reads as the snap never arming rather than as the gesture never starting.</p>
+     *
+     * <p>{@code worldX()} is the absolute answer and is in SURFACE pixels, so it is divided by the
+     * scale to come back to the logical space this fixture speaks.</p>
+     */
     private float[] captionCentreOf(WindowFrame target) {
         Box bar = target.titleBar().box();
-        return new float[] {bar.x() + bar.width() / 2f, bar.y() + bar.height() / 2f};
+        float scale = document.boxes().uiScale();
+        return new float[] {
+                bar.worldX() / scale + bar.width() / 2f,
+                bar.worldY() / scale + bar.height() / 2f
+        };
     }
 
     private long clock = 5_000L;
@@ -677,16 +700,31 @@ public class WindowGesturesTest extends UiDocumentTestBase {
     private void sendMouse(float x, float y, int button, boolean down) {
         Input handler = document.input();
         handler.consumeMouseEvent(new CgSystemInput.Mouse.Event(
-                Math.round(x * 2f), Math.round(y * 2f), 0, 0, button, down, 0f, clock));
+                Math.round(x * uiScale()), Math.round(y * uiScale()), 0, 0, button, down, 0f, clock));
         handler.beginFrame();
         handler.endFrame();
         settle();
     }
 
+    /**
+     * The snap preview's width, and ZERO when there is no preview.
+     *
+     * <p>It returned a {@code Box} and stood in a missing one with {@code new UINode().box()},
+     * which answered a zero box on the old engine and answers <b>null</b> here -- a detached node
+     * has no box at all. Every caller only ever asked for the width, so the helper hands over the
+     * width and the three states it must flatten (never built, built and not shown, shown at zero)
+     * are the one observable the assertions are about.</p>
+     */
     private Box previewBox() {
         UINode found = Desktop.of(document).windowLayer()
                 .querySelector("." + Desktop.SNAP_PREVIEW_CLASS);
-        // Never built is the same observable as never shown, which is what the assertion means.
-        return found == null ? new UINode().box() : found.box();
+        // NULLABLE on purpose. Callers that read x/height only run once a preview exists, so a null
+        // there is a real failure and should say so rather than be flattened into a zero box.
+        return found == null ? null : found.box();
+    }
+
+    private float previewWidth() {
+        return widthOf(Desktop.of(document).windowLayer()
+                .querySelector("." + Desktop.SNAP_PREVIEW_CLASS));
     }
 }

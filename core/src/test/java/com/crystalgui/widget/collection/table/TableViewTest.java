@@ -347,8 +347,8 @@ public class TableViewTest extends UiDocumentTestBase {
     private void clickHeader(int columnIndex) {
         UINode cell = headerCell(columnIndex);
         float scale = document.boxes().uiScale();
-        int x = Math.round((cell.box().x() + cell.box().width() / 2f) * scale);
-        int y = Math.round((cell.box().y() + cell.box().height() / 2f) * scale);
+        int x = Math.round(cell.box().worldX() + cell.box().width() / 2f * scale);
+        int y = Math.round(cell.box().worldY() + cell.box().height() / 2f * scale);
 
         var input = document.input();
         input.consumeMouseEvent(new com.crystalgraphics.platform.input.CgSystemInput.Mouse.Event(

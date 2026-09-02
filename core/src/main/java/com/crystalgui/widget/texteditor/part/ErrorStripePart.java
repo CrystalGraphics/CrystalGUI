@@ -7,6 +7,7 @@ import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.wrap.LineProjection;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.TaffyPosition;
@@ -50,6 +51,12 @@ import java.util.List;
 public final class ErrorStripePart extends EditorViewPart {
 
     static final String STRIPE_CLASS = "__error-stripe__";
+
+    /** @see #markAt(int) — the shadow-crossing spelling of {@link #STRIPE_CLASS}. */
+    static final String STRIPE_PART = "error-stripe";
+    private static final String ERROR_PART = "error-stripe-error";
+    private static final String WARNING_PART = "error-stripe-warning";
+    private static final String INFORMATION_PART = "error-stripe-information";
     static final String ERROR_CLASS = "__error-stripe-error__";
     static final String WARNING_CLASS = "__error-stripe-warning__";
     static final String INFORMATION_CLASS = "__error-stripe-information__";
@@ -239,12 +246,40 @@ public final class ErrorStripePart extends EditorViewPart {
             case INFORMATION -> mark.addClass(INFORMATION_CLASS);
             default -> { }
         }
+        // ...and the PART follows it, because the part is what a rule outside this shadow tree can
+        // name. The pooling rule above applies here too and is simpler: a part is one value, so
+        // setting it replaces whatever the mark showed last rather than accumulating.
+        mark.set(Attribute.PART, switch (severity) {
+            case ERROR -> ERROR_PART;
+            case WARNING -> WARNING_PART;
+            case INFORMATION -> INFORMATION_PART;
+            default -> STRIPE_PART;
+        });
     }
 
     private UINode markAt(int index) {
         while (marks.size() <= index) {
             UINode mark = new UINode();
             mark.addClass(STRIPE_CLASS);
+            // AND A PART NAME, because the class alone reaches nothing here. These marks are appended
+            // into the scrollbar's TRACK, which lives in the Scroller's shadow tree -- so a
+            // document-level `.__error-stripe__` rule cannot match them and every one of its
+            // declarations (the 1.2% height, the z-index above the thumb, the opacity, and the
+            // per-severity colour) was silently doing nothing. Marks drawn at zero height in no
+            // colour, which reads as the stripe not being populated rather than not being styled.
+            // A part IS addressable from outside the tree that owns it, which is the whole point of
+            // one: `scroller::part(error-stripe)` in the sheet, beside the class rule for the old
+            // engine.
+            mark.set(Attribute.PART, STRIPE_PART);
+            // ...AND THE PAINT ORDER FROM JAVA, because not even the part name can carry it here.
+            // A mark is appended to the scrollbar's TRACK, which is itself a part -- and `::part()`
+            // has no spelling for a part UNDER a part, which is the same gap the port counts across
+            // the shipped sheets. So `scroller::part(error-stripe)` does not match either, and the
+            // one declaration that is a correctness guarantee rather than an appearance -- sitting
+            // above the thumb, or the marks are drawn underneath it and simply not visible -- is
+            // stated where it can be. DEFAULT origin, so a scoped sheet supersedes it the day one
+            // exists. The rest of the stripe's look stays in the sheet and is a KNOWN GAP.
+            StyleGroup.defaultPipeline(mark.getStyle().getGeneralGroup(), g -> g.zIndex(1));
             // HIT-TESTABLE NOW THAT IT HAS SOMETHING TO DO. It was deliberately transparent while it did
             // not: a mark that swallowed presses without acting on them would break dragging the thumb
             // underneath it, which is the groove's actual job. It now navigates, so it earns the press.

@@ -147,7 +147,7 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
         Desktop d = desktop();
         WindowFrame frame = open("One");
         assertTrue("a live desktop is not marked live", d.hasClass(Desktop.LIVE_CLASS));
-        assertTrue("a live desktop claimed no width", d.box().width() > 0f);
+        assertTrue("a live desktop claimed no width", widthOf(d) > 0f);
 
         frame.destroy();
         frame();
@@ -170,7 +170,7 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
         frame();
         assertEquals("a hidden window is not HIDDEN", WindowState.HIDDEN, frame.state());
         assertTrue("hiding the only window collapsed the desktop", d.hasClass(Desktop.LIVE_CLASS));
-        assertTrue("the work area went to zero", d.box().width() > 0f);
+        assertTrue("the work area went to zero", widthOf(d) > 0f);
     }
 
     // ── The compositor is reached through the compositor ─────────────────────
@@ -563,7 +563,6 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
      * resolver was covered, the bindings were covered, and the one thing nobody could ask was whether
      * anything called them.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void modTabOpensTheSwitcherInsteadOfTabbingBetweenWindows() {
         open("One");

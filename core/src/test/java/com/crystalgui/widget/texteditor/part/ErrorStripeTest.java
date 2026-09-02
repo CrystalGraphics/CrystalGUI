@@ -9,6 +9,7 @@ import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.widget.texteditor.TextEditor;
 import org.junit.Ignore;
+import com.crystalgui.widget.scroll.Scroller;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -61,7 +62,7 @@ public class ErrorStripeTest extends UiDocumentTestBase {
     }
 
     private static void collect(UINode element, List<UINode> out) {
-        if (element.hasClass("__error-stripe__") && element.box().height() > 0f) {
+        if (element.hasClass("__error-stripe__") && heightOf(element) > 0f) {
             out.add(element);
         }
         for (UINode child : element.children()) collect(child, out);
@@ -157,7 +158,6 @@ public class ErrorStripeTest extends UiDocumentTestBase {
 
     // ── Housekeeping ────────────────────────────────────────────────────────────────────────────
 
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void clearingRetiresEveryMark() {
         build();
@@ -218,7 +218,6 @@ public class ErrorStripeTest extends UiDocumentTestBase {
      * Observed in the harness with two of four marks missing, and invisible to every other assertion here
      * because the elements existed, were positioned correctly, and were painted underneath something.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void aMarkPaintsAboveTheScrollbarThumb() {
         build();
@@ -226,7 +225,9 @@ public class ErrorStripeTest extends UiDocumentTestBase {
         settle();
 
         UINode mark = marks().get(0);
-        UINode thumb = findByClass(editor.verticalScroller(), "__thumb__");
+        // A SCROLLER'S THUMB IS A PART, so a class walk finds nothing: `__thumb__` became `thumb`
+        // and lives inside the scroller's shadow tree, where no outside query reaches it.
+        UINode thumb = deepOrNull(editor.verticalScroller(), "." + Scroller.THUMB_PART);
         assertNotNull("no thumb to compare against", thumb);
 
         assertTrue("the stripe sits under the thumb and will be hidden by it",

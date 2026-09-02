@@ -149,8 +149,25 @@ public class Desktop extends UINode implements DataProvider {
         if (existing != null) return existing;
         Desktop desktop = new Desktop();
         document.append(desktop);
+        BY_DOCUMENT.put(document, desktop);
         return desktop;
     }
+
+    /**
+     * <b>Which compositor belongs to which document, held so it survives a SUSPEND.</b>
+     *
+     * <p>Suspending takes the desktop out of the tree — that is what makes the freeze real — and
+     * {@link #ifPresent} looked for it by walking the document's children. So while suspended a
+     * document appeared to have no compositor at all, and {@link #of} answered by building a SECOND
+     * one: a fresh, empty desktop, with every retained window still held by the first and reachable
+     * from nothing. Nothing throws; a window opened in that state simply appears on a desktop that
+     * is not the one about to be resumed.</p>
+     *
+     * <p>The map is here rather than a field on {@code UIDocument} for the standing reason the engine
+     * may not name a compositor: the compositor names the document. Weak keys, so a document that
+     * goes away takes its entry with it.</p>
+     */
+    private static final java.util.Map<UIDocument, Desktop> BY_DOCUMENT = new java.util.WeakHashMap<>();
 
     /**
      * The compositor <b>only if one is already on screen</b> — never the call that puts it there.
@@ -167,7 +184,11 @@ public class Desktop extends UINode implements DataProvider {
         for (UINode child : document.children()) {
             if (child instanceof Desktop desktop) return desktop;
         }
-        return null;
+        // ...and a SUSPENDED one, which is not a child of anything. Only a suspended desktop is
+        // answered from the map: a desktop that was destroyed or replaced must not be resurrected by
+        // it, and being attached is otherwise the honest test.
+        Desktop remembered = BY_DOCUMENT.get(document);
+        return remembered != null && remembered.isSuspended() ? remembered : null;
     }
 
     /**

@@ -318,7 +318,7 @@ public class TooltipTest extends UiDocumentTestBase {
     private Vector2f centrePoint(UINode element) {
         var cache = element.box();
         return Transform2D.apply(cache.localToWorld(),
-                cache.x() + cache.width() / 2f, cache.y() + cache.height() / 2f);
+                cache.width() / 2f, cache.height() / 2f);
     }
 
     /**

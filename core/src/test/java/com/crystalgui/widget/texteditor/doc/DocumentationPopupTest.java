@@ -538,7 +538,6 @@ public class DocumentationPopupTest extends UiDocumentTestBase {
      * the line you hovered, not about {@code java.lang.StringBuffer}. Carrying it across would offer a
      * fix for one thing while describing another, which is worse than showing no fix at all.</p>
      */
-    @Ignore("M6 port: rewrite pending -- the old-engine behaviour this asserts has no counterpart yet")
     @Test
     public void navigatingDropsTheProblemBand() {
         show(field("entryPoint", "Method", SymbolModifier.STATIC));
@@ -560,7 +559,7 @@ public class DocumentationPopupTest extends UiDocumentTestBase {
     private float problemRowHeight() {
         float tallest = 0f;
         for (UINode each : deepAll(popup, "." + DocumentationPopup.PROBLEM_CLASS)) {
-            tallest = Math.max(tallest, each.box().height());
+            tallest = Math.max(tallest, heightOf(each));
         }
         return tallest;
     }

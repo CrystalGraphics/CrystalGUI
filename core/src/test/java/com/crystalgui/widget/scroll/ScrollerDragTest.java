@@ -72,11 +72,13 @@ public class ScrollerDragTest extends UiDocumentTestBase {
         document.append(root);
         document.boxes().setUiScale(uiScale);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
+
         frame();
         view.refreshScrollers();
         frame();
         return view;
     }
+
 
 
     /** Runs enough frames for a smooth scroll to settle. */
@@ -573,7 +575,7 @@ public class ScrollerDragTest extends UiDocumentTestBase {
         frame();
 
         assertTrue("head button did not become visible",
-                bar.head().box().height() > 0f);
+                heightOf(bar.head()) > 0f);
         assertTrue("groove should shrink to make room for the buttons",
                 bar.track().box().height() < trackBefore);
     }
@@ -616,6 +618,7 @@ public class ScrollerDragTest extends UiDocumentTestBase {
         document.append(root);
         document.boxes().setUiScale(2f);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
+
         frame();
         view.refreshScrollers();
         frame();
