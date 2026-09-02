@@ -3,7 +3,11 @@ package com.crystalgui.widget;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.widget.config.ConfiguratorGroup;
+import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.control.SymbolIcon;
+import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.config.ConfiguratorPanel;
 import com.crystalgui.widget.layout.PageStack;
 import com.crystalgui.widget.layout.SplitView;
@@ -12,6 +16,8 @@ import com.crystalgui.widget.layout.TabView;
 import com.crystalgui.widget.overlay.Dialog;
 import com.crystalgui.widget.overlay.DialogManager;
 import com.crystalgui.widget.scroll.Scroller;
+import dev.vfyjxf.taffy.style.AlignItems;
+import dev.vfyjxf.taffy.style.FlexDirection;
 import java.util.Set;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -606,4 +612,123 @@ public class WidgetBatchPortTest extends UiDocumentTestBase {
         return node;
     }
 
+
+    /**
+     * A symbol icon placed as a widget's icon is still styled.
+     *
+     * <p><b>Its whole appearance is authored in an outer sheet</b> — {@code .__completion-icon__} gives it
+     * a 12x12 box and {@code .completion-kind-*} gives it its picture — and {@code Button.setPreIcon} puts
+     * it INSIDE the host's shadow tree. An outer rule cannot match a node in a shadow tree however simple
+     * its selector, so both rules stopped applying: a dock tab whose file had resolved to a declaration
+     * drew no icon at all, while a tab whose symbol had not resolved kept its file-type glyph and looked
+     * fine. Icons appearing on some tabs and not others reads as the icons failing to load.</p>
+     *
+     * <p>A hostless {@code ::part(pre-icon)} twin is the crossing, the same answer
+     * {@code .__v-scroller__} needed. Asserted on the BOX, because the node was present and correctly
+     * classed throughout — only unstyled.</p>
+     */
+    @Test
+    public void aSymbolIconInAWidgetsIconSlotIsStyled() {
+        withDefaultStyles();
+        Button host = new Button("File.java");
+        SymbolIcon icon = new SymbolIcon().show(SymbolKind.CLASS, Set.of());
+        host.setPreIcon(icon);
+        document.append(host);
+        frame();
+        frame();
+
+        Box box = icon.box();
+        assertNotNull("the icon has a box", box);
+        assertEquals("the sheet's size reaches it through ::part()", 12f, box.width(), 0.5f);
+        assertEquals("the sheet's size reaches it through ::part()", 12f, box.height(), 0.5f);
+    }
+
+    /**
+     * Focusing a field in the same breath as attaching it works.
+     *
+     * <p>Every summoned widget does exactly this — a command palette, a Go to Class, a rename box all
+     * build their tree and focus their field the moment they open, because the caret is the point of the
+     * widget. {@code Focus.focusable} refused all of them: it asked the BOX TREE whether the node was
+     * rendered, and a node attached after the last layout has no box yet.</p>
+     *
+     * <p><b>It is the ordinary case, not a corner.</b> {@code UIDocument.frame} lays out and then
+     * dispatches input in {@code endFrame}, so a popover opened by a chord is always built after that
+     * frame's layout. The request was refused in silence and the caret simply never appeared, so typing
+     * went to whatever held focus before.</p>
+     *
+     * <p>Asserted WITHOUT a frame between attaching and focusing, because a frame is what made it work.</p>
+     */
+    @Test
+    public void aFieldFocusedAsItIsAttachedTakesFocus() {
+        withDefaultStyles();
+        document.append(new Button("something else"));
+        frame();
+
+        TextField field = new TextField();
+        document.append(field);
+        document.focus().requestFocus(field);
+
+        assertSame("a node attached this frame can still take focus", field, document.focus().focused());
+    }
+
+    /**
+     * A resize is forgotten when the popup closes.
+     *
+     * <p>A drag writes {@code width}/{@code height} at INLINE, per the CSS spec's rule for a user resize.
+     * {@code clearUserSizing} dropped the FLAGS and left those candidates standing, so the size won every
+     * cascade for the rest of the widget's life — the classes came off, the sheet's floor came back, and
+     * neither could be seen because an INLINE width outranks both. A documentation popup reopened at the
+     * previous SYMBOL's size, so one wide declaration made every later hover wide.</p>
+     */
+    @Test
+    public void closingAPopoverForgetsAUserResize() {
+        withDefaultStyles();
+        Popover popover = new Popover();
+        document.append(popover);
+        // OPEN, or it is `display: none` and has no box to measure at all.
+        popover.showAt(20f, 20f, null);
+        frame();
+        frame();
+
+        StyleGroup.inlinePipeline(popover.getStyle().getLayoutGroup(), l -> l.width(640f).height(480f));
+        popover.markUserSized(true, true);
+        frame();
+        assertEquals("the drag is in force", 640f, popover.box().width(), 0.5f);
+
+        popover.clearUserSizing();
+        frame();
+        assertTrue("the dragged width outlived the drag",
+                Math.abs(popover.box().width() - 640f) > 0.5f);
+    }
+
+    /**
+     * A scroller's alignment reaches what it scrolls.
+     *
+     * <p>A slot is a real box between a host and its content, so it is the flex container the content
+     * lays out in — and {@code align-items} does not inherit. {@code align-items: center} on a
+     * {@code ScrollerView} therefore centred the SLOT, which already filled the view, and the slot went
+     * on stretching the content to full height.</p>
+     *
+     * <p>Measured where it showed: a dock tab is <b>17.0</b> tall on the old engine and was <b>22.0</b>
+     * here, so every editor tab's focus ring was five pixels taller than its label needed. The widget was
+     * identical in isolation — a bare {@code Tab} measures 17.0 on both engines — which is what makes
+     * this read as a restyle rather than as a box having appeared between two elements that used to be
+     * adjacent. {@code flex-direction} was already mirrored for the same reason.</p>
+     */
+    @Test
+    public void aScrollersAlignmentReachesItsContent() {
+        withDefaultStyles();
+        ScrollerView view = new ScrollerView();
+        layout(view, l -> l.width(200f).height(60f)
+                .flexDirection(FlexDirection.ROW).alignItems(AlignItems.CENTER));
+        UINode item = new UINode();
+        layout(item, l -> l.width(40f).height(20f));
+        view.append(item);
+        document.append(view);
+        frame();
+        frame();
+
+        assertEquals("the item keeps its own height rather than stretching",
+                20f, item.box().height(), 0.5f);
+    }
 }

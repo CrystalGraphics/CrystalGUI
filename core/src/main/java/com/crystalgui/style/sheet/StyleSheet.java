@@ -216,6 +216,25 @@ public final class StyleSheet {
         var rightmost = compounds.get(compounds.size() - 1);
         boolean indexed = false;
         for (var part : rightmost.parts()) {
+            // STOP AT THE PSEUDO-ELEMENT: what follows describes the PART, and the lookup is done with
+            // the HOST.
+            //
+            // `StyleEngine` fetches a `::part()` rule's candidates with `candidatesFor(shadowHost)`,
+            // because a part rule is indexed under the host's own type and classes. So a class written
+            // after the pseudo-element -- which CSS says describes the part, and which
+            // `matchesAfterPseudoElement` correctly tests against the part -- must not choose the
+            // bucket: it files the rule under a class the host does not have, and the host lookup can
+            // never return it. The rule then matches nothing at all, silently.
+            //
+            // Only a HOSTLESS part rule could reach this. `taskbar .__entry__::part(pre-icon).__tile-1__`
+            // is unaffected because its compound also carries `__entry__`, which the host does have, so
+            // the rule lands in a bucket the lookup asks for anyway -- which is why every shipped part
+            // rule worked and hid the gap. `::part(pre-icon).__completion-icon__` has nothing before the
+            // pseudo-element, so with the class filed as its key it was indexed under a bucket nobody
+            // asks the host for; the M6.1 note that `::part(x)` alone is legal was verified on a rule
+            // with no trailing compound. On screen: a `SymbolIcon` in a dock tab drew no icon at all,
+            // while a tab whose symbol had not resolved kept its file-type glyph and looked correct.
+            if (part.type() == SelectorType.PSEUDO_ELEMENT) break;
             switch (part.type()) {
                 case ID -> {
                     byId.computeIfAbsent(part.identity(), k -> new ArrayList<>()).add(rule);

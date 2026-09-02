@@ -1,8 +1,10 @@
 package com.crystalgui.ui.dom;
 
+import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.async.UiThread;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataProvider;
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgui.ui.box.Box;
@@ -367,6 +369,10 @@ public final class UIDocument extends UINode {
      * is what makes hover correct on a frame where a reflow moved something under a still pointer.</p>
      */
     public void frame(float deltaSeconds, float width, float height) {
+        if (JobScheduler.hasShared()) {
+            FrameProfile.count("jobs-busy", JobScheduler.shared().runningCount());
+            JobScheduler.shared().drain();
+        }
         input().beginFrame();
         animation().tick(deltaSeconds);
         calculateStyle(deltaSeconds);
