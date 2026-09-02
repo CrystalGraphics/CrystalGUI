@@ -103,7 +103,7 @@ public final class Resizer extends UINode {
         for (Handle handle : Handle.values()) {
             if (handle.isLeading() && !leading) continue;
             Resizer resizer = new Resizer(handle, target);
-            target.append(resizer);
+            ResizeHandles.attach(target, resizer);
             handles.add(resizer);
         }
         return handles;
