@@ -1,6 +1,5 @@
 package com.crystalgui.ui.contract;
 
-import com.crystalgui.ui.UIElement;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -47,12 +46,12 @@ import javax.annotation.Nullable;
  *
  * @param <P> what the sink is handed — a decoded value for a local UI, an encoded payload for a session
  */
-public final class RateGate<P> {
+public final class RateGate<N, P> {
 
     /** Where a report goes once its policy has let it through. */
     @FunctionalInterface
-    public interface Sink<P> {
-        void send(UIElement widget, String kind, @Nullable P payload);
+    public interface Sink<N, P> {
+        void send(N widget, String kind, @Nullable P payload);
     }
 
     /**
@@ -74,8 +73,8 @@ public final class RateGate<P> {
         RatePolicy policy = RatePolicy.IMMEDIATE;
     }
 
-    private final Sink<P> sink;
-    private final Map<UIElement, Map<String, Pending<P>>> pending = new LinkedHashMap<>();
+    private final Sink<N, P> sink;
+    private final Map<N, Map<String, Pending<P>>> pending = new LinkedHashMap<>();
 
     /**
      * Where "now" comes from.
@@ -86,12 +85,12 @@ public final class RateGate<P> {
      */
     private LongSupplier clock = System::currentTimeMillis;
 
-    public RateGate(Sink<P> sink) {
+    public RateGate(Sink<N, P> sink) {
         this.sink = Objects.requireNonNull(sink, "sink");
     }
 
     /** @see #clock */
-    public RateGate<P> setClock(LongSupplier clock) {
+    public RateGate<N, P> setClock(LongSupplier clock) {
         this.clock = Objects.requireNonNull(clock, "clock");
         return this;
     }
@@ -102,7 +101,7 @@ public final class RateGate<P> {
      * <p>The typed entry point, and the one to reach for: the payload reaches the sink undecoded, so
      * {@code P} is whatever the event carries. A caller that encodes first calls {@link #offer} instead.</p>
      */
-    public <W extends UIElement> RateGate<P> attach(W widget, Event<W, P> event) {
+    public <W extends N> RateGate<N, P> attach(W widget, Event<W, P> event) {
         event.attach(widget, payload -> offer(widget, event.kind(), event.rate(), payload));
         return this;
     }
@@ -113,7 +112,7 @@ public final class RateGate<P> {
      * <p>A null or {@linkplain RatePolicy#isImmediate() immediate} policy goes straight through, so the
      * common case allocates nothing.</p>
      */
-    public void offer(UIElement widget, String kind, @Nullable RatePolicy policy, @Nullable P payload) {
+    public void offer(N widget, String kind, @Nullable RatePolicy policy, @Nullable P payload) {
         if (policy == null || policy.isImmediate()) {
             sink.send(widget, kind, payload);
             return;
@@ -131,7 +130,7 @@ public final class RateGate<P> {
     public void flush() {
         if (pending.isEmpty()) return;
         long now = clock.getAsLong();
-        for (Map.Entry<UIElement, Map<String, Pending<P>>> byWidget : pending.entrySet()) {
+        for (Map.Entry<N, Map<String, Pending<P>>> byWidget : pending.entrySet()) {
             for (Map.Entry<String, Pending<P>> entry : byWidget.getValue().entrySet()) {
                 Pending<P> slot = entry.getValue();
                 if (!slot.held) continue;
@@ -153,7 +152,7 @@ public final class RateGate<P> {
      * than against a timestamp belonging to the window before it.</p>
      */
     public void commit() {
-        for (Map.Entry<UIElement, Map<String, Pending<P>>> byWidget : pending.entrySet()) {
+        for (Map.Entry<N, Map<String, Pending<P>>> byWidget : pending.entrySet()) {
             for (Map.Entry<String, Pending<P>> entry : byWidget.getValue().entrySet()) {
                 Pending<P> slot = entry.getValue();
                 if (slot.held) release(byWidget.getKey(), entry.getKey(), slot);
@@ -169,7 +168,7 @@ public final class RateGate<P> {
      * follows too — a control's last value does not become an intermediate one just because the control
      * has gone.</p>
      */
-    public void forget(UIElement widget) {
+    public void forget(N widget) {
         Map<String, Pending<P>> slots = pending.remove(widget);
         if (slots == null) return;
         for (Map.Entry<String, Pending<P>> entry : slots.entrySet()) {
@@ -188,7 +187,7 @@ public final class RateGate<P> {
         return false;
     }
 
-    private void release(UIElement widget, String kind, Pending<P> slot) {
+    private void release(N widget, String kind, Pending<P> slot) {
         P payload = slot.payload;
         slot.payload = null;
         slot.held = false;

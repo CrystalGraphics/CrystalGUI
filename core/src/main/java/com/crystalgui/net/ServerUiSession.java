@@ -1,5 +1,7 @@
 package com.crystalgui.net;
 
+import com.crystalgui.ui.dom.TreeSource;
+import com.crystalgui.style.Styleable;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.net.protocol.Call;
 import com.crystalgui.net.protocol.Envelope;
@@ -12,13 +14,11 @@ import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.WidgetContracts;
-import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.net.mirror.ElementNodeMirror;
 import com.crystalgui.net.mirror.NodeMirror;
 import com.crystalgui.net.mirror.ServerTreeMirror;
 import com.crystalgui.net.mirror.TreeOps;
-import com.crystalgui.ui.dom.ElementTreeSource;
 
 import com.crystalgui.serialization.StateMap;
 
@@ -50,10 +50,10 @@ import java.util.function.Consumer;
  * bookkeeping. Fanning one tree out to several viewers needs per-viewer version state and is not
  * what this is.</p>
  */
-public final class ServerUiSession<T> {
+public final class ServerUiSession<N extends Styleable, T> {
 
     private final int windowId;
-    private final UIElement root;
+    private final N root;
     private final DynamicOps<T> ops;
 
     private final List<SheetRef> sheets = new ArrayList<>();
@@ -103,10 +103,10 @@ public final class ServerUiSession<T> {
      * <p>It holds the id table that used to be a field on every element, and it is what the mirror
      * (M2) is written against. Per-session rather than per-tree, which is the point: two sessions over
      * one tree each keep their own numbering instead of overwriting one another, and
-     * {@code UIElement.setObserver holds ONE observer} stops being a constraint anything has to
+     * {@code setObserver holds ONE observer} stops being a constraint anything has to
      * document.</p>
      */
-    private final ElementTreeSource ids;
+    private final TreeSource<N> ids;
 
     /**
      * <b>The mirror.</b> Everything about turning tree changes into messages lives there, written
@@ -116,14 +116,14 @@ public final class ServerUiSession<T> {
      * {@code UIElement} -- which quietly voids the seam's reason to exist, since the engine swap was
      * supposed to be a port of the seam's implementation rather than of the mirror.</p>
      */
-    private final ServerTreeMirror<UIElement, T> mirror;
+    private final ServerTreeMirror<N, T> mirror;
 
-    /** How a {@code UIElement} is described. The mirror's other half; see {@link NodeMirror}. */
-    private final NodeMirror<UIElement, T> nodes;
+    /** How a node is described. The mirror's other half; see {@link NodeMirror}. */
+    private final NodeMirror<N, T> nodes;
 
     /** Element -> kind -> lambda. Lives here, never on the element: that is what keeps behaviour on
      * the side that owns it while the client holds only a description. */
-    private final Map<UIElement, Map<String, Consumer<UiEventContext<T>>>> handlers = new LinkedHashMap<>();
+    private final Map<N, Map<String, Consumer<UiEventContext<N, T>>>> handlers = new LinkedHashMap<>();
 
     private String descHash;
     private T encodedDescription;
@@ -192,7 +192,7 @@ public final class ServerUiSession<T> {
      *
      * <p>The tree is the session's, not a viewer's — so a fan-out is a list of <em>routers</em> rather
      * than a list of sessions over one tree. The alternative was rejected on a fact about the engine:
-     * {@code UIElement.setObserver} holds ONE observer, so two sessions cannot both watch one tree, and
+     * {@code setObserver} holds ONE observer, so two sessions cannot both watch one tree, and
      * making it a list would put a per-viewer cost on every mutation in the application to serve a case
      * most windows never have.</p>
      */
@@ -230,11 +230,12 @@ public final class ServerUiSession<T> {
     private final boolean ownsConnection;
 
     /** Owns its own transport, router and mailbox — the shape every test and the in-memory pair use. */
-    public ServerUiSession(int windowId, UIElement root, UITransport<T> transport, DynamicOps<T> ops) {
+    public ServerUiSession(int windowId, TreeSource<N> source, NodeMirror<N, T> nodes,
+                           UITransport<T> transport, DynamicOps<T> ops) {
         this.windowId = windowId;
-        this.root = root;
-        this.ids = new ElementTreeSource(root);
-        this.nodes = new ElementNodeMirror<>(ops);
+        this.root = source.root();
+        this.ids = source;
+        this.nodes = nodes;
         this.mirror = new ServerTreeMirror<>(ids, nodes, ops);
         this.ops = ops;
         this.ownsConnection = true;
@@ -261,12 +262,13 @@ public final class ServerUiSession<T> {
      * The per-handler {@code mine(…)} checks below are kept: they were the guard against a message
      * still in flight when a window closed, and that is a different question from routing.</p>
      */
-    public ServerUiSession(int windowId, UIElement root, ProtocolConnection<T> connection) {
+    public ServerUiSession(int windowId, TreeSource<N> source, NodeMirror<N, T> nodes,
+                           ProtocolConnection<T> connection) {
         this.windowId = windowId;
-        this.root = root;
-        this.ids = new ElementTreeSource(root);
+        this.root = source.root();
+        this.ids = source;
         this.ops = connection.ops();
-        this.nodes = new ElementNodeMirror<>(this.ops);
+        this.nodes = nodes;
         this.mirror = new ServerTreeMirror<>(ids, nodes, this.ops);
         this.ownsConnection = false;
         addViewer(connection.router(), connection.peer(), UiWindowMux.of(connection));
@@ -284,7 +286,7 @@ public final class ServerUiSession<T> {
      * watching one window</em>; {@link UiWindowMux} is what allows a second <em>window on one client</em>.
      * They compose — the mux is per connection and this session registers into each viewer's own.</p>
      */
-    public ServerUiSession<T> addViewer(ProtocolConnection<T> connection) {
+    public ServerUiSession<N, T> addViewer(ProtocolConnection<T> connection) {
         Viewer<T> viewer = addViewer(connection.router(), connection.peer(), UiWindowMux.of(connection));
         if (open) sendOpenTo(viewer);
         return this;
@@ -338,7 +340,7 @@ public final class ServerUiSession<T> {
         return windowId;
     }
 
-    public UIElement root() {
+    public N root() {
         return root;
     }
 
@@ -348,7 +350,7 @@ public final class ServerUiSession<T> {
 
     /** Stylesheets to apply, in order. Order is load-bearing: cross-sheet ties at equal specificity
      * fall back to registration order, so both sides must register identically. */
-    public ServerUiSession<T> addSheet(SheetRef sheet) {
+    public ServerUiSession<N, T> addSheet(SheetRef sheet) {
         sheets.add(sheet);
         return this;
     }
@@ -361,13 +363,13 @@ public final class ServerUiSession<T> {
      * sheet the client is expected to already have — a shipped theme named by id — where sending the
      * bytes would be sending something both sides already hold.</p>
      */
-    public ServerUiSession<T> addSheet(SheetRef sheet, @Nullable String css) {
+    public ServerUiSession<N, T> addSheet(SheetRef sheet, @Nullable String css) {
         sheets.add(sheet);
         if (css != null) sheetSource.put(sheet.hash(), css);
         return this;
     }
 
-    public ServerUiSession<T> setUseUserAgentSheet(boolean use) {
+    public ServerUiSession<N, T> setUseUserAgentSheet(boolean use) {
         this.useUserAgentSheet = use;
         return this;
     }
@@ -385,13 +387,13 @@ public final class ServerUiSession<T> {
      * description is self-sufficient, so an unknown type renders and interacts correctly and merely has
      * no local extras.</p>
      */
-    public ServerUiSession<T> setType(@Nullable String type) {
+    public ServerUiSession<N, T> setType(@Nullable String type) {
         this.type = type == null ? "" : type;
         return this;
     }
 
     /** What to call it on screen. The side that opens a window is the side that knows what it is. */
-    public ServerUiSession<T> setTitle(@Nullable String title) {
+    public ServerUiSession<N, T> setTitle(@Nullable String title) {
         this.title = title == null ? "" : title;
         return this;
     }
@@ -405,12 +407,12 @@ public final class ServerUiSession<T> {
      * geometry.</p>
      */
     /** Names the panel class the far side should initialise before decoding. @see UiMethods#UI_CLASS */
-    public ServerUiSession<T> setUiClass(@Nullable String uiClass) {
+    public ServerUiSession<N, T> setUiClass(@Nullable String uiClass) {
         this.uiClass = uiClass;
         return this;
     }
 
-    public ServerUiSession<T> setKey(@Nullable String key) {
+    public ServerUiSession<N, T> setKey(@Nullable String key) {
         this.key = key;
         return this;
     }
@@ -540,7 +542,7 @@ public final class ServerUiSession<T> {
     }
 
     /** Registers a server-side RPC method the client may call. */
-    public ServerUiSession<T> onCall(String method, Call.Handler<T> handler) {
+    public ServerUiSession<N, T> onCall(String method, Call.Handler<T> handler) {
         // The handler type is unchanged, so nothing that calls this moves. What changed is underneath:
         // an RPC is now an ordinary REQUEST, so its correlation, timeout and "answer exactly once" are
         // the router's for every method rather than a second id space kept for this one.
@@ -566,7 +568,7 @@ public final class ServerUiSession<T> {
      * window — a workspace, a script runtime — still registers on {@code ProtocolConnection} directly
      * and is shared by every window, which is what it wants.</p>
      */
-    public ServerUiSession<T> onNotify(String method, Consumer<StateMap<T>> handler) {
+    public ServerUiSession<N, T> onNotify(String method, Consumer<StateMap<T>> handler) {
         // Remembered so a viewer added later gets it, exactly as onCall's methods are. A handler served
         // to whoever connected first and missing for everyone else is the shape of bug that only appears
         // on a busy server.
@@ -582,7 +584,7 @@ public final class ServerUiSession<T> {
      * of the same application hears nothing of it.</p>
      */
     /** This element's network id, or -1 if the client has not been described it. */
-    public int idOf(UIElement element) {
+    public int idOf(N element) {
         return ids.peekId(element);
     }
 
@@ -605,7 +607,7 @@ public final class ServerUiSession<T> {
     }
 
     /** As {@link #view}, aimed at one element. */
-    public void viewOn(String command, UIElement element, @Nullable StateMap<T> args) {
+    public void viewOn(String command, N element, @Nullable StateMap<T> args) {
         int nid = ids.peekId(element);
         if (nid < 0) {
             CrystalGuiCore.LOGGER.warn("Session {}: '{}' names an element the client has not been "
@@ -690,7 +692,7 @@ public final class ServerUiSession<T> {
      * what lets a server keep its behaviour while the client holds only a description. The element
      * learns the event's <em>name</em> so the client knows to report it; nothing else.</p>
      */
-    public ServerUiSession<T> on(UIElement element, String kind, Consumer<UiEventContext<T>> handler) {
+    public ServerUiSession<N, T> on(N element, String kind, Consumer<UiEventContext<N, T>> handler) {
         /*
          * THE RULE IS NARROWER THAN IT USED TO BE, and the old one was broader than its own reason.
          *
@@ -711,7 +713,7 @@ public final class ServerUiSession<T> {
                     + "described must be registered before open() — the set of reported events is part "
                     + "of that description. An element added since (network id -1) may be wired now.");
         }
-        Map<String, Consumer<UiEventContext<T>>> byKind =
+        Map<String, Consumer<UiEventContext<N, T>>> byKind =
                 handlers.computeIfAbsent(element, e -> new LinkedHashMap<>());
         /*
          * REFUSED rather than replaced. This was a bare put: a second registration for the same
@@ -727,7 +729,7 @@ public final class ServerUiSession<T> {
             throw new IllegalStateException("'" + kind + "' on <" + element.tagName()
                     + "> is already handled by this session; one handler per element and kind");
         }
-        element.addReportedEvent(kind);
+        nodes.addReportedEvent(element, kind);
         byKind.put(kind, handler);
         return this;
     }
@@ -760,7 +762,7 @@ public final class ServerUiSession<T> {
      *       one place that knows the key and the default, instead of one per handler.</li>
      * </ul>
      *
-     * <p><b>The wire is unchanged.</b> This resolves to {@link #on(UIElement, String, Consumer)} with
+     * <p><b>The wire is unchanged.</b> This resolves to {@link #on(Object, String, Consumer)} with
      * {@code event.kind()}, so registration costs one extra call and dispatch is the same map lookup by
      * the same string. Kinds remain strings <em>on the wire</em> because they have to be -- what goes
      * away is having to write one.</p>
@@ -770,8 +772,8 @@ public final class ServerUiSession<T> {
      * contract declares no {@code activate} for a client to attach. Inheritance is exactly what the
      * types cannot see.</p>
      */
-    public <W extends UIElement, P> ServerUiSession<T> on(
-            W element, Event<W, P> event, java.util.function.BiConsumer<UiEventContext<T>, P> handler) {
+    public <W extends N, P> ServerUiSession<N, T> on(
+            W element, Event<W, P> event, java.util.function.BiConsumer<UiEventContext<N, T>, P> handler) {
         // SANITIZED BY THE WIDGET, not by the session: what makes a payload safe is a question about
         // the widget's own configuration -- a slider's bounds and step, a field's maximum length -- and
         // nothing outside the widget class knows those.
@@ -790,8 +792,8 @@ public final class ServerUiSession<T> {
      * lambda picks the right one on its own, and a handler for a signal should not have to name a
      * parameter that is always null.</p>
      */
-    public <W extends UIElement> ServerUiSession<T> on(
-            W element, Event<W, Void> event, Consumer<UiEventContext<T>> handler) {
+    public <W extends N> ServerUiSession<N, T> on(
+            W element, Event<W, Void> event, Consumer<UiEventContext<N, T>> handler) {
         return on(element, event.kind(), handler);
     }
 
@@ -809,8 +811,8 @@ public final class ServerUiSession<T> {
      *               {@link #setViewerVisible(Object, boolean)} take, so a handler can answer the viewer
      *               that spoke rather than broadcasting.
      */
-    public record UiEventContext<T>(ServerUiSession<T> session, @Nullable Object viewer,
-                                    UIElement element, StateMap<T> payload) {
+    public record UiEventContext<N extends Styleable, T>(ServerUiSession<N, T> session, @Nullable Object viewer,
+                                    N element, StateMap<T> payload) {
 
         /**
          * Asks <b>the viewer that did this</b>, rather than broadcasting.
@@ -867,7 +869,7 @@ public final class ServerUiSession<T> {
     private void flush() {
         if (!anyViewerVisible()) return;
         flushStructure();
-        Map<UIElement, StateMap<T>> entries = mirror.drainState();
+        Map<N, StateMap<T>> entries = mirror.drainState();
         if (entries == null || entries.isEmpty()) {
             echoes.clear();
             return;
@@ -888,14 +890,14 @@ public final class ServerUiSession<T> {
          * and that is exactly when the viewer must hear it. Everyone else is told regardless: to them
          * this is ordinary news.
          */
-        Map<UIElement, StateMap<T>> common = entries;
+        Map<N, StateMap<T>> common = entries;
         StateMap<T> shared = null;
         for (Viewer<T> viewer : viewers) {
             if (!viewer.visible) {
                 viewer.missedState = true;
                 continue;
             }
-            List<UIElement> skip = suppressedFor(viewer, entries);
+            List<N> skip = suppressedFor(viewer, entries);
             T encoded;
             if (skip.isEmpty()) {
                 if (shared == null) {
@@ -904,8 +906,8 @@ public final class ServerUiSession<T> {
                 }
                 encoded = shared.encode();
             } else {
-                Map<UIElement, StateMap<T>> mine = new LinkedHashMap<>(entries);
-                for (UIElement element : skip) mine.remove(element);
+                Map<N, StateMap<T>> mine = new LinkedHashMap<>(entries);
+                for (N element : skip) mine.remove(element);
                 if (mine.isEmpty()) continue;      // nothing left worth a packet
                 StateMap<T> out = mirror.pack(mine.values());
                 out.putInt(UiMethods.WINDOW, windowId);
@@ -926,10 +928,10 @@ public final class ServerUiSession<T> {
      * is a control that disagrees with the server.</p>
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private List<UIElement> suppressedFor(Viewer<T> viewer, Map<UIElement, StateMap<T>> entries) {
+    private List<N> suppressedFor(Viewer<T> viewer, Map<N, StateMap<T>> entries) {
         if (echoes.isEmpty()) return List.of();
-        List<UIElement> skip = new ArrayList<>(1);
-        for (UIElement element : entries.keySet()) {
+        List<N> skip = new ArrayList<>(1);
+        for (N element : entries.keySet()) {
             Echo echo = echoes.get(element);
             if (echo == null || !java.util.Objects.equals(echo.viewer, viewer.peer)) continue;
             WidgetContract contract = WidgetContracts.of(element);
@@ -946,10 +948,10 @@ public final class ServerUiSession<T> {
     }
 
     /** Cleared every flush: it describes THIS tick's traffic, never a standing fact. */
-    private final Map<UIElement, Echo> echoes = new LinkedHashMap<>();
+    private final Map<N, Echo> echoes = new LinkedHashMap<>();
 
     /** Records that {@code viewer} is the reason {@code element} now holds {@code value}. */
-    void noteEcho(UIElement element, @Nullable Object viewer, @Nullable Object value) {
+    void noteEcho(N element, @Nullable Object viewer, @Nullable Object value) {
         echoes.put(element, new Echo(viewer, value));
     }
 
@@ -1203,7 +1205,7 @@ public final class ServerUiSession<T> {
             StateMap<T> in = read(payload);
             if (!mine(in)) return;
             int nid = in.getInt("nid", -1);
-            UIElement element = ids.byId(nid);
+            N element = ids.byId(nid);
             if (element == null) {
                 CrystalGuiCore.LOGGER.warn("Session {}: event for unknown element {}", windowId, nid);
                 return;
@@ -1301,7 +1303,7 @@ public final class ServerUiSession<T> {
     private int refusalThreshold = 200;
 
     /** How many refusals a viewer gets before it stops being listened to. */
-    public ServerUiSession<T> setRefusalThreshold(int refusals) {
+    public ServerUiSession<N, T> setRefusalThreshold(int refusals) {
         this.refusalThreshold = Math.max(1, refusals);
         return this;
     }
@@ -1352,7 +1354,7 @@ public final class ServerUiSession<T> {
      * flushes immediately rather than waiting for the next tick, so a window that comes back is correct
      * on the frame it comes back rather than one behind.</p>
      */
-    public ServerUiSession<T> setViewerVisible(boolean visible) {
+    public ServerUiSession<N, T> setViewerVisible(boolean visible) {
         for (Viewer<T> viewer : viewers) setVisible(viewer, visible);
         viewerVisible = visible;
         return this;
@@ -1420,7 +1422,7 @@ public final class ServerUiSession<T> {
      * <p>The session has already stopped serving by the time this runs — it is a report, not a veto. A
      * window is gone on the side that closed it, so there is nothing here that could refuse.</p>
      */
-    public ServerUiSession<T> onClientClosed(Consumer<String> handler) {
+    public ServerUiSession<N, T> onClientClosed(Consumer<String> handler) {
         this.onClientClosed = handler;
         return this;
     }
@@ -1448,7 +1450,7 @@ public final class ServerUiSession<T> {
     }
 
     /** The elements whose state has changed and not yet been flushed. For diagnostics and tests. */
-    public Set<UIElement> pendingStateChanges() {
+    public Set<N> pendingStateChanges() {
         return mirror.pendingStateChanges();
     }
 }

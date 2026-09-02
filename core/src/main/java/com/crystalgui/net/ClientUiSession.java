@@ -1,8 +1,9 @@
 package com.crystalgui.net;
 
+import com.crystalgui.ui.dom.TreeSource;
+import com.crystalgui.style.Styleable;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.net.mirror.ClientTreeMirror;
-import com.crystalgui.net.mirror.ElementNodeMirror;
 import com.crystalgui.net.mirror.NodeMirror;
 import com.crystalgui.net.protocol.*;
 import com.crystalgui.serialization.DynamicOps;
@@ -10,11 +11,9 @@ import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.contract.RateGate;
 import com.crystalgui.ui.contract.RatePolicy;
 import java.util.LinkedHashMap;
-import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.WidgetContracts;
-import com.crystalgui.ui.dom.ElementTreeSource;
 
 import javax.annotation.Nullable;
 import java.util.*;
@@ -33,7 +32,7 @@ import java.util.function.Consumer;
  * <p>Scoped to this session for now. Persisting it across restarts is purely additive precisely
  * because the store is content-addressed.</p>
  */
-public final class ClientUiSession<T> {
+public final class ClientUiSession<N extends Styleable, T> {
 
     private final DynamicOps<T> ops;
 
@@ -71,7 +70,7 @@ public final class ClientUiSession<T> {
     Runnable onReleased;
     private int expectedElementCount = -1;
     @Nullable
-    private UIElement root;
+    private N root;
 
     /**
      * The client half of the seam -- the id table for whatever tree is currently mounted.
@@ -80,7 +79,7 @@ public final class ClientUiSession<T> {
      * walk both sides run: a table outliving the tree it describes is a set of numbers nobody agrees
      * on. Null exactly when {@link #root} is.</p>
      */
-    private ElementTreeSource ids;
+    private TreeSource<N> ids;
 
     /**
      * <b>The mirror.</b> Applying an edit script and a delta lives there, written against the
@@ -89,10 +88,10 @@ public final class ClientUiSession<T> {
      * <p>Rebuilt whenever the tree is, since a mirror is about one tree. Null until a window opens,
      * which is also when {@link #ids} appears.</p>
      */
-    @Nullable private ClientTreeMirror<UIElement, T> mirror;
+    @Nullable private ClientTreeMirror<N, T> mirror;
 
-    /** How a {@code UIElement} is described. Outlives any one tree, so it is built once. */
-    private final NodeMirror<UIElement, T> nodes;
+    /** How a {@code N} is described. Outlives any one tree, so it is built once. */
+    private final NodeMirror<N, T> nodes;
     private List<SheetRef> sheets = List.of();
     private boolean useUserAgentSheet = true;
 
@@ -103,7 +102,7 @@ public final class ClientUiSession<T> {
     private String key;
 
     @Nullable
-    private Consumer<UIElement> onWindowOpened;
+    private Consumer<N> onWindowOpened;
     @Nullable
     /**
      * Told {@code (code, detail)} when the server ends the window.
@@ -115,9 +114,9 @@ public final class ClientUiSession<T> {
     private java.util.function.BiConsumer<String, String> onWindowClosed;
 
     /** Owns its own transport, router and mailbox — the shape every test and the in-memory pair use. */
-    public ClientUiSession(UITransport<T> transport, DynamicOps<T> ops) {
+    public ClientUiSession(NodeMirror<N, T> nodes, UITransport<T> transport, DynamicOps<T> ops) {
         this.ops = ops;
-        this.nodes = new ElementNodeMirror<>(this.ops);
+        this.nodes = nodes;
         this.ownsConnection = true;
         this.router = new MessageRouter<>(envelope -> transport.send(EnvelopeCodec.encode(ops, envelope)));
         registerUiMethods();
@@ -143,9 +142,9 @@ public final class ClientUiSession<T> {
      * <p>Kept rather than folded into the host because it is genuinely the common case and costs a
      * lookup less: a client with one window has nothing to demultiplex.</p>
      */
-    public ClientUiSession(ProtocolConnection<T> connection) {
+    public ClientUiSession(NodeMirror<N, T> nodes, ProtocolConnection<T> connection) {
         this.ops = connection.ops();
-        this.nodes = new ElementNodeMirror<>(this.ops);
+        this.nodes = nodes;
         // A held report must still leave when nothing else is happening, and this session
         // does not own the tick that would otherwise do it. @see #flushRates
         connection.onTick(this::flushRates);
@@ -163,9 +162,9 @@ public final class ClientUiSession<T> {
      * a client learns one from the wire — so on this side the bootstrap message cannot itself be
      * window-scoped, and something has to own it.</p>
      */
-    ClientUiSession(ProtocolConnection<T> connection, int windowId) {
+    ClientUiSession(NodeMirror<N, T> nodes, ProtocolConnection<T> connection, int windowId) {
         this.ops = connection.ops();
-        this.nodes = new ElementNodeMirror<>(this.ops);
+        this.nodes = nodes;
         // A held report must still leave when nothing else is happening, and this session
         // does not own the tick that would otherwise do it. @see #flushRates
         connection.onTick(this::flushRates);
@@ -177,18 +176,18 @@ public final class ClientUiSession<T> {
     }
 
     /** Fired once the tree exists — where a host would hand it to a {@code UIWindow} and render it. */
-    public ClientUiSession<T> onWindowOpened(Consumer<UIElement> handler) {
+    public ClientUiSession<N, T> onWindowOpened(Consumer<N> handler) {
         this.onWindowOpened = handler;
         return this;
     }
 
-    public ClientUiSession<T> onWindowClosed(java.util.function.BiConsumer<String, String> handler) {
+    public ClientUiSession<N, T> onWindowClosed(java.util.function.BiConsumer<String, String> handler) {
         this.onWindowClosed = handler;
         return this;
     }
 
     /** The server asked for this window to be brought forward. @see UiMethods#FOCUS_WINDOW */
-    public ClientUiSession<T> onFocusRequested(Runnable handler) {
+    public ClientUiSession<N, T> onFocusRequested(Runnable handler) {
         this.onFocusRequested = handler;
         return this;
     }
@@ -197,7 +196,7 @@ public final class ClientUiSession<T> {
     private Runnable onFocusRequested;
 
     @Nullable
-    public UIElement root() {
+    public N root() {
         return root;
     }
 
@@ -432,12 +431,12 @@ public final class ClientUiSession<T> {
      * second numbering beside the mirror's.</p>
      */
     @Nullable
-    public com.crystalgui.ui.dom.TreeSource<UIElement> ids() {
+    public com.crystalgui.ui.dom.TreeSource<N> ids() {
         return ids;
     }
 
     /** @see #onViewCommand */
-    public ClientUiSession<T> onViewCommand(
+    public ClientUiSession<N, T> onViewCommand(
             @Nullable java.util.function.BiConsumer<String, StateMap<T>> handler) {
         this.onViewCommand = handler;
         return this;
@@ -537,10 +536,10 @@ public final class ClientUiSession<T> {
      * both cheaper and the only version that is correct.</p>
      */
     @Nullable
-    private java.util.function.Consumer<UIElement> onSubtreeInserted;
+    private java.util.function.Consumer<N> onSubtreeInserted;
 
     /** @see #onSubtreeInserted */
-    public void setOnSubtreeInserted(@Nullable java.util.function.Consumer<UIElement> listener) {
+    public void setOnSubtreeInserted(@Nullable java.util.function.Consumer<N> listener) {
         this.onSubtreeInserted = listener;
     }
 
@@ -588,7 +587,7 @@ public final class ClientUiSession<T> {
      * incoming value resets the caret mid-word. Narrow on purpose: only the focused element, and
      * only one that consumes text.</p>
      */
-    private boolean shouldSuppress(UIElement target) {
+    private boolean shouldSuppress(N target) {
         return target.isFocused() && target.consumesTextInput();
     }
 
@@ -621,12 +620,12 @@ public final class ClientUiSession<T> {
             return;
         }
 
-        Map<UIElement, Integer> carried = new java.util.LinkedHashMap<>();
-        UIElement rebuilt = nodes.decodeLive(encoded, carried::put);
-        ElementTreeSource rebuiltIds = new ElementTreeSource(rebuilt);
-        ClientTreeMirror<UIElement, T> rebuiltMirror = new ClientTreeMirror<>(rebuiltIds, nodes, ops);
+        Map<N, Integer> carried = new java.util.LinkedHashMap<>();
+        N rebuilt = nodes.decodeLive(encoded, carried::put);
+        TreeSource<N> rebuiltIds = nodes.sourceOver(rebuilt);
+        ClientTreeMirror<N, T> rebuiltMirror = new ClientTreeMirror<>(rebuiltIds, nodes, ops);
 
-        for (Map.Entry<UIElement, Integer> entry : carried.entrySet()) {
+        for (Map.Entry<N, Integer> entry : carried.entrySet()) {
             rebuiltIds.assignAt(entry.getKey(), entry.getValue());
         }
         int actual = rebuiltMirror.number(rebuilt, carried.size());
@@ -695,13 +694,13 @@ public final class ClientUiSession<T> {
      * widget touches the widget alone and this method never changes again.</p>
      */
     @SuppressWarnings("unchecked")
-    private void wireReportedEvents(UIElement element) {
-        Set<String> requested = element.getReportedEvents();
+    private void wireReportedEvents(N element) {
+        Set<String> requested = nodes.reportedEventsOf(element);
         if (!requested.isEmpty()) {
-            WidgetContract<UIElement> contract = (WidgetContract<UIElement>) WidgetContracts.of(element);
+            WidgetContract<N> contract = WidgetContracts.of(element);
             for (String kind : requested) {
-                Event<UIElement, Object> event = contract == null
-                        ? null : (Event<UIElement, Object>) contract.event(kind);
+                Event<N, Object> event = contract == null
+                        ? null : (Event<N, Object>) contract.event(kind);
                 if (event == null) {
                     // Reachable only from a peer describing a kind this build's contract does not have
                     // -- a newer server against an older client. Warn and carry on, because refusing
@@ -716,7 +715,7 @@ public final class ClientUiSession<T> {
                         reportRated(element, kind, event.rate(), event.encode(ops, payload)));
             }
         }
-        for (UIElement child : element.getChildren()) wireReportedEvents(child);
+        for (N child : ids.childrenOf(element)) wireReportedEvents(child);
     }
 
     /**
@@ -725,13 +724,13 @@ public final class ClientUiSession<T> {
      * <p>Driven by the connection's tick, so a value held by a debounce still leaves when nothing else
      * is happening — a throttle clears itself only while the user keeps moving.</p>
      */
-    private final RateGate<StateMap<T>> rates = new RateGate<>(this::report);
+    private final RateGate<N, StateMap<T>> rates = new RateGate<>(this::report);
 
     /**
      * Where "now" comes from, for the rate policies. Replaceable so a test can step it rather than
      * sleep, and so a host that already has a tick clock can hand that over.
      */
-    public ClientUiSession<T> setClock(java.util.function.LongSupplier clock) {
+    public ClientUiSession<N, T> setClock(java.util.function.LongSupplier clock) {
         rates.setClock(clock);
         return this;
     }
@@ -743,7 +742,7 @@ public final class ClientUiSession<T> {
      * the server just handed us is not a user gesture, and only a session knows that. The gate decides
      * WHEN a report leaves; this decides whether it is a report at all.</p>
      */
-    private void reportRated(UIElement element, String kind, RatePolicy policy,
+    private void reportRated(N element, String kind, RatePolicy policy,
                              @Nullable StateMap<T> payload) {
         if (applyingDelta) return;
         rates.offer(element, kind, policy, payload);
@@ -759,7 +758,7 @@ public final class ClientUiSession<T> {
         rates.commit();
     }
 
-    private void report(UIElement element, String kind, @Nullable StateMap<T> payload) {
+    private void report(N element, String kind, @Nullable StateMap<T> payload) {
         // A report means "the user did this". A write we were just handed by the server is the one
         // thing that certainly is not. @see #applyStateDelta
         if (applyingDelta) return;
@@ -798,7 +797,7 @@ public final class ClientUiSession<T> {
 
     private final Map<String, Consumer<StateMap<T>>> notifyHandlers = new LinkedHashMap<>();
 
-    public ClientUiSession<T> onCall(String method, Call.Handler<T> handler) {
+    public ClientUiSession<N, T> onCall(String method, Call.Handler<T> handler) {
         if (callHandlers.put(method, handler) != null) return this;   // already routed; delegate swapped
         // Same handler type, so nothing that calls this moves; underneath, an RPC is now an ordinary
         // REQUEST and its correlation is the router's rather than a second id space of its own.
@@ -848,7 +847,7 @@ public final class ClientUiSession<T> {
      * router. Through here two windows may each name {@code app/announce} and each hear only their
      * own.</p>
      */
-    public ClientUiSession<T> onNotify(String method, Consumer<StateMap<T>> handler) {
+    public ClientUiSession<N, T> onNotify(String method, Consumer<StateMap<T>> handler) {
         if (notifyHandlers.put(method, handler) != null) return this;   // already routed
         bindNotify(method, payload -> notifyHandlers.get(method).accept(read(payload)));
         return this;
