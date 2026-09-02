@@ -274,6 +274,12 @@ public final class Box {
 
     /** Scrolls what this box hosts. Clamped to the content on the next layout read. */
     public void setScroll(float left, float top) {
+        // ONLY A SCROLL CONTAINER HAS A SCROLL POSITION. `visible` and `clip` do not establish one,
+        // so a write to either is a no-op rather than a clamped move -- and the clamp alone does not
+        // say so, because a `visible` box whose content overflows has a positive maxScroll and would
+        // scroll perfectly happily. Here rather than in `UINode.scrollTo`, because a thumb drag calls
+        // the box directly and would otherwise slip past the check.
+        if (!isScrollContainer()) return;
         left = clamp(left, 0f, maxScrollLeft());
         top = clamp(top, 0f, maxScrollTop());
         if (left == node.scrollLeft() && top == node.scrollTop()) return;
@@ -445,6 +451,25 @@ public final class Box {
         return node.get(Attribute.HIT_TEST);
     }
 
+    /**
+     * Whether this box is a SCROLL CONTAINER -- CSS's own predicate, which {@code hidden} satisfies
+     * and {@code clip} does not.
+     *
+     * <p>That pair is the whole reason both values exist: {@code overflow: hidden} establishes a
+     * container and {@code scrollTop} works on it, it simply shows no bars, while {@code clip} is the
+     * value that genuinely refuses to scroll. {@link #clips()} answers a different question -- every
+     * one of them but {@code visible} clips -- so a caller that wants "can this be scrolled" and asks
+     * {@code clips()} gets a yes for {@code clip}.</p>
+     */
+    public boolean isScrollContainer() {
+        return node.isScrollContainer();
+    }
+
+    /** Whether the USER may scroll it. {@code hidden} is a scroll container that only code moves. */
+    public boolean allowsUserScrolling() {
+        return node.allowsUserScrolling();
+    }
+
     /** Whether the box clips what it hosts to its own border box. */
     public boolean clips() {
         Overflow overflow = node.computedStyle().get(StylePropertyRegistry.OVERFLOW);
@@ -462,6 +487,12 @@ public final class Box {
      * running offset is exact and no re-composition is needed part way.</p>
      */
     public void scrollIntoView() {
+        // COMPOSE FIRST, for the same reason `BoxTree.hitTest` does: the walk below reads
+        // `worldX()/worldY()`, and a scroll is layout-free -- it marks the transforms dirty and
+        // returns. So a reveal issued between a scroll and the next frame measured against the
+        // positions the boxes had BEFORE that scroll and concluded there was nothing to reveal.
+        // Free when nothing moved.
+        tree.composeIfDirty();
         float shiftX = 0f, shiftY = 0f;
         for (Box ancestor = host(); ancestor != null; ancestor = ancestor.host()) {
             if (!ancestor.clips()) continue;
