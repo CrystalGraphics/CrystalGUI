@@ -1,5 +1,6 @@
 package com.crystalgui.language.run.view;
 
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.language.run.console.ConsoleFilter;
@@ -443,11 +444,13 @@ public final class RunConsoleView {
     private void applyRestore() {
         Place place = restoring;
         if (place == null) return;
-        float max = editor.box().maxScrollTop();
+        float max = maxScrollTop();
         if (!Float.isFinite(max)) return;
 
         float target = Math.max(0f, Math.min(place.top(), max));
-        editor.box().setScroll(editor.scrollLeft(), target);
+        Box box = editor.box();
+        if (box == null) return;
+        box.setScroll(editor.scrollLeft(), target);
         // THE LOCK GOES BACK TOO. A tab left at the tail should keep being pulled down by new output and
         // one left half way up should not -- restoring the position without the lock would drag the
         // reader to the bottom of the very transcript they had scrolled up in, on its next line.
@@ -459,9 +462,28 @@ public final class RunConsoleView {
         if (Float.isFinite(now) && Math.abs(now - target) <= 0.5f) restoring = null;
     }
 
+    /**
+     * The editor's furthest scroll, or NaN when it has no box yet.
+     *
+     * <p>{@code box()} is null until a node has been laid out — a console in a panel nobody has
+     * opened, or any of them on their first frame — where the old engine's runtime cache always
+     * answered. Every reader here already refuses a non-finite maximum, with its own comment about an
+     * unmeasured viewport, so NaN routes the new condition into the guard that was already written
+     * for it rather than adding a second shape to check.</p>
+     */
+    private float maxScrollTop() {
+        Box box = editor.box();
+        return box == null ? Float.NaN : box.maxScrollTop();
+    }
+
     /** Reads the reader's position into the lock. Must run before anything grows the document. */
     private void updateFollow() {
-        follow.sample(editor.scrollTop(), editor.box().maxScrollTop());
+        float max = maxScrollTop();
+        // NOTHING TO SAMPLE against a viewport that does not exist yet: a maximum of NaN would go into
+        // the lock and every later comparison against it would be false, so the tail would never
+        // re-arm. This is the one reader with no guard of its own -- and the one the crash came out of.
+        if (!Float.isFinite(max)) return;
+        follow.sample(editor.scrollTop(), max);
     }
 
     /**
@@ -503,7 +525,7 @@ public final class RunConsoleView {
     }
 
     private void scrollToTail() {
-        float max = editor.box().maxScrollTop();
+        float max = maxScrollTop();
         // An unmeasured viewport reports zero, and "scrolling to the tail" of a box that has not been laid
         // out yet puts the view at the TOP -- which is the shape of the original bug. Refusing leaves the
         // lock armed for a later frame that can actually answer.
@@ -523,7 +545,9 @@ public final class RunConsoleView {
         // already there and wrote nothing, so the console showed an empty band until something else
         // scrolled. The scroll bug that outlived two attempts at this method was this comparison.
         if (Float.isFinite(top) && Math.abs(top - max) <= 0.5f) return;
-        editor.box().setScroll(editor.scrollLeft(), max);
+        Box box = editor.box();
+        if (box == null) return;
+        box.setScroll(editor.scrollLeft(), max);
     }
 
     /**
