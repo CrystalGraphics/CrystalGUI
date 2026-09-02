@@ -1,5 +1,6 @@
 package com.crystalgui.language.run.view;
 
+import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
@@ -41,6 +42,18 @@ import java.util.function.BooleanSupplier;
  * <p>What survives unchanged is the toolbar and the eviction notice, because neither was about rows.</p>
  */
 public final class RunPanel extends UINode  {
+
+    /**
+     * This panel's kind, which 49 rules in {@code ua/panels.css} are written against.
+     *
+     * <p>The old engine derived one: {@code tagName()} fell back to the class's lowercased simple
+     * name, so a class that registered nothing still answered {@code runpanel} and its rules matched.
+     * This engine has no fallback — a kind is a {@code NAME} declared on the class and INHERITED when
+     * absent — so without this the panel answered {@code crystalgui:element} and every one of those
+     * rules matched nothing. The panel drew, laid out and worked, unstyled, which is why it reads as
+     * a missing stylesheet rather than a missing constant.</p>
+     */
+    public static final Name NAME = Name.of("runpanel");
 
     public static final String NOTICE_CLASS = "__run-notice__";
     public static final String EMPTY_CLASS = "__run-empty__";
@@ -219,6 +232,7 @@ public final class RunPanel extends UINode  {
     private boolean ticking;
 
     public RunPanel() {
+        super(NAME);
         buildHead();
         notice.addClass(NOTICE_CLASS);
         notice.setHitTest(false);
@@ -1003,6 +1017,20 @@ public final class RunPanel extends UINode  {
             document().animation().every(this, this::tickFrame);
             ticking = true;
         }
+    }
+
+    /**
+     * The hook is the SERVICE's to drop and the latch is ours to clear, and both halves are needed.
+     *
+     * <p>A hook is dropped when its owner leaves the tree, so a panel that is detached and re-added --
+     * moved between docks, torn out, restored from a session -- comes back with no hook and a latch
+     * that still says it has one. A freeze does not reach here and must not: that is temporary, the
+     * hook is kept dormant, and clearing the latch there would register a second one on the thaw.</p>
+     */
+    @Override
+    protected void disconnected() {
+        super.disconnected();
+        ticking = false;
     }
 
     /**

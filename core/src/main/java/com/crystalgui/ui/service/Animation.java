@@ -149,12 +149,23 @@ public final class Animation {
     }
 
     /**
-     * A per-frame hook OWNED by a node, dropped when the node is frozen or leaves the tree.
+     * A per-frame hook OWNED by a node: dropped when the node leaves the tree, and DORMANT while it
+     * is frozen.
      *
      * <p>The old {@code UIFrameTicker} was registered one-way and stopped only by returning false, so
      * the one thing that carried on running in a hidden window was a ticker — the "hidden editor that
-     * keeps compiling". Ownership makes that structural: hiding is freezing, and freezing drops the
-     * hooks.</p>
+     * keeps compiling". Ownership makes that structural: hiding is freezing, and a frozen node's hook
+     * does not run.</p>
+     *
+     * <p><b>Frozen SKIPS, it does not drop, and the difference is a whole class of dead widget.</b> A
+     * freeze is temporary by construction — a frozen subtree keeps its scroll, its text and its
+     * listeners precisely so it can come back — and this service cannot restore a hook it has
+     * discarded. So dropping on freeze meant every widget had to notice the thaw and register again,
+     * which none of the twelve that register a hook did: each guards registration with a latch set on
+     * connect and never cleared, so the FIRST hide killed the hook for the life of the node. The Run
+     * panel is where it was found — its transcript drain, its empty-state caption and its rail clock
+     * are all that one hook, so a Run panel that had ever been hidden stopped responding to anything
+     * at all while looking perfectly healthy.</p>
      */
     public void every(UINode owner, Hook hook) {
         hooks.add(new OwnedHook(owner, hook));
@@ -193,10 +204,12 @@ public final class Animation {
     public void tick(float deltaSeconds) {
         for (Timeline timeline : new ArrayList<>(timelines)) timeline.advance(deltaSeconds);
         for (OwnedHook owned : new ArrayList<>(hooks)) {
-            if (!owned.owner().isConnected() || owned.owner().isFrozen()) {
+            // GONE is gone; FROZEN is coming back. @see #every
+            if (!owned.owner().isConnected()) {
                 hooks.remove(owned);
                 continue;
             }
+            if (owned.owner().isFrozen()) continue;
             if (!owned.hook().frame(deltaSeconds)) hooks.remove(owned);
         }
     }
@@ -210,10 +223,12 @@ public final class Animation {
     public boolean tickAfterLayout(float deltaSeconds) {
         boolean ran = false;
         for (OwnedHook owned : new ArrayList<>(afterLayout)) {
-            if (!owned.owner().isConnected() || owned.owner().isFrozen()) {
+            // Same rule as `every`: gone is gone, frozen is coming back.
+            if (!owned.owner().isConnected()) {
                 afterLayout.remove(owned);
                 continue;
             }
+            if (owned.owner().isFrozen()) continue;
             ran = true;
             if (!owned.hook().frame(deltaSeconds)) afterLayout.remove(owned);
         }

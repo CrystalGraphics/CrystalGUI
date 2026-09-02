@@ -3,7 +3,7 @@ package com.crystalgui.language.run;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.language.run.view.RunDecorations;
-import com.crystalgui.ui.elements.workbench.decoration.FileDecoration;
+import com.crystalgui.workbench.decoration.FileDecoration;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
