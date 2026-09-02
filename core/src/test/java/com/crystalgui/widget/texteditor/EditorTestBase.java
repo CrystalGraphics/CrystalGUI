@@ -236,7 +236,11 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
     protected java.util.List<UINode> linesOf() {
         java.util.List<UINode> out = new java.util.ArrayList<>();
         for (UINode line : allWithClass(TextEditor.LINE_CLASS)) {
-            if (line.getStyle().taffyBridge.style.display != dev.vfyjxf.taffy.style.TaffyDisplay.NONE) {
+            // A POOLED LINE HAS NO BOX, which is this engine's own way of saying "not laid out" -- a
+            // hidden node gets none at all, where the old one gave a zero-sized box and the display
+            // property had to be read off the Taffy bridge to tell the two apart. Asking for the box
+            // is both the honest test and the thing the sort below needs anyway.
+            if (line.box() != null) {
                 out.add(line);
             }
         }

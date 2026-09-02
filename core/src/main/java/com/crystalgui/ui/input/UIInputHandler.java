@@ -26,7 +26,7 @@ import org.jspecify.annotations.Nullable;
 import com.crystalgraphics.platform.CgPlatform;
 
 public final class UIInputHandler implements CgSystemInput.Keyboard, CgSystemInput.Mouse {
-    public final static long multiClickInterval = CgSystemInput.multiClickIntervalMs();
+    public final static long multiClickInterval = ButtonState.MULTI_CLICK_INTERVAL_MS;
 
     private final UIWindow window;
 
