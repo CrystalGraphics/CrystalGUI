@@ -45,6 +45,8 @@ public final class UINodeMirror<T> implements NodeMirror<UINode, T> {
     private static final String ID = "i";
     private static final String CLASSES = "c";
     private static final String ATTRIBUTES = "a";
+    private static final String STYLE = "s";
+    private static final String STATE = "v";
     private static final String CHILDREN = "k";
     private static final String NID = "nid";
 
@@ -73,10 +75,18 @@ public final class UINodeMirror<T> implements NodeMirror<UINode, T> {
         if (!node.classes().isEmpty()) fields.put(key(CLASSES), ops.createString(String.join(" ", node.classes())));
         T attributes = attributesOf(node);
         if (attributes != null) fields.put(key(ATTRIBUTES), attributes);
+        // A description carries the whole node, not merely its shape. The order here is FIXED and the
+        // optionals are OMITTED rather than written empty, because a description is content-addressed:
+        // the same tree must encode byte-identically or its hash stops naming it.
+        T style = InlineStyleCodec.encode(ops, node);
+        if (style != null) fields.put(key(STYLE), style);
+        T state = encodeState(node);
+        if (state != null && !ops.getMapValue(state).isEmpty()) fields.put(key(STATE), state);
         if (idOf != null) fields.put(key(NID), ops.createNumber(idOf.applyAsInt(node)));
-        if (!node.children().isEmpty()) {
-            List<T> children = new ArrayList<>(node.children().size());
-            for (UINode child : node.children()) children.add(write(child, idOf));
+        List<UINode> described = node.describedChildren();
+        if (!described.isEmpty()) {
+            List<T> children = new ArrayList<>(described.size());
+            for (UINode child : described) children.add(write(child, idOf));
             fields.put(key(CHILDREN), ops.createList(children));
         }
         return ops.createMap(fields);
@@ -98,12 +108,20 @@ public final class UINodeMirror<T> implements NodeMirror<UINode, T> {
         if (name == null) throw new IllegalArgumentException("A described node names its kind");
         UINode node = UINodeRegistry.create(Name.parse(ops.getStringValue(name)));
         applyIdentity(fields, node);
+        T style = fields.get(key(STYLE));
+        if (style != null) applyInlineStyle(style, node);
         T nid = fields.get(key(NID));
         if (nid != null && idSink != null) idSink.accept(node, ops.getNumberValue(nid).intValue());
         T children = fields.get(key(CHILDREN));
         if (children != null) {
-            for (T child : ops.getListValue(children)) node.append(read(child, idSink));
+            for (T child : ops.getListValue(children)) node.adoptDescribedChild(read(child, idSink));
         }
+        // STATE LAST, because some of it INDEXES INTO THE CHILDREN. A TabView's selection is an index
+        // and a Dropdown's is an index into its options, so applied to an empty widget it clamps to
+        // nothing and the widget arrives showing its first entry with the description perfectly
+        // correct. Encode order is fixed for the content hash and is a separate question from this.
+        T state = fields.get(key(STATE));
+        if (state != null) applyState(state, node);
         return node;
     }
 
@@ -263,6 +281,20 @@ public final class UINodeMirror<T> implements NodeMirror<UINode, T> {
 
     @Override
     public void addReportedEvent(UINode node, String kind) {
+        // ASKED AND ANSWERED HERE, not at the client. "Can this kind of widget report X" is a fact
+        // about the class and lives on its contract; "was this one asked to" is the session's, and
+        // is what the attribute below records. Before this check a session could ask any node for any
+        // string: the request was described, travelled, and hit a `default` arm on the far side that
+        // logged it could not observe such a thing and carried on.
+        WidgetContract<UINode> contract = WidgetContracts.of(node);
+        if (contract == null) {
+            throw new IllegalStateException(node.tagName() + " has no WidgetContract, so there is "
+                    + "nothing it can be asked to report");
+        }
+        if (!contract.eventKinds().contains(kind)) {
+            throw new IllegalArgumentException(node.tagName() + " cannot report \"" + kind
+                    + "\" -- its contract declares " + contract.eventKinds());
+        }
         Set<String> kinds = new LinkedHashSet<>(reportedEventsOf(node));
         if (!kinds.add(kind)) return;
         node.set(Attribute.REPORTS, String.join(" ", kinds));
