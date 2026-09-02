@@ -282,20 +282,6 @@ public final class CompletionPopup extends Popover {
         // editor owns, not a thing you tab into.
         setFocusPolicy(FocusPolicy.NONE);
         addClass(POPUP_CLASS);
-        // THE HANDLES, which the sheet's `resize: both` no longer installs on its own.
-        //
-        // The old engine drove this from the cascade -- `StylePropertyRegistry.RESIZE` carried a listener
-        // calling `UIElement.onResizeModeChanged`, so any element whose computed `resize` was not `none`
-        // grew a handle set. That hook does not exist here and its absence is deliberate: a widget says
-        // whether it can be resized, and `WindowFrame` is the standing example. `Popover` already
-        // implements every method of `Resizable`; nothing had ever called `Resizer.install` on one, so
-        // both editor popups declared `resize: both`, answered every question a resize asks, and had no
-        // handle to grab.
-        //
-        // Unconditional rather than gated on the computed mode: each handle re-reads the live `resize`
-        // value per drag, so a sheet can still narrow or withdraw the set, and there is no frame on which
-        // the style has not resolved yet to get wrong.
-        Resizer.install(this);
 
         list.setSelectionMode(SelectionMode.SINGLE);
         list.setItemHeight(ROW_HEIGHT);

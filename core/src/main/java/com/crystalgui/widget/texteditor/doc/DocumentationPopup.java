@@ -361,20 +361,6 @@ public final class DocumentationPopup extends Popover {
     public DocumentationPopup() {
         super(NAME);
         addClass(POPUP_CLASS);
-        // THE HANDLES, which the sheet's `resize: both` no longer installs on its own.
-        //
-        // The old engine drove this from the cascade -- `StylePropertyRegistry.RESIZE` carried a listener
-        // calling `UIElement.onResizeModeChanged`, so any element whose computed `resize` was not `none`
-        // grew a handle set. That hook does not exist here and its absence is deliberate: a widget says
-        // whether it can be resized, and `WindowFrame` is the standing example. `Popover` already
-        // implements every method of `Resizable`; nothing had ever called `Resizer.install` on one, so
-        // both editor popups declared `resize: both`, answered every question a resize asks, and had no
-        // handle to grab -- the eighth mechanism this milestone that was finished and unwired.
-        //
-        // Unconditional rather than gated on the computed mode: `Resizer.install` appends the set and each
-        // handle re-reads the live `resize` value per drag, so a sheet can still narrow or withdraw it,
-        // and there is no frame on which the style has not resolved yet to get wrong.
-        Resizer.install(this);
         // AUTO: light dismiss and Escape, both from the stacks UIDocument already keeps. MANUAL would mean
         // writing both, and the completion popup is MANUAL only because the editor has to arbitrate Escape
         // between a popup and the find bar -- this has no such competitor.

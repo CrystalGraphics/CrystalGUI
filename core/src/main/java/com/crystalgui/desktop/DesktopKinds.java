@@ -44,7 +44,7 @@ public final class DesktopKinds implements NodeKinds {
         UINodeRegistry.register(WindowSwitcher.NAME, () -> new WindowSwitcher(null), NodeContract.INERT);
         UINodeRegistry.register(WindowPreview.NAME, WindowPreview::new, NodeContract.INERT);
         UINodeRegistry.register(WindowThumbnail.NAME, WindowThumbnail::new, NodeContract.INERT);
-        // A RESIZE HANDLE IS NOT A KIND. It is built by `Resizer.install` for a Resizable and never
+        // A RESIZE HANDLE IS NOT A KIND. It is built by `Resizer.install` for a resizable node and never
         // decoded from a description, and no shipped rule names the tag -- the sheet keys on
         // `.__resizer-*__` classes. Registering one with a factory that throws is a registration whose
         // only effect is to fail the coverage walk that builds every kind.
