@@ -734,12 +734,17 @@ dialog .__title-bar__ .__close__:hover {
     z-index: 11;
 }
 
-/* ONLY the bottom-right corner draws a grip. The other three stay full-size and fully draggable —
- * this is `background`, not `display` or `width`, so the hit area is untouched.
+/* ONLY ONE handle draws a grip. The others stay full-size and fully draggable — this is `background`,
+ * not `display` or `width`, so the hit area is untouched.
  *
  * That asymmetry is the convention every desktop toolkit landed on, and the web's single grabber is the
  * same idea taken further: one visible grip says "this resizes" without ringing the element in four
- * marks that read as selection handles. A panel wearing all four looks selected rather than resizable. */
+ * marks that read as selection handles. A panel wearing all four looks selected rather than resizable.
+ *
+ * The bottom-right corner, in EVERY resizable mode — it exists under `resize: horizontal` and
+ * `vertical` too, and a drag on it moves only the axis the mode allows, which is what a browser does
+ * with a `textarea`. Painting the grip on a full-length edge strip instead was tried and reads as a
+ * scrollbar. */
 .__resizer-bottom-right__ {
     background: var(--resizer-grip, #FFFFFF40);
 }
