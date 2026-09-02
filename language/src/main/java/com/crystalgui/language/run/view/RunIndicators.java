@@ -5,9 +5,9 @@ import com.crystalgui.core.async.JobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.language.run.RunSessions;
-import com.crystalgui.ui.elements.workbench.ViewContainerRegistry;
-import com.crystalgui.ui.elements.workbench.Workbench;
-import com.crystalgui.ui.elements.workbench.decoration.FileDecorations;
+import com.crystalgui.workbench.view.ViewContainerRegistry;
+import com.crystalgui.workbench.Workbench;
+import com.crystalgui.workbench.decoration.FileDecorations;
 
 import javax.annotation.Nullable;
 
@@ -32,9 +32,9 @@ import javax.annotation.Nullable;
  * <h3>Both writes cross a thread, and neither may cross it directly</h3>
  *
  * <p>{@link RunSessions#onDidChange} fires from wherever the transition happened — a one-shot's own
- * thread, or the game thread inside a tick handler. Both things updated here are {@code UIElement} state:
+ * thread, or the game thread inside a tick handler. Both things updated here are {@code UINode} state:
  * the badge attaches an internal child, and invalidating decorations repaints tree rows. So the signal
- * only <b>schedules</b>, and the work runs in {@link JobScheduler#drain()}, which {@code UIWindow} calls
+ * only <b>schedules</b>, and the work runs in {@link JobScheduler#drain()}, which {@code UIDocument} calls
  * once a frame on the UI thread.</p>
  *
  * <p><b>Keyed</b>, so a script that transitions twice in a frame — and a burst of them at startup —

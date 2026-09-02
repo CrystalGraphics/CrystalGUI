@@ -1,5 +1,6 @@
 package com.crystalgui.language.run.view;
 
+import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.ClipboardCommands;
 import com.crystalgui.fs.CgPath;
@@ -14,14 +15,14 @@ import com.crystalgui.language.run.console.ConsoleFilter;
 import com.crystalgui.language.run.console.ConsoleSettings;
 import com.crystalgui.language.run.console.RunConsole;
 import com.crystalgui.text.TextPoint;
-import com.crystalgui.ui.elements.chrome.ContextMenu;
-import com.crystalgui.ui.elements.dock.DockDropZone;
-import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
-import com.crystalgui.ui.elements.editor.EditorCommands;
-import com.crystalgui.ui.elements.editor.TextEditor;
-import com.crystalgui.ui.elements.list.ListView;
-import com.crystalgui.ui.elements.workbench.Workbench;
-import com.crystalgui.ui.elements.workbench.decoration.FileDecorations;
+import com.crystalgui.widget.overlay.ContextMenu;
+import com.crystalgui.workbench.dock.drag.DockDropZone;
+import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
+import com.crystalgui.widget.texteditor.EditorCommands;
+import com.crystalgui.widget.texteditor.TextEditor;
+import com.crystalgui.widget.collection.list.ListView;
+import com.crystalgui.workbench.Workbench;
+import com.crystalgui.workbench.decoration.FileDecorations;
 
 import javax.annotation.Nullable;
 
@@ -75,10 +76,10 @@ public final class RunPanels {
         // caption without anyone remembering to.
         panel.setRunnableLanguages(runtimes == null ? "" : runtimes.languageNames());
         // NAMED AND OPTED IN, which is the whole of remembering soft wrap between launches. The id ties
-        // a stored payload to the widget; UIWindow hands it its state as it joins the tree, so a
+        // a stored payload to the widget; UIDocument hands it its state as it joins the tree, so a
         // restored setting is applied before the first frame rather than after it.
         panel.setId(RunPanel.PANEL_ID);
-        panel.setSessionPersistent(true);
+        panel.set(Attribute.SESSION_PERSISTENT, true);
 
         // BESIDE PROBLEMS, and for the reason Workbench gives for its own anchors: closing a panel and
         // reopening it from the activity bar should land it back where it was rather than somewhere
@@ -115,7 +116,7 @@ public final class RunPanels {
                 // KEYBOARD focus and not clicks -- so the programmatic one would outline the whole editor
                 // viewport every time a link was followed. It also scrolls, which would fight the
                 // revealAt above rather than agree with it.
-                editor.requestPointerFocus();
+                editor.document().focus().requestPointerFocus(editor);
             });
         });
 

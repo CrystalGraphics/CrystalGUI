@@ -12,8 +12,8 @@ import com.crystalgui.language.map.PlatformMappings;
 import com.crystalgui.language.map.ReadableSource;
 import com.crystalgui.text.Change;
 import com.crystalgui.text.TextBuffer;
-import com.crystalgui.ui.elements.editor.TextEditor;
-import com.crystalgui.ui.elements.workbench.Workbench;
+import com.crystalgui.widget.texteditor.TextEditor;
+import com.crystalgui.workbench.Workbench;
 
 import javax.annotation.Nullable;
 
