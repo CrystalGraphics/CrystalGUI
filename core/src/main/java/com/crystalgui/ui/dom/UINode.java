@@ -17,6 +17,7 @@ import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.easing.ProgressFunctions;
 import com.crystalgui.style.property.layout.LayoutProperties;
+import com.crystalgui.style.property.visual.Overflow;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 import com.crystalgui.style.property.visual.ScrollBehavior;
 import com.crystalgui.core.command.CommandContext;
@@ -93,6 +94,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
 
     @Nullable
     private ShadowRoot shadowRoot;
+    private boolean structural;
     @Nullable
     UISlot assignedSlot;
 
@@ -598,6 +600,17 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
         if (child instanceof ShadowRoot) {
             throw new IllegalArgumentException("A shadow root belongs to its host; attach one with attachShadow()");
         }
+        // A COMPOSITE WHOSE STRUCTURE IS FIXED REFUSES PUBLIC CHILDREN, and the shadow tree already
+        // says which those are: a host with no DEFAULT slot has nowhere to put a light child, so the
+        // child would be in the light tree, in no composed tree, with no box, no paint and no
+        // promotion -- and nothing anywhere reporting a problem. That is the engine's own
+        // live-and-inert-look-identical failure, and it is why the old engine threw from
+        // `acceptsPublicChildren`. Derived rather than declared, so it cannot be forgotten on a new
+        // widget: give a widget a slot and it takes content, leave it out and it says so.
+        if (!structural && !acceptsPublicChildren()) {
+            throw new UnsupportedOperationException("<" + name + "> takes no public children, so <"
+                    + child.name + "> would never be composed. Use the widget's own accessors.");
+        }
     }
 
     private static int clampIndex(int index, int size) {
@@ -607,6 +620,44 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
     // ── Shadow tree ──────────────────────────────────────────────────────────
 
     /** Attaches a shadow root. A node has at most one; asking twice is an error rather than a second root. */
+    /**
+     * Whether a CALLER may append to this node.
+     *
+     * <p>Derived from the shadow tree by default, so it cannot be forgotten on a new widget: a host
+     * with no DEFAULT slot has nowhere to put a light child, and that child would sit in the light
+     * tree, in no composed tree, with no box, no paint and no promotion -- with nothing anywhere
+     * reporting a problem.</p>
+     *
+     * <p><b>Override it where the derivation cannot see the answer.</b> A composite whose sheets
+     * reach through its structure may not have a shadow tree at all (M6.1 measured 21 of 44 that
+     * cannot), so its parts are ordinary light children and the default says yes. {@code SplitView}
+     * and {@code TabView} are exactly that: fixed structure, no shadow root, typed accessors as the
+     * way in. They declare it, as the old engine's {@code acceptsPublicChildren} did.</p>
+     */
+    public boolean acceptsPublicChildren() {
+        return shadowRoot == null || shadowRoot.slot("") != null;
+    }
+
+    /** Appends a part the WIDGET owns, past its own refusal of public children. */
+    protected final UINode appendStructural(UINode child) {
+        return insertStructuralAt(children.size(), child);
+    }
+
+    /**
+     * Inserts a part the WIDGET owns, past its own refusal of public children -- this engine's
+     * {@code addInternalChild}, minus the flag: what makes a part a part here is that the widget
+     * put it there, not a bit stored on it.
+     */
+    protected final UINode insertStructuralAt(int index, UINode child) {
+        boolean was = structural;
+        structural = true;
+        try {
+            return insertAt(index, child);
+        } finally {
+            structural = was;
+        }
+    }
+
     public ShadowRoot attachShadow() {
         return attachShadow(false);
     }
@@ -1083,8 +1134,18 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
         setFocusVisible(value && visible);
     }
 
+    /**
+     * Focus, and with it the ring -- a bare {@code setFocused} is PROGRAMMATIC by definition, and
+     * programmatic focus rings, exactly as {@code requestFocus} does. Only the pointer path suppresses
+     * it, and that goes through {@link #setFocused(boolean, boolean)}.
+     *
+     * <p><b>The ring cannot outlive the focus.</b> Leaving {@code focusVisible} alone here let a blurred
+     * node keep {@code :focus-visible}, so an outline stayed on something that no longer had focus --
+     * and nothing would clear it until that node was focused and blurred again through the service.</p>
+     */
     public final void setFocused(boolean value) {
         if (focused != value) { focused = value; invalidateStyleMatch(); }
+        setFocusVisible(value);
     }
 
     public final void setFocusVisible(boolean value) {
@@ -1340,6 +1401,29 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
      * died with it would have to be captured and restored — which is the machinery freezing exists
      * to remove. A mirror of this subtree shows the same offset, which is right.
      */
+    /**
+     * Whether this node is a SCROLL CONTAINER -- CSS's own predicate, which {@code hidden}
+     * satisfies and {@code clip} does not.
+     *
+     * <p>That pair is the whole reason both values exist: {@code overflow: hidden} establishes a
+     * container and {@code scrollTop} works on it, it simply shows no bars, while {@code clip} is
+     * the value that genuinely refuses to scroll.</p>
+     *
+     * <p><b>On the node rather than the box</b>, because it is a fact about the STYLE and nothing
+     * about the layout -- so it can be asked of a node that has never been laid out, and of one
+     * that is hidden and therefore has no box at all. {@code Box} delegates here.</p>
+     */
+    public final boolean isScrollContainer() {
+        Overflow overflow = computedStyle().get(StylePropertyRegistry.OVERFLOW);
+        return overflow != null && overflow.isScrollContainer();
+    }
+
+    /** Whether the USER may scroll it. {@code hidden} is a container that only code moves. */
+    public final boolean allowsUserScrolling() {
+        Overflow overflow = computedStyle().get(StylePropertyRegistry.OVERFLOW);
+        return overflow != null && overflow.allowsUserScrolling();
+    }
+
     public final float scrollLeft() {
         return scrollLeft;
     }
@@ -1479,7 +1563,11 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
         Box b = box;
         if (b == null) return false;
         Vector2f local = Transform2D.apply(b.worldToLocal(), surfaceX, surfaceY);
-        return local.x() >= 0f && local.y() >= 0f && local.x() <= b.width() && local.y() <= b.height();
+        // HALF-OPEN, exactly as `Box.hitTest` is. Two predicates that disagree about a point on the
+        // far edge is the engine's own worst failure wearing a smaller hat: a box at x=0 of width 200
+        // covers pixels 0..199, and an inclusive bound makes it and its neighbour both claim 200 --
+        // so `containsSurfacePoint` says yes where a real click resolves to the other one.
+        return local.x() >= 0f && local.y() >= 0f && local.x() < b.width() && local.y() < b.height();
     }
 
     // ── Reporting a state change ─────────────────────────────────────────────

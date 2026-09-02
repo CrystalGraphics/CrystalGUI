@@ -123,12 +123,26 @@ public final class BoxTree {
     }
 
     /** The topmost hit-testable box at a world point, or null over nothing. */
+    /**
+     * What is under a point -- <b>after composing anything that moved</b>.
+     *
+     * <p>{@code composeIfDirty()} is the load-bearing line. Hit-testing walks {@code worldToLocal},
+     * and the engine's own rule is that it and the paint must read the SAME matrix or clicks land
+     * somewhere other than what the user sees. Layout and {@code frame()} both compose; a SCROLL
+     * does not -- it marks the transforms dirty and returns, because a scroll is layout-free. So a
+     * hit test between a scroll and the next frame read the offsets the box had BEFORE the scroll:
+     * a row scrolled off the top stayed clickable where it used to be, and the row that had taken
+     * its place could not be clicked at all. It is free when nothing moved, which is every hit test
+     * in a settled frame.</p>
+     */
     public @Nullable Box hitTest(float worldX, float worldY) {
+        composeIfDirty();
         return root == null ? null : root.hitTest(worldX, worldY);
     }
 
     /** As above, passing over what {@code skip} admits — inertness, which the focus service answers. */
     public @Nullable Box hitTest(float worldX, float worldY, Predicate<Box> skip) {
+        composeIfDirty();
         return root == null ? null : root.hitTest(worldX, worldY, skip);
     }
 
