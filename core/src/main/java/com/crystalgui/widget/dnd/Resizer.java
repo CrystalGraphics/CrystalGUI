@@ -1,8 +1,9 @@
 package com.crystalgui.widget.dnd;
 
-import com.crystalgui.style.StyleGroup;
+import com.crystalgui.ui.dom.ResizeHandles;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.layout.LayoutProperties;
+import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Resize;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
@@ -54,7 +55,7 @@ public final class Resizer extends UINode {
      *
      * <p>{@code dx}/{@code dy} are −1, 0 or +1: the sign says which edge follows the pointer, and a
      * <b>negative</b> one means the opposite edge stays put — so the element has to move as well as
-     * resize. That is the entire reason {@link Resizable#applyResizeOrigin} exists.</p>
+     * resize. That is the entire reason {@link UINode#applyResizeOrigin} exists.</p>
      */
     public enum Handle {
         TOP(0, -1), BOTTOM(0, 1), LEFT(-1, 0), RIGHT(1, 0),
@@ -92,24 +93,24 @@ public final class Resizer extends UINode {
     /**
      * Appends the handle set {@code target} can use, and returns it.
      *
-     * <p>The five leading handles are omitted outright when {@link Resizable#canMoveResizeOrigin} is
+     * <p>The five leading handles are omitted outright when {@link UINode#canMoveResizeOrigin} is
      * false, which leaves bottom, right and the corner — CSS's own default grabber. Everything else is
      * decided per drag from the live {@code resize} value, so a sheet can still narrow the set.</p>
      */
-    public static List<Resizer> install(Resizable target) {
+    public static List<Resizer> install(UINode target) {
         List<Resizer> handles = new ArrayList<>(Handle.values().length);
         boolean leading = target.canMoveResizeOrigin();
         for (Handle handle : Handle.values()) {
             if (handle.isLeading() && !leading) continue;
             Resizer resizer = new Resizer(handle, target);
-            target.node().append(resizer);
+            target.append(resizer);
             handles.add(resizer);
         }
         return handles;
     }
 
     private final Handle handle;
-    private final @Nullable Resizable target;
+    private final @Nullable UINode target;
 
     /**
      * Box at the moment the drag began.
@@ -123,7 +124,7 @@ public final class Resizer extends UINode {
     /**
      * An UNBOUND handle — what a description decodes into, and what nothing drags.
      *
-     * <p>A handle is built by {@link #install} for a {@link Resizable} and is never described over a
+     * <p>A handle is built by {@link #install} for a resizable node and is never described over a
      * wire, so this exists for the registry rather than for a caller: every concrete node needs a kind
      * and every kind needs a factory. {@code beginResize} returns on a null target, so an unbound one
      * is decoration.</p>
@@ -132,7 +133,7 @@ public final class Resizer extends UINode {
         this(Handle.BOTTOM_RIGHT, null);
     }
 
-    private Resizer(Handle handle, @Nullable Resizable target) {
+    private Resizer(Handle handle, @Nullable UINode target) {
         super(NAME);
         this.handle = handle;
         this.target = target;
@@ -159,7 +160,7 @@ public final class Resizer extends UINode {
 
     private void beginResize(MouseEvent.Down event) {
         if (target == null) return;
-        UINode node = target.node();
+        UINode node = target;
         Box box = node.box();
         if (box == null || node.document() == null) return;
 
@@ -176,7 +177,7 @@ public final class Resizer extends UINode {
 
     private void applyResize(float deltaX, float deltaY) {
         if (target == null) return;
-        UINode node = target.node();
+        UINode node = target;
         Resize mode = node.computedStyle().get(StylePropertyRegistry.RESIZE);
         if (mode == null || !handle.appliesTo(mode)) return;
 
@@ -222,7 +223,7 @@ public final class Resizer extends UINode {
 
         // AND SAY SO. Everything else that writes geometry from code writes at a higher origin than
         // this INLINE one, so a widget that sizes itself would overwrite the drag every frame and the
-        // handle would appear dead on that axis. @see Resizable#markUserSized
+        // handle would appear dead on that axis. @see UINode#markUserSized
         target.markUserSized(handle.dx != 0, handle.dy != 0);
 
         // The origin follows the size that was ACHIEVED, never the pointer. That is what pins the
@@ -258,4 +259,37 @@ public final class Resizer extends UINode {
         }
         return desired;
     }
+
+    // ── Driven by the cascade ───────────────────────────────────────────────
+
+    /**
+     * Makes {@code resize} ambient: any node the sheets give a resizable mode grows handles, and any
+     * node whose mode goes back to {@code none} loses them.
+     *
+     * <p>Registered once, from {@code Widgets}. The engine watches the computed value and calls this;
+     * it cannot build a handle itself, because {@code ui.dom} is below the widget layer. @see
+     * ResizeHandles</p>
+     *
+     */
+    public static void driveFromStyle() {
+        ResizeHandles.setInstaller(Resizer::apply);
+    }
+
+    /** Idempotent, because a computed value is re-resolved on every match this node takes part in. */
+    private static void apply(UINode node, Resize mode) {
+        boolean wanted = mode.isResizable();
+        boolean present = false;
+        for (UINode child : node.children()) {
+            if (child instanceof Resizer) { present = true; break; }
+        }
+        if (wanted == present) return;
+        if (wanted) {
+            install(node);
+            return;
+        }
+        for (UINode child : new ArrayList<>(node.children())) {
+            if (child instanceof Resizer) node.remove(child);
+        }
+    }
+
 }
