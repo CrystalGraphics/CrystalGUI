@@ -203,6 +203,7 @@ public class SplitView extends UINode {
 
     public SplitView() {
         super(NAME);
+        refusePublicChildren();
         addPaneInternal(50f);
         addPaneInternal(50f);
 

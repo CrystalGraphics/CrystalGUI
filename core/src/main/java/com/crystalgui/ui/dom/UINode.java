@@ -634,14 +634,10 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
         if (child instanceof ShadowRoot) {
             throw new IllegalArgumentException("A shadow root belongs to its host; attach one with attachShadow()");
         }
-        // A COMPOSITE WHOSE STRUCTURE IS FIXED REFUSES PUBLIC CHILDREN, and the shadow tree already
-        // says which those are: a host with no DEFAULT slot has nowhere to put a light child, so the
-        // child would be in the light tree, in no composed tree, with no box, no paint and no
-        // promotion -- and nothing anywhere reporting a problem. That is the engine's own
-        // live-and-inert-look-identical failure, and it is why the old engine threw from
-        // `acceptsPublicChildren`. Derived rather than declared, so it cannot be forgotten on a new
-        // widget: give a widget a slot and it takes content, leave it out and it says so.
-        if (!structural && !acceptsPublicChildren()) {
+        // ONLY WHAT DECLARED ITSELF FIXED, never anything merely slotless. An unslotted light child
+        // is the web's own state and three tests pin it; a widget that called
+        // `refusePublicChildren()` has promised more than that. See that method.
+        if (!structural && refusesPublicChildren) {
             throw new UnsupportedOperationException("<" + name + "> takes no public children, so <"
                     + child.name + "> would never be composed. Use the widget's own accessors.");
         }
@@ -669,8 +665,30 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
      * way in. They declare it, as the old engine's {@code acceptsPublicChildren} did.</p>
      */
     public boolean acceptsPublicChildren() {
+        if (refusesPublicChildren) return false;
         return shadowRoot == null || shadowRoot.slot("") != null;
     }
+
+    /**
+     * <b>A widget declares that its structure is fixed; it is not derived from the slots.</b>
+     *
+     * <p>Deriving it was the first attempt and it conflates two different things. A shadow host with
+     * no default slot is the WEB's ordinary state -- the light child is in the light tree, out of the
+     * composed tree, and legal -- and three tests pin that behaviour directly. A {@code TabView}
+     * refusing a stray child is a stronger promise, made by the widget about itself, and the reason
+     * it is worth making is that the alternative is silent: the child gets no box, no paint and no
+     * promotion, with nothing anywhere reporting a problem, or -- worse, for a {@link
+     * com.crystalgui.widget.scroll.ListView} -- is recycled out of existence on the next refresh.</p>
+     *
+     * <p>So it is said out loud, in the constructor of the widget that means it, exactly as the old
+     * engine's overridable {@code acceptsPublicChildren} did. Give the widget a named accessor for
+     * its content instead of opening the tree.</p>
+     */
+    protected final void refusePublicChildren() {
+        refusesPublicChildren = true;
+    }
+
+    private boolean refusesPublicChildren;
 
     /** Appends a part the WIDGET owns, past its own refusal of public children. */
     protected final UINode appendStructural(UINode child) {

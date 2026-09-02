@@ -188,6 +188,10 @@ public class Dialog extends UINode {
 
     public Dialog(String title) {
         super(NAME);
+        // On the constructor every other one chains THROUGH, not on the no-arg one: put it there and
+        // a dialog built with a title -- which is most of them, and is what the covering test uses --
+        // never makes the declaration at all.
+        refusePublicChildren();
         // Out of flow and positioned: a floating panel is placed by left/top against its containing
         // block, not laid out among its siblings.
         StyleGroup.defaultPipeline(getStyle().getLayoutGroup(),

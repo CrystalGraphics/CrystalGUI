@@ -14,6 +14,8 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
+import com.crystalgui.desktop.Desktop;
+import org.junit.After;
 import org.junit.Before;
 
 /**
@@ -41,6 +43,25 @@ import org.junit.Before;
  * animation misses it by an amount that depends on the machine.</p>
  */
 public abstract class UiDocumentTestBase extends UiTestBase {
+
+    /**
+     * <b>Animations back on after every test, wherever the test left them.</b>
+     *
+     * <p>{@code Desktop.setAnimationsEnabled} is STATIC, so a class that turns it off and fails to
+     * put it back turns it off for every class that runs after it in the same JVM -- and JUnit
+     * orders neither classes nor {@code @After} methods, so the damage lands on a different victim
+     * each run. It presents as a flaky suite whose failure COUNT moves between runs on an unchanged
+     * tree, which reads as a race in the engine rather than a leaked flag in a fixture.</p>
+     *
+     * <p>Restoring the PRODUCTION DEFAULT rather than a value captured on the way in is the half
+     * that is easy to get wrong: a captured value can itself be somebody else's leak, so putting it
+     * back propagates the leak instead of ending it. A test that wants them off says so in its own
+     * {@code @Before}, which runs after this.</p>
+     */
+    @After
+    public void animationsBackOnHoweverTheTestLeftThem() {
+        Desktop.setAnimationsEnabled(true);
+    }
 
     /** The surface, in logical units. The same 800x600 the service fixtures use. */
     public static final float W = 800f;
