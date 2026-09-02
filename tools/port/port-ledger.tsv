@@ -25,11 +25,11 @@ CLASS	graph/shader/ShaderPropertyNodes	241	app/shadergraph/node	6.4	copy	ported
 CLASS	graph/shader/ShaderVectorFieldWidget	89	app/shadergraph/node	6.4	copy	ported
 CLASS	net/window/ClientScope	92	net/window	6.8	move	in-place
 CLASS	net/window/ClientWindowContext	96	net/window	6.8	move	in-place
-CLASS	net/window/ClientWindows	593	net/window	6.8	move	in-place
+CLASS	net/window/ClientWindows	589	net/window	6.8	move	in-place
 CLASS	net/window/CloseReason	53	net/window	6.8	move	in-place
 CLASS	net/window/Networked	257	net/window	6.8	move	in-place
 CLASS	net/window/OpenResolver	58	net/window	6.8	move	in-place
-CLASS	net/window/ScopedSheets	249	net/window	6.8	move	in-place
+CLASS	net/window/ScopedSheets	124	net/window	6.8	move	in-place
 CLASS	net/window/ServerScope	514	net/window	6.8	move	in-place
 CLASS	net/window/ServerWindow	265	net/window	6.8	move	in-place
 CLASS	net/window/ServerWindows	517	net/window	6.8	move	in-place
@@ -267,14 +267,14 @@ CLASS	ui/text/HighlightRegistry	117	ui/text	stays	move	in-place
 CLASS	ui/text/SyntaxHighlighting	283	widget/text	6.5	copy	ported
 CLASS	ui/text/TextRange	44	ui/text	stays	move	in-place
 CLASS	language/run/view/MappingCommands	174	language/run/view	6.7	move	in-place
-CLASS	language/run/view/RunConsoleView	622	language/run/view	6.7	move	in-place
+CLASS	language/run/view/RunConsoleView	646	language/run/view	6.7	move	in-place
 CLASS	language/run/view/RunDecorations	124	language/run/view	6.7	move	in-place
-CLASS	language/run/view/RunIndicators	114	language/run/view	6.7	copy	in-place
-CLASS	language/run/view/RunPanel	1033	language/run/view	6.7	copy	in-place
-CLASS	language/run/view/RunPanels	253	language/run/view	6.7	copy	in-place
-CLASS	language/run/view/RunRail	353	language/run/view	6.7	copy	in-place
+CLASS	language/run/view/RunIndicators	114	language/run/view	6.7	move	in-place
+CLASS	language/run/view/RunPanel	1076	language/run/view	6.7	move	in-place
+CLASS	language/run/view/RunPanels	254	language/run/view	6.7	move	in-place
+CLASS	language/run/view/RunRail	353	language/run/view	6.7	move	in-place
 CLASS	language/run/view/ScriptWorkbench	567	language/run/view	6.7	move	in-place
-CLASS	language/run/view/TailFollow	127	language/run/view	6.7	copy	in-place
+CLASS	language/run/view/TailFollow	127	language/run/view	6.7	move	in-place
 #
 # PART	owner	name	kind	uses	source	why
 PART	(unowned)	error	A	1	proposed	leaf in every rule
@@ -370,7 +370,7 @@ PART	CompletionPopup	completion-mark-static	B	2	confirmed	leaf in every rule
 PART	CompletionPopup	completion-options	B	2	confirmed	leaf in every rule
 PART	CompletionPopup	completion-params	B	2	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	CompletionPopup	completion-row	B	2	confirmed	leaf in every rule
-PART	ConfigControl	config-control	B	71	confirmed	a rule selects through it (61)
+PART	ConfigControl	config-control	B	75	confirmed	a rule selects through it (65)
 PART	Configurator	configurator	B	6	confirmed	a rule selects through it (5)
 PART	Configurator	inline	C	4	confirmed	state adjective
 PART	Configurator	label	B	5	confirmed	leaf in every rule, scoped by an ancestor in 5
@@ -518,9 +518,9 @@ PART	MarkupView	markup-row	B	0	confirmed	leaf in every rule
 PART	MarkupView	markup-table	B	0	confirmed	leaf in every rule
 PART	MarkupView	markup-term	B	0	confirmed	leaf in every rule
 PART	MaskControl	chevron	B	0	confirmed	leaf in every rule
-PART	MaskControl	mask	B	6	confirmed	a rule selects through it (6)
+PART	MaskControl	mask	B	10	confirmed	a rule selects through it (10)
 PART	MaskControl	mask-panel	B	1	confirmed	a rule selects through it (1)
-PART	MaskControl	mask-row	B	5	confirmed	a rule selects through it (4)
+PART	MaskControl	mask-row	B	9	confirmed	a rule selects through it (4)
 PART	MaskControl	toggle	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	MatrixControl	matrix	B	3	confirmed	a rule selects through it (2)
 PART	MatrixControl	matrix-cell	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1

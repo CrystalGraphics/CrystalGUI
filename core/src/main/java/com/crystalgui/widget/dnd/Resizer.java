@@ -14,6 +14,7 @@ import dev.vfyjxf.taffy.style.TaffyDimension;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 
 import javax.annotation.Nullable;
@@ -79,14 +80,24 @@ public final class Resizer extends UINode {
         }
 
         /**
-         * A handle exists only if <em>every</em> axis it touches is resizable. So
-         * {@code resize: horizontal} yields the two side edges and no corners — a corner would imply
-         * a vertical resize the mode forbids.
+         * A handle exists if <em>any</em> axis it touches is resizable, and a drag then moves only the
+         * axes the mode allows.
+         *
+         * <p>This used to require EVERY axis, so {@code resize: horizontal} had no corners — a corner
+         * would imply a vertical resize the mode forbids. Defensible, and not what a browser does: a
+         * {@code textarea} with {@code resize: horizontal} still shows the bottom-right grabber and
+         * simply changes width alone. The stricter reading also costs the only grip there is — that
+         * corner is the one handle the sheet draws — so a single-axis box ends up resizable with
+         * nothing on screen saying so, and moving the grip onto a full-length edge strip paints
+         * something that reads as a scrollbar.</p>
+         *
+         * <p>So the constraint moves from WHICH HANDLES EXIST to WHAT A DRAG DOES, which is where the
+         * user can see it. @see Resizer#applyResize</p>
          */
         public boolean appliesTo(Resize mode) {
             if (!mode.isResizable()) return false;
-            if (dx != 0 && !mode.allowsWidth()) return false;
-            return dy == 0 || mode.allowsHeight();
+            if (dx != 0 && mode.allowsWidth()) return true;
+            return dy != 0 && mode.allowsHeight();
         }
     }
 
@@ -97,17 +108,26 @@ public final class Resizer extends UINode {
      * false, which leaves bottom, right and the corner — CSS's own default grabber. Everything else is
      * decided per drag from the live {@code resize} value, so a sheet can still narrow the set.</p>
      */
-    public static List<Resizer> install(UINode target) {
+    public static List<Resizer> install(UINode target, Resize mode) {
         List<Resizer> handles = new ArrayList<>(Handle.values().length);
         boolean leading = target.canMoveResizeOrigin();
         for (Handle handle : Handle.values()) {
             if (handle.isLeading() && !leading) continue;
+            // AND THE MODE DECIDES THE REST, which it did not until now: every non-leading handle was
+            // built whatever the sheet said, so `resize: horizontal` grew a bottom-right CORNER --
+            // the one handle that draws the grip. `applyResize` then refused it, correctly, on the
+            // rule this class already states: a handle exists only if EVERY axis it touches is
+            // resizable. So the only visible grabber on a horizontal-only box was one that could
+            // never move it, and the box read as not resizable at all.
+            if (!handle.appliesTo(mode)) continue;
             Resizer resizer = new Resizer(handle, target);
             ResizeHandles.attach(target, resizer);
             handles.add(resizer);
         }
         return handles;
     }
+
+
 
     private final Handle handle;
     private final @Nullable UINode target;
@@ -183,8 +203,11 @@ public final class Resizer extends UINode {
 
         // A trailing edge grows by the drag; a leading edge grows by its negation and moves the origin
         // to match, so the opposite edge stays where it was.
-        float width = startWidth + handle.dx * deltaX;
-        float height = startHeight + handle.dy * deltaY;
+        // PER AXIS, because a handle may touch one the mode forbids -- a bottom-right corner under
+        // `resize: horizontal` exists (a browser shows it) and must move width alone. A forbidden axis
+        // keeps its starting value rather than being refused, or the whole drag dies with it.
+        float width = mode.allowsWidth() ? startWidth + handle.dx * deltaX : startWidth;
+        float height = mode.allowsHeight() ? startHeight + handle.dy * deltaY : startHeight;
 
         // Clamp to the element's OWN min/max first. This is not what constrains the box -- Taffy applies
         // these regardless -- it is what lets the origin below be derived from a size the element will
@@ -277,19 +300,28 @@ public final class Resizer extends UINode {
 
     /** Idempotent, because a computed value is re-resolved on every match this node takes part in. */
     private static void apply(UINode node, Resize mode) {
-        boolean wanted = mode.isResizable();
-        boolean present = false;
+        // THE SET, not merely whether there is one. Comparing presence was enough while every
+        // resizable node got the same three handles; now that the mode decides which exist, a change
+        // from `both` to `horizontal` leaves the count non-zero and would have been skipped -- the
+        // stale corner surviving a mode change is the same dead grabber, arriving a different way.
+        EnumSet<Handle> want = EnumSet.noneOf(Handle.class);
+        if (mode.isResizable()) {
+            boolean leading = node.canMoveResizeOrigin();
+            for (Handle handle : Handle.values()) {
+                if (handle.isLeading() && !leading) continue;
+                if (handle.appliesTo(mode)) want.add(handle);
+            }
+        }
+        EnumSet<Handle> have = EnumSet.noneOf(Handle.class);
         for (UINode child : node.children()) {
-            if (child instanceof Resizer) { present = true; break; }
+            if (child instanceof Resizer resizer) have.add(resizer.handle);
         }
-        if (wanted == present) return;
-        if (wanted) {
-            install(node);
-            return;
-        }
+        if (want.equals(have)) return;
+
         for (UINode child : new ArrayList<>(node.children())) {
             if (child instanceof Resizer) node.remove(child);
         }
+        if (!want.isEmpty()) install(node, mode);
     }
 
 }
