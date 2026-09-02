@@ -247,6 +247,7 @@ public class StyleParityTest extends UiDocumentTestBase {
             Map.entry("empty-collapsed", "a port column with nothing wired, while collapsed"),
             Map.entry("ports-empty", "a node with no ports at all"),
             Map.entry("no-inputs", "a node with outputs and no inputs"),
+            Map.entry("no-outputs", "the mirror -- the master node, which has inputs and no outputs"),
             Map.entry("no-input-gap", "the same, one level down"),
             Map.entry("selected", "GraphSelection, which needs a click or an API call"),
             Map.entry("property-node", "ShaderPropertyNodes marks these; the shader app builds them"),

@@ -82,6 +82,10 @@ public class GraphNode extends UINode {
     public static final String INPUTS_CLASS = "__inputs__";
     /** On {@link #INPUTS_CLASS} when the node has zero input ports — see {@link #addPort}. */
     public static final String NO_INPUTS_CLASS = "__no-inputs__";
+    /** On {@link #OUTPUTS_CLASS} when the node declares no outputs. The mirror of
+     * {@link #NO_INPUTS_CLASS}, and it is on the node for the same reason: the selector subset cannot
+     * count children. */
+    public static final String NO_OUTPUTS_CLASS = "__no-outputs__";
     /** On {@link #INPUTS_CLASS} or {@link #OUTPUTS_CLASS} whenever the node is collapsed AND every port
      * in that column is blank — see {@link #recomputeEmptyOnCollapse}. Distinct from
      * {@link #NO_INPUTS_CLASS}: that is structural (this node was never given an input at all) and
@@ -199,6 +203,7 @@ public class GraphNode extends UINode {
         outputs.addClass(OUTPUTS_CLASS);
         ports.append(inputs);
         ports.append(outputs);
+        syncEmptyPortColumns();
 
         controls.addClass(CONTROLS_CLASS);
         preview.addClass(PREVIEW_CLASS);
@@ -421,8 +426,7 @@ public class GraphNode extends UINode {
         // an even split there shows a bare empty panel beside Out. `NO_INPUTS_CLASS` is what lets
         // the sheet zero the input column's grow ONLY in that one case, without the sheet needing to
         // count children (which its selector subset cannot do).
-        if (inputPorts.isEmpty()) inputs.addClass(NO_INPUTS_CLASS);
-        else inputs.removeClass(NO_INPUTS_CLASS);
+        syncEmptyPortColumns();
         // Connection state can flip long after this port is added, and it has to be re-checked every time
         // it does — see recomputeEmptyOnCollapse.
         port.onBlankChanged.connect(this::recomputeEmptyOnCollapse);
@@ -565,6 +569,28 @@ public class GraphNode extends UINode {
         recomputeEmptyOnCollapse();
         onCollapsedChanged.emit(value);
         return this;
+    }
+
+
+    /**
+     * Zeroes the grow of whichever port column has nothing in it.
+     *
+     * <p>An even 50/50 split matches Unity on every node that has BOTH — but a column with no ports has
+     * nothing to justify it a half, and each column carries its own background, so an empty one is
+     * drawn: a bare panel beside {@code Out} on an inputless node, and a darker strip down the inside
+     * of the right border on the master node every graph ends at. The sheet cannot count children, so
+     * the class is what lets it zero the grow in exactly those cases.</p>
+     *
+     * <p><b>Called from the constructor as well as from {@link #addPort}</b>, because a node with NO
+     * ports at all never reaches the add path and both its columns are empty from the start. That is
+     * also the only shape a fixture builds, so a rule for it would otherwise match nothing anywhere --
+     * which is what {@code StyleParityTest} says when the maintenance lives only in the adder.</p>
+     */
+    private void syncEmptyPortColumns() {
+        if (inputPorts.isEmpty()) inputs.addClass(NO_INPUTS_CLASS);
+        else inputs.removeClass(NO_INPUTS_CLASS);
+        if (outputPorts.isEmpty()) outputs.addClass(NO_OUTPUTS_CLASS);
+        else outputs.removeClass(NO_OUTPUTS_CLASS);
     }
 
     /** See {@link #EMPTY_WHEN_COLLAPSED_CLASS}. Run on every collapse toggle and every port blank-state

@@ -276,6 +276,12 @@ graphnode .__inputs__ {
 graphnode .__inputs__.__no-inputs__ {
     flex-grow: 0;
 }
+/* The mirror, for the master node every graph ends at: no outputs, so the empty column must not take
+ * half the row. It carries its own background, so a share of the free space draws as a darker strip
+ * down the inside of the right border. @see GraphNode#NO_OUTPUTS_CLASS */
+graphnode .__outputs__.__no-outputs__ {
+    flex-grow: 0;
+}
 graphnode .__outputs__ {
     flex-direction: column;
     flex-grow: 1;
@@ -309,6 +315,18 @@ graphnode .__controls__ {
     padding-bottom: 1px;
 }
 graphnode .__control-row__ {
+    /* THE ROW SPANS THE NODE, and it does not get that from `align-items` alone.
+     *
+     * A node on the canvas plane is out of flow and shrink-to-fit, so the row was laid out at its own
+     * content width -- measured at 90.7 inside a 133-wide `.__controls__` -- and its lighter fill
+     * stopped partway across, leaving the container's darker tone showing to the right of every
+     * labelled control. Only the rows whose CONTROL carries `.__full-width__` looked right, and by
+     * accident: that class gives the child `width: 100%`, which drags the row out with it.
+     *
+     * Invisible in a fixture that puts a node in ordinary flow, where the document stretches the node
+     * to its `max-width` and everything inside follows. A percentage contributes nothing to
+     * max-content, so this cannot widen the node itself. */
+    width: 100%;
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
