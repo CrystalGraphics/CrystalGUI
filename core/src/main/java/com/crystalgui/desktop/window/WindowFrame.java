@@ -25,7 +25,6 @@ import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.widget.dnd.Resizable;
 import com.crystalgui.widget.dnd.Resizer;
 import com.crystalgui.ui.UITransform;
 import com.crystalgui.ui.dom.UIDocument;
@@ -96,7 +95,7 @@ import java.util.function.BooleanSupplier;
  * this clamp starts), and the fix belongs with W6's maximise/restore geometry rather than in a special
  * case here.</p>
  */
-public class WindowFrame extends UINode implements Disposable, Resizable, DataProvider {
+public class WindowFrame extends UINode implements Disposable, DataProvider {
 
     /** The cascade identity `ua/desktop.css` names. @see com.crystalgui.ui.dom.Name */
     public static final Name NAME = Name.of("window");
@@ -579,19 +578,6 @@ public class WindowFrame extends UINode implements Disposable, Resizable, DataPr
         content = new ScrollerView();
         content.addClass(CONTENT_CLASS);
         append(content);
-
-        // THE EIGHT RESIZE HANDLES, BUILT HERE RATHER THAN BY THE CASCADE.
-        //
-        // The old engine watched the `resize` property and grew a set of internal children whenever it
-        // changed; the node tree has no property listener that may mutate structure, so a widget that
-        // wants handles asks for them once. `resize: none` on a maximised window still drops them, in
-        // the sense that matters -- Resizer reads the live value per drag, so the rule in ua/desktop.css
-        // goes on working -- and what is lost is only that the nodes themselves come and go. They are
-        // absolutely positioned over the border box and hit-test first, which is the standing rule that
-        // a window's own edges belong to its handles: press an element's CENTRE.
-        //
-        // LAST, so they are above the caption and the content in paint and hit order.
-        Resizer.install(this);
 
         // THE POINTER MOVE GESTURES -- caption drag, Alt-drag, drag-to-edge snap. @see WindowMove
         //
@@ -2381,12 +2367,6 @@ public class WindowFrame extends UINode implements Disposable, Resizable, DataPr
     public UINode resizeContainingBlock() {
         return parent();
     }
-
-    @Override
-    public UINode node() {
-        return this;
-    }
-
     /**
      * Re-clamps this window against the work area as it is now.
      *
