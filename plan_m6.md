@@ -253,7 +253,7 @@ Four packages outside it extend `UIElement` (§0.1: `graph/shader`, `language/�
 | `render` — `CgUiPaintContext.warmGlyphs(UIWindow.DEFAULT_UI_SCALE)` | one constant | trivial |
 | `lifecycle` — `CgUiLifecycle.onDestroy → UIWindow.shutdownAll()` | the shutdown sweep | `UIDocument` needs the registry |
 | `core/async/UiThread` | per-tree owner asked of the attached window | `UIDocument.require` already exists |
-| `mc1710` — eight files (`CgUiScreen` 720 lines, `CgUiWindowMount`, `CgUiHud`, `CgUiInput`, `CgUiOverlayInput`, `Mc1710Workspace`, two probes) | `UIWindow.init/paint/presentation/desktop/enterHudMode/suspendDesktop/openWindow`, `getInputHandler().consume*` | the host flip at 6.9 |
+| `mc1710` — eight files (`CgUiScreen` 720 lines, `CgUiWindowMount`, `CgUiHud`, `CgUiInput`, `CgUiOverlayInput`, `Mc1710Workspace`, two probes) | `UIWindow.init/paint/presentation/desktop/enterHudMode/suspendDesktop/openWindow`, `getInputHandler().consume*` | the host flip at 6.9a (three of the eight go with 6.8) |
 
 ### 1.3 Networking is on M6's critical path, not M7's
 
@@ -363,7 +363,7 @@ reviewed once, and every later batch executes it rather than re-deciding it.
 
 ### 2.6 The package map — where each copy lands
 
-The strangler line forces this: the old `ui.elements.Button` runs the game until 6.9, so the new one
+The strangler line forces this: the old `ui.elements.Button` runs the game until 6.9a, so the new one
 cannot share its package. Every ported class is therefore a **copy into a new package**, and since
 the tree is being re-homed anyway it is re-homed properly — by *kind of thing* first and by *layer*
 second. `ui.elements` had 28 files at its root spanning a `Button` and a `MarkupView`; `desktop`,
@@ -444,7 +444,7 @@ com.crystalgui.graph                  THE GRAPH MODEL: headless, engine-neutral,
   (root)         GraphDocument, NodeType, NodeData, EdgeData, PortSpec, codecs, edits -- not in port scope
   .port          PortType, BasicPortType, PortTypeRegistry   (6.4 D25: the SPI, once its one
                  UIElement-returning method becomes a lookup in widget.graph)
-  .shader        EMPTIED at 6.9 -- all seventeen files belong to an application, not to the model
+  .shader        EMPTIED at 6.9b -- all seventeen files belong to an application, not to the model
 
 com.crystalgui.app                    THE APPLICATIONS: may use everything above, and nothing may use them
   .shadergraph   (root) ShaderInspectorSections, ShaderNodeLibrary, ShaderGraphEditor (6.7),
@@ -643,7 +643,7 @@ each row says what it becomes, or names the gap and the decision (§4.6, §2).
 | `UITreeTraversal` — `pathToRoot`, `commonAncestor` (null, never throws), `first/lastFocusableIn`, `first/lastTabbableIn`, `next/previousTabbable`, `querySelector*` | `Focus` (traversal) + §2.2 (queries) | Tab wraps at both ends |
 | `keymap/` — `Keymap.bind/bindAll/unbind/load/clear/bindings/chordFor/acceleratorFor/acceleratorsFrom/conflicts`, `KeyBinding.on/allowWhileTyping/withArgs`, `KeyChord`, `KeyStroke` (wheel strokes, `hasNonShiftModifier`, `isFunctionKey`, `isBareModifier`), `KeymapResolver.resolve/pending/cancelPending/onPendingChanged` (chords, typing, release), `KeymapSheet.parse/load/applyTo` | unchanged except the two walks (D12); `Input.Chords` is the seam a host wires `KeymapResolver` into | `allowWhileTyping` and *"a menu MNEMONIC must not fire while a text field has focus"* |
 | `ElementRegistry` — 23 tags, bijective, factory per tag, unknown tag THROWS on decode | `UINodeRegistry` — 55 names (§1.5), `register(Name, Supplier, NodeContract)`, `plain(name, acceptsChildren)` | `UiType` and `PortTypeRegistry` also register tags |
-| `EventListenerGroup` — `attachListener(l, capture, bubble)` additive, `defaultEvents` fire in TARGET only if not default-prevented, `emitTarget` vs `emitTargetDom` | `emitTargetDom` becomes the only path at 6.9 | the old `emitTarget` is deleted with the old engine |
+| `EventListenerGroup` — `attachListener(l, capture, bubble)` additive, `defaultEvents` fire in TARGET only if not default-prevented, `emitTarget` vs `emitTargetDom` | `emitTargetDom` becomes the only path at 6.9b | the old `emitTarget` is deleted with the old engine |
 | `UIFrameTicker` — one-way registration, `HashSet`-backed, return `false` to drop | `Animation.every(node, hook)` — owned, dropped on freeze/disconnect | D10 |
 | `UITransform` — ordered op list, `IDENTITY` (empty list — snaps against anything), `applyTo`, no `matrix()` | unchanged | the row *"`UITransform.IDENTITY` … SNAPS at the halfway point"* survives untouched |
 
@@ -1711,7 +1711,7 @@ registration, so the two sit together at the app root and the Blackboard merely 
 scans everything that is not new-engine**, which includes `ui/elements/graph`, `ui/elements/canvas`
 and `graph/shader` — all of which stay until 6.9. So:
 
-| Row | Named by, and it stays until 6.9 |
+| Row | Named by, and it stays until 6.9b |
 |---|---|
 | `GraphConnection`, `GraphSelection`, `NodeWidgetFactory` | old `GraphView` |
 | `BasicPortType`, `PortTypeRegistry` | old `NodeWidgetFactory` |
@@ -2331,6 +2331,44 @@ module and its tests run under `:language:test` with natives — skip cleanly th
 > boundary anybody chose. Eight classes: `EngineModel`, `MachineDemo`, `MachineModel`,
 > `MachineTrace`, and `ui/`'s `EnginePanel`, `MachinePanel`, `MachineRows`, `MachineStyles`.
 
+**Destination — the package structure this milestone should leave behind.** `net/`'s root is a
+grab-bag today: the two sessions (1,454 and 903 lines) sit beside the transport SPI, a limits record,
+a sheet reference and one half of a command pair whose other half is in `net/window`. The retype
+touches every one of them, so it is the one cheap moment to put them where they belong.
+
+```
+net/                 UITransport, InMemoryTransport          — the seam and its in-memory double
+  .session/          ServerUiSession, ClientUiSession, ClientUiSessions, UiWindowMux, UiLimits
+  .mirror/           ServerTreeMirror, ClientTreeMirror, NodeMirror, UINodeMirror, TreeOps
+  .protocol/         unchanged — Envelope, EnvelopeCodec, MessageRouter, ProtocolConnection, Call, UiMethods
+  .wire/             unchanged — FrameCodec, FrameMultiplexer, WireTransport, CgNetworkChannel
+  .window/           Networked, UiType, ServerScope, ClientScope, ServerWindow(s), ClientWindows,
+                     WindowMount, ClientWindowContext, ViewCommand, ViewCommands
+  .sheet/            SheetRef, SheetSupply
+```
+
+Four moves, each with a reason rather than a taste:
+
+- **`.session`** — the two sessions are 2,357 lines of the 3,118 in the root, and they are the one
+  thing in `net/` that is neither the wire nor the window API. Everything else in the root is a
+  handful of small types a caller names; the sessions are the machine. `UiLimits` goes with them
+  because it is a session's policy and nothing else reads it.
+- **`.sheet`** — `SheetRef` is in the root and `SheetSupply` in `.window`, which are the two halves of
+  one question ("what stylesheet does this window use, and where does it come from"). `ScopedSheets`
+  was the third and is **deleted** here: native `@scope` replaces the selector rewrite, and with it
+  the two invariant rows that rewrite earned.
+- **`ViewCommand` joins `ViewCommands`** in `.window`. One being in the root is an accident of the
+  order they were written in; a reader looking for either finds the other.
+- **`ElementNodeMirror` leaves** and `UINodeMirror` is the only mirror, which is what M2 built the
+  `NodeMirror` seam for.
+
+> **Price it before committing to it.** 6.5 and 6.6 both recorded that a split's cost cannot be
+> counted from source — a regex cannot resolve a receiver, and the static tool was wrong by a factor
+> of two in one direction and reported 285 for a real 78 in the other. Run `tools/port/pricesplit.py`
+> over the proposed partition and read the compiler's `is not public` list. If `.session` prices
+> badly it is the one to drop: the sessions reach the mirror, the protocol and the window API, and a
+> hub is worth keeping with whatever is welded to it.
+
 **Ports.** `ServerUiSession<N,T>`, `ClientUiSession<N,T>`, `ClientUiSessions`, `UiWindowMux` over
 `TreeSource<N>` + `NodeMirror<N,T>` (D11); `UINodeMirror` as the only mirror; `ElementNodeMirror`,
 `ElementTreeSource` and `UIDescriptionCodec` retired; `net/window/` retyped (D23); `ScopedSheets`'s
@@ -2339,15 +2377,22 @@ selector rewrite replaced by native `@scope` (M4's own note); `SheetSupply` unch
 `CgUiWindowMount` retyped; `ViewCommands` retyped. D4 (the master plan's row) applied with its
 governance test.
 
+**And mc1710's networking half comes with it** — `CgUiWindowMount` (254 lines, 10 refs),
+`CgUiSessionProbe` (486, 10) and `CgUiServerSmoke` (409, 4). They are typed on the classes this
+milestone retypes, `serverSmoke` is already in the accepts below, and leaving them behind would mean
+the loader compiling against a framework its own engine has not reached — the taxonomy-over-dependency
+mistake 6.7 made with the Machine example and this milestone inherited. The other five mc1710 files
+are the client surface and belong to 6.9a.
+
 **Accepts.** `cgui-workspace`; the seam suite unchanged on `UINodeTreeSource`;
 `MirrorIsEngineAgnosticTest`; every `net/` and `net/window/` test; `WidgetContractRoundTripTest`;
-`ScopedSheetParseTest` (now asserting `@scope`); the two-viewer fixtures; `serverSmoke`.
-
-**Destination.** `net.window` as it is; the sessions in `net` as they are.
+`ScopedSheetParseTest` (now asserting `@scope`); the two-viewer fixtures; `serverSmoke`; and
+`-PcgSessionProbe` in a real client, because a session pair over a real wire is the one thing no
+headless fixture reaches.
 
 **Budget, measured:** **9 copied, 6 moved, 91 mechanical, 0 hand sites** — and the count is
 misleading, because the work is the generic retype of two files the codemod does not touch
-(`ServerUiSession` 1,457 lines, `ClientUiSession` 903), which is a reading of thirty `UIElement`
+(`ServerUiSession` 1,454 lines, `ClientUiSession` 903), which is a reading of thirty `UIElement`
 references rather than a rewrite.
 
 **Rows it owns.** The networking rows are untouched in substance — they are about the mirror, which
@@ -2357,16 +2402,63 @@ disappears, mark it); *"a COMMENT between two rules is not the next rule's selec
 that mis-parsed it is deleted); *"a NETWORKED ELEMENT'S IDENTITY IS NO LONGER ITS POSITION"*
 (unchanged — `UINodeTreeSource` allocates the same way).
 
-**Hazards.** The description format changes from `UIDescriptionCodec`'s to `UINodeMirror`'s;
-`ContentHash` keys change; no mixed-engine wire exists (one jar) so nothing has to interoperate, but
-every recorded fixture in `net/` tests that embeds a description is regenerated. `Networked`'s
-`mayClose` vs `UINode.requestClose` — D23.
+**Hazards.**
 
-### 6.9 — Cutover and deletion · **M** · after: 6.8
+- **Every recorded description in a fixture is stale.** The format changes from
+  `UIDescriptionCodec`'s to `UINodeMirror`'s and `ContentHash` keys change with it. No mixed-engine
+  wire exists (one jar), so nothing has to interoperate — regenerate them in the FIRST commit of the
+  batch rather than letting them fail scattered through it.
+- **D23 — `Networked.mayClose` versus `UINode.requestClose`.** This one has a scar: when the hook
+  was first written as `requestClose` it collided with the base class's method of the same name and
+  the OPPOSITE sense, a concrete method beat the interface default, and every panel that did not
+  override it vetoed its own close — the X silently did nothing, and all sixteen tests passed because
+  each fixture happened to override the hook. Check the new name against `UINode`'s public surface
+  before adopting it, and cover it with a panel that overrides NOTHING.
+- **A generic retype hides a widened bound.** `ServerUiSession<N,T>` is where a `? extends UINode`
+  can quietly become `? extends Object`; the governance test D4 names is what holds it.
 
-**Contents.** The harness defaults to `--engine=new`; `CgUiScreen`, `CgUiHud`, `CgUiInput`,
-`CgUiOverlayInput`, `Mc1710Workspace` and the probes on `UIDocument` (the F6 flag row, the pause row
-and the two-process rows are the in-game acceptance); `serverSmoke`. Then the deletion, in the order
+---
+
+### 6.9a — mc1710 on the new engine · **M** · after: 6.8
+
+> **The platform that matters, and it was a bullet inside the deletion.** Every acceptance this plan
+> has leaned on is a harness scene or a headless fixture, and `AGENTS.md` is blunt about what those
+> cannot see: *"Every server-side defect found this week was found by running it, and none of them was
+> reachable from `core/` or the harness."* The pause deadlock, the respawn identity bug, the obf-run
+> mods directory and the static F6 flag were each invisible to the whole suite. So the loader's FIRST
+> RUN on the new engine is the single highest-information event left in M6 — and 6.9 had it landing
+> in the same commit as the removal of the engine it would fall back to.
+
+**Contents.** The five client-surface files, 27 references and ~1,350 lines:
+`CgUiScreen` (720 lines, 18 refs — the viewport the desktop attaches to, and the whole of the
+milestone's risk), `CgUiHud` (175, 4), `CgUiInput` (159, 3), `CgUiOverlayInput` (124, 2) and
+`CrystalGUI` (171, 1). The networking three went with 6.8.
+
+**Behind a switch, exactly as the harness is.** `CgUiScreen` selects its engine the way
+`--engine=new` already does, so the two can be compared on one machine in one session, and a
+regression found in-game has an A/B rather than a bisect. That switch is what makes this milestone
+separable from the deletion at all; it is deleted in 6.9b along with everything it selects.
+
+**Accepts — all of them in the game, because that is the point.** `runClient` with the desktop, the
+editor and a shader graph open; `runObfClient` through `stageObfMods`, which is the only run that
+sees SRG names and has found four production-only defects; `-PcgJoin=localhost:25565` for the
+two-process case; `-PcgSessionProbe` and `-PcgNetProbe`; `serverSmoke` green and still asserting no
+client-only class was loaded. Plus the four rows that only a host can break: the F6 flag is consumed
+rather than latched, `doesGuiPauseGame()` stays false for anything holding a connection, the workspace
+client is re-asked per frame, and a rejoin re-asks for the project list on a new connection.
+
+**Hazards.** A `GuiScreen` is constructed fresh on every display and `initGui` re-runs on every
+resize — the static-flag trap. Nothing in `core/` can see any of this: it is the loader seam, which
+is why the accepts are runs and not tests.
+
+---
+
+### 6.9b — Cutover and deletion · **M** · after: 6.9a
+
+**Contents.** The harness defaults to `--engine=new` and the loader's engine switch is removed —
+6.9a has already put `CgUiScreen`, `CgUiHud`, `CgUiInput`, `CgUiOverlayInput` and `Mc1710Workspace` on
+`UIDocument` and proved it in a running game, which is the gate this milestone opens against. Then
+the deletion, in the order
 the master plan's ledger names: the old `ui/` core (`UIElement`, `UIWindow`, `TopLayer`, `Ui`,
 `UIResizer`, `AnchoredPlacement`'s old half, `UIInputHandler`, `UIDragController`,
 `UITreeTraversal`, `ElementRegistry`, `UIFrameTicker`), `CgUiPaintContext.mirrored`, the internal
@@ -2387,7 +2479,7 @@ deleted (M8's job, done here because there is nothing left to port).
 
 ---
 
-### 6.10 — The Node/Element seam · **M** · after: 6.9
+### 6.10 — The Node/Element seam · **M** · after: 6.9b
 
 **Why, measured.** `UINode` carries **154 public members**. The old `UIElement` it replaced carried
 166. The class §0 introduced to be *"identity, attributes, children, shadow root, events — and
@@ -2441,7 +2533,7 @@ Roughly **40 on Node and 110 on Element**, and Node's forty are all tree.
 > changes, which no IDE rename performs. Left as a follow-up rather than refused: if the day comes
 > that a document needs to stop being styleable, this is the shape.
 
-**Why after 6.9 and not before.** `UIElement` is the old engine's class until 6.9 deletes it, and two
+**Why after 6.9b and not before.** `UIElement` is the old engine's class until 6.9b deletes it, and two
 classes of that name in one workspace is a shape this milestone has already paid for: `DataKey` is
 interned by name, so `GraphView` existing in two packages threw *"already declared as …, not …"* in
 any test that touched both (6.4). `EngineBoundaryTest`'s class lists are string literals, so a rename
@@ -2464,12 +2556,15 @@ M5 ──► 6.0 machinery + ledger + fixtures
          │                                  │                            └─► 6.5 editor
          │                                  └─► 6.6 desktop (needs 6.0's D16 hooks, Dialog, Popover)
          └───────────────────────────────────────────────────────────────────┐
-                                    6.3 + 6.5 + 6.6 ──► 6.7 workbench + dock + apps ──► 6.8 networking ──► 6.9 cutover ──► 6.10 Node/Element seam
+                                    6.3 + 6.5 + 6.6 ──► 6.7 workbench + dock + apps ──► 6.8 networking ──► 6.9a mc1710 ──► 6.9b cutover ──► 6.10 seam
 ```
 
 6.4 and 6.5 can be worked in either order after 6.3; 6.6 can start after 6.2 and run beside 6.3–6.5.
 Nothing in 6.7 starts before the desktop is on the new engine, because the workbench's tool windows
-are windows. The game is on the old engine until 6.9. 6.10 is last because it takes the name
+are windows. The game is on the old engine until 6.9a, which puts it on the new one behind a switch
+and proves it by RUNNING it — nothing is deleted until that has happened, because the loader seam is
+invisible to every test and every scene this plan otherwise accepts against. 6.10 is last because it
+takes the name
 `UIElement` back, and that name belongs to the old engine until 6.9 has deleted it.
 
 ---
