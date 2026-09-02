@@ -218,8 +218,11 @@ public final class ShaderGraphPreviews  {
         // way, and none of them needs this class to know what a dock or a tab is. The debounce above
         // deliberately keeps running — a graph switched back to must show its current source, not
         // resume a recompile it was in the middle of.
+        // NULL IS "NOT LAID OUT YET", which the paragraph above already counts as a reason to skip --
+        // it simply could not be asked that way. A node has no box at all until it has been laid out,
+        // and this ticker runs on the frame the graph is built.
         Box box = view.box();
-        if (box.width() <= 0f || box.height() <= 0f) return true;
+        if (box == null || box.width() <= 0f || box.height() <= 0f) return true;
 
         // Newly added nodes get their slot here rather than through a second signal: the set is small,
         // the check is an identity scan over one child, and it cannot go stale.
