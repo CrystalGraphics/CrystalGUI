@@ -1,8 +1,9 @@
 package com.crystalgui.mc.client;
 
 import com.crystalgraphics.platform.gl.state.CgGlState;
+import com.crystalgui.desktop.Desktop;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.core.window.DesktopPresentation;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
@@ -19,7 +20,7 @@ import net.minecraftforge.common.MinecraftForge;
  *
  * <h3>Two hooks, one decision</h3>
  *
- * <p>Neither hook decides anything. Each asks {@link UIWindow#presentation} what should be on screen and
+ * <p>Neither hook decides anything. Each asks {@link UIDocument#presentation} what should be on screen and
  * paints if the answer is its own — which is the whole of the flicker fix. Before that, each path tested
  * a Minecraft condition for itself, and on the frame the desktop closed <b>both concluded it was the
  * other's turn</b>: {@code CgUiScreen} closes itself from inside its own {@code drawScreen}, after that
@@ -88,8 +89,6 @@ public final class CgUiHud {
      * paint hooks and the input mixin agreeing with each other.</p>
      */
     static DesktopPresentation presentation() {
-        UIWindow window = CgUiScreen.window();
-        if (window == null) return DesktopPresentation.NONE;
         GuiScreen current = Minecraft.getMinecraft().currentScreen;
 
         // THE TRANSITION IS NOTICED HERE, not in a hook of its own, because this is the one thing every
@@ -98,30 +97,33 @@ public final class CgUiHud {
         // often and breaks worst: a screen that sets skipRenderWorld (the main menu, the loading screen)
         // renders no world, so that event never fires and the close is never seen. Ownership would then
         // survive into the next screen.
+        Desktop desktop = CgUiScreen.desktop();
+        if (desktop == null) return DesktopPresentation.NONE;
+
         boolean foreignUp = current != null && !(current instanceof CgUiScreen);
         if (foreignUp != foreignScreenWasUp) {
             foreignScreenWasUp = foreignUp;
-            window.screenOverlay().onForeignScreenChanged(foreignUp);
+            desktop.screenOverlay().onForeignScreenChanged(foreignUp);
         }
 
-        return window.presentation(current instanceof CgUiScreen, current != null);
+        return desktop.presentation(current instanceof CgUiScreen, current != null);
     }
 
     /** Paints {@code presentation}, bracketed by the GL discipline. Shared by both hooks. */
     private static void paint(DesktopPresentation presentation) {
-        UIWindow window = CgUiScreen.window();
-        if (window == null) return;
+        Desktop desktop = CgUiScreen.desktop();
+        if (desktop == null) return;
         Minecraft mc = Minecraft.getMinecraft();
         try {
             CgGlState.invalidateAllIfPresent();
-            window.paint(presentation, mc.displayWidth, mc.displayHeight);
+            desktop.paint(presentation, CgUiScreen.frameDelta(), mc.displayWidth, mc.displayHeight);
         } catch (RuntimeException | LinkageError e) {
             // A FAULT HERE MUST NOT TAKE THE GAME DOWN. This runs inside Minecraft's own render loop on
             // every frame, and unlike a screen there is nothing the player can close to escape it.
             // Logged and the mode dropped, which puts them back in a working game with their windows
             // intact on the desktop.
             CrystalGuiCore.LOGGER.error("[cgui] overlay paint failed; leaving HUD mode", e);
-            window.exitHudMode();
+            desktop.exitHudMode();
         } finally {
             // MINECRAFT GETS ITS FIXED-FUNCTION STATE BACK. It drew with alpha and blend on and lighting
             // off and will assume the same next frame; CrystalGUI's endFrame restores what IT saved,

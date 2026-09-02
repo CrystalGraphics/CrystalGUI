@@ -5,9 +5,9 @@ import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.net.wire.CgNetworkChannel;
 import com.crystalgui.serialization.ContentHash;
 import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.UIDescriptionCodec;
+import com.crystalgui.net.mirror.UINodeMirror;
 import com.crystalgui.ui.ElementRegistry;
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.dom.UINode;
 
 import cpw.mods.fml.common.FMLCommonHandler;
 import net.minecraft.server.MinecraftServer;
@@ -209,24 +209,24 @@ public final class CgUiServerSmoke {
         try {
             ElementRegistry.bootstrapBuiltins();
 
-            UIElement root = new UIElement();
+            UINode root = new UINode();
             root.setId("smoke-root");
             root.addClass("panel");
-            UIElement child = new UIElement();
+            UINode child = new UINode();
             child.setId("smoke-child");
-            root.addChild(child);
+            root.append(child);
 
-            Object encoded = UIDescriptionCodec.CODEC.encode(PlainOps.INSTANCE, root);
+            Object encoded = new UINodeMirror<>(PlainOps.INSTANCE).describe(root);
             String hashA = ContentHash.of(PlainOps.INSTANCE, encoded);
             String hashB = ContentHash.of(PlainOps.INSTANCE,
-                    UIDescriptionCodec.CODEC.encode(PlainOps.INSTANCE, root));
+                    new UINodeMirror<>(PlainOps.INSTANCE).describe(root));
 
-            UIElement decoded = UIDescriptionCodec.CODEC.decode(PlainOps.INSTANCE, encoded);
+            UINode decoded = new UINodeMirror<>(PlainOps.INSTANCE).decode(encoded);
 
             boolean stable = hashA.equals(hashB);
             boolean shape = decoded != null
-                    && "smoke-root".equals(decoded.getId())
-                    && decoded.getChildren().size() == 1;
+                    && "smoke-root".equals(decoded.id())
+                    && decoded.children().size() == 1;
 
             ok = stable && shape;
             detail = "hash=" + hashA + (stable ? "" : " UNSTABLE across two encodes")

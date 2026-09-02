@@ -1,5 +1,7 @@
 package com.crystalgui.mc.net;
 
+import com.crystalgui.ui.dom.UINodeTreeSource;
+import com.crystalgui.net.mirror.UINodeMirror;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.WorkspaceClient;
@@ -12,14 +14,14 @@ import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.text.Change;
 import com.crystalgui.ui.ElementRegistry;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.Button;
-import com.crystalgui.ui.elements.Dropdown;
-import com.crystalgui.ui.elements.ProgressBar;
-import com.crystalgui.ui.elements.Slider;
-import com.crystalgui.ui.elements.Tab;
-import com.crystalgui.ui.elements.TabView;
-import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.overlay.Dropdown;
+import com.crystalgui.widget.control.ProgressBar;
+import com.crystalgui.widget.control.Slider;
+import com.crystalgui.widget.layout.Tab;
+import com.crystalgui.widget.layout.TabView;
+import com.crystalgui.widget.text.UIText;
 
 import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
@@ -108,8 +110,8 @@ public final class CgUiSessionProbe {
         for (String check : ORDER) CHECKS.put(check, false);
     }
 
-    private static volatile ServerUiSession<Object> server;
-    private static volatile ClientUiSession<Object> client;
+    private static volatile ServerUiSession<UINode, Object> server;
+    private static volatile ClientUiSession<UINode, Object> client;
 
     private static Slider serverSlider;
     private static UIText addedLater;
@@ -118,7 +120,7 @@ public final class CgUiSessionProbe {
     private static InMemoryTransport<Object>[] extraLink;
     private static ProtocolConnection<Object> extraServer;
     private static ProtocolConnection<Object> extraClient;
-    private static ClientUiSession<Object> extraViewer;
+    private static ClientUiSession<UINode, Object> extraViewer;
 
     private static volatile boolean deltaSent;
     private static volatile boolean eventSent;
@@ -149,51 +151,52 @@ public final class CgUiSessionProbe {
 
     /** <b>Server thread.</b> A tree that exercises C3 and C4 as well as the basics. */
     private static void openServer(ProtocolConnection<Object> connection) {
-        UIElement root = new UIElement();
-        root.addChild(new UIText("hello from the server"));
+        UINode root = new UINode();
+        root.append(new UIText("hello from the server"));
 
         Button button = new Button("Press me");
-        root.addChild(button);
+        root.append(button);
 
         serverSlider = new Slider();
         serverSlider.setRange(0f, 1f);
-        root.addChild(serverSlider);
+        root.append(serverSlider);
 
         // C3: tabs are content, and their contents are content too.
         TabView tabs = new TabView();
         Tab first = tabs.addTab("Editor");
-        first.content().addChild(new UIText("inside the first tab"));
+        first.content().append(new UIText("inside the first tab"));
         Tab second = tabs.addTab("Settings");
-        second.content().addChild(new Slider());
+        second.content().append(new Slider());
         tabs.selectIndex(1);
-        root.addChild(tabs);
+        root.append(tabs);
 
         // C4: two widgets whose state had no way of travelling until this phase.
         ProgressBar progress = new ProgressBar();
         progress.setFraction(0.42f);
-        root.addChild(progress);
+        root.append(progress);
 
         Dropdown dropdown = new Dropdown("choose");
         dropdown.addOptions("alpha", "beta", "gamma");
         dropdown.select(2);
-        root.addChild(dropdown);
+        root.append(dropdown);
 
-        ServerUiSession<Object> session = new ServerUiSession<>(WINDOW_ID, root, connection);
+        ServerUiSession<UINode, Object> session = new ServerUiSession<>(WINDOW_ID, new UINodeTreeSource(root),
+                new UINodeMirror<>(connection.ops()), connection);
         session.on(button, Button.ACTIVATE, ctx -> pass("5 event"));
         session.open();
         server = session;
         CrystalGuiCore.LOGGER.info("[session-probe] server session opened on the real connection, "
-                + "{} children, hash={}", root.getChildren().size(), session.descHash());
+                + "{} children, hash={}", root.children().size(), session.descHash());
     }
 
     /** <b>Client thread.</b> */
     private static void openClient(ProtocolConnection<Object> connection) {
         ElementRegistry.bootstrapBuiltins();
-        ClientUiSession<Object> session = new ClientUiSession<>(connection);
+        ClientUiSession<UINode, Object> session = new ClientUiSession<>(new UINodeMirror<>(connection.ops()), connection);
         session.onWindowOpened(root -> {
             if (root != null) pass("1 tree");
             CrystalGuiCore.LOGGER.info("[session-probe] tree rebuilt: {} children",
-                    root == null ? -1 : root.getChildren().size());
+                    root == null ? -1 : root.children().size());
         });
         session.onCall("probe/ping", (args, respond) -> {
             StateMap<Object> out = new StateMap<>(PlainOps.INSTANCE);
@@ -257,7 +260,7 @@ public final class CgUiSessionProbe {
             if (!reshapeSent) {
                 reshapeSent = true;
                 addedLater = new UIText("added after open");
-                server.root().addChildAt(addedLater, 0);
+                server.root().insertAt(0, addedLater);
                 CrystalGuiCore.LOGGER.info("[session-probe] inserted a child at index 0 "
                         + "— every id after it shifts");
                 return;
@@ -270,11 +273,11 @@ public final class CgUiSessionProbe {
                 extraLink = InMemoryTransport.pair();
                 extraServer = Protocols.open(extraLink[0], PlainOps.INSTANCE, () -> { }, "probe-viewer");
                 extraClient = Protocols.open(extraLink[1], PlainOps.INSTANCE, () -> { }, null);
-                extraViewer = new ClientUiSession<>(extraClient);
+                extraViewer = new ClientUiSession<>(new UINodeMirror<>(extraClient.ops()), extraClient);
                 extraViewer.onWindowOpened(root -> {
                     if (root != null) pass("8 fan-out (C1)");
                     CrystalGuiCore.LOGGER.info("[session-probe] second viewer rebuilt {} children",
-                            root == null ? -1 : root.getChildren().size());
+                            root == null ? -1 : root.children().size());
                 });
                 server.addViewer(extraServer);
                 CrystalGuiCore.LOGGER.info("[session-probe] added a second viewer; count={}",
@@ -332,18 +335,18 @@ public final class CgUiSessionProbe {
         /** C3 and C4, read off the rebuilt tree. */
         private void checkDescribedState() {
             if (done("2 tabs (C3)") && done("3 widget state (C4)")) return;
-            List<UIElement> children = client.root().getChildren();
+            List<UINode> children = client.root().children();
             // The reshape inserts at 0, so index off the END -- which is also a small check that the
             // tree really is the one that was described.
             int n = children.size();
-            UIElement tabsElement = children.get(n - 3);
-            UIElement progressElement = children.get(n - 2);
-            UIElement dropdownElement = children.get(n - 1);
+            UINode tabsElement = children.get(n - 3);
+            UINode progressElement = children.get(n - 2);
+            UINode dropdownElement = children.get(n - 1);
 
             if (tabsElement instanceof TabView tabs && tabs.getTabs().size() == 2) {
                 boolean labels = "Editor".equals(tabs.getTabs().get(0).getText())
                         && "Settings".equals(tabs.getTabs().get(1).getText());
-                boolean content = !tabs.getTabs().get(0).content().getChildren().isEmpty();
+                boolean content = !tabs.getTabs().get(0).content().children().isEmpty();
                 boolean selection = tabs.getSelectedIndex() == 1;
                 if (labels && content && selection) pass("2 tabs (C3)");
                 else CrystalGuiCore.LOGGER.warn("[session-probe] tabs: labels={} content={} selected={}",
@@ -360,8 +363,8 @@ public final class CgUiSessionProbe {
 
         private void checkDelta() {
             if (done("4 state delta") || !deltaSent) return;
-            int n = client.root().getChildren().size();
-            UIElement mirrored = client.root().getChildren().get(n - 4);
+            int n = client.root().children().size();
+            UINode mirrored = client.root().children().get(n - 4);
             if (mirrored instanceof Slider slider && Math.abs(slider.getValue() - 0.75f) < 1e-4f) {
                 pass("4 state delta");
             }
@@ -369,8 +372,8 @@ public final class CgUiSessionProbe {
 
         private void pressWhenReady() {
             if (eventSent || !done("4 state delta")) return;
-            int n = client.root().getChildren().size();
-            UIElement mirrored = client.root().getChildren().get(n - 5);
+            int n = client.root().children().size();
+            UINode mirrored = client.root().children().get(n - 5);
             if (!(mirrored instanceof Button)) return;
             eventSent = true;
             // The REAL widget: what reports is a listener the client attached from the description.
@@ -380,12 +383,12 @@ public final class CgUiSessionProbe {
         /** C2 — the child arrived, and the slider's update still landed after renumbering. */
         private void checkReshape() {
             if (done("7 reshape (C2)") || !reshapeSent) return;
-            List<UIElement> children = client.root().getChildren();
+            List<UINode> children = client.root().children();
             if (children.size() != 7) return;
             if (!(children.get(0) instanceof UIText text)) return;
             if (!"added after open".equals(text.getText())) return;
             // And the slider is still the slider, at its shifted index.
-            UIElement slider = children.get(children.size() - 4);
+            UINode slider = children.get(children.size() - 4);
             if (slider instanceof Slider s && Math.abs(s.getValue() - 0.75f) < 1e-4f) {
                 pass("7 reshape (C2)");
             }

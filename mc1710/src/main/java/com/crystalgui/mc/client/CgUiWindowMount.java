@@ -2,6 +2,7 @@ package com.crystalgui.mc.client;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.desktop.Desktop;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.net.ViewCommand;
 import com.crystalgui.net.window.ClientWindows;
@@ -12,9 +13,9 @@ import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.style.sheet.StyleSheet;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.UIWindow;
-import com.crystalgui.ui.elements.desktop.WindowFrame;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.core.window.WindowState;
 
 /**
@@ -35,7 +36,7 @@ import com.crystalgui.core.window.WindowState;
  *
  * <h3>It opens in the background, deliberately</h3>
  *
- * <p>{@link UIWindow#openWindowInBackground} rather than {@code openWindow}: these windows are opened by
+ * <p>{@link UIDocument#openWindowInBackground} rather than {@code openWindow}: these windows are opened by
  * a <em>server</em> pushing a UI, not by the user asking for one, and taking the keyboard out from under
  * whatever is being typed is the one thing every windowing system agreed to stop doing. The frame asks
  * for attention instead, and a user gesture — F8 — is what brings it forward.</p>
@@ -89,21 +90,21 @@ public final class CgUiWindowMount implements WindowMount {
     /**
      * Where a window's own sheets are held, refcounted and scoped.
      *
-     * <p>Static because the style engine they go into is: one {@code UIWindow} hosts every window on
+     * <p>Static because the style engine they go into is: one {@code UIDocument} hosts every window on
      * this client, so "is this sheet already installed" is a question about the client and not about
      * any one window.</p>
      */
     private static final ScopedSheets SHEETS = new ScopedSheets(new ScopedSheets.Host() {
         @Override
         public void add(StyleSheet sheet) {
-            UIWindow host = CgUiScreen.window();
-            if (host != null) host.getStyleEngine().addStylesheet(sheet);
+            UIDocument host = CgUiScreen.window();
+            if (host != null) host.styles().addStylesheet(sheet);
         }
 
         @Override
         public void remove(StyleSheet sheet) {
-            UIWindow host = CgUiScreen.window();
-            if (host != null) host.getStyleEngine().removeStylesheet(sheet);
+            UIDocument host = CgUiScreen.window();
+            if (host != null) host.styles().removeStylesheet(sheet);
         }
     });
 
@@ -120,12 +121,12 @@ public final class CgUiWindowMount implements WindowMount {
 
     @Override
     public MountedWindow mount(ClientWindowContext context) {
-        UIWindow host = CgUiScreen.window();
+        UIDocument host = CgUiScreen.window();
         if (host == null) {
             // Should not happen -- the host installs this mount while building the desktop, and the
             // ClientWindows queues windows until then -- but a mount that threw would take the window
             // down with it rather than merely failing to draw it.
-            throw new IllegalStateException("no UIWindow to mount <" + context.type() + "> onto");
+            throw new IllegalStateException("no UIDocument to mount <" + context.type() + "> onto");
         }
 
         WindowFrame frame = new WindowFrame(title(context));
@@ -139,7 +140,7 @@ public final class CgUiWindowMount implements WindowMount {
         // server -- which asks the very same panels before closing a window itself.
         frame.setDiscardGuard(context::mayClose);
         frame.setContent(context.root());
-        host.openWindowInBackground(frame);
+        Desktop.of(host).addWindow(frame, false);
 
         Mounted mounted = new Mounted(frame, context);
 
@@ -151,7 +152,7 @@ public final class CgUiWindowMount implements WindowMount {
         // AND THE WHOLE COMPOSITOR going away, which no individual window's onHidden reports: suspending
         // takes the desktop off the tree without touching any window, so a server would otherwise go on
         // describing a tree nobody is drawing for as long as the screen is closed.
-        mounted.desktopWatch = host.onDesktopSuspendedChanged.connect(
+        mounted.desktopWatch = Desktop.of(host).onSuspendedChanged.connect(
                 shown -> context.visibilityChanged(shown && frame.state() == WindowState.VISIBLE));
         return mounted;
     }
@@ -211,10 +212,10 @@ public final class CgUiWindowMount implements WindowMount {
 
         @Override
         public void focus() {
-            UIWindow host = CgUiScreen.window();
+            UIDocument host = CgUiScreen.window();
             if (host == null || frame.state() == WindowState.DESTROYED) return;
             if (frame.state() == WindowState.HIDDEN) frame.show(false);
-            host.desktop().activate(frame);
+            Desktop.of(host).activate(frame);
         }
 
         /**
@@ -246,7 +247,7 @@ public final class CgUiWindowMount implements WindowMount {
         }
 
         @Override
-        public void contentReplaced(UIElement newRoot) {
+        public void contentReplaced(UINode newRoot) {
             // The session decoded a FRESH tree, so the one in this frame is no longer being updated.
             frame.setContent(newRoot);
         }

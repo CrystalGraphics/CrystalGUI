@@ -2,19 +2,20 @@ package com.crystalgui.mc.client;
 
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.platform.gl.state.CgGlState;
+import com.crystalgui.desktop.Desktop;
 import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.editor.CrystalEditor;
+import com.crystalgui.app.editor.CrystalEditor;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.fs.LocalConfigStorage;
 import com.crystalgui.language.run.view.RunPanels;
 import com.crystalgui.language.run.view.ScriptWorkbench;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.Ui;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.core.window.DesktopPresentation;
-import com.crystalgui.ui.elements.desktop.WindowFrame;
+import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.core.window.WindowPolicy;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.mc.net.CgUiConnections;
@@ -35,7 +36,7 @@ import java.io.File;
  *
  * <p>{@code CrystalEditor}'s own javadoc states the contract this implements: <i>"A host supplies a
  * {@link com.crystalgui.fs.WorkspaceClient} and a window; everything else is decided here."</i> So this
- * class is deliberately small — it owns a {@link UIWindow}, drives one frame, and saves on close.
+ * class is deliberately small — it owns a {@link UIDocument}, drives one frame, and saves on close.
  * Which panels exist, what the layout is, which commands answer to which keys and where focus starts
  * are all the editor's, and none of them appear below.</p>
  *
@@ -46,7 +47,7 @@ import java.io.File;
  *
  * <p>{@link #drawScreen}'s {@code mouseX}/{@code mouseY} arrive already divided by Minecraft's GUI
  * scale, and {@code GuiScreen.width}/{@code height} are the scaled size. <b>None of them are
- * used here.</b> {@code UIWindow} takes raw pixels and applies its own scale through
+ * used here.</b> {@code UIDocument} takes raw pixels and applies its own scale through
  * {@code getRootTransform()}, which {@code AGENTS.md} names as <i>the single definition of what
  * uiScale means</i> — feeding it pre-scaled numbers creates a second definition, and the two disagree
  * by exactly the scale factor. The symptom is the nasty one: everything draws correctly and every
@@ -62,8 +63,8 @@ public final class CgUiScreen extends GuiScreen {
     /**
      * <b>The host sizes the root, and nothing else will.</b>
      *
-     * <p>{@code UIWindow.init(w, h)} looks like it does this and does not: all it calls is
-     * {@code UIElement.initScreen}, whose entire body is {@code runtimeCache.resetCache()} plus the
+     * <p>{@code UIDocument.init(w, h)} looks like it does this and does not: all it calls is
+     * {@code UINode.initScreen}, whose entire body is {@code runtimeCache.resetCache()} plus the
      * same call on each child. The root therefore has <em>no</em> width or height of its own, and with
      * Taffy's defaults here ({@code flex-direction: COLUMN}, {@code min-size: 0}, no explicit size) it
      * sizes to content — so every percentage and every {@code flex-grow} inside it resolves against
@@ -98,7 +99,37 @@ public final class CgUiScreen extends GuiScreen {
      * screen.</p>
      */
     private static CrystalEditor editor;
-    private static UIWindow uiWindow;
+    /**
+     * The scale this host draws at.
+     *
+     * <p>A HOST choice, which is why it lives here now rather than on the engine: the old engine
+     * carried a {@code DEFAULT_UI_SCALE} constant because the window it lived on was the only thing
+     * a loader ever built, and the box tree takes whatever a host sets. Minecraft's own GUI scale is
+     * 2 at every default resolution and this matches it.</p>
+     */
+    public static final float DEFAULT_UI_SCALE = 2f;
+
+    /** When the last frame was presented, for the delta the engine's motion runs on. */
+    private static long lastFrameNanos;
+
+    /**
+     * Seconds of RENDERED time since the previous frame.
+     *
+     * <p>Rendered, not wall: the first windows of a session open into the worst stall there is --
+     * measured at 398ms and 282ms between consecutive frames -- so wall time would charge a 150ms
+     * gesture its whole duration for frames nobody saw. The engine's own animation service clamps a
+     * long gap; this only has to report one honestly. Zero on the first frame, which holds every
+     * animation at its start value rather than completing it before anything was drawn.</p>
+     */
+    static float frameDelta() {
+        long now = System.nanoTime();
+        long previous = lastFrameNanos;
+        lastFrameNanos = now;
+        if (previous == 0L) return 0f;
+        return (now - previous) / 1_000_000_000f;
+    }
+
+    private static UIDocument uiWindow;
     private static Mc1710Workspace workspace;
     /** The window the editor lives in. @see #initGui */
     private static WindowFrame editorWindow;
@@ -142,8 +173,6 @@ public final class CgUiScreen extends GuiScreen {
     @Nullable
     private static ProtocolConnection<Object> projectsAskedOn;
 
-    private long lastFrameNanos = System.nanoTime();
-
     /** Set by the pump when an Escape reached the window and nothing consumed it. @see CgUiInput */
     private boolean closeRequested;
 
@@ -184,7 +213,7 @@ public final class CgUiScreen extends GuiScreen {
     }
 
     /**
-     * The one {@code UIWindow} on the client, or null before the screen has ever been opened.
+     * The one {@code UIDocument} on the client, or null before the screen has ever been opened.
      *
      * <p><b>Public because there is exactly one, and that is the point.</b> Anything with a UI to show
      * opens a {@code WindowFrame} on <em>this</em> desktop rather than standing up a second
@@ -192,8 +221,20 @@ public final class CgUiScreen extends GuiScreen {
      * desktop's own persistence and the modal stack, and only one of them can be in front. The editor
      * is a window here; so is the worked example's panel. @see com.crystalgui.mc.example.MachineExampleClient
      */
-    public static UIWindow window() {
+    public static UIDocument window() {
         return uiWindow;
+    }
+
+    /**
+     * This client's compositor, or null before the screen has ever been opened.
+     *
+     * <p>The host seam moved off the document at 6.9a and onto the compositor, which is where it
+     * belongs: the engine may not name a desktop, so {@code Desktop.of} names the document and not
+     * the reverse. Everything a loader used to ask a {@code UIWindow} -- suspend, resume, what to
+     * present, whether anything is pinned, the overlay -- it asks here.</p>
+     */
+    public static Desktop desktop() {
+        return uiWindow == null ? null : Desktop.of(uiWindow);
     }
 
     void requestClose() {
@@ -239,8 +280,8 @@ public final class CgUiScreen extends GuiScreen {
             // exitHudMode first, and it is a no-op unless the screen was closed with something pinned --
             // it is what puts back the windows the HUD hid, and it has to run BEFORE the resume so the
             // desktop it restores them onto is the attached one.
-            uiWindow.exitHudMode();
-            uiWindow.resumeDesktop();
+            desktop().exitHudMode();
+            desktop().resume();
             bringEditorForward();
             return;
         }
@@ -278,38 +319,26 @@ public final class CgUiScreen extends GuiScreen {
         // building two would be two answers to the question of where that is.
         config = new LocalConfigStorage(new File(dataDir, "config/crystalgui").toPath());
 
-        // A BARE ROOT, and the editor becomes a WINDOW on the desktop the UIWindow already owns.
-        UIElement root = new UIElement();
-        root.addClass(ROOT_CLASS);
-        uiWindow = new UIWindow(Ui.of(root));
+        // NO SEPARATE ROOT: the DOCUMENT is the root on this engine, so the class the
+        // host sheet keys on goes on it directly.
+        uiWindow = new UIDocument();
+        uiWindow.addClass(ROOT_CLASS);
+        // THE SCALE, ONCE. It lives on the box tree's root transform, which is the matrix layout
+        // composes, painting reads and hit-testing inverts -- so there is no second place it can be
+        // applied and no window in which the three can disagree. The old engine re-derived it inside
+        // `init` on every frame and had to invalidate every cached transform when it moved.
+        uiWindow.boxes().setUiScale(DEFAULT_UI_SCALE);
         // NOT INSTALLED FOR YOU. Without this the window matches no selector at all and the editor
         // renders as an unstyled column of boxes.
-        uiWindow.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
-        uiWindow.getStyleEngine().addStylesheet(StyleSheet.parse(HOST_STYLES));
+        uiWindow.styles().addStylesheet(StyleSheet.DEFAULT);
+        uiWindow.styles().addStylesheet(StyleSheet.parse(HOST_STYLES));
 
         // WHERE THE ARRANGEMENT LIVES, and nothing else -- CrystalOS W12. The compositor owns reading it,
         // applying it to windows as they open, and writing it again when the screen closes; a host has no
         // business holding a second copy of that policy.
-        uiWindow.desktop().persistTo(config, DESKTOP_ID);
+        desktop().persistTo(config, DESKTOP_ID);
 
-        // ATTACHED HERE, not left to the first frame -- a window opened before the tree HAS a UIWindow
-        // gets no animation at all.
-        //
-        // WindowAnimator.start() begins `UIWindow window = frame.getAttachedWindow(); if (window == null)
-        // return;`, which is right (an animation writes styles, and invalidateStyleMatch early-returns on
-        // a detached element) and is silent. initGui builds the desktop and opens the editor immediately,
-        // while the init below used to happen only in drawScreen -- so the FIRST window of every session
-        // opened with no timeline, and every later one animated correctly. Every launch is a fresh
-        // client, so the first open is exactly the one anybody testing this looks at: reported as the
-        // open animation being broken when there was no open animation to be broken.
-        //
-        // Calling it twice is free -- drawScreen calls it every frame anyway, which is how a resize is
-        // picked up -- and the display size is just as knowable here as it is there.
-        //
-        // Same trap AGENTS.md already records for a session restore that runs above uiWindow.init in the
-        // same method. It is the ATTACH that is the precondition, not the paint.
-        uiWindow.init(mc.displayWidth, mc.displayHeight);
-        trace("UIWindow + stylesheets");
+        trace("UIDocument + stylesheets");
     }
 
     /**
@@ -347,10 +376,22 @@ public final class CgUiScreen extends GuiScreen {
         //
         // The cache root is beside the config rather than inside the workspace: compiled output is
         // derived, private, and must not become part of a project a resource pack could ship.
-        scripting = ScriptWorkbench.install(
-                CommandRegistry.global(), editor.workbench(),
-                new File(dataDir, "config/crystalgui/script-cache").toPath());
-        if (scripting != null) editor.workbench().revealPanel(RunPanels.RUN_TYPE);
+        // NOT INSTALLED ON THE NEW ENGINE YET, and this is the honest way to say so.
+        //
+        // `ScriptWorkbench.install` takes the OLD `ui.elements.workbench.Workbench`, and the whole of
+        // `language/run/view` -- eight files, ~2,900 lines -- is still written against the old engine.
+        // The port ledger assigns it to 6.7 and 6.7 shipped without it: `language` compiles against
+        // `core`, the old engine is still there, so nothing failed and nothing said anything.
+        //
+        // It is deliberately NOT ported from here. That package is being worked on concurrently on
+        // another branch, and a port landing under active edits is a merge conflict across a module
+        // boundary rather than a milestone.
+        //
+        // The null is a state this code already handles: `install` returns null when no engine band
+        // opened, and the commands are then deliberately not registered, because a Run row that
+        // cannot run anything teaches people the feature is broken rather than unavailable. So the
+        // Run panel is ABSENT on the new engine until that package moves -- visible, not silent.
+        scripting = null;
 
         trace("scripting install");
         // HIDE_ON_CLOSE, because a workbench is not a dialog: closing it keeps every document, the dock
@@ -362,7 +403,7 @@ public final class CgUiScreen extends GuiScreen {
         // window runs first (a dropdown, then a modal), the window is its own last close watcher so its
         // policy minimises it, and only an Escape that nothing wanted reaches handleKeyboardInput below
         // and closes the screen.
-        editorWindow = uiWindow.openWindow(new WindowFrame("Crystal Editor"));
+        editorWindow = desktop().addWindow(new WindowFrame("Crystal Editor"));
         editorWindow.setPolicy(WindowPolicy.HIDE_ON_CLOSE).setKey("editor:main");
         editorWindow.setIcon("crystalgui:logo");
         // setContent, not content().addChild -- it is what ADOPTS the editor's menu bar into the
@@ -379,8 +420,8 @@ public final class CgUiScreen extends GuiScreen {
         // Sized in LOGICAL pixels off the display and DEFAULT_UI_SCALE, which is the scale this host
         // deliberately never changes. A percentage in the sheet would be tempting and would lose to the
         // desktop's own cascade, which writes left/top at a higher origin for any window nobody placed.
-        float logicalWidth = mc.displayWidth / UIWindow.DEFAULT_UI_SCALE;
-        float logicalHeight = mc.displayHeight / UIWindow.DEFAULT_UI_SCALE;
+        float logicalWidth = mc.displayWidth / DEFAULT_UI_SCALE;
+        float logicalHeight = mc.displayHeight / DEFAULT_UI_SCALE;
         editorWindow.resizeTo(Math.round(logicalWidth * FIRST_RUN_FRACTION),
                 Math.round(logicalHeight * FIRST_RUN_FRACTION));
         editorWindow.moveTo(Math.round(logicalWidth * (1f - FIRST_RUN_FRACTION) / 2f),
@@ -416,7 +457,7 @@ public final class CgUiScreen extends GuiScreen {
         // for whatever is behind it -- so an empty desktop has no taskbar either, and F7 pressed before
         // anything was ever opened would show the game and nothing else. The first open therefore builds
         // the editor whichever key asked for it; from then on the two keys differ as they should.
-        boolean nothingOpen = uiWindow.desktop().registry().size() == 0;
+        boolean nothingOpen = desktop().registry().size() == 0;
         if (!showEditorOnOpen && !nothingOpen) return;
         if (!ensureEditorWindow()) return;
         // BUILT, and only RAISED for F6. Opening a window already shows it, so an empty desktop now has
@@ -430,14 +471,12 @@ public final class CgUiScreen extends GuiScreen {
         // it straight back with nothing on screen to explain why.
         showEditorOnOpen = false;
         if (editorWindow.state() == WindowState.HIDDEN) editorWindow.show(true);
-        uiWindow.desktop().activate(editorWindow);
+        desktop().activate(editorWindow);
     }
 
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
-        long now = System.nanoTime();
-        float delta = (float) ((now - lastFrameNanos) / 1_000_000_000.0);
-        lastFrameNanos = now;
+        float delta = frameDelta();
 
         if (closeRequested) {
             closeRequested = false;
@@ -458,7 +497,7 @@ public final class CgUiScreen extends GuiScreen {
             // By this point displayGuiScreen has run onGuiClosed (which entered HUD mode) and nulled the
             // current screen, so the presentation is already HUD and the pinned windows can simply be
             // painted now, in the frame that would otherwise have dropped them.
-            uiWindow.paint(CgUiHud.presentation(), mc.displayWidth, mc.displayHeight);
+            desktop().paint(CgUiHud.presentation(), delta, mc.displayWidth, mc.displayHeight);
             return;
         }
 
@@ -508,15 +547,6 @@ public final class CgUiScreen extends GuiScreen {
             editor.restoreSession(Mc1710Workspace.PROJECT_ID);
         }
 
-        // Raw pixels. NOT ScaledResolution -- see the class javadoc.
-        //
-        // And the SCALE stays at UIWindow's own default, which is what CgUiDockScene runs at. Deriving
-        // it from ScaledResolution.getScaleFactor() sounds respectful of the player's preference and is
-        // wrong for this window: MC's GUI scale is tuned for a hotbar and an inventory and reaches 4 on
-        // a large display, so the editor rendered at roughly twice the size of the same panels in the
-        // harness. An IDE is not a game HUD. Matching the harness is also what makes a harness capture
-        // and an in-game one comparable, which is the whole basis for testing one against the other.
-        uiWindow.init(mc.displayWidth, mc.displayHeight);
 
         // MINECRAFT WRITES GL STATE BEHIND CrystalGraphics' BACK, SO THE SHADOW MUST BE DROPPED HERE.
         //
@@ -541,7 +571,7 @@ public final class CgUiScreen extends GuiScreen {
         // no caller decides for itself whether it is its turn. That is the whole of the close flicker:
         // this method closes the screen from inside itself, and the overlay hook for the same frame had
         // already run and stood down, so the frame was painted by nobody. @see DesktopPresentation
-        uiWindow.paint(CgUiHud.presentation(), mc.displayWidth, mc.displayHeight);
+        desktop().paint(CgUiHud.presentation(), delta, mc.displayWidth, mc.displayHeight);
         if (TRACE && !tracedFirstPaint) {
             tracedFirstPaint = true;
             // THE ONE THAT NEEDS A CLIENT. Fonts, glyph atlases, icon SVGs and the first layout of the
@@ -680,8 +710,8 @@ public final class CgUiScreen extends GuiScreen {
             //
             // With nothing pinned this is the suspend it always was, which is strictly cheaper: the
             // whole compositor leaves the tree in one detach rather than window by window.
-            if (uiWindow.hasPinnedWindows()) uiWindow.enterHudMode();
-            else uiWindow.suspendDesktop();
+            if (desktop().hasPinnedWindows()) desktop().enterHudMode();
+            else desktop().suspend();
         }
     }
 
