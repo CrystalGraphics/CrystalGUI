@@ -168,6 +168,16 @@ TEST_RULES = [
     (r'\w+\.isModalBlocked\(([\w.()]+)\)', r'document.focus().isInert(\1)', 'modality'),
     # A node's position among its siblings is the parent's answer, not the node's.
     (r'(\w+)\.getSiblingIndex\(\)', r'\1.parent().indexOf(\1)', 'tree'),
+    # -- A LIGHT-TREE QUERY FOR WHAT IS NOW A SHADOW PART ------------------------------------------
+    #
+    # These tests were written when every internal child was an ordinary light child carrying a
+    # `__class__`, so `querySelector(".x")` found it. The same node is a shadow PART now and the
+    # light-tree query answers nothing -- which reads as the widget not having been built rather
+    # than as the query not reaching it. `deep`/`deepAll` are the test-side traversal that crosses
+    # the boundary, which a test is the one caller with a reason to do.
+    (r'(\w+)\.querySelectorAll\(', r'deepAll(\1, ', 'shadow query'),
+    (r'(\w+)\.querySelector\(', r'deepOrNull(\1, ', 'shadow query'),
+    (r'(\w+)\.getElementsByClassName\(', r'deepAll(\1, ', 'shadow query'),
     # A ticker is OWNED now -- dropped when its owner disconnects, dormant while frozen.
     (r'(\w+)\.registerTicker\(', r'document.animation().every(\1, ', 'ticker'),
     # The old `ui` field on a test fixture was the window.

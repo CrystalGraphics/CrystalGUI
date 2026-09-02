@@ -50,6 +50,12 @@ public class GraphEditingTest extends UiDocumentTestBase {
 
     @Before
     public void setUp() {
+        // REGISTER WHAT THIS TEST DEPENDS ON. `CommandRegistry.contribute` is idempotent per
+        // registry, so calling it here costs nothing when the commands are already there -- and it
+        // is the only thing that makes the test independent of ORDER. Another test resets the global
+        // registry in its own @Before and restores nothing, so whether the graph`s Ctrl+A resolves
+        // depended on which class ran first: green alone, red in the suite.
+        GraphCommands.register();
         modifiers = 0;
         TestPlatformService.get().input(new CgInputService() {
             @Override public int getCurrentModifiers() { return modifiers; }
