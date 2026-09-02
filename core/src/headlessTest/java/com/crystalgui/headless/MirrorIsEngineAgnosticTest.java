@@ -19,6 +19,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.List;
 import java.util.Map;
 import java.util.function.ObjIntConsumer;
@@ -58,6 +60,8 @@ public class MirrorIsEngineAgnosticTest {
         boolean marked;
         @Nullable Node parent;
         final List<Node> children = new ArrayList<>();
+        /** What a session has asked this node to report. Per node, like every tree. */
+        final Set<String> reports = new LinkedHashSet<>();
 
         Node(String kind, String label) {
             this.kind = kind;
@@ -182,6 +186,18 @@ public class MirrorIsEngineAgnosticTest {
 
         @Override public Object describe(Node node) {
             return write(node, null);
+        }
+
+        @Override public TreeSource<Node> sourceOver(Node root) {
+            return new Tree(root);
+        }
+
+        @Override public Set<String> reportedEventsOf(Node node) {
+            return node.reports;
+        }
+
+        @Override public void addReportedEvent(Node node, String kind) {
+            node.reports.add(kind);
         }
 
         @Override public Object describeLive(Node node, ToIntFunction<Node> idOf) {

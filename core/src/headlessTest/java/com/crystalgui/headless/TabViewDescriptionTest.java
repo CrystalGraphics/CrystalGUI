@@ -1,13 +1,14 @@
 package com.crystalgui.headless;
 
+import com.crystalgui.net.mirror.UINodeMirror;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.UIDescriptionCodec;
 import com.crystalgui.ui.ElementRegistry;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.Slider;
-import com.crystalgui.ui.elements.Tab;
-import com.crystalgui.ui.elements.TabView;
-import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.control.Slider;
+import com.crystalgui.widget.layout.Tab;
+import com.crystalgui.widget.layout.TabView;
+import com.crystalgui.widget.text.UIText;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -34,9 +35,9 @@ public class TabViewDescriptionTest {
         ElementRegistry.bootstrapBuiltins();
     }
 
-    private static UIElement roundTrip(UIElement source) {
-        Object encoded = UIDescriptionCodec.CODEC.encode(PlainOps.INSTANCE, source);
-        return UIDescriptionCodec.CODEC.decode(PlainOps.INSTANCE, encoded);
+    private static UINode roundTrip(UINode source) {
+        Object encoded = new UINodeMirror<>(PlainOps.INSTANCE).describe(source);
+        return new UINodeMirror<>(PlainOps.INSTANCE).decode(encoded);
     }
 
     /** Three tabs in, three tabs out, labelled the same and in the same order. */
@@ -65,21 +66,21 @@ public class TabViewDescriptionTest {
     public void tabContentSurvives() {
         TabView source = new TabView();
         Tab first = source.addTab("Editor");
-        first.content().addChild(new UIText("hello"));
+        first.content().append(new UIText("hello"));
         Tab second = source.addTab("Settings");
-        second.content().addChild(new Slider());
-        second.content().addChild(new UIText("volume"));
+        second.content().append(new Slider());
+        second.content().append(new UIText("volume"));
 
         TabView back = (TabView) roundTrip(source);
 
-        assertEquals(1, back.getTabs().get(0).content().getChildren().size());
+        assertEquals(1, back.getTabs().get(0).content().children().size());
         assertTrue("the first tab held a text",
-                back.getTabs().get(0).content().getChildren().get(0) instanceof UIText);
-        assertEquals("hello", ((UIText) back.getTabs().get(0).content().getChildren().get(0)).getText());
+                back.getTabs().get(0).content().children().get(0) instanceof UIText);
+        assertEquals("hello", ((UIText) back.getTabs().get(0).content().children().get(0)).getText());
 
-        assertEquals(2, back.getTabs().get(1).content().getChildren().size());
+        assertEquals(2, back.getTabs().get(1).content().children().size());
         assertTrue("the second tab held a slider",
-                back.getTabs().get(1).content().getChildren().get(0) instanceof Slider);
+                back.getTabs().get(1).content().children().get(0) instanceof Slider);
     }
 
     /**
@@ -113,11 +114,11 @@ public class TabViewDescriptionTest {
         inner.addTab("Inner A");
         inner.addTab("Inner B");
         inner.selectIndex(1);
-        host.content().addChild(inner);
+        host.content().append(inner);
 
         TabView back = (TabView) roundTrip(outer);
 
-        UIElement nested = back.getTabs().get(0).content().getChildren().get(0);
+        UINode nested = back.getTabs().get(0).content().children().get(0);
         assertTrue("the nested view must arrive as a TabView", nested instanceof TabView);
         assertEquals(2, ((TabView) nested).getTabs().size());
         assertEquals("and keep its own selection", 1, ((TabView) nested).getSelectedIndex());
@@ -134,7 +135,7 @@ public class TabViewDescriptionTest {
     public void aTabViewRefusesANonTabChild() {
         TabView view = new TabView();
         try {
-            view.addDescribedChildFrom(new UIText("not a tab"));
+            view.append(new UIText("not a tab"));
             fail("a <tabview> must refuse a described child that is not a <tab>");
         } catch (IllegalArgumentException expected) {
             assertTrue(expected.getMessage().contains("tab"));

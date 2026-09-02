@@ -1,9 +1,9 @@
 package com.crystalgui.headless;
 
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.ui.elements.workbench.decoration.FileDecoration;
-import com.crystalgui.ui.elements.workbench.decoration.FileDecorationProvider;
-import com.crystalgui.ui.elements.workbench.decoration.FileDecorations;
+import com.crystalgui.workbench.decoration.FileDecoration;
+import com.crystalgui.workbench.decoration.FileDecorationProvider;
+import com.crystalgui.workbench.decoration.FileDecorations;
 
 import org.junit.Test;
 

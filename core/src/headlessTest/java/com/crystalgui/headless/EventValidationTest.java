@@ -13,10 +13,10 @@ import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.ElementRegistry;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.Button;
-import com.crystalgui.ui.elements.Slider;
-import com.crystalgui.ui.elements.TextField;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.control.Slider;
+import com.crystalgui.widget.control.TextField;
 import com.crystalgui.net.protocol.UiMethods;
 import java.util.ArrayList;
 import java.util.List;
@@ -40,10 +40,10 @@ public class EventValidationTest {
     private InMemoryTransport<Object>[] link;
     private ProtocolConnection<Object> serverEnd;
     private ProtocolConnection<Object> clientEnd;
-    private ServerUiSession<Object> server;
-    private ClientUiSession<Object> client;
+    private ServerUiSession<UINode, Object> server;
+    private ClientUiSession<UINode, Object> client;
 
-    private UIElement root;
+    private UINode root;
     private Slider slider;
     private Button button;
     private TextField field;
@@ -57,22 +57,22 @@ public class EventValidationTest {
         Protocols.resetForTesting();
         ElementRegistry.bootstrapBuiltins();
 
-        root = new UIElement();
+        root = new UINode();
         slider = new Slider();
         slider.setRange(0f, 10f);
         button = new Button("Press");
         field = new TextField();
         field.setMaxLength(4);
-        root.addChild(slider);
-        root.addChild(button);
-        root.addChild(field);
+        root.append(slider);
+        root.append(button);
+        root.append(field);
 
         link = InMemoryTransport.pair();
         serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "alice");
         clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
 
-        server = new ServerUiSession<>(1, root, serverEnd);
-        client = new ClientUiSession<>(clientEnd);
+        server = Sessions.serveOn(1, root, serverEnd);
+        client = Sessions.viewOn(clientEnd);
 
         server.on(slider, Slider.VALUE_CHANGED, (ctx, value) -> values.add(value));
         server.on(button, Button.ACTIVATE, ctx -> presses++);
@@ -108,9 +108,9 @@ public class EventValidationTest {
         settle();
     }
 
-    private int nidOf(UIElement element) {
+    private int nidOf(UINode element) {
         // The client's tree mirrors the server's numbering, so its index is the server's id.
-        return 1 + root.describedChildrenFor().indexOf(element);
+        return 1 + root.children().indexOf(element);
     }
 
     // ── Sanitized: a value a legal gesture could have produced ───────────────

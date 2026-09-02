@@ -1,12 +1,12 @@
 package com.crystalgui.headless;
 
-import com.crystalgui.ui.elements.dock.DockBranch;
-import com.crystalgui.ui.elements.dock.DockDropZone;
-import com.crystalgui.ui.elements.dock.DockLayout;
-import com.crystalgui.ui.elements.dock.DockLeaf;
-import com.crystalgui.ui.elements.dock.DockNode;
-import com.crystalgui.ui.elements.dock.DockOrientation;
-import com.crystalgui.ui.elements.dock.DockPanelRef;
+import com.crystalgui.workbench.dock.layout.DockBranch;
+import com.crystalgui.workbench.dock.drag.DockDropZone;
+import com.crystalgui.workbench.dock.layout.DockLayout;
+import com.crystalgui.workbench.dock.layout.DockLeaf;
+import com.crystalgui.workbench.dock.layout.DockNode;
+import com.crystalgui.workbench.dock.layout.DockOrientation;
+import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import org.junit.Test;
 
 import java.util.List;

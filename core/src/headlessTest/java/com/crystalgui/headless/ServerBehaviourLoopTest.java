@@ -1,5 +1,7 @@
 package com.crystalgui.headless;
 
+import com.crystalgui.ui.dom.UINodeTreeSource;
+import com.crystalgui.net.mirror.UINodeMirror;
 import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
@@ -9,12 +11,12 @@ import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.serialization.UIDescriptionCodec;
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.dom.ElementTreeSource;
-import com.crystalgui.ui.elements.Button;
-import com.crystalgui.ui.elements.Checkbox;
-import com.crystalgui.ui.elements.Slider;
-import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.control.Checkbox;
+import com.crystalgui.widget.control.Slider;
+import com.crystalgui.widget.text.UIText;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -34,10 +36,10 @@ public class ServerBehaviourLoopTest {
 
     private InMemoryTransport<Object> serverLink;
     private InMemoryTransport<Object> clientLink;
-    private ServerUiSession<Object> server;
-    private ClientUiSession<Object> client;
+    private ServerUiSession<UINode, Object> server;
+    private ClientUiSession<UINode, Object> client;
 
-    private UIElement root;
+    private UINode root;
     private Button button;
     private Checkbox checkbox;
     private Slider slider;
@@ -45,22 +47,22 @@ public class ServerBehaviourLoopTest {
 
     @Before
     public void setUp() {
-        root = new UIElement();
+        root = new UINode();
         status = new UIText("idle");
         button = new Button("Press me");
         checkbox = new Checkbox("Enabled");
         slider = new Slider();
         slider.setRange(0f, 10f);
-        root.addChild(status);
-        root.addChild(button);
-        root.addChild(checkbox);
-        root.addChild(slider);
+        root.append(status);
+        root.append(button);
+        root.append(checkbox);
+        root.append(slider);
 
         InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
         serverLink = pair[0];
         clientLink = pair[1];
-        server = new ServerUiSession<>(1, root, serverLink, PlainOps.INSTANCE);
-        client = new ClientUiSession<>(clientLink, PlainOps.INSTANCE);
+        server = Sessions.serve(1, root, serverLink);
+        client = Sessions.view(clientLink);
     }
 
     private void settle() {
@@ -75,7 +77,7 @@ public class ServerBehaviourLoopTest {
     }
 
     private <E> E clientChild(int index, Class<E> type) {
-        return type.cast(client.root().getChildren().get(index));
+        return type.cast(client.root().children().get(index));
     }
 
     // ── The loop ────────────────────────────────────────────────────────────
@@ -187,20 +189,20 @@ public class ServerBehaviourLoopTest {
         settle();
 
         // Asserted through a source of our own rather than off the elements: the numbering left the
-        // element at M0 and lives in an ElementTreeSource each session owns, so what is being checked
+        // element at M0 and lives in an UINodeTreeSource each session owns, so what is being checked
         // here is that the WALK is the same on both sides -- which is the actual claim -- rather than
         // that one shared field happens to hold one value.
-        ElementTreeSource serverIds = new ElementTreeSource(root);
-        ElementTreeSource clientIds = new ElementTreeSource(client.root());
+        UINodeTreeSource serverIds = new UINodeTreeSource(root);
+        UINodeTreeSource clientIds = new UINodeTreeSource(client.root());
         serverIds.assignInDocumentOrder(root);
         clientIds.assignInDocumentOrder(client.root());
 
         assertEquals(serverIds.peekId(root), clientIds.peekId(client.root()));
-        for (int i = 0; i < root.describedChildrenFor().size(); i++) {
-            int serverId = serverIds.peekId(root.describedChildrenFor().get(i));
+        for (int i = 0; i < root.children().size(); i++) {
+            int serverId = serverIds.peekId(root.children().get(i));
             assertTrue("a described child must actually be numbered", serverId >= 0);
             assertEquals("child " + i + " must have the same id on both sides", serverId,
-                    clientIds.peekId(client.root().describedChildrenFor().get(i)));
+                    clientIds.peekId(client.root().children().get(i)));
         }
 
         /*
@@ -215,17 +217,17 @@ public class ServerBehaviourLoopTest {
          * Note the loop above had to move to describedChildrenFor() with it: walking getChildren()
          * compares -1 against -1 for every internal, so it passes whatever the numbering does.
          */
-        UIElement composite = null;
-        for (UIElement candidate : root.describedChildrenFor()) {
-            if (candidate.getChildren().size() > candidate.describedChildrenFor().size()) {
+        UINode composite = null;
+        for (UINode candidate : root.children()) {
+            if (candidate.children().size() > candidate.children().size()) {
                 composite = candidate;
                 break;
             }
         }
         assertNotNull("the fixture needs a widget with internal children for this to mean anything",
                 composite);
-        for (UIElement child : composite.getChildren()) {
-            if (composite.describedChildrenFor().contains(child)) continue;
+        for (UINode child : composite.children()) {
+            if (composite.children().contains(child)) continue;
             assertEquals("an internal child must carry no network id", -1, serverIds.peekId(child));
         }
     }
@@ -241,13 +243,13 @@ public class ServerBehaviourLoopTest {
         String hash = server.descHash();
 
         InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
-        ClientUiSession<Object> fresh = new ClientUiSession<>(pair[1], PlainOps.INSTANCE);
+        ClientUiSession<UINode, Object> fresh = Sessions.view(pair[1]);
         // Claim one more element than the description actually contains.
         StateMap<Object> open = new StateMap<>(PlainOps.INSTANCE);
         open.putInt("protocol", EnvelopeCodec.VERSION);
         open.putInt(UiMethods.WINDOW, 1);
         open.putString("hash", hash);
-        open.putInt("count", new ElementTreeSource(root).describedCount(root) + 1);
+        open.putInt("count", new UINodeTreeSource(root).describedCount(root) + 1);
         pair[0].send(EnvelopeCodec.encode(PlainOps.INSTANCE,
                 new Envelope.Notification<>(UiMethods.OPEN_WINDOW, open.encode())));
         pair[1].deliver();
@@ -267,7 +269,7 @@ public class ServerBehaviourLoopTest {
         StateMap<Object> body = new StateMap<>(PlainOps.INSTANCE);
         body.putInt(UiMethods.WINDOW, 1);
         body.putString("hash", hash);
-        body.putRaw("root", UIDescriptionCodec.CODEC.encode(PlainOps.INSTANCE, root));
+        body.putRaw("root", new UINodeMirror<>(PlainOps.INSTANCE).describe(root));
         pair[0].send(EnvelopeCodec.encode(PlainOps.INSTANCE, Envelope.Response.ok(askId, body.encode())));
         pair[1].deliver();
         fresh.tick();

@@ -10,9 +10,9 @@ import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.ui.ElementRegistry;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.Button;
-import com.crystalgui.ui.elements.TextField;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.control.TextField;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.After;
@@ -34,9 +34,9 @@ public class RatePolicyTest {
     private InMemoryTransport<Object>[] link;
     private ProtocolConnection<Object> serverEnd;
     private ProtocolConnection<Object> clientEnd;
-    private ServerUiSession<Object> server;
-    private ClientUiSession<Object> client;
-    private UIElement root;
+    private ServerUiSession<UINode, Object> server;
+    private ClientUiSession<UINode, Object> client;
+    private UINode root;
     private TextField field;
     private Button button;
     private final List<String> typed = new ArrayList<>();
@@ -47,17 +47,17 @@ public class RatePolicyTest {
     public void setUp() {
         Protocols.resetForTesting();
         ElementRegistry.bootstrapBuiltins();
-        root = new UIElement();
+        root = new UINode();
         field = new TextField();
         button = new Button("Press");
-        root.addChild(field);
-        root.addChild(button);
+        root.append(field);
+        root.append(button);
 
         link = InMemoryTransport.pair();
         serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "alice");
         clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
-        server = new ServerUiSession<>(1, root, serverEnd);
-        client = new ClientUiSession<>(clientEnd).setClock(() -> now);
+        server = Sessions.serveOn(1, root, serverEnd);
+        client = Sessions.viewOn(clientEnd).setClock(() -> now);
 
         server.on(field, TextField.TEXT_CHANGED, (ctx, text) -> typed.add(text));
         server.on(button, Button.ACTIVATE, ctx -> presses++);
@@ -80,13 +80,13 @@ public class RatePolicyTest {
     }
 
     private TextField clientField() {
-        return (TextField) client.root().describedChildrenFor().get(0);
+        return (TextField) client.root().children().get(0);
     }
 
     /** IMMEDIATE is the default and must stay instant: a press is not a stream. */
     @Test
     public void aPressIsReportedAtOnce() {
-        ((Button) client.root().describedChildrenFor().get(1)).onPressed.emit();
+        ((Button) client.root().children().get(1)).onPressed.emit();
         settle();
         assertEquals(1, presses);
     }

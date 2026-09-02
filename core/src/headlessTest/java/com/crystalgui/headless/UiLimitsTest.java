@@ -15,8 +15,8 @@ import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.ElementRegistry;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.Button;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.control.Button;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -34,9 +34,9 @@ public class UiLimitsTest {
     private InMemoryTransport<Object>[] link;
     private ProtocolConnection<Object> serverEnd;
     private ProtocolConnection<Object> clientEnd;
-    private ServerUiSession<Object> server;
-    private ClientUiSession<Object> client;
-    private UIElement root;
+    private ServerUiSession<UINode, Object> server;
+    private ClientUiSession<UINode, Object> client;
+    private UINode root;
     private Button button;
     private int presses;
 
@@ -44,15 +44,15 @@ public class UiLimitsTest {
     public void setUp() {
         Protocols.resetForTesting();
         ElementRegistry.bootstrapBuiltins();
-        root = new UIElement();
+        root = new UINode();
         button = new Button("Press");
-        root.addChild(button);
+        root.append(button);
 
         link = InMemoryTransport.pair();
         serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "alice");
         clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
-        server = new ServerUiSession<>(1, root, serverEnd);
-        client = new ClientUiSession<>(clientEnd);
+        server = Sessions.serveOn(1, root, serverEnd);
+        client = Sessions.viewOn(clientEnd);
         server.on(button, Button.ACTIVATE, ctx -> presses++);
         server.open();
         settle();

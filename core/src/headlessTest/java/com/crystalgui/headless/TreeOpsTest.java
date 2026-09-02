@@ -8,10 +8,10 @@ import com.crystalgui.net.protocol.EnvelopeCodec;
 import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.ui.ElementRegistry;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.Button;
-import com.crystalgui.ui.elements.Slider;
-import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.control.Slider;
+import com.crystalgui.widget.text.UIText;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -33,24 +33,24 @@ import static org.junit.Assert.assertTrue;
  */
 public class TreeOpsTest {
 
-    private UIElement root;
+    private UINode root;
     private InMemoryTransport<Object> serverLink;
     private InMemoryTransport<Object> clientLink;
-    private ServerUiSession<Object> server;
-    private ClientUiSession<Object> client;
+    private ServerUiSession<UINode, Object> server;
+    private ClientUiSession<UINode, Object> client;
 
     @Before
     public void setUp() {
         ElementRegistry.bootstrapBuiltins();
-        root = new UIElement();
-        root.addChild(new UIText("first"));
-        root.addChild(new Button("Press me"));
+        root = new UINode();
+        root.append(new UIText("first"));
+        root.append(new Button("Press me"));
 
         InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
         serverLink = pair[0];
         clientLink = pair[1];
-        server = new ServerUiSession<>(1, root, serverLink, PlainOps.INSTANCE);
-        client = new ClientUiSession<>(clientLink, PlainOps.INSTANCE);
+        server = Sessions.serve(1, root, serverLink);
+        client = Sessions.view(clientLink);
     }
 
     private void settle() {
@@ -76,14 +76,14 @@ public class TreeOpsTest {
     public void anAppendedChildArrives() {
         server.open();
         settle();
-        assertEquals(2, client.root().getChildren().size());
+        assertEquals(2, client.root().children().size());
         serverLink.clearSent();
 
-        root.addChild(new UIText("second"));
+        root.append(new UIText("second"));
         settle();
 
-        assertEquals("the new child must arrive", 3, client.root().getChildren().size());
-        assertEquals("second", ((UIText) client.root().getChildren().get(2)).getText());
+        assertEquals("the new child must arrive", 3, client.root().children().size());
+        assertEquals("second", ((UIText) client.root().children().get(2)).getText());
         assertEquals("as one treeOps message", 1, countMethod(serverLink, UiMethods.TREE_OPS));
         assertEquals("and NOT as a re-open", 0, countMethod(serverLink, UiMethods.OPEN_WINDOW));
     }
@@ -94,12 +94,12 @@ public class TreeOpsTest {
         server.open();
         settle();
 
-        root.removeChild(root.getChildren().get(0));
+        root.remove(root.children().get(0));
         settle();
 
-        assertEquals(1, client.root().getChildren().size());
+        assertEquals(1, client.root().children().size());
         assertTrue("the button is what is left",
-                client.root().getChildren().get(0) instanceof Button);
+                client.root().children().get(0) instanceof Button);
     }
 
     /**
@@ -113,21 +113,21 @@ public class TreeOpsTest {
     public void stateStillLandsOnTheRightElementAfterAReshape() {
         Slider slider = new Slider();
         slider.setRange(0f, 10f);
-        root.addChild(slider);
+        root.append(slider);
         server.open();
         settle();
 
         // Insert BEFORE the slider, so its id shifts.
-        root.addChildAt(new UIText("inserted"), 0);
+        root.insertAt(0, new UIText("inserted"));
         settle();
 
         slider.setValue(6f);
         settle();
 
-        UIElement mirrored = client.root().getChildren().get(3);
+        UINode mirrored = client.root().children().get(3);
         assertTrue("the slider must still be the slider", mirrored instanceof Slider);
         assertEquals("and the update must have landed on it", 6f, ((Slider) mirrored).getValue(), 0.001f);
-        assertEquals("inserted", ((UIText) client.root().getChildren().get(0)).getText());
+        assertEquals("inserted", ((UIText) client.root().children().get(0)).getText());
     }
 
     /** A whole subtree grafted in one go arrives, anchored at the nearest element the client knows. */
@@ -136,19 +136,19 @@ public class TreeOpsTest {
         server.open();
         settle();
 
-        UIElement panel = new UIElement();
-        panel.addChild(new UIText("inside"));
-        UIElement nested = new UIElement();
-        nested.addChild(new Button("deep"));
-        panel.addChild(nested);
-        root.addChild(panel);
+        UINode panel = new UINode();
+        panel.append(new UIText("inside"));
+        UINode nested = new UINode();
+        nested.append(new Button("deep"));
+        panel.append(nested);
+        root.append(panel);
         settle();
 
-        UIElement arrived = client.root().getChildren().get(2);
-        assertEquals(2, arrived.getChildren().size());
-        assertEquals("inside", ((UIText) arrived.getChildren().get(0)).getText());
+        UINode arrived = client.root().children().get(2);
+        assertEquals(2, arrived.children().size());
+        assertEquals("inside", ((UIText) arrived.children().get(0)).getText());
         assertEquals("deep",
-                ((Button) arrived.getChildren().get(1).getChildren().get(0)).getText());
+                ((Button) arrived.children().get(1).children().get(0)).getText());
     }
 
     /**
@@ -164,31 +164,31 @@ public class TreeOpsTest {
         settle();
         serverLink.clearSent();
 
-        UIElement panel = new UIElement();
-        panel.addChild(new UIText("a"));
-        panel.addChild(new UIText("b"));
-        root.addChild(panel);
-        root.addChild(new UIText("c"));
+        UINode panel = new UINode();
+        panel.append(new UIText("a"));
+        panel.append(new UIText("b"));
+        root.append(panel);
+        root.append(new UIText("c"));
         settle();
 
         assertEquals("one delta, not one per changed parent",
                 1, countMethod(serverLink, UiMethods.TREE_OPS));
-        assertEquals(4, client.root().getChildren().size());
+        assertEquals(4, client.root().children().size());
     }
 
     /** Events still reach their handler after a reshape — ids agree in that direction too. */
     @Test
     public void anEventStillReachesItsHandlerAfterAReshape() {
-        Button button = (Button) root.getChildren().get(1);
+        Button button = (Button) root.children().get(1);
         AtomicInteger presses = new AtomicInteger();
         server.on(button, Button.ACTIVATE, ctx -> presses.incrementAndGet());
         server.open();
         settle();
 
-        root.addChildAt(new UIText("shifts everything"), 0);
+        root.insertAt(0, new UIText("shifts everything"));
         settle();
 
-        UIElement mirrored = client.root().getChildren().get(2);
+        UINode mirrored = client.root().children().get(2);
         assertTrue(mirrored instanceof Button);
         ((Button) mirrored).onPressed.emit();
         settle();

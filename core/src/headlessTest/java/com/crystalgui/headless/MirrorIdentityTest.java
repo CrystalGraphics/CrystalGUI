@@ -1,5 +1,6 @@
 package com.crystalgui.headless;
 
+import com.crystalgui.ui.dom.UINodeTreeSource;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
@@ -12,9 +13,9 @@ import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.ui.ElementRegistry;
 import com.crystalgui.ui.dom.ElementTreeSource;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.Button;
-import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.text.UIText;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -28,9 +29,9 @@ import org.junit.Test;
  */
 public class MirrorIdentityTest {
 
-    private UIElement root;
-    private ServerUiSession<Object> server;
-    private ClientUiSession<Object> client;
+    private UINode root;
+    private ServerUiSession<UINode, Object> server;
+    private ClientUiSession<UINode, Object> client;
     private InMemoryTransport<Object> serverLink;
     private InMemoryTransport<Object> clientLink;
 
@@ -41,12 +42,12 @@ public class MirrorIdentityTest {
         serverLink = pair[0];
         clientLink = pair[1];
 
-        root = new UIElement();
-        root.addChild(new UIText("first"));
-        root.addChild(new Button("press"));
+        root = new UINode();
+        root.append(new UIText("first"));
+        root.append(new Button("press"));
 
-        server = new ServerUiSession<>(1, root, serverLink, PlainOps.INSTANCE);
-        client = new ClientUiSession<>(clientLink, PlainOps.INSTANCE);
+        server = Sessions.serve(1, root, serverLink);
+        client = Sessions.view(clientLink);
     }
 
     private void settle() {
@@ -58,8 +59,8 @@ public class MirrorIdentityTest {
         }
     }
 
-    private UIElement clientChild(int index) {
-        return client.root().describedChildrenFor().get(index);
+    private UINode clientChild(int index) {
+        return client.root().children().get(index);
     }
 
     // ── The headline: a sibling insert does not destroy its siblings ─────────
@@ -79,13 +80,13 @@ public class MirrorIdentityTest {
         settle();
         assertNotNull(client.root());
 
-        UIElement firstBefore = clientChild(0);
-        UIElement buttonBefore = clientChild(1);
+        UINode firstBefore = clientChild(0);
+        UINode buttonBefore = clientChild(1);
 
-        root.addChildAt(new UIText("inserted"), 0);
+        root.insertAt(0, new UIText("inserted"));
         settle();
 
-        assertEquals(3, client.root().describedChildrenFor().size());
+        assertEquals(3, client.root().children().size());
         assertSame("the existing text must be the SAME OBJECT after a sibling was inserted",
                 firstBefore, clientChild(1));
         assertSame("and so must the button", buttonBefore, clientChild(2));
@@ -96,13 +97,13 @@ public class MirrorIdentityTest {
         server.open();
         settle();
 
-        root.addChildAt(new UIText("inserted"), 1);
+        root.insertAt(1, new UIText("inserted"));
         settle();
 
         // Appending would be invisible in a size check and wrong on screen, which is why the op carries
         // an index at all.
         assertEquals("inserted", ((UIText) clientChild(1)).getText());
-        assertEquals(3, client.root().describedChildrenFor().size());
+        assertEquals(3, client.root().children().size());
     }
 
     // ── A move is a move ────────────────────────────────────────────────────
@@ -116,25 +117,25 @@ public class MirrorIdentityTest {
      */
     @Test
     public void aReparentKeepsTheInstance() {
-        UIElement from = new UIElement();
-        UIElement to = new UIElement();
+        UINode from = new UINode();
+        UINode to = new UINode();
         UIText moving = new UIText("moving");
-        from.addChild(moving);
-        root.addChild(from);
-        root.addChild(to);
+        from.append(moving);
+        root.append(from);
+        root.append(to);
 
         server.open();
         settle();
 
-        UIElement movingOnClient = clientChild(2).describedChildrenFor().get(0);
+        UINode movingOnClient = clientChild(2).children().get(0);
         assertEquals("moving", ((UIText) movingOnClient).getText());
 
-        to.addChild(moving);          // one tick: detach + attach of the same object
+        to.append(moving);          // one tick: detach + attach of the same object
         settle();
 
-        assertTrue("it left the old parent", clientChild(2).describedChildrenFor().isEmpty());
+        assertTrue("it left the old parent", clientChild(2).children().isEmpty());
         assertSame("and arrived at the new one as the SAME OBJECT",
-                movingOnClient, clientChild(3).describedChildrenFor().get(0));
+                movingOnClient, clientChild(3).children().get(0));
     }
 
     // ── Ids are stable ──────────────────────────────────────────────────────
@@ -148,14 +149,14 @@ public class MirrorIdentityTest {
      */
     @Test
     public void anEventLandsOnTheRightHandlerAfterAnInsert() {
-        Button button = (Button) root.describedChildrenFor().get(1);
+        Button button = (Button) root.children().get(1);
         final int[] presses = { 0 };
         server.on(button, Button.ACTIVATE, ctx -> presses[0]++);
 
         server.open();
         settle();
 
-        root.addChildAt(new UIText("inserted"), 0);
+        root.insertAt(0, new UIText("inserted"));
         settle();
 
         ((Button) clientChild(2)).onPressed.emit();
@@ -177,7 +178,7 @@ public class MirrorIdentityTest {
      */
     @Test
     public void disablingAWidgetAfterOpenReachesTheClient() {
-        Button button = (Button) root.describedChildrenFor().get(1);
+        Button button = (Button) root.children().get(1);
         server.open();
         settle();
         assertTrue(clientChild(1).isEnabled());
@@ -190,7 +191,7 @@ public class MirrorIdentityTest {
 
     @Test
     public void aClassAddedAfterOpenTravels() {
-        UIElement text = root.describedChildrenFor().get(0);
+        UINode text = root.children().get(0);
         server.open();
         settle();
 
@@ -225,9 +226,9 @@ public class MirrorIdentityTest {
         // A Button has internal children (its label). If they were numbered, the described count and
         // the id space would disagree.
         assertEquals("only described elements are numbered", 3,
-                new ElementTreeSource(root).describedCount(root));
+                new UINodeTreeSource(root).describedCount(root));
         assertTrue("the button really does have internals",
-                root.describedChildrenFor().get(1).getChildren().size() > 0);
+                root.children().get(1).children().size() > 0);
     }
 
     // ── Nothing is sent when nothing happens ────────────────────────────────
@@ -252,8 +253,8 @@ public class MirrorIdentityTest {
         serverLink.clearSent();
 
         UIText transient_ = new UIText("gone");
-        root.addChild(transient_);
-        root.removeChild(transient_);
+        root.append(transient_);
+        root.remove(transient_);
         settle();
 
         assertEquals("nothing happened as far as the far side is concerned",
@@ -266,12 +267,12 @@ public class MirrorIdentityTest {
     public void aRemovedSubtreeGoesAndItsSiblingsSurvive() {
         server.open();
         settle();
-        UIElement buttonBefore = clientChild(1);
+        UINode buttonBefore = clientChild(1);
 
-        root.removeChild(root.describedChildrenFor().get(0));
+        root.remove(root.children().get(0));
         settle();
 
-        assertEquals(1, client.root().describedChildrenFor().size());
+        assertEquals(1, client.root().children().size());
         assertSame("removing one child must not rebuild the other", buttonBefore, clientChild(0));
     }
 
@@ -281,15 +282,15 @@ public class MirrorIdentityTest {
         server.open();
         settle();
 
-        UIElement text = root.describedChildrenFor().get(0);
-        UIElement clientTextBefore = clientChild(0);
-        root.removeChild(text);
+        UINode text = root.children().get(0);
+        UINode clientTextBefore = clientChild(0);
+        root.remove(text);
         settle();
 
-        root.addChild(text);
+        root.append(text);
         settle();
 
-        assertEquals(2, client.root().describedChildrenFor().size());
+        assertEquals(2, client.root().children().size());
         assertNotSame("a re-add in a LATER tick is not a move -- the element genuinely left",
                 clientTextBefore, clientChild(1));
     }

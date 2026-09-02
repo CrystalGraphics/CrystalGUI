@@ -1,7 +1,7 @@
 package com.crystalgui.headless;
 
-import com.crystalgui.ui.elements.dock.DockDropZone;
-import com.crystalgui.ui.elements.dock.DockDropZones;
+import com.crystalgui.workbench.dock.drag.DockDropZone;
+import com.crystalgui.workbench.dock.drag.DockDropZones;
 import org.junit.Test;
 
 import static org.junit.Assert.assertArrayEquals;

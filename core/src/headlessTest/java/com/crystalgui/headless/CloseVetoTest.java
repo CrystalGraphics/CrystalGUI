@@ -21,8 +21,8 @@ import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.net.window.WindowProtocol;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.ui.ElementRegistry;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.text.UIText;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -40,13 +40,13 @@ import org.junit.Test;
 public class CloseVetoTest {
 
     /** Refuses on demand, and counts how often it was asked. */
-    public static class GuardedPanel extends UIElement implements Networked<String> {
+    public static class GuardedPanel extends UINode implements Networked<String> {
         static final AtomicBoolean REFUSE = new AtomicBoolean(false);
         static final List<String> ASKED = new ArrayList<>();
 
         @Override
         public void build(String model) {
-            addChild(new UIText(model));
+            append(new UIText(model));
         }
 
         @Override
@@ -71,16 +71,16 @@ public class CloseVetoTest {
      * A panel that says nothing at all about closing — which is nearly every real one.
      *
      * <p>Deliberately overrides no close hook, because the bug this exists for is only reachable when
-     * it does not: the framework's question went by a name {@code UIElement} already used for the
+     * it does not: the framework's question went by a name {@code UINode} already used for the
      * close-watcher, where {@code false} means "I did not handle this". A class method beats an
      * interface default, so every panel that had not overridden it vetoed its own close and the X
      * silently did nothing. Every test above happens to override, which is exactly why they all passed
      * against it.</p>
      */
-    public static class PlainPanel extends UIElement implements Networked<String> {
+    public static class PlainPanel extends UINode implements Networked<String> {
         @Override
         public void build(String model) {
-            addChild(new UIText(model));
+            append(new UIText(model));
         }
     }
 
@@ -107,7 +107,7 @@ public class CloseVetoTest {
         ClientWindows.of(clientEnd).setMount(context -> new WindowMount.MountedWindow() {
             @Override public void closedByServer(String reason) { }
             @Override public void focus() { }
-            @Override public void contentReplaced(UIElement newRoot) { }
+            @Override public void contentReplaced(UINode newRoot) { }
         });
         window = ServerWindows.of(serverEnd).open(TYPE, "hello");
         settle();
@@ -145,12 +145,12 @@ public class CloseVetoTest {
         assertNotNull("the plain window mounted", shown);
         assertTrue("a panel with no opinion must not veto its own close", shown.mayClose());
 
-        // THE TWO QUESTIONS, side by side, which is the whole point of the separate name. UIElement's
+        // THE TWO QUESTIONS, side by side, which is the whole point of the separate name. UINode's
         // requestClose() is the close-watcher hook and answers FALSE for "I did not handle this"; the
         // framework's mayClose() answers TRUE for "yes, you may". One name for both meant every panel
         // that had not overridden it vetoed its own close, silently.
         PlainPanel panel = (PlainPanel) shown.root();
-        assertFalse("UIElement's close-watcher hook says 'I did not handle it'", panel.requestClose());
+        assertFalse("UINode's close-watcher hook says 'I did not handle it'", panel.requestClose());
         assertTrue("...and the framework's question says 'yes, you may'", panel.mayClose());
 
         Boolean[] decided = { null };

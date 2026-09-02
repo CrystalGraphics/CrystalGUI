@@ -5,12 +5,12 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import com.crystalgui.ui.ElementRegistry;
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.contract.RateGate;
 import com.crystalgui.ui.contract.RatePolicy;
-import com.crystalgui.ui.elements.Button;
-import com.crystalgui.ui.elements.Slider;
-import com.crystalgui.ui.elements.TextField;
+import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.control.Slider;
+import com.crystalgui.widget.control.TextField;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.Before;
@@ -45,14 +45,14 @@ public class RateGateTest {
         now = 1_000L;
     }
 
-    private <P> RateGate<P> gate() {
-        return new RateGate<P>((widget, kind, payload) -> sent.add(kind + "=" + payload))
+    private <P> RateGate<UINode, P> gate() {
+        return new RateGate<UINode, P>((widget, kind, payload) -> sent.add(kind + "=" + payload))
                 .setClock(() -> now);
     }
 
     @Test
     public void anImmediatePolicyGoesStraightThrough() {
-        RateGate<Float> gate = gate();
+        RateGate<UINode, Float> gate = gate();
         gate.offer(slider, "value", RatePolicy.IMMEDIATE, 0.5f);
         gate.offer(slider, "value", null, 0.6f);
         assertEquals(List.of("value=0.5", "value=0.6"), sent);
@@ -61,7 +61,7 @@ public class RateGateTest {
 
     @Test
     public void attachTakesTheEventsOwnRate() {
-        RateGate<Float> gate = gate();
+        RateGate<UINode, Float> gate = gate();
         gate.attach(slider, Slider.VALUE_CHANGED);   // DRAGGING: throttled to 50ms
 
         slider.setValue(0.1f);
@@ -76,7 +76,7 @@ public class RateGateTest {
 
     @Test
     public void aThrottleSendsTheLastValueAndNotTheOnesPassedThrough() {
-        RateGate<Float> gate = gate();
+        RateGate<UINode, Float> gate = gate();
         gate.attach(slider, Slider.VALUE_CHANGED);
 
         slider.setValue(0.1f);            // through
@@ -93,7 +93,7 @@ public class RateGateTest {
 
     @Test
     public void aDebounceHoldsUntilTypingStops() {
-        RateGate<String> gate = gate();
+        RateGate<UINode, String> gate = gate();
         gate.attach(field, TextField.TEXT_CHANGED);   // TYPING: 150ms debounce
 
         field.setText("a");
@@ -113,7 +113,7 @@ public class RateGateTest {
 
     @Test
     public void aDebouncedValueNeedsSomethingToDriveTheFlush() {
-        RateGate<String> gate = gate();
+        RateGate<UINode, String> gate = gate();
         gate.attach(field, TextField.TEXT_CHANGED);
 
         field.setText("query");
@@ -129,7 +129,7 @@ public class RateGateTest {
 
     @Test
     public void commitSendsWhatIsHeldWhateverThePolicySays() {
-        RateGate<String> gate = gate();
+        RateGate<UINode, String> gate = gate();
         gate.attach(field, TextField.TEXT_CHANGED);
 
         field.setText("half-typed");
@@ -141,7 +141,7 @@ public class RateGateTest {
 
     @Test
     public void forgettingAWidgetSendsWhatItStillHeld() {
-        RateGate<Float> gate = gate();
+        RateGate<UINode, Float> gate = gate();
         gate.attach(slider, Slider.VALUE_CHANGED);
 
         slider.setValue(0.1f);            // through
@@ -164,7 +164,7 @@ public class RateGateTest {
     @Test
     public void aSignalHeldAtClockZeroIsNotSilentlyDropped() {
         now = 0L;
-        RateGate<Void> gate = gate();
+        RateGate<UINode, Void> gate = gate();
         gate.offer(button, "activate", RatePolicy.throttle(50), null);
         assertEquals("the first one is due immediately", List.of("activate=null"), sent);
 
@@ -177,7 +177,7 @@ public class RateGateTest {
 
     @Test
     public void twoWidgetsAreThrottledIndependently() {
-        RateGate<Float> gate = gate();
+        RateGate<UINode, Float> gate = gate();
         Slider other = new Slider();
         gate.attach(slider, Slider.VALUE_CHANGED);
         gate.attach(other, Slider.VALUE_CHANGED);
@@ -191,7 +191,7 @@ public class RateGateTest {
 
     @Test
     public void aWidgetsTwoEventsAreThrottledIndependently() {
-        RateGate<String> gate = gate();
+        RateGate<UINode, String> gate = gate();
         gate.attach(field, TextField.TEXT_CHANGED);
         gate.attach(field, TextField.COMMITTED);
 
