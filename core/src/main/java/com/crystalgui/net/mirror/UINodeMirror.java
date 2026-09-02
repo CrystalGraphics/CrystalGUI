@@ -1,5 +1,15 @@
 package com.crystalgui.net.mirror;
 
+import com.crystalgui.style.Styleable;
+import com.crystalgui.serialization.style.InlineStyleCodec;
+import com.crystalgui.serialization.StateMap;
+import com.crystalgui.ui.contract.WidgetContracts;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.dom.UINodeTreeSource;
+import com.crystalgui.ui.dom.TreeSource;
+import java.util.Arrays;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
@@ -99,14 +109,37 @@ public final class UINodeMirror<T> implements NodeMirror<UINode, T> {
 
     // ── State ────────────────────────────────────────────────────────────────
 
+    /**
+     * What this node's widget carries, from its contract.
+     *
+     * <p>A plain node answers null -- it is pure structure, and there is nothing to send. So does a
+     * widget whose contract declares no state slots, which is most of them: a {@code Button}'s label
+     * is an attribute, not state.</p>
+     *
+     * <p>These two used to be stubs returning null and doing nothing, on a comment saying widgets
+     * carry state "through their contracts" -- which was true of the contracts and false of this
+     * class, because nothing reached them. Every observable was right: the contract declared its
+     * slots, the session marked the node dirty, the delta was encoded and sent, and it carried an
+     * empty map. A slider moved on the server arrived at its default and stayed there.</p>
+     */
     @Override
     @Nullable
     public T encodeState(UINode node) {
-        return null;   // no plain node carries state; M6's widgets do, through their contracts
+        WidgetContract<UINode> contract = WidgetContracts.of(node);
+        if (contract == null || !contract.carriesState()) return null;
+        StateMap<T> state = new StateMap<>(ops);
+        contract.write(node, state);
+        return state.encode();
     }
 
     @Override
     public void applyState(T value, UINode node) {
+        WidgetContract<UINode> contract = WidgetContracts.of(node);
+        if (contract == null || !contract.carriesState()) return;
+        // DECLARATION ORDER IS APPLY ORDER, and four widgets depend on it -- a Slider takes its range
+        // before its value, or the value is clamped against the range it is replacing. The contract
+        // holds that order; this must not re-sort or filter.
+        contract.read(node, new StateMap<>(ops, value));
     }
 
     // ── Attributes (identity) ────────────────────────────────────────────────
@@ -176,14 +209,28 @@ public final class UINodeMirror<T> implements NodeMirror<UINode, T> {
 
     // ── Inline style (5.2) ───────────────────────────────────────────────────
 
+    /**
+     * The node's inline candidates, through the shared codec.
+     *
+     * <p>An EMPTY map rather than null: "no inline style" is a real value that has to travel, because
+     * a candidate removed on the server has to be removed here too, and a delta carrying only what is
+     * present cannot say "this is gone".</p>
+     *
+     * <p>{@link InlineStyleCodec} is typed on {@link Styleable} rather than on either engine's node,
+     * which is what lets one codec serve both -- the cascade was shared at 5.2 and this is the seam
+     * paying off. These were stubs until 6.8: an empty map out and nothing applied, so a width set
+     * inline on the server arrived as the initial value, with the delta itself perfectly correct.</p>
+     */
     @Override
     @Nullable
     public T encodeInlineStyle(UINode node) {
-        return ops.createMap(Map.of());
+        T style = InlineStyleCodec.encode(ops, node);
+        return style == null ? ops.createMap(Map.of()) : style;
     }
 
     @Override
     public void applyInlineStyle(T value, UINode node) {
+        InlineStyleCodec.decodeInto(ops, value, node);
     }
 
     // ── Structure ────────────────────────────────────────────────────────────
@@ -200,5 +247,29 @@ public final class UINodeMirror<T> implements NodeMirror<UINode, T> {
 
     private T key(String name) {
         return ops.createString(name);
+    }
+
+    /**
+     * {@code Attribute.REPORTS}, space-joined — the same shape {@code classes} takes on the wire, and
+     * for the same reason: a set of short identifiers is cheaper as one string than as a list, and the
+     * attribute encoder already carries it with no special case.
+     */
+    @Override
+    public Set<String> reportedEventsOf(UINode node) {
+        String joined = node.get(Attribute.REPORTS);
+        if (joined == null || joined.isEmpty()) return Set.of();
+        return new LinkedHashSet<>(Arrays.asList(joined.split(" ")));
+    }
+
+    @Override
+    public void addReportedEvent(UINode node, String kind) {
+        Set<String> kinds = new LinkedHashSet<>(reportedEventsOf(node));
+        if (!kinds.add(kind)) return;
+        node.set(Attribute.REPORTS, String.join(" ", kinds));
+    }
+
+    @Override
+    public TreeSource<UINode> sourceOver(UINode root) {
+        return new UINodeTreeSource(root);
     }
 }

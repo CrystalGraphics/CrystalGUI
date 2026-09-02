@@ -104,9 +104,13 @@ public final class WidgetContracts {
      * WindowFrame} answered a tag nothing in the sheet named. A subclass that genuinely IS its parent
      * for wire purposes registers the parent's contract under its own class, which is a line of code
      * and a decision, rather than something inherited by accident.</p>
+     *
+     * <p><b>Takes an {@code Object}, because the lookup is by CLASS and the bound bought nothing.</b>
+     * A session is generic in its node type now, so requiring {@code UIElement} here would have tied
+     * the whole contract layer to one engine for the sake of a parameter this method never reads.</p>
      */
     @Nullable
-    public static <W extends UIElement> WidgetContract<W> of(UIElement widget) {
+    public static <W> WidgetContract<W> of(Object widget) {
         return of(widget.getClass());
     }
 

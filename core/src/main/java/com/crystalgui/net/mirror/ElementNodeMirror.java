@@ -1,5 +1,8 @@
 package com.crystalgui.net.mirror;
 
+import com.crystalgui.ui.dom.ElementTreeSource;
+import com.crystalgui.ui.dom.TreeSource;
+import java.util.Set;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.serialization.UIDescriptionCodec;
@@ -94,5 +97,20 @@ public final class ElementNodeMirror<T> implements NodeMirror<UIElement, T> {
     @Override
     public void removeChild(UIElement parent, UIElement child) {
         parent.removeChild(child);
+    }
+
+    @Override
+    public Set<String> reportedEventsOf(UIElement node) {
+        return node.getReportedEvents();
+    }
+
+    @Override
+    public void addReportedEvent(UIElement node, String kind) {
+        node.addReportedEvent(kind);
+    }
+
+    @Override
+    public TreeSource<UIElement> sourceOver(UIElement root) {
+        return new ElementTreeSource(root);
     }
 }

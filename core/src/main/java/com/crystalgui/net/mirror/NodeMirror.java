@@ -1,5 +1,6 @@
 package com.crystalgui.net.mirror;
 
+import java.util.Set;
 import com.crystalgui.ui.dom.TreeSource;
 import java.util.function.ObjIntConsumer;
 import java.util.function.ToIntFunction;
@@ -115,4 +116,32 @@ public interface NodeMirror<N, T> {
 
     /** Detaches {@code child} from {@code parent}. */
     void removeChild(N parent, N child);
+
+    /**
+     * Which event kinds a session has asked this node to report.
+     *
+     * <p><b>Per instance, not per kind</b> — {@code NodeContract.reportableEvents} is what a KIND can
+     * report, and this is the subset one session asked for. The two are different questions and
+     * collapsing them makes every client attach a listener for everything its widgets are capable of
+     * and report to nobody.</p>
+     *
+     * <p>Here rather than on the node because the sessions must not name either engine: the old tree
+     * keeps a field, the new one keeps {@code Attribute.REPORTS}, and a mirror is the per-tree adapter
+     * that knows which. It also puts the set where the description is written, which is the whole
+     * reason it had to stay a field until M2 gave the mirror the description.</p>
+     */
+    Set<String> reportedEventsOf(N node);
+
+    /** Records that a session wants {@code kind} reported from {@code node}. @see #reportedEventsOf */
+    void addReportedEvent(N node, String kind);
+
+    /**
+     * Identity over a tree this mirror has just decoded.
+     *
+     * <p>A client rebuilding a window from a live description needs to number what came back, and
+     * numbering is {@link TreeSource}'s job — but only the mirror knows which engine's tree it built.
+     * So the factory lives here rather than being a fourth constructor argument every caller would
+     * have to keep in step with the mirror it passes beside it.</p>
+     */
+    TreeSource<N> sourceOver(N root);
 }
