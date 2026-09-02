@@ -1016,6 +1016,25 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
         return ownerWindow;
     }
 
+    /**
+     * Whether any live window names this one as its owner.
+     *
+     * <p>The relation is stored on the OWNED window ({@link #ownerWindow()}), which is the right way
+     * round -- a window has one owner and any number of owned -- so the reverse question has to be
+     * asked of the registry. Worth having as a query because the ANSWER is what several behaviours
+     * turn on: an owner takes its owned windows down with it, a raise moves the whole group, and an
+     * owned window's slot must be released when the last one goes or it sits full-size over its
+     * owner's content swallowing every click.</p>
+     */
+    public boolean hasOwnedWindows() {
+        Desktop desktop = desktop();
+        if (desktop == null) return false;
+        for (WindowFrame other : desktop.registry().windows()) {
+            if (other.ownerWindow() == this) return true;
+        }
+        return false;
+    }
+
     /** @see #ownerWindow() */
     public WindowFrame setOwnerWindow(@Nullable WindowFrame owner) {
         // A window cannot own itself, and a cycle would make the raise walk below never terminate.

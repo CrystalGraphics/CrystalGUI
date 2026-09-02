@@ -178,10 +178,55 @@ TEST_RULES = [
     (r'(\w+)\.querySelectorAll\(', r'deepAll(\1, ', 'shadow query'),
     (r'(\w+)\.querySelector\(', r'deepOrNull(\1, ', 'shadow query'),
     (r'(\w+)\.getElementsByClassName\(', r'deepAll(\1, ', 'shadow query'),
+    # -- The HOST SEAM moved off the engine and onto the compositor --------------------------------
+    (r'\w+\.enterHudMode\(\)', 'Desktop.of(document).enterHudMode()', 'desktop'),
+    (r'\w+\.exitHudMode\(\)', 'Desktop.of(document).exitHudMode()', 'desktop'),
+    (r'\w+\.isHudMode\(\)', 'Desktop.of(document).isHudMode()', 'desktop'),
+    (r'\w+\.presentation\(', 'Desktop.of(document).presentation(', 'desktop'),
+    (r'\w+\.overlayHitTest\(', 'Desktop.of(document).screenOverlay().overlayHitTest(', 'desktop'),
+    # A live gesture is an `InputMode` PUSHED ON A STACK now, so the window routes nothing: the key
+    # goes through the ordinary path and whichever mode is on top decides. There is deliberately no
+    # `routeKeyTo*` to map onto.
+    (r'\w+\.routeKeyToWindowSwitcher\(([^)]*)\)', r'keyPress(\1)', 'input mode'),
+    (r'\w+\.routeKeyToKeyboardMove\(([^,]*),\s*[^)]*\)', r'keyPress(\1)', 'input mode'),
+    # A node's position among its siblings is the PARENT's answer; the chained receiver form too.
+    (r'([\w.()]+)\.getSiblingIndex\(\)', r'\1.parent().indexOf(\1)', 'tree'),
+    (r'(?<![.\w])addInternalChild\(', 'appendStructural(', 'structure'),
+    # The interval moved beside its sibling in `ButtonState`, which is the class that decides
+    # whether a press continues a multi-click run and owned the other half of the answer already.
+    (r'\w*\.?\bmultiClickInterval\b', 'ButtonState.MULTI_CLICK_INTERVAL_MS', 'input'),
+    # Modality is the focus service's; the TOPMOST modal is the last one pushed.
+    (r'\w+\.getActiveModal\(\)',
+     'document.focus().modals().isEmpty() ? null'
+     ' : document.focus().modals().get(document.focus().modals().size() - 1)', 'modality'),
+    # `init(w, h)` is the base's job, whatever the arguments look like.
+    (r'[ \t]*\w+\.init\([^;]*\);[^\r\n]*\r*\n', '', 'window init'),
+    (r'\w+\.topLayerNode\(\)\.add\((\w+)\)', r'document.promote(\1)', 'top layer'),
+    (r'(?<![.\w])document\(\)(?!\s*\{)', 'document', 'document'),
+    # Inertness is ONE predicate the focus service owns, asked ABOUT a node rather than of it --
+    # which is what lets the modal half change for nearly every node at once without invalidating
+    # anything cached on them.
+    (r'([\w.()]+)\.isInert\(\)', r'document.focus().isInert(\1)', 'inertness'),
+    (r'(?<![.\w])isInert\(\)', 'document.focus().isInert(this)', 'inertness'),
+    # Drag is an InputMode on the stack, not a controller hanging off the input handler.
+    (r'\w+\.getDragController\(\)\.isDragging\(\)', 'document.input().mode(Drag.class) != null', 'drag'),
+    (r'\w+\.getDragController\(\)', 'document.input()', 'drag'),
+    (r'\w+\.topLayerNode\(\)\.elements\(\)', 'java.util.List.copyOf(document.promotedNodes())', 'top layer'),
+    (r'\w+\.topLayerNode\(\)\.isEmpty\(\)', 'document.promotedNodes().isEmpty()', 'top layer'),
+    # Light dismiss and the close-watcher cascade are the Dismiss service's -- two SEPARATE stacks,
+    # because the same element is routinely in one and not the other (a modal has a close watcher and
+    # is not light-dismissable; a MANUAL popover is in neither).
+    (r'\w+\.getAutoPopovers\(\)', 'document.dismiss().autoPopovers()', 'dismiss'),
+    (r'\w+\.getCloseWatchers\(\)', 'document.dismiss().closeWatchers()', 'dismiss'),
+    (r'\w+\.getTopCloseWatcher\(\)', 'document.dismiss().topCloseWatcher(null)', 'dismiss'),
+    (r'\w+\.lightDismiss\(', 'document.dismiss().lightDismiss(', 'dismiss'),
     # A ticker is OWNED now -- dropped when its owner disconnects, dormant while frozen.
     (r'(\w+)\.registerTicker\(', r'document.animation().every(\1, ', 'ticker'),
     # The old `ui` field on a test fixture was the window.
-    (r'(?<![.\w])ui(?![\w(])', 'document', 'window'),
+    # NOT inside a string literal or a resource path: `crystalgui:ui/fonts/...` became
+    # `crystalgui:document/fonts/...`, the font failed to load, text measured zero, and every
+    # assertion downstream saw a null box -- reading as a widget that was never laid out.
+    (r'(?<![.\w:/"])ui(?![\w(/"])', 'document', 'window'),
     # The 962-line handler became four services; `Input` is the one a test names.
     (r'\bUIInputHandler\b', 'Input', 'input service'),
     (r'import com\.crystalgui\.ui\.input\.Input;', 'import com.crystalgui.ui.service.Input;', 'input import'),
@@ -207,6 +252,9 @@ NEEDED_IMPORTS = [
     ('UINodeRegistry', 'com.crystalgui.ui.dom.UINodeRegistry'),
     ('StylePropertyRegistry', 'com.crystalgui.style.property.StylePropertyRegistry'),
     ('Desktop', 'com.crystalgui.desktop.Desktop'),
+    ('ButtonState', 'com.crystalgui.ui.input.ButtonState'),
+    # A TEST base, which the index does not see -- it scans main sources only.
+    ('EditorTestBase', 'com.crystalgui.widget.texteditor.EditorTestBase'),
 ]
 
 
@@ -262,12 +310,24 @@ def drop_local_frame(text):
 
 
 def alias_window(text):
-    """Runs the rewrite below until no window declaration is left -- a file may have several."""
+    """Runs the rewrite below until no window declaration is left -- a file may have several.
+
+    Then handles the INHERITED case: a subclass of a ported base uses the base's field by name, and
+    the tool works one file at a time, so it never sees the declaration that was renamed. Twenty-seven
+    uses across the editor tests were exactly this. Guarded on the file declaring no `window` of its
+    own, since then a bare `window` can only be the base's.
+    """
     while True:
         out = _alias_one_window(text)
         if out == text:
-            return text
+            break
         text = out
+    if re.search(r'(?m)^[ 	]*(?:private |protected |public )?(?:final |static )*\w+ window', text):
+        return text
+    if not re.search(r'(?<![.\w])window(?![\w(])', text):
+        return text
+    text = re.sub(r'(?<![.\w])window\.', 'document.', text)
+    return re.sub(r'(?<![.\w])window(?![\w(])', 'document', text)
 
 
 def _alias_one_window(text):
