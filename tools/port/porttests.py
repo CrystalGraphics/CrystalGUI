@@ -118,7 +118,7 @@ TEST_RULES = [
     (r'ElementRegistry\.create\((\w+)\)', r'UINodeRegistry.create(Name.parse(\1))', 'registry'),
     (r'ElementRegistry\.isRegistered\((\w+)\)', r'UINodeRegistry.isRegistered(Name.parse(\1))', 'registry'),
     (r'ElementRegistry\.tags\(\)', 'UINodeRegistry.names()', 'registry'),
-    (r'ElementRegistry', 'UINodeRegistry', 'registry'),
+    (r'\bElementRegistry\b', 'UINodeRegistry', 'registry'),
     # -- transform: a CASCADE property here, not a field on the element ------------------------
     #
     # `Box.setTransform` exists too and is a different channel -- the COMPOSITOR override the
@@ -133,6 +133,25 @@ TEST_RULES = [
     (r'(\w+)\.isMouseOverElement\(', r'\1.containsSurfacePoint(', 'hit test'),
     # `AnchoredPlacement` moved into the service layer; an inline FQN keeps the old package.
     (r'com\.crystalgui\.ui\.AnchoredPlacement', 'com.crystalgui.ui.service.AnchoredPlacement', 'import'),
+    # The resizer is engine-supplied now and lives with the other drag machinery.
+    (r'\bUIResizer\b', 'Resizer', 'resize'),
+    # `dotCenter()` answered in the plane's space implicitly; `dotCenterIn(space)` says WHICH,
+    # because `Box.x()` is parent-relative and a subtraction of two boxes is no longer a
+    # conversion. A test asking for a wire endpoint means the plane.
+    (r'\.dotCenter\(\)', '.dotCenterIn(null)', 'geometry'),
+    # `@Test(timeout = N)` runs only the method BODY on a fresh thread, while `@Before` -- which
+    # builds the document and marks its frame-thread owner -- runs on the runner. So every
+    # mutation in the body is refused: "must happen on the thread that runs frames (Test
+    # worker), not on Time-limited test". The tree genuinely has no safe concurrent reader, so
+    # the guard is right and the annotation is what has to go; a hang is still caught by the
+    # build. AGENTS.md records the same interaction from the other direction.
+    (r'@Test\(\s*timeout\s*=[^)]*\)', '@Test', 'frame thread'),
+    # `Ui` was a trivial {rootElement} holder on the window; the document IS the root here.
+    (r'\w+\.ui\.rootElement', 'document', 'root'),
+    # A ticker is OWNED now -- dropped when its owner disconnects, dormant while frozen.
+    (r'(\w+)\.registerTicker\(', r'document.animation().every(\1, ', 'ticker'),
+    # The old `ui` field on a test fixture was the window.
+    (r'(?<![.\w])ui(?![\w(])', 'document', 'window'),
     # The 962-line handler became four services; `Input` is the one a test names.
     (r'\bUIInputHandler\b', 'Input', 'input service'),
     (r'import com\.crystalgui\.ui\.input\.Input;', 'import com.crystalgui.ui.service.Input;', 'input import'),
@@ -321,6 +340,104 @@ def ensure_base(text):
     return out
 
 
+_INDEX = None
+
+
+def _class_index():
+    """Simple name -> FQN for every class in main sources, dropping ambiguous names.
+
+    An ambiguous one is left out on purpose: guessing between two packages writes an import that
+    compiles against the wrong class, which is worse than the missing-import error it replaces.
+    """
+    index = {}
+    for root in ('core/src/main/java',):
+        for base, _, files in os.walk(root):
+            for f in files:
+                if not f.endswith('.java') or f == 'package-info.java':
+                    continue
+                simple = f[:-5]
+                # PUBLIC ONLY. A package-private type is unreachable from a test in another package,
+                # so importing it swaps a "cannot find symbol" for a "is not public" -- no better.
+                body = io.open(os.path.join(base, f), encoding='utf-8', errors='ignore').read()
+                if not re.search(r'(?m)^public (?:final |abstract |sealed )*'
+                                 r'(?:class|interface|enum|record) ' + simple + r'\b', body):
+                    continue
+                package = os.path.relpath(base, root).replace(os.sep, '.')
+                index.setdefault(simple, set()).add(package + '.' + simple)
+    # DURING A STRANGLER PORT NEARLY EVERY NAME IS AMBIGUOUS -- both copies exist, which is the whole
+    # point of the strangler. So drop the OLD engine's packages first and see whether one candidate is
+    # left; only a name that is still ambiguous among NEW packages is genuinely unresolvable.
+    OLD = ('com.crystalgui.ui.elements', 'com.crystalgui.graph.', 'com.crystalgui.ui.UIElement')
+    resolved = {}
+    for simple, candidates in index.items():
+        fresh = {c for c in candidates if not any(c.startswith(o) for o in OLD)}
+        pick = fresh if fresh else candidates
+        if len(pick) == 1:
+            resolved[simple] = next(iter(pick))
+    return resolved
+
+
+def resolve_imports(text, package):
+    """Imports every main-source class the file NAMES and does not already have.
+
+    The batches move classes into sub-packages -- `MainPreviewPanel` into `.preview`,
+    `ShaderPropertyNodes` into `.node` -- and a test that used to sit beside them needs an import for
+    each. javac reports one error per USE, so a handful of moved classes reads as a wall.
+    """
+    global _INDEX
+    if _INDEX is None:
+        _INDEX = _class_index()
+    additions = []
+    for simple, fqn in _INDEX.items():
+        if fqn.rsplit('.', 1)[0] == package:
+            continue                      # same package, no import needed
+        if ('import %s;' % fqn) in text:
+            continue
+        if re.search(r'(?<![\w.])' + simple + r'(?![\w])', text) and                 not re.search(r'import [\w.]*\.' + simple + ';', text):
+            additions.append('import %s;' % fqn)
+    if not additions:
+        return text
+    match = re.search(r'^import [\w.]+;', text, re.M)
+    if not match:
+        return text
+    return text[:match.start()] + chr(10).join(sorted(set(additions))) + chr(10) + text[match.start():]
+
+
+def retarget_old_fqns(text):
+    """Points an INLINE fully-qualified name at the new engine's package.
+
+    An import rule cannot see one, and a blanket `ui.elements.` -> `widget.` is wrong because the
+    widgets went into sub-packages -- `MenuItem` is in `widget.overlay`, not `widget`. The index
+    already knows where each one landed, so the simple name is what decides.
+    """
+    global _INDEX
+    if _INDEX is None:
+        _INDEX = _class_index()
+    def swap(m):
+        target = _INDEX.get(m.group(1))
+        return target if target else m.group(0)
+    return re.sub(r'com\.crystalgui\.(?:ui\.elements|graph)(?:\.[a-z]\w*)*\.([A-Z]\w+)', swap, text)
+
+
+def rename_clashing_document(text):
+    """Renames a test's OWN `document` when it is not the UI one.
+
+    `UiDocumentTestBase` owns a field called `document`, and the port points every window reference
+    at it -- so a test that already had a `document` of its own (a `GraphDocument`, a
+    `TextFileDocument`) ends up with two things by one name. javac reports it at the USE, as a method
+    missing from the wrong type, which reads as the API having changed rather than as a clash.
+    """
+    match = re.search(r'(?m)^[ 	]*(?:private |protected |public )?(?:final |static )*'
+                      r'(\w*Document)\s+document\b', text)
+    if not match or match.group(1) == 'UIDocument':
+        return text
+    fresh = match.group(1)[0].lower() + match.group(1)[1:]      # GraphDocument -> graphDocument
+    text = re.sub(r'(?<![.\w])document(?![\w(])', '@@DOC@@', text)   # every bare `document`
+    # Put the BASE's field back wherever it is used as one: those are the sites the port introduced.
+    text = text.replace('@@DOC@@.append(', 'document.append(')                .replace('@@DOC@@.styleEngine(', 'document.styleEngine(')                .replace('@@DOC@@.boxes(', 'document.boxes(')                .replace('@@DOC@@.input(', 'document.input(')                .replace('@@DOC@@.focus(', 'document.focus(')                .replace('@@DOC@@.dismiss(', 'document.dismiss(')                .replace('@@DOC@@.promote(', 'document.promote(')                .replace('@@DOC@@.demote(', 'document.demote(')                .replace('@@DOC@@.isPromoted(', 'document.isPromoted(')                .replace('@@DOC@@.promotedNodes(', 'document.promotedNodes(')                .replace('@@DOC@@.removeAll(', 'document.removeAll(')                .replace('@@DOC@@.animation(', 'document.animation(')                .replace('@@DOC@@.lifecycle(', 'document.lifecycle(')
+    return text.replace('@@DOC@@', fresh)
+
+
 def port(old_name, new_package):
     # A bare name is a test in `ui/`, which is where most of them are. A name with a `/` is a path
     # relative to `com/crystalgui/` -- the style, graph and workbench tests live outside `ui/`.
@@ -344,6 +461,9 @@ def port(old_name, new_package):
     text = rename_part_constants(text)
     text = ensure_base(text)
     text = ensure_imports(text)
+    text = retarget_old_fqns(text)
+    text = resolve_imports(text, new_package)
+    text = rename_clashing_document(text)
     text = drop_local_frame(text)
     text = alias_window(text)
 
