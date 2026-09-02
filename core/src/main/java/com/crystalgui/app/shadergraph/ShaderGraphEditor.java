@@ -1,4 +1,6 @@
 package com.crystalgui.app.shadergraph;
+import com.crystalgui.app.shadergraph.node.ShaderVectorFieldWidget;
+import com.crystalgui.app.shadergraph.node.ShaderColorFieldWidget;
 import com.crystalgui.app.shadergraph.blackboard.BlackboardPanel;
 import com.crystalgui.app.shadergraph.blackboard.PropertyPill;
 import com.crystalgui.app.shadergraph.node.ShaderPropertyNodes;
@@ -215,6 +217,19 @@ public class ShaderGraphEditor extends UINode implements FileDocument, Disposabl
 
         // The library IS the shader node set -- the create menu, its search and the widget factory all
         // come from one bridge call, so there is no shader-specific UI code anywhere below this line.
+        // THIS ENGINE'S FIELD WIDGETS, which `ShaderNodeLibrary.of` cannot install.
+        //
+        // That helper belongs to the old engine and installs the old engine's COLOR and VECTOR
+        // factories into the old `NodeFieldWidgets`. This editor's nodes are built by
+        // `widget.graph.node.NodeFieldBinder`, which reads the NEW registry -- and that one has no
+        // default for either kind by design, "so skipping this is a visible regression (a text field)
+        // rather than a silent one". It was worse than a text field here: with no factory at all a
+        // Color node drew nothing but its output port, and a Vector node the same.
+        //
+        // Installed at the one place a library is built, and idempotent -- both installers REPLACE
+        // their registration rather than adding to it, so a second graph costs two map writes.
+        ShaderColorFieldWidget.install();
+        ShaderVectorFieldWidget.install();
         library = ShaderNodeLibrary.of(shaderNodes);
         graph.setNodeLibrary(library, propertyAwareFactory(NodeWidgetFactory.of(library).build()),
                 ShaderGraphBridge.GLSL_PROMOTION);

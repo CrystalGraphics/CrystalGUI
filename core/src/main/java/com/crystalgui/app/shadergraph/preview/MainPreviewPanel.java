@@ -1,5 +1,7 @@
 package com.crystalgui.app.shadergraph.preview;
 
+import com.crystalgui.widget.dnd.Resizer;
+import com.crystalgui.widget.dnd.Resizable;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.app.shadergraph.ShaderGraphBridge;
@@ -54,7 +56,7 @@ import javax.annotation.Nullable;
  * ({@link com.crystalgraphics.shadergraph.CgShaderEmitter.Shading}), touching no engine state, and the
  * {@code Lighting} menu entry turns it off when the colour matters more than the form.</p>
  */
-public class MainPreviewPanel extends UINode implements Disposable.Gl {
+public class MainPreviewPanel extends UINode implements Disposable.Gl, Resizable {
 
     public static final String PANEL_CLASS = "__main-preview__";
     /** The header strip. A CONTAINER, matching the configurator's group heading exactly — see the
@@ -221,6 +223,9 @@ public class MainPreviewPanel extends UINode implements Disposable.Gl {
     // ── Gestures ────────────────────────────────────────────────────────────
 
     private void installGestures() {
+        // THE HANDLES. Unconditional: each one re-reads the live `resize` value per drag, so the sheet
+        // still decides which edges are grabbable and can withdraw them entirely.
+        Resizer.install(this);
         // The MOVE gesture is not here: CanvasOverlayMove installs it from the field initializer, which is
         // the whole of what this panel needs to say about dragging its own title bar now.
         surface.onMouseDown.attachListener((element, event) -> {
@@ -445,8 +450,17 @@ public class MainPreviewPanel extends UINode implements Disposable.Gl {
             // background, so an empty panel reads as "not yet" rather than as a hole.
             if (!(texture instanceof CgTexture2D)) return;
 
-            float x = box.x();
-            float y = box.y();
+            // THE ORIGIN, because a paint hook already draws in its OWN box's space.
+            //
+            // `BoxPainter` sets the pose from this box's `localToWorld` before calling here, so the
+            // top-left of what we draw is (0,0). The old engine's version read
+            // `getRuntimeCache().getX()`, which accumulated through every ancestor and so WAS the
+            // absolute position its `paintSelf` needed; the port kept the shape and swapped in
+            // `Box.x()`, which is the offset from the HOST's origin -- and adding that to a pose that
+            // already contains it displaces the picture by exactly the surface's inset inside the
+            // panel. On screen: the preview drawn a title bar's height too low, over its own border.
+            float x = 0f;
+            float y = 0f;
             float w = box.width();
             float h = box.height();
             if (w <= 0f || h <= 0f) return;
@@ -481,4 +495,54 @@ public class MainPreviewPanel extends UINode implements Disposable.Gl {
         return box == null ? 0f : box.y();
     }
 
+
+    // ── Resizing ────────────────────────────────────────────────────────────
+
+    /**
+     * The handles, which the sheet's {@code resize} no longer installs on its own.
+     *
+     * <p>The old engine drove this from the cascade — {@code StylePropertyRegistry.RESIZE} carried a
+     * listener calling {@code UIElement.onResizeModeChanged}, so any element whose computed
+     * {@code resize} was not {@code none} grew a handle set, and both these panels are plain elements
+     * that got it for free. That hook does not exist here: a widget says whether it can be resized.
+     * The sheet's own measurements are unchanged and still govern — {@code width: 180px;
+     * height: 196px; min-width: 80px; min-height: 100px}.</p>
+     */
+    @Override
+    public UINode node() {
+        return this;
+    }
+
+    /**
+     * Where this panel's origin is measured from — its own box, an offset within its containing block.
+     *
+     * <p>Not the {@code left} inset: {@code CanvasOverlayMove} anchors to whichever edge the panel is
+     * nearer, so a panel on the right half has {@code left: auto} and a {@code right} inset instead.
+     * Reading the inset would answer zero for exactly those panels, which is the teleport-to-the-corner
+     * bug the old engine's default had.</p>
+     */
+    @Override
+    public float resizeOriginLeft() {
+        Box box = box();
+        return box == null ? 0f : box.x();
+    }
+
+    /** @see #resizeOriginLeft */
+    @Override
+    public float resizeOriginTop() {
+        Box box = box();
+        return box == null ? 0f : box.y();
+    }
+
+    /**
+     * A leading drag moves the origin, and {@code placeAt} is the one writer that may.
+     *
+     * <p>Writing {@code left}/{@code top} directly would compete with the mover, which re-derives its
+     * edge anchoring every frame and would overwrite the drag on the next tick. Going through it hands
+     * ownership over instead — the same route the move gesture uses.</p>
+     */
+    @Override
+    public void applyResizeOrigin(float left, float top) {
+        move.placeAt(left, top);
+    }
 }
