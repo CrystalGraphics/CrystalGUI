@@ -2,7 +2,7 @@ package com.crystalgui.mc.client;
 
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.ui.UIWindow;
-import com.crystalgui.ui.elements.desktop.DesktopPresentation;
+import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.ui.elements.desktop.ScreenOverlay;
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;

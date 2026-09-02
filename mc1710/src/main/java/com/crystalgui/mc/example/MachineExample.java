@@ -1,8 +1,8 @@
 package com.crystalgui.mc.example;
 
-import com.crystalgui.example.machine.MachineModel;
-import com.crystalgui.example.machine.MachineTrace;
-import com.crystalgui.example.machine.ui.MachinePanel;
+import com.crystalgui.app.machine.MachineModel;
+import com.crystalgui.app.machine.MachineTrace;
+import com.crystalgui.app.machine.ui.MachinePanel;
 import com.crystalgui.net.window.ServerWindows;
 
 import cpw.mods.fml.common.FMLCommonHandler;

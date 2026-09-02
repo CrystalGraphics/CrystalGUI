@@ -15,7 +15,7 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
 import com.crystalgui.ui.elements.desktop.WindowFrame;
-import com.crystalgui.ui.elements.desktop.WindowState;
+import com.crystalgui.core.window.WindowState;
 
 /**
  * <b>Where a server's window lands on 1.7.10</b> — a {@link WindowFrame} on the desktop
