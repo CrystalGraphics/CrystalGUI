@@ -1,5 +1,10 @@
 package com.crystalgui.desktop;
 
+import com.crystalgui.core.signal.Signal;
+import com.crystalgui.ui.box.BoxPainter;
+import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.desktop.host.ScreenOverlay;
+import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.motion.WindowAnimator;
 import com.crystalgui.desktop.motion.WindowGeometryAnimation;
@@ -268,6 +273,20 @@ public class Desktop extends UINode implements DataProvider {
      * never held a window at all — and once every window is genuinely gone, the surface goes back.</p>
      */
     /** The class the sheet sizes the compositor from. @see #syncPresence */
+    /**
+     * Whether the compositor is on the tree — true on a resume, false on a suspend.
+     *
+     * <p>A host with a window mounted needs to know, because a suspend detaches the whole subtree:
+     * anything holding a frame has to stop driving it and pick it up again on the way back.</p>
+     */
+    public final Signal.Value<Boolean> onSuspendedChanged = new Signal.Value<>();
+
+    private boolean suspended;
+    @Nullable
+    private UIDocument suspendedIn;
+    @Nullable
+    private ScreenOverlay screenOverlay;
+
     public static final String LIVE_CLASS = "__live__";
 
     private void syncPresence() {
@@ -1345,6 +1364,128 @@ public class Desktop extends UINode implements DataProvider {
     /** Lets a test drive the first-hide announcement more than once. */
     public static void resetSwitcherAnnouncementForTesting() {
         switcherAnnounced = false;
+    }
+
+    // ── The host seam ────────────────────────────────────────────────────────────────────
+    //
+    // What a LOADER calls, and the half of the compositor a harness never needs: a scene is always
+    // the thing on screen, so it never asks whether it is, never suspends, and never paints a
+    // pinned window over somebody else's GUI. All of it is the COMPOSITOR's rather than the
+    // document's -- the engine may not name a desktop, which is why `Desktop.of` names the document
+    // and not the reverse.
+
+    /** Whether anything is pinned — what a host asks to choose between a suspend and a HUD. */
+    public boolean hasPinnedWindows() {
+        for (WindowFrame frame : registry().windows()) {
+            if (frame.isPinned()) return true;
+        }
+        return false;
+    }
+
+    /** @see #suspend() */
+    public boolean isSuspended() {
+        return suspended;
+    }
+
+    /**
+     * Takes the compositor off the tree — what a host calls when its screen closes.
+     *
+     * <p>Detaching is the same mechanism a hidden window uses one level down and buys the same
+     * things: nothing matches a selector, nothing lays out, nothing paints, and the services are
+     * told to forget every node in the subtree, so the hover, the press target and any live drag
+     * are dropped rather than left describing a screen that is no longer up.</p>
+     *
+     * <p><b>The windows themselves are untouched.</b> Their states stay {@code VISIBLE}, their
+     * positions and their z-order stay exactly as they were, and {@link #resume} puts the desktop
+     * back with everything where it was left. Hiding each window instead would lose which of them
+     * were on screen, which is the thing a resume has to know.</p>
+     */
+    public void suspend() {
+        if (suspended) return;
+        UIDocument document = document();
+        if (document == null) return;
+        suspended = true;
+        suspendedIn = document;
+        document.remove(this);
+        onSuspendedChanged.emit(false);
+    }
+
+    /** Puts the compositor back. @see #suspend() */
+    public void resume() {
+        if (!suspended) return;
+        suspended = false;
+        UIDocument document = suspendedIn;
+        suspendedIn = null;
+        if (document != null && parent() == null) document.append(this);
+        onSuspendedChanged.emit(true);
+    }
+
+    /**
+     * What the compositor should be showing, given what the host has on screen.
+     *
+     * <p>The host answers two booleans it can see and this answers the one thing it cannot: what
+     * state the desktop is actually in. Keeping the decision here rather than at each hook is what
+     * removed the close flicker — @see DesktopPresentation.</p>
+     *
+     * @param ourScreenIsUp the host's own CrystalGUI screen is the current one
+     * @param anyScreenIsUp some GuiScreen is up, ours or a foreign one
+     */
+    public DesktopPresentation presentation(boolean ourScreenIsUp, boolean anyScreenIsUp) {
+        if (ourScreenIsUp) return DesktopPresentation.DESKTOP;
+        if (parent() == null) return DesktopPresentation.NONE;
+        if (!hasPinnedWindows()) return DesktopPresentation.NONE;
+        return anyScreenIsUp ? DesktopPresentation.OVERLAY : DesktopPresentation.HUD;
+    }
+
+    /** What {@link #enterHudMode} put away, so a foreign screen's input can still reach a pinned window. */
+    public ScreenOverlay screenOverlay() {
+        UIDocument document = document();
+        if (document == null) return null;
+        if (screenOverlay == null) screenOverlay = new ScreenOverlay(document);
+        return screenOverlay;
+    }
+
+    /**
+     * Paints one frame in {@code presentation} — <b>the one paint entry a host calls</b>.
+     *
+     * <p>Folding the arms together is not tidiness: it is what stops two callers each deciding
+     * whether it is their turn, which is what dropped a frame every time the screen closed.</p>
+     *
+     * <p>Three things vary and nothing else does — <b>what</b> is painted (the whole document, or
+     * the window layer alone), whether the <b>top layer</b> goes with it, and whether <b>input</b>
+     * runs. Each is a question the presentation answers, so a new situation is a new arm rather than
+     * a new path. The root transform is the box tree's in every arm, which is what makes a pinned
+     * window pixel-identical on the desktop, over a foreign GUI and on the HUD.</p>
+     */
+    public void paint(DesktopPresentation presentation, float deltaSeconds,
+                      int surfaceWidth, int surfaceHeight) {
+        if (presentation == null || !presentation.paintsAnything()) return;
+        UIDocument document = document();
+        if (document == null) return;
+        if (!presentation.paintsWholeDesktop() && parent() == null) return;
+
+        // SURFACE pixels in, LOGICAL units to lay out in: the scale lives on the box tree's root
+        // transform and nowhere else, so this is the only division and painting picks it up by
+        // reading the matrix it already reads.
+        float scale = document.boxes().uiScale();
+        document.frame(deltaSeconds, surfaceWidth / scale, surfaceHeight / scale);
+
+        CgUiPaintContext ctx = CgUiPaintContext.getInstance();
+        ctx.beginFrame(surfaceWidth, surfaceHeight);
+        if (presentation.paintsWholeDesktop()) {
+            document.paint(ctx);
+        } else {
+            // THE WINDOW LAYER, not the desktop: the taskbar is chrome for a desktop that is not up,
+            // and a strip listing windows most of which are hidden is not something to put over a
+            // game. The top layer is skipped for the same reason unless the presentation asks.
+            Box layer = windowLayer().box();
+            if (layer != null) BoxPainter.paintSubtree(layer, ctx);
+            if (presentation.paintsTopLayer()) {
+                Box top = document.hasTopLayerContent() ? document.topLayer() : null;
+                if (top != null) BoxPainter.paintSubtree(top, ctx);
+            }
+        }
+        ctx.endFrame();
     }
 
     /** The window layer — the work area's box, and the containing block every frame is placed in. */
