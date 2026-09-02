@@ -1,4 +1,4 @@
-package com.crystalgui.example.machine;
+package com.crystalgui.app.machine;
 
 import com.crystalgui.core.CrystalGuiCore;
 

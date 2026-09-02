@@ -1,20 +1,21 @@
-package com.crystalgui.example.machine.ui;
+package com.crystalgui.app.machine.ui;
 
+import com.crystalgui.ui.dom.Name;
 import javax.annotation.Nullable;
 
-import com.crystalgui.example.machine.EngineModel;
-import com.crystalgui.example.machine.MachineTrace;
+import com.crystalgui.app.machine.EngineModel;
+import com.crystalgui.app.machine.MachineTrace;
 import com.crystalgui.net.window.CloseReason;
 import com.crystalgui.net.window.ClientScope;
 import com.crystalgui.net.window.Networked;
 import com.crystalgui.net.window.ServerScope;
 import com.crystalgui.net.window.UiType;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.Button;
-import com.crystalgui.ui.elements.ProgressBar;
-import com.crystalgui.ui.elements.Slider;
-import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.control.ProgressBar;
+import com.crystalgui.widget.control.Slider;
+import com.crystalgui.widget.text.UIText;
 
 /**
  * <b>Step 2b — a UI inside a UI.</b>
@@ -71,7 +72,15 @@ import com.crystalgui.ui.elements.UIText;
  * root, so they are left defaulted here — a nested panel that overrode them would be writing code
  * nothing calls.</p>
  */
-public final class EnginePanel extends UIElement implements Networked<EngineModel> {
+public final class EnginePanel extends UINode implements Networked<EngineModel> {
+
+    /** This panel's kind. Declared here because a node answers the name its class declares,
+     * and {@link com.crystalgui.net.window.UiType} READS this rather than deriving one. */
+    public static final Name NAME = Name.of("enginepanel");
+
+    public EnginePanel() {
+        super(NAME);
+    }
 
     /**
      * Declared for the same reason {@link MachinePanel#TYPE} is, plus one that only applies to a
@@ -135,31 +144,30 @@ public final class EnginePanel extends UIElement implements Networked<EngineMode
 
         UIText title = new UIText("Engine");
         title.addClass(MachineStyles.TITLE_CLASS);
-        addChild(title);
+        append(title);
 
         load.setRange(0f, 1f);
-        addChild(MachineRows.row("Load", load));
-        addChild(MachineRows.row("Heat", heat));
+        append(MachineRows.row("Load", load));
+        append(MachineRows.row("Heat", heat));
 
         reading.addClass(MachineStyles.STATUS_CLASS);
-        addChild(reading);
+        append(reading);
 
-        UIElement controls = new UIElement();
+        UINode controls = new UINode();
         controls.addClass(MachineStyles.ROW_CLASS);
-        controls.addChild(restart);
-        controls.addChild(tune);
-        addChild(controls);
+        controls.append(restart);
+        controls.append(tune);
+        append(controls);
 
         UIText caption = new UIText("This panel's own wire method. Neither side typed the prefix:");
         caption.addClass(MachineStyles.HINT_CLASS);
-        addChild(caption);
+        append(caption);
 
-        addChild(MachineRows.authored(MachineStyles.WHO_SERVER_CLASS, "SERVER", serverWire));
-        addChild(MachineRows.authored(MachineStyles.WHO_CLIENT_CLASS, "CLIENT", clientWire));
+        append(MachineRows.authored(MachineStyles.WHO_SERVER_CLASS, "SERVER", serverWire));
+        append(MachineRows.authored(MachineStyles.WHO_CLIENT_CLASS, "CLIENT", clientWire));
 
         result.addClass(MachineStyles.WIRE_CLASS);
-        result.neverSelfSizeWidth();
-        addChild(result);
+        append(result);
     }
 
     // ── The SERVER half ─────────────────────────────────────────────────────

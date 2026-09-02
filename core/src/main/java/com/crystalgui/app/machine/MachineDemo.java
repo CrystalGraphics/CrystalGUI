@@ -1,10 +1,10 @@
-package com.crystalgui.example.machine;
+package com.crystalgui.app.machine;
 
 import java.util.List;
 import java.util.Map;
 
-import com.crystalgui.example.machine.ui.MachinePanel;
-import com.crystalgui.example.machine.ui.MachineStyles;
+import com.crystalgui.app.machine.ui.MachinePanel;
+import com.crystalgui.app.machine.ui.MachineStyles;
 import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.window.ClientWindows;
 import com.crystalgui.net.window.ServerWindow;
@@ -15,9 +15,9 @@ import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.Button;
-import com.crystalgui.ui.elements.Switch;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.control.Switch;
 
 /**
  * <b>Step 6 — both halves in one process, with the wire printed.</b>
@@ -310,16 +310,16 @@ public final class MachineDemo {
                 }
 
                 @Override
-                public void contentReplaced(UIElement newRoot) {
+                public void contentReplaced(UINode newRoot) {
                     System.out.println("  [client] the server re-described this window");
                 }
             };
         }
     }
 
-    private static int count(UIElement element) {
+    private static int count(UINode element) {
         int total = 1;
-        for (UIElement child : element.getChildren()) total += count(child);
+        for (UINode child : element.children()) total += count(child);
         return total;
     }
 

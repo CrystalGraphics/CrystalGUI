@@ -13,21 +13,21 @@
  *
  * <table>
  *   <tr><th>#</th><th>Class</th><th>What it teaches</th></tr>
- *   <tr><td>1</td><td>{@link com.crystalgui.example.machine.MachineModel}</td>
+ *   <tr><td>1</td><td>{@link com.crystalgui.app.machine.MachineModel}</td>
  *       <td>The truth the server owns. <b>Not a single UI import.</b></td></tr>
- *   <tr><td>1b</td><td>{@link com.crystalgui.example.machine.EngineModel}</td>
+ *   <tr><td>1b</td><td>{@link com.crystalgui.app.machine.EngineModel}</td>
  *       <td>A <b>slice</b> of that truth, owned by the machine — and why carving one is a modelling
  *           decision rather than a UI convenience.</td></tr>
- *   <tr><td>2</td><td>{@link com.crystalgui.example.machine.ui.MachinePanel}</td>
+ *   <tr><td>2</td><td>{@link com.crystalgui.app.machine.ui.MachinePanel}</td>
  *       <td><b>The whole UI, in one class.</b> Widgets as fields, {@code layout()} to arrange them,
  *           {@code serve()} for the server half and {@code wire()}/{@code client()} for the client
  *           half. Read it in that order — the file is written in it.</td></tr>
- *   <tr><td>2b</td><td>{@link com.crystalgui.example.machine.ui.EnginePanel}</td>
+ *   <tr><td>2b</td><td>{@link com.crystalgui.app.machine.ui.EnginePanel}</td>
  *       <td><b>A UI inside a UI.</b> A nested panel with its own slice, its own wire method and a
  *           plain callback back to its parent — see the section below.</td></tr>
- *   <tr><td>3</td><td>{@link com.crystalgui.example.machine.ui.MachineStyles}</td>
+ *   <tr><td>3</td><td>{@link com.crystalgui.app.machine.ui.MachineStyles}</td>
  *       <td>Where the sizes and colours went, and why they travel separately.</td></tr>
- *   <tr><td>4</td><td>{@link com.crystalgui.example.machine.MachineDemo}</td>
+ *   <tr><td>4</td><td>{@link com.crystalgui.app.machine.MachineDemo}</td>
  *       <td>Both ends in one process, with the wire printed.
  *           {@code ./gradlew :core:runExample}</td></tr>
  *   <tr><td>5</td><td>{@code mc1710/…/mc/example/MachineExample}
@@ -35,7 +35,7 @@
  *       <td>The same thing in game, on a real socket. Press <b>F8</b>.</td></tr>
  * </table>
  *
- * <p>{@link com.crystalgui.example.machine.MachineTrace} runs through all of them: every line the example
+ * <p>{@link com.crystalgui.app.machine.MachineTrace} runs through all of them: every line the example
  * prints is stamped with the thread it happened on, because the server/client split is the part that
  * a single-player world hides.</p>
  *
@@ -117,7 +117,7 @@
  *
  * <h2>Composing: a UI inside a UI</h2>
  *
- * <p>{@link com.crystalgui.example.machine.ui.EnginePanel} is a second {@code Networked} panel living
+ * <p>{@link com.crystalgui.app.machine.ui.EnginePanel} is a second {@code Networked} panel living
  * inside the first one as an ordinary field. On the parent that is <b>three lines</b>, and there is no
  * fourth anywhere:</p>
  *
@@ -186,10 +186,10 @@
  *       {@link com.crystalgui.net.SheetRef} — usually as a hash the client already has, so nothing
  *       transfers at all.</li>
  *   <li><b>A server path may not touch {@code CgIO}, fonts or GL.</b> Read
- *       {@link com.crystalgui.example.machine.ui.MachineStyles} for the one that catches everybody:
+ *       {@link com.crystalgui.app.machine.ui.MachineStyles} for the one that catches everybody:
  *       {@code StyleSheet} is unloadable on a server.</li>
  *   <li><b>A window is a VIEW of world state, not the state itself.</b> {@link
- *       com.crystalgui.example.machine.MachineModel} ticks with the world, in {@code MachineExample};
+ *       com.crystalgui.app.machine.MachineModel} ticks with the world, in {@code MachineExample};
  *       {@code MachinePanel.tick} mirrors it into widgets and stops. Fusing the two is invisible
  *       until you ask what happens when the last viewer leaves — and the answer was that the machine
  *       stopped existing, which is the opposite of what a server-authoritative UI is for.</li>
@@ -246,4 +246,4 @@
  *       connection, with a ten-point checklist instead of a narrative.</li>
  * </ul>
  */
-package com.crystalgui.example.machine;
+package com.crystalgui.app.machine;
