@@ -200,11 +200,11 @@ public class Dialog extends UINode {
         titleBar = new UINode();
         titleBar.addClass(TITLE_BAR_CLASS);
         titleBar.append(titleLabel);
-        append(titleBar);
+        appendStructural(titleBar);
 
         content = new UINode();
         content.addClass(CONTENT_CLASS);
-        append(content);
+        appendStructural(content);
 
         closeButton = new Button("x");
         closeButton.addClass(CLOSE_CLASS);
@@ -424,7 +424,7 @@ public class Dialog extends UINode {
             backdrop.addClass(BACKDROP_CLASS);
             backdrop.setHitTest(false);
             backdrop.setInert(true);
-            append(backdrop);
+            appendStructural(backdrop);
         }
         applyBackdropVisibility();
         return backdrop;
@@ -697,4 +697,10 @@ public class Dialog extends UINode {
 
     private boolean clampTickerRunning;
 
+
+    /** A dialog owns its structure; content goes in {@link #getContent()}. */
+    @Override
+    public boolean acceptsPublicChildren() {
+        return false;
+    }
 }

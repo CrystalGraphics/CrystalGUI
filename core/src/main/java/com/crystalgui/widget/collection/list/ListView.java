@@ -436,12 +436,29 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
     private final List<UINode> awaitingRecycle = new ArrayList<>();
 
     /**
+     * Releases the model subscription on the way out.
+     *
+     * <p>{@link #unsubscribeFromModel} existed and had NO CALLER after the port: the old engine
+     * released on detach and the hook did not come across, so every off-screen list kept its
+     * listener -- and with it its pooled elements and every item they reference. Nothing failed;
+     * the leak is invisible until something profiles it, which is why the covering test asserts
+     * the subscription rather than the symptom. Reversible on purpose: a dock panel is detached
+     * every time it is closed, and a view that treated the first detach as death came back deaf.</p>
+     */
+    @Override
+    protected void disconnected() {
+        super.disconnected();
+        unsubscribeFromModel();
+    }
+
+    /**
      * A standing post-layout hook, which is what the {@code onLayoutChanged} override became.
      *
      * <p>Layout is one pass with no feedback into it here, so anything that READS a measured box goes
      * after it — and the realised window is derived from the viewport's height.</p>
      */
     @Override
+
     protected void connected() {
         super.connected();
         document().animation().afterLayout(this, delta -> {
@@ -632,9 +649,16 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
             // one Tab press to skip rather than fifty.
             row.setFocusPolicy(FocusPolicy.CLICK_NOT_TABBABLE);
 
+            // `indexOfRowElement`, NOT `indexOf`. The row's MODEL index is the question; `UINode`
+            // inherits an `indexOf(child)` that answers a child's position in the parent's child
+            // list, and it compiles, and it is a plausible small integer -- so focus, press and
+            // release all silently acted on the wrong row. The old engine had no such method, so
+            // the name resolved to this list's own; renaming it during the port handed the call to
+            // the inherited one with nothing to report. Found by a focus test whose index drifted
+            // from 3 to 7 while the focused element showed item 5.
             final UINode tracked = row;
             tracked.onFocus.attachListener((el, event) -> {
-                int index2 = indexOf(tracked);
+                int index2 = indexOfRowElement(tracked);
                 if (index2 < 0) return;
                 focusedIndex = index2;
             }, false, true);
@@ -662,20 +686,20 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
                 // selection it was opened over, which for a multi-selection cannot be undone. The menu
                 // still knows its subject: it reads the row under the pointer directly.
                 if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
-                int index2 = indexOf(tracked);
+                int index2 = indexOfRowElement(tracked);
                 if (index2 >= 0) pressRow(index2);
             }, false, true);
             tracked.onMouseUp.attachListener((el, event) -> {
                 if (event.getDetail() == UIInputHandler.KEYBOARD_DETAIL) return;
                 if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
-                int index2 = indexOf(tracked);
+                int index2 = indexOfRowElement(tracked);
                 if (index2 >= 0) releaseRow(index2);
             }, false, true);
             // Absolute, so a row sits at its true content offset and the scroll translate moves it for
             // free — the realised set changes, the positions never do.
             StyleGroup.defaultPipeline(row.getStyle().getLayoutGroup(),
                     l -> l.positionType(TaffyPosition.ABSOLUTE));
-            append(row);
+            appendStructural(row);
         }
         final float top = rowOffset() + sizeStrategy.offsetOf(index);
         final float height = sizeStrategy.sizeOf(index);
@@ -1475,4 +1499,28 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
     }
 
     private boolean disposed;
+
+    /**
+     * A list owns every child it has: rows are realised from the MODEL and recycled, so a child a
+     * caller appended would be recycled out of existence. {@code ScrollerView} says yes -- it has a
+     * default slot and is a container on purpose -- which is exactly why this has to be declared.
+     */
+    @Override
+    public boolean acceptsPublicChildren() {
+        return false;
+    }
+
+    /**
+     * NOTHING. A list's children are realised ROWS -- a dozen of ten thousand, recycled as it
+     * scrolls -- so they are a view of the model rather than content.
+     *
+     * <p>Describing them would send a peer whichever window happened to be on screen when the
+     * description was taken, as though it were the list's content; the peer rebuilds rows from the
+     * model it already has. This is the same statement {@link #acceptsPublicChildren} makes from the
+     * other side: nothing a caller put here, and nothing to send.</p>
+     */
+    @Override
+    public java.util.List<UINode> describedChildren() {
+        return java.util.List.of();
+    }
 }

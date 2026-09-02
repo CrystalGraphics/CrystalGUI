@@ -167,7 +167,7 @@ public class TabView extends UINode {
         this.strip.addClass(STRIP_CLASS);
         // Starts empty, and a TabView built and never filled must not reserve the row either.
         this.strip.addClass(EMPTY_CLASS);
-        append(this.strip);
+        appendStructural(this.strip);
 
         // Scrolls, but shows nothing: the visible bar is the sibling below.
         // A PLAIN ScrollerView, and a POST-LAYOUT HOOK rather than the two overrides this replaced.
@@ -214,7 +214,7 @@ public class TabView extends UINode {
         // half of the same problem, and the half that was missing — is set per-axis in setTabSide.
         StyleGroup.defaultPipeline(panes.getStyle().getLayoutGroup(), l -> l.flexGrow(1));
         StyleGroup.defaultPipeline(panes.getStyle().getGeneralGroup(), g -> g.overflow(Overflow.HIDDEN));
-        append(this.panes);
+        appendStructural(this.panes);
 
         setTabSide(TabSide.TOP);
 
@@ -659,4 +659,11 @@ public class TabView extends UINode {
     public UINode panes() {
         return panes;
     }
+
+    /** A TabView's structure is fixed: {@link #addTab} and {@code Tab.content()} are the way in. */
+    @Override
+    public boolean acceptsPublicChildren() {
+        return false;
+    }
+
 }

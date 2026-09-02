@@ -1,5 +1,6 @@
 package com.crystalgui.widget.text;
 
+import com.crystalgui.style.property.visual.text.WhiteSpace;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.api.font.CgFontFamilyGroup;
 import com.crystalgraphics.api.text.CgShapedParagraph;
@@ -248,10 +249,15 @@ public final class UIText extends UINode implements Measurable {
     public Size measure(Constraints constraints) {
         float width = constraints.wrapWidth();
         if (Float.isNaN(width)) width = constraints.wantsMinContentWidth() ? MIN_CONTENT_WIDTH : 0f;
-        if (!wraps()) width = 0f;   // one line however long; the ellipsis happens at paint
+        boolean wraps = wraps();
+        if (!wraps) width = 0f;   // one line however long; the ellipsis happens at paint
 
+        // ONLY WHILE WRAPPING. `max-width` caps the BOX; it is not a wrap width, and applying it to
+        // a `nowrap` run undoes the line above -- zero means "one line", and the clamp read zero as
+        // "unconstrained, so use the max" and wrapped at it. The text is then supposed to overflow a
+        // box the cap still holds at 80px, which is what the covering test asserts on both counts.
         TaffyDimension max = computedStyle().get(LayoutProperties.MAX_WIDTH);
-        if (max != null && max.isLength() && max.getValue() > 0f
+        if (wraps && max != null && max.isLength() && max.getValue() > 0f
                 && (width <= 0f || width > max.getValue())) {
             width = max.getValue();
         }
@@ -318,7 +324,11 @@ public final class UIText extends UINode implements Measurable {
     }
 
     private boolean wraps() {
-        return getStyle().getGeneralGroup().whiteSpace().wraps();
+        // THE COMPUTED STYLE, not the authored group. `white-space` INHERITS -- a container sets it
+        // for a whole subtree -- and the group answers only for what was written on this node, so an
+        // inherited `nowrap` never arrived and the text went on wrapping with the rule plainly there.
+        WhiteSpace whiteSpace = computedStyle().get(StylePropertyRegistry.WHITE_SPACE);
+        return whiteSpace == null || whiteSpace.wraps();
     }
 
     /**
