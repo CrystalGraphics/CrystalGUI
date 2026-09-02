@@ -155,7 +155,27 @@ public class CrystalEditor extends UINode implements Disposable, WindowChrome, D
     protected void connected() {
         super.connected();
         UIDocument document = document();
-        if (document != null) document.addDataProvider(this);
+        if (document == null) return;
+        document.addDataProvider(this);
+        // AND THE APPEARANCE AXES, REPLAYED NOW THAT THERE IS A DOCUMENT TO INSTALL THEM ON.
+        //
+        // `WorkbenchSettings.apply` installs the theme and the editor colour scheme through
+        // `UiThemeManager.installInto(document.styles())`, and it reads `workbench.document()` to find
+        // the engine -- but `install` is called from `loadPreferences`, which a host runs while
+        // building the editor, long before it is added to anything. So the document was null, the
+        // install was silently skipped, and nothing ever asked again: the tree carried the user-agent
+        // sheet and nothing else.
+        //
+        // What that looks like is not a missing theme. Every syntax capture resolves through a
+        // `::highlight()` rule in the SCHEME, so with no scheme sheet installed `keyword`, `type`,
+        // `string` and the rest all resolve to an empty HighlightStyle -- and the editor draws
+        // correctly tokenised code in one flat colour. It reads as the language stack being absent,
+        // which is why it was reported that way, and the services were attached the whole time.
+        //
+        // Idempotent by contract ("safe to call as often as you like"), and the manager's own same-id
+        // guard makes the theme and scheme a no-op when they have not moved. Same shape as the
+        // deferred answer a session restore needs: asked once too early, replayed on arrival.
+        WorkbenchSettings.apply(workbench);
     }
 
     /**
