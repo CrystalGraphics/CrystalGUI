@@ -1,13 +1,12 @@
 package com.crystalgui.net.window;
 
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.style.Styleable;
 import com.crystalgui.style.sheet.StyleSheet;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
-import java.util.regex.Pattern;
-import javax.annotation.Nullable;
+import java.util.Set;
 
 /**
  * <b>A server's CSS, confined to its own window and taken away when the window goes.</b>
@@ -15,7 +14,7 @@ import javax.annotation.Nullable;
  * <p>What a server sends used to be handed straight to the client's one style engine:</p>
  *
  * <pre>{@code
- * host.getStyleEngine().addStylesheet(StyleSheet.parse(sheet));   // and never removed
+ * host.styles().addStylesheet(StyleSheet.parse(sheet));   // and never removed
  * }</pre>
  *
  * <p>Three things wrong with that, and each is silent:</p>
@@ -31,32 +30,46 @@ import javax.annotation.Nullable;
  *       shipping {@code button { … }}.</li>
  * </ul>
  *
- * <h3>Scoped by type, not by window</h3>
+ * <h3>Scoped to the window's own root, natively</h3>
  *
- * <p>Each window's root carries a class derived from its {@code UiType} id, and every selector in the
- * sheet is prefixed with it. So the rules reach that type's windows and nothing else — and two windows
- * of one type <b>share</b> one parsed sheet, which is what makes the refcount worth having. Scoping per
- * window instance would be tighter and would make every window its own parse of the same text.</p>
+ * <p>{@code StyleEngine.addStylesheet(sheet, root)} is CSS {@code @scope}: only nodes at or under
+ * {@code root} can match the sheet's rules. That is the whole of the confinement, and it is the
+ * engine's rather than this class's.</p>
  *
- * <h3>The rewrite is textual, and that is the interim</h3>
+ * <p><b>This used to prefix every selector with a class instead, and the difference is not
+ * cosmetic.</b> A prefix is a DESCENDANT COMBINATOR, and an element is not its own descendant — so
+ * every rule aimed at the panel root itself silently stopped applying. The machine window opened as
+ * a sliver in the corner with no styling and nothing failing anywhere, because the one rule carrying
+ * its width and padding was written for the element wearing the scope. Native scoping means "this
+ * element or below" and the whole problem disappears rather than being worked around. The textual
+ * pass also had to read selectors out of the text, which is how a COMMENT between two rules came to
+ * be parsed as the next rule's selector and refused a whole sheet over a sentence ending in a full
+ * stop.</p>
  *
- * <p>Prefixing selector text is not the same as a real scope: it cannot express "this and nothing
- * below", and a selector already anchored somewhere else is merely narrowed rather than confined. It is
- * enough to stop the bleed, and M5's native scopes replace it. What it must not do is <b>fail
- * loudly</b> — a sheet it cannot rewrite is a plain window, never a missing one.</p>
+ * <h3>One parse per text, one installation per window</h3>
+ *
+ * <p>Two windows of one type share a parsed {@link StyleSheet} — that is what makes the refcount
+ * worth having — and each installs it against its own root. So the sheet must be removed against
+ * that root and not wholesale, or closing either window unstyles the other; see
+ * {@link com.crystalgui.style.StyleEngine#removeStylesheet(StyleSheet, Styleable)}.</p>
+ *
+ * <p>What it must not do is <b>fail loudly</b>: a sheet that will not parse is a plain window, never
+ * a missing one. Note the parser no longer throws for malformed input — it drops what it cannot read
+ * and keeps the rest — so that is now about the OUTCOME rather than about an exception.</p>
  */
 public final class ScopedSheets {
 
-    /** What a host does with a sheet once it has been scoped. */
+    /** What a host does with a sheet once it has been scoped to a window's root. */
     public interface Host {
-        void add(StyleSheet sheet);
+        void add(StyleSheet sheet, Styleable root);
 
-        void remove(StyleSheet sheet);
+        void remove(StyleSheet sheet, Styleable root);
     }
 
+    /** One parse, and the roots currently showing it. */
     private static final class Entry {
         final StyleSheet sheet;
-        int refs;
+        final Set<Styleable> roots = new LinkedHashSet<>();
 
         Entry(StyleSheet sheet) {
             this.sheet = sheet;
@@ -65,185 +78,47 @@ public final class ScopedSheets {
 
     private final Host host;
 
-    /** Keyed by scope + source, so identical CSS under one scope is parsed and added once. */
+    /** Keyed by the CSS text, so identical CSS is parsed once however many windows show it. */
     private final Map<String, Entry> live = new LinkedHashMap<>();
 
     public ScopedSheets(Host host) {
         this.host = host;
     }
 
-    /**
-     * The class a window of this type carries, and the prefix its rules are given.
-     *
-     * <p>Derived from the type id so it is stable across a restart and the same for every window of a
-     * type. Non-identifier characters become {@code -}, since a {@code :} in {@code mymod:furnace}
-     * would end the class in a selector.</p>
-     */
-    public static String scopeClass(String typeId) {
-        StringBuilder out = new StringBuilder("__ui-");
-        for (int i = 0; i < typeId.length(); i++) {
-            char c = typeId.charAt(i);
-            out.append(Character.isLetterOrDigit(c) ? Character.toLowerCase(c) : '-');
+    /** Installs {@code css} scoped to {@code root}, re-using the parse if another window has it. */
+    public void acquire(String css, Styleable root) {
+        if (root == null) return;
+        Entry entry = live.get(css);
+        if (entry == null) {
+            StyleSheet parsed;
+            try {
+                parsed = StyleSheet.parse(css);
+            } catch (RuntimeException malformed) {
+                // A GUARD, not a path. Since 5.2 the parser drops a rule it cannot read, warns with
+                // the selector text and carries on -- CSS's own rule -- so garbage installs and
+                // simply carries nothing. The catch stays because a server can ship anything and the
+                // one thing this must never do is lose the window along with its styling.
+                CrystalGuiCore.LOGGER.warn("A server sheet would not parse: {}", malformed.getMessage());
+                return;
+            }
+            entry = new Entry(parsed);
+            live.put(css, entry);
         }
-        return out.append("__").toString();
+        // The SET is what makes this idempotent: a window re-described mid-session re-applies its
+        // sheets, and a second install against one root would be a second copy at higher priority.
+        if (entry.roots.add(root)) host.add(entry.sheet, root);
     }
 
-    /** Adds {@code css} scoped to {@code typeId}'s windows, or re-uses it if it is already there. */
-    public void acquire(String typeId, String css) {
-        String scope = scopeClass(typeId);
-        String key = scope + "\0" + css;
-        Entry entry = live.get(key);
-        if (entry != null) {
-            entry.refs++;
-            return;
-        }
-        StyleSheet parsed;
-        try {
-            parsed = StyleSheet.parse(scope(css, scope));
-        } catch (RuntimeException malformed) {
-            // A theme that will not parse is a plain window, never a missing one.
-            CrystalGuiCore.LOGGER.warn("A server sheet for <{}> would not parse: {}",
-                    typeId, malformed.getMessage());
-            return;
-        }
-        entry = new Entry(parsed);
-        entry.refs = 1;
-        live.put(key, entry);
-        host.add(parsed);
+    /** Gives one back. The parse is dropped when the last window using it goes. */
+    public void release(String css, Styleable root) {
+        Entry entry = live.get(css);
+        if (entry == null || !entry.roots.remove(root)) return;
+        host.remove(entry.sheet, root);
+        if (entry.roots.isEmpty()) live.remove(css);
     }
 
-    /** Gives one back. The sheet leaves the engine when the last window using it does. */
-    public void release(String typeId, String css) {
-        String key = scopeClass(typeId) + "\0" + css;
-        Entry entry = live.get(key);
-        if (entry == null) return;
-        if (--entry.refs > 0) return;
-        live.remove(key);
-        host.remove(entry.sheet);
-    }
-
-    /** How many distinct sheets are currently installed. For tests and diagnostics. */
+    /** How many distinct sheets are currently parsed. For tests and diagnostics. */
     public int installed() {
         return live.size();
     }
-
-    /**
-     * Prefixes every selector in {@code css} with {@code .scope}.
-     *
-     * <p>Textual, and deliberately conservative: it walks rule by rule, leaves declaration bodies
-     * untouched, and prefixes each comma-separated selector in turn. Anything it does not understand it
-     * passes through rather than dropping — the failure mode of a scoping pass should be rules that are
-     * too broad, never a window with no styling at all.</p>
-     */
-    public static String scope(String css, String scope) {
-        // COMMENTS FIRST. Everything between one block and the next is read below as a selector, and a
-        // comment is exactly where prose lives -- full of commas to split on, colons to mistake for a
-        // pseudo-class, and the odd brace. machine.css shipped a third comments and was refused whole:
-        // "Unparseable selector fragment near '.' in 'that.'", where `that.` is a sentence ending. The
-        // parser strips them itself, so nothing is lost by doing it here.
-        css = BLOCK_COMMENT.matcher(css).replaceAll("");
-        StringBuilder out = new StringBuilder(css.length() + 64);
-        int i = 0;
-        while (i < css.length()) {
-            int open = css.indexOf('{', i);
-            if (open < 0) {
-                out.append(css, i, css.length());
-                break;
-            }
-            int close = matchingBrace(css, open);
-            String selectors = css.substring(i, open);
-            String body = css.substring(open, close + 1);
-
-            String head = selectors.trim();
-            if (head.startsWith("@") || head.isEmpty()) {
-                // An at-rule keeps its own selector -- and none is supported by the parser today, so
-                // this is about passing it through unharmed rather than scoping it.
-                out.append(selectors).append(body);
-            } else {
-                String lead = selectors.substring(0, selectors.length() - selectors.stripLeading().length());
-                out.append(lead);
-                String[] parts = head.split(",");
-                boolean first = true;
-                for (String part : parts) {
-                    String selector = part.trim();
-                    if (selector.isEmpty()) continue;
-                    for (String scoped : scopeOne(selector, scope)) {
-                        if (!first) out.append(", ");
-                        first = false;
-                        out.append(scoped);
-                    }
-                }
-                out.append(' ').append(body);
-            }
-            i = close + 1;
-        }
-        return out.toString();
-    }
-
-    /**
-     * One selector, scoped — as <b>two</b> selectors, because CSS has no "this element or below".
-     *
-     * <p>Prefixing alone was wrong in the case that matters most. {@code .machine-panel} scoped to
-     * {@code .__ui-x__ .machine-panel} is a DESCENDANT selector, and the class is carried by <b>the
-     * panel root itself</b> — so the rule that gives the window its width and padding stopped matching
-     * anything, the panel collapsed to its content and opened as a sliver in the corner. Nothing failed;
-     * the window simply had no styling.</p>
-     *
-     * <p>So each selector yields both readings:</p>
-     *
-     * <ul>
-     *   <li>{@code .scope S} — S somewhere <em>under</em> the scoped root;</li>
-     *   <li>{@code S₁.scope S₂…} — the scope class attached to S's <em>first</em> compound, which is
-     *       how a selector matches the root itself.</li>
-     * </ul>
-     *
-     * <p>The class goes before any pseudo-class on that compound ({@code .a.scope:hover}, never
-     * {@code .a:hover.scope}), which is where a reader expects it and what keeps a functional
-     * pseudo-class's arguments untouched.</p>
-     */
-    private static List<String> scopeOne(String selector, String scope) {
-        List<String> out = new ArrayList<>(2);
-        out.add("." + scope + " " + selector);
-
-        int combinator = firstCombinator(selector);
-        String head = combinator < 0 ? selector : selector.substring(0, combinator);
-        String rest = combinator < 0 ? "" : selector.substring(combinator);
-
-        int pseudo = head.length();
-        for (int i = 0; i < head.length(); i++) {
-            char c = head.charAt(i);
-            if (c == ':' || c == '[') {
-                pseudo = i;
-                break;
-            }
-        }
-        out.add(head.substring(0, pseudo) + "." + scope + head.substring(pseudo) + rest);
-        return out;
-    }
-
-    /** Where the first compound ends: a descendant space, or a {@code >} child combinator. */
-    private static int firstCombinator(String selector) {
-        for (int i = 0; i < selector.length(); i++) {
-            char c = selector.charAt(i);
-            if (c == ' ' || c == '>' || c == '\t') return i;
-        }
-        return -1;
-    }
-
-    /**
-     * A CSS block comment -- the shape {@code DeclarationParser} strips, kept local so this class stays
-     * loadable on a server, where the sheet package is not.
-     */
-    private static final Pattern BLOCK_COMMENT = Pattern.compile("(?s)/\\*.*?\\*/");
-
-    private static int matchingBrace(String css, int open) {
-        int depth = 0;
-        for (int i = open; i < css.length(); i++) {
-            char c = css.charAt(i);
-            if (c == '{') depth++;
-            else if (c == '}' && --depth == 0) return i;
-        }
-        return css.length() - 1;
-    }
-
 }

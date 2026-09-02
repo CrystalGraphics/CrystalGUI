@@ -331,10 +331,6 @@ public final class ClientWindows {
             return;
         }
 
-        // THE SCOPE CLASS, so a server's rules reach its own windows and nothing else. Added before
-        // the mount so the very first layout already matches; a class added afterwards would leave one
-        // frame styled by the client's sheets alone, which reads as a flash of the wrong theme.
-        root.addClass(ScopedSheets.scopeClass(session.type()));
         Mounted fresh = new Mounted(session, root);
         mounted.put(session, fresh);
         try {

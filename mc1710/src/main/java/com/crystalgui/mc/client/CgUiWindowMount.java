@@ -2,6 +2,7 @@ package com.crystalgui.mc.client;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.style.Styleable;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.net.ViewCommand;
@@ -96,25 +97,27 @@ public final class CgUiWindowMount implements WindowMount {
      */
     private static final ScopedSheets SHEETS = new ScopedSheets(new ScopedSheets.Host() {
         @Override
-        public void add(StyleSheet sheet) {
+        public void add(StyleSheet sheet, Styleable root) {
             UIDocument host = CgUiScreen.window();
-            if (host != null) host.styles().addStylesheet(sheet);
+            if (host != null) host.styles().addStylesheet(sheet, root);
         }
 
         @Override
-        public void remove(StyleSheet sheet) {
+        public void remove(StyleSheet sheet, Styleable root) {
             UIDocument host = CgUiScreen.window();
-            if (host != null) host.styles().removeStylesheet(sheet);
+            // The ROOT overload: one parse serves every window of a type, so removing it wholesale
+            // would unstyle the others -- silently, and only ever with two of them open.
+            if (host != null) host.styles().removeStylesheet(sheet, root);
         }
     });
 
     static SheetSupply sheetSupply() {
         return new SheetSupply(
                 (window, css) -> {
-                    for (String sheet : css) SHEETS.acquire(window.type(), sheet);
+                    for (String sheet : css) SHEETS.acquire(sheet, window.root());
                 },
                 (window, css) -> {
-                    for (String sheet : css) SHEETS.release(window.type(), sheet);
+                    for (String sheet : css) SHEETS.release(sheet, window.root());
                 });
     }
 
