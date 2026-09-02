@@ -343,6 +343,32 @@ public class TabView extends UINode {
         for (Tab tab : new ArrayList<>(tabs)) removeTab(tab);
     }
 
+    /**
+     * The TABS, never the strip and the panes.
+     *
+     * <p>Both of those are scaffolding this widget builds in its own constructor, and they are light
+     * children because a sheet reaches through them ({@code tabview .__strip__ .__rail__} — a part
+     * under a part, which {@code ::part()} cannot spell), so this widget may not have a shadow tree
+     * to make them undescribed for free.</p>
+     */
+    @Override
+    public List<UINode> describedChildren() {
+        return List.copyOf(tabs);
+    }
+
+    /**
+     * A described tab is PLACED, not appended: its button goes in the rail and its content in the
+     * panes, which is what {@link #adoptTabAt} is for and why that method exists at all.
+     */
+    @Override
+    public void adoptDescribedChild(UINode child) {
+        if (!(child instanceof Tab tab)) {
+            throw new IllegalArgumentException("a <tabview> holds <tab> children and nothing else; "
+                    + "a described " + child.tagName() + " has no place in one");
+        }
+        adoptTabAt(tab, tabs.size());
+    }
+
     /** The tabs in strip order. Unmodifiable — use {@link #addTab}/{@link #removeTab}. */
     public List<Tab> getTabs() {
         return Collections.unmodifiableList(tabs);

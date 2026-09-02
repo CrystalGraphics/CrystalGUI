@@ -384,6 +384,32 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
         return parent;
     }
 
+    /**
+     * What a peer is told about, and where a described child goes.
+     *
+     * <p>Usually the light children, and for most widgets that is the end of it: a composite's own
+     * parts live in a shadow tree, which nothing here ever hands out because nothing there is a light
+     * child of anything. That is the mechanism, and it covers 23 of the 44 widgets.</p>
+     *
+     * <p>The other 21 may not have a shadow tree — a sheet reaches through their structure and
+     * {@code ::part()} cannot spell a part under a part — so their scaffolding IS light children, and
+     * without these two hooks it is described: the far side rebuilds the parts in its constructor and
+     * then appends a second copy of every one of them. {@code TabView} is the case that found it, and
+     * it also needs the other half, because a described {@code Tab} must be PLACED (its button in the
+     * rail, its content in the panes) rather than appended anywhere.</p>
+     *
+     * <p>Refusing here is how a composite says a child is not one of its kind, which is the whole of
+     * what the old engine's {@code acceptsPublicChildren} did at this seam.</p>
+     */
+    public List<UINode> describedChildren() {
+        return children();
+    }
+
+    /** @see #describedChildren() */
+    public void adoptDescribedChild(UINode child) {
+        append(child);
+    }
+
     /** The light children — what authors, the codec and the mirror see. Read-only. */
     public final List<UINode> children() {
         return childrenView;

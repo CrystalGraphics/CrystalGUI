@@ -3,6 +3,7 @@ package com.crystalgui.fs;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.protocol.ProtocolConnection;
+import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.text.Change;
 
@@ -91,8 +92,11 @@ public final class WorkspaceClient<T> {
     /**
      * @param ops the wire format. Taken here rather than read off the session, which does not expose
      *            its own — widening {@code ClientUiSession} for one caller would be the worse trade.
+     *            <p>The session's NODE type is a wildcard on purpose: a file client uses it as a
+     *            router and has no opinion about which tree the window shows, so pinning it would
+     *            make the filesystem a fact about the engine.</p>
      */
-    public WorkspaceClient(ClientUiSession<UINode, T> session, com.crystalgui.serialization.DynamicOps<T> ops) {
+    public WorkspaceClient(ClientUiSession<?, T> session, DynamicOps<T> ops) {
         this(session::call, session::onCall, ops);
         // RECORDED, or the first rebind to this same wire would not recognise it and would re-register
         // the push handlers on a router that already has them -- which MessageRouter refuses outright.
@@ -198,7 +202,7 @@ public final class WorkspaceClient<T> {
     }
 
     /** The session-shaped rebind, mirroring the session constructor. @see #rebind(ProtocolConnection) */
-    public boolean rebind(ClientUiSession<UINode, T> session) {
+    public boolean rebind(ClientUiSession<?, T> session) {
         if (session == null || session == boundTo) return false;
         boundTo = session;
         bind(session::call, session::onCall);
