@@ -67,11 +67,14 @@ public class ScrollerView extends UINode {
      * drifting away from the truth. Compared with a tolerance because both are floats settled by an
      * ease.</p>
      */
-    private float getTargetScrollTop() {
+    /** Package-private, not private: where a smooth scroll is HEADED is the only thing that
+     *  separates "it settled correctly" from "it never moved", and the covering test sits here. */
+    float getTargetScrollTop() {
         return easing() ? targetTop : scrollTop();
     }
 
-    private float getTargetScrollLeft() {
+    /** @see #getTargetScrollTop() */
+    float getTargetScrollLeft() {
         return easing() ? targetLeft : scrollLeft();
     }
 
@@ -91,9 +94,14 @@ public class ScrollerView extends UINode {
 
     /** {@link UINode#scrollTo} plus the target this view nudges from. */
     private void scrollAimingAt(float left, float top) {
-        targetLeft = left;
-        targetTop = top;
-        scrollTo(left, top);
+        // CLAMP THE TARGET, not only the position it produces. A target past maxScroll is somewhere
+        // the view can never arrive, so `getTargetScrollTop()` answers with a number the scroll then
+        // settles away from -- and a held step button accumulates one step per frame, so it runs off
+        // indefinitely while the view sits at the end. Releasing it then looks like the repeat kept
+        // running, because the reported target keeps changing after the button came up.
+        targetLeft = Math.max(0f, Math.min(maxScrollLeft(), left));
+        targetTop = Math.max(0f, Math.min(maxScrollTop(), top));
+        scrollTo(targetLeft, targetTop);
     }
 
     private float targetLeft;

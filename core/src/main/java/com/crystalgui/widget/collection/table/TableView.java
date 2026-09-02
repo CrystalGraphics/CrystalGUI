@@ -114,7 +114,7 @@ public class TableView<T> extends ListView<T> {
         StyleGroup.defaultPipeline(header.getStyle().getLayoutGroup(),
                 l -> l.positionType(TaffyPosition.ABSOLUTE).top(0).left(0)
                         .flexDirection(FlexDirection.ROW).height(HEADER_HEIGHT).widthPercent(100f));
-        append(header);
+        appendStructural(header);
 
         sourceConnection = source.onChange(change -> {
             selectedItems.removeIf(item -> !contains(source, item));

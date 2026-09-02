@@ -386,7 +386,7 @@ public class SplitView extends UINode {
         panes.add(index, new Pane(element, weight));
 
         if (panes.size() == 1) {
-            append(element);
+            appendStructural(element);
         } else {
             // Internal children are [pane, divider, pane, divider, …], so a pane at logical index i sits
             // at child index 2i and the divider that precedes it at 2i-1.
@@ -396,12 +396,12 @@ public class SplitView extends UINode {
             newDivider.setFocusPolicy(FocusPolicy.FOCUSABLE);
 
             if (index == 0) {
-                insertAt(0, element);
-                insertAt(1, newDivider);
+                insertStructuralAt(0, element);
+                insertStructuralAt(1, newDivider);
                 dividers.add(0, newDivider);
             } else {
-                insertAt(2 * index - 1, newDivider);
-                insertAt(2 * index, element);
+                insertStructuralAt(2 * index - 1, newDivider);
+                insertStructuralAt(2 * index, element);
                 dividers.add(index - 1, newDivider);
             }
         }
@@ -880,4 +880,11 @@ public class SplitView extends UINode {
         float target = (startBefore + deltaWeight) / pairSum * 100f;
         setPercentageAt(dividerIndex, target);
     }
+
+    /** A SplitView's structure is fixed: the PANES take content, the split itself does not. */
+    @Override
+    public boolean acceptsPublicChildren() {
+        return false;
+    }
+
 }
