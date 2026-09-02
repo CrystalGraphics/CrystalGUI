@@ -1,6 +1,6 @@
 package com.crystalgui.ui.projection;
 
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.WidgetContracts;
@@ -110,7 +110,7 @@ public final class AutoProjection {
      * As {@link #wire(Object, Object, Projections, java.util.Set)}, with the caller deciding which
      * inheritance levels hold panel widgets.
      *
-     * <p>Needed because {@code UIElement} has widget-typed fields of its own — {@code parent} and
+     * <p>Needed because {@code UINode} has widget-typed fields of its own — {@code parent} and
      * {@code popoverInvoker} — so a walk that runs to {@code Object} inspects the element's own
      * plumbing and reports it as unwired UI. {@code UiType.collect} stops at {@code Networked} levels
      * for exactly this reason, and a caller that knows about panels passes the same rule; this package
@@ -136,10 +136,10 @@ public final class AutoProjection {
                 continue;
             }
 
-            UIElement widget;
+            UINode widget;
             try {
                 field.setAccessible(true);
-                widget = (UIElement) field.get(panel);
+                widget = (UINode) field.get(panel);
             } catch (ReflectiveOperationException | RuntimeException blocked) {
                 skipped.put(name, "unreadable: " + blocked);
                 continue;
@@ -167,7 +167,7 @@ public final class AutoProjection {
 
             accessor.setAccessible(true);
             final Method reader = accessor;
-            final UIElement target = widget;
+            final UINode target = widget;
             final State slot = primary;
             into.onto(target, () -> {
                 try {
@@ -188,7 +188,7 @@ public final class AutoProjection {
     /**
      * A panel's own widget fields, up the levels the caller says are panel levels.
      *
-     * <p><b>Never {@code UIElement} itself or above.</b> That class has widget-typed fields of its own —
+     * <p><b>Never {@code UINode} itself or above.</b> That class has widget-typed fields of its own —
      * {@code parent} and {@code popoverInvoker} — so a walk that does not stop reports an element's
      * internal plumbing as unwired UI. Found by running this against a real panel and reading the
      * report, which is the thing the report is for.</p>
@@ -197,11 +197,11 @@ public final class AutoProjection {
                                             java.util.function.Predicate<Class<?>> isPanelLevel) {
         List<Field> found = new ArrayList<>();
         for (Class<?> level = type; level != null && level != Object.class
-                && level != UIElement.class && isPanelLevel.test(level);
+                && level != UINode.class && isPanelLevel.test(level);
                 level = level.getSuperclass()) {
             for (Field field : level.getDeclaredFields()) {
                 if (Modifier.isStatic(field.getModifiers())) continue;
-                if (!UIElement.class.isAssignableFrom(field.getType())) continue;
+                if (!UINode.class.isAssignableFrom(field.getType())) continue;
                 found.add(field);
             }
         }

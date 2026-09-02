@@ -1,7 +1,7 @@
 package com.crystalgui.net.window;
 
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.dom.UINode;
 
 /**
  * <b>Where a server's window lands on this client</b> — the one thing a platform implements.
@@ -57,7 +57,7 @@ public interface WindowMount {
          * and the session then decodes a <em>fresh</em> tree. A mount holding the old root would be
          * showing a tree nothing is updating any more.</p>
          */
-        void contentReplaced(UIElement newRoot);
+        void contentReplaced(UINode newRoot);
 
         /**
          * A {@link com.crystalgui.net.ViewCommand} about the WINDOW rather than the tree — its title,

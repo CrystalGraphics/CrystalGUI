@@ -1,16 +1,16 @@
 package com.crystalgui.net.window;
 
-import com.crystalgui.ui.elements.Button;
+import com.crystalgui.widget.control.Button;
 import javax.annotation.Nullable;
 
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.dom.UINode;
 
 /**
  * <b>A networked element</b> — one class that is the whole of a UI served over a wire: its widgets as
  * fields, its structure, its server behaviour and its client behaviour.
  *
  * <pre>{@code
- * public final class MachinePanel extends UIElement implements Networked<MachineModel> {
+ * public final class MachinePanel extends UINode implements Networked<MachineModel> {
  *
  *     public static final UiType<MachinePanel, MachineModel> TYPE =
  *             UiType.of("mymod:machine", MachinePanel::new);
@@ -59,7 +59,7 @@ import com.crystalgui.ui.UIElement;
  *
  * <h3>The field declaration is the declaration</h3>
  *
- * <p>Every non-static {@link UIElement} field declared on a {@code Networked} class is a part of this
+ * <p>Every non-static {@link UINode} field declared on a {@code Networked} class is a part of this
  * panel. On the <b>build</b> side {@link UiType#build} creates anything left null, stamps
  * {@code setId(fieldName)} on it, and then calls {@link #layout}. On the <b>bind</b> side
  * {@link UiType#bind} resolves each field out of the panel's own rebuilt subtree, by that same name
@@ -232,10 +232,10 @@ public interface Networked<M> {
      * }</pre>
      *
      * <p><b>Not called {@code requestClose}</b>, and that is load-bearing rather than taste:
-     * {@code UIElement.requestClose()} already exists as the close-watcher hook, where {@code false}
+     * {@code UINode.requestClose()} already exists as the close-watcher hook, where {@code false}
      * means "I did not handle this" — the <em>opposite</em> sense. A panel is
-     * {@code extends UIElement implements Networked}, and a concrete class method beats an interface
-     * default, so a hook of that name would be answered by {@code UIElement} for every panel that did
+     * {@code extends UINode implements Networked}, and a concrete class method beats an interface
+     * default, so a hook of that name would be answered by {@code UINode} for every panel that did
      * not override it: every window would veto its own close, and the X would silently do nothing.</p>
      */
     default boolean mayClose() {
