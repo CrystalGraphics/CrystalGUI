@@ -144,8 +144,23 @@ public final class StyleEngine {
         markAllDirty();
     }
 
+    /** Removes EVERY installation of {@code sheet}, whatever it was scoped to. @see #removeStylesheet(StyleSheet, Styleable) */
     public void removeStylesheet(StyleSheet sheet) {
         if (sheets.removeIf(installed -> installed.sheet() == sheet)) {
+            markAllDirty();
+        }
+    }
+
+    /**
+     * Removes ONE installation — the sheet as scoped to {@code root}, leaving its other scopes alone.
+     *
+     * <p>Needed the moment one parsed sheet is installed against several roots, which is what sharing
+     * a parse between two windows of one type means. The unscoped overload would take them all off,
+     * so closing either window would unstyle the other — silently, and only ever with two of them
+     * open.</p>
+     */
+    public void removeStylesheet(StyleSheet sheet, @Nullable Styleable root) {
+        if (sheets.removeIf(installed -> installed.sheet() == sheet && installed.root() == root)) {
             markAllDirty();
         }
     }
