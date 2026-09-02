@@ -112,6 +112,24 @@ public interface Styleable {
 
     boolean isFocusWithin();
 
+    /**
+     * The {@code inert} ATTRIBUTE on this node alone — not the full predicate, which also asks whether
+     * a modal is open over this node's scope.
+     *
+     * <p>Here rather than only on a node because the two engines' sessions both refuse a report from an
+     * inert element, and {@code Styleable} is the seam they share. @see com.crystalgui.ui.dom.UINode</p>
+     */
+    boolean isInertAttribute();
+
+    /**
+     * Whether this node takes text — a field, an editor, anything with a caret.
+     *
+     * <p>Not a style question, and here for the same reason as {@link #isInertAttribute()}: a client
+     * session must not apply a delta over what somebody is typing, and that check has to work on both
+     * engines. It is also what stops the keyboard-activation bridge turning a space into a click.</p>
+     */
+    boolean consumesTextInput();
+
     // ── The store and the engine ─────────────────────────────────────────────
 
     /** The candidate store — every value ever set, at every origin, and the two winner maps. */
