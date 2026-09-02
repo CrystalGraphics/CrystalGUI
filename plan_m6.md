@@ -2462,6 +2462,19 @@ client-only class was loaded. Plus the four rows that only a host can break: the
 rather than latched, `doesGuiPauseGame()` stays false for anything holding a connection, the workspace
 client is re-asked per frame, and a rejoin re-asks for the project list on a new connection.
 
+> **THE PRIMARY ACCEPT PASSED (6.9a, in-game).** Two clients and a dedicated server, with the
+> Machine panel networked and synced across both viewers. That single run exercises nearly everything
+> 6.8 and 6.9a changed and could not otherwise be reached: the generic sessions over a REAL transport
+> rather than `InMemoryTransport`; the description carrying state and inline style, without which the
+> panel arrives blank; `UiType` reading the kind off the class, without which the root decodes as a
+> plain node and the host's own bind throws; per-viewer echo suppression and id allocation across two
+> peers; the projections; and the loader's whole new-engine surface — the document as root, the scale
+> on the box tree, the single frame clock, the compositor's paint entry.
+>
+> Still unrun from the list below: `runObfClient` through `stageObfMods` (the only run that sees SRG
+> names, and the one that has found four production-only defects), `serverSmoke`, `-PcgSessionProbe`,
+> `-PcgNetProbe`, and the four rows only a host can break.
+
 **Hazards.** A `GuiScreen` is constructed fresh on every display and `initGui` re-runs on every
 resize — the static-flag trap. Nothing in `core/` can see any of this: it is the loader seam, which
 is why the accepts are runs and not tests.
