@@ -7,11 +7,11 @@ import com.crystalgui.fs.Resource;
 import com.crystalgui.language.run.RunSessions;
 import com.crystalgui.language.run.RunState;
 import com.crystalgui.language.run.console.RunElapsed;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.Tooltip;
-import com.crystalgui.ui.elements.UIText;
-import com.crystalgui.ui.elements.list.ListRenderer;
-import com.crystalgui.ui.elements.list.ListView;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.overlay.Tooltip;
+import com.crystalgui.widget.text.UIText;
+import com.crystalgui.widget.collection.list.ListRenderer;
+import com.crystalgui.widget.collection.list.ListView;
 
 import javax.annotation.Nullable;
 
@@ -45,7 +45,7 @@ import java.util.Map;
  * <p>Which is what makes the rail a control rather than a caption, and it is why the per-script filter was
  * built first: this is the picker for it. The head's dropdown was a stand-in for exactly this and is gone.</p>
  */
-public final class RunRail extends UIElement {
+public final class RunRail extends UINode {
 
     public static final String RAIL_CLASS = "__run-rail__";
     public static final String ROW_NAME_CLASS = "__run-rail-name__";
@@ -94,7 +94,7 @@ public final class RunRail extends UIElement {
             int index = indices.iterator().next();
             onScriptChosen.emit(index <= 0 ? null : items.get(index));
         });
-        addInternalChild(list);
+        append(list);
     }
 
     public RunRail bindTo(@Nullable RunSessions sessions) {
@@ -154,7 +154,7 @@ public final class RunRail extends UIElement {
         // a script is first run; the STATE changes on every transition, and a script finishing changes no
         // set at all. So a finished script kept its green dot until something else happened to rebuild the
         // list, and running a second script appeared to "fix" the first one's mark.
-        for (Map.Entry<Integer, UIElement> realised : list.realisedRows().entrySet()) {
+        for (Map.Entry<Integer, UINode> realised : list.realisedRows().entrySet()) {
             writeRow(realised.getKey(), realised.getValue());
         }
     }
@@ -223,7 +223,7 @@ public final class RunRail extends UIElement {
      * <p>Shared by {@code bind} and the per-frame pass so the two cannot disagree — which is exactly what
      * happened when only the clock was written here and the mark was left to {@code bind}.</p>
      */
-    private void writeRow(int index, UIElement element) {
+    private void writeRow(int index, UINode element) {
         RunSessions showing = sessions;
         Row row = rows(element);
         if (showing == null || row == null || index <= 0 || index - 1 >= known.size()) return;
@@ -241,7 +241,7 @@ public final class RunRail extends UIElement {
      * the element and the cascade resolves whichever rule happens to win. That reads as a random colour
      * rather than as a stale class.
      */
-    private void swapState(UIElement glyph, @Nullable RunState state) {
+    private void swapState(UINode glyph, @Nullable RunState state) {
         for (RunState value : RunState.values()) {
             glyph.removeClass(STATE_CLASS_PREFIX + value.name().toLowerCase(Locale.ROOT));
         }
@@ -286,7 +286,7 @@ public final class RunRail extends UIElement {
      * then never appears to update however correct the lookup is.</p>
      */
     private static final class Row {
-        private final UIElement glyph = new UIElement();
+        private final UINode glyph = new UINode();
         private final UIText name = new UIText("");
         private final UIText time = new UIText("");
         @Nullable private Tooltip tooltip;
@@ -301,10 +301,10 @@ public final class RunRail extends UIElement {
         }
     }
 
-    private final Map<UIElement, Row> rows = new HashMap<>();
+    private final Map<UINode, Row> rows = new HashMap<>();
 
     @Nullable
-    private Row rows(UIElement element) {
+    private Row rows(UINode element) {
         return rows.get(element);
     }
 
@@ -312,8 +312,8 @@ public final class RunRail extends UIElement {
     private final class Rows implements ListRenderer<Resource> {
 
         @Override
-        public UIElement createTemplate() {
-            UIElement element = new UIElement();
+        public UINode createTemplate() {
+            UINode element = new UINode();
             Row row = new Row();
             row.glyph.addClass(ROW_GLYPH_CLASS);
             row.glyph.setHitTest(false);
@@ -322,16 +322,16 @@ public final class RunRail extends UIElement {
             row.time.addClass(ROW_TIME_CLASS);
             row.time.setHitTest(false);
 
-            element.addChild(row.glyph);
-            element.addChild(row.name);
-            element.addChild(row.time);
+            element.append(row.glyph);
+            element.append(row.name);
+            element.append(row.time);
             row.tooltip = Tooltip.attach(element, "");
             rows.put(element, row);
             return element;
         }
 
         @Override
-        public void bind(@Nullable Resource item, int index, UIElement template) {
+        public void bind(@Nullable Resource item, int index, UINode template) {
             Row row = rows(template);
             if (row == null) return;
 

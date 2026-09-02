@@ -11,8 +11,8 @@ import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.ui.elements.editor.TextEditor;
-import com.crystalgui.ui.elements.workbench.Workbench;
+import com.crystalgui.widget.texteditor.TextEditor;
+import com.crystalgui.workbench.Workbench;
 
 import javax.annotation.Nullable;
 
@@ -255,7 +255,7 @@ public final class ScriptWorkbench implements Closeable {
         workbench.showPanel(RunPanels.RUN_TYPE);
         // POINTER focus, never requestFocus: the latter rings, and `:focus-visible` exists to ring
         // KEYBOARD focus and not this.
-        if (wasTyping) editor.requestPointerFocus();
+        if (wasTyping) editor.document().focus().requestPointerFocus(editor);
     }
 
     /**

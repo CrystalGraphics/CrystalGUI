@@ -376,22 +376,10 @@ public final class CgUiScreen extends GuiScreen {
         //
         // The cache root is beside the config rather than inside the workspace: compiled output is
         // derived, private, and must not become part of a project a resource pack could ship.
-        // NOT INSTALLED ON THE NEW ENGINE YET, and this is the honest way to say so.
-        //
-        // `ScriptWorkbench.install` takes the OLD `ui.elements.workbench.Workbench`, and the whole of
-        // `language/run/view` -- eight files, ~2,900 lines -- is still written against the old engine.
-        // The port ledger assigns it to 6.7 and 6.7 shipped without it: `language` compiles against
-        // `core`, the old engine is still there, so nothing failed and nothing said anything.
-        //
-        // It is deliberately NOT ported from here. That package is being worked on concurrently on
-        // another branch, and a port landing under active edits is a merge conflict across a module
-        // boundary rather than a milestone.
-        //
-        // The null is a state this code already handles: `install` returns null when no engine band
-        // opened, and the commands are then deliberately not registered, because a Run row that
-        // cannot run anything teaches people the feature is broken rather than unavailable. So the
-        // Run panel is ABSENT on the new engine until that package moves -- visible, not silent.
-        scripting = null;
+        scripting = ScriptWorkbench.install(
+                CommandRegistry.global(), editor.workbench(),
+                new File(dataDir, "config/crystalgui/script-cache").toPath());
+        if (scripting != null) editor.workbench().revealPanel(RunPanels.RUN_TYPE);
 
         trace("scripting install");
         // HIDE_ON_CLOSE, because a workbench is not a dialog: closing it keeps every document, the dock

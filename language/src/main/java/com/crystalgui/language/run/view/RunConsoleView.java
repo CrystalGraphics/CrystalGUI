@@ -8,7 +8,7 @@ import com.crystalgui.text.Rope;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.syntax.SyntaxToken;
 import com.crystalgui.text.syntax.SyntaxTokenizer;
-import com.crystalgui.ui.elements.editor.TextEditor;
+import com.crystalgui.widget.texteditor.TextEditor;
 import com.crystalgui.ui.event.MouseEvent;
 
 import javax.annotation.Nullable;
@@ -42,7 +42,7 @@ import java.util.Objects;
  *
  * <p>Holding a plain {@code TextEditor} makes the tag {@code texteditor} and every rule apply for free.
  * It also removes a second fault that had no symptom of its own: {@code TextEditor} already implements
- * {@link com.crystalgui.ui.UIFrameTicker} and registers itself, so an override that forgot to call
+ * {@link com.crystalgui.ui.service.Animation.Hook} and registers itself, so an override that forgot to call
  * {@code super.tickFrame} silently replaced the editor's own per-frame work.</p>
  *
  * <h3>Colour goes through the tokenizer seam</h3>
@@ -376,7 +376,7 @@ public final class RunConsoleView {
         // WHERE THIS TAB WAS, read BEFORE the drain -- once the filter has been applied the offset on
         // screen belongs to a document that is already gone.
         String leaving = showing.filter();
-        float leavingTop = editor.getScrollTop();
+        float leavingTop = editor.scrollTop();
         boolean leavingFollow = follow.isFollowing();
 
         boolean changed = showing.drain();
@@ -443,11 +443,11 @@ public final class RunConsoleView {
     private void applyRestore() {
         Place place = restoring;
         if (place == null) return;
-        float max = editor.getMaxScrollTop();
+        float max = editor.box().maxScrollTop();
         if (!Float.isFinite(max)) return;
 
         float target = Math.max(0f, Math.min(place.top(), max));
-        editor.setScrollImmediate(editor.getScrollLeft(), target);
+        editor.box().setScroll(editor.scrollLeft(), target);
         // THE LOCK GOES BACK TOO. A tab left at the tail should keep being pulled down by new output and
         // one left half way up should not -- restoring the position without the lock would drag the
         // reader to the bottom of the very transcript they had scrolled up in, on its next line.
@@ -455,13 +455,13 @@ public final class RunConsoleView {
         if (place.following()) follow.rearm();
         else follow.release();
 
-        float now = editor.getScrollTop();
+        float now = editor.scrollTop();
         if (Float.isFinite(now) && Math.abs(now - target) <= 0.5f) restoring = null;
     }
 
     /** Reads the reader's position into the lock. Must run before anything grows the document. */
     private void updateFollow() {
-        follow.sample(editor.getScrollTop(), editor.getMaxScrollTop());
+        follow.sample(editor.scrollTop(), editor.box().maxScrollTop());
     }
 
     /**
@@ -503,7 +503,7 @@ public final class RunConsoleView {
     }
 
     private void scrollToTail() {
-        float max = editor.getMaxScrollTop();
+        float max = editor.box().maxScrollTop();
         // An unmeasured viewport reports zero, and "scrolling to the tail" of a box that has not been laid
         // out yet puts the view at the TOP -- which is the shape of the original bug. Refusing leaves the
         // lock armed for a later frame that can actually answer.
@@ -512,7 +512,7 @@ public final class RunConsoleView {
         // against: skipping it while skipping the write would leave a stale mark and read the next frame
         // as a reader gesture.
         follow.applied(max);
-        float top = editor.getScrollTop();
+        float top = editor.scrollTop();
         // Only when it would move -- this runs on every frame the lock is armed, and a setter called
         // sixty times a second with the value it already holds is worth not paying for.
         //
@@ -523,7 +523,7 @@ public final class RunConsoleView {
         // already there and wrote nothing, so the console showed an empty band until something else
         // scrolled. The scroll bug that outlived two attempts at this method was this comparison.
         if (Float.isFinite(top) && Math.abs(top - max) <= 0.5f) return;
-        editor.setScrollImmediate(editor.getScrollLeft(), max);
+        editor.box().setScroll(editor.scrollLeft(), max);
     }
 
     /**

@@ -7,7 +7,7 @@ package com.crystalgui.language.run.view;
  *
  * <p>It was four lines there, and they were wrong twice, in two different ways, neither of which any test
  * in this repository could have caught: the logic needed a laid-out {@code TextEditor} to exercise, and
- * {@code language/src/test} has no Taffy on its classpath, so a {@code UIElement} cannot even be
+ * {@code language/src/test} has no Taffy on its classpath, so a {@code UINode} cannot even be
  * constructed. Two floats and a boolean can be, which is the whole argument for the seam.</p>
  *
  * <h3>The question is NOT "is the tail visible"</h3>

@@ -4,8 +4,8 @@ import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.language.run.RunSessions;
 import com.crystalgui.language.run.RunState;
-import com.crystalgui.ui.elements.workbench.decoration.FileDecoration;
-import com.crystalgui.ui.elements.workbench.decoration.FileDecorationProvider;
+import com.crystalgui.workbench.decoration.FileDecoration;
+import com.crystalgui.workbench.decoration.FileDecorationProvider;
 
 import javax.annotation.Nullable;
 
