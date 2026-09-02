@@ -634,6 +634,37 @@ public class WindowFrame extends UINode implements Disposable, Resizable, DataPr
      * {@code Tooltip.attach} trap — so a frame that left a desktop and came back would raise twice per
      * press. The desktop is found at event time instead, which is two hops up the tree.</p>
      */
+
+    /**
+     * Whether {@code node} is this window's minimise control, or inside it.
+     *
+     * <p>Asked by {@code Desktop.focusMoved}, which is handed the real focus owner and so can use
+     * identity where the press listener cannot. Click-focus lands on the button itself.</p>
+     */
+    public boolean isMinimizeControl(@Nullable UINode node) {
+        for (UINode at = node; at != null; at = at.composedParent()) {
+            if (at == minimizeButton) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Whether a press landed over {@code control}, asked by POSITION.
+     *
+     * <p><b>The target cannot answer this.</b> A listener on a shadow host never sees its own parts —
+     * {@code getTarget()} is retargeted to the host before the listener runs — and the caption controls
+     * are this frame's parts, so a walk up from the target finds the frame and never the button. The
+     * press point is not retargeted, and the control's box is in the same surface pixels a mouse-down
+     * listener's coordinates already are.</p>
+     */
+    private static boolean pressedOver(float x, float y, @Nullable UINode control) {
+        if (control == null) return false;
+        Box box = control.box();
+        if (box == null) return false;
+        return x >= box.worldX() && x <= box.worldX() + box.width()
+                && y >= box.worldY() && y <= box.worldY() + box.height();
+    }
+
     private void installActivation() {
         onMouseDown.attachListener((element, event) -> {
             // A PRESS IN THE CONTENT HAS ALREADY DECIDED WHERE FOCUS GOES. emitMouseDown blurred what
@@ -649,7 +680,29 @@ public class WindowFrame extends UINode implements Disposable, Resizable, DataPr
             if (inContent) rememberFocusChosenByPress();
             Desktop desktop = desktop();
             if (desktop != null) {
-                desktop.activate(this, false, !inContent);
+                // MINIMISING IS NOT WORKING IN A WINDOW, so its button does not raise one.
+                //
+                // Every other press here means "I am using this window" and raising is the whole point.
+                // A press on MINIMISE means the opposite, and raising first is visible: pressing a
+                // background window's minimise lit its taskbar entry for the press, then `minimize()`
+                // deactivated it -- so the entry flashed and faded out over its own transition, which
+                // reads as a flicker lasting about as long as the flight.
+                //
+                // It also defeated a guard that says so in its own words. `minimize()` deactivates only
+                // `if (owner.activeWindow() == this)`, "or minimising a background one would deactivate
+                // the foreground" -- but the press had just made the background one active, so the test
+                // passed and the foreground was deactivated anyway. Measured: before the gesture the
+                // front window is active, after it NOBODY is, and the front window's entry goes dark
+                // with the one that left.
+                //
+                // CLOSE is deliberately left raising. It ends with `dispose()`, which reads whether the
+                // window was active in order to hand the keyboard on, and that path is documented and
+                // self-correcting: activate, destroy, `activateTopmost()`. Minimise is the one gesture
+                // documented to hand over to nobody, which is exactly why it cannot afford to take the
+                // foreground with it.
+                if (!pressedOver(event.getPosition().x(), event.getPosition().y(), minimizeButton)) {
+                    desktop.activate(this, false, !inContent);
+                }
                 return;
             }
             if (inContent) return;

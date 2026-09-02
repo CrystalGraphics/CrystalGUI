@@ -805,4 +805,50 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
         assertNotNull(settled);
         assertEquals("the animation left an opacity behind", 1f, settled.opacity(), 0.001f);
     }
+
+    /**
+     * Minimising a BACKGROUND window does not bring it forward on the way out.
+     *
+     * <p>Pressing a background window's minimise button raised it — click-focus lands on the button, and
+     * {@code Desktop.focusMoved} activates whatever frame focus moved into — so its taskbar entry lit for
+     * the press and then faded out over its own transition, which reads as a flicker lasting about as
+     * long as the flight.</p>
+     *
+     * <p><b>It also took the foreground with it.</b> {@code minimize()} deactivates only
+     * {@code if (owner.activeWindow() == this)}, "or minimising a background one would deactivate the
+     * foreground" — but the press had just made the background one active, so the test passed and the
+     * front window went dark too. Measured through the gesture: before it the front window is active,
+     * after it NOBODY was.</p>
+     *
+     * <p><b>Driven as a press at a POINT.</b> {@code sendInputEvent} skips click-focus entirely, which is
+     * the whole mechanism here, and calling {@code minimize()} directly was already correct — the API
+     * path never showed this.</p>
+     */
+    @Test
+    public void minimisingABackgroundWindowLeavesTheForegroundActive() {
+        WindowFrame back = open("Background");
+        WindowFrame front = open("Front");
+        assertSame("the newest window is active", front, desktop().activeWindow());
+
+        UINode button = findByClass(back, WindowFrame.MINIMIZE_CLASS);
+        assertNotNull("the frame has a minimise control", button);
+        Box box = button.box();
+        press(box.worldX() + box.width() / 2f, box.worldY() + box.height() / 2f);
+        assertSame("pressing a background window's minimise must not raise it",
+                front, desktop().activeWindow());
+
+        release(box.worldX() + box.width() / 2f, box.worldY() + box.height() / 2f);
+        frame();
+        assertSame("and the foreground keeps the keyboard", front, desktop().activeWindow());
+    }
+
+    private static UINode findByClass(UINode at, String cls) {
+        if (at.classes().contains(cls)) return at;
+        for (UINode child : at.children()) {
+            UINode hit = findByClass(child, cls);
+            if (hit != null) return hit;
+        }
+        UINode shadow = at.shadowRoot();
+        return shadow == null ? null : findByClass(shadow, cls);
+    }
 }
