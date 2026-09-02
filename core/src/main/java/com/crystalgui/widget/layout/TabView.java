@@ -158,6 +158,7 @@ public class TabView extends UINode {
 
     public TabView() {
         super(NAME);
+        refusePublicChildren();
         // The strip is a plain box, NOT the scroll view. It stacks the tab rail and a real scrollbar
         // as ordinary flex items, because ScrollerView's own bars are absolutely positioned and would
         // float on top of the tabs — on a strip barely taller than one tab that eats their bottom

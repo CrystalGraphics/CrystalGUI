@@ -175,6 +175,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
 
     public ListView(ObservableList<T> model) {
         this(NAME, model);
+        refusePublicChildren();
     }
 
     /** The constructor a subclass hands its own kind to. @see Button#Button(Name, String) */

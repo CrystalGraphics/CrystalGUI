@@ -10,6 +10,7 @@ import static org.junit.Assert.assertTrue;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.ui.dom.UINode;
 import java.util.ArrayList;
 import java.util.List;
@@ -111,6 +112,10 @@ public class PortMachineryTest {
         UINode bar = sized("bar", 8f, 50f);
         bar.setScrollExempt(true);
         viewport.append(content).append(bar);
+        // Scrolling is driven by `overflow`, never implied by oversized content: without it
+        // `setScroll` returns early and BOTH children stay put, which passes the exempt half of
+        // this test for entirely the wrong reason.
+        viewport.getStyle().getGeneralGroup().overflow(Overflow.SCROLL);
         document.append(viewport);
         document.layout(100f, 100f);
 
@@ -200,6 +205,12 @@ public class PortMachineryTest {
         document.append(viewport);
         document.layout(100f, 100f);
 
+        // OVERFLOW, or none of this happens: `Box.setScroll` returns early for a box that is not a
+        // scroll container, so a viewport that never declares one silently stays at zero and the
+        // assertion below reads as clamping having reset the offset. Scrolling is an ordinary
+        // element capability driven by `overflow` -- it is not implied by content being too big.
+        viewport.getStyle().getGeneralGroup().overflow(Overflow.SCROLL);
+        document.layout(100f, 100f);
         document.boxes().boxOf(viewport).setScroll(0f, 400f);
         document.layout(100f, 100f);
         assertEquals(400f, viewport.scrollTop(), 0.01f);

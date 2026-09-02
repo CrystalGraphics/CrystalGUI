@@ -294,6 +294,15 @@ public final class BoxTree {
      */
     public void composeIfDirty() {
         if (!transformsDirty) return;
+        // NO ROOT IS A REAL STATE, not a broken one: a document whose content has been removed has
+        // no root box until something is added back, and the dirty flag is set by the removal that
+        // emptied it. It became reachable when `hitTest` started composing first -- a press arriving
+        // after the tree was torn down is exactly when this is asked, and it is also the one moment
+        // nobody is watching for it.
+        if (root == null) {
+            transformsDirty = false;
+            return;
+        }
         compose(root, rootTransform, 0f, 0f);
         transformsDirty = false;
     }
