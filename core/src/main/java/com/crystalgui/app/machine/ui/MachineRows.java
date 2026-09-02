@@ -1,7 +1,7 @@
-package com.crystalgui.example.machine.ui;
+package com.crystalgui.app.machine.ui;
 
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.text.UIText;
 
 /**
  * The two row shapes both panels in this example build — extracted when {@link EnginePanel} became
@@ -26,17 +26,17 @@ final class MachineRows {
      * box is the standing idiom for keeping a column of labels aligned; every harness scene in the
      * repository does the same thing for the same reason.</p>
      */
-    static UIElement row(String caption, UIElement control) {
-        UIElement row = new UIElement();
+    static UINode row(String caption, UINode control) {
+        UINode row = new UINode();
         row.addClass(MachineStyles.ROW_CLASS);
 
-        UIElement slot = new UIElement().layout(l -> l.width(90));
+        UINode slot = new UINode().layout(l -> l.width(90));
         UIText text = new UIText(caption);
         text.addClass(MachineStyles.LABEL_CLASS);
-        slot.addChild(text);
+        slot.append(text);
 
-        row.addChild(slot);
-        row.addChild(control);
+        row.append(slot);
+        row.append(control);
         return row;
     }
 
@@ -48,22 +48,20 @@ final class MachineRows {
      * badge above the server's sentence and no amount of care at the writers could have prevented
      * it.</p>
      */
-    static UIElement authored(String badgeClass, String side, UIText line) {
-        UIElement row = new UIElement();
+    static UINode authored(String badgeClass, String side, UIText line) {
+        UINode row = new UINode();
         row.addClass(MachineStyles.ROW_CLASS);
 
         UIText badge = new UIText(side);
         badge.addClass(MachineStyles.KIND_CLASS);
         badge.addClass(badgeClass);
-        badge.neverSelfSizeWidth();
-        row.addChild(badge);
+        row.append(badge);
 
         // neverSelfSizeWidth for the opposite reason to the method names elsewhere in the panel: this
         // is in a ROW and its text is long, so sizing itself would push the row past the panel edge.
         // Sized by the sheet, it wraps inside its box.
         line.addClass(MachineStyles.WIRE_CLASS);
-        line.neverSelfSizeWidth();
-        row.addChild(line);
+        row.append(line);
 
         return row;
     }

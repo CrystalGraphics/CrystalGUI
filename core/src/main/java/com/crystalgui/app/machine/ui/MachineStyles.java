@@ -1,4 +1,4 @@
-package com.crystalgui.example.machine.ui;
+package com.crystalgui.app.machine.ui;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;

@@ -1,7 +1,8 @@
-package com.crystalgui.example.machine.ui;
+package com.crystalgui.app.machine.ui;
 
-import com.crystalgui.example.machine.MachineModel;
-import com.crystalgui.example.machine.MachineTrace;
+import com.crystalgui.ui.dom.Name;
+import com.crystalgui.app.machine.MachineModel;
+import com.crystalgui.app.machine.MachineTrace;
 import com.crystalgui.net.window.CloseReason;
 import com.crystalgui.net.window.ClientScope;
 import com.crystalgui.net.window.Networked;
@@ -10,13 +11,13 @@ import com.crystalgui.net.window.UiType;
 import com.crystalgui.serialization.StateMap;
 
 import javax.annotation.Nullable;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.Button;
-import com.crystalgui.ui.elements.ProgressBar;
-import com.crystalgui.ui.elements.Slider;
-import com.crystalgui.ui.elements.Switch;
-import com.crystalgui.ui.elements.TextField;
-import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.control.ProgressBar;
+import com.crystalgui.widget.control.Slider;
+import com.crystalgui.widget.control.Switch;
+import com.crystalgui.widget.control.TextField;
+import com.crystalgui.widget.text.UIText;
 
 /**
  * <b>Step 2 — the widget tree.</b>
@@ -58,7 +59,15 @@ import com.crystalgui.ui.elements.UIText;
  * class for the composition rules; the three lines it costs on this side are in {@link #layout} and
  * {@link #serve}, and the reason the button that opens it sends nothing is in {@link #toggleEngine}.</p>
  */
-public final class MachinePanel extends UIElement implements Networked<MachineModel> {
+public final class MachinePanel extends UINode implements Networked<MachineModel> {
+
+    /** This panel's kind. Declared here because a node answers the name its class declares,
+     * and {@link com.crystalgui.net.window.UiType} READS this rather than deriving one. */
+    public static final Name NAME = Name.of("machinepanel");
+
+    public MachinePanel() {
+        super(NAME);
+    }
 
     /**
      * <b>What ties the two halves together.</b> Declared here because the panel is the artefact both
@@ -182,22 +191,22 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
 
         UIText title = new UIText("Machine control");
         title.addClass(MachineStyles.TITLE_CLASS);
-        addChild(title);
+        append(title);
 
-        addChild(MachineRows.row("Power", power));
+        append(MachineRows.row("Power", power));
 
         throughput.setRange(0f, 1f);
-        addChild(MachineRows.row("Throughput", throughput));
+        append(MachineRows.row("Throughput", throughput));
 
         label.setPlaceholder("name this machine");
-        addChild(MachineRows.row("Label", label));
+        append(MachineRows.row("Label", label));
 
-        addChild(MachineRows.row("Cycle", progress));
+        append(MachineRows.row("Cycle", progress));
 
         status.addClass(MachineStyles.STATUS_CLASS);
-        addChild(status);
+        append(status);
 
-        addChild(purge);
+        append(purge);
 
         /*
          * THE NESTED PANEL, and the two lines are the whole of it.
@@ -213,9 +222,9 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
          * UiType.build fills every null widget field for you and deliberately leaves a nested PANEL
          * alone: it has no way to know which part of the model belongs to it.
          */
-        addChild(showEngine);
+        append(showEngine);
         engine = EnginePanel.TYPE.build(model.engine());
-        addChild(engine);
+        append(engine);
 
         /*
          * THE PROTOCOL DEMO STRIP.
@@ -241,37 +250,37 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
          */
         UIText demoTitle = new UIText("Protocol demo");
         demoTitle.addClass(MachineStyles.TITLE_CLASS);
-        addChild(demoTitle);
+        append(demoTitle);
 
         UIText demoHint = new UIText(
                 "Press one. The result appears at the bottom, and every step is in the game log.");
         demoHint.addClass(MachineStyles.HINT_CLASS);
-        addChild(demoHint);
+        append(demoHint);
 
-        addChild(demoEntry(pingClient, KIND_REQUEST, "server asks client",
+        append(demoEntry(pingClient, KIND_REQUEST, "server asks client",
                 "machine/clientInfo",
                 "The server asks who is drawing this. The client answers; the reply shows below."));
 
-        addChild(demoEntry(announce, KIND_NOTIFY, "server tells client",
+        append(demoEntry(announce, KIND_NOTIFY, "server tells client",
                 "machine/announce",
                 "The server sends a message. Nothing comes back, and nothing is waiting for one."));
 
-        addChild(demoEntry(askStats, KIND_REQUEST, "client asks server",
+        append(demoEntry(askStats, KIND_REQUEST, "client asks server",
                 "machine/stats",
                 "The client asks for the cycle and heartbeat counts. The server answers."));
 
-        addChild(demoEntry(heartbeat, KIND_NOTIFY, "client tells server",
+        append(demoEntry(heartbeat, KIND_NOTIFY, "client tells server",
                 "machine/heartbeat",
                 "The client reports in. The server counts it and replies with nothing."));
 
-        addChild(demoEntry(badRename, KIND_REFUSED, "client asks server",
+        append(demoEntry(badRename, KIND_REFUSED, "client asks server",
                 "machine/rename",
                 "Asks for a blank name. The server REFUSES with the code EMPTY_NAME -- which is a "
                         + "normal answer, not an error and not a timeout."));
 
         UIText wireLabel = new UIText("Result");
         wireLabel.addClass(MachineStyles.LABEL_CLASS);
-        addChild(wireLabel);
+        append(wireLabel);
 
         /*
          * TWO LINES, ONE PER SIDE, AND EACH HAS EXACTLY ONE AUTHOR.
@@ -301,9 +310,9 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
          * bonus is that BOTH HALVES OF EVERY EXCHANGE ARE NOW ON SCREEN AT ONCE: press Heartbeat and
          * the client line says it sent one while the server line says it received one.
          */
-        addChild(MachineRows.authored(MachineStyles.WHO_SERVER_CLASS, "SERVER", serverLine));
+        append(MachineRows.authored(MachineStyles.WHO_SERVER_CLASS, "SERVER", serverLine));
 
-        addChild(MachineRows.authored(MachineStyles.WHO_CLIENT_CLASS, "CLIENT", clientLine));
+        append(MachineRows.authored(MachineStyles.WHO_CLIENT_CLASS, "CLIENT", clientLine));
     }
 
     // ── The three badges an entry can carry ─────────────────────────────────
@@ -324,14 +333,14 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
      * is a sentence saying what pressing it will do. Everything a reader needs is on screen, which is
      * the whole difference between this and the version it replaced.</p>
      */
-    private static UIElement demoEntry(Button button, String[] kind, String direction,
+    private static UINode demoEntry(Button button, String[] kind, String direction,
             String method, String outcome) {
-        UIElement entry = new UIElement();
+        UINode entry = new UINode();
         entry.addClass(MachineStyles.DEMO_CLASS);
 
-        UIElement head = new UIElement();
+        UINode head = new UINode();
         head.addClass(MachineStyles.ROW_CLASS);
-        head.addChild(button);
+        head.append(button);
 
         /*
          * neverSelfSizeWidth() ON BOTH, and without it the columns do not line up.
@@ -345,13 +354,11 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
         UIText badge = new UIText(kind[0]);
         badge.addClass(MachineStyles.KIND_CLASS);
         badge.addClass(kind[1]);
-        badge.neverSelfSizeWidth();
-        head.addChild(badge);
+        head.append(badge);
 
         UIText where = new UIText(direction);
         where.addClass(MachineStyles.DIRECTION_CLASS);
-        where.neverSelfSizeWidth();
-        head.addChild(where);
+        head.append(where);
 
         /*
          * forceSelfSizeWidth(), and it is not optional: without it this measured ZERO and the method
@@ -364,14 +371,13 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
          */
         UIText wireName = new UIText(method);
         wireName.addClass(MachineStyles.METHOD_CLASS);
-        wireName.forceSelfSizeWidth();
-        head.addChild(wireName);
+        head.append(wireName);
 
-        entry.addChild(head);
+        entry.append(head);
 
         UIText what = new UIText(outcome);
         what.addClass(MachineStyles.OUTCOME_CLASS);
-        entry.addChild(what);
+        entry.append(what);
 
         return entry;
     }

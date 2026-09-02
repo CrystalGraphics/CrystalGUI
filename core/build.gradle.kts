@@ -151,7 +151,7 @@ dependencies {
 //
 // Gradle copies src/main/resources and nothing else, so a .css next to a .java compiles, ships, and
 // is absent from the jar -- which fails at runtime as a missing file rather than at build time as a
-// missing rule. com/crystalgui/example/machine/ui/machine.css is the one file relying on this today:
+// missing rule. com/crystalgui/app/machine/ui/machine.css is the one file relying on this today:
 // the example panel is meant to be read as a single directory (model, tree, theme, both session
 // halves), and splitting its theme into the assets tree would mean opening two source roots to read
 // one panel.

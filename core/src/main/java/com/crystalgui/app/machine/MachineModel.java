@@ -1,4 +1,4 @@
-package com.crystalgui.example.machine;
+package com.crystalgui.app.machine;
 
 /**
  * <b>Step 1 — the truth the server owns.</b>
@@ -16,7 +16,7 @@ package com.crystalgui.example.machine;
  *
  * <p>There isn't one. That is the whole point of this class and the reason it is first.</p>
  *
- * <p>A model that imports {@code UIElement} has quietly become a widget, and from then on the only
+ * <p>A model that imports {@code UINode} has quietly become a widget, and from then on the only
  * way to ask it a question is to build a tree — which on a dedicated server means building a tree
  * that can never be drawn, in a process with no fonts. Keeping the domain ignorant of the UI is not
  * tidiness here; it is what lets the same object be ticked by the world, saved to disk, and consulted
