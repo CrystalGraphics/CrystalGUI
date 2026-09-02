@@ -73,11 +73,17 @@ public final class UINodeRegistry {
      * finds a second copy of everything. The defining loader is the only one guaranteed to see the
      * jar this interface came from.</p>
      *
+     * <p><b>Public, and called by {@link UIDocument}'s constructor as well as by every decode.</b> A
+     * layer's service declares more than names — {@code Widgets} also tells the engine how to build a
+     * resize handle — and a UI assembled IN PROCESS decodes nothing, so waiting for a decode meant a
+     * window built by hand never loaded the layer that speaks for it. Idempotent, so the extra call
+     * costs one volatile read.</p>
+     *
      * <p>A service that throws is reported and skipped rather than taking the registry down with it:
      * one mod's broken widget must not make every other kind unresolvable, and a decode that finds
      * an unknown name already throws with a message naming what IS registered.</p>
      */
-    private static void bootstrap() {
+    public static void bootstrap() {
         if (bootstrapped) return;
         synchronized (UINodeRegistry.class) {
             if (bootstrapped) return;

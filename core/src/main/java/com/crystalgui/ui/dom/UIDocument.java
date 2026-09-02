@@ -119,6 +119,11 @@ public final class UIDocument extends UINode {
     public UIDocument() {
         super(NAME);
         this.document = this;
+        // EVERY LAYER HAS SPOKEN BEFORE ANY NODE IS STYLED. A service declares more than names -- it is
+        // also how the widget layer tells the engine to build a resize handle -- and a UI assembled in
+        // process decodes nothing, so a registry that only bootstrapped on decode left that
+        // unregistered for exactly the trees nobody sends over a wire. Idempotent.
+        UINodeRegistry.bootstrap();
     }
 
     // ── The frame thread ─────────────────────────────────────────────────────
