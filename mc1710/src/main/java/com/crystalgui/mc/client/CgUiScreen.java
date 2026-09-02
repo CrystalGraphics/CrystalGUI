@@ -13,10 +13,10 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.Ui;
 import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.UIWindow;
-import com.crystalgui.ui.elements.desktop.DesktopPresentation;
+import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.ui.elements.desktop.WindowFrame;
-import com.crystalgui.ui.elements.desktop.WindowPolicy;
-import com.crystalgui.ui.elements.desktop.WindowState;
+import com.crystalgui.core.window.WindowPolicy;
+import com.crystalgui.core.window.WindowState;
 import com.crystalgui.mc.net.CgUiConnections;
 import com.crystalgui.net.protocol.ProtocolConnection;
 

@@ -2,9 +2,9 @@ package com.crystalgui.mc.example;
 
 import org.lwjgl.input.Keyboard;
 
-import com.crystalgui.example.machine.MachineTrace;
+import com.crystalgui.app.machine.MachineTrace;
 import com.crystalgui.net.window.ClientWindows;
-import com.crystalgui.example.machine.ui.MachinePanel;
+import com.crystalgui.app.machine.ui.MachinePanel;
 import com.crystalgui.mc.client.CgUiScreen;
 import com.crystalgui.mc.net.CgUiConnections;
 import com.crystalgui.net.protocol.ProtocolConnection;
@@ -20,7 +20,7 @@ import net.minecraft.client.settings.KeyBinding;
  * The worked example's <b>client half</b>: a key binding. <b>Press F8.</b>
  *
  * <p>There is nothing to register — the window arrives naming
- * {@link com.crystalgui.example.machine.ui.MachinePanel}, and the engine initialises the class and
+ * {@link com.crystalgui.app.machine.ui.MachinePanel}, and the engine initialises the class and
  * runs its client half. Where the window <em>goes</em> is {@code CgUiWindowMount}'s answer, once, for
  * every mod.</p>
  */

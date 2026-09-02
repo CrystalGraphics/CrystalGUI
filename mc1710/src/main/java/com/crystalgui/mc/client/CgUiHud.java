@@ -3,7 +3,7 @@ package com.crystalgui.mc.client;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.ui.UIWindow;
-import com.crystalgui.ui.elements.desktop.DesktopPresentation;
+import com.crystalgui.core.window.DesktopPresentation;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
 import cpw.mods.fml.relauncher.Side;
