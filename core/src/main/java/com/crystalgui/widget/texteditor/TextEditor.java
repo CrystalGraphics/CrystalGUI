@@ -1,5 +1,8 @@
 package com.crystalgui.widget.texteditor;
 
+import org.joml.Vector3f;
+import org.joml.Vector2f;
+import com.crystalgui.core.data.Transform2D;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.api.text.CgShapedRun;
 import com.crystalgraphics.api.text.CgTextLayout;
@@ -41,6 +44,7 @@ import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.input.keymap.Keymap;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.dom.UISlot;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.UiDataKeys;
 import com.crystalgui.text.WordOperations;
@@ -784,6 +788,12 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         foldColumn.setScrollExempt(true);
         append(foldColumn);
         append(gutter);
+        // THE EDITOR MOVES ITS OWN CONTENT, so the view must not move it as well. Every one of this
+        // widget's parts is scroll-exempt already, and none of those exemptions could take effect: they
+        // land in the ScrollerView's slot, and an exemption only cancels the offset of the box that
+        // HOSTS you. @see ScrollerView#setContentScrollExempt, which records what the doubling looked
+        // like -- a band of text at the top of the editor and blank below it, growing as you scroll.
+        setContentScrollExempt(true);
 
         buffer.onChanged.connect(change -> {
             long changed = FrameProfile.enter("buffer.onChanged");
@@ -1334,8 +1344,40 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
             }
         }, false, false);
 
+        // BUBBLE AS WELL AS TARGET, and on this engine it is not optional.
+        //
+        // A ScrollerView here has a SLOT -- the old engine's had none ("your children are ordinary
+        // children; there is no viewport or content wrapper to reach") -- and the slot spans the view,
+        // so every press in the editor TARGETS the slot rather than the editor. Target-only listeners
+        // therefore never ran: clicking anywhere in the text did nothing at all, while focus still
+        // moved to the editor, because click-focus walks UP to the nearest node that focuses on click.
+        // The editor looked alive and answered no gesture.
+        //
+        // Safe to widen: these handlers read `event.getPosition()`, which is surface pixels and says
+        // nothing about what was hit, and the Down handler ends by stopping propagation -- so a control
+        // INSIDE the editor that wants its own press still takes it first and this never sees it.
         events.getGroup(MouseEvent.Down.class).attachListener((el, event) -> {
             if (!isEnabled()) return;
+            // ONLY A PRESS ON THE TEXT, and this listener hears far more than that.
+            //
+            // It is attached to the BUBBLE phase because on this engine a press in the text lands on the
+            // ScrollerView's SLOT rather than on the editor, so target-only heard nothing and clicking an
+            // editor did nothing at all. The cost is that it now also hears every press that bubbles up
+            // from a control INSIDE the editor -- the Problems widget's arrows, the quick-fix bulb, a
+            // fold chevron, a scrollbar.
+            //
+            // For those it did two visible things: it moved the caret to whatever text is behind the
+            // control, and it took POINTER CAPTURE for the selection drag -- which substitutes the hit
+            // for the capturing element, so the matching mouse-UP was delivered to the editor instead of
+            // to the button. `Button` activates on `isWasPressTarget()`, so the press was recorded on the
+            // arrow, the release arrived at the editor, and the arrow never fired. Measured:
+            // `target=TextEditor pressTarget=Button __inspection-next__`. On screen the chevrons looked
+            // dead and merely moved the caret, which reads as them not being wired up.
+            //
+            // A SLOT is the one node that stands for content it does not own, so it and this editor are
+            // the text; everything else answers for itself. Same rule the cursor's `auto` resolution uses,
+            // and for the same reason.
+            if (event.getTarget() != this && !(event.getTarget() instanceof UISlot)) return;
             int offset = offsetAt(event.getPosition().x(), event.getPosition().y());
             // Click count drives GRANULARITY, and the granularity is remembered for the whole drag --
             // see dragGranularity. 1 = character, 2 = word, 3 = line, as in VS Code's mouse handler.
@@ -1397,14 +1439,14 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
             if (window != null) window.input().setPointerCapture(this);
             requestFocusHere();
             event.stopPropagation();
-        }, false, false);
+        }, false, true);
 
         events.getGroup(MouseEvent.Move.class).attachListener((el, event) -> {
             rememberPointer(event.getPosition().x(), event.getPosition().y());
             langFeatures.hover().pointerMoved();
             if (!selecting) return;
             extendDragTo(offsetAt(event.getPosition().x(), event.getPosition().y()));
-        }, false, false);
+        }, false, true);
 
         // THE POINTER LEFT THE TEXT, which is not the same as it having left the popup -- the box sits
         // below the token, so reaching for it fires this immediately. The grace in the ticker is what
@@ -1417,7 +1459,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
             dragGranularity = 1;
             dragAnchor = null;
             draggingAddedCaret = false;
-        }, false, false);
+        }, false, true);
     }
 
     /** Records the pointer in this element's own space, for the autoscroll to steer by. */
@@ -2411,7 +2453,26 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         if (!Float.isFinite(localX) || !Float.isFinite(localY)) return null;
         Box self = box();
         if (self == null) return new float[] { localX, localY, lineHeight() };
-        return new float[] { self.worldX() + localX, self.worldY() + localY, lineHeight() };
+        // OUT THROUGH THIS EDITOR'S WORLD MATRIX AND BACK IN THROUGH THE ROOT'S, never `worldX() +
+        // localX`.
+        //
+        // A world coordinate is in SURFACE pixels with the root transform -- `uiScale` -- baked into it,
+        // and every consumer of this answer writes it as `left`/`top`, which are LOGICAL and are scaled
+        // by that same transform again on the way to the screen. So the sum came out multiplied by
+        // `uiScale`, which at the shipped 2 puts a popup at twice the caret's distance from the origin:
+        // further down and further right the deeper into the document the caret is, and exactly right
+        // for a caret at the very top left, which is what makes it read as drift rather than as a
+        // conversion.
+        //
+        // Going through the root's inverse is what the M6.1 fix to `AnchoredPlacement` uses and is
+        // strictly better than summing the layout chain, which this method's own javadoc still describes:
+        // it also undoes any scroll or transform between the editor and the root, which a sum of layout
+        // offsets cannot see.
+        Box root = document() == null ? null : document().box();
+        if (root == null) return new float[] { localX, localY, lineHeight() };
+        Vector3f world = new Vector3f(localX, localY, 0f).mulPosition(self.localToWorld());
+        Vector2f inRoot = Transform2D.apply(root.worldToLocal(), world.x, world.y);
+        return new float[] { inRoot.x, inRoot.y, lineHeight() };
     }
 
     /**
@@ -5937,42 +5998,28 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         textOf(line).highlights().clear();
         // HIDDEN, NOT DETACHED -- the pool/hide idiom `DecorationPool` already uses one layer up.
         //
-        // This pooled the Java objects and threw away their tree membership, which is the expensive half:
+        // Pooling the Java objects and throwing away their tree membership is the expensive half:
         // `removeInternalChild` unregisters the whole subtree, destroying a Taffy node for the line and
-        // one for its UIText, and the matching `addInternalChild` on the way back registers them again --
-        // and a registration invalidates the style match, so the cascade re-runs over every line that
-        // came back.
+        // one for its UIText, and the matching add on the way back registers them again -- and a
+        // registration invalidates the style match, so the cascade re-runs over every line that came
+        // back. It is paid on every SCROLL, and in bulk whenever a viewport's worth turns over at once.
         //
-        // It is paid on every SCROLL, and in bulk whenever a viewport's worth turns over at once. The
-        // case that made it visible is a tab switch: an unselected pane is `display: none`, a hidden box
-        // measures zero, and the windowing above reads zero as "one line is on screen" -- so switching
-        // away recycles the whole viewport and switching back realises it again. Measured on the frame
-        // after closing one of two open tabs, which is a switch to the survivor:
-        // `UIDocument.registerElement x181`, `style:drainDirtyMatch 6,607us`, `layout 7,282us`.
+        // THE SAME CHANNEL THE SHOW SIDE USES, which is the whole of this. It hid through the CASCADE --
+        // an INLINE `display: none` plus a direct poke at the Taffy bridge, both carried over from the
+        // old engine -- while `realiseLine` shows with `setDisplayed(true)`, which clears the `hidden`
+        // ATTRIBUTE and says nothing about the cascade. The box tree refuses a box for either reason, so
+        // a line that had been recycled once could never come back: it was shown, unhidden, still
+        // resolving `display: none`, and had no box to paint into.
         //
-        // Hiding costs one IMPORTANT-origin display write, and `replaceOrPutCandidate` no-ops when the
-        // value is unchanged. A hidden element takes no layout and paints nothing, so a pool of them is
-        // bounded by the largest viewport this editor has ever shown -- which is what it would hold
-        // detached anyway.
-        // THROUGH THE CASCADE, at IMPORTANT origin -- NOT `taffyBridge.setDisplay`, which is immediate
-        // and was tried first. A direct Taffy write leaves no candidate behind, so the next thing to
-        // re-match this element resolves `display` to its INITIAL value and pops the pooled line back
-        // into layout. Re-matching a line is ordinary: `invalidateStyleMatch` recurses, so any class
-        // change on the editor reaches every line under it, pool included.
+        // On screen that is text that vanishes and never returns, while the gutter, the fold arrows, the
+        // current-line bar and the error tick all stay -- they are separate elements that were never
+        // pooled. Reported as scrolling "destroying the lines", and equally reachable by switching tabs
+        // or pressing Ctrl+A, because all three recycle the viewport.
         //
-        // Immediate in practice all the same. `display` is transitionable and its DISPLAY_ALLOW_DISCRETE
-        // interpolator holds the visible end until the very end -- but only while a transition is
-        // RUNNING, and nothing declares one on a line.
-        StyleGroup.inlinePipeline(line.getStyle().getLayoutGroup(),
-                l -> l.display(TaffyDisplay.NONE));
-        // AND STRAIGHT AT TAFFY TOO, which is not belt-and-braces -- the two do different halves. The
-        // candidate is what SURVIVES: without it the next re-match resolves `display` to its initial
-        // value and pops the pooled line back into layout, and re-matching a line is ordinary, since
-        // `invalidateStyleMatch` recurses and any class change on the editor reaches the whole pool. The
-        // direct write is what makes it take effect NOW: this runs from a ticker, after the frame's
-        // cascade has already drained, so a candidate alone leaves the line laid out and painted for one
-        // more frame -- a ghost row wherever the viewport just turned over.
-        line.getStyle().taffyBridge.setDisplay(TaffyDisplay.NONE);
+        // The attribute is also the whole mechanism now: it is what the box tree reads when it syncs, and
+        // it reports the structure change itself, so there is no bridge left to poke and no candidate
+        // that a later re-match could resolve back to `initial`. Exactly the pair `DragGhost` needed.
+        line.setDisplayed(false);
         linePool.addLast(line);
     }
 

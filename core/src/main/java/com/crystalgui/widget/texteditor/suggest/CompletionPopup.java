@@ -1,5 +1,6 @@
 package com.crystalgui.widget.texteditor.suggest;
 
+import com.crystalgui.widget.dnd.Resizer;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.core.signal.Signal;
@@ -281,6 +282,20 @@ public final class CompletionPopup extends Popover {
         // editor owns, not a thing you tab into.
         setFocusPolicy(FocusPolicy.NONE);
         addClass(POPUP_CLASS);
+        // THE HANDLES, which the sheet's `resize: both` no longer installs on its own.
+        //
+        // The old engine drove this from the cascade -- `StylePropertyRegistry.RESIZE` carried a listener
+        // calling `UIElement.onResizeModeChanged`, so any element whose computed `resize` was not `none`
+        // grew a handle set. That hook does not exist here and its absence is deliberate: a widget says
+        // whether it can be resized, and `WindowFrame` is the standing example. `Popover` already
+        // implements every method of `Resizable`; nothing had ever called `Resizer.install` on one, so
+        // both editor popups declared `resize: both`, answered every question a resize asks, and had no
+        // handle to grab.
+        //
+        // Unconditional rather than gated on the computed mode: each handle re-reads the live `resize`
+        // value per drag, so a sheet can still narrow or withdraw the set, and there is no frame on which
+        // the style has not resolved yet to get wrong.
+        Resizer.install(this);
 
         list.setSelectionMode(SelectionMode.SINGLE);
         list.setItemHeight(ROW_HEIGHT);
@@ -487,11 +502,18 @@ public final class CompletionPopup extends Popover {
 
             float startLeft = placedLeft;
             float startTop = placedTop;
-            float[] press = pressInHostSpace(hint, host, event.getPosition().x(), event.getPosition().y());
-            float pressX = press[0];
-            float pressY = press[1];
-
-            Drag.start(host, pressX, pressY,
+            // THE RAW PRESS, because `Drag.start` takes SURFACE pixels and converts them itself.
+            //
+            // This handed it a position already converted into the host's own space, and `Drag` records
+            // the argument as `pressSurfaceX` then measures every later delta as
+            // `livePointer - pressSurface` -- so with a local value in there the first frame reported a
+            // delta the size of the popup's own offset. On screen the popup jumped to the corner on
+            // mouse-down and tracked the pointer correctly from there, which reads as the anchor being
+            // lost rather than as the press being in the wrong units.
+            //
+            // A mouse-DOWN listener's coordinates are already raw -- the standing rule -- and every other
+            // `Drag.start` in the engine passes them straight through.
+            Drag.start(host, event.getPosition().x(), event.getPosition().y(),
                     new Drag.Listener() {
                         @Override
                         public void onDragUpdate(float mx, float my, float sx, float sy,
@@ -535,18 +557,6 @@ public final class CompletionPopup extends Popover {
         return box == null ? 0f : box.height();
     }
 
-    private static float[] pressInHostSpace(UINode from, UINode host, float localX, float localY) {
-        Box box = from.box();
-        if (box == null) return new float[] { localX, localY };
-        // OUT THROUGH THE SOURCE'S WORLD MATRIX AND BACK IN THROUGH THE HOST'S. `toLocal` is the
-        // second half and it now zeroes the host's own origin, which is exactly the space `moveTo`
-        // writes in -- so the pair converts an offset within `from` into an offset within `host`
-        // with no origin arithmetic of its own.
-        Vector3f world = new Vector3f(localX, localY, 0f).mulPosition(box.localToWorld());
-        Vector2f inHost = host.toLocal(world.x, world.y);
-        return new float[] { inHost.x, inHost.y };
-    }
-
     /**
      * The sort menu — IntelliJ's own, which offers exactly this one toggle.
      *
@@ -567,7 +577,13 @@ public final class CompletionPopup extends Popover {
         window.addOverlay(menu, this);
         Box optionsBox = options.box();
         if (optionsBox == null) return;
-        menu.showAt(optionsBox.worldX(), optionsBox.worldY() + HINT_HEIGHT, options);
+        // THROUGH THE ROOT'S INVERSE, never `worldX()` raw. `showAt` writes `left`/`top`, which are
+        // LOGICAL and are scaled by the root transform on the way to the screen, while a world
+        // coordinate already has that scale baked in -- so the menu would open at `uiScale` times the
+        // button's distance from the origin. The same conversion `TextEditor.anchorInWindow` makes, and
+        // the old engine avoided it by reading the LAYOUT chain (`getWindowX`) instead.
+        Vector2f inRoot = Box.originIn(optionsBox, window.box());
+        menu.showAt(inRoot.x, inRoot.y + HINT_HEIGHT, options);
     }
 
     /**

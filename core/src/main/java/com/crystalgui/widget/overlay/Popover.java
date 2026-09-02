@@ -1,5 +1,7 @@
 package com.crystalgui.widget.overlay;
 
+import com.crystalgui.style.property.layout.LayoutProperties;
+import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.workbench.chrome.status.ProcessesPopover;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
@@ -602,6 +604,20 @@ public class Popover extends UINode implements Resizable {
         userSizedWidth = false;
         userSizedHeight = false;
         syncUserSizedClasses();
+        // AND THE SIZE ITSELF, which is the whole of what "clear" means here.
+        //
+        // A resize writes `width`/`height` at INLINE, per the CSS spec's rule for a user resize, and
+        // dropping the FLAGS without dropping the CANDIDATES leaves that size winning every cascade for
+        // the rest of the widget's life: the classes come off, the sheet's floor and ceiling come back,
+        // and neither can be seen because an INLINE width outranks both. On screen the popup reopens at
+        // whatever it was last dragged to -- for a documentation popup that is the previous SYMBOL's
+        // size, so one wide declaration makes every later hover wide.
+        //
+        // Withdrawn rather than written back: writing the resting value would be a second INLINE
+        // candidate outranking the sheet for good, which is the standing rule about borrowing a property
+        // an author states outright.
+        getStyle().removeCandidates(LayoutProperties.WIDTH, slot -> slot.origin() == StyleOrigin.INLINE);
+        getStyle().removeCandidates(LayoutProperties.HEIGHT, slot -> slot.origin() == StyleOrigin.INLINE);
     }
 
     private void syncUserSizedClasses() {
