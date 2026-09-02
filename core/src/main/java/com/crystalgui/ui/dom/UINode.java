@@ -698,6 +698,21 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
 
     private boolean refusesPublicChildren;
 
+    /**
+     * Appends AMBIENT engine furniture — resize handles — past a widget's refusal of public children.
+     *
+     * <p>Package-private and reached only through {@link ResizeHandles}, which is the seam that says
+     * WHEN handles exist. {@code resize} is a CSS property that applies to elements generally, so the
+     * cascade grows handles on whatever a sheet names — including a {@code Dialog}, which refuses
+     * public children because its structure is fixed. Those handles are not a caller's children and
+     * the refusal was never about them: it exists so a caller's content cannot vanish among a widget's
+     * parts. Adding them through the public {@code append} threw, and the whole gallery died on the
+     * first dialog it built.</p>
+     */
+    final UINode appendAmbient(UINode child) {
+        return insertStructuralAt(children.size(), child);
+    }
+
     /** Appends a part the WIDGET owns, past its own refusal of public children. */
     protected final UINode appendStructural(UINode child) {
         return insertStructuralAt(children.size(), child);
