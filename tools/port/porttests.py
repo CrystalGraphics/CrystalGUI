@@ -152,6 +152,22 @@ TEST_RULES = [
     # compositor, so `UIWindow.desktop()` became `Desktop.of(document)`.
     (r'\w+\.desktop\(\)', 'Desktop.of(document)', 'desktop'),
     (r'\w+\.getRootTransform\(\)', 'document.boxes().rootTransform()', 'geometry'),
+    #  collapsed to , and an INLINE spelling kept the old
+    # qualifier -- , which is the node package, not the box one.
+    (r'com\.crystalgui\.ui\.dom\.Box' + chr(92) + 'b', 'Box', 'geometry'),
+    # -- The compositor ---------------------------------------------------------------------------
+    #
+    # The engine may not name a compositor, so `UIWindow.openWindow`/`desktop()`/`suspendDesktop`
+    # all became calls on the Desktop, which names the DOCUMENT.
+    (r'(\w+)\.openWindowInBackground\(([^;]*)\)', r'Desktop.of(document).addWindow(\2, false)', 'desktop'),
+    (r'\w+\.openWindow\(', 'Desktop.of(document).addWindow(', 'desktop'),
+    (r'\w+\.suspendDesktop\(\)', 'Desktop.of(document).suspend()', 'desktop'),
+    (r'\w+\.resumeDesktop\(\)', 'Desktop.of(document).resume()', 'desktop'),
+    (r'\w+\.isDesktopSuspended\(\)', 'Desktop.of(document).isSuspended()', 'desktop'),
+    # Modality is ONE predicate the focus service owns, asked of the node.
+    (r'\w+\.isModalBlocked\(([\w.()]+)\)', r'document.focus().isInert(\1)', 'modality'),
+    # A node's position among its siblings is the parent's answer, not the node's.
+    (r'(\w+)\.getSiblingIndex\(\)', r'\1.parent().indexOf(\1)', 'tree'),
     # A ticker is OWNED now -- dropped when its owner disconnects, dormant while frozen.
     (r'(\w+)\.registerTicker\(', r'document.animation().every(\1, ', 'ticker'),
     # The old `ui` field on a test fixture was the window.

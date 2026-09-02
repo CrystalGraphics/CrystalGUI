@@ -50,6 +50,28 @@ import org.junit.Test;
  * </ul>
  */
 public class DesktopBatchPortTest extends UiDocumentTestBase {
+    /**
+     * ANIMATIONS OFF, unless a test turns them on for itself.
+     *
+     * <p>A window animation defers the thing it animates: `close()` destroys and `hide()`
+     * detaches only once the flight has finished, so a test that asserts the state straight
+     * after the gesture reads the state BEFORE it. Disabled, the continuation runs
+     * synchronously, which is what lets every assertion here be immediate. The tests that are
+     * ABOUT the animation enable it themselves and restore this in a finally.</p>
+     */
+    @Before
+    public void quietAnimationsForTheFixture() {
+        Desktop.setAnimationsEnabled(false);
+    }
+
+    /** AND PUT IT BACK. The flag is STATIC, so leaving it off leaks into every later test in the
+     *  run -- a governance test that asks whether every shipped rule still matches something then
+     *  finds `taskbar .__entry__.__animating__` matching nothing, because nothing animates. */
+    @After
+    public void restoreAnimationsAfterTheFixture() {
+        Desktop.setAnimationsEnabled(true);
+    }
+
 
     private Desktop desktop;
     private boolean animationsWere;
