@@ -1,7 +1,7 @@
 package com.crystalgui.mc.client;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
-import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.dom.UIDocument;
 
 import cpw.mods.fml.client.registry.ClientRegistry;
 import cpw.mods.fml.common.FMLCommonHandler;
@@ -104,13 +104,13 @@ public final class CgUiInput {
      * @param displayHeight raw device height — <b>not</b> {@code GuiScreen.height}, which is the scaled
      *                      GUI size and would put the pointer off by the scale factor
      */
-    public static void pumpMouse(UIWindow window, int displayHeight) {
+    public static void pumpMouse(UIDocument window, int displayHeight) {
         int button = Mouse.getEventButton();
         // A MOVE EVENT HAS NO BUTTON and must not carry a click timestamp, or the multi-click detail
         // counter drifts and a slow double-click registers as a triple.
         long millis = button == -1 ? -1 : Mouse.getEventNanoseconds() / NANOS_IN_MILLIS;
 
-        window.getInputHandler().consumeMouseEvent(new CgSystemInput.Mouse.Event(
+        window.input().consumeMouseEvent(new CgSystemInput.Mouse.Event(
                 Mouse.getEventX(),
                 displayHeight - Mouse.getEventY(),
                 Mouse.getEventDX(),
@@ -128,8 +128,8 @@ public final class CgUiInput {
      *         what lets the screen close on an Escape nothing else wanted. This javadoc said the
      *         opposite, and its one caller believed it
      */
-    public static boolean pumpKeyboard(UIWindow window) {
-        return window.getInputHandler().consumeKeyboardEvent(new CgSystemInput.Keyboard.Event(
+    public static boolean pumpKeyboard(UIDocument window) {
+        return window.input().consumeKeyboardEvent(new CgSystemInput.Keyboard.Event(
                 Keyboard.getEventCharacter(),
                 Keyboard.getEventKey(),
                 Keyboard.getEventKeyState(),

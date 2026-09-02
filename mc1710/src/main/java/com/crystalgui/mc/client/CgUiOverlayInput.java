@@ -1,9 +1,9 @@
 package com.crystalgui.mc.client;
 
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.ui.UIWindow;
+import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.core.window.DesktopPresentation;
-import com.crystalgui.ui.elements.desktop.ScreenOverlay;
+import com.crystalgui.desktop.host.ScreenOverlay;
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
 import net.minecraft.client.Minecraft;
@@ -84,7 +84,7 @@ public final class CgUiOverlayInput {
      * unable to receive anything at all — including whatever the player would press to escape it.</p>
      */
     public static void drainInto(GuiScreen screen) {
-        UIWindow window = CgUiScreen.window();
+        UIDocument window = CgUiScreen.window();
         if (window == null || screen == null) return;
         if (!announced) {
             announced = true;
@@ -94,7 +94,7 @@ public final class CgUiOverlayInput {
             CrystalGuiCore.LOGGER.info("[cgui] overlay input is live: pinned windows are taking events "
                     + "from {}", screen.getClass().getName());
         }
-        ScreenOverlay overlay = window.screenOverlay();
+        ScreenOverlay overlay = CgUiScreen.desktop().screenOverlay();
         Minecraft mc = Minecraft.getMinecraft();
 
         try {
