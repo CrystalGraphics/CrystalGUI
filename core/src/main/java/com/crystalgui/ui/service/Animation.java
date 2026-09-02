@@ -157,6 +157,15 @@ public final class Animation {
      * keeps compiling". Ownership makes that structural: hiding is freezing, and a frozen node's hook
      * does not run.</p>
      *
+     * <p><b>A hook runs BEFORE layout, so on its first frame — and on its first frame after a thaw —
+     * its owner may have no box.</b> The frame is {@code animation → style → layout}, a freeze drops
+     * the subtree's boxes and a thaw rebuilds them on the next pass, so a hook that reads geometry
+     * gets null at both of those moments. {@code box()} is nullable and this is the commonest way to
+     * meet it: the Run console's tail-follow read {@code editor.box().maxScrollTop()} and threw on the
+     * first frame the panel was ever ticked. Guard at the call site, where the widget knows what the
+     * right answer is for "not laid out yet" — or use {@link #afterLayout} when the hook exists to
+     * measure something.</p>
+     *
      * <p><b>Frozen SKIPS, it does not drop, and the difference is a whole class of dead widget.</b> A
      * freeze is temporary by construction — a frozen subtree keeps its scroll, its text and its
      * listeners precisely so it can come back — and this service cannot restore a hook it has
