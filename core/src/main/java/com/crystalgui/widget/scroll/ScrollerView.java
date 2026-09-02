@@ -1,5 +1,7 @@
 package com.crystalgui.widget.scroll;
 
+import dev.vfyjxf.taffy.style.AlignContent;
+import dev.vfyjxf.taffy.style.AlignItems;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StyleProperty;
@@ -186,7 +188,7 @@ public class ScrollerView extends UINode {
         // which is the whole point of a scroll container.
         StyleGroup.defaultPipeline(viewport.getStyle().getLayoutGroup(),
                 l -> l.widthPercent(100f).minHeightPercent(100f));
-        mirrorDirection();
+        mirrorFlexContainer();
         shadow.append(viewport);
 
         this.verticalScroller = newBar(Scroller.Orientation.VERTICAL, V_SCROLLER_PART);
@@ -307,34 +309,53 @@ public class ScrollerView extends UINode {
      * <p>Call after the content changes. Cheap and idempotent.</p>
      */
     /**
-     * Gives the slot the view's own {@code flex-direction}.
+     * Gives the slot the view's own {@code flex-direction}, {@code align-items} and
+     * {@code justify-content}.
      *
      * <p><b>A slot is a real box between a host and its content, so it is the flex container the
-     * content actually lays out in</b> — and {@code flex-direction} does not inherit. The slot used to
-     * state {@code COLUMN} outright, which made a horizontal scroller impossible: a TabView's tab rail
-     * is a {@code ScrollerView}, its sheet gives the rail a row, and its tabs stacked vertically
-     * anyway, each one full width. That took two more symptoms with it — the rail became a VERTICAL
-     * scroll container, so it ate wheel notches meant for the page, and the strip bar it sized was for
-     * an axis nothing scrolls on.</p>
+     * content actually lays out in</b> — and none of the three inherits. The slot used to state
+     * {@code COLUMN} outright, which made a horizontal scroller impossible: a TabView's tab rail is a
+     * {@code ScrollerView}, its sheet gives the rail a row, and its tabs stacked vertically anyway,
+     * each one full width. That took two more symptoms with it — the rail became a VERTICAL scroll
+     * container, so it ate wheel notches meant for the page, and the strip bar it sized was for an axis
+     * nothing scrolls on.</p>
+     *
+     * <p><b>Alignment is the same trap and cost a second round.</b> Three shipped rules set
+     * {@code align-items} on a rail, and the dock's is {@code center} — which centred the SLOT inside
+     * the rail (where it already filled it) and left the slot stretching the tabs to the rail's full
+     * height. Measured: a dock tab is 17.0 tall on the old engine and was 22.0 here, so every editor
+     * tab's focus ring was five pixels taller than its label needed. It reads as a restyle rather than
+     * as a box having appeared between two elements that used to be adjacent.</p>
+     *
+     * <p>{@code justify-content} is mirrored with them although nothing sets it on a scroller today: it
+     * is the identical shape, and leaving it would arm the same trap for whoever writes that rule.</p>
      *
      * <p>Mirroring rather than inheriting is the narrowest fix that is also correct: a scroll
-     * container's direction IS the axis its content runs along, so there is no case where the two
-     * should differ. Written at DEFAULT origin so a sheet can still address the view itself, and
-     * re-run from {@link #computedChanged} because a theme may set the direction long after
-     * construction — a rail that is a row until the first restyle is worse than one that is never a
-     * row, because only one of the two is reproducible.</p>
+     * container's direction IS the axis its content runs along, and alignment set on a scroller is
+     * alignment meant for what it scrolls. Written at DEFAULT origin so a sheet can still address the
+     * view itself, and re-run from {@link #computedChanged} because a theme may set any of them long
+     * after construction — a rail that is a row until the first restyle is worse than one that is never
+     * a row, because only one of the two is reproducible.</p>
      */
-    private void mirrorDirection() {
+    private void mirrorFlexContainer() {
         FlexDirection direction = computedStyle().get(LayoutProperties.FLEX_DIRECTION);
+        AlignItems align = computedStyle().get(LayoutProperties.ALIGN_ITEMS);
+        AlignContent justify = computedStyle().get(LayoutProperties.JUSTIFY_CONTENT);
         StyleGroup.defaultPipeline(viewport.getStyle().getLayoutGroup(),
-                l -> l.flexDirection(direction == null ? FlexDirection.COLUMN : direction));
+                l -> {
+                    l.flexDirection(direction == null ? FlexDirection.COLUMN : direction);
+                    if (align != null) l.alignItems(align);
+                    if (justify != null) l.justifyContent(justify);
+                });
     }
 
     @Override
     public void computedChanged(StyleProperty<?> property, @Nullable Object oldValue,
                                 @Nullable Object newValue) {
         super.computedChanged(property, oldValue, newValue);
-        if (property == LayoutProperties.FLEX_DIRECTION) mirrorDirection();
+        if (property == LayoutProperties.FLEX_DIRECTION
+                || property == LayoutProperties.ALIGN_ITEMS
+                || property == LayoutProperties.JUSTIFY_CONTENT) mirrorFlexContainer();
     }
 
     public void refreshScrollers() {
@@ -486,4 +507,41 @@ public class ScrollerView extends UINode {
         return true;
     }
 
+
+    /**
+     * Whether a caller's content moves with the view, or the subclass moves it itself.
+     *
+     * <h3>Exemption only cancels the offset of the box that HOSTS you</h3>
+     *
+     * <p>The bars, the corner and anything else beside the slot are direct children of this view, so
+     * {@code setScrollExempt(true)} on one of them cancels this view's own scroll and they hold still.
+     * A node a subclass appends is NOT beside them — it lands in the slot, one level further down, and
+     * by then the offset is already baked into the slot's matrix. {@code BoxTree.compose} says so where
+     * it applies the rule: <em>"an element that wanted to opt out any further down would be undoing an
+     * offset already baked into its parent's matrix."</em> So the exemption is a no-op there, silently.
+     * </p>
+     *
+     * <p><b>What that cost.</b> {@code TextEditor} positions its rows in DOCUMENT coordinates and moves
+     * them with one matrix per layer — Monaco's {@code linesContent} — so its text viewport, gutter and
+     * fold column are all {@code setScrollExempt(true)} and have been since they were written. All three
+     * were in the slot, so all three scrolled anyway: the content moved by {@code scrollTop} from the
+     * slot AND by {@code scrollTop} from the layer's own transform, arriving at <b>twice</b> the offset.
+     * Measured at {@code scrollTop = 300}: the layer's transform read {@code translate(0, -300)} and its
+     * {@code worldY} read {@code -600}.</p>
+     *
+     * <p>Doubling does not look like doubling. Which rows are REALISED is computed from {@code scrollTop}
+     * and which rows are VISIBLE from twice it, so the two windows drift apart as you scroll: at
+     * {@code scrollTop = 160} the realised rows were 8..40 while only those from 22 up were on screen —
+     * a band of text at the top of the editor and blank below it, growing until past a viewport's worth
+     * the two sets stop overlapping and the editor goes empty. At {@code scrollTop = 0} they coincide
+     * exactly, which is why it was reported as appearing "the second I scroll down" and read as text
+     * being destroyed rather than as text being drawn twice as far away as it was placed.</p>
+     *
+     * <p>The old engine could not reach this: its {@code ScrollerView} had no shadow root — <em>"your
+     * children are ordinary children; there is no viewport or content wrapper to reach"</em> — so a
+     * child was hosted by the scrolling box itself and its exemption applied.</p>
+     */
+    protected final void setContentScrollExempt(boolean exempt) {
+        viewport.setScrollExempt(exempt);
+    }
 }
