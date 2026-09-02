@@ -690,8 +690,18 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
                     event.repeat(), modifiers, event.millis());
             send(focused, down);
             boolean consumed = down.isPropagationStopped() || down.isDefaultPrevented();
-            if (!consumed && chords != null
-                    && chords.resolve(scopeFor(focused), event.key(), modifiers, true, event.repeat(), event.millis())) {
+            // THE ACCESSOR, NOT THE FIELD. `chords` is null until a host installs one, and `chords()`
+            // is what falls back to the document's own command registry -- so reading the field here
+            // skipped the keymap entirely for every UNMODIFIED key on every host that never called
+            // `setChords`, while the modified-chord path above (which uses the accessor) worked.
+            //
+            // What that looked like: `Space` is bound to `graph.createNode`, and with the keymap
+            // skipped it fell through to `activation` instead, which synthesized a press on the focused
+            // node. The graph is focusable so its commands can resolve, so Space started a canvas PAN
+            // and the create menu never opened -- two symptoms that read as a broken binding and a
+            // broken gesture rather than as one lookup asking the wrong thing.
+            if (!consumed && keymap != null
+                    && keymap.resolve(scopeFor(focused), event.key(), modifiers, true, event.repeat(), event.millis())) {
                 return true;
             }
             // ONE KEYSTROKE DOES ONE THING: traversal and activation are gated on the same answer.
@@ -716,7 +726,9 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         KeyboardEvent.Up up = new KeyboardEvent.Up(focused, event.key(), event.character(),
                 event.repeat(), modifiers, event.millis());
         send(focused, up);
-        if (chords != null) chords.resolve(scopeFor(focused), event.key(), modifiers, false, false, event.millis());
+        // The accessor here too -- a release must reach the same keymap the press did, or a
+        // hold-to-open gesture never hears that its key came up. @see #consumeKeyboardEvent
+        if (keymap != null) keymap.resolve(scopeFor(focused), event.key(), modifiers, false, false, event.millis());
         activation(event, focused);
         return false;
     }
