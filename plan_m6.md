@@ -2430,7 +2430,7 @@ that mis-parsed it is deleted); *"a NETWORKED ELEMENT'S IDENTITY IS NO LONGER IT
 
 ---
 
-### 6.9a — mc1710 on the new engine · **M** · after: 6.8
+### 6.9a — mc1710 on the new engine · **M** · after: 6.8 · **SHIPPED 2026-09-02**
 
 > **The platform that matters, and it was a bullet inside the deletion.** Every acceptance this plan
 > has leaned on is a harness scene or a headless fixture, and `AGENTS.md` is blunt about what those
@@ -2481,7 +2481,7 @@ is why the accepts are runs and not tests.
 
 ---
 
-### 6.9b — Cutover and deletion · **M** · after: 6.9a
+### 6.9b — Cutover and deletion · **M** · after: 6.9a · **SHIPPED 2026-09-02**
 
 **Contents.** The harness defaults to `--engine=new` and the loader's engine switch is removed —
 6.9a has already put `CgUiScreen`, `CgUiHud`, `CgUiInput`, `CgUiOverlayInput` and `Mc1710Workspace` on
@@ -2507,20 +2507,55 @@ deleted (M8's job, done here because there is nothing left to port).
 
 ---
 
-### 6.10 — The Node/Element seam · **M** · after: 6.9b
+### 6.10 — The Node/Element seam · **M** · after: 6.9b (**gate open**)
 
-**Why, measured.** `UINode` carries **154 public members**. The old `UIElement` it replaced carried
-166. The class §0 introduced to be *"identity, attributes, children, shadow root, events — and
-NOTHING else: no layout, no paint, no geometry"* now answers `box()`, `setBox`, `scrollTo`,
-`toLocal`, `paintContent`, nine pseudo-class state flags, the whole style surface and — since 6.7 —
-ten resize members. It arrived there one defensible commit at a time, which is exactly how the class
-it replaced got to 166. A seam is the only thing that stops the drift, because it makes every new
-capability answer *Node or Element?* rather than defaulting to "the node class".
+**Why, measured.** `UINode` carries **154 public and protected members** across twenty-five sections
+of a 1,979-line file. The old `UIElement` it replaced carried 166. The class §0 introduced to be
+*"identity, attributes, children, shadow root, events — and NOTHING else: no layout, no paint, no
+geometry"* now answers `box()`, `setBox`, `scrollTo`, `toLocal`, `paintContent`, nine pseudo-class
+state flags, the whole style surface and — since 6.7 — twelve resize members. It arrived there one
+defensible commit at a time, which is exactly how the class it replaced got to 166. A seam is the only
+thing that stops the drift, because it makes every new capability answer *Node or Element?* rather
+than defaulting to "the node class".
+
+**And this is not only hygiene — the drift has already produced a live defect.**
+`UIDocument.allNodes()` ends:
+
+```java
+ShadowRoot shadow = at.shadowRoot();
+if (shadow != null) collect(shadow, into);
+```
+
+That list is what `StyleEngine` re-matches. So **every shadow root in the tree is matched against
+every selector in every sheet and cascaded into a full `ElementStyle` that nothing ever reads** — the
+box tree walks `composedChildren()`, where a shadow root is transparent by construction, so it is
+never laid out and never painted. One wasted cascade entry per shadow-hosting widget *instance*,
+across the 23 widgets §4.7 says may host one; and a sheet writing `shadow-root { }` matches it,
+silently. The split does not merely record that this is wrong, it makes it **uncompilable**:
+`allNodes()` can no longer hand a `ShadowRoot` to a cascade that wants a `Styleable`. The compiler
+finds it instead of a test nobody wrote.
 
 **The bottom of the chain already exists.** `EventTarget` is an empty marker interface and
 `UINode implements EventTarget`, so the web's `EventTarget → Node → Element → HTMLElement` is half
 built. This milestone adds the middle join: `UIElement extends UINode`, with the name coming back to
 what 303 ported files and every reader already call it.
+
+**What makes the seam cheap, and it is one structural fact.** `ShadowRoot` and `UIDocument` are the
+only non-elements, and **both are roots** — either can be a parent, neither can ever be a child. So
+every child is an element: `children()`, `composedChildren()`, `append`, `insertAt` and the query
+methods — 455 call sites between them — keep the element type and do not move at all. Only `parent()`
+and `root()` can hand back something that is not one; the composed tree is not even that, since
+`composedParent()` answers a slot, a host or a light parent and all three are elements. The DOM
+arrives at the same place by a different route and gives it a name: `parentNode` is a `Node`,
+`parentElement` is an `Element` or null.
+
+> **Decision: `parent()` returns `UINode`, and `parentElement()` returns `UIElement` or null.**
+> Measured before choosing rather than after: of the 129 `.parent()` sites in `main`, only **four**
+> chain a method onto the result, and all four — `remove`, `parent`, `indexOf`, `equals` — are
+> Node-level anyway. Everything else is a comparison or a null check and compiles untouched. Every
+> site the compiler *does* flag is one that walks up and calls an element method on whatever it
+> finds, which today succeeds against a shadow root and writes a class the cascade dutifully matches
+> and nothing reads.
 
 **The split**, from the DOM as it actually is rather than by analogy:
 
@@ -2530,48 +2565,104 @@ what 303 ported files and every reader already call it.
 | `children()`, `childCount()`, `indexOf`, `contains`, `depth()` | attributes (`get`/`set`/`has`/`setAttributes`), `id`, every class method |
 | `append`, `insertAt`, `remove`, `removeAll`, `removeSelf`, `moveTo`, `setOnlyChild` | `attachShadow`, `shadowRoot`, `containingShadowRoot`, `shadowHost`, `partName` |
 | the composed tree — `composedParent/Children/Subtree`, `assignedSlot`, `retarget`, `isInShadowTree` | style — `getStyle`, `style`/`layout`/`generalStyle`, `computedStyle`, `styleEngine`, `invalidateStyleMatch`, `computedChanged` |
-| events, because they are `EventTarget`'s and that is below Node | geometry (CSSOM View) — `box`, `setBox`, `toLocal`, `containsSurfacePoint`, `scroll*`, `scrollExtent`, `setScrollExempt` |
+| `querySelector*`, `getElementById`, `getElementsByClassName` — `ParentNode`'s, see below | geometry (CSSOM View) — `box`, `setBox`, `toLocal`, `containsSurfacePoint`, `scroll*`, `scrollExtent`, `setScrollExempt` |
 | freeze/thaw, `markStructureChanged`, `markTreeDirty` | state — hovered, pressed, focused, focus-visible, focus-within, enabled, checked, blank, invalid |
-| `querySelector*`, `getElementById`, `getElementsByClassName` — see below | policy — focus, hit-test, inert, displayed, popover, resize |
+| **both walk-out interfaces** — `KeymapScope` (`commandParent`) and `SettingsScope` (`settings`) | policy — focus, hit-test, inert, displayed, popover, resize |
+| | **events** — the fifteen pre-bound groups, `EventTarget`; see the correction below |
 | | `paintContent`/`paintDecoration`, `consumesTextInput`, `claimsChord`, `pressBlocked`, the scope accessors |
 
-Roughly **40 on Node and 110 on Element**, and Node's forty are all tree.
+By the section census that is **56 on Node and 98 on Element**, and Node's fifty-six are tree, walks
+and lifecycle — nothing else.
 
-**Two judgement calls, both taken from the spec rather than from taste.** The query methods are
-`ParentNode`'s, which `Document`, `DocumentFragment` and `Element` all implement — so they stay on
-`UINode`, or a shadow root loses the ability to search itself. And inline style is strictly
-`HTMLElement`'s; it goes on `UIElement` regardless, because a third class earns nothing here.
+**Three judgement calls, and only two of them follow the spec.**
+
+*Queries stay on `UINode`.* They are `ParentNode`'s, which `Document`, `DocumentFragment` and
+`Element` all implement; put them on `UIElement` and a shadow root loses the ability to search itself,
+which is the one query a composite most wants.
+
+*Both walk-out interfaces stay on `UINode`.* `ShadowRoot.commandParent()` returning the host is
+load-bearing and has an invariant row of its own — encapsulation governs which rules *match* a node,
+never which questions it may ask outward — so `KeymapScope` cannot move. `SettingsScope` follows it
+for consistency and costs nothing at rest, its `Settings` field being created on first ask; splitting
+the two would leave one walk uniform and the other special-casing the shadow boundary.
+
+*Events move to `UIElement`, which is where this diverges.* They were placed on `UINode` here on the
+reasoning that `EventTarget` sits below `Node`, and on the web a `ShadowRoot` genuinely is an
+`EventTarget` that events retarget through. In **this** engine it is not: `Input` dispatches over the
+*composed* tree, where a shadow root does not appear, so a listener attached to one can never fire.
+The fifteen groups are also eagerly allocated at field init, so a shadow root would pay fifteen
+`EventListenerGroup` objects for fifteen promises the dispatcher cannot keep — a capability that
+compiles, is discoverable from fifteen public fields, and silently does nothing, which is the exact
+shape this milestone exists to delete.
+
+Inline style is strictly `HTMLElement`'s and goes on `UIElement` regardless, because a third class
+earns nothing here.
 
 **The payoff is the subclasses, not the rename.**
 
 - `ShadowRoot extends UINode` — a shadow root is a `DocumentFragment`, not an element. Today it
-  inherits attributes, classes, a part name and `attachShadow`, none of which mean anything on it.
+  inherits attributes, classes, a part name, `attachShadow`, a focus policy, scroll and a box, none
+  of which mean anything on it, and one of which the cascade acts on.
 - `UISlot extends UIElement` — `HTMLSlotElement` is an element. The cursor's `auto` rule keys on
   `instanceof UISlot` and is unaffected.
 - `UIDocument` — the one place the seam costs something. See below.
 
 **`UIDocument` is a Document AND the root element, and the web says those are two things.** There,
-`Document` is a Node and the root is `document.documentElement`; here one class is both, and
-`document.append(...)` and `document.box()` appear in hundreds of places including every fixture.
+`Document` is a Node and the root is `document.documentElement`; here one class is both — it is laid
+out, it takes `display: block`, `:root` matches it — and `document.append(...)` and `document.box()`
+appear in hundreds of places including every fixture.
 
 > **Decision: `UIDocument extends UIElement`, as a documented divergence** — *our Document is also
-> the root element*. It keeps the whole value of the split (the two subclasses above, and 154 → 40 +
-> 110) for one sentence of divergence, where the faithful form — `extends UINode` plus a
-> `root()` returning a `UIElement` — is a mechanical rewrite of every call site whose RECEIVER
-> changes, which no IDE rename performs. Left as a follow-up rather than refused: if the day comes
-> that a document needs to stop being styleable, this is the shape.
+> the root element*. It keeps the whole value of the split (the two subclasses above, and 154 → 56 +
+> 98) for one sentence of divergence, where the faithful form — `extends UINode` plus a `root()`
+> returning a `UIElement` — is a mechanical rewrite of every call site whose RECEIVER changes, which
+> no IDE rename performs. Left as a follow-up rather than refused: if the day comes that a document
+> needs to stop being styleable, this is the shape. It also means `ShadowRoot` is the **only** bare
+> node, which is what keeps the widening seam down to two methods.
 
-**Why after 6.9b and not before.** `UIElement` is the old engine's class until 6.9b deletes it, and two
-classes of that name in one workspace is a shape this milestone has already paid for: `DataKey` is
+**How the refactor runs — backwards, because that is what makes it affordable.** Today's `UINode`
+*is* an Element in all but name, and it is named in **2,432 places across 420 files**: 218 in `main`,
+179 across the two test sets, 23 in the harness. Writing that by hand *is* the milestone; renaming it
+is a keystroke. So the rename comes **first** and the base class is extracted **second**, which means
+nothing existing is ever re-pointed — the only edits are the deliberate widenings.
+
+| # | Who | What | Cost |
+|---|---|---|---|
+| 1 | **IDE** | Rename the type `UINode` → `UIElement`, file included, *search in comments and strings* ON. Then `UINodeRegistry` → `UIElementRegistry`, `UINodeMirror` → `UIElementMirror`, `UINodeTreeSource` → `UIElementTreeSource`: the generic seam names (`NodeMirror`, `TreeSource`, `TreeObserver`, `NodeContract`) deliberately keep "Node" because there "node" means a node of any tree, and the `UI` prefix marks *the implementation over `ui.dom`* — so those three follow the concrete type and the four generics do not | seconds; compiles green, zero semantic change |
+| 2 | hand | Verify the **eight string literals** naming `UINode`, which a rename cannot be trusted with either way. One is live code — `FrameProfile.blame("com.crystalgui.style", "com.crystalgui.ui.dom.UINode")`, a profiler attribution filter that just stops matching — and two are hardcoded bytecode paths in `EngineBoundaryTest`, a governance test that would go quietly blind | minutes |
+| 3 | hand | Extract `abstract class UINode` from `UIElement`; move the 56 base members and their fields. Pure code motion, everything still compiles | one commit |
+| 4 | hand | `ShadowRoot extends UINode`. Compile, and **read every error** — each one is a site that was relying on a shadow root being an element | one commit |
+| 5 | hand | Widen `parent()` and `root()`; add `parentElement()` | one commit |
+| 6 | hand | Fix `allNodes()`; add the governance test that a shadow root never enters the cascade | one commit |
+
+Steps 4 and 6 are coupled on purpose, and that coupling is the milestone's whole argument: step 4 is
+what *breaks* `allNodes()`, so the defect cannot be left behind by anyone who finishes the refactor.
+
+`abstract` on `UINode` is load-bearing rather than tidy. `new UINode()` is what the no-argument
+constructor means today and the rename turns every one of those into `new UIElement()` automatically;
+making the base abstract is what stops one coming back.
+
+**Why after 6.9b and not before.** `UIElement` was the old engine's class until 6.9b deleted it, and
+two classes of that name in one workspace is a shape this milestone has already paid for: `DataKey` is
 interned by name, so `GraphView` existing in two packages threw *"already declared as …, not …"* in
-any test that touched both (6.4). `EngineBoundaryTest`'s class lists are string literals, so a rename
-slides past them without failing. **The split and the rename are independent** — only the rename
-carries the collision — so a split done earlier under the current name is safe if it is wanted sooner.
+any test that touched both (6.4). **The split and the rename are independent** — only the rename
+carries the collision — so a split done earlier under the current name would have been safe. With
+6.9b shipped the question is moot and both can run together.
 
 **Accepts.** Every surviving test green with no behaviour change of any kind: this milestone moves
-members between two classes in one hierarchy and renames one. `ShadowRoot` no longer compiles against
-any attribute, class or part method. `UINode`'s public count is under fifty, and a new capability
-landing on it fails review with the table above as the reason.
+members between two classes in one hierarchy, renames one, and fixes one defect the move exposes.
+`ShadowRoot` no longer compiles against any attribute, class, part, style, geometry or event member.
+`UINode`'s public count is **under sixty**, and a new capability landing on it fails review with the
+table above as the reason.
+
+> **Under sixty rather than under fifty, and the difference is a separate cut.** Node/Element fixes
+> *type honesty* — which nodes may be asked what — and not size: `UIElement` keeps 98 of the 154. The
+> size axis is extraction, and this package has already started it — `NodeQueries` and `ResizeHandles`
+> are extracted helpers sitting in `ui/dom` today. Queries (6), resize (12), scroll (7) and
+> `SettingsScope` (10) are thirty-five members that could follow them out of the class entirely. That
+> is a **6.11**, not a fold-in: doing both at once would mean a compile error could be either the seam
+> or the extraction, and the whole reason step 4 above is worth doing is that every error it raises
+> has exactly one meaning.
 
 ---
 
