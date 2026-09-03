@@ -8,7 +8,7 @@ import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.api.text.CgTextLayout;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.testsupport.UiTestBase;
+import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.text.UIText;
@@ -26,7 +26,7 @@ import org.junit.Test;
  * it its own (100). This is the same shape over the box tree, which has no other path to a
  * text's height.</p>
  */
-public class MeasureThroughTaffyTest extends UiTestBase {
+public class MeasureThroughTaffyTest extends UiDocumentTestBase {
 
     private static final String TEXT = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda";
 

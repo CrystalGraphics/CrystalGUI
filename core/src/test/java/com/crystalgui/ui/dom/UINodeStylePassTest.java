@@ -12,7 +12,7 @@ import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import dev.vfyjxf.taffy.style.TaffyDimension;
 import com.crystalgui.style.sheet.StyleSheet;
-import com.crystalgui.testsupport.UiTestBase;
+import com.crystalgui.testsupport.UiDocumentTestBase;
 import org.junit.Test;
 
 /**
@@ -25,7 +25,7 @@ import org.junit.Test;
  * inherits from {@code :root}, a bad selector that costs one rule, and a computed style that never
  * answers null and never moves under a reader.</p>
  */
-public class UINodeStylePassTest extends UiTestBase {
+public class UINodeStylePassTest extends UiDocumentTestBase {
 
     private static UIDocument document(String css) {
         UIDocument document = new UIDocument();

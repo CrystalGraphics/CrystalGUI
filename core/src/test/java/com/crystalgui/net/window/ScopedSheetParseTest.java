@@ -7,7 +7,7 @@ import static org.junit.Assert.assertTrue;
 import com.crystalgui.app.machine.ui.MachineStyles;
 import com.crystalgui.style.Styleable;
 import com.crystalgui.style.sheet.StyleSheet;
-import com.crystalgui.testsupport.UiTestBase;
+import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UINode;
 import java.util.ArrayList;
@@ -25,7 +25,7 @@ import org.junit.Test;
  * window opened with no styling at all. Nothing textual is left to break that way; the fixture stays
  * pointed at the real sheet because a parse is still a parse.</p>
  */
-public class ScopedSheetParseTest extends UiTestBase {
+public class ScopedSheetParseTest extends UiDocumentTestBase {
 
     /** The rule the whole scoping question turns on: {@code .machine-panel { width: 560px }}. */
     private static final float PANEL_WIDTH = 560f;

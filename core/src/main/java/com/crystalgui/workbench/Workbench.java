@@ -617,7 +617,12 @@ public class Workbench extends UINode implements DataProvider {
         // ANSWERED HERE, NOT BY THE BAR. The walk only finds ancestors, and the menu bar is a SIBLING of
         // the content everything is focused inside -- so a command resolving outward from a focused editor
         // would never reach it. The workbench is the nearest thing that is an ancestor of both.
-        if (key == UiDataKeys.MENU_BAR) return menuBar;
+        // `MenuBarView.MENU_BAR`, NOT `UiDataKeys.MENU_BAR`. A DataKey's TYPE is the thing it names,
+        // and the old one is a `DataKey<ui.elements.chrome.MenuBarView>` -- so answering it with THIS
+        // engine's bar compiled (getData returns Object) and then failed `key.cast` inside
+        // DataContext, which is a null nobody reports. The new bar declares its own key for exactly
+        // this reason and its javadoc says so; this call site had not caught up.
+        if (key == MenuBarView.MENU_BAR) return menuBar;
         // THE SURFACE, which nothing answered and every command gated on it was therefore disabled.
         //
         // The old engine's palette took `UiDataKeys.WINDOW`, a `DataKey<UIWindow>`; a key's TYPE is the

@@ -5,7 +5,7 @@ import static org.junit.Assert.assertEquals;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.sheet.StyleSheet;
-import com.crystalgui.testsupport.UiTestBase;
+import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UINode;
 import org.junit.Test;
@@ -17,7 +17,7 @@ import org.junit.Test;
  * {@code default.css} through {@code CgIO}, so the whole class is unloadable headlessly: CSS text
  * belongs in {@code test}, never in {@code headlessTest}.</p>
  */
-public class FreezeStyleTest extends UiTestBase {
+public class FreezeStyleTest extends UiDocumentTestBase {
 
     @Test
     public void aFrozenSubtreeMatchesNoSelectorAndCatchesUpOnTheWayBack() {
