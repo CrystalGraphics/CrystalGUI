@@ -194,14 +194,46 @@ public class EngineBoundaryTest {
                 offences.isEmpty());
     }
 
+    /**
+     * <b>The document layer's MODEL half is neutral</b> — {@code plan_fs_rewrite.md} F1, D4.
+     *
+     * <p>{@code document/} is listed as a new-engine package above because {@code FileDocument.view()}
+     * answers a node, and there was no supertype the two engines' element classes shared. F1 split that:
+     * the model, the document, the kind and the store name {@code ui.dom} at most and usually nothing at
+     * all, which is what lets a document be opened, analysed and saved with no window — and it is why
+     * {@code fs.client} can hold documents without the filesystem becoming a fact about the engine.</p>
+     *
+     * <p>Same mechanism as {@link #DOM_SEAM_CLASSES}: a package can be an engine's and still contain
+     * classes that are nobody's. {@code LayeringTest.theDocumentModelNamesNoWidget} is the assertion
+     * that keeps this list honest — the day one of these names a widget, that fails.</p>
+     */
+    private static final List<String> DOCUMENT_MODEL_CLASSES = List.of(
+            "com/crystalgui/document/Document",
+            "com/crystalgui/document/DocumentModel",
+            "com/crystalgui/document/AbstractDocumentModel",
+            "com/crystalgui/document/TextDocumentModel",
+            "com/crystalgui/document/BytesDocumentModel",
+            "com/crystalgui/document/DocumentReference",
+            "com/crystalgui/document/Documents",
+            "com/crystalgui/document/DocumentState",
+            "com/crystalgui/document/DocumentKind",
+            "com/crystalgui/document/DocumentKinds",
+            "com/crystalgui/document/EditorInput");
+
     @Test
     public void theOldEngineNamesNothingOfTheNew() throws IOException {
         Path root = ClassReferences.mainClassesRoot(EngineBoundaryTest.class);
         List<String> forbidden = new java.util.ArrayList<>(NEW_PACKAGES);
         forbidden.add("com/crystalgui/ui/dom/UI");
         forbidden.addAll(NEW_CLASSES);
-        List<String> offences = ClassReferences.offences(
-                root, root.resolve("com/crystalgui"), path -> !isNewEngine(path), forbidden);
+        List<String> offences = new java.util.ArrayList<>(ClassReferences.offences(
+                root, root.resolve("com/crystalgui"), path -> !isNewEngine(path), forbidden));
+        // The headless document types are nobody's engine. Filtered here rather than removed from
+        // NEW_PACKAGES, because the half of `document/` that DOES name a node is still the new
+        // engine's and this assertion still has to catch it.
+        offences.removeIf(offence -> DOCUMENT_MODEL_CLASSES.stream()
+                .anyMatch(neutral -> offence.endsWith(" references " + neutral)
+                        || offence.contains(" references " + neutral + "$")));
         assertTrue("the old engine reaches into the new one:\n" + String.join("\n", offences),
                 offences.isEmpty());
     }

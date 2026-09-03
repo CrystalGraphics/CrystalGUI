@@ -196,6 +196,29 @@ public final class WorkspaceService {
     }
 
     /**
+     * A window of a file, authorised as a read.
+     *
+     * <p>What a chunked transfer pulls through, and the reason a transfer can hold
+     * {@code (path, etag, size)} rather than the bytes: the server no longer has to have read the file
+     * in order to be sending it.</p>
+     */
+    public byte[] readRange(WorkspaceActor actor, CgPath path, long offset, int length) {
+        authorise(actor, path, WorkspaceOperation.READ);
+        return files.read(path, offset, length);
+    }
+
+    /**
+     * Whether this workspace's filesystem tells {@code Main.java} from {@code main.java}.
+     *
+     * <p>The provider has always known and the answer could not reach the client, which is why two
+     * spellings of one file could be opened as two documents that overwrote each other. It travels in
+     * {@code FsHello} now. @see com.crystalgui.fs.CgFileCapability#PATH_CASE_SENSITIVE
+     */
+    public boolean caseSensitive() {
+        return files.has(com.crystalgui.fs.CgFileCapability.PATH_CASE_SENSITIVE);
+    }
+
+    /**
      * Replaces a file, refusing if it moved since {@code expectedEtag} was taken.
      *
      * <p><b>The re-stat is the guarantee, and it is here rather than in a watcher.</b> Whatever a

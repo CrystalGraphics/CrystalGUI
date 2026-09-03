@@ -35,6 +35,12 @@ public record WorkspaceProject(ProjectInfo info, Path root, List<String> exclude
         if (info == null) throw new IllegalArgumentException("info");
         if (root == null) throw new IllegalArgumentException("root");
         excludes = excludes == null ? List.of() : List.copyOf(excludes);
+        // THE INFO CARRIES THEM TOO, because the info is what travels. Stated in one place and copied
+        // into the other rather than declared twice: a project whose excludes and whose described
+        // excludes could disagree is a project whose client walks what its server hides.
+        if (!excludes.isEmpty() && info.excludes().isEmpty()) {
+            info = new ProjectInfo(info.id(), info.displayName(), info.sourceRoots(), excludes);
+        }
     }
 
     public WorkspaceProject(String id, String displayName, Path root) {

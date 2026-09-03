@@ -14,7 +14,20 @@ import com.crystalgui.fs.CgPath;
  * @param id          the project id — see {@link WorkspaceProject} for the {@code namespace.name} form
  * @param displayName what a user sees. Free text; never parsed.
  */
-public record ProjectInfo(String id, String displayName, java.util.List<String> sourceRoots) {
+public record ProjectInfo(String id, String displayName, java.util.List<String> sourceRoots,
+                         java.util.List<String> excludes) {
+
+    /**
+     * A project with no stated ignore rules, which is what every caller before D22 described.
+     *
+     * <p>The rules are the SERVER's and were never sent, so the crawl, Go to File and the tree each had
+     * their own idea of what to skip and none of them was the project's — an excluded directory was
+     * absent from a listing and walked by the index anyway. They travel now, and this overload is what
+     * keeps every existing construction meaning what it meant.</p>
+     */
+    public ProjectInfo(String id, String displayName, java.util.List<String> sourceRoots) {
+        this(id, displayName, sourceRoots, java.util.List.of());
+    }
 
     public ProjectInfo {
         if (id == null || id.isEmpty()) throw new IllegalArgumentException("project id");
@@ -26,6 +39,7 @@ public record ProjectInfo(String id, String displayName, java.util.List<String> 
         // one whose declared roots simply contain none, which costs nothing to declare.
         sourceRoots = sourceRoots == null || sourceRoots.isEmpty()
                 ? SourceRoots.CONVENTION : java.util.List.copyOf(sourceRoots);
+        excludes = excludes == null ? java.util.List.of() : java.util.List.copyOf(excludes);
     }
 
     /**
