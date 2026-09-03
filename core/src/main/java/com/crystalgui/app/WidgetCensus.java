@@ -22,7 +22,6 @@ import com.crystalgui.workbench.chrome.status.StatusBarView;
 import com.crystalgui.widget.config.Configurator;
 import com.crystalgui.widget.config.ConfiguratorGroup;
 import com.crystalgui.widget.config.ConfiguratorPanel;
-import com.crystalgui.widget.config.control.ArrayControl;
 import com.crystalgui.widget.config.control.HeaderControl;
 import com.crystalgui.widget.config.control.InfoControl;
 import com.crystalgui.desktop.Desktop;
@@ -122,6 +121,21 @@ public final class WidgetCensus {
                         + "the same fact that could disagree with the first.");
         WidgetContracts.localOnly(ConfiguratorGroup.class, "Derived, as Configurator -- a section of one.");
         WidgetContracts.localOnly(ConfiguratorPanel.class, "Derived, as Configurator -- the scroller around one.");
+        WidgetContracts.localOnly(ListView.class,
+                "Derived. A served collection is a `ServerScope.stream` on a CONTAINER: the server "
+                        + "describes the rows a viewer can see, they arrive as ordinary described "
+                        + "children, and the client builds a ListView over a RemoteRows around them. So "
+                        + "the rows travel and the view of them does not -- which is also why "
+                        + "describedChildren() answers nothing here: the realised window is what is on "
+                        + "screen, not what the list HAS.");
+        WidgetContracts.localOnly(TableView.class,
+                "Derived, as ListView -- the rows are the stream and this is a view of them. Its "
+                        + "COLUMNS are a separate question and genuinely do not travel yet.");
+        WidgetContracts.localOnly(TreeView.class,
+                "Derived, as ListView. Its expansion is view state for a local tree and would be the "
+                        + "server's for a served one; nothing has needed the second yet, and inventing "
+                        + "a wire form for it before something does is how two mechanisms for one rule "
+                        + "start disagreeing.");
         WidgetContracts.localOnly(Inspector.class,
                 "Derived. An Inspector is a Configurator over whatever is selected; its controls carry "
                         + "the state.");
@@ -208,20 +222,5 @@ public final class WidgetCensus {
         WidgetContracts.localOnly(NotificationsView.class, "Shell chrome, built from the Notifications store.");
         WidgetContracts.localOnly(NotificationBalloons.class, "Shell chrome, as NotificationsView.");
 
-        // ── 4. Blocked on a mechanism that has a name ────────────────────────
-        WidgetContracts.localOnly(ListView.class,
-                "Blocked on M7. A list's contract is its ROWS, and rows have to be a stream -- the "
-                        + "server sends a count and a template, the client asks for rows{from,to} as it "
-                        + "scrolls. That needs the mirror (M2) underneath it. A contract carrying only "
-                        + "the selection would describe a list whose contents never arrive, which is "
-                        + "worse than saying nothing.");
-        WidgetContracts.localOnly(TableView.class, "Blocked on M7, as ListView -- rows are a stream.");
-        WidgetContracts.localOnly(TreeView.class,
-                "Blocked on M7, as ListView. A tree additionally needs its expansion state, which is "
-                        + "view state for a local tree and document state for a served one -- a "
-                        + "distinction the row stream has to settle first.");
-        WidgetContracts.localOnly(ArrayControl.class,
-                "Blocked on M7. Its value is a List<Object> whose element type is whatever the "
-                        + "descriptor says, so it has no wire form until collections do.");
     }
 }

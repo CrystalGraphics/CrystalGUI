@@ -873,6 +873,26 @@ in a described child list, so the next `insert` op lands one index off, and `Pro
 
 #### 7.3 — The remaining contracts; the provisional markers deleted · S · after: 7.0, 7.2
 
+> **SHIPPED.** `ArrayControl.CONTRACT`, tier 4 deleted, and the three collection widgets rewritten
+> into tier 2. Two tests in `WidgetContractRoundTripTest`.
+>
+> **The collections are DERIVED, not contracted** — which is what 7.0 settled rather than unblocked.
+> A served collection is a `ServerScope.stream` on a CONTAINER: the rows arrive as ordinary described
+> children, and the `ListView` a client builds over a `RemoteRows` around them is the client's own
+> view of them. So the rows travel and the view does not, and that is the same reason `Configurator`
+> is local. `ListView.describedChildren()` already said so from the other side. The two genuinely
+> open halves — a table's columns, a tree's expansion — stay named in their reasons rather than
+> pretended into a wire form nothing has asked for.
+>
+> **`ArrayControl` is the one control whose value type is not fixed by its class**, and that is what
+> the old reason was really about rather than lists having no wire form (`stringListUnder` predates
+> M7). An element descriptor says what one entry is and a `State` slot is declared once per kind, so
+> entries cross as the text they read as and are coerced back by the element's own kind — inside the
+> control, because only it knows what one of its entries is. Handing a number entry's text to
+> `ConfigControls` yields `0`, silently, since it takes anything that is not a `Number` as zero: a
+> list that arrives the right length and the wrong values.
+
+
 - `ArrayControl` gets its contract: a list of values typed by its descriptor, which is a plain state
   slot now that a list has a wire form.
 - Every tier 1–3 reason in `WidgetCensus` is re-read against the new engine. The verdicts expected:
