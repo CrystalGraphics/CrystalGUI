@@ -124,6 +124,29 @@ public final class ServerUiSession<N extends Styleable, T> {
      * the side that owns it while the client holds only a description. */
     private final Map<N, Map<String, Consumer<UiEventContext<N, T>>>> handlers = new LinkedHashMap<>();
 
+    /**
+     * Which rows each viewer is looking at, per streamed element.
+     *
+     * <p>Registered by {@code ServerScope.stream}; read by the {@code ui/rows} handler below. The
+     * session holds it rather than the scope because the WINDOW is per viewer and only the session
+     * knows who asked — a scope's {@code onCall} is window-wide by construction.</p>
+     */
+    private final Map<N, RowWindows> rowWindows = new LinkedHashMap<>();
+
+    /** How many rows each streamed element has, so the answer to {@code ui/rows} is the count. */
+    private final Map<N, java.util.function.IntSupplier> rowCounts = new LinkedHashMap<>();
+
+    /**
+     * Declares an element as a streamed collection.
+     *
+     * <p>Called by {@code ServerScope.stream}. Answers the window table the projection reads to decide
+     * which rows have to exist as described children.</p>
+     */
+    public RowWindows streamRows(N element, java.util.function.IntSupplier count) {
+        rowCounts.put(element, count);
+        return rowWindows.computeIfAbsent(element, ignored -> new RowWindows());
+    }
+
     private String descHash;
     private T encodedDescription;
     /**
@@ -305,6 +328,10 @@ public final class ServerUiSession<N extends Styleable, T> {
         boolean removed = viewers.removeIf(viewer -> {
             if (viewer.router != router) return false;
             if (viewer.mux != null) viewer.mux.release(windowId);
+            // AND ITS ROW WINDOWS, or the union stays as wide as it was while somebody was scrolled to
+            // the end of a ten thousand row list -- so the server goes on describing rows for a viewer
+            // that has gone, for as long as the window is open.
+            for (RowWindows windows : rowWindows.values()) windows.forget(viewer);
             return true;
         });
         return removed;
@@ -1195,6 +1222,30 @@ public final class ServerUiSession<N extends Styleable, T> {
             out.putInt(UiMethods.WINDOW, windowId);
             out.putString("hash", descHash);
             out.putRaw("root", encodedDescription);
+            respond.ok(out.encode());
+        });
+
+        bindRequest(viewer, UiMethods.ROWS, (args, respond) -> {
+            if (viewer.refused) return;
+            if (!withinRate(viewer)) return;
+            StateMap<T> in = read(args);
+            if (!mine(in)) return;
+            int nid = in.getInt("nid", -1);
+            N element = ids.byId(nid);
+            RowWindows windows = element == null ? null : rowWindows.get(element);
+            if (windows == null) {
+                // NOT A REFUSAL. A window request in flight when a list is replaced names an element
+                // that is gone, which is ordinary rather than a peer misbehaving -- and refusing would
+                // end that viewer's participation over a race it could not have avoided.
+                StateMap<T> gone = new StateMap<>(ops);
+                gone.putInt("count", 0);
+                respond.ok(gone.encode());
+                return;
+            }
+            int count = rowCounts.get(element).getAsInt();
+            windows.asked(viewer, in.getInt("from", 0), in.getInt("to", 0), count);
+            StateMap<T> out = new StateMap<>(ops);
+            out.putInt("count", count);
             respond.ok(out.encode());
         });
 
