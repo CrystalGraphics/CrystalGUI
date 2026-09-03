@@ -290,6 +290,45 @@ public class RowStreamTest {
     }
 
     /**
+     * <b>A log that grows while it is followed ships only the new rows</b> — the M7 row's own measure,
+     * with two viewers.
+     *
+     * <p>Two properties in one, because the interesting failure passes each of them separately. The
+     * described set must stay a window as the log grows, or "following" has become "describe the whole
+     * log". And the second viewer, scrolled elsewhere, must cost its own window and no more — a naive
+     * follow that slid every viewer to the tail would satisfy the first assertion and drag somebody
+     * reading the middle to the bottom of a log on every appended line.</p>
+     */
+    @Test
+    public void aLogThatGrowsWhileFollowedShipsOnlyTheNewRows() {
+        server.addViewer(serverB);
+        server.open();
+        showing(clientA, TOTAL - 20, TOTAL);            // A follows the tail
+        showing(clientB, TOTAL - 120, TOTAL - 100);     // B is reading a page above it
+        settle();
+
+        int before = describedRows();
+        // THE BOUND FIRST, or `before + 50` below holds just as well for a list that described all ten
+        // thousand rows -- which is the failure this whole mechanism exists to prevent. It is the SPAN
+        // between the two viewers rather than the sum of their windows, which is what a contiguous
+        // child list can express; two viewers half a log apart genuinely cost the distance.
+        assertTrue("the span between them, not ten thousand rows: " + before, before < 200);
+        UIElement above = rowShowing(String.valueOf(TOTAL - 110));
+        assertNotNull("B's page is described", above);
+
+        for (int i = 0; i < 50; i++) all.add(TOTAL + i);
+        settle();
+
+        assertEquals("fifty rows appended, fifty rows described -- nothing else grew",
+                before + 50, describedRows());
+        assertEquals("...and the tail follower is showing the last one, with nobody having asked",
+                String.valueOf(TOTAL + 49),
+                ((UIText) list.describedChildren().get(describedRows() - 1)).getText());
+        assertSame("...while the reader above it kept the very element it had -- following must not "
+                        + "drag every viewer to the bottom", above, rowShowing(String.valueOf(TOTAL - 110)));
+    }
+
+    /**
      * The counter-control for it: a window that is NOT at the end does not follow.
      *
      * <p>Without this, "following" written as "always slide to the end" passes the test above and drags

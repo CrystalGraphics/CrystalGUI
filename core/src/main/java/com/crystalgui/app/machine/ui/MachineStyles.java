@@ -109,6 +109,18 @@ public final class MachineStyles {
      */
     public static final String ENGINE_OPEN_CLASS = "machine-engine-open";
 
+    /** The three-column {@link StreamsPanel}. */
+    public static final String STREAMS_CLASS = "machine-streams";
+
+    /** One of its columns — a title and the rows under it. */
+    public static final String STREAM_COLUMN_CLASS = "machine-stream-column";
+
+    /** One inventory row: a label and its Take button. */
+    public static final String SLOT_CLASS = "machine-slot";
+
+    /** The Take button on an inventory row. */
+    public static final String TAKE_CLASS = "machine-take";
+
     /** Resolved against this class's own package, which is what keeps the name unqualified. */
     private static final String FILE = "machine.css";
 

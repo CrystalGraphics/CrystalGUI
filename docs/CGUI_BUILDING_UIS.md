@@ -18,6 +18,7 @@ beside this file. Nothing here assumes you have read them.
 5. [Reacting to the user](#5-reacting-to-the-user)
 6. [Sending your own messages](#6-sending-your-own-messages)
 7. [Nesting panels](#7-nesting-panels)
+7b. [Long lists — inventories, logs and files](#7b-long-lists--inventories-logs-and-files)
 8. [Opening and closing](#8-opening-and-closing)
 9. [Remembering things](#9-remembering-things)
 10. [Owning a file type](#10-owning-a-file-type)
@@ -812,6 +813,83 @@ engine.onRestarted(() -> status.setText("engine restarted"));
 ```
 
 `title`, `key` and `stillValid` are window-level and only ever asked of the root panel.
+
+---
+
+## 7b. Long lists — inventories, logs and files
+
+A panel's widgets are described in full, which is right for a dozen controls and wrong for a
+collection. Two hundred inventory slots described in full is two hundred elements re-sent whenever
+anything in one of them changes, and nobody is looking at more than a screenful.
+
+**Three shapes, and picking the wrong one is what costs you.**
+
+### The server holds it and only the server has it — stream it
+
+```java
+public void serve(Machine model, ServerScope io) {
+    io.stream(inventory, new RowSource<Slot>() {
+        public int count()                  { return model.slotCount(); }
+        public List<Slot> rows(int a, int b) { return model.slots(a, b); }
+        public Object keyOf(Slot slot)      { return slot.index(); }     // NOT its position
+    }, slot -> slotRow(io, model), StreamsPanel::writeSlot);
+}
+```
+
+`inventory` is a plain container; the rows become its children. What exists is the **window each
+viewer is looking at**, so ten thousand rows cost a screenful. On the client, wrap a `RemoteRows`
+around it and tell it what is visible from your scroll handler:
+
+```java
+RemoteRows rows = new RemoteRows(requester, Placeholder::new);
+rows.showing(firstVisibleRow, lastVisibleRow + 1);
+```
+
+**`keyOf` is what makes an insert an insert.** A row whose key has not changed keeps its element, and
+everything a viewer had done to it survives. Keyed by index instead, adding a row at the top renumbers
+every row below it and the viewer is handed a rebuild of a list that mostly did not change.
+
+**A row is an ordinary described subtree**, so a `Button` in one reports like any other button —
+`io.on(take, Button.ACTIVATE, …)`, wired where the row is built. Read what the row is showing off the
+element, never off a captured index: a row's element is reused for whatever the window puts there.
+
+**A window that reaches the last row follows it.** Appended rows arrive without the viewer asking,
+which is what a log wants; a viewer reading the middle is left where they are.
+
+### Someone else's protocol already serves it — read it there
+
+A file list is not UI state:
+
+```java
+public void client(ClientScope io) {
+    io.workspace().files().list(root).then(listing -> {
+        for (FsMessages.Entry entry : listing.entries()) {
+            io.addLocal(files, new UIText(entry.name()));
+        }
+    });
+}
+```
+
+The workspace has watches, etags, chunked reads and a permission model. Shipping a directory through
+the UI mirror would be a second, worse copy of all of it. `io.addLocal` is how a client adds children
+of its own — see below.
+
+### It is small and fixed — describe it
+
+Every other panel in this guide. A dozen controls is a dozen controls.
+
+### Controls of the viewer's own — `io.addLocal`
+
+`client(io)` runs over every build of the tree and is where local extras go. To *add* an element there,
+use `addLocal`:
+
+```java
+io.addLocal(row, new Button("Copy"));
+```
+
+It is an ordinary child in every way that shows and invisible to the server in every way that travels:
+never described, never numbered, never counted. Appending one by hand instead puts it in the described
+child list, and the server's next insert lands one index off — silently.
 
 ---
 

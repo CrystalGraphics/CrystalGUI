@@ -131,6 +131,12 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
      */
     public EnginePanel engine;
 
+    /**
+     * The three collections — a streamed inventory, a followed log, and the workspace read through the
+     * fs protocol. A nested {@link Networked} panel like {@link #engine}, attached over the whole model.
+     */
+    public StreamsPanel streams;
+
     /** The last thing the SERVER did. Nothing else may write it. */
     public UIText serverLine = new UIText("nothing yet");
 
@@ -314,6 +320,15 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
         append(MachineRows.authored(MachineStyles.WHO_SERVER_CLASS, "SERVER", serverLine));
 
         append(MachineRows.authored(MachineStyles.WHO_CLIENT_CLASS, "CLIENT", clientLine));
+
+        // THE COLLECTIONS, which are the one thing a description cannot carry: two hundred slots and a
+        // growing log are streams, and the workspace column is not on this wire at all. @see StreamsPanel
+        //
+        // BUILT HERE, like the engine panel and for the same reason: a nested panel needs its slice of
+        // the model and only this layout knows which slice that is. Over the WHOLE model here, because
+        // an inventory and a log are the machine's rather than some sub-part's.
+        streams = StreamsPanel.TYPE.build(model);
+        append(streams);
     }
 
     // ── The three badges an entry can carry ─────────────────────────────────
@@ -529,6 +544,10 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
         engine.onRestarted(() -> say("the engine panel restarted the engine - a plain Java callback, "
                 + "not a message: both halves are in this process"));
         io.attach(engine, model.engine());
+
+        // THE SAME MOVE for the collections, over the WHOLE model rather than a slice: an inventory and
+        // a log are the machine's, not some sub-part's, so there is nothing narrower to hand over.
+        io.attach(streams, model);
 
         /*
          * THE MODEL, STATED ONCE.
