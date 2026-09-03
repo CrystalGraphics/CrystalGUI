@@ -5,7 +5,7 @@ import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.app.editor.CrystalEditor;
+import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.fs.LocalConfigStorage;
 import com.crystalgui.language.run.view.RunPanels;
