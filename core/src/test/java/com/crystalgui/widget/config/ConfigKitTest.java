@@ -1,22 +1,11 @@
 package com.crystalgui.widget.config;
 
-import com.crystalgui.core.settings.Settings;
-import com.crystalgui.widget.config.control.BooleanControl;
-import com.crystalgui.widget.config.control.MaskControl;
-import com.crystalgui.widget.config.control.SelectControl;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Checkbox;
-import com.crystalgui.widget.form.ColorSelector;
-import com.crystalgui.widget.overlay.Dialog;
-import com.crystalgui.style.property.StylePropertyRegistry;
-import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.widget.config.*;
 import com.crystalgui.widget.config.control.ArrayControl;
 import com.crystalgui.core.config.ConfigDescriptor;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -41,10 +30,10 @@ public class ConfigKitTest extends UiDocumentTestBase {
      * <p>18, measured off Unity's own inspector: a 20px row pitch with an 18px control in it. */
     private static final float CTRL_H = 18f;
 
-    private UINode root;
+    private UIElement root;
 
     private ConfiguratorPanel openPanel() {
-        root = new UINode();
+        root = new UIElement();
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
         ConfiguratorPanel panel = new ConfiguratorPanel();
@@ -82,7 +71,7 @@ public class ConfigKitTest extends UiDocumentTestBase {
         return kinds;
     }
 
-    private static float height(UINode e) {
+    private static float height(UIElement e) {
         // Zero for a control that is not on screen: a hidden node has no box here, where the old
         // engine's runtime cache always answered one.
         return heightOf(e);
@@ -90,8 +79,8 @@ public class ConfigKitTest extends UiDocumentTestBase {
 
     /** True when {@code e} sits inside a {@code dialog}/{@code popover}/{@code menu} between itself and
      * {@code stopAt} — a popup a control can summon, not the row it lives in. */
-    private static boolean isInsidePopup(UINode e, UINode stopAt) {
-        for (UINode p = e.parent(); p != null && p != stopAt; p = p.parent()) {
+    private static boolean isInsidePopup(UIElement e, UIElement stopAt) {
+        for (UIElement p = e.parent(); p != null && p != stopAt; p = p.parent()) {
             String tag = p.tagName();
             if ("dialog".equals(tag) || "popover".equals(tag) || "menu".equals(tag)) return true;
         }
@@ -126,7 +115,7 @@ public class ConfigKitTest extends UiDocumentTestBase {
             ConfigControl control = row.control();
             // The leaf a user actually clicks. For a leaf control that IS the control; for a composite
             // it is each of its parts, which is the level the rhythm has to hold at.
-            List<UINode> leaves = new ArrayList<>();
+            List<UIElement> leaves = new ArrayList<>();
             // `checkbox` is NOT in this list, and the omission is the same carve-out the sheet makes: a
             // checkbox is square and Unity keeps it ~13px inside a 20px row. Stretching it to the kit
             // height makes the quietest control on the panel the loudest. Its size is asserted on its
@@ -150,7 +139,7 @@ public class ConfigKitTest extends UiDocumentTestBase {
             leaves.removeIf(leaf -> leaf.box() == null);
             if (leaves.isEmpty()) leaves.add(control);
 
-            for (UINode leaf : leaves) {
+            for (UIElement leaf : leaves) {
                 if (Math.abs(height(leaf) - CTRL_H) > 0.5f) {
                     wrong.add(kind + " -> " + leaf.tagName() + " is " + height(leaf) + "px");
                 }
@@ -327,12 +316,12 @@ public class ConfigKitTest extends UiDocumentTestBase {
                 .element(ConfigDescriptor.text("entries.e", "")), null);
         frame();
 
-        UINode headerTitle = deepAll(header.control(), ".__title__").get(0);
-        UINode groupTitle = deepAll(group.head(), ".__title__").get(0);
+        UIElement headerTitle = deepAll(header.control(), ".__title__").get(0);
+        UIElement groupTitle = deepAll(group.head(), ".__title__").get(0);
         // Scoped to `.__head__ text`, not a bare "text" query — an empty array ALSO shows a
         // `.__empty__` placeholder, itself a `text` tag, and the two must not be confused.
-        UINode arrayTitle = deepAll(array.control(), ".__head__ text").get(0);
-        for (UINode title : List.of(headerTitle, groupTitle, arrayTitle)) {
+        UIElement arrayTitle = deepAll(array.control(), ".__head__ text").get(0);
+        for (UIElement title : List.of(headerTitle, groupTitle, arrayTitle)) {
             assertEquals("must not wrap onto a second line",
                     com.crystalgui.style.property.visual.text.WhiteSpace.NOWRAP,
                     title.getStyle().getComputed(
@@ -399,7 +388,7 @@ public class ConfigKitTest extends UiDocumentTestBase {
         assertNotNull("step 6's leaves must all be reachable too", panel.control("transform"));
         // Every row shares the panel's width, which is the property a ragged label column breaks.
         float panelWidth = panel.box().width();
-        for (UINode row : deepAll(panel, "." + Configurator.ROW_CLASS)) {
+        for (UIElement row : deepAll(panel, "." + Configurator.ROW_CLASS)) {
             // A row inside something that is not showing -- a folded group, an unshown picker -- has
             // NO box here rather than a zero one, and it is not on screen to be too wide.
             if (row.box() == null) continue;
@@ -470,7 +459,7 @@ public class ConfigKitTest extends UiDocumentTestBase {
     }
 
     /** The cascaded {@code padding-left} on a label, in pixels. */
-    private static float indentOf(UINode label) {
+    private static float indentOf(UIElement label) {
         var value = label.getStyle().getComputed(
                 com.crystalgui.style.property.layout.LayoutProperties.PADDING_LEFT);
         return value == null || !value.isLength() ? 0f : value.getValue();
@@ -502,7 +491,7 @@ public class ConfigKitTest extends UiDocumentTestBase {
         // The inset bevel: this is the property most likely to resolve-but-not-paint, since
         // border-top-color/border-bottom-color only DO anything when border-width is also non-zero —
         // a theme could set the colours and forget the width (or vice versa) and nothing would warn.
-        UINode field = deepAll(text.control(), "textfield").get(0);
+        UIElement field = deepAll(text.control(), "textfield").get(0);
         assertEquals("the field must carry a non-zero border for the bevel colours to have anything "
                         + "to stroke", 1f, field.box().border().left, 0.01f);
         assertEquals("top edge must be the DARK bevel colour",
@@ -517,7 +506,7 @@ public class ConfigKitTest extends UiDocumentTestBase {
                         + "real checkmark on the SAME dark field colour instead of colour-swapping",
                 0xFF1E1E1E, backgroundOf(deepAll(bool.control(), "." + Checkbox.MARK_PART).get(0)));
 
-        UINode mark = deepAll(bool.control(), "." + Checkbox.MARK_PART).get(0);
+        UIElement mark = deepAll(bool.control(), "." + Checkbox.MARK_PART).get(0);
         var overlay = mark.getStyle().getGeneralGroup().overlay();
         assertTrue("the on/off distinction must be the vector checkmark, not a colour swap",
                 overlay instanceof com.crystalgui.render.texture.CgUiShape
@@ -535,8 +524,8 @@ public class ConfigKitTest extends UiDocumentTestBase {
         // under a descendant -- it is one of the shipped rules the port counts as unexpressible.
         // Finding the row and then querying inside it crosses the boundary the same way the cascade
         // will have to when `exportparts` exists.
-        UINode maskRow = deepAll(mask.control(), ".__mask-row__").get(0);
-        UINode maskMark = deepAll(maskRow, "." + Checkbox.MARK_PART).get(0);
+        UIElement maskRow = deepAll(mask.control(), ".__mask-row__").get(0);
+        UIElement maskMark = deepAll(maskRow, "." + Checkbox.MARK_PART).get(0);
         assertEquals("a checked mask row must match BooleanControl's neutral field colour, not the "
                         + "base sheet's green",
                 0xFF1E1E1E, backgroundOf(maskMark));
@@ -562,7 +551,7 @@ public class ConfigKitTest extends UiDocumentTestBase {
         Configurator mask = panel.add(ConfigDescriptor.mask("m", "M", List.of("X")), Set.of());
         frame();
 
-        UINode dropdown = deepAll(select.control(), "dropdown").get(0);
+        UIElement dropdown = deepAll(select.control(), "dropdown").get(0);
         dropdown.setHovered(true);
         assertNotEquals("a hovered dropdown must not be the base sheet's placeholder red",
                 0xFFFF0000, backgroundOf(dropdown));
@@ -575,7 +564,7 @@ public class ConfigKitTest extends UiDocumentTestBase {
     }
 
     /** The resolved {@code background} of an element, as ARGB, when it is a flat fill. */
-    private static int backgroundOf(UINode e) {
+    private static int backgroundOf(UIElement e) {
         var drawable = e.getStyle().getGeneralGroup().background();
         assertTrue("expected a flat fill, got " + drawable,
                 drawable instanceof com.crystalgui.render.texture.CgUiQuad);
@@ -589,7 +578,7 @@ public class ConfigKitTest extends UiDocumentTestBase {
         Configurator row = panel.add(ConfigDescriptor.bool("b", "B"), true);
         frame();
 
-        UINode mark = deepAll(row.control(), "." + Checkbox.MARK_PART).get(0);
+        UIElement mark = deepAll(row.control(), "." + Checkbox.MARK_PART).get(0);
         var c = mark.box();
         assertEquals("a checkbox must be square", c.width(), c.height(), 0.5f);
         assertEquals("...at the checkbox token, not the kit height", 13f, c.height(), 0.5f);

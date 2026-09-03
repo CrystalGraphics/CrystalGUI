@@ -1,7 +1,7 @@
 package com.crystalgui.workbench.chrome.preferences;
 
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.workbench.chrome.palette.QuickPick;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.workbench.chrome.status.Breadcrumbs;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.core.collection.tree.FilteredTreeSource;
@@ -15,7 +15,6 @@ import com.crystalgui.core.search.SearchMatch;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.nav.NavigationHistory;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.collection.tree.TreeView;
 import com.crystalgui.widget.control.Button;
@@ -23,7 +22,6 @@ import com.crystalgui.widget.layout.PageStack;
 import com.crystalgui.widget.layout.SplitView;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.text.UIText;
-import com.crystalgui.widget.collection.tree.*;
 import com.crystalgui.ui.event.KeyboardEvent;
 
 import javax.annotation.Nullable;
@@ -57,7 +55,7 @@ import java.util.function.Predicate;
  *
  * @param <T> the item type of the tree — a path, an id, a node
  */
-public class NavigatorView<T> extends UINode {
+public class NavigatorView<T> extends UIElement {
 
     public static final Name NAME = Name.of("navigatorview");
 
@@ -82,9 +80,9 @@ public class NavigatorView<T> extends UINode {
     public final Signal.Value<T> onNavigated = new Signal.Value<>();
 
     private final SplitView split = new SplitView();
-    private final UINode sidebar = new UINode();
-    private final UINode detail = new UINode();
-    private final UINode header = new UINode();
+    private final UIElement sidebar = new UIElement();
+    private final UIElement detail = new UIElement();
+    private final UIElement header = new UIElement();
     /**
      * The search, and every part of it — the box, the count, the mode button, the marking and the filter.
      *
@@ -172,7 +170,7 @@ public class NavigatorView<T> extends UINode {
     private boolean fitSidebarToRows() {
         if (tree == null || document() == null) return true;
         float widest = 0f;
-        for (UINode label : tree.querySelectorAll("." + LABEL_CLASS)) {
+        for (UIElement label : tree.querySelectorAll("." + LABEL_CLASS)) {
             // The label's own X relative to the sidebar already carries the indent and the arrow, so
             // there is nothing to add back -- and no need to reach for the Taffy box to find it.
             Box labelBox = label.box();
@@ -371,7 +369,7 @@ public class NavigatorView<T> extends UINode {
     }
 
     /** How a page is built for an item. Returning null gives the placeholder — see {@link PageStack}. */
-    public NavigatorView<T> setPageFactory(Function<T, UINode> factory) {
+    public NavigatorView<T> setPageFactory(Function<T, UIElement> factory) {
         pages.setPageFactory(factory);
         return this;
     }
@@ -410,7 +408,7 @@ public class NavigatorView<T> extends UINode {
     private SearchQuery parsedQuery;
 
     /** Shown on a node with no page of its own. @see PageStack#setPlaceholder */
-    public NavigatorView<T> setPlaceholder(@Nullable UINode placeholder) {
+    public NavigatorView<T> setPlaceholder(@Nullable UIElement placeholder) {
         pages.setPlaceholder(placeholder);
         return this;
     }
@@ -550,11 +548,11 @@ public class NavigatorView<T> extends UINode {
      */
     private final class TitleRenderer implements TreeRenderer<T> {
         @Override
-        public UINode createTemplate() {
-            UINode row = new UINode();
+        public UIElement createTemplate() {
+            UIElement row = new UIElement();
             row.addClass(NODE_CLASS);
 
-            UINode arrow = new UINode();
+            UIElement arrow = new UIElement();
             arrow.addClass(ARROW_CLASS);
             arrow.onMouseDown.attachListener((element, event) -> {
                 if (tree == null) return;
@@ -580,8 +578,8 @@ public class NavigatorView<T> extends UINode {
         }
 
         @Override
-        public void bind(T item, TreeRow<T> row, int index, UINode template) {
-            for (UINode child : template.children()) {
+        public void bind(T item, TreeRow<T> row, int index, UIElement template) {
+            for (UIElement child : template.children()) {
                 if (child instanceof UIText label) label.setText(titleOf.apply(item));
             }
         }

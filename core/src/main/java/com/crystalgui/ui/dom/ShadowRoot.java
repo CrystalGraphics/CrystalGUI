@@ -25,13 +25,13 @@ import javax.annotation.Nullable;
  * focusing the host focuses the first focusable thing inside instead — the composite's answer to
  * "a focusable container is a wall".</p>
  */
-public final class ShadowRoot extends UINode {
+public final class ShadowRoot extends UIElement {
 
     /**
      * <b>The HOST, because a shadow root has no parent and the walk must still get out.</b>
      *
      * <p>{@code commandParent()} is the step {@code DataContext} and the keymap resolver take
-     * outward from wherever a gesture landed, and {@code UINode}'s answer is {@code parent()} --
+     * outward from wherever a gesture landed, and {@code UIElement}'s answer is {@code parent()} --
      * which is null here by design ({@link #host()} is the way up). So the walk stopped at the
      * boundary: a command invoked from inside ANY composite -- which is every widget with a shadow
      * tree -- resolved against nothing, and a {@code DataKey} its host answers came back null with
@@ -46,20 +46,20 @@ public final class ShadowRoot extends UINode {
     /** A shadow root: never a light child, never described, never styled from outside. */
     public static final Name NAME = Name.of("shadow-root");
 
-    private final UINode host;
+    private final UIElement host;
     private final boolean delegatesFocus;
 
     private boolean slotsDirty = true;
     private List<UISlot> slots = List.of();
 
-    ShadowRoot(UINode host, boolean delegatesFocus) {
+    ShadowRoot(UIElement host, boolean delegatesFocus) {
         super(NAME);
         this.host = host;
         this.delegatesFocus = delegatesFocus;
         this.inShadow = true;
     }
 
-    public UINode host() {
+    public UIElement host() {
         return host;
     }
 
@@ -70,7 +70,7 @@ public final class ShadowRoot extends UINode {
     /** The shadow root is transparent in the flat tree; its children's composed parent is the host. */
     @Override
     @Nullable
-    public UINode composedParent() {
+    public UIElement composedParent() {
         return host;
     }
 
@@ -104,11 +104,11 @@ public final class ShadowRoot extends UINode {
         List<UISlot> found = new ArrayList<>();
         collectSlots(this, found);
 
-        Map<UISlot, List<UINode>> before = new HashMap<>();
+        Map<UISlot, List<UIElement>> before = new HashMap<>();
         for (UISlot slot : slots) before.put(slot, slot.assignedSnapshot());
         for (UISlot slot : found) slot.beginAssignment();
 
-        for (UINode child : host.children()) {
+        for (UIElement child : host.children()) {
             String wanted = child.get(Attribute.SLOT);
             UISlot target = null;
             for (UISlot slot : found) {
@@ -123,7 +123,7 @@ public final class ShadowRoot extends UINode {
         slots = found;
 
         for (UISlot slot : found) {
-            List<UINode> was = before.getOrDefault(slot, List.of());
+            List<UIElement> was = before.getOrDefault(slot, List.of());
             if (!was.equals(slot.assignedSnapshot())) {
                 UIDocument doc = document;
                 if (doc != null) doc.queue(slot::slotChanged);
@@ -133,8 +133,8 @@ public final class ShadowRoot extends UINode {
     }
 
     /** Slots in THIS tree: light descendants, never inside a nested host's own shadow tree. */
-    private static void collectSlots(UINode at, List<UISlot> into) {
-        for (UINode child : at.children()) {
+    private static void collectSlots(UIElement at, List<UISlot> into) {
+        for (UIElement child : at.children()) {
             if (child instanceof UISlot) into.add((UISlot) child);
             collectSlots(child, into);
         }

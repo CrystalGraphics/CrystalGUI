@@ -1,13 +1,11 @@
 package com.crystalgui.app.shadergraph.blackboard;
 
-import com.crystalgui.widget.text.UIText;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UIDocument;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -18,7 +16,7 @@ import static org.junit.Assert.*;
  * <h3>The bug this exists for, because it hid in the one direction nobody would question</h3>
  * <p>{@code dropIndexAt} compared {@code toLocal(...).y} against half the row's height, as though
  * the conversion returned a position <em>relative to that row's top-left</em>. It does not.
- * {@code UINode.localToWorld} composes the parent chain, scroll and the element's own
+ * {@code UIElement.localToWorld} composes the parent chain, scroll and the element's own
  * {@code transform} — but never its layout offset — so "local" is <b>absolute logical space</b>: the
  * space {@code box().y()} is already in, which is why {@code isMouseOverElement} compares
  * against {@code getX()/getY()} rather than against zero. All it undoes is {@code uiScale} and any
@@ -44,7 +42,7 @@ public class BlackboardDropSlotTest extends UiDocumentTestBase {
      * under test inverts. Multiplying by a hardcoded {@code uiScale} would be a second statement of the
      * conversion, and this test exists precisely because a second statement of it was wrong.</p>
      */
-    private float screenYOf(UINode row, float fraction) {
+    private float screenYOf(UIElement row, float fraction) {
         var cache = row.box();
         float logicalY = cache.height() * fraction;
         return Transform2D.apply(cache.localToWorld(), 0f, logicalY).y();
@@ -54,7 +52,7 @@ public class BlackboardDropSlotTest extends UiDocumentTestBase {
         graphDocument = new GraphDocument();
         board = new BlackboardPanel(graphDocument, "test", new UndoStack());
 
-        UINode root = new UINode().layout(l -> l.width(600).height(400));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400));
         root.append(board);
         document.append(root);
         // The user-agent sheet is NOT installed for you, and without it the rows have no geometry at
@@ -73,8 +71,8 @@ public class BlackboardDropSlotTest extends UiDocumentTestBase {
         mountWith("Vector 2", "Vector 4");
         assertEquals(2, board.pills().size());
 
-        UINode first = board.pills().get(0);
-        UINode second = board.pills().get(1);
+        UIElement first = board.pills().get(0);
+        UIElement second = board.pills().get(1);
 
         assertEquals("above the first row", 0, board.dropIndexAt(20f, screenYOf(first, -1f)));
         assertEquals("in the first row's top half", 0, board.dropIndexAt(20f, screenYOf(first, 0.25f)));

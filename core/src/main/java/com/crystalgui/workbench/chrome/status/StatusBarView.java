@@ -8,7 +8,7 @@ import com.crystalgui.core.notify.StatusBarAlignment;
 import com.crystalgui.core.notify.StatusBarEntry;
 import com.crystalgui.core.notify.StatusBarEntryAccessor;
 import com.crystalgui.core.signal.ConnectionGroup;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.service.AnchoredPlacement;
 import com.crystalgui.widget.overlay.Menu;
@@ -58,7 +58,7 @@ import javax.annotation.Nullable;
  * {@link UIText} for as long as it exists; only appearing, disappearing and <em>reordering</em> touch the
  * tree.</p>
  */
-public class StatusBarView extends UINode {
+public class StatusBarView extends UIElement {
 
     public static final Name NAME = Name.of("statusbarview");
 
@@ -116,9 +116,9 @@ public class StatusBarView extends UINode {
      */
     private static final int RIGHT_GROUP_RESERVED = 1;
 
-    private final UINode leftGroup = new UINode();
-    private final UINode rightGroup = new UINode();
-    private final UINode spacer = new UINode();
+    private final UIElement leftGroup = new UIElement();
+    private final UIElement rightGroup = new UIElement();
+    private final UIElement spacer = new UIElement();
     private final Breadcrumbs breadcrumbs = new Breadcrumbs();
 
     /** One live slot per registered entry — see the class note on why these are keyed by the accessor. */
@@ -275,7 +275,7 @@ public class StatusBarView extends UINode {
      *
      * @param reserved how many leading children of the group are not slots — @see #LEFT_GROUP_RESERVED
      */
-    private void applyGroup(UINode group, List<StatusBarEntryAccessor> entries, int reserved) {
+    private void applyGroup(UIElement group, List<StatusBarEntryAccessor> entries, int reserved) {
         int position = reserved;
         for (int i = 0; i < entries.size(); i++) {
             StatusBarEntryAccessor accessor = entries.get(i);
@@ -304,7 +304,7 @@ public class StatusBarView extends UINode {
     private static final class Slot {
 
         final UIText label = new UIText("");
-        final UINode separator = new UINode();
+        final UIElement separator = new UIElement();
 
         /**
          * Attached once and then only re-texted.
@@ -398,7 +398,7 @@ public class StatusBarView extends UINode {
         }
 
         /** Puts the pair at {@code index} in {@code group}, moving only what is in the wrong place. */
-        int placeIn(UINode group, int index) {
+        int placeIn(UIElement group, int index) {
             index = place(group, separator, index);
             return place(group, label, index);
         }
@@ -413,8 +413,8 @@ public class StatusBarView extends UINode {
          * and only when an entry was withdrawn from ahead of another, since that is the only thing that
          * moves an existing slot.</p>
          */
-        private static int place(UINode group, UINode child, int index) {
-            List<UINode> children = group.children();
+        private static int place(UIElement group, UIElement child, int index) {
+            List<UIElement> children = group.children();
             int current = children.indexOf(child);
             if (current == index) return index + 1;
             if (current >= 0 && !group.remove(child)) group.remove(child);

@@ -7,23 +7,18 @@ import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.taskbar.Taskbar;
 import com.crystalgui.desktop.taskbar.TaskbarDesigner;
-import com.crystalgui.desktop.taskbar.TaskbarPreviews;
-import com.crystalgui.desktop.taskbar.WindowPreview;
 import com.crystalgui.desktop.taskbar.WindowThumbnail;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.desktop.window.WindowIcon;
-import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Animation;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.input.keymap.KeyChord;
 import com.crystalgui.ui.input.keymap.Keymap;
-
-import dev.vfyjxf.taffy.style.TaffyDisplay;
 
 import javax.annotation.Nullable;
 
@@ -94,13 +89,13 @@ import java.util.List;
  * <p>A press on the backdrop cancels, as a press outside any menu does. It cannot commit instead: the
  * pointer is nowhere near a tile, so there is nothing to say the user meant the current selection.</p>
  */
-public class WindowSwitcher extends UINode {
+public class WindowSwitcher extends UIElement {
 
     /**
      * Its own kind, and every concrete node needs one.
      *
      * <p>No shipped rule names this tag — the sheet keys on the classes — but a subclass that
-     * declares none INHERITS {@code UINode.NAME}, so it would report {@code element} and match
+     * declares none INHERITS {@code UIElement.NAME}, so it would report {@code element} and match
      * every bare {@code element} rule there ever is. That is the {@code ToolWindowFrame} trap
      * from the other side, and {@code NodeKindsCoverageTest} is what makes it a compile-time
      * question rather than an unstyled widget somebody reports.</p>
@@ -137,7 +132,7 @@ public class WindowSwitcher extends UINode {
     private final Desktop desktop;
 
     /** The panel, so the overlay itself can stay a bare full-size centring box. */
-    private final UINode panel = new UINode();
+    private final UIElement panel = new UIElement();
 
     /** The MRU snapshot this pass is cycling, taken once when the switcher opens. */
     private final List<WindowFrame> order = new ArrayList<>();
@@ -154,7 +149,7 @@ public class WindowSwitcher extends UINode {
     private int holdingMask;
 
     /** The accent wash under the tiles. @see Taskbar#GLOW_CLASS */
-    private final UINode glow = new UINode();
+    private final UIElement glow = new UIElement();
 
     private long openedAt;
     private long lastInteraction;
@@ -185,7 +180,7 @@ public class WindowSwitcher extends UINode {
      * Package-private: a theme retones this through {@code --switcher-glow}, and the element itself is
      * only reachable because the designer writes at IMPORTANT origin while it runs.
      */
-    public UINode glow() {
+    public UIElement glow() {
         return glow;
     }
 
@@ -513,7 +508,7 @@ public class WindowSwitcher extends UINode {
      * <p>Package-private rather than public: a tile is an implementation detail of the panel, and the
      * only caller outside this class is the test that presses one.</p>
      */
-    UINode tileAt(int index) {
+    UIElement tileAt(int index) {
         return entries.get(index);
     }
 
@@ -581,9 +576,9 @@ public class WindowSwitcher extends UINode {
      * registered, and the crash names an index rather than the widget. Everything a tile can ever need
      * exists before it is attached; {@link #show} only ever fills it in.</p>
      */
-    private final class Tile extends UINode {
+    private final class Tile extends UIElement {
 
-        private final UINode header = new UINode();
+        private final UIElement header = new UIElement();
         private final WindowIcon iconSlot = new WindowIcon();
         private final UIText title = new UIText("");
         private final Button close = new Button("");
@@ -611,7 +606,7 @@ public class WindowSwitcher extends UINode {
             // AND A PRESS ACTIVATES -- on the DOWN, because a switcher is dismissed by the press itself,
             // so waiting for the release would mean waiting for a click that lands on nothing.
             onMouseDown.attachListener((element, event) -> {
-                if (isWithinClose(((UINode) event.getTarget()))) return;
+                if (isWithinClose(((UIElement) event.getTarget()))) return;
                 activateTile(this);
             }, false, true);
         }
@@ -623,8 +618,8 @@ public class WindowSwitcher extends UINode {
          * activating the window somebody just asked to close is the one outcome that cannot be right.
          * A press on the button's own children counts, which is why this walks rather than compares.</p>
          */
-        private boolean isWithinClose(@Nullable UINode target) {
-            for (UINode walk = target; walk != null && walk != this; walk = walk.parent()) {
+        private boolean isWithinClose(@Nullable UIElement target) {
+            for (UIElement walk = target; walk != null && walk != this; walk = walk.parent()) {
                 if (walk == close) return true;
             }
             return false;

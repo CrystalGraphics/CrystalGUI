@@ -48,7 +48,6 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import javax.annotation.Nullable;
 import org.joml.Vector2f;
@@ -84,14 +83,14 @@ import org.joml.Vector2f;
  * lifecycle callback is an ordinary new mutation. A reparent is one {@code moved}, which the old tree
  * could not spell (M2).</p>
  */
-public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScope {
+public class UIElement implements EventTarget, Styleable, KeymapScope, SettingsScope {
 
     private final Name name;
 
     @Nullable
-    private UINode parent;
-    private final List<UINode> children = new ArrayList<>();
-    private final List<UINode> childrenView = Collections.unmodifiableList(children);
+    private UIElement parent;
+    private final List<UIElement> children = new ArrayList<>();
+    private final List<UIElement> childrenView = Collections.unmodifiableList(children);
 
     @Nullable
     private ShadowRoot shadowRoot;
@@ -115,10 +114,10 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
     boolean inShadow;
     /** An observer installed on THIS node by a source over it. */
     @Nullable
-    private TreeObserver<UINode> ownObserver;
+    private TreeObserver<UIElement> ownObserver;
     /** The observer this node reports to: its own, or the nearest ancestor's. Null in shadow. */
     @Nullable
-    TreeObserver<UINode> observer;
+    TreeObserver<UIElement> observer;
 
     private boolean frozen;
     private float scrollLeft;
@@ -136,7 +135,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
     private boolean fontRelativeStyles;
 
     /** The listener groups, one per event type, created on first use. */
-    public final EventListenerGroup.Map<UINode> events = new EventListenerGroup.Map<>(this);
+    public final EventListenerGroup.Map<UIElement> events = new EventListenerGroup.Map<>(this);
 
     // ── The pre-bound groups ─────────────────────────────────────────────────
     //
@@ -145,24 +144,24 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
     // codemod never has to touch. A field is also how a reader finds out what a node can be told:
     // `events.getGroup(MouseEvent.Down.class)` is discoverable only if you already know the answer.
 
-    public final EventListenerGroup<UINode, MouseEvent.Down> onMouseDown = events.getGroup(MouseEvent.Down.class);
-    public final EventListenerGroup<UINode, MouseEvent.Up> onMouseUp = events.getGroup(MouseEvent.Up.class);
-    public final EventListenerGroup<UINode, MouseEvent.Scroll> onMouseScroll = events.getGroup(MouseEvent.Scroll.class);
-    public final EventListenerGroup<UINode, MouseEvent.Move> onMouseMove = events.getGroup(MouseEvent.Move.class);
-    public final EventListenerGroup<UINode, MouseEvent.Enter> onMouseEnter = events.getGroup(MouseEvent.Enter.class);
-    public final EventListenerGroup<UINode, MouseEvent.Leave> onMouseLeave = events.getGroup(MouseEvent.Leave.class);
+    public final EventListenerGroup<UIElement, MouseEvent.Down> onMouseDown = events.getGroup(MouseEvent.Down.class);
+    public final EventListenerGroup<UIElement, MouseEvent.Up> onMouseUp = events.getGroup(MouseEvent.Up.class);
+    public final EventListenerGroup<UIElement, MouseEvent.Scroll> onMouseScroll = events.getGroup(MouseEvent.Scroll.class);
+    public final EventListenerGroup<UIElement, MouseEvent.Move> onMouseMove = events.getGroup(MouseEvent.Move.class);
+    public final EventListenerGroup<UIElement, MouseEvent.Enter> onMouseEnter = events.getGroup(MouseEvent.Enter.class);
+    public final EventListenerGroup<UIElement, MouseEvent.Leave> onMouseLeave = events.getGroup(MouseEvent.Leave.class);
 
-    public final EventListenerGroup<UINode, KeyboardEvent.Down> onKeyDown = events.getGroup(KeyboardEvent.Down.class);
-    public final EventListenerGroup<UINode, KeyboardEvent.Up> onKeyUp = events.getGroup(KeyboardEvent.Up.class);
+    public final EventListenerGroup<UIElement, KeyboardEvent.Down> onKeyDown = events.getGroup(KeyboardEvent.Down.class);
+    public final EventListenerGroup<UIElement, KeyboardEvent.Up> onKeyUp = events.getGroup(KeyboardEvent.Up.class);
 
-    public final EventListenerGroup<UINode, DragEvent.Enter> onDragEnter = events.getGroup(DragEvent.Enter.class);
-    public final EventListenerGroup<UINode, DragEvent.Leave> onDragLeave = events.getGroup(DragEvent.Leave.class);
-    public final EventListenerGroup<UINode, DragEvent.Over> onDragOver = events.getGroup(DragEvent.Over.class);
-    public final EventListenerGroup<UINode, DragEvent.Drop> onDrop = events.getGroup(DragEvent.Drop.class);
-    public final EventListenerGroup<UINode, DragEvent.Cancel> onDragCancel = events.getGroup(DragEvent.Cancel.class);
+    public final EventListenerGroup<UIElement, DragEvent.Enter> onDragEnter = events.getGroup(DragEvent.Enter.class);
+    public final EventListenerGroup<UIElement, DragEvent.Leave> onDragLeave = events.getGroup(DragEvent.Leave.class);
+    public final EventListenerGroup<UIElement, DragEvent.Over> onDragOver = events.getGroup(DragEvent.Over.class);
+    public final EventListenerGroup<UIElement, DragEvent.Drop> onDrop = events.getGroup(DragEvent.Drop.class);
+    public final EventListenerGroup<UIElement, DragEvent.Cancel> onDragCancel = events.getGroup(DragEvent.Cancel.class);
 
-    public final EventListenerGroup<UINode, FocusEvent.Focus> onFocus = events.getGroup(FocusEvent.Focus.class);
-    public final EventListenerGroup<UINode, FocusEvent.Blur> onBlur = events.getGroup(FocusEvent.Blur.class);
+    public final EventListenerGroup<UIElement, FocusEvent.Focus> onFocus = events.getGroup(FocusEvent.Focus.class);
+    public final EventListenerGroup<UIElement, FocusEvent.Blur> onBlur = events.getGroup(FocusEvent.Blur.class);
 
     /**
      * A plain container — the {@code <div>} of this engine, and what the no-argument constructor
@@ -174,11 +173,11 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
      */
     public static final Name NAME = Name.of("element");
 
-    public UINode() {
+    public UIElement() {
         this(NAME);
     }
 
-    public UINode(Name name) {
+    public UIElement(Name name) {
         this.name = Objects.requireNonNull(name, "name");
     }
 
@@ -192,7 +191,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
         return id;
     }
 
-    public UINode setId(String id) {
+    public UIElement setId(String id) {
         String value = id == null ? "" : id;
         if (value.equals(this.id)) return this;
         Mutation m = beginMutation("setting an id");
@@ -327,14 +326,14 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
      * ended up with before it did the same.</p>
      */
     @Nullable
-    public static UINode sourceOf(@Nullable CommandContext context) {
-        return context != null && context.source() instanceof UINode node ? node : null;
+    public static UIElement sourceOf(@Nullable CommandContext context) {
+        return context != null && context.source() instanceof UIElement node ? node : null;
     }
 
     /** @see #sourceOf(CommandContext) */
     @Nullable
-    public static UINode sourceOf(@Nullable DataContext context) {
-        return context != null && context.source() instanceof UINode node ? node : null;
+    public static UIElement sourceOf(@Nullable DataContext context) {
+        return context != null && context.source() instanceof UIElement node ? node : null;
     }
 
     public final Set<String> classes() {
@@ -345,7 +344,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
         return classes.contains(className);
     }
 
-    public UINode addClass(String className) {
+    public UIElement addClass(String className) {
         if (className == null || className.isEmpty() || classes.contains(className)) return this;
         Mutation m = beginMutation("adding a class");
         try {
@@ -358,7 +357,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
         return this;
     }
 
-    public UINode removeClass(String className) {
+    public UIElement removeClass(String className) {
         if (!classes.contains(className)) return this;
         Mutation m = beginMutation("removing a class");
         try {
@@ -371,7 +370,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
         return this;
     }
 
-    public UINode toggleClass(String className, boolean on) {
+    public UIElement toggleClass(String className, boolean on) {
         return on ? addClass(className) : removeClass(className);
     }
 
@@ -389,7 +388,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
     }
 
     /** Sets, reporting one {@code attributeChanged}; a value equal to the current one reports nothing. */
-    public <T> UINode set(Attribute<T> key, T value) {
+    public <T> UIElement set(Attribute<T> key, T value) {
         Objects.requireNonNull(key, "key");
         Object current = attributes.containsKey(key) ? attributes.get(key) : key.initial();
         if (Objects.equals(current, value)) return this;
@@ -425,7 +424,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
     // ── Light tree ───────────────────────────────────────────────────────────
 
     @Nullable
-    public final UINode parent() {
+    public final UIElement parent() {
         return parent;
     }
 
@@ -446,17 +445,17 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
      * <p>Refusing here is how a composite says a child is not one of its kind, which is the whole of
      * what the old engine's {@code acceptsPublicChildren} did at this seam.</p>
      */
-    public List<UINode> describedChildren() {
+    public List<UIElement> describedChildren() {
         return children();
     }
 
     /** @see #describedChildren() */
-    public void adoptDescribedChild(UINode child) {
+    public void adoptDescribedChild(UIElement child) {
         append(child);
     }
 
     /** The light children — what authors, the codec and the mirror see. Read-only. */
-    public final List<UINode> children() {
+    public final List<UIElement> children() {
         return childrenView;
     }
 
@@ -464,7 +463,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
         return children.size();
     }
 
-    public final int indexOf(UINode child) {
+    public final int indexOf(UIElement child) {
         return children.indexOf(child);
     }
 
@@ -484,7 +483,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
      */
     public final int depth() {
         int depth = 0;
-        for (UINode at = composedParent(); at != null; at = at.composedParent()) depth++;
+        for (UIElement at = composedParent(); at != null; at = at.composedParent()) depth++;
         return depth;
     }
 
@@ -493,26 +492,26 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
     }
 
     /** Whether {@code other} is this node or a light-tree descendant of it. */
-    public final boolean contains(@Nullable UINode other) {
-        for (UINode at = other; at != null; at = at.parent) {
+    public final boolean contains(@Nullable UIElement other) {
+        for (UIElement at = other; at != null; at = at.parent) {
             if (at == this) return true;
         }
         return false;
     }
 
     /** The top of the light-parent chain: a document, a shadow root, or a detached subtree's root. */
-    public final UINode root() {
-        UINode at = this;
+    public final UIElement root() {
+        UIElement at = this;
         while (at.parent != null) at = at.parent;
         return at;
     }
 
-    public final UINode append(UINode child) {
+    public final UIElement append(UIElement child) {
         return insertAt(children.size(), child);
     }
 
-    public final UINode append(UINode... nodes) {
-        for (UINode child : nodes) append(child);
+    public final UIElement append(UIElement... nodes) {
+        for (UIElement child : nodes) append(child);
         return this;
     }
 
@@ -521,7 +520,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
      * the DOM's {@code insertBefore} does and what keeps the observer's stream one {@code moved}
      * rather than a {@code removed} followed by an {@code inserted}.
      */
-    public UINode insertAt(int index, UINode child) {
+    public UIElement insertAt(int index, UIElement child) {
         Objects.requireNonNull(child, "child");
         if (child.parent != null) {
             child.moveTo(this, index);
@@ -544,13 +543,13 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
     }
 
     /** Removes a light child. False if it was not one. */
-    public boolean remove(UINode child) {
+    public boolean remove(UIElement child) {
         if (child == null || child.parent != this) return false;
         Mutation m = beginMutation("removing <" + child.name + ">");
         try {
             // REPORTED BEFORE THE LINK IS CLEARED: the receiver anchors the change on the parent, which
             // has to be nameable while the change is being reported.
-            TreeObserver<UINode> to = child.observer;
+            TreeObserver<UIElement> to = child.observer;
             m.observe(() -> TreeObserver.Dispatch.removed(to, child, this));
             children.remove(child);
             child.parent = null;
@@ -580,7 +579,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
      * with no parent is inserted rather than moved. Crossing a shadow boundary is a {@code removed} or
      * an {@code inserted} as seen from the light tree, because that is what the light tree saw.</p>
      */
-    public UINode moveTo(UINode newParent, int index) {
+    public UIElement moveTo(UIElement newParent, int index) {
         Objects.requireNonNull(newParent, "parent");
         if (parent == null) {
             newParent.insertAt(index, this);
@@ -589,8 +588,8 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
         newParent.refuseAsChild(this);
         Mutation m = beginMutation("moving <" + name + ">");
         try {
-            UINode old = parent;
-            TreeObserver<UINode> before = observer;
+            UIElement old = parent;
+            TreeObserver<UIElement> before = observer;
             UIDocument oldDocument = document;
             old.children.remove(this);
             int at = clampIndex(index, newParent.children.size());
@@ -607,8 +606,8 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
             slotsChanged(newParent);
             if (oldDocument != null && oldDocument != document) oldDocument.fireStructureChanged();
             structureChanged();
-            TreeObserver<UINode> after = observer;
-            UINode self = this;
+            TreeObserver<UIElement> after = observer;
+            UIElement self = this;
             if (before != null && after == before) {
                 m.observe(() -> TreeObserver.Dispatch.moved(before, self, newParent, at));
             } else {
@@ -627,14 +626,14 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
      * already heard of. Each node reports to its own effective observer, which is the grafted root's
      * unless a source was installed lower down.
      */
-    private static void reportInserted(UINode node, UINode parent, int index, Mutation m) {
-        TreeObserver<UINode> to = node.observer;
+    private static void reportInserted(UIElement node, UIElement parent, int index, Mutation m) {
+        TreeObserver<UIElement> to = node.observer;
         if (to != null) m.observe(() -> TreeObserver.Dispatch.inserted(to, node, parent, index));
-        List<UINode> kids = node.children;
+        List<UIElement> kids = node.children;
         for (int i = 0; i < kids.size(); i++) reportInserted(kids.get(i), node, i, m);
     }
 
-    private void refuseAsChild(UINode child) {
+    private void refuseAsChild(UIElement child) {
         if (child == this || child.contains(this)) {
             throw new IllegalArgumentException("A node cannot contain itself");
         }
@@ -709,12 +708,12 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
      * parts. Adding them through the public {@code append} threw, and the whole gallery died on the
      * first dialog it built.</p>
      */
-    final UINode appendAmbient(UINode child) {
+    final UIElement appendAmbient(UIElement child) {
         return insertStructuralAt(children.size(), child);
     }
 
     /** Appends a part the WIDGET owns, past its own refusal of public children. */
-    protected final UINode appendStructural(UINode child) {
+    protected final UIElement appendStructural(UIElement child) {
         return insertStructuralAt(children.size(), child);
     }
 
@@ -723,7 +722,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
      * {@code addInternalChild}, minus the flag: what makes a part a part here is that the widget
      * put it there, not a bit stored on it.
      */
-    protected final UINode insertStructuralAt(int index, UINode child) {
+    protected final UIElement insertStructuralAt(int index, UIElement child) {
         boolean was = structural;
         structural = true;
         try {
@@ -776,7 +775,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
     /** The shadow root this node is inside, or null. */
     @Nullable
     public final ShadowRoot containingShadowRoot() {
-        for (UINode at = this; at != null; at = at.parent) {
+        for (UIElement at = this; at != null; at = at.parent) {
             if (at instanceof ShadowRoot) return (ShadowRoot) at;
         }
         return null;
@@ -789,7 +788,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
      * child; null for a light child that its parent's shadow tree slots nowhere (it is not rendered).
      */
     @Nullable
-    public UINode composedParent() {
+    public UIElement composedParent() {
         UISlot slot = assignedSlot();
         if (slot != null) return slot;
         if (parent == null) return null;
@@ -803,22 +802,22 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
      * root itself is transparent), otherwise the light children. A {@link UISlot} answers its assigned
      * nodes, or its fallback.
      */
-    public List<UINode> composedChildren() {
+    public List<UIElement> composedChildren() {
         if (shadowRoot != null) return shadowRoot.children();
         return childrenView;
     }
 
     /** This node and every composed descendant, depth-first, parents before children. */
-    public final Iterable<UINode> composedSubtree() {
-        return () -> new Iterator<UINode>() {
-            private final Deque<UINode> pending = new ArrayDeque<>();
+    public final Iterable<UIElement> composedSubtree() {
+        return () -> new Iterator<UIElement>() {
+            private final Deque<UIElement> pending = new ArrayDeque<>();
 
             {
-                pending.push(UINode.this);
+                pending.push(UIElement.this);
             }
 
-            private void push(UINode node) {
-                List<UINode> kids = node.composedChildren();
+            private void push(UIElement node) {
+                List<UIElement> kids = node.composedChildren();
                 for (int i = kids.size() - 1; i >= 0; i--) pending.push(kids.get(i));
             }
 
@@ -828,9 +827,9 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
             }
 
             @Override
-            public UINode next() {
+            public UIElement next() {
                 if (pending.isEmpty()) throw new NoSuchElementException();
-                UINode next = pending.pop();
+                UIElement next = pending.pop();
                 push(next);
                 return next;
             }
@@ -842,10 +841,10 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
      * shadow root that {@code relativeTo} is not inside, the target is that root's host. What an
      * event's target and a focus query answer from outside a composite — the spec's algorithm.
      */
-    public static UINode retarget(UINode target, @Nullable UINode relativeTo) {
-        UINode at = target;
+    public static UIElement retarget(UIElement target, @Nullable UIElement relativeTo) {
+        UIElement at = target;
         while (true) {
-            UINode root = at.root();
+            UIElement root = at.root();
             if (!(root instanceof ShadowRoot)) return at;
             if (relativeTo != null && isShadowIncludingInclusiveAncestor(root, relativeTo)) return at;
             at = ((ShadowRoot) root).host();
@@ -853,15 +852,15 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
     }
 
     /** Whether {@code ancestor} is {@code node} or above it, crossing from a shadow root to its host. */
-    public static boolean isShadowIncludingInclusiveAncestor(UINode ancestor, UINode node) {
-        for (UINode at = node; at != null; at = at.shadowIncludingParent()) {
+    public static boolean isShadowIncludingInclusiveAncestor(UIElement ancestor, UIElement node) {
+        for (UIElement at = node; at != null; at = at.shadowIncludingParent()) {
             if (at == ancestor) return true;
         }
         return false;
     }
 
     @Nullable
-    private UINode shadowIncludingParent() {
+    private UIElement shadowIncludingParent() {
         if (parent != null) return parent;
         return this instanceof ShadowRoot ? ((ShadowRoot) this).host() : null;
     }
@@ -1088,7 +1087,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
     @Override
     public void computedChanged(StyleProperty<?> property, @Nullable Object oldValue, @Nullable Object newValue) {
         if (property == StylePropertyRegistry.FONT_SIZE) {
-            for (UINode node : composedSubtree()) node.invalidateStyleMatch();
+            for (UIElement node : composedSubtree()) node.invalidateStyleMatch();
         }
         // display: none is a structural fact -- a box exists or it does not.
         if (property == LayoutProperties.DISPLAY) structureChanged();
@@ -1112,7 +1111,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
      *
      * @param modal the modal that absorbed the press
      */
-    public void pressBlocked(UINode modal) {
+    public void pressBlocked(UIElement modal) {
     }
 
     /**
@@ -1150,7 +1149,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
     private void markSubtreeDirty(StyleEngine engine) {
         engine.markDirty(this);
         invalidateExposedParts(engine);
-        for (UINode child : children) {
+        for (UIElement child : children) {
             if (!child.frozen) child.markSubtreeDirty(engine);
         }
     }
@@ -1180,8 +1179,8 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
         markExposedParts(shadowRoot, engine);
     }
 
-    private static void markExposedParts(UINode at, StyleEngine engine) {
-        for (UINode child : at.children) {
+    private static void markExposedParts(UIElement at, StyleEngine engine) {
+        for (UIElement child : at.children) {
             if (!child.frozen && !child.get(Attribute.PART).isEmpty()) engine.markDirty(child);
             if (child.shadowRoot == null) markExposedParts(child, engine);
         }
@@ -1239,7 +1238,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
         return get(Attribute.FOCUS_POLICY);
     }
 
-    public final UINode setFocusPolicy(FocusPolicy policy) {
+    public final UIElement setFocusPolicy(FocusPolicy policy) {
         return set(Attribute.FOCUS_POLICY, policy);
     }
 
@@ -1271,12 +1270,12 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
     // storage and the method is the door -- a widget should not have to know which key it is.
 
     /** {@code :disabled} when false, and the input service refuses it. */
-    public UINode setEnabled(boolean enabled) {
+    public UIElement setEnabled(boolean enabled) {
         return set(Attribute.ENABLED, enabled);
     }
 
     /** Whether hit-testing may land here. Subtree-wide, like {@code pointer-events: none}. */
-    public UINode setHitTest(boolean hitTest) {
+    public UIElement setHitTest(boolean hitTest) {
         return set(Attribute.HIT_TEST, hitTest);
     }
 
@@ -1285,7 +1284,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
     }
 
     /** The HTML {@code inert} attribute: keeps its box, stops being interactive. Subtree-wide. */
-    public UINode setInert(boolean inert) {
+    public UIElement setInert(boolean inert) {
         return set(Attribute.INERT, inert);
     }
 
@@ -1297,7 +1296,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
      * Shown or not — the old engine's {@code setDisplayed}, which wrote {@code display} at
      * {@code IMPORTANT} from 74 sites. @see Attribute#HIDDEN
      */
-    public UINode setDisplayed(boolean displayed) {
+    public UIElement setDisplayed(boolean displayed) {
         return set(Attribute.HIDDEN, !displayed);
     }
 
@@ -1306,7 +1305,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
     }
 
     /** @see Attribute#SCROLL_EXEMPT */
-    public UINode setScrollExempt(boolean exempt) {
+    public UIElement setScrollExempt(boolean exempt) {
         return set(Attribute.SCROLL_EXEMPT, exempt);
     }
 
@@ -1324,7 +1323,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
      * node and the cascade resolves whichever happens to win — which reads as a random colour rather
      * than a stale class.</p>
      */
-    public final UINode swapPrefixedClass(String prefix, @Nullable String next) {
+    public final UIElement swapPrefixedClass(String prefix, @Nullable String next) {
         List<String> stale = new ArrayList<>(1);
         for (String c : classes()) {
             if (c.startsWith(prefix) && !c.equals(next)) stale.add(c);
@@ -1341,7 +1340,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
      * otherwise detach and re-attach the same node, which is a removal and an insertion on the wire
      * and a lifecycle round trip for a tree nothing changed about.</p>
      */
-    public final UINode setOnlyChild(@Nullable UINode wanted) {
+    public final UIElement setOnlyChild(@Nullable UIElement wanted) {
         if (childCount() == 1 && children().get(0) == wanted) return this;
         removeAll();
         if (wanted != null) append(wanted);
@@ -1352,12 +1351,12 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
 
     /** The first light descendant matching {@code selector}, in document order, or null. */
     @Nullable
-    public final UINode querySelector(String selector) {
+    public final UIElement querySelector(String selector) {
         return NodeQueries.querySelector(this, selector, false);
     }
 
     /** Every light descendant matching {@code selector}, in document order. */
-    public final List<UINode> querySelectorAll(String selector) {
+    public final List<UIElement> querySelectorAll(String selector) {
         return NodeQueries.querySelectorAll(this, selector, false);
     }
 
@@ -1368,23 +1367,23 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
      * where this is a walk — and a document is where the question is nearly always asked.</p>
      */
     @Nullable
-    public UINode getElementById(String id) {
+    public UIElement getElementById(String id) {
         return NodeQueries.getElementById(this, id, false);
     }
 
-    public final List<UINode> getElementsByClassName(String className) {
+    public final List<UIElement> getElementsByClassName(String className) {
         return NodeQueries.getElementsByClassName(this, className, false);
     }
 
     /** {@link #querySelector} typed, or null when nothing matched or the match is another kind. */
     @Nullable
-    public final <T extends UINode> T find(String selector, Class<T> type) {
-        UINode found = querySelector(selector);
+    public final <T extends UIElement> T find(String selector, Class<T> type) {
+        UIElement found = querySelector(selector);
         return type.isInstance(found) ? type.cast(found) : null;
     }
 
     /** {@link #find}, but a miss is a programming error rather than a null to carry around. */
-    public final <T extends UINode> T require(String selector, Class<T> type) {
+    public final <T extends UIElement> T require(String selector, Class<T> type) {
         T found = find(selector, type);
         if (found == null) {
             throw new IllegalStateException("No " + type.getSimpleName() + " matches '" + selector + "' under " + this);
@@ -1434,7 +1433,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
      * cancels it must be able to.</p>
      */
     protected final <T extends UIEvent> void attachDefaultListener(
-            EventListenerGroup<UINode, T> group, UIEvent.Listener<UINode, T> defaultAction) {
+            EventListenerGroup<UIElement, T> group, UIEvent.Listener<UIElement, T> defaultAction) {
         group.attachDefaultListener(defaultAction);
     }
 
@@ -1460,17 +1459,17 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
      * invoker counts as part of its popover, or a dropdown button dies on its own press.</p>
      */
     @Nullable
-    public final UINode popoverInvoker() {
+    public final UIElement popoverInvoker() {
         return popoverInvoker;
     }
 
-    public final UINode setPopoverInvoker(@Nullable UINode invoker) {
+    public final UIElement setPopoverInvoker(@Nullable UIElement invoker) {
         this.popoverInvoker = invoker;
         return this;
     }
 
     @Nullable
-    private UINode popoverInvoker;
+    private UIElement popoverInvoker;
 
     // ── Scroll: per NODE, not per box ────────────────────────────────────────
 
@@ -1578,19 +1577,19 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
      * {@link com.crystalgui.ui.box.Measurable} is for, and writing a measured height back into the
      * cascade is exactly the feedback loop the three-tree design removes.</p>
      */
-    public UINode layout(Consumer<LayoutGroup> configurator) {
+    public UIElement layout(Consumer<LayoutGroup> configurator) {
         configurator.accept(getStyle().getLayoutGroup());
         return this;
     }
 
     /** As {@link #layout}, for the visual group — {@code background}, {@code opacity}, {@code color}. */
-    public UINode generalStyle(Consumer<GeneralGroup> configurator) {
+    public UIElement generalStyle(Consumer<GeneralGroup> configurator) {
         configurator.accept(getStyle().getGeneralGroup());
         return this;
     }
 
     /** As {@link #layout}, for the whole store, when a caller needs both groups. */
-    public UINode style(Consumer<ElementStyle> configurator) {
+    public UIElement style(Consumer<ElementStyle> configurator) {
         configurator.accept(getStyle());
         return this;
     }
@@ -1677,7 +1676,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
      * is silent in the same way — no error at any layer.</p>
      */
     protected final void notifyStateChanged() {
-        UINode target = this;
+        UIElement target = this;
         for (ShadowRoot root = target.containingShadowRoot(); root != null;
                 root = target.containingShadowRoot()) {
             target = root.host();
@@ -1688,27 +1687,27 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
     // ── Wiring: document, observer, shadow flag ──────────────────────────────
 
     /** This node was linked under {@code parent}: take its document, its shadowness, its observer. */
-    void attachedTo(UINode parent) {
+    void attachedTo(UIElement parent) {
         boolean shadow = parent.inShadow || parent instanceof ShadowRoot;
-        TreeObserver<UINode> inherited = shadow ? null : parent.observer;
+        TreeObserver<UIElement> inherited = shadow ? null : parent.observer;
         propagate(parent.document(), shadow, inherited);
     }
 
     /** This node moved within one document: re-derive shadowness and observer, no lifecycle. */
-    void relinked(UINode parent) {
+    void relinked(UIElement parent) {
         boolean shadow = parent.inShadow || parent instanceof ShadowRoot;
-        TreeObserver<UINode> inherited = shadow ? null : parent.observer;
+        TreeObserver<UIElement> inherited = shadow ? null : parent.observer;
         rewire(shadow, inherited);
     }
 
-    void rewire(boolean shadow, @Nullable TreeObserver<UINode> inherited) {
+    void rewire(boolean shadow, @Nullable TreeObserver<UIElement> inherited) {
         inShadow = shadow;
         observer = ownObserver != null && !shadow ? ownObserver : inherited;
-        for (UINode child : children) child.rewire(shadow, observer);
+        for (UIElement child : children) child.rewire(shadow, observer);
         if (shadowRoot != null) shadowRoot.rewire(true, null);
     }
 
-    void propagate(@Nullable UIDocument doc, boolean shadow, @Nullable TreeObserver<UINode> inherited) {
+    void propagate(@Nullable UIDocument doc, boolean shadow, @Nullable TreeObserver<UIElement> inherited) {
         inShadow = shadow;
         observer = ownObserver != null && !shadow ? ownObserver : inherited;
         boolean joining = doc != null && document == null;
@@ -1743,7 +1742,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
                 if (isConnected()) connected();
             });
         }
-        for (UINode child : children) child.propagate(doc, shadow, observer);
+        for (UIElement child : children) child.propagate(doc, shadow, observer);
         if (shadowRoot != null) shadowRoot.propagate(doc, true, null);
     }
 
@@ -1754,7 +1753,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
     }
 
     void detachedKeepingParent() {
-        for (UINode child : children) child.detachedKeepingParent();
+        for (UIElement child : children) child.detachedKeepingParent();
         if (shadowRoot != null) shadowRoot.detachedKeepingParent();
         UIDocument doc = document;
         if (doc != null) {
@@ -1788,16 +1787,16 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
     }
 
     /** Installs the observer a source over this node reports to; propagates down the light tree. */
-    void setObserver(@Nullable TreeObserver<UINode> observer) {
+    void setObserver(@Nullable TreeObserver<UIElement> observer) {
         this.ownObserver = observer;
-        TreeObserver<UINode> inherited = parent == null || inShadow ? null : parent.observer;
+        TreeObserver<UIElement> inherited = parent == null || inShadow ? null : parent.observer;
         rewire(inShadow, inherited);
     }
 
     // ── Mutation bookkeeping ─────────────────────────────────────────────────
 
     /** The shadow context whose slot assignment a change under {@code where} may have moved. */
-    private static void slotsChanged(@Nullable UINode where) {
+    private static void slotsChanged(@Nullable UIElement where) {
         if (where == null) return;
         if (where.shadowRoot != null) where.shadowRoot.markSlotsDirty();
         ShadowRoot enclosing = where.containingShadowRoot();
@@ -1858,7 +1857,7 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
      * and there is nothing to clamp against.</p>
      */
     @Nullable
-    public UINode resizeContainingBlock() {
+    public UIElement resizeContainingBlock() {
         return parent();
     }
 

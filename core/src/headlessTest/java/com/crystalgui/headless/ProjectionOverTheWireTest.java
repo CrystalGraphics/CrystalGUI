@@ -17,7 +17,7 @@ import com.crystalgui.net.window.ServerWindows;
 import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.net.window.WindowProtocol;
 import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -255,7 +255,7 @@ public class ProjectionOverTheWireTest {
             return new MountedWindow() {
                 @Override public void closedByServer(String reason) { }
                 @Override public void focus() { }
-                @Override public void contentReplaced(UINode newRoot) { }
+                @Override public void contentReplaced(UIElement newRoot) { }
             };
         }
     }

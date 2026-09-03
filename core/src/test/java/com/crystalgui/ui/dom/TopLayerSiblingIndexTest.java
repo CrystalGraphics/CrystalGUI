@@ -1,7 +1,5 @@
 package com.crystalgui.ui.dom;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.widget.overlay.Menu;
@@ -30,7 +28,7 @@ import static org.junit.Assert.assertTrue;
  *
  * <p>Promotion moves an element's Taffy node to the root while leaving it a DOM child of its parent, so
  * the parent's DOM child list and its Taffy child list drift apart by one per open popup. Both sites
- * inserted at the <em>DOM</em> index. {@code UINode.taffyChildIndex()} counts only siblings that
+ * inserted at the <em>DOM</em> index. {@code UIElement.taffyChildIndex()} counts only siblings that
  * actually have a node there, and is now the single answer both use.</p>
  *
  * <p>Tested here at the engine level rather than through a menu, because a menu is where it was noticed
@@ -39,14 +37,14 @@ import static org.junit.Assert.assertTrue;
  */
 public class TopLayerSiblingIndexTest extends UiDocumentTestBase {
 
-    private UINode host;
+    private UIElement host;
 
     @Before
     public void setUp() {
-        host = new UINode().layout(l -> l.widthPercent(100f).height(0).flexGrow(1f)
-                .flexDirection(FlexDirection.COLUMN));
-        UINode root = new UINode().layout(l -> l.widthPercent(100f).heightPercent(100f)
-                .flexDirection(FlexDirection.COLUMN));
+        host = new UIElement().layout(l -> l.widthPercent(100f).height(0).flexGrow(1f)
+                                            .flexDirection(FlexDirection.COLUMN));
+        UIElement root = new UIElement().layout(l -> l.widthPercent(100f).heightPercent(100f)
+                                                      .flexDirection(FlexDirection.COLUMN));
         root.append(host);
 
         document.append(root);
@@ -58,7 +56,7 @@ public class TopLayerSiblingIndexTest extends UiDocumentTestBase {
         for (int i = 0; i < 3; i++) frame();
     }
 
-    private Popover openPopupOn(UINode anchor) {
+    private Popover openPopupOn(UIElement anchor) {
         Menu menu = new Menu();
         menu.addItem("item");
         host.append(menu);
@@ -76,13 +74,13 @@ public class TopLayerSiblingIndexTest extends UiDocumentTestBase {
      */
     @Test
     public void aChildCanBeAddedBesideAnOpenPopup() {
-        UINode anchor = new UINode().layout(l -> l.width(50).height(20));
+        UIElement anchor = new UIElement().layout(l -> l.width(50).height(20));
         host.append(anchor);
         settle();
 
         openPopupOn(anchor);
 
-        UINode newcomer = new UINode().layout(l -> l.width(50).height(20));
+        UIElement newcomer = new UIElement().layout(l -> l.width(50).height(20));
         host.append(newcomer);       // threw: Index (is 2) should be < child_count (1)
         settle();
 
@@ -99,7 +97,7 @@ public class TopLayerSiblingIndexTest extends UiDocumentTestBase {
      */
     @Test
     public void onePopupCanCloseWhileAnotherIsStillOpen() {
-        UINode anchor = new UINode().layout(l -> l.width(50).height(20));
+        UIElement anchor = new UIElement().layout(l -> l.width(50).height(20));
         host.append(anchor);
         settle();
 
@@ -118,7 +116,7 @@ public class TopLayerSiblingIndexTest extends UiDocumentTestBase {
     /** And the whole chain at once, which is what light dismiss does. */
     @Test
     public void severalPopupsCanAllCloseInOneGo() {
-        UINode anchor = new UINode().layout(l -> l.width(50).height(20));
+        UIElement anchor = new UIElement().layout(l -> l.width(50).height(20));
         host.append(anchor);
         settle();
 
@@ -131,7 +129,7 @@ public class TopLayerSiblingIndexTest extends UiDocumentTestBase {
         c.hide();
         settle();
 
-        UINode newcomer = new UINode().layout(l -> l.width(50).height(20));
+        UIElement newcomer = new UIElement().layout(l -> l.width(50).height(20));
         host.append(newcomer);
         settle();
         assertTrue("the host's child list never recovered", widthOf(newcomer) > 0f);
@@ -147,7 +145,7 @@ public class TopLayerSiblingIndexTest extends UiDocumentTestBase {
      */
     @Test
     public void aPopoverAttachesItselfWhenShownForAnAnchor() {
-        UINode anchor = new UINode().layout(l -> l.width(50).height(20));
+        UIElement anchor = new UIElement().layout(l -> l.width(50).height(20));
         host.append(anchor);
         settle();
 

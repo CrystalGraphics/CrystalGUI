@@ -1,7 +1,7 @@
 package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.text.UIText;
 
 import java.util.ArrayList;
@@ -11,7 +11,7 @@ import java.util.function.Supplier;
 /**
  * A recycled run of identical decoration elements — one guide, marker, ruler or number per use.
  *
- * <p>Every {@code layOut*} method wrote the same four lines: grow a {@code List<UINode>} on demand,
+ * <p>Every {@code layOut*} method wrote the same four lines: grow a {@code List<UIElement>} on demand,
  * count how many it used, then hide the tail. That idiom is what this is, named once.</p>
  *
  * <h3>Hiding clears the text as well as collapsing the box</h3>
@@ -28,8 +28,8 @@ import java.util.function.Supplier;
  */
 public final class DecorationPool {
 
-    private final List<UINode> elements = new ArrayList<>();
-    private final Supplier<UINode> parent;
+    private final List<UIElement> elements = new ArrayList<>();
+    private final Supplier<UIElement> parent;
     private final String className;
     private final boolean withText;
     private int used;
@@ -41,7 +41,7 @@ public final class DecorationPool {
      * @param className the CSS class the sheet styles this decoration by
      * @param withText  whether each element carries a {@link UIText} child
      */
-    DecorationPool(Supplier<UINode> parent, String className, boolean withText) {
+    DecorationPool(Supplier<UIElement> parent, String className, boolean withText) {
         this.parent = parent;
         this.className = className;
         this.withText = withText;
@@ -58,9 +58,9 @@ public final class DecorationPool {
     }
 
     /** The next element of the pass, growing the pool if it has run out. Shown; the caller places it. */
-    UINode next() {
+    UIElement next() {
         while (elements.size() <= used) {
-            UINode element = new UINode();
+            UIElement element = new UIElement();
             element.addClass(className);
             element.setHitTest(false);
             if (withText) element.append(new UIText(""));
@@ -82,7 +82,7 @@ public final class DecorationPool {
     }
 
     /** Every element ever created, for the parts that need to reach them directly. */
-    List<UINode> all() {
+    List<UIElement> all() {
         return elements;
     }
 
@@ -98,22 +98,22 @@ public final class DecorationPool {
      * is a squiggle under text with no problem, which reads as the editor being wrong rather than the
      * diagnostic. {@code SquigglesTest} and {@code ErrorStripeTest} both caught it within the same edit.</p>
      *
-     * <p>{@link UINode#setDisplayed} writes at IMPORTANT, so no stylesheet can outrank it, and it takes
+     * <p>{@link UIElement#setDisplayed} writes at IMPORTANT, so no stylesheet can outrank it, and it takes
      * the element out of layout entirely rather than leaving a zero-sized box in the flow. The zero box
      * stays underneath it because it is what a theme's own sizing is measured against on the way back in,
      * and because clearing the text is a separate scar — a {@code UIText} has no clipping of its own and
      * keeps painting its glyph where the box used to be.</p>
      */
-    static void hide(UINode element) {
+    static void hide(UIElement element) {
         element.setDisplayed(false);
         StyleGroup.defaultPipeline(element.getStyle().getLayoutGroup(), l -> l.width(0f).height(0f));
-        for (UINode child : element.children()) {
+        for (UIElement child : element.children()) {
             if (child instanceof UIText label) label.setText("");
         }
     }
 
     /** The other half of {@link #hide} — puts a recycled element back into layout. */
-    static UINode show(UINode element) {
+    static UIElement show(UIElement element) {
         element.setDisplayed(true);
         return element;
     }

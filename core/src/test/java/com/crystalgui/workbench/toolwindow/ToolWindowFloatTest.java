@@ -1,15 +1,9 @@
 package com.crystalgui.workbench.toolwindow;
 
-import com.crystalgui.desktop.window.WindowChrome;
-import com.crystalgui.widget.config.inspector.Inspector;
-import com.crystalgui.widget.text.UIText;
-import com.crystalgui.workbench.Workbench;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.desktop.Desktop;
-import com.crystalgui.ui.dom.Attribute;
-import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.ShadowRoot;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.widget.control.Button;
@@ -20,15 +14,11 @@ import com.crystalgui.workbench.dock.panel.DockPanelRegistry;
 import com.crystalgui.workbench.region.DockRegion;
 import com.crystalgui.workbench.region.RegionSide;
 import com.crystalgui.desktop.window.WindowFrame;
-import com.crystalgui.workbench.toolwindow.ToolWindowFrame;
-import com.crystalgui.workbench.toolwindow.ToolWindowManager;
-import com.crystalgui.workbench.toolwindow.ToolWindowType;
 import com.crystalgui.workbench.view.ViewContainer;
 import com.crystalgui.workbench.region.WorkbenchRegions;
 
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -81,13 +71,13 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
         // detaches and `close()` destroys only once the flight ends, so the assertion reads the state
         // BEFORE the gesture took effect and the numbers it does get are mid-flight fractions.
         Desktop.setAnimationsEnabled(false);
-        regions = new WorkbenchRegions(new UINode());
-        DockPanelRegistry<UINode> registry = new DockPanelRegistry<>();
+        regions = new WorkbenchRegions(new UIElement());
+        DockPanelRegistry<UIElement> registry = new DockPanelRegistry<>();
         registry.register(DockPanelDescriptor.container(INSPECTOR, "Inspector", DockRegion.AUXILIARY),
-                ref -> new UINode());
+                ref -> new UIElement());
         manager = new ToolWindowManager(regions, registry);
 
-        UINode root = new UINode().layout(l -> l.width(800).height(600));
+        UIElement root = new UIElement().layout(l -> l.width(800).height(600));
         elsewhere = new Button("elsewhere");
         root.append(elsewhere);
         document.append(root);
@@ -139,14 +129,14 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
         // Through shadow boundaries: `parent()` stops at a shadow root, so a focus owner that is a
         // widget's own part -- which most focusable things now are -- never reaches the container
         // holding it. The host is the step that continues the walk.
-        for (UINode e = document.focus().focused(); e != null; e = outward(e)) {
+        for (UIElement e = document.focus().focused(); e != null; e = outward(e)) {
             if (e instanceof ViewContainer container) return INSPECTOR.equals(container.containerId());
         }
         return false;
     }
 
-    private static UINode outward(UINode node) {
-        UINode parent = node.parent();
+    private static UIElement outward(UIElement node) {
+        UIElement parent = node.parent();
         if (parent != null) return parent;
         return node instanceof ShadowRoot shadow ? shadow.host() : null;
     }
@@ -337,7 +327,7 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
         manager.showPanel(INSPECTOR);
         settle();
         ViewContainer container = manager.containerOf(INSPECTOR);
-        UINode header = container.captionChrome();
+        UIElement header = container.captionChrome();
         float headerHeight = header.box().height();
         float titleIndent = header.children().get(0).box().worldX() - header.box().worldX();
         assertTrue("setup: the header has a box", headerHeight > 0f);
@@ -371,7 +361,7 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
         manager.showPanel(INSPECTOR);
         settle();
         ViewContainer container = manager.containerOf(INSPECTOR);
-        UINode header = container.captionChrome();
+        UIElement header = container.captionChrome();
         float dockedHeight = header.box().height();
         float dockedIndent = header.children().get(0).box().worldX() - header.box().worldX();
         assertTrue("setup: the docked header has a box", dockedHeight > 0f);
@@ -403,14 +393,14 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
     public void theHeadersPartsDoNotOverlap() {
         manager.showPanel(INSPECTOR);
         settle();
-        UINode header = manager.containerOf(INSPECTOR).captionChrome();
-        UINode title = header.children().get(0);
+        UIElement header = manager.containerOf(INSPECTOR).captionChrome();
+        UIElement title = header.children().get(0);
 
         float titleEnd = title.box().worldX() + title.box().width();
         assertTrue("the title claimed no width, so anything beside it draws over it",
                 widthOf(title) > 0f);
         for (int at = 1; at < header.children().size(); at++) {
-            UINode sibling = header.children().get(at);
+            UIElement sibling = header.children().get(at);
             assertTrue("a header part starts before the title ends: " + sibling.classes(),
                     sibling.box().worldX() >= titleEnd);
         }
@@ -422,7 +412,7 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
         manager.floatPanel(INSPECTOR, 40f, 40f);
         settle();
         ViewContainer container = manager.containerOf(INSPECTOR);
-        UINode header = container.captionChrome();
+        UIElement header = container.captionChrome();
 
         manager.dockPanel(INSPECTOR);
         settle();
@@ -723,16 +713,16 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
         return frame.getStyle().getGeneralGroup().zIndex();
     }
 
-    private static boolean isInside(UINode element, UINode ancestor) {
-        for (UINode walk = element; walk != null; walk = walk.parent()) {
+    private static boolean isInside(UIElement element, UIElement ancestor) {
+        for (UIElement walk = element; walk != null; walk = walk.parent()) {
             if (walk == ancestor) return true;
         }
         return false;
     }
 
-    private static int countMatching(UINode from, UINode target) {
+    private static int countMatching(UIElement from, UIElement target) {
         int found = from == target ? 1 : 0;
-        for (UINode child : from.children()) found += countMatching(child, target);
+        for (UIElement child : from.children()) found += countMatching(child, target);
         return found;
     }
 }

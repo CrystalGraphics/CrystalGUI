@@ -1,12 +1,9 @@
 package com.crystalgui.widget.layout;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.style.property.layout.LayoutProperties;
-import com.crystalgui.widget.layout.Tab;
-import com.crystalgui.widget.layout.TabView;
 import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
@@ -33,21 +30,24 @@ import static org.junit.Assert.*;
  */
 public class TabViewTest extends UiDocumentTestBase {
 
+
     private TabView tabView;
 
     @Before
     public void setUp() {
         tabView = new TabView();
         tabView.layout(l -> l.width(300).height(200));
-        UINode root = new UINode().layout(l -> l.width(300).height(200));
+        UIElement root = new UIElement().layout(l -> l.width(300).height(200));
         root.append(tabView);
         document.append(root);
+
         frame();
     }
 
     private Tab tab(String label) {
         return tabView.addTab(label);
     }
+
 
 
     /**
@@ -85,7 +85,7 @@ public class TabViewTest extends UiDocumentTestBase {
         key(CgKeyCodes.KEY_SPACE);
     }
 
-    private TaffyDisplay displayOf(UINode element) {
+    private TaffyDisplay displayOf(UIElement element) {
         return element.getStyle().getComputed(LayoutProperties.DISPLAY);
     }
 
@@ -187,17 +187,17 @@ public class TabViewTest extends UiDocumentTestBase {
         Tab first = tab("one");
         Tab second = tab("two");
 
-        UINode visibleField = new UINode().layout(l -> l.width(50).height(10));
+        UIElement visibleField = new UIElement().layout(l -> l.width(50).height(10));
         visibleField.setFocusPolicy(FocusPolicy.FOCUSABLE);
         first.content().append(visibleField);
 
-        UINode hiddenField = new UINode().layout(l -> l.width(50).height(10));
+        UIElement hiddenField = new UIElement().layout(l -> l.width(50).height(10));
         hiddenField.setFocusPolicy(FocusPolicy.FOCUSABLE);
         second.content().append(hiddenField);
         styleFrame();
 
-        List<UINode> reachable = new ArrayList<>();
-        for (UINode at = document.focus().firstTabbableIn(document);
+        List<UIElement> reachable = new ArrayList<>();
+        for (UIElement at = document.focus().firstTabbableIn(document);
              at != null && !reachable.contains(at);
              at = document.focus().nextTabbable(at, document)) {
             reachable.add(at);
@@ -317,7 +317,7 @@ public class TabViewTest extends UiDocumentTestBase {
     @Test
     public void theTabViewRefusesArbitraryChildren() {
         try {
-            tabView.append(new UINode());
+            tabView.append(new UIElement());
             fail("a TabView's structure is fixed — addChild must be refused");
         } catch (UnsupportedOperationException expected) {
             // the typed accessors are the way in

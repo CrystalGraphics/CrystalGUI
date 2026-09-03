@@ -7,14 +7,14 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import com.crystalgui.net.mirror.ClientTreeMirror;
-import com.crystalgui.net.mirror.UINodeMirror;
+import com.crystalgui.net.mirror.UIElementMirror;
 import com.crystalgui.net.mirror.ServerTreeMirror;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UINodeTreeSource;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UIElementTreeSource;
 import java.util.List;
 import java.util.Map;
 
@@ -24,26 +24,26 @@ import org.junit.Test;
  * The mirror over the NEW engine — the second real tree it has run over, after
  * {@code MirrorIsEngineAgnosticTest}'s twelve-line fixture proved it could.
  *
- * <p>This is the milestone's networking claim in full: a {@link UINodeTreeSource} and a
- * {@link UINodeMirror}, and the same {@code ServerTreeMirror}/{@code ClientTreeMirror} that serve the
+ * <p>This is the milestone's networking claim in full: a {@link UIElementTreeSource} and a
+ * {@link UIElementMirror}, and the same {@code ServerTreeMirror}/{@code ClientTreeMirror} that serve the
  * old engine carry a node tree across with its identity, attributes and structure intact — and
  * without ever describing a shadow tree.</p>
  */
-public class MirrorOverUINodeTreeTest {
+public class MirrorOverUIElementTreeTest {
 
-    private final UINodeMirror<Object> nodes = new UINodeMirror<>(PlainOps.INSTANCE);
+    private final UIElementMirror<Object> nodes = new UIElementMirror<>(PlainOps.INSTANCE);
 
     private UIDocument serverDocument;
-    private UINodeTreeSource serverTree;
-    private ServerTreeMirror<UINode, Object> server;
-    private UINode clientRoot;
-    private UINodeTreeSource clientTree;
-    private ClientTreeMirror<UINode, Object> client;
+    private UIElementTreeSource serverTree;
+    private ServerTreeMirror<UIElement, Object> server;
+    private UIElement clientRoot;
+    private UIElementTreeSource clientTree;
+    private ClientTreeMirror<UIElement, Object> client;
 
-    private UINode serverRootWith(String... ids) {
+    private UIElement serverRootWith(String... ids) {
         serverDocument = new UIDocument();
-        for (String id : ids) serverDocument.append(new UINode().setId(id));
-        serverTree = new UINodeTreeSource(serverDocument);
+        for (String id : ids) serverDocument.append(new UIElement().setId(id));
+        serverTree = new UIElementTreeSource(serverDocument);
         return serverDocument;
     }
 
@@ -52,7 +52,7 @@ public class MirrorOverUINodeTreeTest {
         int count = server.describeAndNumber();
         serverTree.observe(server);
         clientRoot = nodes.decode(nodes.describe(serverDocument));
-        clientTree = new UINodeTreeSource(clientRoot);
+        clientTree = new UIElementTreeSource(clientRoot);
         client = new ClientTreeMirror<>(clientTree, nodes, PlainOps.INSTANCE);
         assertEquals("both sides number the same pristine description alike",
                 count, client.number(clientRoot, 0));
@@ -64,25 +64,25 @@ public class MirrorOverUINodeTreeTest {
     }
 
     private void pumpState() {
-        Map<UINode, StateMap<Object>> entries = server.drainState();
+        Map<UIElement, StateMap<Object>> entries = server.drainState();
         if (entries != null) client.applyState(server.pack(entries.values()), null);
     }
 
-    private static UINode childById(UINode root, String id) {
-        for (UINode child : root.children()) if (child.id().equals(id)) return child;
+    private static UIElement childById(UIElement root, String id) {
+        for (UIElement child : root.children()) if (child.id().equals(id)) return child;
         throw new AssertionError("no child " + id + " under " + root);
     }
 
     @Test
     public void aNodeTreeMirrorsPerfectly() {
-        UINode root = serverRootWith("first", "second");
+        UIElement root = serverRootWith("first", "second");
         childById(root, "first").addClass("primary").set(Attribute.ENABLED, false);
-        childById(root, "second").append(new UINode().setId("grandchild"));
+        childById(root, "second").append(new UIElement().setId("grandchild"));
         open();
 
         assertEquals("crystalgui:document", clientRoot.name().toString());
         assertEquals(2, clientRoot.children().size());
-        UINode first = childById(clientRoot, "first");
+        UIElement first = childById(clientRoot, "first");
         assertTrue(first.hasClass("primary"));
         assertFalse("a carried attribute travels", first.get(Attribute.ENABLED));
         assertEquals("grandchild", childById(clientRoot, "second").children().get(0).id());
@@ -90,41 +90,41 @@ public class MirrorOverUINodeTreeTest {
 
     @Test
     public void anInsertKeepsEverySiblingInstance() {
-        UINode root = serverRootWith("first", "second");
+        UIElement root = serverRootWith("first", "second");
         open();
-        UINode firstBefore = childById(clientRoot, "first");
-        UINode secondBefore = childById(clientRoot, "second");
+        UIElement firstBefore = childById(clientRoot, "first");
+        UIElement secondBefore = childById(clientRoot, "second");
 
-        root.insertAt(0, new UINode().setId("inserted"));
+        root.insertAt(0, new UIElement().setId("inserted"));
         pumpStructure();
 
         assertEquals(List.of("inserted", "first", "second"),
-                clientRoot.children().stream().map(UINode::id).toList());
+                clientRoot.children().stream().map(UIElement::id).toList());
         assertSame("the existing nodes must survive a sibling insert", firstBefore, clientRoot.children().get(1));
         assertSame(secondBefore, clientRoot.children().get(2));
     }
 
     @Test
     public void aRemovalTakesTheSubtreeWithIt() {
-        UINode root = serverRootWith("keep", "gone");
-        childById(root, "gone").append(new UINode().setId("under"));
+        UIElement root = serverRootWith("keep", "gone");
+        childById(root, "gone").append(new UIElement().setId("under"));
         open();
         assertEquals(2, clientRoot.children().size());
 
         root.remove(childById(root, "gone"));
         pumpStructure();
 
-        assertEquals(List.of("keep"), clientRoot.children().stream().map(UINode::id).toList());
+        assertEquals(List.of("keep"), clientRoot.children().stream().map(UIElement::id).toList());
         assertNull(clientTree.byId(serverTree.peekId(root) + 2));
     }
 
     @Test
     public void aReparentArrivesAsAMoveAndKeepsTheInstance() {
-        UINode root = serverRootWith("from", "to");
-        UINode moving = new UINode().setId("moving");
+        UIElement root = serverRootWith("from", "to");
+        UIElement moving = new UIElement().setId("moving");
         childById(root, "from").append(moving);
         open();
-        UINode clientMoving = childById(childById(clientRoot, "from"), "moving");
+        UIElement clientMoving = childById(childById(clientRoot, "from"), "moving");
 
         childById(root, "to").append(moving);
         pumpStructure();
@@ -135,9 +135,9 @@ public class MirrorOverUINodeTreeTest {
 
     @Test
     public void anAttributeChangeArrivesAsAnAttribute() {
-        UINode root = serverRootWith("node");
+        UIElement root = serverRootWith("node");
         open();
-        UINode clientNode = childById(clientRoot, "node");
+        UIElement clientNode = childById(clientRoot, "node");
 
         childById(root, "node").addClass("lit").set(Attribute.INERT, true);
         pumpStructure();
@@ -154,29 +154,29 @@ public class MirrorOverUINodeTreeTest {
 
     @Test
     public void aShadowTreeNeverTravels() {
-        UINode root = serverRootWith("host");
-        UINode host = childById(root, "host");
-        host.attachShadow().append(new UINode().setId("part"));
-        host.append(new UINode().setId("content"));
+        UIElement root = serverRootWith("host");
+        UIElement host = childById(root, "host");
+        host.attachShadow().append(new UIElement().setId("part"));
+        host.append(new UIElement().setId("content"));
         open();
 
-        UINode clientHost = childById(clientRoot, "host");
+        UIElement clientHost = childById(clientRoot, "host");
         assertNull("the far side's registered class rebuilds its own parts", clientHost.shadowRoot());
         assertEquals("the light content travels", List.of("content"),
-                clientHost.children().stream().map(UINode::id).toList());
+                clientHost.children().stream().map(UIElement::id).toList());
 
-        host.shadowRoot().append(new UINode().setId("more-scaffolding"));
+        host.shadowRoot().append(new UIElement().setId("more-scaffolding"));
         assertNull("and a change inside the shadow tree produces no traffic", server.drainStructure());
     }
 
     @Test
     public void aLateViewerIsToldTheIds() {
-        UINode root = serverRootWith("a", "b");
+        UIElement root = serverRootWith("a", "b");
         open();
-        root.insertAt(0, new UINode().setId("late"));
+        root.insertAt(0, new UIElement().setId("late"));
         pumpStructure();
 
-        UINode lateRoot = nodes.decodeLive(nodes.describeLive(root, serverTree::idOf), (node, id) -> { });
-        assertEquals(List.of("late", "a", "b"), lateRoot.children().stream().map(UINode::id).toList());
+        UIElement lateRoot = nodes.decodeLive(nodes.describeLive(root, serverTree::idOf), (node, id) -> { });
+        assertEquals(List.of("late", "a", "b"), lateRoot.children().stream().map(UIElement::id).toList());
     }
 }

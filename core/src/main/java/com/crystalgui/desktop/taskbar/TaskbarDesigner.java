@@ -14,8 +14,8 @@ import com.crystalgui.style.property.visual.border.BorderRadiusProperties;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Checkbox;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.ui.UITransform;
 import com.crystalgui.ui.dom.UIDocument;
@@ -24,7 +24,6 @@ import com.crystalgui.widget.scroll.ScrollerView;
 import com.crystalgui.widget.form.ColorSelector;
 import com.crystalgui.widget.control.Slider;
 import com.crystalgui.widget.text.UIText;
-import com.crystalgui.ui.event.MouseEvent;
 import dev.vfyjxf.taffy.style.TaffyDimension;
 import org.jetbrains.annotations.Nullable;
 
@@ -32,7 +31,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
 
 /**
  * A live tuner for the taskbar: its geometry, its position, and every parameter of its backdrop.
@@ -53,7 +51,7 @@ import java.util.function.Supplier;
  *
  * <h3>Position is a TRANSFORM, deliberately</h3>
  *
- * <p>Dragging the island moves it with {@link UINode#setTransform}, which Taffy never sees. That is
+ * <p>Dragging the island moves it with {@link UIElement#setTransform}, which Taffy never sees. That is
  * not a shortcut, it is the only option that does not break the compositor: the taskbar is <b>laid out</b>
  * as a bottom bar precisely so the window layer's box IS the work area, and a strip that could be
  * absolutely positioned anywhere would take that derivation — and every maximised window with it. A
@@ -69,7 +67,7 @@ public final class TaskbarDesigner {
     public static final String WINDOW_CLASS = "__taskbar-designer__";
 
     private final Taskbar taskbar;
-    private final UINode island;
+    private final UIElement island;
     private final CgUiGlass glass = new CgUiGlass();
 
     /**
@@ -81,7 +79,7 @@ public final class TaskbarDesigner {
      * first hover after picking a tone would show a preview in the old one.</p>
      */
     private int tone = 0x333574F0;
-    private final List<UINode> glows;
+    private final List<UIElement> glows;
 
     // Geometry, in logical px. Seeded from the sheet on the first frame the island has a box.
     private float islandWidth, islandHeight, radius = 8f, padding = 4f, gap = 4f;
@@ -157,10 +155,10 @@ public final class TaskbarDesigner {
 
     // ── the panel ────────────────────────────────────────────────────────────────────────────────
 
-    private UINode build() {
+    private UIElement build() {
         seedFromCascade();
 
-        UINode content = new UINode();
+        UIElement content = new UIElement();
         content.addClass("__designer__");
 
         // A ScrollerView, FOR THE BARS. This was a plain element on the argument that scrolling is an
@@ -300,8 +298,8 @@ public final class TaskbarDesigner {
         return content;
     }
 
-    private UINode actions() {
-        UINode row = new UINode();
+    private UIElement actions() {
+        UIElement row = new UIElement();
         row.addClass("__designer-actions__");
 
         Button copy = new Button("Copy CSS");
@@ -522,7 +520,7 @@ public final class TaskbarDesigner {
      * sliders can express the same number and cannot show you that, and this is a value judged by eye —
      * the whole reason the panel exists.</p>
      */
-    private UINode tintPicker() {
+    private UIElement tintPicker() {
         int initial = glass.getTint();
         ColorSelector picker = new ColorSelector();
         picker.addClass("__designer-tint__");
@@ -536,7 +534,7 @@ public final class TaskbarDesigner {
     }
 
     /** The tone, the same picker as the tint: alpha is most of what is being chosen. */
-    private UINode tonePicker() {
+    private UIElement tonePicker() {
         int initial = tone;
         ColorSelector picker = new ColorSelector();
         picker.addClass("__designer-tint__");
@@ -549,9 +547,9 @@ public final class TaskbarDesigner {
         return picker;
     }
 
-    private UINode slider(String label, float min, float max, float initial,
+    private UIElement slider(String label, float min, float max, float initial,
                              String format, Consumer<Float> apply) {
-        UINode row = new UINode();
+        UIElement row = new UIElement();
         row.addClass("__designer-row__");
 
         UIText name = new UIText(label);
@@ -574,8 +572,8 @@ public final class TaskbarDesigner {
         return row;
     }
 
-    private UINode toggle(String label, boolean initial, Consumer<Boolean> apply) {
-        UINode row = new UINode();
+    private UIElement toggle(String label, boolean initial, Consumer<Boolean> apply) {
+        UIElement row = new UIElement();
         row.addClass("__designer-row__");
         Checkbox box = new Checkbox();
         box.setChecked(initial);
@@ -588,13 +586,13 @@ public final class TaskbarDesigner {
         return row;
     }
 
-    private static UINode heading(String text) {
+    private static UIElement heading(String text) {
         UIText t = new UIText(text);
         t.addClass("__designer-heading__");
         return t;
     }
 
-    private static UINode note(String text) {
+    private static UIElement note(String text) {
         UIText t = new UIText(text);
         t.addClass("__designer-note__");
         return t;

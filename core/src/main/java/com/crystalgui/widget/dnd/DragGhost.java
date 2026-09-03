@@ -2,14 +2,10 @@ package com.crystalgui.widget.dnd;
 
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.CgUiSvg;
-import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.ui.dom.*;
 import com.crystalgui.widget.text.UIText;
-import com.crystalgui.ui.dom.Attribute;
-import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.ShadowRoot;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
 
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.style.TaffyPosition;
@@ -61,7 +57,7 @@ import com.crystalgui.ui.service.Drag;
  * field on {@link UIDocument}. Neither is worth it for a saving of one field: {@link #parkIn} is also the
  * only statement of <b>who owns this element</b>, and a global would answer that question with "nobody".</p>
  */
-public class DragGhost extends UINode {
+public class DragGhost extends UIElement {
 
     public static final Name NAME = Name.of("dragghost");
     /**
@@ -103,7 +99,7 @@ public class DragGhost extends UINode {
     public static final String UNLABELLED_CLASS = "__unlabelled__";
 
     private final ShadowRoot shadow;
-    private final UINode icon = new UINode();
+    private final UIElement icon = new UIElement();
     private final UIText label = new UIText("");
 
     public DragGhost() {
@@ -147,7 +143,7 @@ public class DragGhost extends UINode {
      *
      * <p>Idempotent, so calling it from a constructor and again from a rebuild is safe.</p>
      */
-    public DragGhost parkIn(UINode host) {
+    public DragGhost parkIn(UIElement host) {
         if (host == null || getParent() == host) return this;
         // A LIGHT child of the host, not one of its parts: the ghost belongs to whoever
         // parked it and the host has no idea it is there. Putting it in the host's shadow

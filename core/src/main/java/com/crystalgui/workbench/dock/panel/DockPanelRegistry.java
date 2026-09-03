@@ -1,6 +1,6 @@
 package com.crystalgui.workbench.dock.panel;
 
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.signal.Signal;
 
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
@@ -28,8 +28,8 @@ import java.util.function.Function;
  *
  * <h3>Generic in what a factory builds</h3>
  *
- * <p>{@code C} is the content type — {@code UINode} for the widget layer, anything at all for a
- * headless test. Keeping it a type parameter rather than hardcoding {@code UINode} is what lets the
+ * <p>{@code C} is the content type — {@code UIElement} for the widget layer, anything at all for a
+ * headless test. Keeping it a type parameter rather than hardcoding {@code UIElement} is what lets the
  * whole layout half of this package stay free of the widget half, which is the same boundary
  * {@link DockLayout} is drawn on.</p>
  */
@@ -272,10 +272,10 @@ public final class DockPanelRegistry<C> {
 
     /** An ELEMENT for a tab's icon slot, when a name cannot say enough. @see #iconElementOf */
     @Nullable
-    private Function<DockPanelRef, UINode> iconElementProvider;
+    private Function<DockPanelRef, UIElement> iconElementProvider;
 
     public DockPanelRegistry<C> setIconElementProvider(
-            @Nullable Function<DockPanelRef, UINode> provider) {
+            @Nullable Function<DockPanelRef, UIElement> provider) {
         this.iconElementProvider = provider;
         return this;
     }
@@ -296,7 +296,7 @@ public final class DockPanelRegistry<C> {
      * come to disagree about what an interface looks like.</p>
      */
     @Nullable
-    public UINode iconElementOf(DockPanelRef ref) {
+    public UIElement iconElementOf(DockPanelRef ref) {
         return iconElementProvider == null ? null : iconElementProvider.apply(ref);
     }
 

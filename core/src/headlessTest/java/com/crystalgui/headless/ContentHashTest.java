@@ -1,10 +1,10 @@
 package com.crystalgui.headless;
 
-import com.crystalgui.net.mirror.UINodeMirror;
+import com.crystalgui.net.mirror.UIElementMirror;
 import com.crystalgui.serialization.ContentHash;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Checkbox;
 import com.crystalgui.widget.control.Slider;
 import com.crystalgui.widget.text.UIText;
@@ -25,9 +25,9 @@ import static org.junit.Assert.*;
 public class ContentHashTest {
 
     /** A tree with enough shape to exercise maps, lists, strings, numbers and booleans. */
-    private static Supplier<UINode> sampleTree() {
+    private static Supplier<UIElement> sampleTree() {
         return () -> {
-            UINode root = new UINode();
+            UIElement root = new UIElement();
             root.setId("settings").addClass("panel").addClass("dark");
             root.layout(l -> l.width(200).height(120));
             root.append(new UIText("Title"));
@@ -41,8 +41,8 @@ public class ContentHashTest {
         };
     }
 
-    private String hashOfJson(UINode element) {
-        return ContentHash.of(JsonOps.INSTANCE, new UINodeMirror<>(JsonOps.INSTANCE).describe(element));
+    private String hashOfJson(UIElement element) {
+        return ContentHash.of(JsonOps.INSTANCE, new UIElementMirror<>(JsonOps.INSTANCE).describe(element));
     }
 
     // ── Stability ───────────────────────────────────────────────────────────
@@ -56,8 +56,8 @@ public class ContentHashTest {
     /** Encoding twice must be byte-identical too — the payload itself is what gets transferred. */
     @Test
     public void encodingIsByteIdentical() {
-        JsonElement first = new UINodeMirror<>(JsonOps.INSTANCE).describe(sampleTree().get());
-        JsonElement second = new UINodeMirror<>(JsonOps.INSTANCE).describe(sampleTree().get());
+        JsonElement first = new UIElementMirror<>(JsonOps.INSTANCE).describe(sampleTree().get());
+        JsonElement second = new UIElementMirror<>(JsonOps.INSTANCE).describe(sampleTree().get());
         assertEquals("a HashMap anywhere in the encode path would break this",
                 first.toString(), second.toString());
     }
@@ -68,11 +68,11 @@ public class ContentHashTest {
      */
     @Test
     public void theSameTreeHashesTheSameThroughDifferentOps() {
-        UINode tree = sampleTree().get();
+        UIElement tree = sampleTree().get();
         String viaJson = ContentHash.of(JsonOps.INSTANCE,
-                new UINodeMirror<>(JsonOps.INSTANCE).describe(tree));
+                new UIElementMirror<>(JsonOps.INSTANCE).describe(tree));
         String viaPlain = ContentHash.of(PlainOps.INSTANCE,
-                new UINodeMirror<>(PlainOps.INSTANCE).describe(tree));
+                new UIElementMirror<>(PlainOps.INSTANCE).describe(tree));
         assertEquals(viaJson, viaPlain);
     }
 
@@ -82,19 +82,19 @@ public class ContentHashTest {
     public void anyMeaningfulChangeChangesTheHash() {
         String base = hashOfJson(sampleTree().get());
 
-        UINode differentState = sampleTree().get();
+        UIElement differentState = sampleTree().get();
         ((Checkbox) differentState.children().get(1)).setChecked(false);
         assertNotEquals("widget state must affect the identity", base, hashOfJson(differentState));
 
-        UINode differentClass = sampleTree().get();
+        UIElement differentClass = sampleTree().get();
         differentClass.addClass("extra");
         assertNotEquals(base, hashOfJson(differentClass));
 
-        UINode differentStyle = sampleTree().get();
+        UIElement differentStyle = sampleTree().get();
         differentStyle.layout(l -> l.width(201));
         assertNotEquals(base, hashOfJson(differentStyle));
 
-        UINode differentStructure = sampleTree().get();
+        UIElement differentStructure = sampleTree().get();
         differentStructure.append(new UIText("extra"));
         assertNotEquals(base, hashOfJson(differentStructure));
     }
@@ -102,11 +102,11 @@ public class ContentHashTest {
     /** Child order is meaningful — it decides paint and tab order. */
     @Test
     public void childOrderAffectsTheHash() {
-        UINode a = new UINode();
+        UIElement a = new UIElement();
         a.append(new UIText("one"));
         a.append(new UIText("two"));
 
-        UINode b = new UINode();
+        UIElement b = new UIElement();
         b.append(new UIText("two"));
         b.append(new UIText("one"));
 
@@ -127,9 +127,9 @@ public class ContentHashTest {
      */
     @Test
     public void listsWithTheSameContentButDifferentBoundariesDiffer() {
-        UINode ab = new UINode();
+        UIElement ab = new UIElement();
         ab.addClass("ab").addClass("c");
-        UINode a = new UINode();
+        UIElement a = new UIElement();
         a.addClass("a").addClass("bc");
         assertNotEquals(hashOfJson(ab), hashOfJson(a));
     }

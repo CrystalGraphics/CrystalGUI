@@ -1,10 +1,6 @@
 package com.crystalgui.widget.graph;
 
-import com.crystalgui.text.Selection;
-import com.crystalgui.ui.input.keymap.Keymap;
-import com.crystalgui.ui.service.Focus;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
@@ -14,9 +10,6 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.TestPlatformService;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.graph.port.BasicPortType;
-import com.crystalgui.widget.graph.GraphNode;
-import com.crystalgui.widget.graph.GraphView;
-import com.crystalgui.widget.graph.NodePort;
 import com.crystalgui.graph.port.PortType;
 import org.joml.Vector2f;
 import org.junit.Before;
@@ -25,7 +18,6 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.undo.UndoCommands;
-import com.crystalgui.widget.graph.GraphCommands;
 import com.crystalgui.ui.input.keymap.KeyStroke;
 
 /**
@@ -71,7 +63,7 @@ public class GraphEditingTest extends UiDocumentTestBase {
         graph = new GraphView();
         graph.layout(l -> l.width(360).height(300));
 
-        UINode root = new UINode().layout(l -> l.width(400).height(400));
+        UIElement root = new UIElement().layout(l -> l.width(400).height(400));
         root.append(graph);
 
         document.append(root);
@@ -95,7 +87,7 @@ public class GraphEditingTest extends UiDocumentTestBase {
         return Transform2D.apply(graph.box().localToWorld(), local.x(), local.y());
     }
 
-    private Vector2f physicalCenterOf(UINode element) {
+    private Vector2f physicalCenterOf(UIElement element) {
         var cache = element.box();
         return Transform2D.apply(cache.localToWorld(),
                 cache.width() * 0.5f, cache.height() * 0.5f);
@@ -282,8 +274,8 @@ public class GraphEditingTest extends UiDocumentTestBase {
                 isInside(hit(overlap.x(), overlap.y()), under));
     }
 
-    private static boolean isInside(UINode hit, GraphNode node) {
-        for (UINode e = hit; e != null; e = e.parent()) {
+    private static boolean isInside(UIElement hit, GraphNode node) {
+        for (UIElement e = hit; e != null; e = e.parent()) {
             if (e == node) return true;
         }
         return false;

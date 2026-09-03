@@ -1,16 +1,11 @@
 package com.crystalgui.widget.collection.table;
 
-import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.core.collection.tree.TreeRow;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.core.collection.list.SelectionMode;
 import com.crystalgui.core.collection.table.SortOrder;
-import com.crystalgui.widget.collection.table.TableColumn;
-import com.crystalgui.widget.collection.table.TableView;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -57,7 +52,7 @@ public class TableViewTest extends UiDocumentTestBase {
         table.addColumn(nameColumn);
         table.addColumn(sizeColumn);
 
-        UINode root = new UINode().layout(l -> l.width(200).height(200));
+        UIElement root = new UIElement().layout(l -> l.width(200).height(200));
         root.append(table);
         document.append(root);
         settle();
@@ -70,9 +65,9 @@ public class TableViewTest extends UiDocumentTestBase {
 
     /** What the NAME cell of the realised row at {@code index} actually displays. */
     private String displayedName(int index) {
-        UINode row = table.realisedRows().get(index);
+        UIElement row = table.realisedRows().get(index);
         assertNotNull("row " + index + " is not realised", row);
-        UINode cell = row.children().get(0);
+        UIElement cell = row.children().get(0);
         return ((UIText) cell.children().get(0)).getText();
     }
 
@@ -125,7 +120,7 @@ public class TableViewTest extends UiDocumentTestBase {
     @Test
     public void rowsStartBelowTheHeader() {
         build("a", "b", "c");
-        UINode firstRow = table.realisedRows().get(0);
+        UIElement firstRow = table.realisedRows().get(0);
         assertNotNull(firstRow);
         assertTrue("row 0 top was " + firstRow.box().y()
                         + ", which is inside the header",
@@ -150,8 +145,8 @@ public class TableViewTest extends UiDocumentTestBase {
         settle();
         settle();
 
-        UINode header = null;
-        for (UINode child : table.children()) {
+        UIElement header = null;
+        for (UIElement child : table.children()) {
             if (child.hasClass(TableView.HEADER_CLASS)) header = child;
         }
         assertNotNull(header);
@@ -193,15 +188,15 @@ public class TableViewTest extends UiDocumentTestBase {
         settle();
         settle();
 
-        UINode header = null;
-        for (UINode child : table.children()) {
+        UIElement header = null;
+        for (UIElement child : table.children()) {
             if (child.hasClass(TableView.HEADER_CLASS)) header = child;
         }
         assertNotNull(header);
 
         float previousRight = -1f;
         int cells = 0;
-        for (UINode child : header.children()) {
+        for (UIElement child : header.children()) {
             if (!child.hasClass(TableView.HEADER_CELL_CLASS)) continue;
             float left = child.box().x();
             assertTrue("header cell " + cells + " starts at " + left
@@ -246,9 +241,9 @@ public class TableViewTest extends UiDocumentTestBase {
         build("a-very-long-asset-name-indeed", "b");
         settle();
 
-        UINode row = table.realisedRows().get(0);
-        UINode nameCell = row.children().get(0);
-        UINode sizeCell = row.children().get(1);
+        UIElement row = table.realisedRows().get(0);
+        UIElement nameCell = row.children().get(0);
+        UIElement sizeCell = row.children().get(1);
 
         assertEquals("a cell clips its content",
                 com.crystalgui.style.property.visual.Overflow.HIDDEN,
@@ -275,7 +270,7 @@ public class TableViewTest extends UiDocumentTestBase {
         build("charlie", "alpha", "bravo");
         settle();
 
-        List<UINode> before = new ArrayList<>(headerOf().children());
+        List<UIElement> before = new ArrayList<>(headerOf().children());
         assertFalse(before.isEmpty());
 
         table.toggleSort(sizeColumn);
@@ -345,7 +340,7 @@ public class TableViewTest extends UiDocumentTestBase {
 
     /** A real press+release at the centre of a header cell, through hit-testing. */
     private void clickHeader(int columnIndex) {
-        UINode cell = headerCell(columnIndex);
+        UIElement cell = headerCell(columnIndex);
         float scale = document.boxes().uiScale();
         int x = Math.round(cell.box().worldX() + cell.box().width() / 2f * scale);
         int y = Math.round(cell.box().worldY() + cell.box().height() / 2f * scale);
@@ -376,7 +371,7 @@ public class TableViewTest extends UiDocumentTestBase {
         settle();
         settle();
 
-        UINode row = table.realisedRows().get(0);
+        UIElement row = table.realisedRows().get(0);
         assertNotNull(row);
         for (int i = 0; i < table.getColumns().size(); i++) {
             float headerLeft = headerCell(i).box().x();
@@ -415,16 +410,16 @@ public class TableViewTest extends UiDocumentTestBase {
                 table.resolvedWidths().get(0) >= flexible.getMinWidth() - 0.5f);
     }
 
-    private UINode headerOf() {
-        for (UINode child : table.children()) {
+    private UIElement headerOf() {
+        for (UIElement child : table.children()) {
             if (child.hasClass(TableView.HEADER_CLASS)) return child;
         }
         throw new AssertionError("no header");
     }
 
-    private UINode headerCell(int columnIndex) {
+    private UIElement headerCell(int columnIndex) {
         int seen = 0;
-        for (UINode child : headerOf().children()) {
+        for (UIElement child : headerOf().children()) {
             if (!child.hasClass(TableView.HEADER_CELL_CLASS)) continue;
             if (seen++ == columnIndex) return child;
         }
@@ -637,8 +632,8 @@ public class TableViewTest extends UiDocumentTestBase {
     @Test
     public void theHeaderIsScrollExemptAndNotPartOfTheModel() {
         build("a", "b", "c");
-        UINode header = null;
-        for (UINode child : table.children()) {
+        UIElement header = null;
+        for (UIElement child : table.children()) {
             if (child.hasClass(TableView.HEADER_CLASS)) header = child;
         }
         assertNotNull("the table has a header element", header);
@@ -652,11 +647,11 @@ public class TableViewTest extends UiDocumentTestBase {
         table.toggleSort(nameColumn);
         settle();
 
-        UINode header = null;
-        for (UINode child : table.children()) {
+        UIElement header = null;
+        for (UIElement child : table.children()) {
             if (child.hasClass(TableView.HEADER_CLASS)) header = child;
         }
-        UINode firstCell = header.children().get(0);
+        UIElement firstCell = header.children().get(0);
         assertTrue("ascending is marked for a theme to draw an arrow from",
                 firstCell.hasClass(TableView.SORTED_ASC_CLASS));
 
@@ -679,7 +674,7 @@ public class TableViewTest extends UiDocumentTestBase {
         table.layout(l -> l.width(200).height(120));
         table.addColumn(TableColumn.<File>of("Name", File::name).width(100));
 
-        UINode root = new UINode().layout(l -> l.width(200).height(200));
+        UIElement root = new UIElement().layout(l -> l.width(200).height(200));
         root.append(table);
         document.append(root);
         settle();

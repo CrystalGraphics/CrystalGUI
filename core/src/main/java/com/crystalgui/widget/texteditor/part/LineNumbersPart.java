@@ -4,13 +4,10 @@ import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.wrap.ProjectedLines;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.TaffyPosition;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * The gutter box and one number per visible row.
@@ -28,14 +25,14 @@ import java.util.List;
  */
 public final class LineNumbersPart extends EditorViewPart {
 
-    private final UINode gutter;
+    private final UIElement gutter;
     /**
      * The numbers, pooled — {@link DecorationPool} is this idiom, and this part hand-rolled it beside
      * the class that names it.
      */
     private final DecorationPool numbers;
 
-    public LineNumbersPart(TextEditor editor, UINode gutter) {
+    public LineNumbersPart(TextEditor editor, UIElement gutter) {
         super(editor);
         this.gutter = gutter;
         // Into the GUTTER'S scroll layer, not the gutter: the numbers follow the rows, so they are
@@ -80,7 +77,7 @@ public final class LineNumbersPart extends EditorViewPart {
             if (model.viewLineInRow() != 0) continue;
             int row = model.row();
             timed = FrameProfile.begin();
-            UINode number = numbers.next();
+            UIElement number = numbers.next();
             FrameProfile.end(timed, "ln:poolNext");
             timed = FrameProfile.begin();
             ((UIText) number.children().get(0)).setText(numberFor(row));

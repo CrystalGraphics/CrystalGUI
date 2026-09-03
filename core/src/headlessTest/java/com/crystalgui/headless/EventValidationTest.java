@@ -12,8 +12,8 @@ import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.dom.UINodeRegistry;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Slider;
 import com.crystalgui.widget.control.TextField;
@@ -40,10 +40,10 @@ public class EventValidationTest {
     private InMemoryTransport<Object>[] link;
     private ProtocolConnection<Object> serverEnd;
     private ProtocolConnection<Object> clientEnd;
-    private ServerUiSession<UINode, Object> server;
-    private ClientUiSession<UINode, Object> client;
+    private ServerUiSession<UIElement, Object> server;
+    private ClientUiSession<UIElement, Object> client;
 
-    private UINode root;
+    private UIElement root;
     private Slider slider;
     private Button button;
     private TextField field;
@@ -55,9 +55,9 @@ public class EventValidationTest {
     @Before
     public void setUp() {
         Protocols.resetForTesting();
-        UINodeRegistry.bootstrap();
+        UIElementRegistry.bootstrap();
 
-        root = new UINode();
+        root = new UIElement();
         slider = new Slider();
         slider.setRange(0f, 10f);
         button = new Button("Press");
@@ -108,7 +108,7 @@ public class EventValidationTest {
         settle();
     }
 
-    private int nidOf(UINode element) {
+    private int nidOf(UIElement element) {
         // The client's tree mirrors the server's numbering, so its index is the server's id.
         return 1 + root.children().indexOf(element);
     }

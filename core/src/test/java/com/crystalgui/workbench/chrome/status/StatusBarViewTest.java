@@ -1,11 +1,6 @@
 package com.crystalgui.workbench.chrome.status;
 
-import com.crystalgui.document.TextFileDocument;
-import com.crystalgui.ui.UiDataKeys;
-import com.crystalgui.widget.Widgets;
-import com.crystalgui.workbench.Workbench;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
@@ -17,12 +12,9 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.widget.text.UIText;
-import com.crystalgui.workbench.chrome.status.StatusBarView;
 
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
-import com.crystalgui.workbench.chrome.palette.CommandPalette;
 import org.junit.Test;
 
 import java.util.List;
@@ -48,7 +40,7 @@ public class StatusBarViewTest extends UiDocumentTestBase {
     public void setUp() {
         StatusBar.resetForTesting();
         bar = new StatusBarView();
-        UINode root = new UINode().layout(l -> l.width(400).height(100));
+        UIElement root = new UIElement().layout(l -> l.width(400).height(100));
         root.append(bar);
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
@@ -64,8 +56,8 @@ public class StatusBarViewTest extends UiDocumentTestBase {
         for (int i = 0; i < 4; i++) frame();
     }
 
-    private List<UINode> itemsIn(String groupClass) {
-        UINode group = deepOrNull(bar, "." + groupClass);
+    private List<UIElement> itemsIn(String groupClass) {
+        UIElement group = deepOrNull(bar, "." + groupClass);
         assertNotNull("no " + groupClass + " group", group);
         return deepAll(group, StatusBarView.ITEM_CLASS);
     }
@@ -74,7 +66,7 @@ public class StatusBarViewTest extends UiDocumentTestBase {
         return StatusBar.addEntry(StatusBarEntry.of(name, text), name, alignment);
     }
 
-    private static String textOf(UINode item) {
+    private static String textOf(UIElement item) {
         return ((UIText) item).getText();
     }
 
@@ -102,11 +94,11 @@ public class StatusBarViewTest extends UiDocumentTestBase {
     public void updatingAnEntryReusesItsElement() {
         StatusBarEntryAccessor caret = add("caret", "Ln 1, Col 1", StatusBarAlignment.RIGHT);
         settle();
-        UINode before = itemsIn(StatusBarView.RIGHT_CLASS).get(0);
+        UIElement before = itemsIn(StatusBarView.RIGHT_CLASS).get(0);
 
         caret.update(caret.entry().withText("Ln 2, Col 7"));
         settle();
-        List<UINode> after = itemsIn(StatusBarView.RIGHT_CLASS);
+        List<UIElement> after = itemsIn(StatusBarView.RIGHT_CLASS);
 
         assertEquals("still one entry", 1, after.size());
         assertSame("the slot was rebuilt rather than updated", before, after.get(0));
@@ -139,7 +131,7 @@ public class StatusBarViewTest extends UiDocumentTestBase {
         StatusBar.addEntry(StatusBarEntry.of("Index", "indexing"), "shared", StatusBarAlignment.LEFT);
         settle();
 
-        List<UINode> left = itemsIn(StatusBarView.LEFT_CLASS);
+        List<UIElement> left = itemsIn(StatusBarView.LEFT_CLASS);
         assertEquals("one writer overwrote the other", 2, left.size());
     }
 
@@ -159,7 +151,7 @@ public class StatusBarViewTest extends UiDocumentTestBase {
                 StatusBarAlignment.RIGHT, 100);
         settle();
 
-        List<UINode> right = itemsIn(StatusBarView.RIGHT_CLASS);
+        List<UIElement> right = itemsIn(StatusBarView.RIGHT_CLASS);
         assertEquals(2, right.size());
         assertEquals("the later registration outranks by priority", "51:39", textOf(right.get(0)));
         assertEquals("UTF-8", textOf(right.get(1)));
@@ -199,7 +191,7 @@ public class StatusBarViewTest extends UiDocumentTestBase {
         add("caret", "1:1", StatusBarAlignment.RIGHT);
         settle();
 
-        List<UINode> left = itemsIn(StatusBarView.LEFT_CLASS);
+        List<UIElement> left = itemsIn(StatusBarView.LEFT_CLASS);
         assertTrue("the leading left entry carries it", left.get(0).hasClass(StatusBarView.FIRST_CLASS));
         assertFalse("the one after it does not", left.get(1).hasClass(StatusBarView.FIRST_CLASS));
         assertTrue("each group has its own leading entry",
@@ -256,7 +248,7 @@ public class StatusBarViewTest extends UiDocumentTestBase {
                 "compile", StatusBarAlignment.LEFT);
         settle();
 
-        UINode item = itemsIn(StatusBarView.LEFT_CLASS).get(0);
+        UIElement item = itemsIn(StatusBarView.LEFT_CLASS).get(0);
         assertTrue("nothing said it could be pressed",
                 item.hasClass(StatusBarView.CLICKABLE_CLASS));
 
@@ -292,9 +284,9 @@ public class StatusBarViewTest extends UiDocumentTestBase {
             // THE SOURCE ELEMENT, which is what this test is about and the only thing that can
             // answer here. `UiDataKeys.WINDOW` is a `DataKey<UIWindow>` and there is no `UIWindow`
             // in a new-engine tree at all; `CommandPalette.SURFACE` is read by consumers and
-            // PROVIDED by nobody, so it is null from every element. `UINode.sourceOf` is the engine's
+            // PROVIDED by nobody, so it is null from every element. `UIElement.sourceOf` is the engine's
             // own answer to "what was this run from".
-            .enabledWhen(c -> UINode.sourceOf(c) != null));
+            .enabledWhen(c -> UIElement.sourceOf(c) != null));
         try {
             assertFalse("a contextless run must not silently appear to work",
                     CommandRegistry.global().run("test.needsWindow"));
@@ -360,7 +352,7 @@ public class StatusBarViewTest extends UiDocumentTestBase {
                         StatusBarEntry.Kind.STANDARD),
                 "compile", StatusBarAlignment.LEFT);
         settle();
-        UINode slot = itemsIn(StatusBarView.LEFT_CLASS).get(0);
+        UIElement slot = itemsIn(StatusBarView.LEFT_CLASS).get(0);
         hover(slot);
         assertEquals("one tooltip for one slot", 1, tooltipsAnchoredTo(slot));
 
@@ -389,19 +381,19 @@ public class StatusBarViewTest extends UiDocumentTestBase {
      * fixture that never hovers has no tooltip to count, and the assertion below would hold at zero
      * whatever the widget did.
      */
-    private void hover(UINode target) {
+    private void hover(UIElement target) {
         int[] centre = centreOf(target);
         move(centre[0], centre[1]);
         frame();
     }
 
-    private int tooltipsAnchoredTo(UINode anchor) {
+    private int tooltipsAnchoredTo(UIElement anchor) {
         // Counted across the DOCUMENT, not under the anchor and not by `anchor()` -- which answers
         // the anchor a tooltip is CURRENTLY SHOWING FOR, so it is null until one is hovered. With a
         // single slot in the fixture, "how many tooltips exist" is exactly the question: one is
         // right and six is the defect (a fresh tooltip attached on every update).
         int n = 0;
-        for (UINode node : composed(document)) {
+        for (UIElement node : composed(document)) {
             if (node instanceof Tooltip) n++;
         }
         return n;

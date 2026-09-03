@@ -11,7 +11,7 @@ import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.UITransform;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 
 import javax.annotation.Nullable;
 
@@ -58,13 +58,13 @@ import javax.annotation.Nullable;
  * again; a minimised one is already a texture, drawn in {@link #paintDecoration} because a texture has
  * no boxes.</p>
  */
-public class WindowThumbnail extends UINode {
+public class WindowThumbnail extends UIElement {
 
     /**
      * Its own kind, and every concrete node needs one.
      *
      * <p>No shipped rule names this tag — the sheet keys on the classes — but a subclass that
-     * declares none INHERITS {@code UINode.NAME}, so it would report {@code element} and match
+     * declares none INHERITS {@code UIElement.NAME}, so it would report {@code element} and match
      * every bare {@code element} rule there ever is. That is the {@code ToolWindowFrame} trap
      * from the other side, and {@code NodeKindsCoverageTest} is what makes it a compile-time
      * question rather than an unstyled widget somebody reports.</p>

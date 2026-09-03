@@ -5,11 +5,11 @@ import com.crystalgui.core.window.WindowPolicy;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.DesktopSession;
-import com.crystalgui.desktop.motion.WindowAnimation;
 import com.crystalgui.desktop.motion.WindowAnimator;
 import com.crystalgui.desktop.motion.WindowGeometryAnimation;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Attribute;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.data.DataKey;
@@ -19,13 +19,9 @@ import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.render.texture.CgUiSvg;
-import com.crystalgui.style.ElementStyle;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.widget.dnd.Resizer;
 import com.crystalgui.ui.UITransform;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.service.Focus;
@@ -41,9 +37,7 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
 import javax.annotation.Nullable;
 
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -52,10 +46,10 @@ import java.util.function.BooleanSupplier;
  *
  * <p>CrystalOS's unit of stacking ({@code plan_windowing.md}). A window is an <b>element subtree</b>,
  * not a {@link UIDocument}: that class is the engine's {@code Document} analogue and the display surface
- * every frame here shares. The network layer already models a window as {@code (windowId, UINode
+ * every frame here shares. The network layer already models a window as {@code (windowId, UIElement
  * root)}, so this is the visual home that model never had.</p>
  *
- * <h3>Extends {@link UINode}, never {@code Dialog}</h3>
+ * <h3>Extends {@link UIElement}, never {@code Dialog}</h3>
  * <p>{@code Dialog}'s bundle is modality, a close watcher and a backdrop — exactly what a frame must not
  * inherit, and {@code FloatingDock} paid for that lesson once already: it extended {@code Dialog} and
  * then spent three paragraphs of its own javadoc listing what it must not be allowed to inherit, which
@@ -93,7 +87,7 @@ import java.util.function.BooleanSupplier;
  * this clamp starts), and the fix belongs with W6's maximise/restore geometry rather than in a special
  * case here.</p>
  */
-public class WindowFrame extends UINode implements Disposable, DataProvider {
+public class WindowFrame extends UIElement implements Disposable, DataProvider {
 
     /** The cascade identity `ua/desktop.css` names. @see com.crystalgui.ui.dom.Name */
     public static final Name NAME = Name.of("window");
@@ -220,7 +214,7 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
      * obvious spelling is a descendant rule ({@code window > .__title-bar__ .__header__ { … }}), and it
      * works perfectly right up until the chrome goes home, at which point <b>it keeps applying</b>.</p>
      *
-     * <p>{@link UINode#invalidateStyleMatch()} runs on an id, a class or a state change — and
+     * <p>{@link UIElement#invalidateStyleMatch()} runs on an id, a class or a state change — and
      * <em>not</em> on being reparented. So an element moved out from under a selector's ancestor keeps
      * the candidates that selector gave it, at its specificity, indefinitely. A tool window docked back
      * into its region came back with the caption's {@code padding-left: 0} and {@code flex-grow: 1}
@@ -263,9 +257,9 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
     /** Emitted when the window is destroyed, after {@code Disposer} has run. */
     public final Signal.Action onDestroyed = new Signal.Action();
 
-    private final UINode titleBar;
-    private final UINode controls;
-    private final UINode content;
+    private final UIElement titleBar;
+    private final UIElement controls;
+    private final UIElement content;
 
     /** The open/close/minimise/maximise transitions. @see WindowAnimator */
     private final WindowAnimator animator = new WindowAnimator(this);
@@ -382,7 +376,7 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
             }
         }
     }
-    private final UINode captionChrome;
+    private final UIElement captionChrome;
     private final UIText titleLabel;
     private final WindowIcon icon;
     private final Button closeButton;
@@ -398,7 +392,7 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
 
     /** Where focus was when this window last had it. @see #restoreFocus */
     @Nullable
-    private UINode lastFocused;
+    private UIElement lastFocused;
 
     /** This window's place in the stack, as last assigned. @see Desktop#raise */
     private int stackOrder;
@@ -458,9 +452,9 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
 
     /** @see #adoptChrome */
     @Nullable
-    private UINode adoptedChrome;
+    private UIElement adoptedChrome;
     @Nullable
-    private UINode chromeOrigin;
+    private UIElement chromeOrigin;
     private int chromeOriginIndex = -1;
 
     private boolean maximized;
@@ -498,7 +492,7 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
         // title is" is indistinguishable from a broken drag.
         titleLabel.setHitTest(false);
 
-        controls = new UINode();
+        controls = new UIElement();
         controls.addClass(CONTROLS_CLASS);
 
         // PIN FIRST, left of minimise. It is the only control here that is not about this window's
@@ -554,11 +548,11 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
         // title bar both put an application's menu: hard against the left, with the title taking
         // whatever is left. Hidden until something is adopted, and the caption has no `gap-all`, so an
         // empty slot occupies nothing.
-        captionChrome = new UINode();
+        captionChrome = new UIElement();
         captionChrome.addClass(CAPTION_CHROME_CLASS);
         captionChrome.setDisplayed(false);
 
-        titleBar = new UINode();
+        titleBar = new UIElement();
         titleBar.addClass(TITLE_BAR_CLASS);
         titleBar.append(icon);
         titleBar.append(captionChrome);
@@ -625,8 +619,8 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
      * <p>Asked by {@code Desktop.focusMoved}, which is handed the real focus owner and so can use
      * identity where the press listener cannot. Click-focus lands on the button itself.</p>
      */
-    public boolean isMinimizeControl(@Nullable UINode node) {
-        for (UINode at = node; at != null; at = at.composedParent()) {
+    public boolean isMinimizeControl(@Nullable UIElement node) {
+        for (UIElement at = node; at != null; at = at.composedParent()) {
             if (at == minimizeButton) return true;
         }
         return false;
@@ -641,7 +635,7 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
      * press point is not retargeted, and the control's box is in the same surface pixels a mouse-down
      * listener's coordinates already are.</p>
      */
-    private static boolean pressedOver(float x, float y, @Nullable UINode control) {
+    private static boolean pressedOver(float x, float y, @Nullable UIElement control) {
         if (control == null) return false;
         Box box = control.box();
         if (box == null) return false;
@@ -660,7 +654,7 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
             // the click had happened to land on another control. A press on CHROME -- the caption, a
             // resize edge, the slot's own scrollbar -- is the case the memory exists for: dragging a
             // window by its title bar must not lose the field you were typing in.
-            boolean inContent = pressedInContent(((UINode) event.getTarget()));
+            boolean inContent = pressedInContent(((UIElement) event.getTarget()));
             if (inContent) rememberFocusChosenByPress();
             Desktop desktop = desktop();
             if (desktop != null) {
@@ -716,7 +710,7 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
         // record the frame ITSELF: a press on the title bar focuses the frame (the ancestor walk above),
         // so recording that would let dragging a window forget the field you were typing in.
         onFocus.attachListener((element, event) -> {
-            if (((UINode) event.getTarget()) != null && ((UINode) event.getTarget()) != this) lastFocused = ((UINode) event.getTarget());
+            if (((UIElement) event.getTarget()) != null && ((UIElement) event.getTarget()) != this) lastFocused = ((UIElement) event.getTarget());
         }, false, true);
     }
 
@@ -749,9 +743,9 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
      * up from one reaches the shadow root and stops rather than reaching the slot. A press on real
      * content goes through the slot's assignment and reaches it. Two answers, one walk.</p>
      */
-    private boolean pressedInContent(@Nullable UINode target) {
+    private boolean pressedInContent(@Nullable UIElement target) {
         if (target == null || target == this) return false;
-        for (UINode at = target; at != null; at = at.parent()) {
+        for (UIElement at = target; at != null; at = at.parent()) {
             if (at == content) return true;
         }
         return false;
@@ -760,7 +754,7 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
     // ── The parts ───────────────────────────────────────────────────────────
 
     /** Where a window's content goes. The named accessor a composite owes its callers. */
-    public UINode content() {
+    public UIElement content() {
         return content;
     }
 
@@ -777,7 +771,7 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
      * providers won" is not a question a caller should have to reason about — anything else can call
      * {@link #adoptChrome} itself.</p>
      */
-    public WindowFrame setContent(UINode newContent) {
+    public WindowFrame setContent(UIElement newContent) {
         if (newContent == null) return this;
         content.append(newContent);
         if (newContent instanceof WindowChrome) adoptChrome((WindowChrome) newContent);
@@ -800,7 +794,7 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
      */
     public void adoptChrome(WindowChrome provider) {
         if (provider == null) return;
-        UINode chrome = provider.captionChrome();
+        UIElement chrome = provider.captionChrome();
         if (chrome == null || chrome == adoptedChrome) return;
         releaseChrome();
 
@@ -822,7 +816,7 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
     /** Puts adopted chrome back where it came from. Safe to call when there is none. */
     public void releaseChrome() {
         if (adoptedChrome == null) return;
-        UINode chrome = adoptedChrome;
+        UIElement chrome = adoptedChrome;
         adoptedChrome = null;
         // BEFORE the reparent, though either order works -- removeClass invalidates the match, and that
         // invalidation is the entire reason the class exists. @see ADOPTED_CHROME_CLASS
@@ -840,17 +834,17 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
 
     /** What this window is currently hosting in its caption, or null. */
     @Nullable
-    public UINode adoptedChrome() {
+    public UIElement adoptedChrome() {
         return adoptedChrome;
     }
 
     /** The drag handle. Exposed so a caller may add chrome of its own beside the title. */
-    public UINode titleBar() {
+    public UIElement titleBar() {
         return titleBar;
     }
 
     /** The button strip. Exposed for the same reason {@link #titleBar()} is. */
-    public UINode controls() {
+    public UIElement controls() {
         return controls;
     }
 
@@ -960,7 +954,7 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
      * {@code 100%} of its containing block — which is now the frame — and that backdrop goes away with
      * the dialog. Nothing has to be told.</p>
      */
-    public UINode overlaySlot() {
+    public UIElement overlaySlot() {
         return this;
     }
 
@@ -977,7 +971,7 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
      * surface has stopped showing, because a node that is not displayed has no box — the question the
      * old {@code releaseOwned} existed to answer is one the engine answers on every layout.</p>
      */
-    public void attachOwned(UINode owned) {
+    public void attachOwned(UIElement owned) {
         if (owned == null) return;
         if (owned.parent() != this) append(owned);
         // AND IT IS TOLD, because being parented here is not something it can read as ownership --
@@ -1032,7 +1026,7 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
         // parenting -- a first-class top-level window that merely belongs to another, which is what
         // a torn-out tool window is. Counting the relation makes a tear-out report the editor as
         // still holding it, which is precisely what the gesture was supposed to end.
-        for (UINode child : children()) {
+        for (UIElement child : children()) {
             if (child instanceof WindowFrame) return true;
         }
         return false;
@@ -1325,8 +1319,8 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
      * a promoted dialog is still inside the window that opened it.</p>
      */
     @Nullable
-    public static WindowFrame of(@Nullable UINode element) {
-        for (UINode el = element; el != null; el = el.parent()) {
+    public static WindowFrame of(@Nullable UIElement element) {
+        for (UIElement el = element; el != null; el = el.parent()) {
             if (el instanceof WindowFrame) return (WindowFrame) el;
         }
         return null;
@@ -1432,10 +1426,10 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
         //
         // Focus on a real control inside (a caption button, something in the content) is still left
         // alone: that is somebody's deliberate target and moving it would be theft.
-        UINode focused = focus.focused();
+        UIElement focused = focus.focused();
         if (focused != null && focused != this && isInclusiveAncestorOf(focused)) return;
 
-        UINode wanted = isInclusiveAncestorOf(lastFocused) && focus.focusable(lastFocused)
+        UIElement wanted = isInclusiveAncestorOf(lastFocused) && focus.focusable(lastFocused)
                 ? lastFocused : null;
         if (wanted == null) wanted = focusDelegate();
         if (wanted == null) wanted = this;
@@ -1469,7 +1463,7 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
      * default for content that is a plain box of controls.</p>
      */
     @Nullable
-    protected UINode focusDelegate() {
+    protected UIElement focusDelegate() {
         UIDocument window = document();
         return window == null ? null : window.focus().firstFocusableIn(content);
     }
@@ -1477,12 +1471,12 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
     /**
      * Whether {@code element} is this frame or inside it.
      *
-     * <p>Renamed off {@code contains}, which {@link UINode} now declares with a different meaning —
+     * <p>Renamed off {@code contains}, which {@link UIElement} now declares with a different meaning —
      * <em>light</em> containment, excluding the node itself. Overriding it to mean "or is me" would
      * have been a silent widening of a method every caller in the engine already relies on.</p>
      */
-    private boolean isInclusiveAncestorOf(@Nullable UINode element) {
-        for (UINode walk = element; walk != null; walk = walk.parent()) {
+    private boolean isInclusiveAncestorOf(@Nullable UIElement element) {
+        for (UIElement walk = element; walk != null; walk = walk.parent()) {
             if (walk == this) return true;
         }
         return false;
@@ -1585,7 +1579,7 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
         // subtree for free. SYNCHRONOUS here because a direct hide() is; an animated departure has
         // already cascaded at gesture time and this pass skips what it started. @see #isToolWindow()
         cascadeHideOwnedToolWindows(Departure.NOW);
-        UINode layer = parent();
+        UIElement layer = parent();
         if (layer == null) {
             markHidden();
             return;
@@ -1597,7 +1591,7 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
         // in close(); a frame has to do it here, because hide() is reached from requestClose, from
         // minimise, from dispose and from a caller, and only one of those is a place to remember it.
         WindowFrame ownedBy = null;
-        UINode above = layer.parent();
+        UIElement above = layer.parent();
         // AN OWNED FRAME IS A CHILD OF ITS OWNER, with no slot in between since the slot was
         // deleted -- so the question is simply whether the layer it is leaving IS a window.
         if (layer instanceof WindowFrame candidate) ownedBy = candidate;
@@ -1609,7 +1603,7 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
         captureVisibleSize();
         layer.remove(this);
         // ...WHICH ONLY HOLDS FOR A WINDOW LAYER. An OWNED frame's parent is its owner's overlay slot,
-        // an ordinary UINode whose removeChild detaches and nothing else -- so the delegation above
+        // an ordinary UIElement whose removeChild detaches and nothing else -- so the delegation above
         // silently did neither half of what hide() promises: the frame left the tree still claiming to
         // be VISIBLE, and onHidden never fired. Anything listening for a window being put away (a tool
         // window's manager, for one) heard nothing at all, and the second hide() early-returned on a
@@ -1934,7 +1928,7 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
         maximized = true;
         addClass(MAXIMIZED_CLASS);
         maximizeTooltip.setText(RESTORE_TOOLTIP);
-        UINode area = resizeContainingBlock();
+        UIElement area = resizeContainingBlock();
         Box areaBox = area == null ? null : area.box();
         if (areaBox != null && animateGeometry(restoreLeft, restoreTop, restoreWidth, restoreHeight,
                 0f, 0f, areaBox.width(), areaBox.height(), this::applyMaximizedRect)) {
@@ -1959,7 +1953,7 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
         maximizeTooltip.setText(MAXIMIZE_TOOLTIP);
         // MEASURED, not read from the fields: while maximised those still hold the PRE-maximise
         // position, because applyPosition declines to clamp a maximised window at all.
-        UINode area = resizeContainingBlock();
+        UIElement area = resizeContainingBlock();
         Box areaBox = area == null ? null : area.box();
         Box self = box();
         // NO SUBTRACTION. A frame IS a child of its containing block, so `Box.x()` -- the offset from
@@ -2386,7 +2380,7 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
      */
     @Override
     @Nullable
-    public UINode resizeContainingBlock() {
+    public UIElement resizeContainingBlock() {
         return parent();
     }
     /**
@@ -2461,7 +2455,7 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
      * only land inside the modal because {@code requestFocus} consults the full inertness predicate.</p>
      */
     @Override
-    public void pressBlocked(UINode modal) {
+    public void pressBlocked(UIElement modal) {
         Desktop desktop = desktop();
         if (desktop != null) desktop.activate(this, false, true);
         // THE FRAME KNOWS WHAT A DIALOG IS and the engine does not -- `desktop` sits above
@@ -2495,7 +2489,7 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
     /**
      * The box this window is placed and clamped against — its containing block.
      *
-     * <p>Package-private because {@code UINode.resizeContainingBlock()} is {@code protected} and is
+     * <p>Package-private because {@code UIElement.resizeContainingBlock()} is {@code protected} and is
      * declared in another package, so a collaborator here cannot ask for it directly. {@code
      * CanvasOverlayMove} takes a supplier for exactly this reason and says so.</p>
      *
@@ -2504,7 +2498,7 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
      * would let it be dragged out of the window it belongs to.</p>
      */
     @Nullable
-    UINode workArea() {
+    UIElement workArea() {
         return resizeContainingBlock();
     }
 
@@ -2546,7 +2540,7 @@ public class WindowFrame extends UINode implements Disposable, DataProvider {
         float clampedLeft = left;
         float clampedTop = top;
 
-        UINode area = resizeContainingBlock();
+        UIElement area = resizeContainingBlock();
         Box areaBox = area == null ? null : area.box();
         Box frameBox = box();
         float areaWidth = areaBox == null ? 0f : areaBox.width();

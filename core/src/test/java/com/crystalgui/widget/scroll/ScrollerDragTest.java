@@ -1,7 +1,6 @@
 package com.crystalgui.widget.scroll;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.testsupport.TestPlatformService;
 import com.crystalgui.testsupport.UiDocumentTestBase;
@@ -10,14 +9,11 @@ import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.ScrollBehavior;
 import com.crystalgui.style.sheet.StyleSheet;
-import com.crystalgui.widget.scroll.Scroller;
-import com.crystalgui.widget.scroll.ScrollerView;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
-import com.crystalgraphics.platform.input.CgModifiers;
 
 /**
  * Scrollbar dragging and wheel handling, driven through the same entry point real input uses.
@@ -63,10 +59,10 @@ public class ScrollerDragTest extends UiDocumentTestBase {
         view = new ScrollerView();
         view.layout(l -> l.width(120).height(VIEWPORT).flexDirection(FlexDirection.COLUMN));
         for (int i = 0; i < ROWS; i++) {
-            view.append(new UINode().layout(l -> l.width(120).height(ROW_H)));
+            view.append(new UIElement().layout(l -> l.width(120).height(ROW_H)));
         }
 
-        UINode root = new UINode().layout(l -> l.width(400).height(300));
+        UIElement root = new UIElement().layout(l -> l.width(400).height(300));
         root.append(view);
 
         document.append(root);
@@ -339,7 +335,7 @@ public class ScrollerDragTest extends UiDocumentTestBase {
     /** A view that overflows on BOTH axes, so both bars show. */
     private ScrollerView setUpBothAxes() {
         setUp(2f);
-        for (UINode child : view.children()) {
+        for (UIElement child : view.children()) {
             if (!child.isScrollExempt()) child.layout(l -> l.width(400));
         }
         frame();
@@ -503,7 +499,7 @@ public class ScrollerDragTest extends UiDocumentTestBase {
 
         // Ten times the content.
         for (int i = 0; i < ROWS * 9; i++) {
-            view.append(new UINode().layout(l -> l.width(120).height(ROW_H)));
+            view.append(new UIElement().layout(l -> l.width(120).height(ROW_H)));
         }
         frame();
         view.refreshScrollers();
@@ -582,7 +578,7 @@ public class ScrollerDragTest extends UiDocumentTestBase {
 
     /** Dispatches a press directly at an element, bypassing coordinates — the buttons are hidden by
      * default so there is no on-screen position to click. */
-    private void pressTarget(UINode target) {
+    private void pressTarget(UIElement target) {
         document.input().send(target,
                 new com.crystalgui.ui.event.MouseEvent.Down(
                         target, new com.crystalgui.core.data.ReadOnlyVec2f(new org.joml.Vector2f()), 0, 1));
@@ -593,7 +589,7 @@ public class ScrollerDragTest extends UiDocumentTestBase {
     public void barsHideWhenContentFits() {
         setUp(2f);
         view.removeAll();
-        view.append(new UINode().layout(l -> l.width(120).height(20)));
+        view.append(new UIElement().layout(l -> l.width(120).height(20)));
         frame();
         view.refreshScrollers();
         frame();
@@ -610,9 +606,9 @@ public class ScrollerDragTest extends UiDocumentTestBase {
         view = new ScrollerView();
         view.layout(l -> l.width(100).height(40).flexDirection(FlexDirection.ROW));
         for (int i = 0; i < ROWS; i++) {
-            view.append(new UINode().layout(l -> l.width(60).height(20)));
+            view.append(new UIElement().layout(l -> l.width(60).height(20)));
         }
-        UINode root = new UINode().layout(l -> l.width(400).height(300));
+        UIElement root = new UIElement().layout(l -> l.width(400).height(300));
         root.append(view);
 
         document.append(root);

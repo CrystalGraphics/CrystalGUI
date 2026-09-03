@@ -1,7 +1,7 @@
 package com.crystalgui.app.shadergraph.blackboard;
 
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.event.MouseEvent;
 
@@ -22,7 +22,7 @@ import com.crystalgui.ui.event.MouseEvent;
  * {@code TextEditor}'s folding draws, and the reason {@code Ctrl+Z} does not unfold. This row only
  * <em>renders</em> the state and reports the press; the panel decides what a press means.</p>
  */
-public class CategoryHeader extends UINode {
+public class CategoryHeader extends UIElement {
 
     public static final String HEADER_CLASS = "__category__";
     public static final String ARROW_CLASS = "__arrow__";

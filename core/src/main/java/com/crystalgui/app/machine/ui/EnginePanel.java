@@ -11,7 +11,7 @@ import com.crystalgui.net.window.Networked;
 import com.crystalgui.net.window.ServerScope;
 import com.crystalgui.net.window.UiType;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.ProgressBar;
 import com.crystalgui.widget.control.Slider;
@@ -72,7 +72,7 @@ import com.crystalgui.widget.text.UIText;
  * root, so they are left defaulted here — a nested panel that overrode them would be writing code
  * nothing calls.</p>
  */
-public final class EnginePanel extends UINode implements Networked<EngineModel> {
+public final class EnginePanel extends UIElement implements Networked<EngineModel> {
 
     /** This panel's kind. Declared here because a node answers the name its class declares,
      * and {@link com.crystalgui.net.window.UiType} READS this rather than deriving one. */
@@ -153,7 +153,7 @@ public final class EnginePanel extends UINode implements Networked<EngineModel> 
         reading.addClass(MachineStyles.STATUS_CLASS);
         append(reading);
 
-        UINode controls = new UINode();
+        UIElement controls = new UIElement();
         controls.addClass(MachineStyles.ROW_CLASS);
         controls.append(restart);
         controls.append(tune);

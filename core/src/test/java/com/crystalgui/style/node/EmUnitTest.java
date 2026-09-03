@@ -7,7 +7,7 @@ import com.crystalgui.style.property.layout.dimension.DimensionValue;
 import com.crystalgui.style.property.layout.length.LPAValue;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 import dev.vfyjxf.taffy.style.TaffyDimension;
@@ -72,17 +72,17 @@ public class EmUnitTest extends UiDocumentTestBase {
      */
     @Test
     public void oneRuleResolvesPerElement() {
-        UINode root = new UINode();
+        UIElement root = new UIElement();
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.parse(
                 ".boxed { padding-left: 2em; }"
                         + ".small { font-size: 5; }"
                         + ".large { font-size: 40; }"));
 
-        UINode small = new UINode();
+        UIElement small = new UIElement();
         small.addClass("boxed");
         small.addClass("small");
-        UINode large = new UINode();
+        UIElement large = new UIElement();
         large.addClass("boxed");
         large.addClass("large");
         root.append(small, large);
@@ -103,12 +103,12 @@ public class EmUnitTest extends UiDocumentTestBase {
      */
     @Test
     public void anImportantFontSizeStillDrivesTheEm() {
-        UINode root = new UINode();
+        UIElement root = new UIElement();
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.parse(
                 ".boxed { padding-left: 2em; font-size: 10; }"));
 
-        UINode box = new UINode();
+        UIElement box = new UIElement();
         box.addClass("boxed");
         root.append(box);
         settle(document);
@@ -127,7 +127,7 @@ public class EmUnitTest extends UiDocumentTestBase {
         for (int i = 0; i < 3; i++) frame();
     }
 
-    private float padLeftOf(UINode element) {
+    private float padLeftOf(UIElement element) {
         LengthPercentageAuto value =
                 element.getStyle().getLayoutGroup().getValueSave(LayoutProperties.PADDING_LEFT);
         return value == null || !value.isLength() ? Float.NaN : value.getValue();

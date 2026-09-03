@@ -1,8 +1,5 @@
 package com.crystalgui.ui.dom;
 
-import com.crystalgui.text.decoration.TrackedRange;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.text.TextPoint;
@@ -46,7 +43,7 @@ public class UnnecessaryTagTest extends UiDocumentTestBase {
         editor.layout(l -> l.width(300).height(160));
         editor.generalStyle(g -> g.fontSize(8f).lineHeight(1.25f));
 
-        UINode root = new UINode().layout(l -> l.width(300).height(200));
+        UIElement root = new UIElement().layout(l -> l.width(300).height(200));
         root.append(editor);
         document.append(root);
         // The user-agent sheet, because the rule that fades an unnecessary range lives in it -- without
@@ -67,11 +64,11 @@ public class UnnecessaryTagTest extends UiDocumentTestBase {
         return found;
     }
 
-    private static void collect(UINode element, List<TextRange> out) {
+    private static void collect(UIElement element, List<TextRange> out) {
         if (element instanceof UIText) {
             out.addAll(((UIText) element).highlights().get(UNNECESSARY));
         }
-        for (UINode child : element.children()) collect(child, out);
+        for (UIElement child : element.children()) collect(child, out);
     }
 
     private static Diagnostic unusedAt(int row, int fromColumn, int toColumn) {

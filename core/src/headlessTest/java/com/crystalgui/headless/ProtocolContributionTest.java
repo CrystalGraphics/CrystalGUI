@@ -7,7 +7,7 @@ import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
 import org.junit.After;
 import org.junit.Before;
@@ -126,12 +126,12 @@ public class ProtocolContributionTest {
                 }));
         connect();
 
-        UINode root = new UINode();
+        UIElement root = new UIElement();
         root.append(new Button("Press me"));
-        ServerUiSession<UINode, Object> server = Sessions.serveOn(1, root, a);
-        ClientUiSession<UINode, Object> client = Sessions.viewOn(b);
+        ServerUiSession<UIElement, Object> server = Sessions.serveOn(1, root, a);
+        ClientUiSession<UIElement, Object> client = Sessions.viewOn(b);
 
-        AtomicReference<UINode> arrived = new AtomicReference<>();
+        AtomicReference<UIElement> arrived = new AtomicReference<>();
         client.onWindowOpened(arrived::set);
 
         AtomicReference<String> body = new AtomicReference<>();

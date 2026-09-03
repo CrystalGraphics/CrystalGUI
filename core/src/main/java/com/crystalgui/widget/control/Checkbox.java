@@ -5,6 +5,7 @@ import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.RatePolicy;
@@ -15,7 +16,6 @@ import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.ShadowRoot;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import javax.annotation.Nullable;
@@ -39,7 +39,7 @@ import javax.annotation.Nullable;
  * <em>looks</em> like. That is the widget-layer rule stated in the small: no sizes, no colours and no
  * conditional styling in Java.</p>
  */
-public class Checkbox extends UINode {
+public class Checkbox extends UIElement {
 
     public static final Name NAME = Name.of("checkbox");
 
@@ -96,7 +96,7 @@ public class Checkbox extends UINode {
     public final Signal.Value<Boolean> onCheckedChanged = new Signal.Value<>();
 
     private final ShadowRoot shadow;
-    private final UINode mark;
+    private final UIElement mark;
     private final UIText label;
     private boolean checked;
     @Nullable
@@ -119,7 +119,7 @@ public class Checkbox extends UINode {
 
         this.shadow = attachShadow();
 
-        this.mark = new UINode();
+        this.mark = new UIElement();
         mark.set(Attribute.PART, MARK_PART);
         mark.setHitTest(false);
         shadow.append(mark);
@@ -168,7 +168,7 @@ public class Checkbox extends UINode {
     }
 
     /** The mark node, for a subclass that needs to style or measure it. */
-    protected final UINode mark() {
+    protected final UIElement mark() {
         return mark;
     }
 

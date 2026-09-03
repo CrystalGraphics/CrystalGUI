@@ -7,8 +7,8 @@ import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.text.TextPoint;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.overlay.InputDialog;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.input.keymap.Keymap;
 
 import javax.annotation.Nullable;
@@ -62,14 +62,14 @@ public final class EditorCommands {
     /** Runs {@code action} against the editor the command was invoked from, if there is one. */
     private static Consumer<CommandContext> on(Consumer<TextEditor> action) {
         return context -> {
-            TextEditor editor = nearest(UINode.sourceOf(context));
+            TextEditor editor = nearest(UIElement.sourceOf(context));
             if (editor != null) action.accept(editor);
         };
     }
 
     private static Predicate<CommandContext> when(Predicate<TextEditor> test) {
         return context -> {
-            TextEditor editor = nearest(UINode.sourceOf(context));
+            TextEditor editor = nearest(UIElement.sourceOf(context));
             return editor != null && test.test(editor);
         };
     }
@@ -113,8 +113,8 @@ public final class EditorCommands {
      * from a menu item carries that item as its source. The same shape as {@code UndoScope.nearest}.</p>
      */
     @Nullable
-    public static TextEditor nearest(@Nullable UINode from) {
-        for (UINode element = from; element != null; element = element.parent()) {
+    public static TextEditor nearest(@Nullable UIElement from) {
+        for (UIElement element = from; element != null; element = element.parent()) {
             if (element instanceof TextEditor editor) return editor;
         }
         return null;

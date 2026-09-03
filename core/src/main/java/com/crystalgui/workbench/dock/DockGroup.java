@@ -1,12 +1,12 @@
 package com.crystalgui.workbench.dock;
 
 import com.crystalgui.render.texture.CgUiSvg;
-import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.workbench.dock.banner.DockBannerBar;
 import com.crystalgui.workbench.dock.banner.DockBanners;
 import com.crystalgui.workbench.dock.drag.DockDropZone;
@@ -18,7 +18,6 @@ import com.crystalgui.workbench.dock.panel.DockPane;
 import com.crystalgui.workbench.dock.panel.DockPaneProvider;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.event.FocusEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.widget.layout.Tab;
@@ -55,7 +54,7 @@ import javax.annotation.Nullable;
  * <p>It is also built <b>lazily</b> — a tab restored from a session is a title until something activates
  * it. See {@link #showContent}.</p>
  */
-public class DockGroup extends UINode {
+public class DockGroup extends UIElement {
     /** One leaf, drawn: a tab strip plus whatever the active panel is. */
     public static final Name NAME = Name.of("dockgroup");
 
@@ -90,7 +89,7 @@ public class DockGroup extends UINode {
     private final DockArea area;
     private final DockLeaf leaf;
     private final TabView tabs = new TabView();
-    private final UINode overlay = new UINode();
+    private final UIElement overlay = new UIElement();
     /**
      * The gap a drag opens where the tab would land.
      *
@@ -103,7 +102,7 @@ public class DockGroup extends UINode {
             new InsertionMarker(InsertionMarker.Axis.HORIZONTAL).mode(InsertionMarker.Mode.IN_FLOW);
 
     /** Panel → its built content. Survives every rebuild of the tree above. */
-    private final Map<DockPanelRef, UINode> content = new LinkedHashMap<>();
+    private final Map<DockPanelRef, UIElement> content = new LinkedHashMap<>();
 
     /** Panel → its tab, so a reconcile can tell "already there" from "new". */
     private final Map<DockPanelRef, Tab> tabByPanel = new LinkedHashMap<>();
@@ -447,13 +446,13 @@ public class DockGroup extends UINode {
     private void applyIconTo(Tab tab, DockPanelRef panel) {
         // AN ELEMENT FIRST, for the reason the build path gives: a name cannot carry a declaration's
         // static and final marks.
-        UINode glyph = area.registry().iconElementOf(panel);
+        UIElement glyph = area.registry().iconElementOf(panel);
         if (glyph != null) applyIconElement(tab, glyph);
         else applyIcon(tab, area.registry().iconOf(panel));
 
         Tooltip tooltip = tabTooltips.get(tab);
         String iconText = area.registry().iconTooltipOf(panel);
-        UINode icon = tab.getPreIcon();
+        UIElement icon = tab.getPreIcon();
         if (tooltip != null && iconText != null && icon != null) tooltip.addRegion(icon, iconText);
     }
 
@@ -487,7 +486,7 @@ public class DockGroup extends UINode {
      * <p>{@code setOnlyChild} rather than an add: a strip is rebuilt on every rearrangement and a tab is
      * pooled, so adding would stack a new glyph on the last one every time the panel list moved.</p>
      */
-    private static void applyIconElement(Tab tab, UINode glyph) {
+    private static void applyIconElement(Tab tab, UIElement glyph) {
         // THE ELEMENT IS THE SLOT, set the way applyIcon sets its own. This read `getPreIcon()` and
         // filled it, which answers NULL on a tab that has never had one -- so a viewer tab lost its icon
         // entirely while every project tab kept theirs, because those go through the NAME path and its
@@ -528,7 +527,7 @@ public class DockGroup extends UINode {
         // RETAINED, so a later icon can re-anchor its region rather than attaching a second tooltip.
         tabTooltips.put(tab, tooltip);
         String iconText = area.registry().iconTooltipOf(panel);
-        UINode icon = tab.getPreIcon();
+        UIElement icon = tab.getPreIcon();
         if (iconText != null && icon != null) tooltip.addRegion(icon, iconText);
     }
 
@@ -536,7 +535,7 @@ public class DockGroup extends UINode {
         if (iconName == null) return;
         CgUiSvg glyph = CgUiSvg.ofIcon(iconName);
         if (glyph == null) return;
-        UINode slot = new UINode();
+        UIElement slot = new UIElement();
         // Unhittable, like every other composite part: click-focus targets the exact element hit rather
         // than the nearest focusable ancestor, so a hittable icon would swallow the press meant to select
         // the tab -- and the drag that starts from it.
@@ -619,7 +618,7 @@ public class DockGroup extends UINode {
             visibleInput = incoming;
         }
 
-        UINode host = content.get(active);
+        UIElement host = content.get(active);
         if (host != null) host.setOnlyChild(pane.view());
     }
 
@@ -692,7 +691,7 @@ public class DockGroup extends UINode {
         tab.content().setOnlyChild(contentFor(panel));
     }
 
-    private UINode contentFor(DockPanelRef panel) {
+    private UIElement contentFor(DockPanelRef panel) {
         return content.computeIfAbsent(panel, ref -> withBanners(ref, buildContent(ref)));
     }
     
@@ -710,7 +709,7 @@ public class DockGroup extends UINode {
      * see. @see DockArea#closePanelDiscarding</p>
      */
     void forgetContent(DockPanelRef panel) {
-        UINode built = content.remove(panel);
+        UIElement built = content.remove(panel);
         if (built != null) built.removeSelf();
     }
 
@@ -731,11 +730,11 @@ public class DockGroup extends UINode {
      * <p>The content keeps growing into what is left: the grow is written at {@code DEFAULT} origin, so a
      * panel that states its own layout still wins, exactly as the pane host above does.</p>
      */
-    private UINode withBanners(DockPanelRef ref, UINode built) {
+    private UIElement withBanners(DockPanelRef ref, UIElement built) {
         List<Notification> banners = DockBanners.bannersFor(ref);
         if (banners.isEmpty()) return built;
 
-        UINode column = new UINode();
+        UIElement column = new UIElement();
         column.addClass(BANNERED_CLASS);
         StyleGroup.defaultPipeline(column.getStyle().getLayoutGroup(),
                 l -> l.flexDirection(FlexDirection.COLUMN).flexGrow(1f).flexBasis(0));
@@ -749,22 +748,22 @@ public class DockGroup extends UINode {
     /** The banner column wrapping a panel's own content. Only present when something answered. */
     public static final String BANNERED_CLASS = "__dock-bannered__";
 
-    private UINode buildContent(DockPanelRef ref) {
+    private UIElement buildContent(DockPanelRef ref) {
         // A pane-backed panel gets a stable EMPTY host of its own. The pane's view moves into
         // whichever host is active -- see retargetPane -- so no element is ever in two tabs.
         if (area.registry().paneProviderFor(DockInput.of(ref)) != null) {
-            UINode host = new UINode();
+            UIElement host = new UIElement();
             host.addClass(PANE_HOST_CLASS);
             StyleGroup.defaultPipeline(host.getStyle().getLayoutGroup(),
                     l -> l.flexGrow(1f).flexBasis(0));
             return host;
         }
-        UINode built = area.registry().create(ref);
+        UIElement built = area.registry().create(ref);
         if (built != null) return built;
         // An unbuildable panel is shown as an empty box rather than skipped: a tab with nothing
         // behind it is visible and reportable, while a silently absent tab looks like the layout
         // failed to restore.
-        UINode placeholder = new UINode();
+        UIElement placeholder = new UIElement();
         placeholder.addClass("__missing__");
         return placeholder;
     }

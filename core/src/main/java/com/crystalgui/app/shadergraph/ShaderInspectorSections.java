@@ -19,7 +19,7 @@ import com.crystalgui.graph.NodeTypeRegistry;
 import com.crystalgui.graph.PortRef;
 import com.crystalgui.graph.PortSpec;
 import com.crystalgui.graph.PropertyEdits;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.config.ConfigControl;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.widget.config.Configurator;
@@ -234,7 +234,7 @@ public final class ShaderInspectorSections {
                         data.properties().get(field.id()))
                 : field;
 
-        UINode control = NodeFieldBinder.buildControl(shaped, document, data.id(),
+        UIElement control = NodeFieldBinder.buildControl(shaped, document, data.id(),
                 editor.graph().undoStack(), editor::recompile,
                 shaped == field ? null : shaped.defaultValue());
         if (control instanceof ConfigControl typed) form.control(field.id(), field.label(), typed);
@@ -405,7 +405,7 @@ public final class ShaderInspectorSections {
                 // The row shows the first node's value, which is what every inspector does with a
                 // multi-selection: the write applies to all of them regardless, so it is a starting point
                 // rather than a claim that they agree.
-                UINode control = NodeFieldBinder.buildMultiControl(field, document, ids, firstId,
+                UIElement control = NodeFieldBinder.buildMultiControl(field, document, ids, firstId,
                         editor.graph().undoStack(), editor::recompile);
                 if (control instanceof ConfigControl typed) {
                     form.control(field.id(), field.label(), typed);

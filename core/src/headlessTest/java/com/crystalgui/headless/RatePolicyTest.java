@@ -9,8 +9,8 @@ import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.ui.dom.UINodeRegistry;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.TextField;
 import java.util.ArrayList;
@@ -34,9 +34,9 @@ public class RatePolicyTest {
     private InMemoryTransport<Object>[] link;
     private ProtocolConnection<Object> serverEnd;
     private ProtocolConnection<Object> clientEnd;
-    private ServerUiSession<UINode, Object> server;
-    private ClientUiSession<UINode, Object> client;
-    private UINode root;
+    private ServerUiSession<UIElement, Object> server;
+    private ClientUiSession<UIElement, Object> client;
+    private UIElement root;
     private TextField field;
     private Button button;
     private final List<String> typed = new ArrayList<>();
@@ -46,8 +46,8 @@ public class RatePolicyTest {
     @Before
     public void setUp() {
         Protocols.resetForTesting();
-        UINodeRegistry.bootstrap();
-        root = new UINode();
+        UIElementRegistry.bootstrap();
+        root = new UIElement();
         field = new TextField();
         button = new Button("Press");
         root.append(field);

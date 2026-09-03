@@ -1,8 +1,6 @@
 package com.crystalgui.widget.text;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.widget.text.UIText;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import org.junit.Test;
 
@@ -26,7 +24,7 @@ public class UITextMaxWidthTest extends UiDocumentTestBase {
     private static final String LONG = "Long enough that it has to wrap onto several lines instead of one.";
 
     /** Root is wide and the text is a free-standing child, so nothing but max-width can bound it. */
-    private UIText textIn(UINode root, java.util.function.Consumer<UIText> configure) {
+    private UIText textIn(UIElement root, java.util.function.Consumer<UIText> configure) {
         UIText text = new UIText(LONG);
         configure.accept(text);
         root.append(text);
@@ -37,7 +35,7 @@ public class UITextMaxWidthTest extends UiDocumentTestBase {
 
     @Test
     public void aMaxWidthWrapsSelfSizingText() {
-        UINode root = new UINode().layout(l -> l.width(800).height(800));
+        UIElement root = new UIElement().layout(l -> l.width(800).height(800));
         UIText text = textIn(root, t -> t.layout(l -> l.maxWidth(80)));
 
         assertTrue("must not exceed its max-width, was " + text.box().width(),
@@ -50,11 +48,11 @@ public class UITextMaxWidthTest extends UiDocumentTestBase {
      * than the box merely being clamped after the fact. */
     @Test
     public void aTighterMaxWidthProducesMoreLines() {
-        UINode wideRoot = new UINode().layout(l -> l.width(800).height(800));
+        UIElement wideRoot = new UIElement().layout(l -> l.width(800).height(800));
         float tallAt80 = textIn(wideRoot, t -> t.layout(l -> l.maxWidth(80)))
                 .box().height();
 
-        UINode narrowRoot = new UINode().layout(l -> l.width(800).height(800));
+        UIElement narrowRoot = new UIElement().layout(l -> l.width(800).height(800));
         float tallAt40 = textIn(narrowRoot, t -> t.layout(l -> l.maxWidth(40)))
                 .box().height();
 
@@ -66,7 +64,7 @@ public class UITextMaxWidthTest extends UiDocumentTestBase {
      * containing block that, by definition of self-sizing, never gave this element a width. */
     @Test
     public void anAutoMaxWidthLeavesTextUnbounded() {
-        UINode root = new UINode().layout(l -> l.width(800).height(800));
+        UIElement root = new UIElement().layout(l -> l.width(800).height(800));
         UIText text = textIn(root, t -> { });
 
         assertTrue("with no max-width it should stay on one line, was "
@@ -78,11 +76,11 @@ public class UITextMaxWidthTest extends UiDocumentTestBase {
      * padded text element wraps exactly its horizontal padding too late and overflows. */
     @Test
     public void paddingIsSubtractedFromTheWrapBound() {
-        UINode bare = new UINode().layout(l -> l.width(800).height(800));
+        UIElement bare = new UIElement().layout(l -> l.width(800).height(800));
         float heightWithoutPadding = textIn(bare, t -> t.layout(l -> l.maxWidth(80)))
                 .box().height();
 
-        UINode padded = new UINode().layout(l -> l.width(800).height(800));
+        UIElement padded = new UIElement().layout(l -> l.width(800).height(800));
         float heightWithPadding = textIn(padded, t -> t.layout(l -> l.maxWidth(80).paddingLeft(20).paddingRight(20)))
                 .box().height();
 

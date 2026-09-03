@@ -1,14 +1,10 @@
 package com.crystalgui.widget.collection.tree;
 
-import com.crystalgui.workbench.chrome.palette.QuickPick;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.workbench.chrome.preferences.NavigatorView;
-import com.crystalgui.workbench.chrome.preferences.Preferences;
-import com.crystalgui.workbench.chrome.problems.ProblemsPanel;
 import com.crystalgui.core.collection.tree.FilteredTreeSource;
-import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.core.collection.tree.TreeRow;
-import com.crystalgui.text.diagnostic.ProblemNode;
-import com.crystalgui.widget.overlay.ContextMenu;
+
 import java.util.function.BooleanSupplier;
 import java.util.Set;
 import java.util.EnumSet;
@@ -23,7 +19,6 @@ import com.crystalgui.core.search.SearchMatch;
 import com.crystalgui.core.search.SearchMatcher;
 import com.crystalgui.core.search.SearchQuery;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.TextField;
@@ -236,11 +231,11 @@ public final class TreeSearch<T> {
     private final Model<T> model;
     private final Consumer<T> onActivate;
 
-    private final UINode bar = new UINode();
+    private final UIElement bar = new UIElement();
 
     /** Where the bar was added, so {@link #apply} can mark it. */
     @Nullable
-    private UINode host;
+    private UIElement host;
     /**
      * The box, with the toggles inside its border.
      *
@@ -387,7 +382,7 @@ public final class TreeSearch<T> {
      *                   top of the view and has nothing to cover there
      * @param onActivate what Enter does with the current match
      */
-    public static <T> TreeSearch<T> installOn(TreeView<T> tree, UINode host, Model<T> model,
+    public static <T> TreeSearch<T> installOn(TreeView<T> tree, UIElement host, Model<T> model,
                                               Consumer<T> onActivate) {
         return installOn(tree, host, 0, model, onActivate);
     }
@@ -401,14 +396,14 @@ public final class TreeSearch<T> {
      * through by the first row. Its bar goes in the panel's own column instead, which is a decision only
      * the host can make.</p>
      */
-    public static <T> TreeSearch<T> installOn(TreeView<T> tree, UINode host, int index, Model<T> model,
+    public static <T> TreeSearch<T> installOn(TreeView<T> tree, UIElement host, int index, Model<T> model,
                                               Consumer<T> onActivate) {
         TreeSearch<T> search = new TreeSearch<>(tree, model, onActivate);
         search.build(host, index);
         return search;
     }
 
-    private void build(UINode host, int index) {
+    private void build(UIElement host, int index) {
         // WRAPPED AT INSTALL, so a renderer set afterwards would lose the marking. Both consumers build
         // their renderer with the tree and install onto it, which is the natural order -- a component
         // cannot decorate something that does not exist yet.
@@ -571,7 +566,7 @@ public final class TreeSearch<T> {
                 l -> l.display(closeable ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
     }
 
-    private void show(UINode element, Control control) {
+    private void show(UIElement element, Control control) {
         StyleGroup.inlinePipeline(element.getStyle().getLayoutGroup(),
                 l -> l.display(controls.contains(control) ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
     }
@@ -655,7 +650,7 @@ public final class TreeSearch<T> {
     }
 
     /** The bar itself, for a host that wants to name or place it. */
-    public UINode bar() {
+    public UIElement bar() {
         return bar;
     }
 
@@ -907,7 +902,7 @@ public final class TreeSearch<T> {
      *
      * @param badge optional element carrying the descendant count; null for a tree without one
      */
-    public void markRow(UINode row, UIText label, @Nullable UIText badge, T item, boolean expandable) {
+    public void markRow(UIElement row, UIText label, @Nullable UIText badge, T item, boolean expandable) {
         markedThisBind = true;
         // MARKED IN BOTH MODES. Filtering narrows the list; it does not answer "where in this row".
         // VS Code highlights matched characters in its filter mode too, and leaving them unmarked here
@@ -1049,12 +1044,12 @@ public final class TreeSearch<T> {
         }
 
         @Override
-        public UINode createTemplate() {
+        public UIElement createTemplate() {
             return inner.createTemplate();
         }
 
         @Override
-        public void bind(T item, TreeRow<T> row, int index, UINode template) {
+        public void bind(T item, TreeRow<T> row, int index, UIElement template) {
             markedThisBind = false;
             inner.bind(item, row, index, template);
             if (markedThisBind) return;
@@ -1077,15 +1072,15 @@ public final class TreeSearch<T> {
         }
 
         @Override
-        public void unbind(UINode template) {
+        public void unbind(UIElement template) {
             inner.unbind(template);
         }
     }
 
     /** Depth-first, because a label is usually inside a content box rather than a direct child. */
     @Nullable
-    private static UIText firstText(UINode element) {
-        for (UINode child : element.children()) {
+    private static UIText firstText(UIElement element) {
+        for (UIElement child : element.children()) {
             if (child instanceof UIText text) return text;
             UIText found = firstText(child);
             if (found != null) return found;

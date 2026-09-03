@@ -1,7 +1,7 @@
 package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgui.style.property.StyleProperty;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 import dev.vfyjxf.taffy.style.TaffyDimension;
@@ -83,7 +83,7 @@ public abstract class EditorViewPart {
      * whose sheet entry has been deleted should look wrong rather than quietly keep a number nobody can
      * find. Only absolute lengths are honoured; {@link #stylePercent} is the other half.</p>
      */
-    protected static float styleInset(UINode element,
+    protected static float styleInset(UIElement element,
                                       StyleProperty<LengthPercentageAuto> property, float fallback) {
         LengthPercentageAuto value = element.getStyle().getLayoutGroup().getValueSave(property);
         if (value == null || !value.isLength()) return fallback;
@@ -91,7 +91,7 @@ public abstract class EditorViewPart {
     }
 
     /** A {@code width}/{@code height} the cascade gave this element, in logical px. @see #styleInset */
-    protected static float styleSize(UINode element,
+    protected static float styleSize(UIElement element,
                                      StyleProperty<TaffyDimension> property, float fallback) {
         TaffyDimension value = element.getStyle().getLayoutGroup().getValueSave(property);
         if (value == null || !value.isLength()) return fallback;
@@ -99,7 +99,7 @@ public abstract class EditorViewPart {
     }
 
     /** The percentage flavour of {@link #styleSize} — for anything sized against its container. */
-    protected static float stylePercent(UINode element,
+    protected static float stylePercent(UIElement element,
                                         StyleProperty<TaffyDimension> property, float fallback) {
         TaffyDimension value = element.getStyle().getLayoutGroup().getValueSave(property);
         if (value == null || !value.isPercent()) return fallback;

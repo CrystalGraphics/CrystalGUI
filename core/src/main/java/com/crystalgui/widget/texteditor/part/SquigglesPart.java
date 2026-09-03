@@ -8,7 +8,7 @@ import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.diagnostic.DiagnosticTag;
 import com.crystalgui.text.wrap.LineProjection;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
@@ -56,7 +56,7 @@ public final class SquigglesPart extends EditorViewPart {
     static final String WARNING_CLASS = "__squiggle-warning__";
     static final String INFORMATION_CLASS = "__squiggle-information__";
 
-    private final List<UINode> bands = new ArrayList<>();
+    private final List<UIElement> bands = new ArrayList<>();
 
     public SquigglesPart(TextEditor editor) {
         super(editor);
@@ -119,7 +119,7 @@ public final class SquigglesPart extends EditorViewPart {
             float right = pad + editor.xOfView(viewLine, toView.column());
             float width = Math.max(1f, right - left);
 
-            UINode band = bandAt(index++);
+            UIElement band = bandAt(index++);
             applySeverity(band, diagnostic.severity());
             // READ FROM THE SHEET, then used for both the height and the top -- see below.
             float thickness = styleSize(band, LayoutProperties.HEIGHT, DEFAULT_THICKNESS);
@@ -146,7 +146,7 @@ public final class SquigglesPart extends EditorViewPart {
 
     /** Set AND cleared, all three, because bands are recycled — a band that underlined an error and is
      * reused for a warning would otherwise carry both classes and take whichever the cascade preferred. */
-    private static void applySeverity(UINode band, DiagnosticSeverity severity) {
+    private static void applySeverity(UIElement band, DiagnosticSeverity severity) {
         band.removeClass(ERROR_CLASS);
         band.removeClass(WARNING_CLASS);
         band.removeClass(INFORMATION_CLASS);
@@ -158,9 +158,9 @@ public final class SquigglesPart extends EditorViewPart {
         }
     }
 
-    private UINode bandAt(int index) {
+    private UIElement bandAt(int index) {
         while (bands.size() <= index) {
-            UINode band = new UINode();
+            UIElement band = new UIElement();
             band.addClass(SQUIGGLE_CLASS);
             band.setHitTest(false);
             // In the viewport, in document coordinates, like every other decoration -- see SelectionsPart

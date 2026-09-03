@@ -1,9 +1,6 @@
 package com.crystalgui.app.shadergraph.node;
 
 import com.crystalgui.app.shadergraph.ShaderGraphBridge;
-import com.crystalgui.app.shadergraph.preview.ShaderGraphPreviews;
-import com.crystalgui.graph.PortSpec;
-import com.crystalgui.graph.port.PortType;
 import com.crystalgraphics.shadergraph.CgBuiltinShaderNodes;
 import com.crystalgraphics.shadergraph.CgShaderNodeRegistry;
 import com.crystalgui.graph.GraphDocument;
@@ -12,8 +9,7 @@ import com.crystalgui.graph.NodeType;
 import com.crystalgui.graph.NodeTypeRegistry;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.graph.GraphNode;
 import com.crystalgui.widget.graph.GraphView;
 import com.crystalgui.widget.graph.NodePort;
@@ -45,7 +41,7 @@ public class ShaderPortArityTest extends UiDocumentTestBase {
     private void openWindow() {
         view = new GraphView();
         view.layout(l -> l.width(600).height(400));
-        UINode root = new UINode().layout(l -> l.width(800).height(600));
+        UIElement root = new UIElement().layout(l -> l.width(800).height(600));
         root.append(view);
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
@@ -257,7 +253,7 @@ public class ShaderPortArityTest extends UiDocumentTestBase {
         view.connect(position.portNamed("Out"), multiply.portNamed("A"));
         frame();
 
-        UINode editor = multiply.portNamed("B").getDefaultEditor();
+        UIElement editor = multiply.portNamed("B").getDefaultEditor();
         assertTrue("resolved to vec3, so the editor must now be a vector one",
                 editor instanceof VectorControl);
         assertEquals("with one box per component", 3, ((VectorControl) editor).components().size());

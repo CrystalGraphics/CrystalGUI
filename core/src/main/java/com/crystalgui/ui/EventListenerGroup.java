@@ -25,7 +25,7 @@ public final class EventListenerGroup<E extends EventTarget, T extends UIEvent> 
      *
      * <p>Public since M6.0: the old engine reached it through a {@code protected} hop on
      * {@code UIElement}, which works while every widget IS a {@code UIElement} and stops working the
-     * moment a widget is a {@code UINode} in another package. {@code UINode} keeps the same
+     * moment a widget is a {@code UIElement} in another package. {@code UIElement} keeps the same
      * {@code protected} hop for the same discoverability, and both engines call this.</p>
      */
     public void attachDefaultListener(UIEvent.Listener<E, T> listener) {

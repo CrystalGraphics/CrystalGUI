@@ -1,16 +1,12 @@
 package com.crystalgui.workbench.chrome.problems;
 
-import com.crystalgui.widget.overlay.MenuBuilder;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.workbench.chrome.problems.ProblemsCommands;
-import com.crystalgui.workbench.chrome.problems.ProblemsPanel;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -40,7 +36,7 @@ public class ProblemsMenuTest extends UiDocumentTestBase {
         ProblemsCommands.register();
         panel = new ProblemsPanel();
         panel.layout(l -> l.width(400).height(200));
-        UINode root = new UINode().layout(l -> l.width(400).height(200));
+        UIElement root = new UIElement().layout(l -> l.width(400).height(200));
         root.append(panel);
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);

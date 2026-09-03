@@ -1,7 +1,6 @@
 package com.crystalgui.workbench.dock;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.render.texture.asset.FileIconTheme;
@@ -11,8 +10,6 @@ import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.widget.layout.Tab;
 import com.crystalgui.widget.overlay.Tooltip;
-import com.crystalgui.workbench.dock.DockArea;
-import com.crystalgui.workbench.dock.DockGroup;
 import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
 import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
@@ -58,10 +55,10 @@ public class DockTabPresentationTest extends UiDocumentTestBase {
     /** Stands in for the workbench: a title that can go "dirty", and an icon derived from the title. */
     private boolean dirty;
 
-    private DockPanelRegistry<UINode> registry() {
-        DockPanelRegistry<UINode> registry = new DockPanelRegistry<>();
-        registry.register(new DockPanelDescriptor(FILE_TYPE, "File"), ref -> new UINode());
-        registry.register(new DockPanelDescriptor(TOOL_TYPE, "Tool"), ref -> new UINode());
+    private DockPanelRegistry<UIElement> registry() {
+        DockPanelRegistry<UIElement> registry = new DockPanelRegistry<>();
+        registry.register(new DockPanelDescriptor(FILE_TYPE, "File"), ref -> new UIElement());
+        registry.register(new DockPanelDescriptor(TOOL_TYPE, "Tool"), ref -> new UIElement());
 
         registry.setTitleProvider(ref -> {
             String name = ref.state(DockPanelRef.TITLE, "");
@@ -81,8 +78,8 @@ public class DockTabPresentationTest extends UiDocumentTestBase {
         DockLayout layout = DockLayout.of(leaf);
 
         area = new DockArea(registry(), layout);
-        UINode root = new UINode().layout(l -> l.width(600).height(400)
-                .flexDirection(FlexDirection.COLUMN));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400)
+                                                      .flexDirection(FlexDirection.COLUMN));
         root.append(area);
         area.layout(l -> l.width(600).height(400));
 
@@ -106,7 +103,7 @@ public class DockTabPresentationTest extends UiDocumentTestBase {
         Tab tab = tabFor(javaFile);
         assertNotNull("no tab was built", tab);
 
-        UINode slot = tab.getPreIcon();
+        UIElement slot = tab.getPreIcon();
         assertNotNull("the tab has no icon slot", slot);
 
         CgUiDrawable overlay = slot.getStyle().getGeneralGroup()
@@ -188,8 +185,8 @@ public class DockTabPresentationTest extends UiDocumentTestBase {
     /** With no provider registered the dock falls back to what a ref and its descriptor say. */
     @Test
     public void withoutProvidersATabFallsBackToRefAndDescriptor() {
-        DockPanelRegistry<UINode> bare = new DockPanelRegistry<>();
-        bare.register(new DockPanelDescriptor(FILE_TYPE, "File"), ref -> new UINode());
+        DockPanelRegistry<UIElement> bare = new DockPanelRegistry<>();
+        bare.register(new DockPanelDescriptor(FILE_TYPE, "File"), ref -> new UIElement());
 
         assertEquals("Main.java", bare.titleOf(javaFile));
         assertNull("a bare registry invented an icon", bare.iconOf(javaFile));
@@ -234,15 +231,15 @@ public class DockTabPresentationTest extends UiDocumentTestBase {
      */
     @Test
     public void aPanelTypeThatRefusesClosingHasNoButton() {
-        DockPanelRegistry<UINode> registry = new DockPanelRegistry<>();
+        DockPanelRegistry<UIElement> registry = new DockPanelRegistry<>();
         // singleton = true, closable = FALSE -- the shape a region host has.
-        registry.register(new DockPanelDescriptor(TOOL_TYPE, "Tool", true, false), ref -> new UINode());
+        registry.register(new DockPanelDescriptor(TOOL_TYPE, "Tool", true, false), ref -> new UIElement());
         DockPanelRef pinned = new DockPanelRef(TOOL_TYPE);
 
         leaf = new DockLeaf(pinned);
         area = new DockArea(registry, DockLayout.of(leaf));
-        UINode root = new UINode().layout(l -> l.width(600).height(400)
-                .flexDirection(FlexDirection.COLUMN));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400)
+                                                      .flexDirection(FlexDirection.COLUMN));
         root.append(area);
         area.layout(l -> l.width(600).height(400));
         document.append(root);
@@ -293,10 +290,10 @@ public class DockTabPresentationTest extends UiDocumentTestBase {
      */
     @Test
     public void aProvidedElementBecomesTheTabIcon() {
-        UINode glyph = new UINode();
+        UIElement glyph = new UIElement();
         glyph.addClass("__test-glyph__");
 
-        DockPanelRegistry<UINode> registry = registry();
+        DockPanelRegistry<UIElement> registry = registry();
         registry.setIconElementProvider(ref -> FILE_TYPE.equals(ref.typeId()) ? glyph : null);
         setUpWith(registry, javaFile);
 
@@ -317,25 +314,25 @@ public class DockTabPresentationTest extends UiDocumentTestBase {
      */
     @Test
     public void aDeclinedElementFallsBackToTheNamedIcon() {
-        DockPanelRegistry<UINode> registry = registry();
+        DockPanelRegistry<UIElement> registry = registry();
         registry.setIconElementProvider(ref -> null);
         setUpWith(registry, javaFile);
 
         Tab tab = area.groupFor(leaf).tabFor(javaFile);
         assertNotNull(tab);
-        UINode slot = tab.getPreIcon();
+        UIElement slot = tab.getPreIcon();
         assertNotNull("the name path was skipped when the element provider declined", slot);
         assertNotNull("the slot carries no drawable",
                 slot.getStyle().getGeneralGroup().getValueSave(StylePropertyRegistry.OVERLAY));
     }
 
     /** Builds the area over a registry the caller has configured. */
-    private void setUpWith(DockPanelRegistry<UINode> registry, DockPanelRef... panels) {
+    private void setUpWith(DockPanelRegistry<UIElement> registry, DockPanelRef... panels) {
         leaf = new DockLeaf(panels[0]);
         for (int i = 1; i < panels.length; i++) leaf.add(panels[i]);
         area = new DockArea(registry, DockLayout.of(leaf));
-        UINode root = new UINode().layout(l -> l.width(600).height(400)
-                .flexDirection(FlexDirection.COLUMN));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400)
+                                                      .flexDirection(FlexDirection.COLUMN));
         root.append(area);
         area.layout(l -> l.width(600).height(400));
         document.append(root);
@@ -357,7 +354,7 @@ public class DockTabPresentationTest extends UiDocumentTestBase {
      * the top layer the moment it shows. So it is found by its ANCHOR, not by walking children.</p>
      */
     private Tooltip tooltipOn(Tab tab) {
-        for (UINode child : document.children()) {
+        for (UIElement child : document.children()) {
             if (child instanceof Tooltip tip && tip.anchor() == tab) return tip;
         }
         return null;
@@ -373,7 +370,7 @@ public class DockTabPresentationTest extends UiDocumentTestBase {
      */
     @Test
     public void aTabSaysWhereItIsAndItsIconSaysWhatItIs() {
-        DockPanelRegistry<UINode> registry = registry();
+        DockPanelRegistry<UIElement> registry = registry();
         registry.setTooltipProvider(ref -> "/workspace/src/Main.java");
         registry.setIconTooltipProvider(ref -> FILE_TYPE.equals(ref.typeId()) ? "Final class" : null);
         setUpWith(registry, javaFile);

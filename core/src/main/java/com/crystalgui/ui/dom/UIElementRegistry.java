@@ -20,11 +20,11 @@ import javax.annotation.Nullable;
  * kinds are registered below; widgets register from their own class initialisers in M6, and a
  * {@code UiType} registers its panel.</p>
  */
-public final class UINodeRegistry {
+public final class UIElementRegistry {
 
     /**
-     * <b>Declared above the static block, and it has to be.</b> That block reads {@code UINode.NAME},
-     * which initialises {@link UINode} — and a widget's own class initialiser registers itself here
+     * <b>Declared above the static block, and it has to be.</b> That block reads {@code UIElement.NAME},
+     * which initialises {@link UIElement} — and a widget's own class initialiser registers itself here
      * ({@link com.crystalgui.ui.box.UIText} is the shipped example, and every widget M6 ports will
      * be another), so the moment any of these classes gains one, initialisation re-enters this class
      * while it is still being initialised. The JVM lets a thread straight through its own in-progress
@@ -35,7 +35,7 @@ public final class UINodeRegistry {
     private static final Map<Name, Entry> ENTRIES = new ConcurrentHashMap<>();
 
     /** {@code factory} is null for a cascade-only kind — see {@link #registerTag}. */
-    private record Entry(@Nullable Supplier<? extends UINode> factory, NodeContract contract) {
+    private record Entry(@Nullable Supplier<? extends UIElement> factory, NodeContract contract) {
     }
 
     /**
@@ -51,7 +51,7 @@ public final class UINodeRegistry {
      * name for the cascade and nothing to build from the wire.</p>
      */
     static {
-        register(UINode.NAME, UINode::new, plain(UINode.NAME, true));
+        register(UIElement.NAME, UIElement::new, plain(UIElement.NAME, true));
         register(UISlot.NAME, UISlot::new, plain(UISlot.NAME, true));
         register(UIDocument.NAME, UIDocument::new, plain(UIDocument.NAME, true));
     }
@@ -85,10 +85,10 @@ public final class UINodeRegistry {
      */
     public static void bootstrap() {
         if (bootstrapped) return;
-        synchronized (UINodeRegistry.class) {
+        synchronized (UIElementRegistry.class) {
             if (bootstrapped) return;
             bootstrapped = true;
-            for (NodeKinds kinds : ServiceLoader.load(NodeKinds.class, UINodeRegistry.class.getClassLoader())) {
+            for (NodeKinds kinds : ServiceLoader.load(NodeKinds.class, UIElementRegistry.class.getClassLoader())) {
                 try {
                     kinds.register();
                 } catch (RuntimeException | LinkageError e) {
@@ -99,10 +99,10 @@ public final class UINodeRegistry {
         }
     }
 
-    private UINodeRegistry() {
+    private UIElementRegistry() {
     }
 
-    public static void register(Name name, Supplier<? extends UINode> factory, NodeContract contract) {
+    public static void register(Name name, Supplier<? extends UIElement> factory, NodeContract contract) {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(factory, "factory");
         Objects.requireNonNull(contract, "contract");
@@ -145,7 +145,7 @@ public final class UINodeRegistry {
     }
 
     /** A fresh node of the named kind. Throws for a name nothing registered. */
-    public static UINode create(Name name) {
+    public static UIElement create(Name name) {
         bootstrap();
         Entry entry = ENTRIES.get(name);
         if (entry == null) {
@@ -155,7 +155,7 @@ public final class UINodeRegistry {
         if (entry.factory() == null) {
             throw new IllegalArgumentException("<" + name + "> is a cascade-only kind and cannot be "
                     + "built: it is registered so a sheet can name it, and nothing describes one over "
-                    + "a wire. @see UINodeRegistry#registerTag");
+                    + "a wire. @see UIElementRegistry#registerTag");
         }
         return entry.factory().get();
     }

@@ -1,16 +1,14 @@
 package com.crystalgui.widget.texteditor.suggest;
 
-import com.crystalgui.widget.dnd.Resizer;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.search.SearchMatch;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.lang.CompletionItem;
-import com.crystalgui.text.lang.SymbolModifier;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.control.SymbolIcon;
 import com.crystalgui.ui.dom.UIDocument;
@@ -25,9 +23,7 @@ import com.crystalgui.core.collection.list.SelectionMode;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.text.TextRange;
-import com.crystalgui.widget.texteditor.TextEditor;
 import org.joml.Vector2f;
-import org.joml.Vector3f;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -196,10 +192,10 @@ public final class CompletionPopup extends Popover {
      * <p><b>Absolutely positioned</b>, so it takes part in layout without contributing to the popup's own
      * box — an in-flow probe would make the popup as tall as its rows plus one.</p>
      */
-    private UINode widthProbe;
+    private UIElement widthProbe;
 
     /** The bottom strip. See {@link #ACCEPT_KEYS} — its text is derived from the same list the editor reads. */
-    private final UINode hint = new UINode();
+    private final UIElement hint = new UIElement();
 
     /** The corner grab, at the strip's right-hand end. */
     private final UIText hintLabel = new UIText(hintText());
@@ -294,7 +290,7 @@ public final class CompletionPopup extends Popover {
         hintLabel.setHitTest(false);
         hint.append(hintLabel);
 
-        UINode hintSpacer = new UINode();
+        UIElement hintSpacer = new UIElement();
         hintSpacer.layout(l -> l.width(0f).flexGrow(1f));
         hintSpacer.setHitTest(false);
         hint.append(hintSpacer);
@@ -331,7 +327,7 @@ public final class CompletionPopup extends Popover {
         //
         // Applied to every child rather than to the two named ones, because the next part added to a row
         // will be shrinkable too and nothing would report that this had stopped measuring it.
-        for (UINode part : widthProbe.children()) {
+        for (UIElement part : widthProbe.children()) {
             StyleGroup.inlinePipeline(part.getStyle().getLayoutGroup(),
                     l -> l.flexShrink(0f).minWidthAuto());
         }
@@ -436,7 +432,7 @@ public final class CompletionPopup extends Popover {
         userMoved = false;
         // Removes the INLINE width/height the resize wrote, not merely the flag -- otherwise the popup's
         // own IMPORTANT sizing and the dragged one would both be live and the result would depend on
-        // which ran last. @see UINode#clearUserSizing
+        // which ran last. @see UIElement#clearUserSizing
         clearUserSizing();
     }
 
@@ -482,7 +478,7 @@ public final class CompletionPopup extends Popover {
             // start dragging the window. Filtering on the target is what SplitView's divider does.
             if (event.getTarget() != hint) return;
             UIDocument window = document();
-            UINode host = parent();
+            UIElement host = parent();
             if (window == null || host == null) return;
 
             float startLeft = placedLeft;
@@ -750,7 +746,7 @@ public final class CompletionPopup extends Popover {
     private final class RowRenderer implements ListRenderer<CompletionSession.Row> {
 
         @Override
-        public UINode createTemplate() {
+        public UIElement createTemplate() {
             // BUILT HERE, never in bind(). An element created during bind lands after that frame's layout
             // pass -- the trap the command palette's key chips and the editor's gutter arrows each paid for.
             Row row = new Row();
@@ -802,7 +798,7 @@ public final class CompletionPopup extends Popover {
         }
 
         @Override
-        public void bind(CompletionSession.Row value, int index, UINode template) {
+        public void bind(CompletionSession.Row value, int index, UIElement template) {
             Row row = (Row) template;
             row.index = index;
             CompletionItem item = value.item();
@@ -869,7 +865,7 @@ public final class CompletionPopup extends Popover {
         }
 
         @Override
-        public void unbind(UINode template) {
+        public void unbind(UIElement template) {
             Row row = (Row) template;
             row.index = -1;
             row.label.highlights().remove(MATCH_HIGHLIGHT);
@@ -899,7 +895,7 @@ public final class CompletionPopup extends Popover {
             }
         }
 
-        private static void swapPrefixed(UINode element, String prefix, @Nullable String wanted) {
+        private static void swapPrefixed(UIElement element, String prefix, @Nullable String wanted) {
             for (String name : new ArrayList<>(element.classes())) {
                 if (name.startsWith(prefix) && !name.equals(wanted)) element.removeClass(name);
             }
@@ -911,7 +907,7 @@ public final class CompletionPopup extends Popover {
     }
 
     /** The row element, holding its slots so {@code bind} never searches for them. */
-    private static final class Row extends UINode {
+    private static final class Row extends UIElement {
         /** Which model row this template currently shows, or -1 while pooled. Read at click time. */
         int index = -1;
         /** Kind glyph plus its static/final marks. @see SymbolIcon */
@@ -919,7 +915,7 @@ public final class CompletionPopup extends Popover {
         final UIText label = new UIText("");
         /** The dimmed parameter list, when the label has one. */
         final UIText params = new UIText("");
-        final UINode spacer = new UINode();
+        final UIElement spacer = new UIElement();
         final UIText detail = new UIText("");
     }
 }

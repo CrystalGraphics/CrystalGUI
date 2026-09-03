@@ -2,7 +2,7 @@ package com.crystalgui.workbench.toolwindow;
 
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.desktop.Desktop;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
@@ -50,7 +50,7 @@ import java.util.Map;
 public final class ToolWindowManager {
 
     private final WorkbenchRegions regions;
-    private final DockPanelRegistry<UINode> registry;
+    private final DockPanelRegistry<UIElement> registry;
 
     /** Container id -> its built container. Survives every hide; see the class note. */
     private final Map<String, ViewContainer> containers = new LinkedHashMap<>();
@@ -65,7 +65,7 @@ public final class ToolWindowManager {
 
     private final ToolWindowLayout toolWindows = new ToolWindowLayout();
 
-    public ToolWindowManager(WorkbenchRegions regions, DockPanelRegistry<UINode> registry) {
+    public ToolWindowManager(WorkbenchRegions regions, DockPanelRegistry<UIElement> registry) {
         this.regions = regions;
         this.registry = registry;
     }
@@ -545,7 +545,7 @@ public final class ToolWindowManager {
     private boolean showInFrame(String typeId, ToolWindowType type) {
         ViewContainer container = containers.computeIfAbsent(typeId, this::buildContainer);
         if (container == null) return false;
-        UINode anchor = regions.root();
+        UIElement anchor = regions.root();
         UIDocument window = anchor.document();
         if (window == null) {
             // NOT A FAILURE — A "NOT YET". A windowed tool window needs a UIDocument to open into, and a
@@ -597,7 +597,7 @@ public final class ToolWindowManager {
             // workbench is not in a frame at all: a bare UIDocument with no desktop window open is a
             // legitimate host, and refusing there would make the gesture work in the application and
             // not in a test.
-            UINode scope = window.focus().scopeOf(anchor);
+            UIElement scope = window.focus().scopeOf(anchor);
             if (scope instanceof WindowFrame owner) owner.attachOwned(frame);
             else Desktop.of(window).addWindow(frame);
         } else {

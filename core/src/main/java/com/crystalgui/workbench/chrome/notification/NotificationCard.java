@@ -2,7 +2,7 @@ package com.crystalgui.workbench.chrome.notification;
 
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.input.FocusPolicy;
 
@@ -28,23 +28,23 @@ import java.util.Locale;
  *
  * <h3>An element that owns its parts, not a builder that returns a tree</h3>
  *
- * <p>This was a static {@code build()} handing back an opaque {@link UINode}, which meant a consumer
+ * <p>This was a static {@code build()} handing back an opaque {@link UIElement}, which meant a consumer
  * wanting to update a card had to <b>find its way back in through the selector engine</b> — a
  * {@code querySelector(".__message__")} per repeat, matching on a CSS class as though from outside. Both
  * consumers did it, and both then had to cope with it returning null. Holding the label in a field makes
  * a repeat a {@code setText} and makes the class name a styling detail again rather than a lookup key.</p>
  */
-class NotificationCard extends UINode {
+class NotificationCard extends UIElement {
 
     private final Notification notification;
     private final UIText message;
-    private final UINode head;
+    private final UIElement head;
 
     NotificationCard(Notification notification) {
         this.notification = notification;
         addClass(NotificationsView.ENTRY_CLASS);
 
-        UINode icon = new UINode();
+        UIElement icon = new UIElement();
         icon.addClass(NotificationsView.ICON_CLASS);
         // THE CLASS CARRIES THE SEVERITY, and the sheet turns it into a glyph and a colour. Writing either
         // from here would put the palette in Java, which is the split graph.css already makes for port
@@ -73,7 +73,7 @@ class NotificationCard extends UINode {
         // hypothetical: the timestamp rendered as "7:" with the rest cut off, while `flex-shrink: 0` said
         // it should never have shrunk at all.
 
-        UINode head = new UINode();
+        UIElement head = new UIElement();
         head.addClass(NotificationsView.ENTRY_HEAD_CLASS);
         head.append(icon);
         head.append(message);
@@ -96,7 +96,7 @@ class NotificationCard extends UINode {
         boolean silenceable = notification.getNeverShowAgainId() != null;
         if (!notification.actions().isEmpty() || !notification.secondaryActions().isEmpty()
                 || silenceable) {
-            UINode actions = new UINode();
+            UIElement actions = new UIElement();
             actions.addClass(NotificationsView.ACTIONS_CLASS);
             for (Notification.Action action : notification.actions()) {
                 actions.append(link(action.label(), action.run(), false));
@@ -140,7 +140,7 @@ class NotificationCard extends UINode {
         // AN ELEMENT WITH A SHAPE, not a UIText carrying "✕". The bundled font has no U+2715 and drew
         // tofu -- the same reason the breadcrumb separator is a shape and UIText carries an ellipsis
         // fallback. A glyph in Java is also a look the cascade cannot reach.
-        UINode close = new UINode();
+        UIElement close = new UIElement();
         close.addClass(NotificationsView.CLOSE_CLASS);
         close.setFocusPolicy(FocusPolicy.CLICK);
         close.onMouseDown.attachListener((element, event) -> {

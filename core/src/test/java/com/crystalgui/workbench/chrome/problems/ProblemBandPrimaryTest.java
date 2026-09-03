@@ -1,8 +1,6 @@
 package com.crystalgui.workbench.chrome.problems;
 
-import com.crystalgui.text.Change;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.TextPoint;
@@ -37,7 +35,7 @@ public class ProblemBandPrimaryTest extends UiDocumentTestBase {
     @Before
     public void openAPopup() {
         popup = new DocumentationPopup();
-        UINode root = new UINode().layout(l -> l.width(400).height(200));
+        UIElement root = new UIElement().layout(l -> l.width(400).height(200));
         document.append(root);
         document.styleEngine().addStylesheet(com.crystalgui.style.sheet.StyleSheet.DEFAULT);
         settle();

@@ -1,10 +1,6 @@
 package com.crystalgui.workbench.chrome.palette;
 
-import com.crystalgui.core.data.DataContext;
-import com.crystalgui.ui.input.keymap.Keymap;
-import com.crystalgui.widget.collection.list.ListView;
-import com.crystalgui.workbench.dock.DockArea;
-import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.command.Command;
@@ -14,13 +10,10 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.workbench.chrome.menu.ChromeCommands;
-import com.crystalgui.workbench.chrome.palette.CommandPalette;
-import com.crystalgui.workbench.chrome.palette.QuickPick;
 import com.crystalgui.core.collection.pick.QuickPickItem;
 import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -32,7 +25,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import com.crystalgui.core.command.CommandRegistry;
-import com.crystalgui.ui.dom.UINode;
 
 /**
  * The command palette, and above all <b>which element its commands are resolved against</b>.
@@ -48,7 +40,7 @@ public class CommandPaletteTest extends UiDocumentTestBase {
 
     /** Stands in for a {@code DockArea} or an editor — something a command's {@code enabledWhen} walks up
      * the tree to find. Every scoped command in the codebase resolves its target this way. */
-    private static final class Scope extends UINode {
+    private static final class Scope extends UIElement {
     }
 
     private static final String SCOPED = "test.scopedCommand";
@@ -60,10 +52,10 @@ public class CommandPaletteTest extends UiDocumentTestBase {
     private static final String THIRD = "test.thirdCommand";
 
     private Scope scope;
-    private UINode inner;
+    private UIElement inner;
 
     /** Every source element a command was actually invoked with, in order. */
-    private final List<UINode> invokedWith = new ArrayList<>();
+    private final List<UIElement> invokedWith = new ArrayList<>();
 
     @Before
     public void setUpWindow() {
@@ -71,12 +63,12 @@ public class CommandPaletteTest extends UiDocumentTestBase {
         // assertions are about which rows a palette shows and in what order, so they need a known set.
         CommandRegistry.global().resetForTesting();
         scope = new Scope();
-        inner = new UINode();
+        inner = new UIElement();
         inner.setFocusPolicy(FocusPolicy.FOCUSABLE);
         scope.append(inner);
 
-        UINode root = new UINode().layout(l -> l.width(600).height(400)
-                .flexDirection(FlexDirection.COLUMN));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400)
+                                                      .flexDirection(FlexDirection.COLUMN));
         root.append(scope);
 
         document.append(root);
@@ -87,18 +79,18 @@ public class CommandPaletteTest extends UiDocumentTestBase {
         document.styleEngine().addStylesheet(StyleSheetRegistry.of("crystalgui:ore"));
 
         document.getCommands().register(Command.of(SCOPED, "Scoped Action")
-                .run(context -> invokedWith.add(UINode.sourceOf(context)))
+                .run(context -> invokedWith.add(UIElement.sourceOf(context)))
                 .enabledWhen(CommandPaletteTest::hasScopeAbove));
         document.getCommands().register(Command.of(GLOBAL, "Global Action")
-                .run(context -> invokedWith.add(UINode.sourceOf(context))));
+                .run(context -> invokedWith.add(UIElement.sourceOf(context))));
         document.getCommands().register(Command.of(THIRD, "Third Action")
-                .run(context -> invokedWith.add(UINode.sourceOf(context))));
+                .run(context -> invokedWith.add(UIElement.sourceOf(context))));
 
         frame();
     }
 
     private static boolean hasScopeAbove(CommandContext context) {
-        for (UINode element = UINode.sourceOf(context); element != null; element = element.parent()) {
+        for (UIElement element = UIElement.sourceOf(context); element != null; element = element.parent()) {
             if (element instanceof Scope) return true;
         }
         return false;
@@ -183,7 +175,7 @@ public class CommandPaletteTest extends UiDocumentTestBase {
         frame();
         frame();
 
-        UINode row = pick.resultList().realisedRows().get(0);
+        UIElement row = pick.resultList().realisedRows().get(0);
         assertNotNull("the disabled row is still listed and realised", row);
         clickCentreOf(row);
 
@@ -300,7 +292,7 @@ public class CommandPaletteTest extends UiDocumentTestBase {
 
         var realised = pick.resultList().realisedRows();
         assertFalse("no rows realised", realised.isEmpty());
-        UINode row = realised.get(0);
+        UIElement row = realised.get(0);
         assertNotNull("row 0 is not realised", row);
 
         clickCentreOf(row);
@@ -310,7 +302,7 @@ public class CommandPaletteTest extends UiDocumentTestBase {
 
     /** Physical-pixel press and release at an element's centre. {@code uiScale} defaults to 2, so logical
      * coordinates fed straight to {@code consumeMouseEvent} land at half the intended position. */
-    private void clickCentreOf(UINode element) {
+    private void clickCentreOf(UIElement element) {
         var cache = element.box();
         // worldX/worldY, because `Box.x()` is the offset inside the HOST -- a palette row reports
         // its position within the list, so the press landed near the corner of the screen and the

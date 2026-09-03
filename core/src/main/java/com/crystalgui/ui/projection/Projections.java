@@ -1,7 +1,8 @@
 package com.crystalgui.ui.projection;
 
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
+
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -127,7 +128,7 @@ public final class Projections {
     }
 
     private static String describe(Object target) {
-        return target instanceof UINode ? ((UINode) target).tagName()
+        return target instanceof UIElement ? ((UIElement) target).tagName()
                 : target.getClass().getSimpleName();
     }
 
@@ -152,9 +153,9 @@ public final class Projections {
      * @param create builds the row element for an item seen for the first time
      * @param apply  writes an item into its row, every run. Cheap because widget setters are idempotent
      */
-    public <T> Projections each(Supplier<? extends List<T>> items, UINode into,
-                                Function<T, Object> key, Function<T, UINode> create,
-                                BiConsumer<UINode, T> apply) {
+    public <T> Projections each(Supplier<? extends List<T>> items, UIElement into,
+                                Function<T, Object> key, Function<T, UIElement> create,
+                                BiConsumer<UIElement, T> apply) {
         Objects.requireNonNull(into, "into");
         targets.add(into);
         units.add(new Keyed<>(Objects.requireNonNull(items, "items"), into,
@@ -310,19 +311,19 @@ public final class Projections {
     /** A keyed list reconciled against a container's described children. */
     private static final class Keyed<T> extends Unit {
         private final Supplier<? extends List<T>> items;
-        private final UINode into;
+        private final UIElement into;
         private final Function<T, Object> key;
-        private final Function<T, UINode> create;
-        private final BiConsumer<UINode, T> apply;
+        private final Function<T, UIElement> create;
+        private final BiConsumer<UIElement, T> apply;
 
         /** Realised rows by key, in the order they are currently laid out. */
-        private final Map<Object, UINode> realised = new LinkedHashMap<>();
+        private final Map<Object, UIElement> realised = new LinkedHashMap<>();
 
         /** The item each row was last written from, so an unchanged row is not rewritten. */
         private final Map<Object, T> lastItem = new LinkedHashMap<>();
 
-        Keyed(Supplier<? extends List<T>> items, UINode into, Function<T, Object> key,
-              Function<T, UINode> create, BiConsumer<UINode, T> apply) {
+        Keyed(Supplier<? extends List<T>> items, UIElement into, Function<T, Object> key,
+              Function<T, UIElement> create, BiConsumer<UIElement, T> apply) {
             this.items = items;
             this.into = into;
             this.key = key;
@@ -361,7 +362,7 @@ public final class Projections {
                 }
                 order.add(id);
 
-                UINode row = realised.get(id);
+                UIElement row = realised.get(id);
                 if (row == null) {
                     row = create.apply(item);
                     if (row == null) {
@@ -386,9 +387,9 @@ public final class Projections {
             // 2. Remove what is gone. A SET lookup, not a list scan: the first version asked
             //    `wanted.contains(...)` inside this loop, which is O(n^2) and reaches a quarter of a
             //    million comparisons per tick on a five-hundred-row list.
-            for (Iterator<Map.Entry<Object, UINode>> it = realised.entrySet().iterator();
-                    it.hasNext(); ) {
-                Map.Entry<Object, UINode> entry = it.next();
+            for (Iterator<Map.Entry<Object, UIElement>> it = realised.entrySet().iterator();
+                 it.hasNext(); ) {
+                Map.Entry<Object, UIElement> entry = it.next();
                 if (wanted.contains(entry.getKey())) continue;
                 into.remove(entry.getValue());
                 lastItem.remove(entry.getKey());
@@ -398,8 +399,8 @@ public final class Projections {
 
             // 3. Put them in order, moving only what is out of place.
             for (int i = 0; i < order.size(); i++) {
-                UINode row = realised.get(order.get(i));
-                List<UINode> laid = into.children();
+                UIElement row = realised.get(order.get(i));
+                List<UIElement> laid = into.children();
                 if (i < laid.size() && laid.get(i) == row) continue;
                 // A row already here is MOVED and a new one is INSERTED, and the two are different
                 // calls on purpose: only the move path reports `moved` -- which is what stops a reorder

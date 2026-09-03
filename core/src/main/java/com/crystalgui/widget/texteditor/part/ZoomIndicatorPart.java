@@ -5,7 +5,7 @@ import com.crystalgraphics.api.text.CgTextLayout;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -33,7 +33,7 @@ public final class ZoomIndicatorPart extends EditorViewPart {
     /** Seconds left on screen; zero means hidden. */
     private float secondsLeft;
 
-    private UINode panel;
+    private UIElement panel;
     private UIText label;
     private Button resetButton;
 
@@ -82,9 +82,9 @@ public final class ZoomIndicatorPart extends EditorViewPart {
         }
     }
 
-    private UINode panel() {
+    private UIElement panel() {
         if (panel == null) {
-            panel = new UINode();
+            panel = new UIElement();
             panel.addClass(TextEditor.ZOOM_INDICATOR_CLASS);
             panel.setScrollExempt(true);
 

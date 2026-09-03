@@ -1,11 +1,11 @@
 package com.crystalgui.widget.config.control;
 
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.config.ConfigControlContracts;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.RatePolicy;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.widget.config.ValueControl;
@@ -62,7 +62,7 @@ public class VectorControl extends ValueControl<double[]> {
         addClass("__vector__");
         for (int i = 0; i < arity; i++) {
             final int axis = i;
-            UINode cell = new UINode();
+            UIElement cell = new UIElement();
             cell.addClass("__vector-cell__");
 
             UIText axisLabel = new UIText(AXES[i]);

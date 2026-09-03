@@ -1,12 +1,8 @@
 package com.crystalgui.ui.dom;
 
-import com.crystalgui.style.selector.Selector;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.control.Slider;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.List;
@@ -14,14 +10,14 @@ import java.util.List;
 import static org.junit.Assert.*;
 
 /**
- * The DOM-shaped tree query API on {@link UINode} and {@link UIDocument}.
+ * The DOM-shaped tree query API on {@link UIElement} and {@link UIDocument}.
  *
  * <p>These delegate to the same {@code Selector} the stylesheet cascade uses — there is deliberately
  * no second matcher — so anything the cascade can select, a query can find.</p>
  */
 public class TreeQueryTest extends UiDocumentTestBase {
 
-    private UINode root, panel, a, b, deep;
+    private UIElement root, panel, a, b, deep;
 
     @Before
     public void setUp() {
@@ -30,26 +26,26 @@ public class TreeQueryTest extends UiDocumentTestBase {
         //      ├── a(.item)
         //      ├── b(.item)
         //      └── deep(.nested) > (.item, id=leaf)
-        root = new UINode();
+        root = new UIElement();
         root.addClass("app");
 
-        panel = new UINode();
+        panel = new UIElement();
         panel.addClass("panel").setId("main");
         root.append(panel);
 
-        a = new UINode();
+        a = new UIElement();
         a.addClass("item");
         panel.append(a);
 
-        b = new UINode();
+        b = new UIElement();
         b.addClass("item");
         panel.append(b);
 
-        deep = new UINode();
+        deep = new UIElement();
         deep.addClass("nested");
         panel.append(deep);
 
-        UINode leaf = new UINode();
+        UIElement leaf = new UIElement();
         leaf.addClass("item").setId("leaf");
         deep.append(leaf);
 
@@ -90,7 +86,7 @@ public class TreeQueryTest extends UiDocumentTestBase {
     /** Depth-first pre-order, matching the DOM. */
     @Test
     public void resultsAreInDocumentOrder() {
-        List<UINode> items = deepAll(root, ".item");
+        List<UIElement> items = deepAll(root, ".item");
         assertEquals(3, items.size());
         assertSame(a, items.get(0));
         assertSame(b, items.get(1));

@@ -5,7 +5,6 @@ import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
 
-import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.async.JobKey;
@@ -33,7 +32,7 @@ import com.crystalgui.text.syntax.DocComments;
 import com.crystalgui.text.syntax.LanguageRegistry;
 import com.crystalgui.text.syntax.SyntaxTokenizer;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.workbench.chrome.palette.CommandPalette;
 import com.crystalgui.workbench.chrome.status.Breadcrumbs;
 import com.crystalgui.workbench.chrome.palette.QuickPick;
@@ -55,9 +54,6 @@ import com.crystalgui.workbench.diff.ConflictDialog;
 import com.crystalgui.workbench.diff.MergeView;
 import com.crystalgui.workbench.dock.DockArea;
 import com.crystalgui.workbench.dock.DockWindow;
-import com.crystalgui.workbench.dock.layout.DockBranch;
-import com.crystalgui.workbench.dock.layout.DockNode;
-import com.crystalgui.workbench.dock.layout.DockOrientation;
 import com.crystalgui.workbench.dock.drag.DockDropZone;
 import com.crystalgui.workbench.dock.DockGroup;
 import com.crystalgui.workbench.dock.layout.DockLayout;
@@ -74,9 +70,7 @@ import com.crystalgui.workbench.explorer.WorkspaceTreeSource;
 import com.crystalgui.workbench.region.DockRegion;
 import com.crystalgui.workbench.region.RegionDropOverlay;
 import com.crystalgui.workbench.region.RegionSide;
-import com.crystalgui.workbench.dock.layout.DockPath;
 import com.crystalgui.workbench.dock.panel.DockPanelRegistry;
-import com.crystalgui.widget.texteditor.EditorCommands;
 import com.crystalgui.widget.texteditor.TextEditor;
 import com.crystalgui.workbench.decoration.DiagnosticDecorations;
 import com.crystalgui.document.TextFileDocument;
@@ -108,9 +102,7 @@ import com.crystalgui.core.notify.StatusBarEntryAccessor;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.diagnostic.Markers;
 import com.crystalgui.core.command.CommandRegistry;
-import com.crystalgui.core.command.MenuId;
 import com.crystalgui.workbench.chrome.menu.MainMenuCommands;
-import com.crystalgui.ui.UiDataKeys;
 import com.crystalgui.workbench.chrome.menu.MenuBarView;
 import com.crystalgui.core.undo.UndoCommands;
 
@@ -135,7 +127,7 @@ import com.crystalgui.core.undo.UndoCommands;
  * <p>{@code DockArea} asks the registry for a panel's content on every rebuild, so handing back a fresh
  * editor each time would discard unsaved edits on every split, drag or close.</p>
  */
-public class Workbench extends UINode implements DataProvider {
+public class Workbench extends UIElement implements DataProvider {
     /** The shell. `ua/workbench.css` names the tag. */
     public static final Name NAME = Name.of("workbench");
 
@@ -224,7 +216,7 @@ public class Workbench extends UINode implements DataProvider {
     // (keyed per writer, replaced rather than accumulated). See com.crystalgui.core.notify.
 
     private final WorkspaceClient<?> client;
-    private final DockPanelRegistry<UINode> registry = new DockPanelRegistry<>();
+    private final DockPanelRegistry<UIElement> registry = new DockPanelRegistry<>();
     private final ProjectFileTree fileTree;
     private final ProblemsPanel problems = new ProblemsPanel();
 
@@ -532,7 +524,7 @@ public class Workbench extends UINode implements DataProvider {
     /** Marked internal exactly ONCE, while empty. {@code markAsInternal()} RECURSES, and stamping a
      * populated subtree makes {@code removeChild} silently refuse everything under it — which is how the
      * dock grew duplicate unclickable tabs and how the shader graph editor hung the window. */
-    private final UINode content = new UINode();
+    private final UIElement content = new UIElement();
 
     /**
      * The line along the top — File, Edit, View, Graph, Window, Help.
@@ -731,13 +723,13 @@ public class Workbench extends UINode implements DataProvider {
     protected void registerCommands(CommandRegistry registry) {
         ExplorerCommands.register();
         // THE PROJECT INDEX IS *NOT* CONTRIBUTED HERE, and it was, and that was the whole of S4 being
-        // dead on arrival. This method runs from UINode's INSTANCE INITIALISER -- before the Workbench
+        // dead on arrival. This method runs from UIElement's INSTANCE INITIALISER -- before the Workbench
         // constructor body -- so `projectIndex` was still null, and `contribute` opens with
         // `if (provider == null) return`. Nothing threw, nothing logged, and every cross-file reference in
         // the workspace reported "cannot be resolved to a type" with the registry, the name environment
         // and the project tier all correct and all covered by passing tests. Registration is per INSTANCE
         // and belongs in the constructor; this hook is per CLASS and may only name statics, which is
-        // exactly what its own javadoc says. @see UINode#registerCommands
+        // exactly what its own javadoc says. @see UIElement#registerCommands
         // Undo comes with a workbench because the file tree IS the workspace's UndoScope -- deleting a
         // file is undoable and reaches the workspace stack. Same ids the editor and the graph use, so
         // there is one Undo in the palette rather than one per widget.
@@ -758,7 +750,7 @@ public class Workbench extends UINode implements DataProvider {
      */
     private static void registerToolWindowCommands(CommandRegistry registry) {
         // REGISTERED ON THE REGISTRY WE WERE HANDED, never through a nested contribute(Workbench.class).
-        // UINode already calls contribute(getClass(), this::registerCommands) to get here, so
+        // UIElement already calls contribute(getClass(), this::registerCommands) to get here, so
         // Workbench.class is ALREADY in the contributor set by the time this runs -- a second contribute
         // under the same key adds nothing and returns, silently, and the commands were never registered
         // at all. The status entries drew a pointer cursor and did nothing, which is precisely the failure
@@ -1141,7 +1133,7 @@ public class Workbench extends UINode implements DataProvider {
         return dock;
     }
 
-    public DockPanelRegistry<UINode> panels() {
+    public DockPanelRegistry<UIElement> panels() {
         return registry;
     }
 
@@ -1155,7 +1147,7 @@ public class Workbench extends UINode implements DataProvider {
 
     /** Adds a host's own panel type — a shader graph, a console, an inspector. */
     public Workbench registerPanel(DockPanelDescriptor descriptor,
-                                   Function<DockPanelRef, UINode> factory) {
+                                   Function<DockPanelRef, UIElement> factory) {
         registry.register(descriptor, factory::apply);
         return this;
     }
@@ -2186,7 +2178,7 @@ public class Workbench extends UINode implements DataProvider {
         Dialog dialog = new Dialog("Merge " + target.name());
         dialog.getContent().append(view);
 
-        UINode actions = new UINode();
+        UIElement actions = new UIElement();
         actions.addClass(MergeView.DIALOG_ACTIONS_CLASS);
         dialog.getContent().append(actions);
 
@@ -2638,7 +2630,7 @@ public class Workbench extends UINode implements DataProvider {
      * kinds of tab now ask the same question.</p>
      */
     @Nullable
-    private static UINode viewerIconElement(DockPanelRef panel) {
+    private static UIElement viewerIconElement(DockPanelRef panel) {
         SymbolInfo symbol = symbolFor(panel);
         if (symbol == null) return null;
         return new SymbolIcon().show(symbol.kind(), symbol.modifiers());

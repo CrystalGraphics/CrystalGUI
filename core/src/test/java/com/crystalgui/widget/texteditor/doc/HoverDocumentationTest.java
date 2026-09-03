@@ -1,7 +1,6 @@
 package com.crystalgui.widget.texteditor.doc;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.text.lang.LanguageServices;
 import com.crystalgui.text.lang.Resolver;
@@ -11,7 +10,6 @@ import com.crystalgui.text.lang.TypeRef;
 import com.crystalgui.text.lang.Versioned;
 import com.crystalgui.widget.texteditor.TextEditor;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.List;
@@ -89,7 +87,7 @@ public class HoverDocumentationTest extends UiDocumentTestBase {
         resolver.version = editor.buffer().version();
 
         editor.layout(l -> l.width(400).height(200));
-        UINode root = new UINode().layout(l -> l.width(400).height(200));
+        UIElement root = new UIElement().layout(l -> l.width(400).height(200));
         root.append(editor);
         document.append(root);
         document.styleEngine().addStylesheet(com.crystalgui.style.sheet.StyleSheet.DEFAULT);

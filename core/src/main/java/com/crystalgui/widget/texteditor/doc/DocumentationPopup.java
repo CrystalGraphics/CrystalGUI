@@ -13,11 +13,10 @@ import com.crystalgui.text.lang.SymbolModifier;
 import com.crystalgui.text.lang.TypeRef;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.text.syntax.Language;
-import com.crystalgui.text.syntax.SyntaxToken;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.AnchoredPlacement;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.dnd.Resizer;
 import com.crystalgui.ui.input.keymap.KeyChord;
@@ -36,16 +35,11 @@ import com.crystalgui.widget.text.SyntaxHighlighting;
 import com.crystalgui.ui.text.TextRange;
 import com.crystalgui.widget.texteditor.EditorCommands;
 import com.crystalgui.widget.texteditor.TextEditor;
-import com.crystalgui.widget.texteditor.find.SearchReplaceBar;
-import com.crystalgui.widget.texteditor.lang.EditorLanguageFeatures;
-import com.crystalgui.widget.texteditor.suggest.CompletionPopup;
 import lombok.Getter;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 import javax.annotation.Nullable;
 
@@ -245,8 +239,8 @@ public final class DocumentationPopup extends Popover {
     /** What separates the owner from {@link #HL_OWNER_NOTE}. An em dash, spaced, as an engine writes it. */
     private static final String NOTE_SEPARATOR = " — ";
 
-    private final UINode ownerRow = new UINode();
-    private final UINode ownerIcon = new UINode();
+    private final UIElement ownerRow = new UIElement();
+    private final UIElement ownerIcon = new UIElement();
     private final UIText ownerText = new UIText("");
     /**
      * The signature band — a <b>column of lines</b>, not one label.
@@ -258,22 +252,22 @@ public final class DocumentationPopup extends Popover {
      * one. Self-sizing is what makes a short signature size this popup at all, so the two are mutually
      * exclusive and every attempt at both gave a box sized to the owner row or a signature cut mid-word.</p>
      */
-    private final UINode definition = new UINode();
+    private final UIElement definition = new UIElement();
     private final List<UIText> definitionLines = new ArrayList<>();
     private String definitionText = "";
     /** @see #SEPARATOR_CLASS */
-    private final UINode separator = new UINode();
+    private final UIElement separator = new UIElement();
 
     /** @see #FOOTER_CLASS */
-    private final UINode footerRule = new UINode();
+    private final UIElement footerRule = new UIElement();
 
-    private final UINode footerRow = new UINode();
+    private final UIElement footerRow = new UIElement();
 
-    private final UINode footerIcon = new UINode();
+    private final UIElement footerIcon = new UIElement();
 
     private final UIText footerText = new UIText("");
 
-    private final UINode footerEdit = new UINode();
+    private final UIElement footerEdit = new UIElement();
 
     /**
      * The prose band — <b>a {@link MarkupView}, not a text element</b>.
@@ -301,9 +295,9 @@ public final class DocumentationPopup extends Popover {
      * is what keeps a hover the size of a hover. A popup that listed every contributor's answers would be
      * taller than the code it is explaining before it said anything about the code.</p>
      */
-    private final UINode problemRow = new UINode();
+    private final UIElement problemRow = new UIElement();
     private final UIText problemMessage = new UIText("");
-    private final UINode problemActions = new UINode();
+    private final UIElement problemActions = new UIElement();
     private final UIText primaryAction = new UIText("");
     private final UIText primaryShortcut = new UIText("");
     private final UIText moreActions = new UIText("");
@@ -477,7 +471,7 @@ public final class DocumentationPopup extends Popover {
             // Only the MOVE is excluded below -- the pin is about intent, the move is about which gesture.
             pinned = true;
             addClass(PINNED_CLASS);
-            if (ownsItsOwnPress(((UINode) event.getTarget()))) return;
+            if (ownsItsOwnPress(((UIElement) event.getTarget()))) return;
             beginMove(rawX, rawY);
         }, false, true);
 
@@ -725,7 +719,7 @@ public final class DocumentationPopup extends Popover {
      * whatever was hovered before this.</p>
      */
     public void showProblems(UIDocument window, List<com.crystalgui.text.diagnostic.Diagnostic> problems,
-                             UINode anchor) {
+                             UIElement anchor) {
         this.shown = null;
         clearUserSizing();
         if (parent() == null) window.addOverlay(this, null);
@@ -908,8 +902,8 @@ public final class DocumentationPopup extends Popover {
      * with the thumb. They are excluded here rather than made to stop propagation, because both are
      * shared widgets and every other consumer is relying on that press continuing to bubble.</p>
      */
-    private boolean ownsItsOwnPress(@Nullable UINode target) {
-        for (UINode at = target; at != null && at != this; at = at.parent()) {
+    private boolean ownsItsOwnPress(@Nullable UIElement target) {
+        for (UIElement at = target; at != null && at != this; at = at.parent()) {
             // BY CLASS for the resizer, because `UIResizer` is package-private and cannot be named from
             // here; by TYPE for the scroller, which is an ordinary public widget.
             if (at.hasClass(Resizer.RESIZER_CLASS) || at instanceof Scroller) return true;
@@ -920,7 +914,7 @@ public final class DocumentationPopup extends Popover {
     /**
      * Starts dragging the box, from a source that <b>does not move with it</b>.
      *
-     * <p>{@code UIDragController} reports its delta through {@link UINode#toLocal}, so the frame
+     * <p>{@code UIDragController} reports its delta through {@link UIElement#toLocal}, so the frame
      * the delta is measured in is the drag <em>source</em>'s. Naming this popup as its own source would
      * therefore measure each frame's movement in a frame that has already moved by it, which is the trap
      * already recorded for a canvas pan: "a pan drag's source is the viewport, never the transformed
@@ -934,7 +928,7 @@ public final class DocumentationPopup extends Popover {
      */
     private void beginMove(float rawX, float rawY) {
         UIDocument window = document();
-        UINode frame = parent();
+        UIElement frame = parent();
         Box self = box();
         if (window == null || frame == null || self == null) return;
 
@@ -958,14 +952,14 @@ public final class DocumentationPopup extends Popover {
      * hover-off -- the two halves of pinning disagreeing about whether it is still pinned.</p>
      */
     @Override
-    public Popover showAt(float rootX, float rootY, @Nullable UINode invoker) {
+    public Popover showAt(float rootX, float rootY, @Nullable UIElement invoker) {
         unpin();
         return super.showAt(rootX, rootY, invoker);
     }
 
     /** @see #showAt */
     @Override
-    public Popover showFor(UINode anchorElement, @Nullable UINode invoker) {
+    public Popover showFor(UIElement anchorElement, @Nullable UIElement invoker) {
         unpin();
         return super.showFor(anchorElement, invoker);
     }

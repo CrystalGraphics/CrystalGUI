@@ -6,7 +6,7 @@ import com.crystalgui.text.lang.SymbolModifier;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.ShadowRoot;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 
 import javax.annotation.Nullable;
 
@@ -47,7 +47,7 @@ import java.util.Set;
  * at once, and scaling one into a small corner box re-does, badly, the positioning the artwork already
  * did.</p>
  */
-public class SymbolIcon extends UINode {
+public class SymbolIcon extends UIElement {
 
     public static final Name NAME = Name.of("symbolicon");
 
@@ -167,8 +167,8 @@ public class SymbolIcon extends UINode {
     public static final String MODIFIER_CLASS_PREFIX = "completion-mod-";
 
     private final ShadowRoot shadow;
-    private final UINode staticMark = new UINode();
-    private final UINode finalMark = new UINode();
+    private final UIElement staticMark = new UIElement();
+    private final UIElement finalMark = new UIElement();
 
     public SymbolIcon() {
         super(NAME);
@@ -231,7 +231,7 @@ public class SymbolIcon extends UINode {
         return this;
     }
 
-    private static void swapPrefixed(UINode element, String prefix, @Nullable String wanted) {
+    private static void swapPrefixed(UIElement element, String prefix, @Nullable String wanted) {
         for (String name : new ArrayList<>(element.classes())) {
             if (name.startsWith(prefix) && !name.equals(wanted)) element.removeClass(name);
         }

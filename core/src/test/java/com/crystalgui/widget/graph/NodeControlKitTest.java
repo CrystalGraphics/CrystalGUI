@@ -1,21 +1,14 @@
 package com.crystalgui.widget.graph;
 
-import com.crystalgui.render.texture.geometry.Position;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
-import com.crystalgui.widget.form.ColorSelector;
-import com.crystalgui.widget.overlay.Dropdown;
-import com.crystalgui.style.property.StylePropertyRegistry;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.graph.NodeField;
 import com.crystalgui.app.shadergraph.node.ShaderColorFieldWidget;
 import com.crystalgui.app.shadergraph.node.ShaderVectorFieldWidget;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.widget.graph.GraphNode;
 import com.crystalgui.widget.graph.node.NodeFieldWidgets;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -59,10 +52,10 @@ public class NodeControlKitTest extends UiDocumentTestBase {
     private static final float CTRL_H = 18f;
     private static final float ROW_H = 25f;
 
-    private UINode root;
+    private UIElement root;
 
     private void openWindow() {
-        root = new UINode();
+        root = new UIElement();
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
         document.styleEngine().addStylesheet(StyleSheetRegistry.of("crystalgui:graph"));
@@ -95,10 +88,10 @@ public class NodeControlKitTest extends UiDocumentTestBase {
     }
 
     /** A node carrying exactly one control of the given kind, laid out. */
-    private UINode controlInNode(NodeField.Kind kind) {
+    private UIElement controlInNode(NodeField.Kind kind) {
         GraphNode node = new GraphNode("Node");
         NodeField field = fieldFor(kind);
-        UINode widget = NodeFieldWidgets.create(field, field.defaultValue(), v -> { });
+        UIElement widget = NodeFieldWidgets.create(field, field.defaultValue(), v -> { });
         assertNotNull("no widget registered for kind " + kind, widget);
         node.addControl(field.label(), widget);
         root.append(node);
@@ -106,7 +99,7 @@ public class NodeControlKitTest extends UiDocumentTestBase {
         return widget;
     }
 
-    private static float height(UINode e) {
+    private static float height(UIElement e) {
         return e.box().height();
     }
 
@@ -119,7 +112,7 @@ public class NodeControlKitTest extends UiDocumentTestBase {
         List<String> wrong = new ArrayList<>();
         for (NodeField.Kind kind : NodeField.Kind.values()) {
             openWindow();
-            UINode widget = controlInNode(kind);
+            UIElement widget = controlInNode(kind);
             float h = height(widget);
             if (Math.abs(h - CTRL_H) > 0.5f) {
                 wrong.add(kind + " is " + h + "px (kit height is " + CTRL_H + ")");
@@ -143,23 +136,23 @@ public class NodeControlKitTest extends UiDocumentTestBase {
     public void labelsClipInsteadOfWrappingEverywhereTheSameGapExisted() {
         openWindow();
         GraphNode node = new GraphNode("A Rather Long Node Title");
-        node.addControl("A Rather Long Control Label", new UINode());
+        node.addControl("A Rather Long Control Label", new UIElement());
         com.crystalgui.widget.overlay.Dropdown dropdown = new com.crystalgui.widget.overlay.Dropdown("");
         dropdown.addOption("A Rather Long Selected Value").select(0);
         root.append(node);
         root.append(dropdown);
         frame();
 
-        UINode title = deepAll(node, ".__title__").get(0);
-        UINode controlLabel = deepAll(node, ".__control-row__ .__label__").get(0);
+        UIElement title = deepAll(node, ".__title__").get(0);
+        UIElement controlLabel = deepAll(node, ".__control-row__ .__label__").get(0);
         // NAMED, not filtered by parentage. The original picked the dropdown's own label out of a
         // "text" sweep by asking which one was a direct child -- the closed menu holds a MenuItem per
         // option, each with its own text, so the first match was not reliably the right one. Every one
         // of those is a shadow PART now, so none of them is a child of the dropdown and the filter
         // matched nothing at all. The part name says exactly which label is meant.
-        UINode dropdownLabel = part(dropdown, Button.LABEL_PART);
+        UIElement dropdownLabel = part(dropdown, Button.LABEL_PART);
 
-        for (UINode label : List.of(title, controlLabel, dropdownLabel)) {
+        for (UIElement label : List.of(title, controlLabel, dropdownLabel)) {
             assertEquals("must not wrap onto a second line: " + label,
                     com.crystalgui.style.property.visual.text.WhiteSpace.NOWRAP,
                     label.getStyle().getComputed(
@@ -175,8 +168,8 @@ public class NodeControlKitTest extends UiDocumentTestBase {
     @Test
     public void theRowIsAFloorNotACap() {
         openWindow();
-        UINode widget = controlInNode(NodeField.Kind.NUMBER);
-        UINode row = widget.parent();
+        UIElement widget = controlInNode(NodeField.Kind.NUMBER);
+        UIElement row = widget.parent();
         assertTrue("the control row must not be shorter than its floor, was " + height(row),
                 height(row) >= ROW_H - 0.5f);
         assertTrue("a control must never be taller than the row containing it",
@@ -207,18 +200,18 @@ public class NodeControlKitTest extends UiDocumentTestBase {
         List<String> diverged = new ArrayList<>();
         for (Composite composite : COMPOSITES) {
             openWindow();
-            UINode free = composite.build();
+            UIElement free = composite.build();
             root.append(free);
             frame();
             List<Float> expected = composite.measure(free);
 
             openWindow();
             GraphNode node = new GraphNode("Node");
-            UINode slot = new UINode();
+            UIElement slot = new UIElement();
             slot.addClass(GraphNode.FULL_WIDTH_CLASS);
             node.addControl("", slot);
             root.append(node);
-            UINode hosted = composite.build();
+            UIElement hosted = composite.build();
             slot.append(hosted);
             // Promoted, because that is how a node presents one — and promotion is precisely what makes
             // this worth testing: it moves the Taffy parent, the transform and the paint entry, and
@@ -242,22 +235,22 @@ public class NodeControlKitTest extends UiDocumentTestBase {
     private static final class Composite {
         final String name;
         final List<String> partNames;
-        private final java.util.function.Supplier<UINode> factory;
+        private final java.util.function.Supplier<UIElement> factory;
         private final List<String> selectors;
 
-        Composite(String name, java.util.function.Supplier<UINode> factory, String... selectors) {
+        Composite(String name, java.util.function.Supplier<UIElement> factory, String... selectors) {
             this.name = name;
             this.factory = factory;
             this.selectors = List.of(selectors);
             this.partNames = this.selectors;
         }
 
-        UINode build() {
+        UIElement build() {
             return factory.get();
         }
 
         /** Widths, because a composite's design is how its parts divide the width between them. */
-        List<Float> measure(UINode instance) {
+        List<Float> measure(UIElement instance) {
             List<Float> widths = new ArrayList<>();
             for (String selector : selectors) {
                 var found = deepAll(instance, selector);

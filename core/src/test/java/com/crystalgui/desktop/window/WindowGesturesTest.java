@@ -1,7 +1,6 @@
 package com.crystalgui.desktop.window;
 
-import com.crystalgui.desktop.motion.WindowGeometryAnimation;
-import com.crystalgui.ui.input.keymap.KeyStroke;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.input.ButtonState;
@@ -16,13 +15,10 @@ import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.service.Input;
 
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -77,7 +73,7 @@ public class WindowGesturesTest extends UiDocumentTestBase {
         CommandRegistry.global().resetForTesting();
         WindowCommands.resetForTesting();
 
-        UINode root = new UINode().layout(l -> l.width(800).height(600));
+        UIElement root = new UIElement().layout(l -> l.width(800).height(600));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
 
@@ -214,7 +210,7 @@ public class WindowGesturesTest extends UiDocumentTestBase {
      */
     @Test
     public void altDraggingTheContentStartsAMove() {
-        UINode inside = new UINode().layout(l -> l.width(120).height(60));
+        UIElement inside = new UIElement().layout(l -> l.width(120).height(60));
         frame.content().append(inside);
         settle();
 
@@ -235,7 +231,7 @@ public class WindowGesturesTest extends UiDocumentTestBase {
      */
     @Test
     public void theMoveModifierIsRebindable() {
-        UINode inside = new UINode().layout(l -> l.width(120).height(60));
+        UIElement inside = new UIElement().layout(l -> l.width(120).height(60));
         frame.content().append(inside);
         settle();
         Desktop.of(document).setMoveModifier(CgModifiers.CTRL);
@@ -257,7 +253,7 @@ public class WindowGesturesTest extends UiDocumentTestBase {
      */
     @Test
     public void pressingTheContentWithoutTheModifierStartsNoMove() {
-        UINode inside = new UINode().layout(l -> l.width(120).height(60));
+        UIElement inside = new UIElement().layout(l -> l.width(120).height(60));
         frame.content().append(inside);
         settle();
 
@@ -292,7 +288,7 @@ public class WindowGesturesTest extends UiDocumentTestBase {
         }
     }
 
-    private void pressAt(UINode target) {
+    private void pressAt(UIElement target) {
         var box = target.box();
         frame();
         document.input().consumeMouseEvent(new CgSystemInput.Mouse.Event(
@@ -608,8 +604,8 @@ public class WindowGesturesTest extends UiDocumentTestBase {
         Desktop.of(document).showSnapPreview(SnapZones.Zone.LEFT, frame);
         settle();
 
-        UINode preview = Desktop.of(document).windowLayer()
-                .querySelector("." + Desktop.SNAP_PREVIEW_CLASS);
+        UIElement preview = Desktop.of(document).windowLayer()
+                                   .querySelector("." + Desktop.SNAP_PREVIEW_CLASS);
         assertNotNull("the preview was never built", preview);
         int previewZ = preview.getStyle().getGeneralGroup().zIndex();
 
@@ -709,15 +705,15 @@ public class WindowGesturesTest extends UiDocumentTestBase {
     /**
      * The snap preview's width, and ZERO when there is no preview.
      *
-     * <p>It returned a {@code Box} and stood in a missing one with {@code new UINode().box()},
+     * <p>It returned a {@code Box} and stood in a missing one with {@code new UIElement().box()},
      * which answered a zero box on the old engine and answers <b>null</b> here -- a detached node
      * has no box at all. Every caller only ever asked for the width, so the helper hands over the
      * width and the three states it must flatten (never built, built and not shown, shown at zero)
      * are the one observable the assertions are about.</p>
      */
     private Box previewBox() {
-        UINode found = Desktop.of(document).windowLayer()
-                .querySelector("." + Desktop.SNAP_PREVIEW_CLASS);
+        UIElement found = Desktop.of(document).windowLayer()
+                                 .querySelector("." + Desktop.SNAP_PREVIEW_CLASS);
         // NULLABLE on purpose. Callers that read x/height only run once a preview exists, so a null
         // there is a real failure and should say so rather than be flattened into a zero box.
         return found == null ? null : found.box();

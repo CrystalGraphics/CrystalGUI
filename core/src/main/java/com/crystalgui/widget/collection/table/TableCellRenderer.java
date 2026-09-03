@@ -1,6 +1,6 @@
 package com.crystalgui.widget.collection.table;
 
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 
 /**
  * Builds and fills one column's cells — the same {@code createTemplate}/{@code bind} split every
@@ -12,7 +12,7 @@ import com.crystalgui.ui.dom.UINode;
  */
 public interface TableCellRenderer<T> {
 
-    UINode createTemplate();
+    UIElement createTemplate();
 
-    void bind(T item, int rowIndex, UINode template);
+    void bind(T item, int rowIndex, UIElement template);
 }

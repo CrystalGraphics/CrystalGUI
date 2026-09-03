@@ -1,6 +1,6 @@
 package com.crystalgui.desktop.window;
 
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 
 import javax.annotation.Nullable;
 
@@ -51,5 +51,5 @@ public interface WindowChrome {
      * on demand would put a fresh one in the caption every time and orphan the last.</p>
      */
     @Nullable
-    UINode captionChrome();
+    UIElement captionChrome();
 }

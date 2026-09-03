@@ -4,7 +4,7 @@ import com.crystalgui.app.editor.CrystalEditor;
 import com.crystalgui.app.shadergraph.ShaderGraphEditor;
 import com.crystalgui.ui.dom.NodeContract;
 import com.crystalgui.ui.dom.NodeKinds;
-import com.crystalgui.ui.dom.UINodeRegistry;
+import com.crystalgui.ui.dom.UIElementRegistry;
 
 /**
  * <b>The application layer's kinds</b> — the two shells that are named by a stylesheet.
@@ -25,7 +25,7 @@ public final class AppKinds implements NodeKinds {
         // shader graph editor with a document, and nothing describes either over a wire. What a
         // registration buys here is the TAG -- `ua/workbench.css` names both outright, so without one
         // every rule written for them would match nothing, silently.
-        UINodeRegistry.registerTag(CrystalEditor.NAME, NodeContract.INERT);
-        UINodeRegistry.registerTag(ShaderGraphEditor.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(CrystalEditor.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(ShaderGraphEditor.NAME, NodeContract.INERT);
     }
 }

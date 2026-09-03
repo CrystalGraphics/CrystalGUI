@@ -11,7 +11,8 @@ import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.style.property.visual.Overflow;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
+
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.Test;
@@ -32,8 +33,8 @@ public class PortMachineryTest {
         return document;
     }
 
-    private static UINode sized(String id, float width, float height) {
-        UINode node = new UINode().setId(id);
+    private static UIElement sized(String id, float width, float height) {
+        UIElement node = new UIElement().setId(id);
         node.getStyle().getLayoutGroup().width(width).height(height);
         return node;
     }
@@ -51,8 +52,8 @@ public class PortMachineryTest {
     @Test
     public void aHiddenNodeHasNoBoxAndTakesNoSpace() {
         UIDocument document = document(200f, 200f);
-        UINode a = sized("a", 50f, 20f);
-        UINode b = sized("b", 50f, 20f);
+        UIElement a = sized("a", 50f, 20f);
+        UIElement b = sized("b", 50f, 20f);
         document.append(a).append(b);
         document.layout(200f, 200f);
 
@@ -82,7 +83,7 @@ public class PortMachineryTest {
     @Test
     public void hidingReportsAStructureChange() {
         UIDocument document = document(100f, 100f);
-        UINode a = sized("a", 10f, 10f);
+        UIElement a = sized("a", 10f, 10f);
         document.append(a);
         document.layout(100f, 100f);
         int syncsBefore = document.boxes().syncPasses();
@@ -107,9 +108,9 @@ public class PortMachineryTest {
     @Test
     public void aScrollExemptChildDoesNotMoveWithItsHostsScroll() {
         UIDocument document = document(100f, 100f);
-        UINode viewport = sized("viewport", 100f, 50f);
-        UINode content = sized("content", 100f, 500f);
-        UINode bar = sized("bar", 8f, 50f);
+        UIElement viewport = sized("viewport", 100f, 50f);
+        UIElement content = sized("content", 100f, 500f);
+        UIElement bar = sized("bar", 8f, 50f);
         bar.setScrollExempt(true);
         viewport.append(content).append(bar);
         // Scrolling is driven by `overflow`, never implied by oversized content: without it
@@ -136,7 +137,7 @@ public class PortMachineryTest {
     /**
      * A virtualised view's scroll extent comes from its MODEL, not from the rows it realised.
      *
-     * <p>The whole reason {@link UINode#scrollExtent} exists: a list showing a dozen rows of ten
+     * <p>The whole reason {@link UIElement#scrollExtent} exists: a list showing a dozen rows of ten
      * thousand has a dozen boxes, so reading the laid-out content would size its scrollbar thumb for
      * what is on screen and cap its travel at one screenful. The old engine spelled it as a
      * {@code getScrollHeight} override for exactly this.</p>
@@ -144,14 +145,14 @@ public class PortMachineryTest {
     @Test
     public void aVirtualisedViewsScrollExtentComesFromTheModel() {
         UIDocument document = document(100f, 100f);
-        UINode list = new UINode() {
+        UIElement list = new UIElement() {
             @Override
             public float scrollExtent(boolean horizontal) {
                 return horizontal ? -1f : 10_000f;
             }
         };
         list.getStyle().getLayoutGroup().width(100f).height(50f);
-        UINode realised = sized("realised", 100f, 60f);
+        UIElement realised = sized("realised", 100f, 60f);
         list.append(realised);
         document.append(list);
         document.layout(100f, 100f);
@@ -173,7 +174,7 @@ public class PortMachineryTest {
     @Test
     public void aNonFiniteExtentClampsToZeroRatherThanPropagating() {
         UIDocument document = document(100f, 100f);
-        UINode list = new UINode() {
+        UIElement list = new UIElement() {
             @Override
             public float scrollExtent(boolean horizontal) {
                 return Float.NaN;
@@ -199,8 +200,8 @@ public class PortMachineryTest {
     @Test
     public void shrinkingContentClampsTheOffsetRatherThanResettingIt() {
         UIDocument document = document(100f, 100f);
-        UINode viewport = sized("viewport", 100f, 50f);
-        UINode content = sized("content", 100f, 500f);
+        UIElement viewport = sized("viewport", 100f, 50f);
+        UIElement content = sized("content", 100f, 500f);
         viewport.append(content);
         document.append(viewport);
         document.layout(100f, 100f);
@@ -240,8 +241,8 @@ public class PortMachineryTest {
     @Test
     public void theTopLayerStacksByInsertionAndIgnoresZIndex() {
         UIDocument document = document(100f, 100f);
-        UINode first = sized("first", 10f, 10f);
-        UINode second = sized("second", 10f, 10f);
+        UIElement first = sized("first", 10f, 10f);
+        UIElement second = sized("second", 10f, 10f);
         // A z-index that would win everywhere else.
         first.getStyle().getGeneralGroup().zIndex(999);
         document.append(first).append(second);
@@ -257,8 +258,8 @@ public class PortMachineryTest {
     @Test
     public void promotingSomethingAlreadyPromotedRaisesIt() {
         UIDocument document = document(100f, 100f);
-        UINode a = sized("a", 10f, 10f);
-        UINode b = sized("b", 10f, 10f);
+        UIElement a = sized("a", 10f, 10f);
+        UIElement b = sized("b", 10f, 10f);
         document.append(a).append(b);
         document.promote(a);
         document.promote(b);
@@ -282,7 +283,7 @@ public class PortMachineryTest {
     @Test
     public void promotionSurvivesTheBoxBeingRebuilt() {
         UIDocument document = document(100f, 100f);
-        UINode popup = sized("popup", 10f, 10f);
+        UIElement popup = sized("popup", 10f, 10f);
         document.append(popup);
         document.promote(popup);
         document.layout(100f, 100f);
@@ -303,8 +304,8 @@ public class PortMachineryTest {
     @Test
     public void demotingReturnsItToItsOwnParent() {
         UIDocument document = document(100f, 100f);
-        UINode holder = sized("holder", 100f, 100f);
-        UINode popup = sized("popup", 10f, 10f);
+        UIElement holder = sized("holder", 100f, 100f);
+        UIElement popup = sized("popup", 10f, 10f);
         holder.append(popup);
         document.append(holder);
         document.promote(popup);
@@ -326,7 +327,7 @@ public class PortMachineryTest {
     @Test
     public void anEmptyTopLayerTakesNoSpaceAndCannotSwallowAClick() {
         UIDocument document = document(200f, 200f);
-        UINode content = sized("content", 200f, 200f);
+        UIElement content = sized("content", 200f, 200f);
         document.append(content);
         document.topLayerNode();
         document.layout(200f, 200f);
@@ -342,7 +343,7 @@ public class PortMachineryTest {
     /** The convenience setters are the attribute, under the names the widget layer already uses. */
     @Test
     public void theConvenienceSettersAreTheAttribute() {
-        UINode node = new UINode();
+        UIElement node = new UIElement();
 
         node.setEnabled(false);
         assertFalse(node.isEnabled());
@@ -371,7 +372,7 @@ public class PortMachineryTest {
      */
     @Test
     public void swappingAPrefixedClassRemovesTheOneItReplaces() {
-        UINode row = new UINode();
+        UIElement row = new UIElement();
         row.addClass("filetype-md").addClass("selected");
 
         row.swapPrefixedClass("filetype-", "filetype-java");
@@ -388,23 +389,23 @@ public class PortMachineryTest {
     @Test
     public void setOnlyChildDoesNothingWhenItAlreadyIs() {
         UIDocument document = document(100f, 100f);
-        UINode host = new UINode();
-        UINode child = new UINode();
+        UIElement host = new UIElement();
+        UIElement child = new UIElement();
         document.append(host);
         host.setOnlyChild(child);
 
         List<String> ops = new ArrayList<>();
-        new com.crystalgui.ui.dom.UINodeTreeSource(document).observe(
-                new com.crystalgui.ui.dom.TreeObserver.Adapter<UINode>() {
-                    @Override public void inserted(UINode n, UINode p, int i) { ops.add("inserted"); }
-                    @Override public void removed(UINode n, UINode p) { ops.add("removed"); }
+        new com.crystalgui.ui.dom.UIElementTreeSource(document).observe(
+                new com.crystalgui.ui.dom.TreeObserver.Adapter<UIElement>() {
+                    @Override public void inserted(UIElement n, UIElement p, int i) { ops.add("inserted"); }
+                    @Override public void removed(UIElement n, UIElement p) { ops.add("removed"); }
                 });
 
         host.setOnlyChild(child);
         assertEquals("a rebuild that changes nothing must not be a removal and an insertion on the wire",
                 List.of(), ops);
 
-        UINode other = new UINode();
+        UIElement other = new UIElement();
         host.setOnlyChild(other);
         assertEquals(List.of("removed", "inserted"), ops);
     }
@@ -421,9 +422,9 @@ public class PortMachineryTest {
     @Test
     public void aQueryDoesNotSeeIntoAShadowTree() {
         UIDocument document = document(100f, 100f);
-        UINode host = new UINode().setId("host");
-        UINode lightChild = new UINode().setId("light");
-        UINode part = new UINode().setId("part");
+        UIElement host = new UIElement().setId("host");
+        UIElement lightChild = new UIElement().setId("light");
+        UIElement part = new UIElement().setId("part");
         part.addClass("target");
         lightChild.addClass("target");
         host.attachShadow().append(part);
@@ -439,15 +440,15 @@ public class PortMachineryTest {
     /** {@code require} is a miss stated as a programming error rather than a null to carry around. */
     @Test
     public void requireThrowsWhereFindAnswersNull() {
-        UINode host = new UINode();
-        UINode child = new UINode();
+        UIElement host = new UIElement();
+        UIElement child = new UIElement();
         child.addClass("row");
         host.append(child);
 
-        assertSame(child, host.require(".row", UINode.class));
-        assertNull(host.find(".missing", UINode.class));
+        assertSame(child, host.require(".row", UIElement.class));
+        assertNull(host.find(".missing", UIElement.class));
         try {
-            host.require(".missing", UINode.class);
+            host.require(".missing", UIElement.class);
             org.junit.Assert.fail("a required miss is a programming error");
         } catch (IllegalStateException expected) {
             assertTrue(expected.getMessage(), expected.getMessage().contains(".missing"));
@@ -458,8 +459,8 @@ public class PortMachineryTest {
     @Test
     public void theDocumentAnswersByIndexAndAWalkDoesNot() {
         UIDocument document = document(100f, 100f);
-        UINode host = new UINode();
-        UINode part = new UINode().setId("part");
+        UIElement host = new UIElement();
+        UIElement part = new UIElement().setId("part");
         host.attachShadow().append(part);
         document.append(host);
 
@@ -493,7 +494,7 @@ public class PortMachineryTest {
         assertTrue("and the node is BUILT by then, unlike an instance initialiser", first.fieldWasSet);
     }
 
-    private static final class CountingNode extends UINode {
+    private static final class CountingNode extends UIElement {
         static int registrations;
         int binds;
         /** Assigned in the constructor: an instance initialiser would see this false. */

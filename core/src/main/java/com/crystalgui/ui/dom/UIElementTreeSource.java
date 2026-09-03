@@ -9,7 +9,7 @@ import javax.annotation.Nullable;
 /**
  * The seam, implemented natively by the node tree.
  *
- * <p>What {@link ElementTreeSource} is to {@code UIElement}, this is to {@link UINode} — and it is the
+ * <p>What {@link ElementTreeSource} is to {@code UIElement}, this is to {@link UIElement} — and it is the
  * whole of what the mirror needs from the second engine: ids in a table the source owns, light
  * children as {@link #childrenOf}, contracts by {@link Name}, and the observer installed on the
  * observed root so that only the subtree under it reports. Nothing in a shadow tree is ever handed
@@ -19,22 +19,22 @@ import javax.annotation.Nullable;
  * requires; but only one observer is installed per root, because that is what the node carries —
  * the same shape the old engine's propagated field has.</p>
  */
-public final class UINodeTreeSource implements TreeSource<UINode> {
+public final class UIElementTreeSource implements TreeSource<UIElement> {
 
-    private final UINode root;
-    private final Map<UINode, Integer> ids = new IdentityHashMap<>();
-    private final Map<Integer, UINode> byId = new HashMap<>();
+    private final UIElement root;
+    private final Map<UIElement, Integer> ids = new IdentityHashMap<>();
+    private final Map<Integer, UIElement> byId = new HashMap<>();
     private int nextId;
     @Nullable
-    private TreeObserver<UINode> observer;
+    private TreeObserver<UIElement> observer;
     private boolean closed;
 
-    public UINodeTreeSource(UINode root) {
+    public UIElementTreeSource(UIElement root) {
         this.root = root;
     }
 
     @Override
-    public int idOf(UINode node) {
+    public int idOf(UIElement node) {
         requireOpen();
         Integer existing = ids.get(node);
         if (existing != null) return existing;
@@ -45,41 +45,41 @@ public final class UINodeTreeSource implements TreeSource<UINode> {
     }
 
     @Override
-    public int peekId(UINode node) {
+    public int peekId(UIElement node) {
         Integer existing = ids.get(node);
         return existing == null ? NO_ID : existing;
     }
 
     @Override
     @Nullable
-    public UINode byId(int id) {
+    public UIElement byId(int id) {
         return byId.get(id);
     }
 
     @Override
-    public int allocate(UINode subtreeRoot) {
+    public int allocate(UIElement subtreeRoot) {
         requireOpen();
         int base = nextId;
         assignFrom(subtreeRoot);
         return base;
     }
 
-    private void assignFrom(UINode node) {
+    private void assignFrom(UIElement node) {
         int allocated = nextId++;
         ids.put(node, allocated);
         byId.put(allocated, node);
-        for (UINode child : node.children()) assignFrom(child);
+        for (UIElement child : node.children()) assignFrom(child);
     }
 
     @Override
-    public void release(UINode subtreeRoot) {
+    public void release(UIElement subtreeRoot) {
         Integer id = ids.remove(subtreeRoot);
         if (id != null) byId.remove(id);
-        for (UINode child : subtreeRoot.children()) release(child);
+        for (UIElement child : subtreeRoot.children()) release(child);
     }
 
     @Override
-    public void assignAt(UINode node, int id) {
+    public void assignAt(UIElement node, int id) {
         requireOpen();
         ids.put(node, id);
         byId.put(id, node);
@@ -94,34 +94,34 @@ public final class UINodeTreeSource implements TreeSource<UINode> {
     }
 
     @Override
-    public UINode root() {
+    public UIElement root() {
         return root;
     }
 
     @Override
     @Nullable
-    public UINode parentOf(UINode node) {
+    public UIElement parentOf(UIElement node) {
         return node == root ? null : node.parent();
     }
 
     /** The light children — the described tree. A shadow tree is not part of it. */
     @Override
-    public List<UINode> childrenOf(UINode node) {
+    public List<UIElement> childrenOf(UIElement node) {
         return node.describedChildren();
     }
 
     @Override
-    public boolean contains(UINode node) {
+    public boolean contains(UIElement node) {
         return root.contains(node);
     }
 
     @Override
-    public NodeContract contractOf(UINode node) {
-        return UINodeRegistry.contractFor(node.name());
+    public NodeContract contractOf(UIElement node) {
+        return UIElementRegistry.contractFor(node.name());
     }
 
     @Override
-    public void observe(@Nullable TreeObserver<UINode> observer) {
+    public void observe(@Nullable TreeObserver<UIElement> observer) {
         requireOpen();
         this.observer = observer;
         root.setObserver(observer);
@@ -129,7 +129,7 @@ public final class UINodeTreeSource implements TreeSource<UINode> {
 
     @Override
     @Nullable
-    public TreeObserver<UINode> observer() {
+    public TreeObserver<UIElement> observer() {
         return observer;
     }
 

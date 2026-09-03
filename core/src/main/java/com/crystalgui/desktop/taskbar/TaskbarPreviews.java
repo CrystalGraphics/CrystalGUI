@@ -2,21 +2,17 @@ package com.crystalgui.desktop.taskbar;
 
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
-import com.crystalgui.desktop.motion.WindowAnimation;
 import com.crystalgui.desktop.motion.WindowGeometryAnimation;
 import com.crystalgui.desktop.motion.WindowMotion;
 import com.crystalgui.desktop.window.WindowFrame;
-import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.easing.ProgressFunctions;
 import com.crystalgui.ui.service.AnchoredPlacement;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Animation;
 import com.crystalgui.ui.box.Box;
 import org.joml.Vector2f;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.control.Button;
-
-import dev.vfyjxf.taffy.style.TaffyDisplay;
 
 import javax.annotation.Nullable;
 
@@ -141,7 +137,7 @@ public final class TaskbarPreviews {
      * constructed before it is attached and its desktop is its parent. Building this lazily instead —
      * on the first entry — put an {@code addInternalChild} inside {@code refresh()}, which runs from
      * {@code onWindowChanged}: a Taffy insert into a parent whose children were still being registered,
-     * and the crash {@code UINode.taffyChildIndex} is named after.</p>
+     * and the crash {@code UIElement.taffyChildIndex} is named after.</p>
      */
     TaskbarPreviews(Taskbar taskbar) {
         this.taskbar = taskbar;
@@ -477,7 +473,7 @@ public final class TaskbarPreviews {
      * Handed back at the end with the final size applied, so the two agree about what is on screen.</p>
      */
     private void morphThumbnail(UIDocument window, float toWidth, float toHeight) {
-        UINode picture = preview.thumbnailElement();
+        UIElement picture = preview.thumbnailElement();
         preview.setThumbnailSizingSuppressed(true);
         preview.applyThumbnailSize(morphThumbWidth, morphThumbHeight);
         WindowMotion started = new WindowGeometryAnimation(picture, this::panelIsLive,

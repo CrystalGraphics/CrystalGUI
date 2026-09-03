@@ -1,8 +1,6 @@
 package com.crystalgui.widget.texteditor.lang;
 
-import com.crystalgui.ui.text.HighlightRegistry;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.style.HighlightStyle;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
@@ -45,7 +43,7 @@ public class SyntaxColoursTest extends UiDocumentTestBase {
         editor.setLanguage(entry.language());
         editor.setTokenizer(entry.newTokenizer());
 
-        UINode root = new UINode().layout(l -> l.width(320).height(200));
+        UIElement root = new UIElement().layout(l -> l.width(320).height(200));
         root.append(editor);
         document.append(root);
         // THE USER-AGENT SHEET ONLY. No theme, because the point is that a bare editor colours its code —
@@ -57,15 +55,15 @@ public class SyntaxColoursTest extends UiDocumentTestBase {
     /** The line elements the editor has realised — where highlight ranges actually live. */
     private List<UIText> lines() {
         List<UIText> found = new ArrayList<>();
-        for (UINode child : editor.children()) collect(child, found);
+        for (UIElement child : editor.children()) collect(child, found);
         return found;
     }
 
-    private static void collect(UINode element, List<UIText> out) {
+    private static void collect(UIElement element, List<UIText> out) {
         // Every UIText under a __line__ row. The ranges live on the UIText the row owns, not on the row,
         // which is the same distinction gallery.css records: a HighlightRegistry belongs to a UIText.
         if (element instanceof UIText text) out.add(text);
-        for (UINode child : element.children()) collect(child, out);
+        for (UIElement child : element.children()) collect(child, out);
     }
 
     /** A {@code UIText} carrying at least one range under {@code name}, or null. */

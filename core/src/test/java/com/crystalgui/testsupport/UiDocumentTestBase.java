@@ -8,7 +8,7 @@ import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.ShadowRoot;
 import com.crystalgui.ui.dom.Attribute;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.UIEvent;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 import java.util.ArrayList;
@@ -57,19 +57,19 @@ public abstract class UiDocumentTestBase extends UiTestBase {
      * {@code box()} directly and fail loudly if it is null, because "zero-sized" and "never laid
      * out" are different facts and a helper that flattens them hides the second.</p>
      */
-    protected static float widthOf(UINode node) {
+    protected static float widthOf(UIElement node) {
         Box box = node == null ? null : node.box();
         return box == null ? 0f : box.width();
     }
 
     /** The content-box height, zero when there is no box. @see #widthOf */
-    protected static float contentBoxHeightOf(UINode node) {
+    protected static float contentBoxHeightOf(UIElement node) {
         Box box = node == null ? null : node.box();
         return box == null ? 0f : box.contentBoxHeight();
     }
 
     /** @see #widthOf */
-    protected static float heightOf(UINode node) {
+    protected static float heightOf(UIElement node) {
         Box box = node == null ? null : node.box();
         return box == null ? 0f : box.height();
     }
@@ -115,15 +115,15 @@ public abstract class UiDocumentTestBase extends UiTestBase {
     // ── Building ─────────────────────────────────────────────────────────────
 
     /** A node at an absolute position — what most geometry fixtures want. */
-    protected static UINode at(String id, float x, float y, float width, float height) {
-        UINode node = new UINode().setId(id);
+    protected static UIElement at(String id, float x, float y, float width, float height) {
+        UIElement node = new UIElement().setId(id);
         layout(node, l -> l.positionType(TaffyPosition.ABSOLUTE).left(x).top(y).width(width).height(height));
         return node;
     }
 
     /** A node sized in flow. */
-    protected static UINode sized(String id, float width, float height) {
-        UINode node = new UINode().setId(id);
+    protected static UIElement sized(String id, float width, float height) {
+        UIElement node = new UIElement().setId(id);
         layout(node, l -> l.width(width).height(height));
         return node;
     }
@@ -134,7 +134,7 @@ public abstract class UiDocumentTestBase extends UiTestBase {
      * <p>Never {@code importantPipeline}: the engine may not write there and neither may its tests,
      * or a fixture is asserting against a cascade position no widget can reach.</p>
      */
-    protected static void layout(UINode node, Consumer<LayoutGroup> style) {
+    protected static void layout(UIElement node, Consumer<LayoutGroup> style) {
         StyleGroup.inlinePipeline(node.getStyle().getLayoutGroup(), style);
     }
 
@@ -264,7 +264,7 @@ public abstract class UiDocumentTestBase extends UiTestBase {
      * arithmetic multiplies by a 2 this fixture does not have. {@code worldX()} already carries the
      * root transform, so only the HALF-EXTENT is scaled -- scaling the origin too doubles it again.</p>
      */
-    protected final int[] centreOf(UINode node) {
+    protected final int[] centreOf(UIElement node) {
         Box box = boxOf(node);
         float scale = document.boxes().uiScale();
         return new int[]{
@@ -287,19 +287,19 @@ public abstract class UiDocumentTestBase extends UiTestBase {
      * this press" is a question about the retargeted node — asking the raw one makes every composite
      * answer with its own plumbing.</p>
      */
-    protected final UINode hitTarget(float x, float y) {
-        UINode raw = hit(x, y);
-        return raw == null ? null : UINode.retarget(raw, document);
+    protected final UIElement hitTarget(float x, float y) {
+        UIElement raw = hit(x, y);
+        return raw == null ? null : UIElement.retarget(raw, document);
     }
 
     /** What is under a point, or null over nothing. The hit test needs no paint to have happened. */
-    protected final UINode hit(float x, float y) {
+    protected final UIElement hit(float x, float y) {
         Box box = document.boxes().hitTest(x, y);
         return box == null ? null : box.node();
     }
 
     /** A node's settled box. Fails loudly rather than answering a zero box nobody asked for. */
-    protected final Box boxOf(UINode node) {
+    protected final Box boxOf(UIElement node) {
         Box box = document.boxes().boxOf(node);
         if (box == null) {
             throw new AssertionError("no box for " + node + " -- hidden, frozen, or laid out yet?");
@@ -316,29 +316,29 @@ public abstract class UiDocumentTestBase extends UiTestBase {
      * widget not having been built. Fails loudly rather than returning null, because every caller
      * is about to dereference it.</p>
      */
-    protected static UINode part(UINode host, String partName) {
+    protected static UIElement part(UIElement host, String partName) {
         ShadowRoot root = host.shadowRoot();
         if (root == null) {
             throw new AssertionError(host + " has no shadow tree, so it has no parts");
         }
-        UINode found = findPart(root, partName);
+        UIElement found = findPart(root, partName);
         if (found == null) {
             throw new AssertionError("no part named " + partName + " in " + host);
         }
         return found;
     }
 
-    private static UINode findPart(UINode at, String partName) {
-        for (UINode child : at.children()) {
+    private static UIElement findPart(UIElement at, String partName) {
+        for (UIElement child : at.children()) {
             if (partName.equals(child.get(Attribute.PART))) return child;
-            UINode deeper = findPart(child, partName);
+            UIElement deeper = findPart(child, partName);
             if (deeper != null) return deeper;
         }
         return null;
     }
 
     /** Every node under {@code scope} carrying {@code className}, in document order. */
-    protected static List<UINode> allWithClass(UINode scope, String className) {
+    protected static List<UIElement> allWithClass(UIElement scope, String className) {
         return scope.getElementsByClassName(className);
     }
 
@@ -358,8 +358,8 @@ public abstract class UiDocumentTestBase extends UiTestBase {
      * <p>{@code selector} takes the shapes those tests already use: {@code .class}, a bare class
      * name, a {@code tag}, or a part name.</p>
      */
-    protected static UINode deep(UINode scope, String selector) {
-        List<UINode> found = deepAll(scope, selector);
+    protected static UIElement deep(UIElement scope, String selector) {
+        List<UIElement> found = deepAll(scope, selector);
         if (found.isEmpty()) {
             throw new AssertionError("nothing matching \"" + selector + "\" under " + scope
                     + " -- if it is a shadow part, that is expected of querySelector and not of this");
@@ -368,13 +368,13 @@ public abstract class UiDocumentTestBase extends UiTestBase {
     }
 
     /** As {@link #deep}, but {@code null} for no match -- what {@code querySelector} answers. */
-    protected static UINode deepOrNull(UINode scope, String selector) {
-        List<UINode> found = deepAll(scope, selector);
+    protected static UIElement deepOrNull(UIElement scope, String selector) {
+        List<UIElement> found = deepAll(scope, selector);
         return found.isEmpty() ? null : found.get(0);
     }
 
     /** As {@link #deep}, every match, in composed order; empty rather than failing. */
-    protected static List<UINode> deepAll(UINode scope, String selector) {
+    protected static List<UIElement> deepAll(UIElement scope, String selector) {
         // THE REAL SELECTOR ENGINE FIRST, run once per tree. `querySelectorAll` stops at a shadow
         // boundary by design -- that is the encapsulation the engine exists to provide -- so a deep
         // query is that same query repeated inside every shadow root beneath the scope. Written as a
@@ -386,10 +386,10 @@ public abstract class UiDocumentTestBase extends UiTestBase {
         // undotted token as a TYPE and rejects one starting with underscores outright -- twelve
         // status-bar tests failed with `Unparseable selector fragment` rather than finding nothing.
         String query = selector.startsWith("__") ? "." + selector : selector;
-        LinkedHashSet<UINode> out = new LinkedHashSet<>();
+        LinkedHashSet<UIElement> out = new LinkedHashSet<>();
         try {
             out.addAll(scope.querySelectorAll(query));
-            for (UINode node : scope.composedSubtree()) {
+            for (UIElement node : scope.composedSubtree()) {
                 ShadowRoot shadow = node.shadowRoot();
                 if (shadow != null) out.addAll(shadow.querySelectorAll(query));
             }
@@ -407,7 +407,7 @@ public abstract class UiDocumentTestBase extends UiTestBase {
             // the bare word -- `__mark__` became `mark`. Every ported test still asks for the old
             // spelling, and a query that answers nothing for it reads as the part having been dropped
             // rather than renamed.
-            for (UINode node : scope.composedSubtree()) {
+            for (UIElement node : scope.composedSubtree()) {
                 if (node != scope && want.equals(node.get(Attribute.PART))) out.add(node);
             }
             // The bare name is a LAST RESORT, never a widening. Part names are short and shared --
@@ -416,7 +416,7 @@ public abstract class UiDocumentTestBase extends UiTestBase {
             // the bar. Only when nothing else answered at all, which is the case it was added for.
             if (out.isEmpty() && want.startsWith("__") && want.endsWith("__") && want.length() > 4) {
                 String bare = want.substring(2, want.length() - 2);
-                for (UINode node : scope.composedSubtree()) {
+                for (UIElement node : scope.composedSubtree()) {
                     if (node != scope && bare.equals(node.get(Attribute.PART))) out.add(node);
                 }
             }
@@ -425,9 +425,9 @@ public abstract class UiDocumentTestBase extends UiTestBase {
     }
 
     /** Every node in the COMPOSED subtree, shadow trees included — what paint and hit-testing walk. */
-    protected static List<UINode> composed(UINode scope) {
-        List<UINode> out = new ArrayList<>();
-        for (UINode node : scope.composedSubtree()) out.add(node);
+    protected static List<UIElement> composed(UIElement scope) {
+        List<UIElement> out = new ArrayList<>();
+        for (UIElement node : scope.composedSubtree()) out.add(node);
         return out;
     }
 
@@ -440,14 +440,14 @@ public abstract class UiDocumentTestBase extends UiTestBase {
      * shadow retarget both dispatch to a chain, so a listener attached in every phase fires more than
      * once and the count is not the thing the test meant to assert.</p>
      */
-    protected static <T extends UIEvent> void onTarget(UINode node, Class<T> type,
-                                                       UIEvent.Listener<UINode, T> listener) {
+    protected static <T extends UIEvent> void onTarget(UIElement node, Class<T> type,
+                                                       UIEvent.Listener<UIElement, T> listener) {
         node.events.getGroup(type).attachListener(listener, false, false);
     }
 
     /** A bubble-phase listener — what an ancestor watching its subtree wants. */
-    protected static <T extends UIEvent> void onBubble(UINode node, Class<T> type,
-                                                       UIEvent.Listener<UINode, T> listener) {
+    protected static <T extends UIEvent> void onBubble(UIElement node, Class<T> type,
+                                                       UIEvent.Listener<UIElement, T> listener) {
         node.events.getGroup(type).attachListener(listener, false, true);
     }
 }

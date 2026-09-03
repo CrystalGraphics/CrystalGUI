@@ -1,12 +1,10 @@
 package com.crystalgui.widget.overlay;
 
 import com.crystalgui.ui.dom.Attribute;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.render.texture.CgUiShape;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.widget.overlay.Dropdown;
 import org.junit.Test;
 
 import java.util.List;
@@ -26,7 +24,7 @@ public class DropdownChevronTest extends UiDocumentTestBase {
 
     @Test
     public void aDropdownCarriesAChevronShape() {
-        UINode root = new UINode();
+        UIElement root = new UIElement();
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
 
@@ -35,11 +33,11 @@ public class DropdownChevronTest extends UiDocumentTestBase {
         root.append(dropdown);
         frame();
 
-        UINode chevron = dropdown.getPostIcon();
+        UIElement chevron = dropdown.getPostIcon();
         assertNotNull("a dropdown must carry its disclosure arrow", chevron);
         assertEquals("and it is the button's post-icon slot, by that name",
                 Dropdown.CHEVRON_PART, chevron.get(Attribute.PART));
-        List<UINode> chevrons = List.of(chevron);
+        List<UIElement> chevrons = List.of(chevron);
 
         var overlay = chevrons.get(0).getStyle().getGeneralGroup().overlay();
         assertTrue("the marker must actually draw the chevron shape, not just claim the class",

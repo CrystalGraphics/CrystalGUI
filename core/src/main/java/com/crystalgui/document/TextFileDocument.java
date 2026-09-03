@@ -13,10 +13,8 @@ import javax.annotation.Nullable;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.texteditor.TextEditor;
-import com.crystalgui.document.DocumentViewState;
-import com.crystalgui.document.FileDocument;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -154,7 +152,7 @@ public record TextFileDocument(TextEditor editor, Resource resource)
     }
 
     @Override
-    public UINode view() {
+    public UIElement view() {
         return editor;
     }
 

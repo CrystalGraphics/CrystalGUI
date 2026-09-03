@@ -1,10 +1,8 @@
 package com.crystalgui.workbench.region;
 
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.layout.SplitView;
-import com.crystalgui.workbench.region.DockRegion;
-import com.crystalgui.workbench.region.RegionSide;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -43,7 +41,7 @@ import java.util.Map;
  * rule the uncloseable central leaf already states: a region that vanished when empty could never be
  * reopened, because there would be nothing left for {@code Ctrl+B} to toggle. The same goes for a half.</p>
  */
-public class RegionHost extends UINode {
+public class RegionHost extends UIElement {
     /** One region, as a node. */
     public static final Name NAME = Name.of("regionhost");
 
@@ -79,7 +77,7 @@ public class RegionHost extends UINode {
     private final Map<RegionSide, String> showing = new EnumMap<>(RegionSide.class);
 
     /** One holder per half. Built once and reused — see {@link #HALF_CLASS}. */
-    private final Map<RegionSide, UINode> halves = new EnumMap<>(RegionSide.class);
+    private final Map<RegionSide, UIElement> halves = new EnumMap<>(RegionSide.class);
 
     private float sideWeight = DEFAULT_SIDE_WEIGHT;
     private boolean capturing;
@@ -107,7 +105,7 @@ public class RegionHost extends UINode {
         split.onPercentageChanged.connect(ignored -> captureSideWeight());
 
         for (RegionSide side : RegionSide.values()) {
-            UINode half = new UINode();
+            UIElement half = new UIElement();
             half.addClass(HALF_CLASS);
             half.addClass(side == RegionSide.PRIMARY ? "__region-primary__" : "__region-secondary__");
             halves.put(side, half);
@@ -154,7 +152,7 @@ public class RegionHost extends UINode {
     }
 
     /** Shows {@code content} in one half, replacing whatever was there. */
-    public void show(RegionSide side, String typeId, UINode element) {
+    public void show(RegionSide side, String typeId, UIElement element) {
         showing.put(side, typeId);
         halves.get(side).setOnlyChild(element);
         sync();
@@ -170,7 +168,7 @@ public class RegionHost extends UINode {
     /** Empties both halves. */
     public void clear() {
         showing.clear();
-        for (UINode half : halves.values()) half.setOnlyChild(null);
+        for (UIElement half : halves.values()) half.setOnlyChild(null);
         sync();
     }
 
@@ -182,7 +180,7 @@ public class RegionHost extends UINode {
      */
     private void sync() {
         if (capturing) return;
-        List<UINode> parts = new ArrayList<>(2);
+        List<UIElement> parts = new ArrayList<>(2);
         List<Float> weights = new ArrayList<>(2);
         if (showing.containsKey(RegionSide.PRIMARY)) {
             parts.add(halves.get(RegionSide.PRIMARY));

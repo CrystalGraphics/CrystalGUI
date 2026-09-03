@@ -36,7 +36,7 @@ import java.util.List;
  *
  * <h3>Values are read through the scope chain, not from a store somebody has to hand around</h3>
  *
- * <p>{@code UINode} is a {@code SettingsScope}, so {@code workbench.resolve(SORT_ORDER)} already walks
+ * <p>{@code UIElement} is a {@code SettingsScope}, so {@code workbench.resolve(SORT_ORDER)} already walks
  * outward to whichever ancestor holds the value. Nothing here needs a {@code Settings} reference, and a
  * panel that wants to override a setting for itself alone can, by holding its own.</p>
  */

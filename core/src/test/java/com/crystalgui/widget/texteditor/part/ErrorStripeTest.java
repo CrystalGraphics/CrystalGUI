@@ -1,14 +1,12 @@
 package com.crystalgui.widget.texteditor.part;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.widget.texteditor.TextEditor;
-import org.junit.Ignore;
 import com.crystalgui.widget.scroll.Scroller;
 import org.junit.Test;
 
@@ -43,7 +41,7 @@ public class ErrorStripeTest extends UiDocumentTestBase {
         editor.layout(l -> l.width(300).height(160));
         editor.generalStyle(g -> g.fontSize(8f).lineHeight(1.25f));
 
-        UINode root = new UINode().layout(l -> l.width(320).height(200));
+        UIElement root = new UIElement().layout(l -> l.width(320).height(200));
         root.append(editor);
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
@@ -55,17 +53,17 @@ public class ErrorStripeTest extends UiDocumentTestBase {
         for (int i = 0; i < 4; i++) frame();
     }
 
-    private List<UINode> marks() {
-        List<UINode> found = new ArrayList<>();
+    private List<UIElement> marks() {
+        List<UIElement> found = new ArrayList<>();
         collect(editor.verticalScroller().track(), found);
         return found;
     }
 
-    private static void collect(UINode element, List<UINode> out) {
+    private static void collect(UIElement element, List<UIElement> out) {
         if (element.hasClass("__error-stripe__") && heightOf(element) > 0f) {
             out.add(element);
         }
-        for (UINode child : element.children()) collect(child, out);
+        for (UIElement child : element.children()) collect(child, out);
     }
 
     private static Diagnostic errorOn(int row) {
@@ -107,7 +105,7 @@ public class ErrorStripeTest extends UiDocumentTestBase {
         editor.diagnostics().setAll(List.of(errorOn(10)));
         settle();
 
-        List<UINode> found = marks();
+        List<UIElement> found = marks();
         assertEquals(1, found.size());
         assertTrue(found.get(0).hasClass("__error-stripe-error__"));
         assertFalse(found.get(0).hasClass("__error-stripe-warning__"));
@@ -126,7 +124,7 @@ public class ErrorStripeTest extends UiDocumentTestBase {
         editor.diagnostics().setAll(List.of(errorOn(2), errorOn(ROWS / 2), errorOn(ROWS - 2)));
         settle();
 
-        List<UINode> found = marks();
+        List<UIElement> found = marks();
         assertEquals(3, found.size());
 
         float top = found.get(0).box().y();
@@ -147,7 +145,7 @@ public class ErrorStripeTest extends UiDocumentTestBase {
         editor.diagnostics().setAll(List.of(errorOn(ROWS - 1)));
         settle();
 
-        List<UINode> found = marks();
+        List<UIElement> found = marks();
         assertEquals(1, found.size());
         float trackBottom = editor.verticalScroller().track().box().y() + trackHeight();
         var cache = found.get(0).box();
@@ -181,7 +179,7 @@ public class ErrorStripeTest extends UiDocumentTestBase {
                 new TextPoint(5, 0), new TextPoint(5, 4), "now a warning")));
         settle();
 
-        List<UINode> found = marks();
+        List<UIElement> found = marks();
         assertEquals(1, found.size());
         assertTrue(found.get(0).hasClass("__error-stripe-warning__"));
         assertFalse("the error class survived recycling", found.get(0).hasClass("__error-stripe-error__"));
@@ -224,10 +222,10 @@ public class ErrorStripeTest extends UiDocumentTestBase {
         editor.diagnostics().setAll(List.of(errorOn(10)));
         settle();
 
-        UINode mark = marks().get(0);
+        UIElement mark = marks().get(0);
         // A SCROLLER'S THUMB IS A PART, so a class walk finds nothing: `__thumb__` became `thumb`
         // and lives inside the scroller's shadow tree, where no outside query reaches it.
-        UINode thumb = deepOrNull(editor.verticalScroller(), "." + Scroller.THUMB_PART);
+        UIElement thumb = deepOrNull(editor.verticalScroller(), "." + Scroller.THUMB_PART);
         assertNotNull("no thumb to compare against", thumb);
 
         assertTrue("the stripe sits under the thumb and will be hidden by it",
@@ -235,10 +233,10 @@ public class ErrorStripeTest extends UiDocumentTestBase {
                         > thumb.getStyle().getGeneralGroup().zIndex());
     }
 
-    private static UINode findByClass(UINode element, String cssClass) {
+    private static UIElement findByClass(UIElement element, String cssClass) {
         if (element.hasClass(cssClass)) return element;
-        for (UINode child : element.children()) {
-            UINode found = findByClass(child, cssClass);
+        for (UIElement child : element.children()) {
+            UIElement found = findByClass(child, cssClass);
             if (found != null) return found;
         }
         return null;

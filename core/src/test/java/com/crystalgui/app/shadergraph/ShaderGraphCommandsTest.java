@@ -1,10 +1,8 @@
 package com.crystalgui.app.shadergraph;
 
-import com.crystalgui.core.undo.UndoScope;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.undo.UndoCommands;
-import com.crystalgui.app.shadergraph.ShaderGraphEditor;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiDocumentTestBase;
@@ -40,8 +38,8 @@ import com.crystalgui.ui.input.keymap.Keymap;
 public class ShaderGraphCommandsTest extends UiDocumentTestBase {
 
 
-    private UIDocument windowOver(UINode content) {
-        UINode root = new UINode().layout(l -> l.width(800).height(500));
+    private UIDocument windowOver(UIElement content) {
+        UIElement root = new UIElement().layout(l -> l.width(800).height(500));
         root.append(content);
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);

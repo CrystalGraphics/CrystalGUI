@@ -79,10 +79,11 @@ public class EngineBoundaryTest {
             "com/crystalgui/workbench/",
             // THE DOCUMENT LAYER (6.7) is a NEW-ENGINE package and not a neutral one, and the reason
             // is one method: `FileDocument.view()` answers the node that shows the document, and
-            // there is no supertype `UIElement` and `UINode` share. So it cannot be ONE class both
-            // engines name -- the three genuinely neutral members (DocumentType, DocumentViewState,
-            // RecentFiles) are copied with it rather than moved, because the old engine still names
-            // them and a move into a new-engine package is what this test exists to catch.
+            // there was no supertype the OLD engine's element class and this one shared, so it
+            // could not be ONE class both engines name -- the three genuinely neutral members
+            // (DocumentType, DocumentViewState, RecentFiles) are copied with it rather than moved,
+            // because the old engine still named them and a move into a new-engine package is what
+            // this test exists to catch.
             "com/crystalgui/document/",
             // THE APPLICATIONS (6.4). Without this the shader graph is classified as OLD engine, and
             // every reference it makes into `widget` reads as the old engine reaching into the new
@@ -120,8 +121,8 @@ public class EngineBoundaryTest {
      * engine, so the node tree's sits in {@code net/mirror} beside the old engine's.</p>
      */
     private static final List<String> NEW_CLASSES = List.of(
-            "com/crystalgui/net/mirror/UINodeMirror",
-            "com/crystalgui/net/mirror/UINodeMirror$Companion");
+            "com/crystalgui/net/mirror/UIElementMirror",
+            "com/crystalgui/net/mirror/UIElementMirror$Companion");
 
     /** What the new engine must never name. */
     private static final List<String> OLD_ENGINE = List.of(

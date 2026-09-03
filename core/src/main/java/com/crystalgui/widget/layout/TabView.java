@@ -7,6 +7,7 @@ import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.serialization.StateMap;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.scroll.Scroller;
 import com.crystalgui.widget.scroll.ScrollerView;
 import javax.annotation.Nullable;
@@ -16,7 +17,6 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.event.KeyboardEvent;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
@@ -33,7 +33,7 @@ import java.util.List;
  * ├── strip : ScrollerView   .__strip__     Tabs are DIRECT children — no viewport wrapper
  * │   ├── Tab
  * │   └── Tab
- * └── panes : UINode      .__panes__
+ * └── panes : UIElement      .__panes__
  *     ├── pane               .__pane__      display: none unless its tab is selected
  *     └── pane
  * </pre>
@@ -59,7 +59,7 @@ import java.util.List;
  * an internal container, so {@link #describedChildren()} exposes the tabs and each {@code Tab} exposes
  * its own content. The selection travels as state, applied after the tabs exist.</p>
  */
-public class TabView extends UINode {
+public class TabView extends UIElement {
 
     public static final Name NAME = Name.of("tabview");
 
@@ -136,10 +136,10 @@ public class TabView extends UINode {
     /** Fires whenever the selected tab changes. Carries {@code null} when the last tab is removed. */
     public final Signal.Value<Tab> onTabSelected = new Signal.Value<>();
 
-    private final UINode strip;
+    private final UIElement strip;
     private final ScrollerView rail;
     private final Scroller bar;
-    private final UINode panes;
+    private final UIElement panes;
     private final List<Tab> tabs = new ArrayList<>();
     /**
      * A tab that has been selected and not yet scrolled to — see {@link #revealPendingTab}.
@@ -164,7 +164,7 @@ public class TabView extends UINode {
         // float on top of the tabs — on a strip barely taller than one tab that eats their bottom
         // edge, and reserving padding to dodge it pushes every tab off the pane and kills the
         // selected tab's seam. A laid-out bar simply takes its own few pixels.
-        this.strip = new UINode();
+        this.strip = new UIElement();
         this.strip.addClass(STRIP_CLASS);
         // Starts empty, and a TabView built and never filled must not reserve the row either.
         this.strip.addClass(EMPTY_CLASS);
@@ -207,7 +207,7 @@ public class TabView extends UINode {
         });
         this.strip.append(this.bar);
 
-        this.panes = new UINode();
+        this.panes = new UIElement();
         this.panes.addClass(PANES_CLASS);
         // flex-grow is not optional here: this engine's FLEX_SHRINK defaults to 0 and MIN_WIDTH to
         // ZERO (both diverge from CSS), so without an explicit grow the panes container would sit at
@@ -353,7 +353,7 @@ public class TabView extends UINode {
      * to make them undescribed for free.</p>
      */
     @Override
-    public List<UINode> describedChildren() {
+    public List<UIElement> describedChildren() {
         return List.copyOf(tabs);
     }
 
@@ -362,7 +362,7 @@ public class TabView extends UINode {
      * panes, which is what {@link #adoptTabAt} is for and why that method exists at all.
      */
     @Override
-    public void adoptDescribedChild(UINode child) {
+    public void adoptDescribedChild(UIElement child) {
         if (!(child instanceof Tab tab)) {
             throw new IllegalArgumentException("a <tabview> holds <tab> children and nothing else; "
                     + "a described " + child.tagName() + " has no place in one");
@@ -575,7 +575,7 @@ public class TabView extends UINode {
     }
 
     /** The header strip — the box holding {@link #rail()} and {@link #bar()}. */
-    public UINode strip() {
+    public UIElement strip() {
         return strip;
     }
 
@@ -610,7 +610,7 @@ public class TabView extends UINode {
      * How far the rail's content extends on one axis.
      *
      * <p>{@code getScrollWidth()}/{@code getScrollHeight()} were the old engine's spelling and have no
-     * counterpart: {@link UINode#scrollExtent} looks like one and is not — it answers {@code -1} unless
+     * counterpart: {@link UIElement#scrollExtent} looks like one and is not — it answers {@code -1} unless
      * a VIRTUALISED view overrides it, which a tab rail is not. The client box plus what is left to
      * scroll is the same number by definition, and it needs no new API.</p>
      */
@@ -657,7 +657,7 @@ public class TabView extends UINode {
     private static final float LINE_PX = 40f;
 
     /** The container holding every pane. Panes themselves come from {@link Tab#content()}. */
-    public UINode panes() {
+    public UIElement panes() {
         return panes;
     }
 

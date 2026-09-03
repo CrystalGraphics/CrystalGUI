@@ -16,7 +16,7 @@ import org.junit.Test;
 /**
  * A widget that declares a kind must actually REPORT it.
  *
- * <p>{@code UINode}'s no-argument constructor answers {@code crystalgui:element}, so a subclass that
+ * <p>{@code UIElement}'s no-argument constructor answers {@code crystalgui:element}, so a subclass that
  * declares {@code NAME} and never passes it to {@code super} compiles, registers, and then reports the
  * base tag for the rest of its life — and <b>every tag-scoped rule aimed at it matches nothing</b>.</p>
  *

@@ -6,7 +6,7 @@ import com.crystalgui.style.GeneralGroup;
 import com.crystalgui.style.LayoutGroup;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 import java.util.function.Consumer;
 import javax.annotation.Nullable;
@@ -17,8 +17,8 @@ final class BoxFixtures {
     private BoxFixtures() {
     }
 
-    static UINode sized(float width, float height) {
-        UINode node = new UINode();
+    static UIElement sized(float width, float height) {
+        UIElement node = new UIElement();
         layout(node, l -> {
             l.width(width);
             l.height(height);
@@ -26,8 +26,8 @@ final class BoxFixtures {
         return node;
     }
 
-    static UINode absolute(float x, float y, float width, float height) {
-        UINode node = sized(width, height);
+    static UIElement absolute(float x, float y, float width, float height) {
+        UIElement node = sized(width, height);
         layout(node, l -> {
             l.positionType(TaffyPosition.ABSOLUTE);
             l.left(x);
@@ -36,22 +36,22 @@ final class BoxFixtures {
         return node;
     }
 
-    static void layout(UINode node, Consumer<LayoutGroup> style) {
+    static void layout(UIElement node, Consumer<LayoutGroup> style) {
         StyleGroup.inlinePipeline(node.getStyle().getLayoutGroup(), style);
     }
 
-    static void general(UINode node, Consumer<GeneralGroup> style) {
+    static void general(UIElement node, Consumer<GeneralGroup> style) {
         StyleGroup.inlinePipeline(node.getStyle().getGeneralGroup(), style);
     }
 
-    static Box box(UINode node) {
+    static Box box(UIElement node) {
         Box box = node.box();
         assertNotNull("<" + node + "> has no box", box);
         return box;
     }
 
     /** The node under a world point, or null over nothing. */
-    static @Nullable UINode hit(UIDocument document, float x, float y) {
+    static @Nullable UIElement hit(UIDocument document, float x, float y) {
         Box box = document.boxes().hitTest(x, y);
         return box == null ? null : box.node();
     }

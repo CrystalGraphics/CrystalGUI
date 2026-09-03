@@ -1,17 +1,10 @@
 package com.crystalgui.desktop.window;
 
-import com.crystalgui.core.undo.Edit;
-import com.crystalgui.workbench.Workbench;
-import com.crystalgui.ui.dom.Attribute;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.desktop.Desktop;
-import com.crystalgui.desktop.window.WindowChrome;
-import com.crystalgui.desktop.window.WindowFrame;
-import org.junit.Ignore;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -50,9 +43,9 @@ public class WindowCaptionChromeTest extends UiDocumentTestBase {
     /** Stands in for a workbench: content with its own header, held as an INTERNAL child exactly as
      * {@code Workbench} holds its menu bar — which is the case that is easy to get wrong on the way
      * back, since {@code removeChild} refuses an internal child and the return has to restore the flag. */
-    private static final class Application extends UINode implements WindowChrome {
-        private final UINode header = new UINode();
-        private final UINode body = new UINode();
+    private static final class Application extends UIElement implements WindowChrome {
+        private final UIElement header = new UIElement();
+        private final UIElement body = new UIElement();
 
         Application() {
             header.append(new UIText("File  Edit  View"));
@@ -61,13 +54,13 @@ public class WindowCaptionChromeTest extends UiDocumentTestBase {
         }
 
         @Override
-        public UINode captionChrome() {
+        public UIElement captionChrome() {
             return header;
         }
     }
 
     private void build() {
-        UINode root = new UINode().layout(l -> l.width(400).height(300));
+        UIElement root = new UIElement().layout(l -> l.width(400).height(300));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
         desktop = Desktop.of(document);
@@ -118,7 +111,7 @@ public class WindowCaptionChromeTest extends UiDocumentTestBase {
     public void releasingPutsItBackWhereItCameFrom() {
         build();
         Application app = new Application();
-        UINode header = app.captionChrome();
+        UIElement header = app.captionChrome();
         int originalIndex = app.children().indexOf(header);
         WindowFrame frame = Desktop.of(document).addWindow(new WindowFrame("App"));
         frame.resizeTo(200, 140).setContent(app);
@@ -144,7 +137,7 @@ public class WindowCaptionChromeTest extends UiDocumentTestBase {
     public void destroyingTheWindowReturnsTheChrome() {
         build();
         Application app = new Application();
-        UINode header = app.captionChrome();
+        UIElement header = app.captionChrome();
         WindowFrame frame = Desktop.of(document).addWindow(new WindowFrame("App"));
         frame.resizeTo(200, 140).setContent(app);
         settle();
@@ -158,7 +151,7 @@ public class WindowCaptionChromeTest extends UiDocumentTestBase {
     @Test
     public void contentWithNoChromeIsLeftAlone() {
         build();
-        UINode plain = new UINode();
+        UIElement plain = new UIElement();
         WindowFrame frame = Desktop.of(document).addWindow(new WindowFrame("Plain"));
         frame.resizeTo(200, 140).setContent(plain);
         settle();
@@ -203,24 +196,24 @@ public class WindowCaptionChromeTest extends UiDocumentTestBase {
         frame.resizeTo(240, 140).moveTo(20, 20).setContent(app);
         settle();
 
-        UINode bar = frame.titleBar();
-        UINode chrome = frame.adoptedChrome();
+        UIElement bar = frame.titleBar();
+        UIElement chrome = frame.adoptedChrome();
         assertTrue("the chrome has a box, or this proves nothing",
                 widthOf(chrome) > 0f);
         assertTrue("and it does not fill the caption",
                 chrome.box().width() < bar.box().width() - 8f);
     }
 
-    private static boolean isInside(UINode element, UINode ancestor) {
-        for (UINode walk = element; walk != null; walk = walk.parent()) {
+    private static boolean isInside(UIElement element, UIElement ancestor) {
+        for (UIElement walk = element; walk != null; walk = walk.parent()) {
             if (walk == ancestor) return true;
         }
         return false;
     }
 
-    private static int countMatching(UINode from, UINode target) {
+    private static int countMatching(UIElement from, UIElement target) {
         int found = from == target ? 1 : 0;
-        for (UINode child : from.children()) found += countMatching(child, target);
+        for (UIElement child : from.children()) found += countMatching(child, target);
         return found;
     }
 }

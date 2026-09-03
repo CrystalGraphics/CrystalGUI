@@ -1,18 +1,6 @@
 package com.crystalgui.app.shadergraph;
 
-import com.crystalgui.core.property.Property;
-import com.crystalgui.graph.GraphCodecs;
-import com.crystalgui.serialization.CodecException;
-import com.crystalgui.text.diagnostic.DiagnosticSet;
-import com.crystalgui.widget.graph.GraphView;
-import com.crystalgui.widget.layout.SplitView;
-import com.crystalgui.widget.texteditor.TextEditor;
-import com.crystalgui.workbench.Workbench;
-import com.crystalgui.workbench.chrome.palette.QuickPick;
-import com.crystalgui.workbench.chrome.problems.ProblemsPanel;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.app.shadergraph.ShaderGraphEditor;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.app.shadergraph.node.ShaderPropertyNodes;
 import com.crystalgui.widget.graph.GraphNode;
 import com.crystalgui.style.sheet.StyleSheet;
@@ -45,7 +33,7 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
 
     private void build() {
         editor = new ShaderGraphEditor();
-        UINode root = new UINode().layout(l -> l.width(800).height(500));
+        UIElement root = new UIElement().layout(l -> l.width(800).height(500));
         root.append(editor);
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
@@ -116,7 +104,7 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
         // removeChild REFUSES an internal child and reports false, so asking the engine to remove the
         // GraphView is the observable form of "was this subtree stamped?" -- and it asks the engine
         // rather than a private flag this test would have to guess the name of.
-        UINode pane = editor.graph().parent();
+        UIElement pane = editor.graph().parent();
         assertNotNull("the graph is not in the tree at all", pane);
         boolean removable = pane.remove(editor.graph());
         assertTrue("the GraphView is stamped internal -- removals under it are silently refused, "
@@ -142,7 +130,7 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
         assertNull("source() must not be in the editor's own tree -- a host places it",
                 editor.source().parent());
 
-        UINode host = new UINode().layout(l -> l.width(300).height(200));
+        UIElement host = new UIElement().layout(l -> l.width(300).height(200));
         editor.parent().append(host);
         host.append(editor.source());
         for (int i = 0; i < 3; i++) frame();
@@ -179,7 +167,7 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
 
         // A DIFFERENT editor, which is what opening the file in a new tab is.
         ShaderGraphEditor reopened = new ShaderGraphEditor();
-        UINode host = new UINode().layout(l -> l.width(800).height(500));
+        UIElement host = new UIElement().layout(l -> l.width(800).height(500));
         host.append(reopened);
         document.append(host);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
@@ -270,7 +258,7 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
         byte[] saved = editor.encode();
 
         ShaderGraphEditor reopened = new ShaderGraphEditor();
-        UINode host = new UINode().layout(l -> l.width(800).height(500));
+        UIElement host = new UIElement().layout(l -> l.width(800).height(500));
         host.append(reopened);
         document.append(host);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
@@ -302,7 +290,7 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
         byte[] saved = editor.encode();
 
         ShaderGraphEditor reopened = new ShaderGraphEditor();
-        UINode host = new UINode().layout(l -> l.width(800).height(500));
+        UIElement host = new UIElement().layout(l -> l.width(800).height(500));
         host.append(reopened);
         document.append(host);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
@@ -377,7 +365,7 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
     @Test
     public void compileProblemsBecomeAttributedDiagnostics() {
         ShaderGraphEditor editor = new ShaderGraphEditor();
-        UINode root = new UINode().layout(l -> l.width(600).height(400));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400));
         root.append(editor);
         document.append(root);
         for (int i = 0; i < 6; i++) frame();
@@ -406,7 +394,7 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
     @Test
     public void duplicatePropertyNamesAreReported() {
         ShaderGraphEditor editor = new ShaderGraphEditor();
-        UINode root = new UINode().layout(l -> l.width(600).height(400));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400));
         root.append(editor);
         document.append(root);
         for (int i = 0; i < 6; i++) frame();
@@ -437,7 +425,7 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
     @Test
     public void aNodeTypeThisBuildLacksIsReported() {
         ShaderGraphEditor editor = new ShaderGraphEditor();
-        UINode root = new UINode().layout(l -> l.width(600).height(400));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400));
         root.append(editor);
         document.append(root);
         for (int i = 0; i < 6; i++) frame();

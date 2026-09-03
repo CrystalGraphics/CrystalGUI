@@ -1,8 +1,6 @@
 package com.crystalgui.widget.texteditor.lang;
 
-import com.crystalgui.ui.text.HighlightRegistry;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.text.Rope;
@@ -131,7 +129,7 @@ public class SemanticOverlayTest extends UiDocumentTestBase {
             }
         });
 
-        UINode root = new UINode().layout(l -> l.width(400).height(400));
+        UIElement root = new UIElement().layout(l -> l.width(400).height(400));
         root.append(editor);
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
@@ -152,14 +150,14 @@ public class SemanticOverlayTest extends UiDocumentTestBase {
      * into that element's own string. Every fixture here is one unwrapped line, so a document offset is a
      * line offset; anything wrapping would need the rebasing {@code refreshHighlights} does.</p>
      */
-    private static void collect(UINode element, List<UIText> out) {
+    private static void collect(UIElement element, List<UIText> out) {
         if (element instanceof UIText text) out.add(text);
-        for (UINode child : element.children()) collect(child, out);
+        for (UIElement child : element.children()) collect(child, out);
     }
 
     private List<UIText> lines(TextEditor target) {
         List<UIText> found = new ArrayList<>();
-        for (UINode child : target.children()) collect(child, found);
+        for (UIElement child : target.children()) collect(child, found);
         return found;
     }
 
@@ -228,7 +226,7 @@ public class SemanticOverlayTest extends UiDocumentTestBase {
         plain.generalStyle(g -> g.fontSize(8f).lineHeight(1.25f));
         plain.setTokenizer(new BlanketTokenizer());
 
-        UINode root = new UINode().layout(l -> l.width(400).height(400));
+        UIElement root = new UIElement().layout(l -> l.width(400).height(400));
         root.append(plain);
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);

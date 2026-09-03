@@ -13,7 +13,7 @@ import com.crystalgui.workbench.chrome.status.StatusBarView;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.ui.dom.NodeContract;
 import com.crystalgui.ui.dom.NodeKinds;
-import com.crystalgui.ui.dom.UINodeRegistry;
+import com.crystalgui.ui.dom.UIElementRegistry;
 
 /**
  * The {@code chrome} layer's kinds — {@link NodeKinds} for the shell.
@@ -40,15 +40,15 @@ public final class ChromeKinds implements NodeKinds {
 
     @Override
     public void register() {
-        UINodeRegistry.register(QuickPick.NAME, QuickPick::new, NodeContract.INERT);
-        UINodeRegistry.register(MenuBarView.NAME, () -> new MenuBarView(CommandRegistry.global()), NodeContract.INERT);
-        UINodeRegistry.register(StatusBarView.NAME, StatusBarView::new, NodeContract.INERT);
-        UINodeRegistry.register(ProgressStatusItem.NAME, ProgressStatusItem::new, NodeContract.INERT);
-        UINodeRegistry.register(ProcessesPopover.NAME, ProcessesPopover::new, NodeContract.INERT);
-        UINodeRegistry.register(Breadcrumbs.NAME, Breadcrumbs::new, NodeContract.INERT);
-        UINodeRegistry.register(NotificationsView.NAME, NotificationsView::new, NodeContract.INERT);
-        UINodeRegistry.register(NotificationBalloons.NAME, NotificationBalloons::new, NodeContract.INERT);
-        UINodeRegistry.register(ProblemsPanel.NAME, ProblemsPanel::new, NodeContract.INERT);
-        UINodeRegistry.register(NavigatorView.NAME, NavigatorView::new, NodeContract.INERT);
+        UIElementRegistry.register(QuickPick.NAME, QuickPick::new, NodeContract.INERT);
+        UIElementRegistry.register(MenuBarView.NAME, () -> new MenuBarView(CommandRegistry.global()), NodeContract.INERT);
+        UIElementRegistry.register(StatusBarView.NAME, StatusBarView::new, NodeContract.INERT);
+        UIElementRegistry.register(ProgressStatusItem.NAME, ProgressStatusItem::new, NodeContract.INERT);
+        UIElementRegistry.register(ProcessesPopover.NAME, ProcessesPopover::new, NodeContract.INERT);
+        UIElementRegistry.register(Breadcrumbs.NAME, Breadcrumbs::new, NodeContract.INERT);
+        UIElementRegistry.register(NotificationsView.NAME, NotificationsView::new, NodeContract.INERT);
+        UIElementRegistry.register(NotificationBalloons.NAME, NotificationBalloons::new, NodeContract.INERT);
+        UIElementRegistry.register(ProblemsPanel.NAME, ProblemsPanel::new, NodeContract.INERT);
+        UIElementRegistry.register(NavigatorView.NAME, NavigatorView::new, NodeContract.INERT);
     }
 }

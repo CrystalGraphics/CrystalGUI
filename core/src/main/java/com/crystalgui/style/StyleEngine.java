@@ -285,7 +285,7 @@ public final class StyleEngine {
         // BLAMED WHILE PROFILING. A count says three hundred elements were re-matched; only the caller
         // says why, and "why" is the whole question when nothing on screen is moving. @see FrameProfile
         if (FrameProfile.ENABLED && dirtyMatch.add(element)) {
-            FrameProfile.blame("markDirty", "com.crystalgui.style", "com.crystalgui.ui.dom.UINode");
+            FrameProfile.blame("markDirty", "com.crystalgui.style", "com.crystalgui.ui.dom.UIElement");
             return;
         }
         dirtyMatch.add(element);

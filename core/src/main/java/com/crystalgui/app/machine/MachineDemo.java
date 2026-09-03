@@ -4,7 +4,6 @@ import java.util.List;
 import java.util.Map;
 
 import com.crystalgui.app.machine.ui.MachinePanel;
-import com.crystalgui.app.machine.ui.MachineStyles;
 import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.window.ClientWindows;
 import com.crystalgui.net.window.ServerWindow;
@@ -15,7 +14,7 @@ import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Switch;
 
@@ -310,16 +309,16 @@ public final class MachineDemo {
                 }
 
                 @Override
-                public void contentReplaced(UINode newRoot) {
+                public void contentReplaced(UIElement newRoot) {
                     System.out.println("  [client] the server re-described this window");
                 }
             };
         }
     }
 
-    private static int count(UINode element) {
+    private static int count(UIElement element) {
         int total = 1;
-        for (UINode child : element.children()) total += count(child);
+        for (UIElement child : element.children()) total += count(child);
         return total;
     }
 

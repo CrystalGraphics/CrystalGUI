@@ -6,22 +6,17 @@ import com.crystalgui.desktop.motion.WindowMotion;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.property.StyleProperty;
-import com.crystalgui.style.property.StyleSlot;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.easing.Easing;
 import com.crystalgui.style.easing.ProgressFunctions;
-import com.crystalgui.style.property.StylePropertyRegistry;
-import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.ui.box.Box;
 import javax.annotation.Nullable;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.service.Animation;
+
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 import dev.vfyjxf.taffy.style.TaffyPosition;
-
-import java.util.function.Predicate;
 
 /**
  * An entry joining or leaving the strip — it opens the row apart, or closes it up.
@@ -88,7 +83,7 @@ final class TaskbarEntryMotion implements WindowMotion {
      */
     private static final Easing CURVE = ProgressFunctions.Premade.OUT_QUAD;
 
-    private final UINode entry;
+    private final UIElement entry;
     private final boolean opening;
     private final Runnable onDone;
 
@@ -112,12 +107,12 @@ final class TaskbarEntryMotion implements WindowMotion {
     private boolean over;
 
     /** An entry arriving: measured out of flow on its first frame, then the row opens for it. */
-    static TaskbarEntryMotion opening(UINode entry, Runnable settled) {
+    static TaskbarEntryMotion opening(UIElement entry, Runnable settled) {
         return new TaskbarEntryMotion(entry, true, settled);
     }
 
     /** An entry leaving: the row closes up, and {@code detach} drops it at the end. */
-    static TaskbarEntryMotion closing(UINode entry, Runnable detach) {
+    static TaskbarEntryMotion closing(UIElement entry, Runnable detach) {
         return new TaskbarEntryMotion(entry, false, detach);
     }
 
@@ -125,7 +120,7 @@ final class TaskbarEntryMotion implements WindowMotion {
      * Starts immediately — the first values are written here, not on the first tick, or the entry shows a
      * frame of its END state before it begins.
      */
-    private TaskbarEntryMotion(UINode entry, boolean opening, Runnable onDone) {
+    private TaskbarEntryMotion(UIElement entry, boolean opening, Runnable onDone) {
         this.entry = entry;
         this.opening = opening;
         this.onDone = onDone;

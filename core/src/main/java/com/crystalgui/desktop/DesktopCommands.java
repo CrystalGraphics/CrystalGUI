@@ -4,10 +4,9 @@ import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
-import com.crystalgui.desktop.taskbar.Taskbar;
 import com.crystalgui.desktop.taskbar.TaskbarDesigner;
 import com.crystalgui.desktop.window.WindowFrame;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 
 import javax.annotation.Nullable;
@@ -153,7 +152,7 @@ public final class DesktopCommands {
      */
     @Nullable
     private static Desktop desktopFor(CommandContext context) {
-        UINode element = UINode.sourceOf(context);
+        UIElement element = UIElement.sourceOf(context);
         return element == null ? null : Desktop.ifPresent(element.document());
     }
 }

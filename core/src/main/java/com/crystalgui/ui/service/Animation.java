@@ -1,7 +1,7 @@
 package com.crystalgui.ui.service;
 
 import com.crystalgui.style.easing.Easing;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -125,7 +125,7 @@ public final class Animation {
         }
     }
 
-    private record OwnedHook(UINode owner, Hook hook) {
+    private record OwnedHook(UIElement owner, Hook hook) {
     }
 
     private final List<Timeline> timelines = new ArrayList<>();
@@ -176,7 +176,7 @@ public final class Animation {
      * are all that one hook, so a Run panel that had ever been hidden stopped responding to anything
      * at all while looking perfectly healthy.</p>
      */
-    public void every(UINode owner, Hook hook) {
+    public void every(UIElement owner, Hook hook) {
         hooks.add(new OwnedHook(owner, hook));
     }
 
@@ -201,7 +201,7 @@ public final class Animation {
      * <p>It may not mutate the tree — a structural change would need another layout, and there is no
      * second pass. Move a box, read a box, place something; do not add one.</p>
      */
-    public void afterLayout(UINode owner, Hook hook) {
+    public void afterLayout(UIElement owner, Hook hook) {
         afterLayout.add(new OwnedHook(owner, hook));
     }
 
@@ -250,8 +250,8 @@ public final class Animation {
     }
 
     /** Drops the hooks a subtree owns — the lifecycle service, freezing or destroying it. */
-    public void forget(UINode node) {
-        hooks.removeIf(owned -> UINode.isShadowIncludingInclusiveAncestor(node, owned.owner()));
-        afterLayout.removeIf(owned -> UINode.isShadowIncludingInclusiveAncestor(node, owned.owner()));
+    public void forget(UIElement node) {
+        hooks.removeIf(owned -> UIElement.isShadowIncludingInclusiveAncestor(node, owned.owner()));
+        afterLayout.removeIf(owned -> UIElement.isShadowIncludingInclusiveAncestor(node, owned.owner()));
     }
 }

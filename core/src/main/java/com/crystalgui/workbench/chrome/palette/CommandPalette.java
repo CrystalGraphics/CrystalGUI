@@ -1,14 +1,13 @@
 package com.crystalgui.workbench.chrome.palette;
 
 
-import com.crystalgui.workbench.chrome.menu.MenuBarView;
 import com.crystalgui.core.collection.pick.QuickPickItem;
 import com.crystalgui.core.collection.pick.QuickPickSource;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataKey;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.input.keymap.KeyChord;
 import com.crystalgui.ui.input.keymap.Keymap;
@@ -93,8 +92,8 @@ public final class CommandPalette {
      */
     public static QuickPick open(UIDocument window) {
         // BEFORE showing -- see the class javadoc. This is the load-bearing line.
-        UINode invokedFrom = window.focus().focused();
-        UINode source = invokedFrom != null ? invokedFrom : window;
+        UIElement invokedFrom = window.focus().focused();
+        UIElement source = invokedFrom != null ? invokedFrom : window;
 
         CommandRegistry registry = window.getCommands();
         List<QuickPickItem> items = itemsFor(registry, source);
@@ -117,7 +116,7 @@ public final class CommandPalette {
      * <p>Public and static so a test can assert the candidate set without a window on screen — the
      * enablement filter is the part worth pinning, and it does not need pixels.</p>
      */
-    public static List<QuickPickItem> itemsFor(CommandRegistry registry, @Nullable UINode source) {
+    public static List<QuickPickItem> itemsFor(CommandRegistry registry, @Nullable UIElement source) {
         Map<String, KeyChord> accelerators = Keymap.acceleratorsFrom(source);
         CommandContext here = CommandContext.of(source);
         // "ANYWHERE" IS THE ROOT, NOT NULL, and the difference is the whole measurement.
@@ -148,8 +147,8 @@ public final class CommandPalette {
 
     /** The top of {@code source}'s tree — the same element {@link #open} uses when nothing is focused. */
     @Nullable
-    private static UINode rootOf(@Nullable UINode source) {
-        UINode root = source;
+    private static UIElement rootOf(@Nullable UIElement source) {
+        UIElement root = source;
         while (root != null && root.parent() != null) root = root.parent();
         return root;
     }

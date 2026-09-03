@@ -3,23 +3,19 @@ package com.crystalgui.widget.overlay;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.EventListenerGroup;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.CloseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
-import com.crystalgui.ui.service.Animation;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.text.UIText;
@@ -40,7 +36,7 @@ import lombok.Getter;
  * form joins the top layer. A modeless dialog stays in ordinary flow and ordinary stacking, which is the
  * right model for editor panels: several coexist, they order themselves against each other and against
  * page content by {@code z-index}, and none outranks the whole UI. A modal is the opposite by design —
- * it outranks everything and makes everything else {@link UINode#isInert() inert}.</p>
+ * it outranks everything and makes everything else {@link UIElement#isInert() inert}.</p>
  *
  * <h3>Escape closes a modal, and only a modal</h3>
  * <p>Only {@code showModal()} "establishes a close watcher" — the machinery that turns a close request
@@ -62,7 +58,7 @@ import lombok.Getter;
  * same choice CSS {@code resize} mandates for the size it writes, so the two stay consistent and an
  * author's {@code !important} can still pin a dialog in place.</p>
  */
-public class Dialog extends UINode {
+public class Dialog extends UIElement {
 
     public static final Name NAME = Name.of("dialog");
 
@@ -148,13 +144,13 @@ public class Dialog extends UINode {
 
     /** The spec's cancelable {@code cancel} event — Escape on a modal. {@code preventDefault()} keeps
      * the dialog open. Never fires for a modeless dialog, which establishes no close watcher. */
-    public final EventListenerGroup<UINode, CloseEvent.Cancel> onCancel = events.getGroup(CloseEvent.Cancel.class);
+    public final EventListenerGroup<UIElement, CloseEvent.Cancel> onCancel = events.getGroup(CloseEvent.Cancel.class);
 
-    private final UINode titleBar;
+    private final UIElement titleBar;
     private final Button closeButton;
     private final UIText titleLabel;
     @Getter
-    private final UINode content;
+    private final UIElement content;
 
     @Getter
     private boolean open;
@@ -162,7 +158,7 @@ public class Dialog extends UINode {
     @Getter
     private boolean modal;
     /** Built lazily: a modeless dialog never needs one, and most dialogs are modeless. */
-    private UINode backdrop;
+    private UIElement backdrop;
 
     /** The window this dialog is modal INSIDE, or null when it is modal over the whole screen. */
     @Nullable
@@ -178,7 +174,7 @@ public class Dialog extends UINode {
     /** Focus to hand back on close — the spec's "if a previously focused element exists, focus
      * returns to it". Without it, closing a dialog drops the user's place in the page entirely. */
     @Nullable
-    private UINode focusBeforeOpen;
+    private UIElement focusBeforeOpen;
 
     /** The no-argument constructor the registry's factory needs. @see Button#Button() */
     public Dialog() {
@@ -200,12 +196,12 @@ public class Dialog extends UINode {
         titleLabel.addClass(LABEL_CLASS);
         titleLabel.setHitTest(false);
 
-        titleBar = new UINode();
+        titleBar = new UIElement();
         titleBar.addClass(TITLE_BAR_CLASS);
         titleBar.append(titleLabel);
         appendStructural(titleBar);
 
-        content = new UINode();
+        content = new UIElement();
         content.addClass(CONTENT_CLASS);
         appendStructural(content);
 
@@ -264,7 +260,7 @@ public class Dialog extends UINode {
     }
 
     /** The drag handle. Exposed so a theme or a caller can restyle or replace what it contains. */
-    public UINode getTitleBar() {
+    public UIElement getTitleBar() {
         return titleBar;
     }
 
@@ -303,7 +299,7 @@ public class Dialog extends UINode {
      *       what lets several editor panels order themselves among ordinary content.</li>
      *   <li><b>Everything outside it becomes inert</b> — unhittable, unfocusable, and outside the tab
      *       sequence. That last part is focus trapping, and it falls out of inertness rather than being a
-     *       separate mechanism. See {@link UINode#isInert()}.</li>
+     *       separate mechanism. See {@link UIElement#isInert()}.</li>
      *   <li><b>Escape closes it</b>, via a close watcher: a cancelable {@link #onCancel} first, then
      *       {@link #close()}. A modeless dialog establishes no close watcher and so ignores Escape — on
      *       the web too.</li>
@@ -361,7 +357,7 @@ public class Dialog extends UINode {
         } else if (backdrop == null) {
             // THE BACKDROP GOES BESIDE THE DIALOG, not inside it: the sheet sizes it to 100% of its
             // containing block, and inside the dialog that is the dialog.
-            UINode host = parent();
+            UIElement host = parent();
             if (host != null) host.append(ensureBackdrop());
         }
         window.focus().pushModal(this);
@@ -386,14 +382,14 @@ public class Dialog extends UINode {
         UIDocument window = document();
         if (window == null) return;
         focusBeforeOpen = window.focus().focused();
-        UINode delegate = window.focus().firstFocusableIn(content);
+        UIElement delegate = window.focus().firstFocusableIn(content);
         window.focus().requestFocus(delegate != null ? delegate : this);
     }
 
     /**
      * The close-watcher hook. Fires a cancelable {@link #onCancel}; closes unless it was prevented.
      *
-     * <p>Overrides {@link UINode#requestClose()}, which {@code UIInputHandler} asks of the active modal
+     * <p>Overrides {@link UIElement#requestClose()}, which {@code UIInputHandler} asks of the active modal
      * on Escape. Guarded on {@link #isModal()} too, so a stray call on a modeless dialog cannot give it
      * Escape behaviour the web would not.</p>
      */
@@ -401,7 +397,7 @@ public class Dialog extends UINode {
     public boolean requestClose() {
         // OPEN is the whole condition. This used to require `modal` as well, on the reasoning that only a
         // modal establishes a close watcher -- true, but it conflates "who calls this" with "what it
-        // means". UINode.requestClose is the general "ask this element to close" hook, and a modeless
+        // means". UIElement.requestClose is the general "ask this element to close" hook, and a modeless
         // dialog that answers false to it cannot be closed by anything that politely asks, including its
         // own Escape handler. Modals are unaffected: their close watcher is still the only thing that
         // reaches them, because Escape is consumed before dispatch ever runs.
@@ -421,9 +417,9 @@ public class Dialog extends UINode {
      * the same substitute the widgets already use: an internal child carrying a {@code __} class a theme
      * can target. Promoted alongside the dialog so it covers the viewport rather than the dialog's own box,
      * and inert plus non-hit-testable because it is decoration, not a control. */
-    private UINode ensureBackdrop() {
+    private UIElement ensureBackdrop() {
         if (backdrop == null) {
-            backdrop = new UINode();
+            backdrop = new UIElement();
             backdrop.addClass(BACKDROP_CLASS);
             backdrop.setHitTest(false);
             backdrop.setInert(true);

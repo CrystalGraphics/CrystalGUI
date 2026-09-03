@@ -3,7 +3,7 @@ package com.crystalgui.widget.graph;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.widget.canvas.CanvasView;
@@ -31,7 +31,7 @@ import javax.annotation.Nullable;
  * <p>The previous design rebuilt the whole {@code PortDefaultEditor} on every such change. That is what
  * made a vector editor render its X/Y boxes hundreds of pixels away from its own frame: the new box
  * adopted a control the old box still held, and reparenting an <b>internal</b> child used to be a silent
- * no-op (see {@code UINode.addChildAtInternal}), so both boxes claimed it — Taffy laid it out under
+ * no-op (see {@code UIElement.addChildAtInternal}), so both boxes claimed it — Taffy laid it out under
  * both and the wrong pass won. Swapping in place means there is only ever one owner, and
  * {@link #detachControl} makes the hand-off explicit rather than leaving it to a reparent.</p>
  *
@@ -94,15 +94,15 @@ final class PortDefaultEditor {
 
     private final NodePort port;
     private final GraphView view;
-    private final UINode box;
-    private final UINode dot;
-    private final UINode core;
+    private final UIElement box;
+    private final UIElement dot;
+    private final UIElement core;
 
     /** The bare control currently inside {@link #box} — the same instance
      * {@link NodePort#getDefaultEditor()} returns, or {@code null} while the port has none. Kept in step
      * by {@link #syncControl()}, never assumed to be the value it had at construction. */
     @Nullable
-    private UINode control;
+    private UIElement control;
 
     /** The axis prefix, present only while {@link #control} is one that wants one — see
      * {@link #rebuildBoxContents}. */
@@ -120,10 +120,10 @@ final class PortDefaultEditor {
         box = new Placed();
         box.addClass(NodePort.EDITOR_CLASS);
 
-        core = new UINode();
+        core = new UIElement();
         core.addClass(NodePort.EDITOR_DOT_CORE_CLASS);
         core.setHitTest(false);
-        UINode ring = new UINode();
+        UIElement ring = new UIElement();
         ring.addClass(NodePort.EDITOR_DOT_RING_CLASS);
         ring.setHitTest(false);
         ring.append(core);
@@ -145,7 +145,7 @@ final class PortDefaultEditor {
      * @return whether the control actually changed
      */
     boolean syncControl() {
-        UINode current = port.getDefaultEditor();
+        UIElement current = port.getDefaultEditor();
         if (current == control) return false;
 
         detachControl();
@@ -211,7 +211,7 @@ final class PortDefaultEditor {
      * {@link VectorControl}'s own per-axis ones — {@code ColorControl} and {@code BooleanControl} have no
      * number text field to set a mode on at all.
      */
-    private static void applyLiveUpdateMode(UINode control) {
+    private static void applyLiveUpdateMode(UIElement control) {
         if (control instanceof NumberControl number) {
             number.field().setUpdateMode(TextField.UpdateMode.IMMEDIATE);
         } else if (control instanceof VectorControl vector) {
@@ -236,13 +236,13 @@ final class PortDefaultEditor {
     /** The control itself — the same instance {@link NodePort#getDefaultEditor()} returns, exposed for
      * tests and for any future caller that needs to reach it directly instead of through the port. */
     @Nullable
-    UINode control() {
+    UIElement control() {
         return control;
     }
 
     /** The dot element — exposed only for {@code isInsideNode}-style ancestor checks and tests; nothing
      * outside this class should reposition or restyle it directly. */
-    UINode dot() {
+    UIElement dot() {
         return dot;
     }
 
@@ -273,7 +273,7 @@ final class PortDefaultEditor {
     void setMounted(boolean value) {
         if (mounted == value) return;
         mounted = value;
-        UINode content = view.content();
+        UIElement content = view.content();
         if (value) {
             StyleGroup.defaultPipeline(box.getStyle().getLayoutGroup(),
                     l -> l.positionType(TaffyPosition.ABSOLUTE));
@@ -322,7 +322,7 @@ final class PortDefaultEditor {
      * that same frame's {@code calculateLayout}. So the mounting call reads zero, and its result is the
      * port's own dot minus the gap — the widget lands <em>on the node</em> rather than beside it.</p>
      */
-    private final class Placed extends UINode {
+    private final class Placed extends UIElement {
     /**
      * Geometry that can only be settled once layout has run.
      *
@@ -401,7 +401,7 @@ final class PortDefaultEditor {
      * #dot} and the real port's dot sit at the same Y (see {@link #reposition}), so the segment is
      * already purely horizontal and the trim is exact, not an approximation.</p>
      */
-    void paintStub(CgUiPaintContext ctx, UINode space) {
+    void paintStub(CgUiPaintContext ctx, UIElement space) {
         Box cache = dot.box();
         // The dot has not been laid out yet on the very first frame after mounting — see setMounted —
         // and a zero-size box would draw a stub from nowhere to itself. Invisible either way, but

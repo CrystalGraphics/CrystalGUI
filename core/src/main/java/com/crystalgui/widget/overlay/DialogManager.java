@@ -1,6 +1,6 @@
 package com.crystalgui.widget.overlay;
 
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import lombok.Getter;
 
 import javax.annotation.Nullable;
@@ -13,7 +13,7 @@ import java.util.Objects;
  * Coordinates a set of {@link Dialog}s sharing one container: stacking order, activation, and where a
  * new one lands.
  *
- * <h3>Not a {@code UINode}</h3>
+ * <h3>Not a {@code UIElement}</h3>
  * <p>Follows {@link CheckboxGroup}'s precedent — a coordinator over elements rather than an element
  * itself. There is nothing to paint and nothing to lay out; introducing a node would put a box in the
  * tree whose only job is to not affect anything.</p>
@@ -49,7 +49,7 @@ public final class DialogManager {
      */
     private static final int BASE_Z = 10;
 
-    private final UINode stage;
+    private final UIElement stage;
     private final float cascadeStep;
     private final List<Dialog> dialogs = new ArrayList<>();
 
@@ -61,11 +61,11 @@ public final class DialogManager {
     @Nullable
     private Dialog active;
 
-    public DialogManager(UINode stage) {
+    public DialogManager(UIElement stage) {
         this(stage, DEFAULT_CASCADE_STEP);
     }
 
-    public DialogManager(UINode stage, float cascadeStep) {
+    public DialogManager(UIElement stage, float cascadeStep) {
         this.stage = Objects.requireNonNull(stage, "stage");
         this.cascadeStep = cascadeStep;
     }

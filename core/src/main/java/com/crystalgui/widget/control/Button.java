@@ -13,7 +13,7 @@ import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.ShadowRoot;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import javax.annotation.Nullable;
@@ -43,7 +43,7 @@ import com.crystalgui.ui.dom.UISlot;
  * widget's contract — which is what lets a caller compile against either and a reviewer read one
  * widget at a time.</p>
  */
-public class Button extends UINode {
+public class Button extends UIElement {
 
     public static final Name NAME = Name.of("button");
 
@@ -92,16 +92,16 @@ public class Button extends UINode {
     private final ShadowRoot shadow;
     private final UIText label;
     @Nullable
-    private UINode preIcon;
+    private UIElement preIcon;
     @Nullable
-    private UINode postIcon;
+    private UIElement postIcon;
     @Nullable
-    private UINode underlay;
+    private UIElement underlay;
 
     /**
      * The no-argument constructor the registry's factory needs.
      *
-     * <p>{@code UINodeRegistry.register} takes a {@code Supplier<? extends UINode>}, so a widget whose
+     * <p>{@code UIElementRegistry.register} takes a {@code Supplier<? extends UIElement>}, so a widget whose
      * only constructor takes its text does not compile as {@code Button::new} — and the codec has
      * nothing to build the node with when a description arrives. The old {@code ElementRegistry}
      * wanted the same thing.</p>
@@ -210,18 +210,18 @@ public class Button extends UINode {
      * tree both paid for. With a getter the refresh is a style write on a node that never moves.</p>
      */
     @Nullable
-    public UINode getPreIcon() {
+    public UIElement getPreIcon() {
         return preIcon;
     }
 
     /** The icon shown after the label, or null. See {@link #getPreIcon}. */
     @Nullable
-    public UINode getPostIcon() {
+    public UIElement getPostIcon() {
         return postIcon;
     }
 
     /** Sets (or clears, passing {@code null}) the icon shown before the label. */
-    public Button setPreIcon(@Nullable UINode icon) {
+    public Button setPreIcon(@Nullable UIElement icon) {
         if (preIcon != null) shadow.remove(preIcon);
         preIcon = icon;
         if (preIcon != null) {
@@ -232,7 +232,7 @@ public class Button extends UINode {
     }
 
     /** Sets (or clears, passing {@code null}) the icon shown after the label. */
-    public Button setPostIcon(@Nullable UINode icon) {
+    public Button setPostIcon(@Nullable UIElement icon) {
         if (postIcon != null) shadow.remove(postIcon);
         postIcon = icon;
         if (postIcon != null) {
@@ -245,7 +245,7 @@ public class Button extends UINode {
 
     /** What is drawn behind the label, or null. See {@link #setUnderlay}. */
     @Nullable
-    public UINode getUnderlay() {
+    public UIElement getUnderlay() {
         return underlay;
     }
 
@@ -262,7 +262,7 @@ public class Button extends UINode {
      * <p>Inserted at index 0 and unhittable: painter's order puts it under everything added after it,
      * and a hittable fill would swallow the press meant for the button it is inside.</p>
      */
-    public Button setUnderlay(@Nullable UINode fill) {
+    public Button setUnderlay(@Nullable UIElement fill) {
         if (underlay != null) shadow.remove(underlay);
         underlay = fill;
         if (underlay != null) {

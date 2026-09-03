@@ -1,6 +1,6 @@
 package com.crystalgui.widget.config.control;
 
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.widget.config.ConfigControl;
@@ -51,8 +51,8 @@ public class ArrayControl extends ValueControl<List<Object>> {
     public static final String ENTRY_CLASS = "__entry__";
     public static final String EMPTY_CLASS = "__empty__";
 
-    private final UINode body = new UINode();
-    private final UINode foot = new UINode();
+    private final UIElement body = new UIElement();
+    private final UIElement foot = new UIElement();
     private final ConfigDescriptor element;
     private final List<Object> values = new ArrayList<>();
 
@@ -70,7 +70,7 @@ public class ArrayControl extends ValueControl<List<Object>> {
                 ? ConfigDescriptor.text(descriptor.id() + ".entry", "")
                 : descriptor.element();
         addClass("__array__");
-        UINode head = new UINode();
+        UIElement head = new UIElement();
         head.addClass(HEAD_CLASS);
         UIText title = new UIText(descriptor.label());
         title.setHitTest(false);
@@ -151,7 +151,7 @@ public class ArrayControl extends ValueControl<List<Object>> {
                     commit(List.copyOf(values));
                 }
             });
-            UINode entry = new UINode();
+            UIElement entry = new UIElement();
             entry.addClass(ENTRY_CLASS);
             entry.append(control);
             body.append(entry);

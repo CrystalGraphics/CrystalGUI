@@ -1,6 +1,5 @@
 package com.crystalgui.fs;
 
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.serialization.DynamicOps;

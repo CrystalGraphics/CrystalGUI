@@ -4,7 +4,7 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.fold.FoldingRegions;
 import com.crystalgui.text.wrap.ProjectedLines;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.TaffyPosition;
@@ -33,9 +33,9 @@ import java.util.List;
  */
 public final class FoldingDecorationsPart extends EditorViewPart {
 
-    private final List<UINode> arrows = new ArrayList<>();
+    private final List<UIElement> arrows = new ArrayList<>();
     private final List<Integer> arrowRows = new ArrayList<>();
-    private final List<UINode> chips = new ArrayList<>();
+    private final List<UIElement> chips = new ArrayList<>();
     private final List<Integer> chipRows = new ArrayList<>();
 
     public FoldingDecorationsPart(TextEditor editor) {
@@ -57,10 +57,10 @@ public final class FoldingDecorationsPart extends EditorViewPart {
      * code, which {@code gutterFoldWidth} already reserves and which is where every editor puts it.</p>
      */
     private void renderArrows(int firstViewLine, int lastViewLine) {
-        UINode column = editor.foldColumn();
+        UIElement column = editor.foldColumn();
         if (!editor.isGutterVisible() || !editor.isFoldingEnabled()) {
             DecorationPool.hide(column);
-            for (UINode arrow : arrows) DecorationPool.hide(arrow);
+            for (UIElement arrow : arrows) DecorationPool.hide(arrow);
             return;
         }
         DecorationPool.show(column);
@@ -88,7 +88,7 @@ public final class FoldingDecorationsPart extends EditorViewPart {
             if (region == null) continue;
 
             int slot = used++;
-            UINode arrow = arrowAt(slot);
+            UIElement arrow = arrowAt(slot);
             arrowRows.set(slot, model.row());
             // The triangle's direction is driven entirely by this class — default.css's
             // texteditor .__fold__(.__collapsed__) rules swap the shape, the same way TreeView's
@@ -108,10 +108,10 @@ public final class FoldingDecorationsPart extends EditorViewPart {
         }
     }
 
-    private UINode arrowAt(int index) {
+    private UIElement arrowAt(int index) {
         while (arrows.size() <= index) {
             final int slot = arrows.size();
-            UINode arrow = new UINode();
+            UIElement arrow = new UIElement();
             arrow.addClass(TextEditor.FOLD_CLASS);
             // A real vector triangle drawn directly by `overlay:` (see default.css's
             // texteditor .__fold__ rules) — no child glyph needed, since a shape needs nowhere to
@@ -158,7 +158,7 @@ public final class FoldingDecorationsPart extends EditorViewPart {
             if (model.viewLineInRow() != inRow) continue;
 
             int slot = used++;
-            UINode marker = chipAt(slot);
+            UIElement marker = chipAt(slot);
             chipRows.set(slot, model.row());
             UIText glyph = (UIText) marker.children().get(0);
 
@@ -224,10 +224,10 @@ public final class FoldingDecorationsPart extends EditorViewPart {
         }
     }
 
-    private UINode chipAt(int index) {
+    private UIElement chipAt(int index) {
         while (chips.size() <= index) {
             final int slot = chips.size();
-            UINode marker = new UINode();
+            UIElement marker = new UIElement();
             marker.addClass(TextEditor.FOLD_PLACEHOLDER_CLASS);
             // The chip itself takes the click; its text does not, so the press lands on the box rather
             // than on a character inside it.

@@ -12,7 +12,7 @@ import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import java.util.List;
 import org.junit.Test;
 
@@ -175,7 +175,7 @@ public class TextEditorBatchPortTest extends UiDocumentTestBase {
     @Test
     public void aStripeMarkIsPositionedInsideItsOwnGroove() {
         withDefaultStyles();
-        UINode spacer = sized("spacer", 600f, 120f);
+        UIElement spacer = sized("spacer", 600f, 120f);
         document.append(spacer);
         editor = new TextEditor("one\ntwo\nthree\nfour\nfive\n");
         layout(editor, l -> l.width(600f).height(300f));
@@ -190,7 +190,7 @@ public class TextEditorBatchPortTest extends UiDocumentTestBase {
         frame();
         frame();
 
-        UINode track = editor.verticalScroller().track();
+        UIElement track = editor.verticalScroller().track();
         Box trackBox = track.box();
         assertNotNull("the groove has no box", trackBox);
         // THE CONTROL: the groove is NOT at the document's origin, so an absolute reading and a
@@ -198,7 +198,7 @@ public class TextEditorBatchPortTest extends UiDocumentTestBase {
         assertNotEquals("the fixture is flat -- is the spacer above the editor laid out?",
                 trackBox.worldY(), trackBox.y(), 1f);
 
-        for (UINode mark : track.children()) {
+        for (UIElement mark : track.children()) {
             Box box = mark.box();
             if (box == null || !mark.isDisplayed()) continue;
             assertTrue("a mark sits outside the groove it is a child of: y=" + box.y()
@@ -283,8 +283,8 @@ public class TextEditorBatchPortTest extends UiDocumentTestBase {
         assertNotNull("the lines layer has a box", layer);
         assertEquals("the layer is moved by the scroll offset once", -300f, layer.worldY(), 0.5f);
 
-        UINode row = null;
-        for (UINode child : editor.linesLayer().children()) {
+        UIElement row = null;
+        for (UIElement child : editor.linesLayer().children()) {
             if (child.box() != null && child.classes().contains("__line__")) {
                 row = child;
                 break;
@@ -361,7 +361,7 @@ public class TextEditorBatchPortTest extends UiDocumentTestBase {
         frame();
         frame();
 
-        UINode next = findByClass(editor, "__inspection-next__");
+        UIElement next = findByClass(editor, "__inspection-next__");
         assertNotNull("the Problems widget offers a next-problem arrow", next);
         Box box = next.box();
         assertNotNull("and it is laid out", box);
@@ -376,13 +376,13 @@ public class TextEditorBatchPortTest extends UiDocumentTestBase {
                 3, editor.caretRow());
     }
 
-    private static UINode findByClass(UINode at, String cls) {
+    private static UIElement findByClass(UIElement at, String cls) {
         if (at.classes().contains(cls)) return at;
-        for (UINode child : at.children()) {
-            UINode hit = findByClass(child, cls);
+        for (UIElement child : at.children()) {
+            UIElement hit = findByClass(child, cls);
             if (hit != null) return hit;
         }
-        UINode shadow = at.shadowRoot();
+        UIElement shadow = at.shadowRoot();
         return shadow == null ? null : findByClass(shadow, cls);
     }
 }

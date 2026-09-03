@@ -1,7 +1,7 @@
 package com.crystalgui.workbench.diff;
 
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.overlay.Dialog;
@@ -74,7 +74,7 @@ public final class ConflictDialog {
      * @param onKeepMine  overwrite the server's copy with what is on screen
      * @param onTakeTheirs discard the unsaved edits and reload
      */
-    public static void ask(@Nullable UINode from, CgPath path, @Nullable String otherEditor,
+    public static void ask(@Nullable UIElement from, CgPath path, @Nullable String otherEditor,
                            Runnable onKeepMine, Runnable onTakeTheirs) {
         ask(from, path, otherEditor, onKeepMine, onTakeTheirs, null);
     }
@@ -91,7 +91,7 @@ public final class ConflictDialog {
      *                against — a file that was never read has no common ancestor, so the option is omitted
      *                rather than offered and then refused
      */
-    public static void ask(@Nullable UINode from, CgPath path, @Nullable String otherEditor,
+    public static void ask(@Nullable UIElement from, CgPath path, @Nullable String otherEditor,
                            Runnable onKeepMine, Runnable onTakeTheirs, @Nullable Runnable onMerge) {
         UIDocument window = from == null ? null : from.document();
         if (window == null) {
@@ -114,7 +114,7 @@ public final class ConflictDialog {
             dialog.getContent().append(who);
         }
 
-        UINode actions = new UINode();
+        UIElement actions = new UIElement();
         actions.addClass(ACTIONS_CLASS);
         dialog.getContent().append(actions);
 
@@ -158,7 +158,7 @@ public final class ConflictDialog {
         window.focus().requestFocus(cancel);
     }
 
-    private static Button choice(UINode row, String label, String tooltip) {
+    private static Button choice(UIElement row, String label, String tooltip) {
         Button button = new Button(label);
         Tooltip.attach(button, tooltip);
         row.append(button);

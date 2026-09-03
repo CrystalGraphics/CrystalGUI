@@ -6,8 +6,7 @@ import com.crystalgui.desktop.Desktop;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.service.Animation;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.layout.SplitView;
@@ -54,7 +53,7 @@ import java.util.Objects;
  * rule it produced is that a widget must never rebuild the elements it is being clicked or dragged on.
  * Every structural change here therefore sets a flag and the ticker does the work on the next frame.</p>
  */
-public class DockArea extends UINode  {
+public class DockArea extends UIElement {
     /** The dock's layout, drawn. `ua/workbench.css` names the tag. */
     public static final Name NAME = Name.of("dockarea");
 
@@ -87,9 +86,9 @@ public class DockArea extends UINode  {
      * <p>Going through a wrapper means the built tree is added with an ordinary public
      * {@code addChild}, which marks nothing.</p>
      */
-    private final UINode content = new UINode();
+    private final UIElement content = new UIElement();
 
-    private final DockPanelRegistry<UINode> registry;
+    private final DockPanelRegistry<UIElement> registry;
     private DockLayout layout;
 
     /**
@@ -121,7 +120,7 @@ public class DockArea extends UINode  {
     /** Where in the target strip a MERGE would land, or negative to append. */
     private int previewTabIndex = -1;
 
-    public DockArea(DockPanelRegistry<UINode> registry, DockLayout layout) {
+    public DockArea(DockPanelRegistry<UIElement> registry, DockLayout layout) {
         super(NAME);
         this.registry = registry;
         this.layout = layout;
@@ -133,7 +132,7 @@ public class DockArea extends UINode  {
 
     /** The tree is built from the layout; content comes from the registry. */
 
-    public DockPanelRegistry<UINode> registry() {
+    public DockPanelRegistry<UIElement> registry() {
         return registry;
     }
 
@@ -154,7 +153,7 @@ public class DockArea extends UINode  {
      * single leaf, or {@code null} before the first rebuild.
      */
     @Nullable
-    public UINode builtRoot() {
+    public UIElement builtRoot() {
         return content.children().isEmpty() ? null : content.children().get(0);
     }
 
@@ -177,8 +176,8 @@ public class DockArea extends UINode  {
      * the same rule {@code DataContext} follows and for the same reason.</p>
      */
     @Nullable
-    public DockGroup groupOf(@Nullable UINode element) {
-        for (UINode scope = element; scope != null; scope = scope.parent()) {
+    public DockGroup groupOf(@Nullable UIElement element) {
+        for (UIElement scope = element; scope != null; scope = scope.parent()) {
             if (scope instanceof DockGroup group && group.dockArea() == this) return group;
         }
         return null;
@@ -477,7 +476,7 @@ public class DockArea extends UINode  {
         DockLeaf leaf = layout.leafContaining(panel);
         DockGroup group = leaf == null ? null : groupFor(leaf);
         Tab tab = group == null ? null : group.tabFor(panel);
-        UINode inside = tab == null ? null : window.focus().firstFocusableIn(tab.content());
+        UIElement inside = tab == null ? null : window.focus().firstFocusableIn(tab.content());
         if (inside != null) window.focus().requestPointerFocus(inside);
     }
 
@@ -518,7 +517,7 @@ public class DockArea extends UINode  {
         splitBranches.clear();
 
         phase("clear + prune");
-        UINode built = buildNode(layout.root(), 0);
+        UIElement built = buildNode(layout.root(), 0);
         phase("buildNode (the whole tree)");
         if (built != null) {
             // flex-grow plus a zero basis, and deliberately NOT an explicit width/height: this area is a
@@ -584,7 +583,7 @@ public class DockArea extends UINode  {
     }
 
     @Nullable
-    private UINode buildNode(DockNode node, int depth) {
+    private UIElement buildNode(DockNode node, int depth) {
         if (node.isLeaf()) {
             DockLeaf leaf = (DockLeaf) node;
             long started = TRACE && !traced ? System.nanoTime() : 0L;
@@ -620,7 +619,7 @@ public class DockArea extends UINode  {
         float[] weights = new float[branch.childCount()];
         for (int i = 0; i < branch.childCount(); i++) {
             weights[i] = Math.max(0.0001f, branch.child(i).size());
-            UINode child = buildNode(branch.child(i), depth + 1);
+            UIElement child = buildNode(branch.child(i), depth + 1);
             if (child != null) {
                 StyleGroup.defaultPipeline(child.getStyle().getLayoutGroup(),
                         l -> l.flexGrow(1f).flexBasis(0));

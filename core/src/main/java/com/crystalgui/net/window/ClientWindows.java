@@ -14,14 +14,14 @@ import javax.annotation.Nullable;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.ClientUiSessions;
-import com.crystalgui.net.mirror.UINodeMirror;
+import com.crystalgui.net.mirror.UIElementMirror;
 import com.crystalgui.net.SheetRef;
 import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.ui.dom.UINodeRegistry;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.dom.UINode;
 
 /**
  * Every window this client is showing over one connection — <b>the mirror of {@link ServerWindows}</b>.
@@ -53,7 +53,7 @@ public final class ClientWindows {
     static {
         // The moment the window layer is loaded on a client, openWindow panel names start resolving.
         ClientUiSessions.setUiClassLoader(ClientWindows::ensureUiClass);
-        ClientUiSessions.setMirrorFactory(UINodeMirror::new);
+        ClientUiSessions.setMirrorFactory(UIElementMirror::new);
     }
 
     private final ProtocolConnection<Object> connection;
@@ -67,10 +67,10 @@ public final class ClientWindows {
      * window is never taken off screen. The session object is the one identity that is stable for the
      * whole of a window's life.</p>
      */
-    private final Map<ClientUiSession<UINode, Object>, Mounted> mounted = new LinkedHashMap<>();
+    private final Map<ClientUiSession<UIElement, Object>, Mounted> mounted = new LinkedHashMap<>();
 
     /** Sessions whose tree is ready and which have nowhere to go yet. @see #setMount */
-    private final List<ClientUiSession<UINode, Object>> waiting = new ArrayList<>();
+    private final List<ClientUiSession<UIElement, Object>> waiting = new ArrayList<>();
 
     @Nullable
     private WindowMount mount;
@@ -83,10 +83,10 @@ public final class ClientWindows {
         // A description addresses widgets by tag, and an unregistered tag THROWS on decode rather than
         // degrading to a styleless div. Idempotent, and every lookup would trigger it anyway; it is here
         // so the dependency is visible at the one place trees get rebuilt.
-        // `UINodeRegistry.bootstrap()`, which runs every `NodeKinds` service once -- the new engine's
+        // `UIElementRegistry.bootstrap()`, which runs every `NodeKinds` service once -- the new engine's
         // answer to a hand-written list of builtins, and what makes the registry's contents a function
         // of what is on the classpath rather than of what somebody remembered to add.
-        UINodeRegistry.bootstrap();
+        UIElementRegistry.bootstrap();
 
         /*
          * INSTALLED THE MOMENT THE CONNECTION EXISTS, which is the race this class exists to remove.
@@ -95,7 +95,7 @@ public final class ClientWindows {
          * it in silence. A contributor binding at connection open is the only moment that cannot be
          * late.
          */
-        ClientUiSessions.<UINode, Object>forConnection(connection).onSession(this::adopt);
+        ClientUiSessions.<UIElement, Object>forConnection(connection).onSession(this::adopt);
         connection.onClosed(this::onConnectionClosed);
     }
 
@@ -169,9 +169,9 @@ public final class ClientWindows {
     public ClientWindows setMount(@Nullable WindowMount mount) {
         this.mount = mount;
         if (mount == null || waiting.isEmpty()) return this;
-        List<ClientUiSession<UINode, Object>> pending = new ArrayList<>(waiting);
+        List<ClientUiSession<UIElement, Object>> pending = new ArrayList<>(waiting);
         waiting.clear();
-        for (ClientUiSession<UINode, Object> session : pending) present(session);
+        for (ClientUiSession<UIElement, Object> session : pending) present(session);
         return this;
     }
 
@@ -214,7 +214,7 @@ public final class ClientWindows {
      * @param onGranted told {@code true} if a window was opened, {@code false} if it was refused,
      *                  unanswered, or this client is not connected to anything
      */
-    public static <P extends UINode & Networked<M>, M> void requestOpen(
+    public static <P extends UIElement & Networked<M>, M> void requestOpen(
             UiType<P, M> type, @Nullable StateMap<Object> args,
             @Nullable Consumer<Boolean> onGranted) {
         ClientWindows windows = CLIENT;
@@ -228,7 +228,7 @@ public final class ClientWindows {
         windows.ask(type, args, onGranted);
     }
 
-    private <P extends UINode & Networked<M>, M> void ask(
+    private <P extends UIElement & Networked<M>, M> void ask(
             UiType<P, M> type, @Nullable StateMap<Object> args,
             @Nullable java.util.function.Consumer<Boolean> onGranted) {
         StateMap<Object> out = new StateMap<>(connection.ops());
@@ -279,7 +279,7 @@ public final class ClientWindows {
 
     // ── Adoption ────────────────────────────────────────────────────────────
 
-    private void adopt(ClientUiSession<UINode, Object> session) {
+    private void adopt(ClientUiSession<UIElement, Object> session) {
         session.onWindowOpened(root -> present(session));
         session.onWindowClosed((code, detail) -> closedByServer(session, code, detail));
         session.onCall(UiMethods.REQUEST_CLOSE, (args, respond) -> {
@@ -303,8 +303,8 @@ public final class ClientWindows {
      *
      * <p>The three cases are exactly the three states this can be in, and none of them is a poll.</p>
      */
-    private void present(ClientUiSession<UINode, Object> session) {
-        UINode root = session.root();
+    private void present(ClientUiSession<UIElement, Object> session) {
+        UIElement root = session.root();
         if (root == null) return;
 
         Mounted live = mounted.get(session);
@@ -374,7 +374,7 @@ public final class ClientWindows {
      * <p>A panel that throws is taken to have consented. Refusing on its behalf would make a bug in one
      * panel into a window nobody can shut.</p>
      */
-    private boolean mayClose(ClientUiSession<UINode, Object> session) {
+    private boolean mayClose(ClientUiSession<UIElement, Object> session) {
         Mounted live = mounted.get(session);
         if (live == null) return true;
         for (Networked<?> panel : live.panels) {
@@ -392,9 +392,9 @@ public final class ClientWindows {
      * Finds every {@link Networked} element under {@code element}, carrying the id-path prefix its
      * scope derives from — the client half of {@link ServerScope#attach}'s naming rule.
      */
-    private static void collectNested(UINode element, String prefix,
+    private static void collectNested(UIElement element, String prefix,
                                       List<Networked<?>> panels, List<String> prefixes) {
-        for (UINode child : element.children()) {
+        for (UIElement child : element.children()) {
             if (child instanceof Networked) {
                 String path = prefix + child.id() + "/";
                 UiType.bindFields(child);
@@ -409,7 +409,7 @@ public final class ClientWindows {
 
     // ── Endings ─────────────────────────────────────────────────────────────
 
-    private void closedByServer(ClientUiSession<UINode, Object> session, String code, String detail) {
+    private void closedByServer(ClientUiSession<UIElement, Object> session, String code, String detail) {
         Mounted live = mounted.remove(session);
         waiting.remove(session);
         if (live == null) return;
@@ -434,8 +434,8 @@ public final class ClientWindows {
     /** The context handed out, and the bookkeeping behind it. One object so the two cannot disagree. */
     private final class Mounted implements ClientWindowContext {
 
-        private final ClientUiSession<UINode, Object> session;
-        private UINode root;
+        private final ClientUiSession<UIElement, Object> session;
+        private UIElement root;
 
         @Nullable
         private WindowMount.MountedWindow handle;
@@ -449,7 +449,7 @@ public final class ClientWindows {
         private boolean ended;
         private boolean visible = true;
 
-        Mounted(ClientUiSession<UINode, Object> session, UINode root) {
+        Mounted(ClientUiSession<UIElement, Object> session, UIElement root) {
             this.session = session;
             this.root = root;
         }
@@ -496,7 +496,7 @@ public final class ClientWindows {
         }
 
         @Override
-        public UINode root() {
+        public UIElement root() {
             return root;
         }
 
@@ -527,7 +527,7 @@ public final class ClientWindows {
         }
 
         @Override
-        public ClientUiSession<UINode, Object> session() {
+        public ClientUiSession<UIElement, Object> session() {
             return session;
         }
 

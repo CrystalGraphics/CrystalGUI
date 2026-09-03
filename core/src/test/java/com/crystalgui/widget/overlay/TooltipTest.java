@@ -1,8 +1,6 @@
 package com.crystalgui.widget.overlay;
 
-import com.crystalgui.ui.dom.Attribute;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 import com.crystalgui.style.property.layout.LayoutProperties;
@@ -10,7 +8,6 @@ import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Overflow;
-import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import org.joml.Vector2f;
 import org.junit.Test;
@@ -29,10 +26,10 @@ public class TooltipTest extends UiDocumentTestBase {
     private static final float ROOT_W = 800f, ROOT_H = 600f;
     private static final float TIP_W = 60f, TIP_H = 20f;
 
-    private UINode root;
+    private UIElement root;
 
-    private UINode newRoot() {
-        root = new UINode().layout(l -> l.width(ROOT_W).height(ROOT_H));
+    private UIElement newRoot() {
+        root = new UIElement().layout(l -> l.width(ROOT_W).height(ROOT_H));
         return root;
     }
 
@@ -53,15 +50,15 @@ public class TooltipTest extends UiDocumentTestBase {
     }
 
     /** An anchor at a known place, plus a sized tooltip already parented to it. */
-    private Tooltip tooltipOn(UINode anchor) {
+    private Tooltip tooltipOn(UIElement anchor) {
         Tooltip tip = new Tooltip("hello");
         tip.layout(l -> l.width(TIP_W).height(TIP_H));
         anchor.append(tip);
         return tip;
     }
 
-    private float x(UINode e) { return e.box().x() - root.box().x(); }
-    private float y(UINode e) { return e.box().y() - root.box().y(); }
+    private float x(UIElement e) { return e.box().x() - root.box().x(); }
+    private float y(UIElement e) { return e.box().y() - root.box().y(); }
 
     // ── Not disturbing the tree it lives in ─────────────────────────────────
 
@@ -72,8 +69,8 @@ public class TooltipTest extends UiDocumentTestBase {
      */
     @Test
     public void aHiddenTooltipDoesNotAffectItsAnchorsLayout() {
-        UINode anchor = new UINode().layout(l -> l.width(100));
-        anchor.append(new UINode().layout(l -> l.width(100).height(30)));
+        UIElement anchor = new UIElement().layout(l -> l.width(100));
+        anchor.append(new UIElement().layout(l -> l.width(100).height(30)));
         newRoot().append(anchor);
         attach();
         float heightWithout = anchor.box().height();
@@ -87,7 +84,7 @@ public class TooltipTest extends UiDocumentTestBase {
 
     @Test
     public void attachDoesNotMakeTheTooltipTheAnchorsContent() {
-        UINode anchor = new UINode().layout(l -> l.width(100).height(20));
+        UIElement anchor = new UIElement().layout(l -> l.width(100).height(20));
         newRoot().append(anchor);
         attach();
 
@@ -105,7 +102,7 @@ public class TooltipTest extends UiDocumentTestBase {
 
     @Test
     public void detachRemovesItFromTheAnchor() {
-        UINode anchor = new UINode().layout(l -> l.width(100).height(20));
+        UIElement anchor = new UIElement().layout(l -> l.width(100).height(20));
         newRoot().append(anchor);
         attach();
 
@@ -119,13 +116,13 @@ public class TooltipTest extends UiDocumentTestBase {
     }
 
     /**
-     * Ownership regression. When this wiring lived on {@code UINode.setTooltip}, a
+     * Ownership regression. When this wiring lived on {@code UIElement.setTooltip}, a
      * set/clear/set cycle attached a <em>second</em> pair of hover listeners each time. Creating the
      * tooltip and its listeners together in one call makes that unrepresentable.
      */
     @Test
     public void attachingWiresExactlyOnePairOfListeners() {
-        UINode anchor = new UINode().layout(l -> l.width(100).height(20).marginTop(50));
+        UIElement anchor = new UIElement().layout(l -> l.width(100).height(20).marginTop(50));
         newRoot().append(anchor);
         attach();
 
@@ -140,7 +137,7 @@ public class TooltipTest extends UiDocumentTestBase {
     /** Hovering the tooltip itself must not count as leaving the anchor, or it flickers forever. */
     @Test
     public void aTooltipNeverEatsThePointer() {
-        UINode anchor = new UINode().layout(l -> l.width(100).height(20));
+        UIElement anchor = new UIElement().layout(l -> l.width(100).height(20));
         newRoot().append(anchor);
         attach();
         Tooltip tip = tooltipOn(anchor);
@@ -152,7 +149,7 @@ public class TooltipTest extends UiDocumentTestBase {
 
     @Test
     public void showingPlacesItBelowTheAnchor() {
-        UINode anchor = new UINode().layout(l -> l.width(100).height(40).marginLeft(50).marginTop(50));
+        UIElement anchor = new UIElement().layout(l -> l.width(100).height(40).marginLeft(50).marginTop(50));
         newRoot().append(anchor);
         attach();
         Tooltip tip = tooltipOn(anchor);
@@ -171,8 +168,8 @@ public class TooltipTest extends UiDocumentTestBase {
      * {@code position-try-fallbacks}. */
     @Test
     public void itFlipsAboveWhenThereIsNoRoomBelow() {
-        UINode spacer = new UINode().layout(l -> l.width(100).height(ROOT_H - 30f));
-        UINode anchor = new UINode().layout(l -> l.width(100).height(20));
+        UIElement spacer = new UIElement().layout(l -> l.width(100).height(ROOT_H - 30f));
+        UIElement anchor = new UIElement().layout(l -> l.width(100).height(20));
         newRoot().append(spacer);
         root.append(anchor);
         attach();
@@ -189,7 +186,7 @@ public class TooltipTest extends UiDocumentTestBase {
     public void itClampsInsteadOfOverflowingTheRightEdge() {
         // Narrow, and hard against the right edge, so a left-aligned tooltip genuinely overflows:
         // anchor spans 770..790, so the tooltip would want 770..830 against a 800-wide root.
-        UINode anchor = new UINode()
+        UIElement anchor = new UIElement()
                 .layout(l -> l.width(20).height(20).marginLeft(ROOT_W - 30f).marginTop(50));
         newRoot().append(anchor);
         attach();
@@ -214,11 +211,11 @@ public class TooltipTest extends UiDocumentTestBase {
         // The scroller is SHORTER than its row on purpose: the row's bottom edge — and therefore the
         // tooltip hanging off it — falls outside the clip box. That is the case that used to be
         // impossible to render.
-        UINode scroller = new UINode()
+        UIElement scroller = new UIElement()
                 .layout(l -> l.width(200).height(30).marginLeft(40).marginTop(40))
                 .generalStyle(g -> g.overflow(Overflow.HIDDEN));
         newRoot().append(scroller);
-        UINode row = new UINode().layout(l -> l.width(200).height(40));
+        UIElement row = new UIElement().layout(l -> l.width(200).height(40));
         scroller.append(row);
         attach();
         Tooltip tip = tooltipOn(row);
@@ -243,12 +240,12 @@ public class TooltipTest extends UiDocumentTestBase {
     /** Placement is recomputed per frame, so a scrolling anchor drags its tooltip along. */
     @Test
     public void placementFollowsAScrollingAnchor() {
-        UINode scroller = new UINode()
+        UIElement scroller = new UIElement()
                 .layout(l -> l.width(200).height(100).marginLeft(40).marginTop(40))
                 .generalStyle(g -> g.overflow(Overflow.AUTO));
         newRoot().append(scroller);
-        for (int i = 0; i < 5; i++) scroller.append(new UINode().layout(l -> l.width(200).height(40)));
-        UINode row = scroller.children().get(2);
+        for (int i = 0; i < 5; i++) scroller.append(new UIElement().layout(l -> l.width(200).height(40)));
+        UIElement row = scroller.children().get(2);
         attach();
         Tooltip tip = tooltipOn(row);
 
@@ -273,7 +270,7 @@ public class TooltipTest extends UiDocumentTestBase {
 
     @Test
     public void hidingDemotesAndTakesItOutOfLayoutAgain() {
-        UINode anchor = new UINode().layout(l -> l.width(100).height(40).marginTop(50));
+        UIElement anchor = new UIElement().layout(l -> l.width(100).height(40).marginTop(50));
         newRoot().append(anchor);
         attach();
         float heightWhenClosed = anchor.box().height();
@@ -293,7 +290,7 @@ public class TooltipTest extends UiDocumentTestBase {
 
     @Test
     public void showingIsIdempotent() {
-        UINode anchor = new UINode().layout(l -> l.width(100).height(20).marginTop(50));
+        UIElement anchor = new UIElement().layout(l -> l.width(100).height(20).marginTop(50));
         newRoot().append(anchor);
         attach();
         Tooltip tip = tooltipOn(anchor);
@@ -315,7 +312,7 @@ public class TooltipTest extends UiDocumentTestBase {
     }
 
     /** The physical point at an element's centre — the space pointer events are reported in. */
-    private Vector2f centrePoint(UINode element) {
+    private Vector2f centrePoint(UIElement element) {
         var cache = element.box();
         return Transform2D.apply(cache.localToWorld(),
                 cache.width() / 2f, cache.height() / 2f);
@@ -327,15 +324,15 @@ public class TooltipTest extends UiDocumentTestBase {
      * <p>Returned as {@code [anchor, part, filler]}. The default flex direction here is COLUMN, so the
      * part occupies the top 20 logical pixels and the filler the bottom 20.</p>
      */
-    private UINode[] anchorWithPart() {
-        UINode anchor = new UINode().layout(l -> l.width(100).height(40));
-        UINode part = new UINode().layout(l -> l.width(100).height(20));
-        UINode filler = new UINode().layout(l -> l.width(100).height(20));
+    private UIElement[] anchorWithPart() {
+        UIElement anchor = new UIElement().layout(l -> l.width(100).height(40));
+        UIElement part = new UIElement().layout(l -> l.width(100).height(20));
+        UIElement filler = new UIElement().layout(l -> l.width(100).height(20));
         anchor.append(part);
         anchor.append(filler);
         newRoot().append(anchor);
         attachAndPresent();
-        return new UINode[] { anchor, part, filler };
+        return new UIElement[] { anchor, part, filler };
     }
 
     /**
@@ -346,8 +343,8 @@ public class TooltipTest extends UiDocumentTestBase {
      */
     @Test
     public void aRegionSpeaksForItsOwnPartOfTheAnchor() {
-        UINode[] parts = anchorWithPart();
-        UINode anchor = parts[0], part = parts[1], filler = parts[2];
+        UIElement[] parts = anchorWithPart();
+        UIElement anchor = parts[0], part = parts[1], filler = parts[2];
 
         Tooltip tip = tooltipOn(anchor).setText("java.util.ArrayList");
         tip.addRegion(part, "Final class");
@@ -380,8 +377,8 @@ public class TooltipTest extends UiDocumentTestBase {
      */
     @Test
     public void aRegionResolvesOnAPartThatCannotBeHit() {
-        UINode[] parts = anchorWithPart();
-        UINode anchor = parts[0], part = parts[1];
+        UIElement[] parts = anchorWithPart();
+        UIElement anchor = parts[0], part = parts[1];
         part.setHitTest(false);
 
         Tooltip tip = tooltipOn(anchor).setText("path");
@@ -408,9 +405,9 @@ public class TooltipTest extends UiDocumentTestBase {
      */
     @Test
     public void theDeepestRegionUnderThePointerWins() {
-        UINode anchor = new UINode().layout(l -> l.width(100).height(40));
-        UINode outer = new UINode().layout(l -> l.width(100).height(40));
-        UINode inner = new UINode().layout(l -> l.width(40).height(20));
+        UIElement anchor = new UIElement().layout(l -> l.width(100).height(40));
+        UIElement outer = new UIElement().layout(l -> l.width(100).height(40));
+        UIElement inner = new UIElement().layout(l -> l.width(40).height(20));
         outer.append(inner);
         anchor.append(outer);
         newRoot().append(anchor);
@@ -437,8 +434,8 @@ public class TooltipTest extends UiDocumentTestBase {
      */
     @Test
     public void aBaseTextWrittenWhileARegionSpeaksSurvivesUntilThePointerLeaves() {
-        UINode[] parts = anchorWithPart();
-        UINode anchor = parts[0], part = parts[1], filler = parts[2];
+        UIElement[] parts = anchorWithPart();
+        UIElement anchor = parts[0], part = parts[1], filler = parts[2];
 
         Tooltip tip = tooltipOn(anchor).setText("before");
         tip.addRegion(part, "region");
@@ -476,7 +473,7 @@ public class TooltipTest extends UiDocumentTestBase {
      * which is exactly how it presented.</p>
      */
     private Tooltip hoverTooltipWaiting(float delay) {
-        UINode anchor = new UINode().layout(l -> l.width(200).height(100));
+        UIElement anchor = new UIElement().layout(l -> l.width(200).height(100));
         newRoot().append(anchor);
         attachAndPresent();
 
@@ -490,7 +487,7 @@ public class TooltipTest extends UiDocumentTestBase {
         return tip;
     }
 
-    private UINode onlyAnchor() {
+    private UIElement onlyAnchor() {
         return root.children().get(0);
     }
 
@@ -526,7 +523,7 @@ public class TooltipTest extends UiDocumentTestBase {
     @Test
     public void leavingDuringTheWaitMeansTheTooltipNeverAppears() {
         Tooltip tip = hoverTooltipWaiting(1f);
-        UINode anchor = onlyAnchor();
+        UIElement anchor = onlyAnchor();
 
         movePointerTo(centrePoint(anchor));
         frame();
@@ -567,8 +564,8 @@ public class TooltipTest extends UiDocumentTestBase {
      */
     @Test
     public void aTooltipIsPlacedAgainstTheRegionThatSpeaks() {
-        UINode[] parts = anchorWithPart();
-        UINode anchor = parts[0], part = parts[1], filler = parts[2];
+        UIElement[] parts = anchorWithPart();
+        UIElement anchor = parts[0], part = parts[1], filler = parts[2];
 
         Tooltip tip = tooltipOn(anchor).setText("the whole thing");
         tip.addRegion(part, "the part");
@@ -620,8 +617,8 @@ public class TooltipTest extends UiDocumentTestBase {
      */
     @Test
     public void aTooltipWithNothingToSayStaysHidden() {
-        UINode[] parts = anchorWithPart();
-        UINode anchor = parts[0], part = parts[1], filler = parts[2];
+        UIElement[] parts = anchorWithPart();
+        UIElement anchor = parts[0], part = parts[1], filler = parts[2];
 
         Tooltip tip = tooltipOn(anchor).setText("");
         tip.addRegion(part, "the part");

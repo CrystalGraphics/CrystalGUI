@@ -1,7 +1,7 @@
 package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
@@ -33,7 +33,7 @@ public final class GutterEdgePart extends EditorViewPart {
             return;
         }
         pool.beginPass();
-        UINode edge = pool.next();
+        UIElement edge = pool.next();
         edge.setScrollExempt(true);
         // ON THE EDGE THAT FACES THE CODE, which is what a border is. Floating it in the middle of the
         // code margin read as a third thing -- a stray rule with a gap either side -- rather than as the

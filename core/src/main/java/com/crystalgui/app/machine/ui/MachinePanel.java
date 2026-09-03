@@ -11,7 +11,8 @@ import com.crystalgui.net.window.UiType;
 import com.crystalgui.serialization.StateMap;
 
 import javax.annotation.Nullable;
-import com.crystalgui.ui.dom.UINode;
+
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.ProgressBar;
 import com.crystalgui.widget.control.Slider;
@@ -59,7 +60,7 @@ import com.crystalgui.widget.text.UIText;
  * class for the composition rules; the three lines it costs on this side are in {@link #layout} and
  * {@link #serve}, and the reason the button that opens it sends nothing is in {@link #toggleEngine}.</p>
  */
-public final class MachinePanel extends UINode implements Networked<MachineModel> {
+public final class MachinePanel extends UIElement implements Networked<MachineModel> {
 
     /** This panel's kind. Declared here because a node answers the name its class declares,
      * and {@link com.crystalgui.net.window.UiType} READS this rather than deriving one. */
@@ -333,12 +334,12 @@ public final class MachinePanel extends UINode implements Networked<MachineModel
      * is a sentence saying what pressing it will do. Everything a reader needs is on screen, which is
      * the whole difference between this and the version it replaced.</p>
      */
-    private static UINode demoEntry(Button button, String[] kind, String direction,
-            String method, String outcome) {
-        UINode entry = new UINode();
+    private static UIElement demoEntry(Button button, String[] kind, String direction,
+                                       String method, String outcome) {
+        UIElement entry = new UIElement();
         entry.addClass(MachineStyles.DEMO_CLASS);
 
-        UINode head = new UINode();
+        UIElement head = new UIElement();
         head.addClass(MachineStyles.ROW_CLASS);
         head.append(button);
 

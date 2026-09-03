@@ -1,7 +1,7 @@
 package com.crystalgui.app.shadergraph.node;
 
 import com.crystalgui.graph.NodeField;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.widget.config.control.VectorControl;
 import com.crystalgui.widget.graph.node.NodeFieldWidgets;
@@ -41,7 +41,7 @@ public final class ShaderVectorFieldWidget {
         });
     }
 
-    private static UINode build(NodeField field, String value, Consumer<String> onChange) {
+    private static UIElement build(NodeField field, String value, Consumer<String> onChange) {
         double[] initial = parse(field.resolve(value));
         ConfigDescriptor descriptor = ConfigDescriptor.vector(field.id(), field.label(), initial.length);
         VectorControl control = new VectorControl(descriptor, initial);

@@ -1,6 +1,6 @@
 package com.crystalgui.workbench.region;
 
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.layout.SplitView;
 
 import java.util.List;
@@ -34,7 +34,7 @@ final class SplitFill {
      * @return the element the caller should mount — {@code split} when there are several parts, the part
      *         itself when there is one, and {@code null} when there are none
      */
-    static UINode mount(SplitView split, List<UINode> parts, List<Float> weights) {
+    static UIElement mount(SplitView split, List<UIElement> parts, List<Float> weights) {
         if (parts.isEmpty()) return null;
         if (parts.size() == 1) {
             // Taken OUT of the split, so the split holds nothing that could keep measuring.
@@ -54,7 +54,7 @@ final class SplitFill {
      * blank. Shares authored as fractions of the whole sum to 1 only while every one of them is present, so
      * it looks correct until something is hidden.</p>
      */
-    private static void fill(SplitView split, List<UINode> parts, List<Float> weights) {
+    private static void fill(SplitView split, List<UIElement> parts, List<Float> weights) {
         while (split.paneCount() > parts.size()) {
             if (!split.removePane(split.paneCount() - 1)) break;
         }

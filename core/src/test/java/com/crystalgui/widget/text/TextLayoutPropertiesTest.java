@@ -1,12 +1,10 @@
 package com.crystalgui.widget.text;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.style.property.visual.text.TextAlign;
 import com.crystalgui.style.property.visual.text.TextOverflow;
 import com.crystalgui.style.property.visual.text.WhiteSpace;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.widget.text.UIText;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -29,10 +27,11 @@ public class TextLayoutPropertiesTest extends UiDocumentTestBase {
 
     private static final String LONG = "wrap me onto several lines if you can manage it";
 
-    private UINode root;
+
+    private UIElement root;
 
     private UIText build(java.util.function.Consumer<UIText> configure) {
-        root = new UINode().layout(l -> l.width(400).height(400));
+        root = new UIElement().layout(l -> l.width(400).height(400));
         UIText text = new UIText(LONG);
         text.layout(l -> l.maxWidth(80));
         configure.accept(text);
@@ -82,7 +81,7 @@ public class TextLayoutPropertiesTest extends UiDocumentTestBase {
     /** `white-space` inherits, matching CSS — so a container can set it for a whole subtree. */
     @Test
     public void whiteSpaceInherits() {
-        root = new UINode().layout(l -> l.width(400).height(400));
+        root = new UIElement().layout(l -> l.width(400).height(400));
         root.generalStyle(g -> g.whiteSpace(WhiteSpace.NOWRAP));
         UIText child = new UIText(LONG);
         child.layout(l -> l.maxWidth(80));
@@ -159,7 +158,7 @@ public class TextLayoutPropertiesTest extends UiDocumentTestBase {
     /** Nothing is truncated when the text fits — a label that fits must never lose a character. */
     @Test
     public void ellipsisLeavesTextThatFitsCompletelyAlone() {
-        root = new UINode().layout(l -> l.width(400).height(400));
+        root = new UIElement().layout(l -> l.width(400).height(400));
         UIText text = new UIText("short");
         text.layout(l -> l.width(200));
         text.generalStyle(g -> g.whiteSpace(WhiteSpace.NOWRAP).textOverflow(TextOverflow.ELLIPSIS));
@@ -173,7 +172,7 @@ public class TextLayoutPropertiesTest extends UiDocumentTestBase {
 
     @Test
     public void textOverflowDoesNotInherit() {
-        root = new UINode().layout(l -> l.width(400).height(400));
+        root = new UIElement().layout(l -> l.width(400).height(400));
         root.generalStyle(g -> g.textOverflow(TextOverflow.ELLIPSIS));
         UIText child = new UIText("x");
         root.append(child);
@@ -190,7 +189,7 @@ public class TextLayoutPropertiesTest extends UiDocumentTestBase {
      * arithmetic — the leftover-space fraction that {@code paintOverlay} multiplies by. */
     @Test
     public void textAlignResolvesAndInherits() {
-        root = new UINode().layout(l -> l.width(400).height(400));
+        root = new UIElement().layout(l -> l.width(400).height(400));
         root.generalStyle(g -> g.textAlign(TextAlign.CENTER));
         UIText child = new UIText("x");
         root.append(child);
@@ -219,7 +218,7 @@ public class TextLayoutPropertiesTest extends UiDocumentTestBase {
     /** Registered long before anything drew it — `AGENTS.md` called it out as a no-op. Now consumed. */
     @Test
     public void textShadowIsReadableAndInherits() {
-        root = new UINode().layout(l -> l.width(400).height(400));
+        root = new UIElement().layout(l -> l.width(400).height(400));
         root.generalStyle(g -> g.textShadow(true));
         UIText child = new UIText("x");
         root.append(child);

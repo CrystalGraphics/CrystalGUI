@@ -14,8 +14,8 @@ import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.Attribute;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UINodeRegistry;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UIElementRegistry;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.Test;
@@ -64,8 +64,8 @@ public class CheckboxPortTest extends UiDocumentTestBase {
         Checkbox c = checkbox("Wrap lines");
         frame();
 
-        UINode mark = composed(c).stream()
-                .filter(n -> "mark".equals(n.get(Attribute.PART))).findFirst().orElseThrow();
+        UIElement mark = composed(c).stream()
+                                    .filter(n -> "mark".equals(n.get(Attribute.PART))).findFirst().orElseThrow();
 
         // The OVERLAY, not the background: `checkbox:checked ::part(mark)` sets `overlay:
         // shape("checkmark")` and the unchecked rule sets none, so the two are distinguishable
@@ -199,10 +199,10 @@ public class CheckboxPortTest extends UiDocumentTestBase {
     /** The kind is registered with its contract. */
     @Test
     public void theKindIsRegisteredWithItsContract() {
-        assertTrue(UINodeRegistry.isRegistered(Checkbox.NAME));
-        assertTrue(UINodeRegistry.create(Checkbox.NAME) instanceof Checkbox);
+        assertTrue(UIElementRegistry.isRegistered(Checkbox.NAME));
+        assertTrue(UIElementRegistry.create(Checkbox.NAME) instanceof Checkbox);
         assertEquals("checkbox", Checkbox.NAME.local());
-        assertSame(Checkbox.CONTRACT, UINodeRegistry.contractFor(Checkbox.NAME));
+        assertSame(Checkbox.CONTRACT, UIElementRegistry.contractFor(Checkbox.NAME));
         assertSame(Checkbox.CONTRACT, WidgetContracts.of(Checkbox.class));
     }
 

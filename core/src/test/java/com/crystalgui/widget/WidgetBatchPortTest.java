@@ -4,6 +4,7 @@ import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.text.lang.SymbolKind;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.config.ConfiguratorGroup;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.SymbolIcon;
@@ -29,8 +30,7 @@ import static org.junit.Assert.assertTrue;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UINodeRegistry;
+import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.control.ProgressBar;
 import com.crystalgui.widget.control.Slider;
 import com.crystalgui.widget.control.Switch;
@@ -87,11 +87,11 @@ public class WidgetBatchPortTest extends UiDocumentTestBase {
         for (Object[] row : KINDS) {
             Name name = (Name) row[0];
             Class<?> type = (Class<?>) row[1];
-            if (!UINodeRegistry.isRegistered(name)) {
+            if (!UIElementRegistry.isRegistered(name)) {
                 wrong.add(name + " is not registered");
                 continue;
             }
-            UINode built = UINodeRegistry.create(name);
+            UIElement built = UIElementRegistry.create(name);
             if (!type.isInstance(built)) {
                 wrong.add(name + " builds a " + built.getClass().getSimpleName()
                         + ", not a " + type.getSimpleName());
@@ -147,12 +147,12 @@ public class WidgetBatchPortTest extends UiDocumentTestBase {
      */
     @Test
     public void everyCompositeKeepsItsPartsInAShadowTree() {
-        List<Supplier<UINode>> composites = List.of(
+        List<Supplier<UIElement>> composites = List.of(
                 Switch::new, Slider::new, ProgressBar::new, ScrollerView::new, Menu::new,
                 () -> new MenuItem("x"), () -> new Dropdown("x"));
         List<String> offenders = new ArrayList<>();
-        for (Supplier<UINode> make : composites) {
-            UINode node = make.get();
+        for (Supplier<UIElement> make : composites) {
+            UIElement node = make.get();
             if (node.shadowRoot() == null) {
                 offenders.add(node.getClass().getSimpleName() + " has no shadow root");
             } else if (!node.children().isEmpty()) {
@@ -174,7 +174,7 @@ public class WidgetBatchPortTest extends UiDocumentTestBase {
     @Test
     public void aScrollerViewStillShowsWhatACallerAddsToIt() {
         ScrollerView view = new ScrollerView();
-        UINode row = new UINode().setId("row");
+        UIElement row = new UIElement().setId("row");
         view.append(row);
         document.append(view);
         layoutOnly();
@@ -204,8 +204,8 @@ public class WidgetBatchPortTest extends UiDocumentTestBase {
         assertTrue(hasPart(new ScrollerView(), "corner"));
     }
 
-    private boolean hasPart(UINode node, String part) {
-        for (UINode at : node.composedSubtree()) {
+    private boolean hasPart(UIElement node, String part) {
+        for (UIElement at : node.composedSubtree()) {
             if (part.equals(at.get(Attribute.PART))) return true;
         }
         return false;
@@ -227,10 +227,10 @@ public class WidgetBatchPortTest extends UiDocumentTestBase {
     public void aProgressBarReportsNothingForAnUnchangedFraction() {
         ProgressBar bar = new ProgressBar();
         document.append(bar);
-        List<UINode> reports = new ArrayList<>();
-        new com.crystalgui.ui.dom.UINodeTreeSource(document).observe(
+        List<UIElement> reports = new ArrayList<>();
+        new com.crystalgui.ui.dom.UIElementTreeSource(document).observe(
                 new com.crystalgui.ui.dom.TreeObserver.Adapter<>() {
-                    @Override public void stateChanged(UINode node) {
+                    @Override public void stateChanged(UIElement node) {
                         reports.add(node);
                     }
                 });
@@ -281,7 +281,7 @@ public class WidgetBatchPortTest extends UiDocumentTestBase {
         ScrollerView view = new ScrollerView();
         layout(view, l -> l.width(400f).height(200f));
         document.append(view);
-        UINode tall = new UINode();
+        UIElement tall = new UIElement();
         StyleGroup.inlinePipeline(tall.getStyle().getLayoutGroup(),
                 l -> l.widthPercent(100f).height(1000f));
         view.append(tall);
@@ -289,7 +289,7 @@ public class WidgetBatchPortTest extends UiDocumentTestBase {
         frame();
 
         Scroller bar = null;
-        for (UINode child : view.shadowRoot().children()) {
+        for (UIElement child : view.shadowRoot().children()) {
             if (child instanceof Scroller candidate
                     && candidate.getOrientation() == Scroller.Orientation.VERTICAL) {
                 bar = candidate;
@@ -307,8 +307,8 @@ public class WidgetBatchPortTest extends UiDocumentTestBase {
         // AND THE THUMB, which is the part a hand actually has to hit. It is proportional, so it must
         // be shorter than its track as well as non-zero -- 200 visible of 1000 is a fifth.
         Box thumb = null;
-        for (UINode part : bar.shadowRoot().children()) {
-            for (UINode inner : part.children()) {
+        for (UIElement part : bar.shadowRoot().children()) {
+            for (UIElement inner : part.children()) {
                 Box box = document.boxes().boxOf(inner);
                 if (box != null && box.height() > 0f) thumb = box;
             }
@@ -336,7 +336,7 @@ public class WidgetBatchPortTest extends UiDocumentTestBase {
     @Test
     public void aDialogDragTracksThePointerOneForOne() {
         withDefaultStyles();
-        UINode stage = sized("stage", 600f, 400f);
+        UIElement stage = sized("stage", 600f, 400f);
         document.append(stage);
         DialogManager manager = new DialogManager(stage);
         Dialog dialog = manager.manage(new Dialog("panel"));
@@ -387,9 +387,9 @@ public class WidgetBatchPortTest extends UiDocumentTestBase {
                 l -> l.widthPercent(100f).height(150f));
         page.append(tabs);
         for (String name : new String[] {"one", "two", "three", "four", "five", "six", "seven"}) {
-            tabs.addTab(name).content().append(new UINode());
+            tabs.addTab(name).content().append(new UIElement());
         }
-        UINode below = new UINode();
+        UIElement below = new UIElement();
         StyleGroup.inlinePipeline(below.getStyle().getLayoutGroup(),
                 l -> l.widthPercent(100f).height(600f));
         page.append(below);
@@ -474,7 +474,7 @@ public class WidgetBatchPortTest extends UiDocumentTestBase {
         List<String> offenders = new ArrayList<>();
         for (String id : new String[] {"text", "number", "bool", "select", "vector",
                                        "color", "mask", "matrix", "asset"}) {
-            UINode control = panel.control(id);
+            UIElement control = panel.control(id);
             if (control == null) {
                 offenders.add(id + ": ConfigControls built nothing for this kind");
                 continue;
@@ -543,13 +543,13 @@ public class WidgetBatchPortTest extends UiDocumentTestBase {
         List<String> offenders = new ArrayList<>();
 
         SplitView split = new SplitView();
-        UINode inFirst = filled();
+        UIElement inFirst = filled();
         split.first().append(inFirst);
         check(split, inFirst, "SplitView's first pane", offenders);
 
         TabView tabs = new TabView();
         Tab tab = tabs.addTab("one");
-        UINode inTab = filled();
+        UIElement inTab = filled();
         tab.content().append(inTab);
         check(tabs, inTab, "TabView's selected pane", offenders);
 
@@ -570,12 +570,12 @@ public class WidgetBatchPortTest extends UiDocumentTestBase {
      */
     @Test
     public void aShownDialogLaysOutItsContent() {
-        UINode stage = sized("stage", 400f, 300f);
+        UIElement stage = sized("stage", 400f, 300f);
         document.append(stage);
         DialogManager manager = new DialogManager(stage);
 
         Dialog dialog = manager.manage(new Dialog("panel"));
-        UINode body = filled();
+        UIElement body = filled();
         dialog.getContent().append(body);
         dialog.show();
         frame();
@@ -587,7 +587,7 @@ public class WidgetBatchPortTest extends UiDocumentTestBase {
     }
 
     /** Lays {@code root} out at a usable size and reports whether {@code content} got a box. */
-    private void check(UINode root, UINode content, String what, List<String> offenders) {
+    private void check(UIElement root, UIElement content, String what, List<String> offenders) {
         // A SPLIT DIVIDES WHAT IT IS GIVEN and a tab's panes fill what is left, so both measure to
         // nothing inside a content-sized parent. Sizing them here is the fixture's job, not the
         // widget's -- the same thing the gallery's stylesheet does for the same reason.
@@ -605,8 +605,8 @@ public class WidgetBatchPortTest extends UiDocumentTestBase {
     }
 
     /** Something with a size of its own, so a zero box means the container and not the content. */
-    private static UINode filled() {
-        UINode node = new UINode();
+    private static UIElement filled() {
+        UIElement node = new UIElement();
         StyleGroup.inlinePipeline(node.getStyle().getLayoutGroup(),
                 l -> l.width(60f).height(20f));
         return node;
@@ -721,7 +721,7 @@ public class WidgetBatchPortTest extends UiDocumentTestBase {
         ScrollerView view = new ScrollerView();
         layout(view, l -> l.width(200f).height(60f)
                 .flexDirection(FlexDirection.ROW).alignItems(AlignItems.CENTER));
-        UINode item = new UINode();
+        UIElement item = new UIElement();
         layout(item, l -> l.width(40f).height(20f));
         view.append(item);
         document.append(view);

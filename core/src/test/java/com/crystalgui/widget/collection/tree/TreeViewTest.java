@@ -1,14 +1,11 @@
 package com.crystalgui.widget.collection.tree;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.core.collection.list.SelectionMode;
 import com.crystalgui.core.collection.tree.TreeDataSource;
-import com.crystalgui.widget.collection.tree.TreeRenderer;
 import com.crystalgui.core.collection.tree.TreeRow;
-import com.crystalgui.widget.collection.tree.TreeView;
 import com.crystalgui.ui.input.FocusPolicy;
 import org.junit.Test;
 
@@ -63,19 +60,19 @@ public class TreeViewTest extends UiDocumentTestBase {
         tree.layout(l -> l.width(100).height(100));
         tree.setRenderer(new TreeRenderer<String>() {
             @Override
-            public UINode createTemplate() {
-                UINode row = new UINode();
+            public UIElement createTemplate() {
+                UIElement row = new UIElement();
                 row.setFocusPolicy(FocusPolicy.FOCUSABLE);
                 return row;
             }
 
             @Override
-            public void bind(String item, TreeRow<String> row, int index, UINode template) {
+            public void bind(String item, TreeRow<String> row, int index, UIElement template) {
                 template.setId(item);
             }
         });
 
-        UINode root = new UINode().layout(l -> l.width(100).height(100));
+        UIElement root = new UIElement().layout(l -> l.width(100).height(100));
         root.append(tree);
         document.append(root);
         settle();
@@ -93,8 +90,8 @@ public class TreeViewTest extends UiDocumentTestBase {
     }
 
     private void key(int keyCode) {
-        UINode focused = document.focus().focused();
-        UINode target = focused != null ? focused : tree;
+        UIElement focused = document.focus().focused();
+        UIElement target = focused != null ? focused : tree;
         document.input().send(target,
                 new com.crystalgui.ui.event.KeyboardEvent.Down(target, keyCode, (char) 0, false, 0, 0L));
         settle();
@@ -222,7 +219,7 @@ public class TreeViewTest extends UiDocumentTestBase {
 
     /** What the renderer last wrote into the realised row at {@code index} — the display, not the model. */
     private String renderedAt(int index) {
-        UINode row = tree.realisedRows().get(index);
+        UIElement row = tree.realisedRows().get(index);
         assertNotNull("row " + index + " is not realised", row);
         return row.id();
     }
@@ -346,7 +343,7 @@ public class TreeViewTest extends UiDocumentTestBase {
     @Test
     public void aRowElementReportsTheIndexItCurrentlyRepresents() {
         build();
-        UINode rowOne = tree.realisedRows().get(1);
+        UIElement rowOne = tree.realisedRows().get(1);
         assertEquals(1, tree.indexOfRowElement(rowOne));
         assertEquals("b", tree.rowAt(tree.indexOfRowElement(rowOne)).item());
 
@@ -392,15 +389,15 @@ public class TreeViewTest extends UiDocumentTestBase {
         huge.layout(l -> l.width(100).height(100));
         huge.setRenderer(new TreeRenderer<String>() {
             @Override
-            public UINode createTemplate() {
-                return new UINode();
+            public UIElement createTemplate() {
+                return new UIElement();
             }
 
             @Override
-            public void bind(String item, TreeRow<String> row, int index, UINode template) {
+            public void bind(String item, TreeRow<String> row, int index, UIElement template) {
             }
         });
-        UINode root = new UINode().layout(l -> l.width(100).height(100));
+        UIElement root = new UIElement().layout(l -> l.width(100).height(100));
         root.append(huge);
         document.append(root);
         for (int i = 0; i < 4; i++) frame();

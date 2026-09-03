@@ -14,8 +14,7 @@ import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.dispose.Disposer;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.service.Animation;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.AnchoredPlacement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.overlay.Menu;
@@ -53,7 +52,7 @@ import javax.annotation.Nullable;
  * ({@link com.crystalgraphics.shadergraph.CgShaderEmitter.Shading}), touching no engine state, and the
  * {@code Lighting} menu entry turns it off when the colour matters more than the form.</p>
  */
-public class MainPreviewPanel extends UINode implements Disposable.Gl {
+public class MainPreviewPanel extends UIElement implements Disposable.Gl {
 
     public static final String PANEL_CLASS = "__main-preview__";
     /** The header strip. A CONTAINER, matching the configurator's group heading exactly — see the
@@ -76,7 +75,7 @@ public class MainPreviewPanel extends UINode implements Disposable.Gl {
     private final CgMasterNode master;
     private final CgMainPreviewRenderer renderer;
 
-    private final UINode head = new UINode();
+    private final UIElement head = new UIElement();
     private final UIText title = new UIText("Main Preview");
     private final Surface surface = new Surface();
 
@@ -433,7 +432,7 @@ public class MainPreviewPanel extends UINode implements Disposable.Gl {
     }
 
     /** The rectangle the picture is painted into — its own element so a theme can frame it. */
-    private final class Surface extends UINode {
+    private final class Surface extends UIElement {
 
         @Override
         public void paintContent(CgUiPaintContext ctx, Box box) {

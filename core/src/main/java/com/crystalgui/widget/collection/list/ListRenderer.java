@@ -1,6 +1,6 @@
 package com.crystalgui.widget.collection.list;
 
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 
 /**
  * Builds and fills the rows of a {@link ListView} — the contract that makes recycling safe.
@@ -17,13 +17,13 @@ import com.crystalgui.ui.dom.UINode;
  *
  * <pre>{@code
  * list.setRenderer(new ListRenderer<Person>() {
- *     public UINode createTemplate() {
- *         UINode row = new UINode();
+ *     public UIElement createTemplate() {
+ *         UIElement row = new UIElement();
  *         row.append(new UIText(""));
  *         row.onMouseDown.attachListener(...);   // ONCE, for the life of this element
  *         return row;
  *     }
- *     public void bind(Person item, int index, UINode template) {
+ *     public void bind(Person item, int index, UIElement template) {
  *         ((UIText) template.children().get(0)).setText(item.name());   // data only
  *     }
  * });
@@ -35,7 +35,7 @@ public interface ListRenderer<T> {
      * A blank row. Called once per pooled element, never per scroll — so this is where listeners,
      * children and classes belong, and where allocation is acceptable.
      */
-    UINode createTemplate();
+    UIElement createTemplate();
 
     /**
      * Writes {@code item} into a template returned earlier by {@link #createTemplate()}.
@@ -44,7 +44,7 @@ public interface ListRenderer<T> {
      * listeners. The template may have held any other item before — assume nothing about its current
      * contents beyond the structure {@code createTemplate} gave it.</p>
      */
-    void bind(T item, int index, UINode template);
+    void bind(T item, int index, UIElement template);
 
     /**
      * Optional: clear a row as it leaves the window.
@@ -53,7 +53,7 @@ public interface ListRenderer<T> {
      * to a heavyweight item keeps it alive for as long as the pool does. Most renderers overwrite
      * everything in {@link #bind} and need nothing here, which is why it defaults to a no-op.</p>
      */
-    default void unbind(UINode template) {
+    default void unbind(UIElement template) {
     }
 
     /**

@@ -5,13 +5,11 @@ import com.crystalgui.desktop.Desktop;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.ui.service.Input;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.junit.Assert.assertNotNull;
@@ -43,7 +41,7 @@ public class TaskbarPreviewTest extends UiDocumentTestBase {
     @Before
     public void build() {
         Desktop.setAnimationsEnabled(false);
-        UINode root = new UINode().layout(l -> l.width(400).height(300));
+        UIElement root = new UIElement().layout(l -> l.width(400).height(300));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
         input = document.input();

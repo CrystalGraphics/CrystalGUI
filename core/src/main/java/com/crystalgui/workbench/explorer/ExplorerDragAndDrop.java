@@ -3,9 +3,8 @@ package com.crystalgui.workbench.explorer;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.asset.FileIconTheme;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.dnd.DragGhost;
@@ -53,7 +52,7 @@ final class ExplorerDragAndDrop {
     private final DragGhost ghost = new DragGhost();
 
     /** The ghost has to be IN THE TREE before a drag can promote it. @see DragGhost */
-    void parkGhostIn(UINode host) {
+    void parkGhostIn(UIElement host) {
         ghost.parkIn(host);
     }
 
@@ -72,7 +71,7 @@ final class ExplorerDragAndDrop {
      * re-read every frame and never latched. HTML5 drag-and-drop's one good idea, which this engine
      * already keeps.</p>
      */
-    void installRowDrag(UINode row) {
+    void installRowDrag(UIElement row) {
         row.events.getGroup(MouseEvent.Down.class).attachListener((element, event) -> {
             if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
             // NEVER FROM THE KEYBOARD. Space and Enter on a focused element are delivered as a synthesized
@@ -131,8 +130,8 @@ final class ExplorerDragAndDrop {
             // the more useful signal: an outline that appears only over valid targets leaves you unable to
             // tell "this cannot take it" from "the drag is not tracking me at all". The refusal is carried
             // by the cursor, which is what a cursor is for.
-            markDropTarget(tree.rowElementFor(((UINode) event.getTarget())));
-            if (dropTargetFor(((UINode) event.getTarget())) != null) {
+            markDropTarget(tree.rowElementFor(((UIElement) event.getTarget())));
+            if (dropTargetFor(((UIElement) event.getTarget())) != null) {
                 // ACCEPTING is preventDefault. Re-read every frame, so a drag that wanders over
                 // something invalid stops being accepted without anything having to un-latch it.
                 event.preventDefault();
@@ -147,7 +146,7 @@ final class ExplorerDragAndDrop {
         tree.treeView().events.getGroup(DragEvent.Drop.class).attachListener((element, event) -> {
             markDropTarget(null);
             if (!(event.getPayload() instanceof DragPayload payload)) return;
-            CgPath destination = dropTargetFor(((UINode) event.getTarget()));
+            CgPath destination = dropTargetFor(((UIElement) event.getTarget()));
             if (destination == null) return;
             // The modifier means COPY, matching every file manager. Read at DROP time rather than at
             // press time, because the decision is made while dragging -- you pick the folder first and
@@ -161,7 +160,7 @@ final class ExplorerDragAndDrop {
 
     /** The row currently outlined, so the class can be taken off again without searching for it. */
     @Nullable
-    private UINode outlinedRow;
+    private UIElement outlinedRow;
 
     /**
      * Moves the drop outline to {@code row}, or clears it for {@code null}.
@@ -176,7 +175,7 @@ final class ExplorerDragAndDrop {
      * clear driven off "is a drag still live" was written and removed again -- no path could reach
      * it, and an untestable backstop is a claim of safety nothing checks.</p>
      */
-    private void markDropTarget(@Nullable UINode row) {
+    private void markDropTarget(@Nullable UIElement row) {
         if (outlinedRow == row) return;
         if (outlinedRow != null) outlinedRow.removeClass(ProjectFileTree.DROP_TARGET_CLASS);
         outlinedRow = row;
@@ -185,8 +184,8 @@ final class ExplorerDragAndDrop {
 
     /** The folder a drop on {@code hit} lands in, or null if it is not over a row. */
     @Nullable
-    private CgPath dropTargetFor(@Nullable UINode hit) {
-        UINode row = tree.rowElementFor(hit);
+    private CgPath dropTargetFor(@Nullable UIElement hit) {
+        UIElement row = tree.rowElementFor(hit);
         if (row == null) return null;
         CgPath item = tree.itemForRow(row);
         if (item == null) return null;

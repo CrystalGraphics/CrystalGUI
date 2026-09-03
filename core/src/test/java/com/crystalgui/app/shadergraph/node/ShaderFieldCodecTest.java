@@ -1,11 +1,9 @@
 package com.crystalgui.app.shadergraph.node;
 
-import com.crystalgui.widget.graph.node.NodeFieldBinder;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.graph.NodeField;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.config.control.ColorControl;
 import com.crystalgui.widget.config.control.VectorControl;
 import com.crystalgui.widget.graph.node.NodeFieldWidgets;
@@ -75,13 +73,13 @@ public class ShaderFieldCodecTest extends UiDocumentTestBase {
         // luck rather than by what it actually asserts.
         ShaderColorFieldWidget.install();
 
-        UINode root = new UINode();
+        UIElement root = new UIElement();
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
 
         NodeField field = NodeField.color("tint", "Tint", "vec4(1.000, 1.000, 1.000, 1.000)");
         String[] written = { null };
-        UINode widget = NodeFieldWidgets.create(field, field.defaultValue(), v -> written[0] = v);
+        UIElement widget = NodeFieldWidgets.create(field, field.defaultValue(), v -> written[0] = v);
         assertTrue(widget instanceof ColorControl);
         root.append(widget);
         frame();
@@ -94,14 +92,14 @@ public class ShaderFieldCodecTest extends UiDocumentTestBase {
     public void editingTheVectorControlWritesBackTheGlslLiteral() {
         ShaderVectorFieldWidget.install();
 
-        UINode root = new UINode();
+        UIElement root = new UIElement();
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
 
         NodeField field = new NodeField("uv", "UV", NodeField.Kind.VECTOR,
                 java.util.List.of(), "vec2(0.000, 0.000)", null);
         String[] written = { null };
-        UINode widget = NodeFieldWidgets.create(field, field.defaultValue(), v -> written[0] = v);
+        UIElement widget = NodeFieldWidgets.create(field, field.defaultValue(), v -> written[0] = v);
         assertTrue(widget instanceof VectorControl);
         root.append(widget);
         frame();

@@ -3,7 +3,7 @@ package com.crystalgui.widget.texteditor.part;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -53,11 +53,11 @@ public final class InspectionWidgetPart extends EditorViewPart {
     // never deriving the right-hand one from verticalBarThickness() went with them -- it is a rule about
     // what the number may be, so it belongs where the number is.
 
-    private UINode panel;
-    private UINode errorCount;
-    private UINode warningCount;
-    private UINode infoCount;
-    private UINode clean;
+    private UIElement panel;
+    private UIElement errorCount;
+    private UIElement warningCount;
+    private UIElement infoCount;
+    private UIElement clean;
     private Button previous;
     private Button next;
 
@@ -101,7 +101,7 @@ public final class InspectionWidgetPart extends EditorViewPart {
      * <p>A severity with nothing to report is not "0", it is absent: IntelliJ shows the marks that apply
      * and no others, and a row of zeroes is noise in a widget whose whole job is to be glanceable.</p>
      */
-    private static void showCount(UINode chip, int count) {
+    private static void showCount(UIElement chip, int count) {
         chip.setDisplayed(count > 0);
         if (count > 0) ((UIText) chip.children().get(1)).setText(Integer.toString(count));
     }
@@ -144,10 +144,10 @@ public final class InspectionWidgetPart extends EditorViewPart {
 
     private boolean worstApplied;
 
-    private UINode panel() {
+    private UIElement panel() {
         if (panel != null) return panel;
 
-        panel = new UINode();
+        panel = new UIElement();
         panel.addClass(PANEL_CLASS);
         // Chrome, not content: it must stay in the corner rather than sliding away as the text scrolls.
         panel.setScrollExempt(true);
@@ -158,7 +158,7 @@ public final class InspectionWidgetPart extends EditorViewPart {
         errorCount = countChip("severity-error");
         warningCount = countChip("severity-warning");
         infoCount = countChip("severity-info");
-        clean = new UINode();
+        clean = new UIElement();
         clean.addClass(CLEAN_MARK_CLASS);
         clean.setHitTest(false);
         panel.append(errorCount);
@@ -184,13 +184,13 @@ public final class InspectionWidgetPart extends EditorViewPart {
      * no gap of its own — which is also required because a chip hidden with {@code display: none}
      * <em>still counts</em> for a {@code gap-all}, so a clean file would have carried three phantom gaps.</p>
      */
-    private static UINode countChip(String severityClass) {
-        UINode chip = new UINode();
+    private static UIElement countChip(String severityClass) {
+        UIElement chip = new UIElement();
         chip.addClass(COUNT_CLASS);
         chip.addClass(severityClass);
         chip.setHitTest(false);
 
-        UINode icon = new UINode();
+        UIElement icon = new UIElement();
         icon.addClass(ICON_CLASS);
         icon.setHitTest(false);
         chip.append(icon);

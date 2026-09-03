@@ -1,16 +1,12 @@
 package com.crystalgui.workbench.chrome.preferences;
 
-import com.crystalgui.core.collection.tree.FilteredTreeSource;
 import com.crystalgui.core.settings.Setting;
 import com.crystalgui.core.settings.Settings;
 import com.crystalgui.core.settings.SettingsCategory;
 import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.core.settings.SettingsRegistry;
-import com.crystalgui.style.StyleGroup;
-import com.crystalgui.style.StyleOrigin;
-import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.overlay.Dialog;
 import com.crystalgui.widget.overlay.InputDialog;
@@ -225,17 +221,17 @@ public final class Preferences {
      * children. {@link PageStack} shows the placeholder for those rather than an empty box.</p>
      */
     @Nullable
-    private UINode buildPage(String path) {
+    private UIElement buildPage(String path) {
         List<String> ids = paths.idsDirectlyUnder(path);
         if (ids.isEmpty()) return null;
 
         ConfiguratorPanel panel = new ConfiguratorPanel();
         panel.addClass(PANEL_CLASS);
-        Map<String, UINode> hostsBySection = new LinkedHashMap<>();
+        Map<String, UIElement> hostsBySection = new LinkedHashMap<>();
         for (String id : ids) {
             Setting<?> setting = SettingsRegistry.get().get(id);
             if (setting == null) continue;
-            UINode host = hostsBySection.computeIfAbsent(paths.sectionOf(id), section -> {
+            UIElement host = hostsBySection.computeIfAbsent(paths.sectionOf(id), section -> {
                 if (section.isEmpty()) return panel;
                 ConfiguratorGroup group = panel.group(sectionTitle(path, section));
                 // ADDED, not merely built: `group()` deliberately does not attach, and forgetting it
@@ -279,7 +275,7 @@ public final class Preferences {
 
     /** The page on screen, or null when the category holds nothing of its own. */
     @Nullable
-    public UINode page() {
+    public UIElement page() {
         return navigator.pages().built(navigator.pages().current());
     }
 

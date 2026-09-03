@@ -2,12 +2,11 @@ package com.crystalgui.widget.config.inspector;
 
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.core.data.DataContext;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.service.Animation;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.widget.config.ConfigControl;
-import com.crystalgui.widget.config.inspector.InspectorRegistry;
+
 import java.util.ArrayList;
 import com.crystalgui.widget.config.ConfiguratorPanel;
 import com.crystalgui.widget.layout.Tab;
@@ -45,7 +44,7 @@ import java.util.Set;
  * nodes must not throw you back to the first tab, which is the one thing the old per-graph swap also got
  * wrong.</p>
  */
-public class Inspector extends UINode  {
+public class Inspector extends UIElement {
 
     public static final Name NAME = Name.of("inspector");
 
@@ -89,7 +88,7 @@ public class Inspector extends UINode  {
      * was true when it was built.</p>
      */
     @Nullable
-    private UINode pendingSource;
+    private UIElement pendingSource;
     private boolean pending;
 
     @Override
@@ -161,7 +160,7 @@ public class Inspector extends UINode  {
      * popup closing — and blanking on that would make the panel flicker empty for reasons the user never
      * connected to what they did. So it latches, and only a real new subject replaces it.</p>
      */
-    private void onFocusChanged(@Nullable UINode focused) {
+    private void onFocusChanged(@Nullable UIElement focused) {
         if (focused == null || contains(focused)) return;
         inspect(focused);
     }
@@ -207,7 +206,7 @@ public class Inspector extends UINode  {
      * dispatch in flight and a detached inspector cannot have one. That is what keeps it usable from a
      * headless test rather than a convenience fork.</p>
      */
-    public void inspect(@Nullable UINode source) {
+    public void inspect(@Nullable UIElement source) {
         pendingSource = source;
         pending = true;
         if (document() == null) {
@@ -216,7 +215,7 @@ public class Inspector extends UINode  {
         }
     }
 
-    private void rebuild(@Nullable UINode source) {
+    private void rebuild(@Nullable UIElement source) {
         // A DETACHED SUBJECT ANSWERS NOTHING, and that is not the same as "nothing to describe".
         //
         // DataContext walks up from the source, so an element that is momentarily out of the tree finds

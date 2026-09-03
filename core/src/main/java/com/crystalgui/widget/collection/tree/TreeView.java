@@ -7,7 +7,7 @@ import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.widget.collection.list.ListRenderer;
 import com.crystalgui.widget.collection.list.ListView;
@@ -37,8 +37,8 @@ import lombok.Getter;
  * <pre>{@code
  * TreeView<Path> tree = new TreeView<>(source);
  * tree.setRenderer(new TreeRenderer<Path>() {
- *     public UINode createTemplate() { ... }
- *     public void bind(Path item, TreeRow<Path> row, int i, UINode t) { ... }
+ *     public UIElement createTemplate() { ... }
+ *     public void bind(Path item, TreeRow<Path> row, int i, UIElement t) { ... }
  * });
  * }</pre>
  */
@@ -89,12 +89,12 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
         // know: indentation from depth, and the state classes a theme draws the twisty from.
         super.setRenderer(renderer == null ? null : new ListRenderer<TreeRow<T>>() {
             @Override
-            public UINode createTemplate() {
+            public UIElement createTemplate() {
                 return renderer.createTemplate();
             }
 
             @Override
-            public void bind(TreeRow<T> row, int index, UINode template) {
+            public void bind(TreeRow<T> row, int index, UIElement template) {
                 final float indent = row.depth() * indentPerDepth;
                 StyleGroup.defaultPipeline(template.getStyle().getLayoutGroup(), l -> l.paddingLeft(indent));
                 // THE CLASS A ROW ALREADY HAS IS NOT A CHANGE, and this removed all three and added one
@@ -126,7 +126,7 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
             }
 
             @Override
-            public void unbind(UINode template) {
+            public void unbind(UIElement template) {
                 renderer.unbind(template);
             }
 

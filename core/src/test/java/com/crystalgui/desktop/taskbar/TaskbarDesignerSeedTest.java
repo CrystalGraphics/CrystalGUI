@@ -7,8 +7,7 @@ import com.crystalgui.style.property.visual.border.BorderRadiusProperties;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
 
 import org.junit.After;
 import org.junit.Before;
@@ -59,7 +58,7 @@ public class TaskbarDesignerSeedTest extends UiDocumentTestBase {
     @Before
     public void setUpDesktop() {
         Desktop.setAnimationsEnabled(false);
-        UINode root = new UINode().layout(l -> l.width(800).height(600));
+        UIElement root = new UIElement().layout(l -> l.width(800).height(600));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
         // A document, because the compositor takes up no space until one is open — and with no space the
@@ -84,7 +83,7 @@ public class TaskbarDesignerSeedTest extends UiDocumentTestBase {
     }
 
     /** The resolved top-left radius in px; null — nothing has written one — is a square corner. */
-    private float radiusOf(UINode element) {
+    private float radiusOf(UIElement element) {
         Object radius = element.getStyle().getComputed(BorderRadiusProperties.TOP_LEFT_X);
         return radius instanceof LengthPercent r ? r.resolve(element.box().width()) : 0f;
     }

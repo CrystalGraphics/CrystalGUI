@@ -1,6 +1,5 @@
 package com.crystalgui.ui.dom;
 
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.core.settings.Setting;
 import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.testsupport.UiDocumentTestBase;
@@ -12,7 +11,7 @@ import static org.junit.Assert.*;
  * P6.1.13 — settings on <b>every element</b>, resolved up the tree.
  *
  * <h3>Why this is not in {@code headlessTest} with the rest of the gear</h3>
- * <p>{@code UINode} holds fields of CrystalGraphics types, and a field descriptor resolves at class
+ * <p>{@code UIElement} holds fields of CrystalGraphics types, and a field descriptor resolves at class
  * load rather than in a method body — so the class is unloadable where CG core is deliberately absent.
  * The <em>model</em> half of settings is fully headless and tested there; this file is only the part that
  * needs a real element.</p>
@@ -25,7 +24,7 @@ public class ElementSettingsTest extends UiDocumentTestBase {
     /** An element that has never been asked about settings must not be carrying a store. */
     @Test
     public void anElementWithNoSettingsAllocatesNothing() {
-        UINode element = new UINode();
+        UIElement element = new UIElement();
         assertNull(element.settingsOrNull());
         assertEquals("and still answers, from the declaration", Integer.valueOf(4), element.resolve(INDENT));
         assertNull("asking must not have created one", element.settingsOrNull());
@@ -41,9 +40,9 @@ public class ElementSettingsTest extends UiDocumentTestBase {
      */
     @Test
     public void resolvingDoesNotAllocateStoresAlongTheWay() {
-        UINode root = new UINode();
-        UINode middle = new UINode();
-        UINode leaf = new UINode();
+        UIElement root = new UIElement();
+        UIElement middle = new UIElement();
+        UIElement leaf = new UIElement();
         root.append(middle);
         middle.append(leaf);
 
@@ -57,9 +56,9 @@ public class ElementSettingsTest extends UiDocumentTestBase {
     /** The nearest ancestor with an answer wins — the whole of the scoping rule. */
     @Test
     public void theNearestScopeWins() {
-        UINode root = new UINode();
-        UINode panel = new UINode();
-        UINode field = new UINode();
+        UIElement root = new UIElement();
+        UIElement panel = new UIElement();
+        UIElement field = new UIElement();
         root.append(panel);
         panel.append(field);
 
@@ -81,7 +80,7 @@ public class ElementSettingsTest extends UiDocumentTestBase {
      */
     @Test
     public void aDetachedElementStillResolves() {
-        UINode orphan = new UINode();
+        UIElement orphan = new UIElement();
         assertEquals(Integer.valueOf(4), orphan.resolve(INDENT));
         orphan.settings().set(SettingsLayer.MEMORY, INDENT, 16);
         assertEquals(Integer.valueOf(16), orphan.resolve(INDENT));
@@ -90,9 +89,9 @@ public class ElementSettingsTest extends UiDocumentTestBase {
     /** Reparenting changes what an element inherits, with nothing to invalidate. */
     @Test
     public void reparentingChangesWhatIsInherited() {
-        UINode left = new UINode();
-        UINode right = new UINode();
-        UINode child = new UINode();
+        UIElement left = new UIElement();
+        UIElement right = new UIElement();
+        UIElement child = new UIElement();
         left.settings().set(SettingsLayer.USER, WRAP, true);
         right.settings().set(SettingsLayer.USER, WRAP, false);
 

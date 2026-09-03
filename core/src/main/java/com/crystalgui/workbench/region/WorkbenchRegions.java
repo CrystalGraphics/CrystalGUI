@@ -1,8 +1,7 @@
 package com.crystalgui.workbench.region;
 
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.layout.SplitView;
-import com.crystalgui.workbench.region.DockRegion;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -66,9 +65,9 @@ public final class WorkbenchRegions {
     private final Map<DockRegion, Float> weights = new EnumMap<>(DockRegion.class);
 
     /** The EDITOR region's content — the dock. Always present, never hidden. */
-    private final UINode editor;
+    private final UIElement editor;
 
-    public WorkbenchRegions(UINode editor) {
+    public WorkbenchRegions(UIElement editor) {
         this.editor = editor;
 
         // The BOX carries the frame class -- it is what the workbench mounts. The splits inside it are
@@ -131,11 +130,11 @@ public final class WorkbenchRegions {
      * there is no leftover pane and no divider to drag it back out with. Which is also the honest shape: a
      * split of one thing is not a split.</p>
      */
-    public UINode root() {
+    public UIElement root() {
         return rootBox;
     }
 
-    private final UINode rootBox = new UINode();
+    private final UIElement rootBox = new UIElement();
 
     public RegionHost host(DockRegion region) {
         return hosts.get(region);
@@ -188,7 +187,7 @@ public final class WorkbenchRegions {
     public void sync() {
         if (capturing) return;
         // THE ROW: sidebar | editor | auxiliary.
-        List<UINode> rowParts = new ArrayList<>();
+        List<UIElement> rowParts = new ArrayList<>();
         List<Float> rowWeights = new ArrayList<>();
         if (isVisible(DockRegion.SIDEBAR)) {
             rowParts.add(hosts.get(DockRegion.SIDEBAR));
@@ -200,10 +199,10 @@ public final class WorkbenchRegions {
             rowParts.add(hosts.get(DockRegion.AUXILIARY));
             rowWeights.add(weightOf(DockRegion.AUXILIARY));
         }
-        UINode rowContent = SplitFill.mount(centre, rowParts, rowWeights);
+        UIElement rowContent = SplitFill.mount(centre, rowParts, rowWeights);
 
         // THE COLUMN: that whole row, over the bottom panel.
-        List<UINode> columnParts = new ArrayList<>();
+        List<UIElement> columnParts = new ArrayList<>();
         List<Float> columnWeights = new ArrayList<>();
         columnParts.add(rowContent);
         columnWeights.add(editorShareOf(DockRegion.PANEL));

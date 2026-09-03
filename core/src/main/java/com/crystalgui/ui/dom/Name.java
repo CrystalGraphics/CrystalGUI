@@ -23,7 +23,7 @@ import java.util.Objects;
  * for what a kind is called, and only one of them can be extended. A widget outside this module
  * declares its own {@code NAME} beside its class ({@link com.crystalgui.ui.box.UIText} does, and
  * every widget M6 ports will), so the four built-ins doing something different would make the
- * pattern a special case rather than the rule. They are now {@code UINode.NAME},
+ * pattern a special case rather than the rule. They are now {@code UIElement.NAME},
  * {@code UIDocument.NAME}, {@code ShadowRoot.NAME} and {@code UISlot.NAME} — declared where the
  * thing they name is declared, which is also where a reader looking for a tag would go first.</p>
  */

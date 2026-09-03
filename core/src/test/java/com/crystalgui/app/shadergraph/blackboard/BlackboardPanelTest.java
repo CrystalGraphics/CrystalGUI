@@ -1,15 +1,11 @@
 package com.crystalgui.app.shadergraph.blackboard;
 
 import com.crystalgui.app.shadergraph.ShaderPropertyForm;
-import com.crystalgui.text.Selection;
-import com.crystalgui.ui.service.Focus;
-import com.crystalgui.widget.config.ConfiguratorPanel;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.graph.GraphProperty;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UIDocument;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -31,7 +27,7 @@ public class BlackboardPanelTest extends UiDocumentTestBase {
         undo = new UndoStack();
         board = new BlackboardPanel(graphDocument, "test", undo);
 
-        UINode root = new UINode().layout(l -> l.width(600).height(400));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400));
         root.append(board);
         document.append(root);
         frame();
@@ -201,7 +197,7 @@ public class BlackboardPanelTest extends UiDocumentTestBase {
     @Test
     public void refreshingReplacesTheListRatherThanAppending() {
         mount();
-        UINode list = board.pills().isEmpty() ? null : board.pills().get(0).parent();
+        UIElement list = board.pills().isEmpty() ? null : board.pills().get(0).parent();
 
         board.refresh();
         board.refresh();
@@ -231,13 +227,13 @@ public class BlackboardPanelTest extends UiDocumentTestBase {
 
     /** Whatever the body is, count everything in it — pills are internal, the placeholder is not. */
     private int countBodyChildren() {
-        UINode body = null;
-        for (UINode child : board.children()) {
+        UIElement body = null;
+        for (UIElement child : board.children()) {
             if (child.hasClass(BlackboardPanel.BODY_CLASS)) body = child;
         }
         assertNotNull("the panel must have a body", body);
         int found = 0;
-        for (UINode child : body.children()) {
+        for (UIElement child : body.children()) {
             if (child instanceof PropertyPill || child.hasClass("__empty__")) found++;
         }
         return found;

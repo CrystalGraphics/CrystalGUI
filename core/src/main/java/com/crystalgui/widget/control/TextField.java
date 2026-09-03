@@ -21,8 +21,7 @@ import com.crystalgui.core.signal.Signal;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.style.property.visual.text.LineHeightValue;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.service.Animation;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.FocusEvent;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
@@ -76,7 +75,7 @@ import com.crystalgui.ui.box.Measurable;
  * {@code setMode(INTEGER).setPattern("[a-z]+")} — is simply unsatisfiable; a caller who wants
  * complete control uses {@link Mode#STRING}.</p>
  */
-public class TextField extends UINode implements Measurable {
+public class TextField extends UIElement implements Measurable {
 
     public static final Name NAME = Name.of("textfield");
 

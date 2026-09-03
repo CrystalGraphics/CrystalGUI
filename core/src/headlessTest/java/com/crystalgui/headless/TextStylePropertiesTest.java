@@ -1,11 +1,11 @@
 package com.crystalgui.headless;
 
-import com.crystalgui.net.mirror.UINodeMirror;
+import com.crystalgui.net.mirror.UIElementMirror;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.style.property.StylePropertyRegistry;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.TextField;
 import com.google.gson.JsonObject;
 import org.junit.Test;
@@ -48,7 +48,7 @@ public class TextStylePropertiesTest {
     /** Inheritance itself, without going near a stylesheet. */
     @Test
     public void aChildSeesAnAncestorsValues() {
-        UINode root = new UINode();
+        UIElement root = new UIElement();
         TextField field = new TextField();
         root.append(field);
 
@@ -63,7 +63,7 @@ public class TextStylePropertiesTest {
     /** An element's own value wins over an inherited one. */
     @Test
     public void anOwnValueBeatsAnInheritedOne() {
-        UINode root = new UINode();
+        UIElement root = new UIElement();
         TextField field = new TextField();
         root.append(field);
 
@@ -94,7 +94,7 @@ public class TextStylePropertiesTest {
     /** Float- and Integer-valued properties are already in StyleValueCodecs, so these travel free. */
     @Test
     public void allThreeRoundTripToAClient() {
-        UINode element = new UINode();
+        UIElement element = new UIElement();
         element.getStyle().getGeneralGroup()
                 .lineHeight(1.75f)
                 .caretWidth(4f)
@@ -108,14 +108,14 @@ public class TextStylePropertiesTest {
         }
     }
 
-    private static <T> UINode roundTrip(UINode source, DynamicOps<T> ops) {
-        return new UINodeMirror<>(ops).decode(new UINodeMirror<>(ops).describe(source));
+    private static <T> UIElement roundTrip(UIElement source, DynamicOps<T> ops) {
+        return new UIElementMirror<>(ops).decode(new UIElementMirror<>(ops).describe(source));
     }
 
     /** A widget that never had them set must not carry them over the wire. */
     @Test
     public void defaultsAreNotSent() {
-        JsonObject encoded = new UINodeMirror<>(JsonOps.INSTANCE)
+        JsonObject encoded = new UIElementMirror<>(JsonOps.INSTANCE)
                 .describe(new TextField()).getAsJsonObject();
         assertFalse("an unstyled field should carry no style block at all", encoded.has("style"));
     }

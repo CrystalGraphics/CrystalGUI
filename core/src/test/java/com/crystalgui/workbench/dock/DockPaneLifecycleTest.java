@@ -1,15 +1,11 @@
 package com.crystalgui.workbench.dock;
 
-import com.crystalgui.widget.config.inspector.Inspector;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.workbench.dock.DockArea;
-import com.crystalgui.workbench.dock.DockGroup;
 import com.crystalgui.workbench.dock.panel.DockInput;
 import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
@@ -45,13 +41,13 @@ public class DockPaneLifecycleTest extends UiDocumentTestBase {
 
     /** Records everything the framework does to it, in order. */
     private static final class Recording implements DockPane {
-        final UINode view = new UINode();
+        final UIElement view = new UIElement();
         final List<String> events = new ArrayList<>();
         DockInput input;
         String restored = "";
         int disposals;
 
-        @Override public UINode view() { return view; }
+        @Override public UIElement view() { return view; }
 
         @Override public void setInput(DockInput input) {
             this.input = input;
@@ -94,9 +90,9 @@ public class DockPaneLifecycleTest extends UiDocumentTestBase {
 
     @Before
     public void setUp() {
-        DockPanelRegistry<UINode> registry = new DockPanelRegistry<>();
-        registry.register(new DockPanelDescriptor(TYPE, TYPE), ref -> new UINode());
-        registry.register(new DockPanelDescriptor("plain", "plain"), ref -> new UINode());
+        DockPanelRegistry<UIElement> registry = new DockPanelRegistry<>();
+        registry.register(new DockPanelDescriptor(TYPE, TYPE), ref -> new UIElement());
+        registry.register(new DockPanelDescriptor("plain", "plain"), ref -> new UIElement());
         registry.registerPane(new DockPaneProvider() {
             @Override public boolean accepts(DockInput input) { return TYPE.equals(input.typeId()); }
             @Override public DockPane create() {
@@ -117,8 +113,8 @@ public class DockPaneLifecycleTest extends UiDocumentTestBase {
         layout = DockLayout.of(leaf);
 
         area = new DockArea(registry, layout);
-        UINode root = new UINode().layout(l -> l.width(600).height(400)
-                .flexDirection(FlexDirection.COLUMN));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400)
+                                                      .flexDirection(FlexDirection.COLUMN));
         root.append(area);
         area.layout(l -> l.width(600).height(400));
 
@@ -186,13 +182,13 @@ public class DockPaneLifecycleTest extends UiDocumentTestBase {
     @Test
     public void theViewMovesToTheActivePanelsHost() {
         Recording pane = pane();
-        UINode firstHost = pane.view.parent();
+        UIElement firstHost = pane.view.parent();
         assertNotNull(firstHost);
 
         leaf.add(beta);
         activate(beta);
 
-        UINode secondHost = pane.view.parent();
+        UIElement secondHost = pane.view.parent();
         assertNotNull(secondHost);
         assertFalse("the view did not move hosts", firstHost == secondHost);
         assertTrue("the old host should be empty", firstHost.children().isEmpty());

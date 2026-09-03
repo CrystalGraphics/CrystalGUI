@@ -1,7 +1,7 @@
 package com.crystalgui.widget.collection.tree;
 
 import com.crystalgui.core.collection.tree.TreeRow;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 
 /**
  * Builds and fills tree rows — {@link com.crystalgui.ui.elements.list.ListRenderer}'s split, with the
@@ -18,15 +18,15 @@ import com.crystalgui.ui.dom.UINode;
  */
 public interface TreeRenderer<T> {
 
-    UINode createTemplate();
+    UIElement createTemplate();
 
     /**
      * @param row the flattened context — depth, expandable, expanded. Passed because a renderer usually
      *            wants at least {@code expandable} to decide whether to show a twisty at all.
      */
-    void bind(T item, TreeRow<T> row, int index, UINode template);
+    void bind(T item, TreeRow<T> row, int index, UIElement template);
 
-    default void unbind(UINode template) {
+    default void unbind(UIElement template) {
     }
 
     /**

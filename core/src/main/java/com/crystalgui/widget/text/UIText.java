@@ -26,7 +26,7 @@ import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.text.HighlightRegistry;
 import com.crystalgui.ui.text.TextRange;
 import dev.vfyjxf.taffy.style.TaffyDimension;
@@ -84,7 +84,7 @@ import javax.annotation.Nullable;
  * family)} verbatim whenever nothing needs a span — no highlight resolves to anything, no decoration,
  * no synthetic face — which is every label in the engine that is not code or a search result.</p>
  */
-public final class UIText extends UINode implements Measurable {
+public final class UIText extends UIElement implements Measurable {
 
     public static final Name NAME = Name.of("text");
 

@@ -1,7 +1,7 @@
 package com.crystalgui.document;
 
 import com.crystalgui.text.diagnostic.DiagnosticSet;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 
 import javax.annotation.Nullable;
 
@@ -34,7 +34,7 @@ import com.crystalgui.fs.Resource;
  * division as the I/O itself — a document owns <em>content</em>, never paths, reads, writes or etags.</p>
  *
  * <p>An abstract base class would not have helped either: {@code ShaderGraphEditor} is a widget and
- * already extends {@code UINode}, so the one implementation that most wanted to inherit the
+ * already extends {@code UIElement}, so the one implementation that most wanted to inherit the
  * bookkeeping is the one that could not.</p>
  *
  * <h3>Bytes, not text</h3>
@@ -111,7 +111,7 @@ public interface FileDocument {
     }
 
     /** The element the dock shows for this file. */
-    UINode view();
+    UIElement view();
 
     /**
      * What {@code Ctrl+S} writes.

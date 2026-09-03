@@ -2,7 +2,7 @@ package com.crystalgui.core.command;
 
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.data.DataKey;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 
 import org.junit.After;
 import org.junit.Before;
@@ -26,12 +26,12 @@ import static org.junit.Assert.assertTrue;
  */
 public class CommandRegistryGlobalTest {
     /**
-     * A node that can answer a {@link DataKey}. {@code UINode} has no {@code getData} to override --
+     * A node that can answer a {@link DataKey}. {@code UIElement} has no {@code getData} to override --
      * the outward walk tests each step for a {@link DataProvider} instead -- so a fixture that wants
      * to answer implements the interface. Subclassed anonymously below, which is what these tests
      * used to do straight off the old element.
      */
-    private static class ProviderNode extends UINode implements DataProvider {
+    private static class ProviderNode extends UIElement implements DataProvider {
         @Override
         public Object getData(DataKey<?> key) {
             return null;
@@ -43,7 +43,7 @@ public class CommandRegistryGlobalTest {
 
     private final List<String> ran = new ArrayList<>();
 
-    private static UINode answering(String answer) {
+    private static UIElement answering(String answer) {
         return new ProviderNode() {
             @Override
             public Object getData(DataKey<?> key) {
@@ -101,7 +101,7 @@ public class CommandRegistryGlobalTest {
                 ;
 
         assertTrue(action.isEnabled(ctx(answering("yes"))));
-        assertFalse(action.isEnabled(ctx(new UINode())));
+        assertFalse(action.isEnabled(ctx(new UIElement())));
         assertFalse(action.isEnabled(CommandContext.of(null)));
     }
 
@@ -207,7 +207,7 @@ public class CommandRegistryGlobalTest {
         for (Command command : commands) CommandRegistry.global().register(command);
     }
 
-    private static CommandContext ctx(UINode source) {
+    private static CommandContext ctx(UIElement source) {
         return CommandContext.of(source);
     }
 

@@ -6,13 +6,11 @@ import com.crystalgui.desktop.window.WindowIcon;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.event.MouseEvent;
-
-import dev.vfyjxf.taffy.style.TaffyDisplay;
 
 import javax.annotation.Nullable;
 
@@ -37,13 +35,13 @@ import javax.annotation.Nullable;
  * rest on an entry and goes when you leave both the entry and the panel — so joining the popover stack
  * would make Escape and a stray click fight the hover for control of it.</p>
  */
-public class WindowPreview extends UINode {
+public class WindowPreview extends UIElement {
 
     /**
      * Its own kind, and every concrete node needs one.
      *
      * <p>No shipped rule names this tag — the sheet keys on the classes — but a subclass that
-     * declares none INHERITS {@code UINode.NAME}, so it would report {@code element} and match
+     * declares none INHERITS {@code UIElement.NAME}, so it would report {@code element} and match
      * every bare {@code element} rule there ever is. That is the {@code ToolWindowFrame} trap
      * from the other side, and {@code NodeKindsCoverageTest} is what makes it a compile-time
      * question rather than an unstyled widget somebody reports.</p>
@@ -57,8 +55,8 @@ public class WindowPreview extends UINode {
     public static final String ICON_CLASS = "__pre-icon__";
 
     /** The bar's accent wash, on the panel too -- one material, one tone. @see Taskbar#GLOW_CLASS */
-    private final UINode glow = new UINode();
-    private final UINode header = new UINode();
+    private final UIElement glow = new UIElement();
+    private final UIElement header = new UIElement();
     private final WindowIcon icon = new WindowIcon();
     private final UIText title = new UIText("");
     private final Button close = new Button("");
@@ -79,7 +77,7 @@ public class WindowPreview extends UINode {
      * once. Package-private: a theme retones this through {@code --preview-glow}, and the element
      * itself is only reachable because the designer writes at IMPORTANT origin while it runs.
      */
-    UINode glow() {
+    UIElement glow() {
         return glow;
     }
 
@@ -128,13 +126,13 @@ public class WindowPreview extends UINode {
         // press on the button itself is that button's -- the two booleans are additive, and target-only
         // would never hear a press that landed on a child at all.
         events.getGroup(MouseEvent.Down.class).attachListener((element, event) -> {
-            if (isWithin(((UINode) event.getTarget()), close)) return;
+            if (isWithin(((UIElement) event.getTarget()), close)) return;
             onActivated.emit();
         }, false, true);
     }
 
-    private static boolean isWithin(@Nullable UINode element, UINode ancestor) {
-        for (UINode walk = element; walk != null; walk = walk.parent()) {
+    private static boolean isWithin(@Nullable UIElement element, UIElement ancestor) {
+        for (UIElement walk = element; walk != null; walk = walk.parent()) {
             if (walk == ancestor) return true;
         }
         return false;
@@ -177,7 +175,7 @@ public class WindowPreview extends UINode {
     }
 
     /** The picture itself, for something that wants to animate its box. @see WindowThumbnail#applySize */
-    UINode thumbnailElement() {
+    UIElement thumbnailElement() {
         return thumbnail;
     }
 

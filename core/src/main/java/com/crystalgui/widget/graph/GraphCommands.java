@@ -6,7 +6,6 @@ import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.graph.GraphDocument;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.input.keymap.Keymap;
 

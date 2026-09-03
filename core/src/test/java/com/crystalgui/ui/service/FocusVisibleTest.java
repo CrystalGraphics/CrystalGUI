@@ -1,8 +1,6 @@
 package com.crystalgui.ui.service;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.service.Input;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.style.sheet.StyleSheet;
@@ -30,10 +28,10 @@ import static org.junit.Assert.*;
  */
 public class FocusVisibleTest extends UiDocumentTestBase {
 
-    private UINode root;
+    private UIElement root;
 
     /** uiScale 1 so logical == physical and the click coordinates below need no conversion. */
-    private void setUp(UINode... children) {
+    private void setUp(UIElement... children) {
         // Called once per widget from a loop, and the base's document persists across calls where the
         // old fixture built a fresh UIWindow each time.
         document.removeAll();
@@ -41,8 +39,8 @@ public class FocusVisibleTest extends UiDocumentTestBase {
         // Switch carries no text, so without it it measures 0x0 and a click at its centre lands on
         // nothing -- which reads as click-focus being broken rather than as the widget having no box.
         withDefaultStyles();
-        root = new UINode().layout(l -> l.width(400).height(400));
-        for (UINode child : children) root.append(child);
+        root = new UIElement().layout(l -> l.width(400).height(400));
+        for (UIElement child : children) root.append(child);
         document.append(root);
         document.boxes().setUiScale(1f);
         frame();
@@ -50,7 +48,7 @@ public class FocusVisibleTest extends UiDocumentTestBase {
 
 
     /** A press-and-release over the element's centre, the way a real click arrives. */
-    private void click(UINode target) {
+    private void click(UIElement target) {
         int[] centre = centreOf(target);
         int x = centre[0], y = centre[1];
         var handler = document.input();
@@ -158,7 +156,7 @@ public class FocusVisibleTest extends UiDocumentTestBase {
      */
     @Test
     public void clickingAButtonCheckboxOrSwitchFocusesItWithoutRinging() {
-        for (UINode widget : new UINode[]{new Button("b"), new Checkbox("c"), new Switch()}) {
+        for (UIElement widget : new UIElement[]{new Button("b"), new Checkbox("c"), new Switch()}) {
             setUp(widget);
 
             click(widget);
@@ -172,7 +170,7 @@ public class FocusVisibleTest extends UiDocumentTestBase {
     /** ...and Tab still rings all three, i.e. CLICK really is a superset of FOCUSABLE. */
     @Test
     public void tabStillRingsButtonCheckboxAndSwitch() {
-        for (UINode widget : new UINode[]{new Button("b"), new Checkbox("c"), new Switch()}) {
+        for (UIElement widget : new UIElement[]{new Button("b"), new Checkbox("c"), new Switch()}) {
             setUp(widget);
 
             pressTab();

@@ -1,12 +1,11 @@
 package com.crystalgui.desktop.motion;
 
 import com.crystalgui.style.easing.Easing;
-import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.transition.ActiveTransition;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.UITransform;
 
 import javax.annotation.Nullable;
@@ -68,7 +67,7 @@ import java.util.function.BooleanSupplier;
  */
 public final class WindowAnimation implements WindowMotion {
 
-    private final UINode target;
+    private final UIElement target;
 
     /**
      * Whether the thing being animated is still worth writing to.
@@ -123,7 +122,7 @@ public final class WindowAnimation implements WindowMotion {
      * value" is a frame of the END state, which is a visible flash at the beginning of every gesture.
      * The ticker exists to advance it, not to begin it.</p>
      */
-    WindowAnimation(UINode target, BooleanSupplier alive, UITransform from, UITransform to,
+    WindowAnimation(UIElement target, BooleanSupplier alive, UITransform from, UITransform to,
                     float fromOpacity, float toOpacity, LengthPercent originX, LengthPercent originY,
                     long durationNanos, Easing easing, @Nullable Runnable onDone) {
         this.target = target;

@@ -1,12 +1,9 @@
 package com.crystalgui.workbench.dock;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.workbench.dock.DockArea;
 import com.crystalgui.workbench.dock.drag.DockDropZone;
-import com.crystalgui.workbench.dock.DockGroup;
 import com.crystalgui.workbench.dock.panel.DockInput;
 import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
@@ -42,14 +39,14 @@ public class DockPlacementTest extends UiDocumentTestBase {
     private final DockPanelRef beta = new DockPanelRef("beta");
 
     /** Panel type → the element built for it, so a test can point at a panel's own content. */
-    private final Map<String, UINode> built = new HashMap<>();
+    private final Map<String, UIElement> built = new HashMap<>();
 
     @Before
     public void setUp() {
-        DockPanelRegistry<UINode> registry = new DockPanelRegistry<>();
+        DockPanelRegistry<UIElement> registry = new DockPanelRegistry<>();
         for (String id : new String[]{"alpha", "beta"}) {
             registry.register(new DockPanelDescriptor(id, id), ref -> {
-                UINode content = new UINode();
+                UIElement content = new UIElement();
                 built.put(ref.typeId(), content);
                 return content;
             });
@@ -60,8 +57,8 @@ public class DockPlacementTest extends UiDocumentTestBase {
         layout.drop(left, DockDropZone.SPLIT_RIGHT, new DockLeaf(beta));
 
         area = new DockArea(registry, layout);
-        UINode root = new UINode().layout(l -> l.width(600).height(400)
-                .flexDirection(FlexDirection.COLUMN));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400)
+                                                      .flexDirection(FlexDirection.COLUMN));
         root.append(area);
         area.layout(l -> l.width(600).height(400));
 
@@ -80,7 +77,7 @@ public class DockPlacementTest extends UiDocumentTestBase {
      */
     @Test
     public void groupOfFindsTheGroupHoldingAnElement() {
-        UINode betaContent = built.get("beta");
+        UIElement betaContent = built.get("beta");
         assertNotNull("fixture wrong -- beta's content was never built", betaContent);
 
         DockGroup group = area.groupOf(betaContent);
@@ -98,7 +95,7 @@ public class DockPlacementTest extends UiDocumentTestBase {
     /** An element outside any dock is an ordinary null, not a failure. */
     @Test
     public void anElementOutsideTheDockResolvesToNothing() {
-        assertNull(area.groupOf(new UINode()));
+        assertNull(area.groupOf(new UIElement()));
         assertNull(area.groupOf(null));
     }
 
@@ -125,7 +122,7 @@ public class DockPlacementTest extends UiDocumentTestBase {
     /** An element that is not in a dock cannot name a group — the caller then makes one. */
     @Test
     public void withResolvesToNothingForAnElementOutsideTheDock() {
-        assertNull(DockPlacement.resolve(DockPlacement.with(new UINode()), area));
+        assertNull(DockPlacement.resolve(DockPlacement.with(new UIElement()), area));
     }
 
     @Test

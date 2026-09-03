@@ -1,20 +1,14 @@
 package com.crystalgui.workbench.chrome.palette;
 
-import com.crystalgui.style.property.visual.Resize;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.workbench.chrome.palette.QuickPick;
 import com.crystalgui.core.collection.pick.QuickPickEntry;
 import com.crystalgui.core.collection.pick.QuickPickItem;
 import com.crystalgui.core.collection.pick.QuickPickSource;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.ArrayList;
-import java.util.List;
 
 import static org.junit.Assert.assertTrue;
 
@@ -45,7 +39,7 @@ public class QuickPickResizeTest extends UiDocumentTestBase {
 
     @Before
     public void setUp() {
-        UINode root = new UINode().layout(l -> l.width(900).height(700));
+        UIElement root = new UIElement().layout(l -> l.width(900).height(700));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
 
@@ -76,14 +70,14 @@ public class QuickPickResizeTest extends UiDocumentTestBase {
     /** Takes the height the way a drag on the resize handle does — INLINE, plus the user-sized latch. */
     private void userResizesTo(float height) {
         StyleGroup.inlinePipeline(pick.getStyle().getLayoutGroup(), l -> l.height(height));
-        // CAST, because `markUserSized` is package-private on UINode and QuickPick is in another
+        // CAST, because `markUserSized` is package-private on UIElement and QuickPick is in another
         // package -- so it is not a member of QuickPick at all and cannot be called through one. This test
-        // shares UINode's package, which is the only reason it can reach it.
-        ((UINode) pick).markUserSized(false, true);
+        // shares UIElement's package, which is the only reason it can reach it.
+        ((UIElement) pick).markUserSized(false, true);
         settle();
     }
 
-    private static float bottomOf(UINode element) {
+    private static float bottomOf(UIElement element) {
         return element.box().y() + element.box().height();
     }
 

@@ -27,8 +27,8 @@ import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.dom.UINodeRegistry;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Switch;
 import com.crystalgui.widget.text.UIText;
@@ -80,7 +80,7 @@ public class WindowLifecycleTest {
 
     @Before
     public void setUp() {
-        UINodeRegistry.bootstrap();
+        UIElementRegistry.bootstrap();
         Protocols.resetForTesting();
         WindowProtocol.resetForTesting();
         WindowProtocol.register();
@@ -262,7 +262,7 @@ public class WindowLifecycleTest {
     public void openingUnderAKeyThatIsAlreadyOpenBringsTheExistingWindowForward() {
         ServerWindow<TestPanel> first = server.open(TestPanel.TYPE, "test:one");
         settle();
-        UINode firstRoot = mount.mounted.get(0).root();
+        UIElement firstRoot = mount.mounted.get(0).root();
 
         ServerWindow<TestPanel> again = server.open(TestPanel.TYPE, "test:one");
         settle();
@@ -696,7 +696,7 @@ public class WindowLifecycleTest {
 
     // ── Fixtures ────────────────────────────────────────────────────────────
 
-    private static String textOf(@Nullable UINode element) {
+    private static String textOf(@Nullable UIElement element) {
         return element instanceof UIText ? ((UIText) element).getText() : null;
     }
 
@@ -704,7 +704,7 @@ public class WindowLifecycleTest {
      * The workhorse: one class, both sides, per-instance counters. Its MODEL is its key — which is
      * the honest general shape anyway, a key naming the window's subject.
      */
-    public static class TestPanel extends UINode implements Networked<String> {
+    public static class TestPanel extends UIElement implements Networked<String> {
 
         public static final Name NAME = Name.of("testpanel");
 
@@ -769,7 +769,7 @@ public class WindowLifecycleTest {
     }
 
     /** The auto-creation case: a null field the framework instantiates and names. */
-    public static class DeclaredPanel extends UINode implements Networked<String> {
+    public static class DeclaredPanel extends UIElement implements Networked<String> {
 
         public static final Name NAME = Name.of("declaredpanel");
 
@@ -790,7 +790,7 @@ public class WindowLifecycleTest {
     }
 
     /** A declared part its layout forgot to add — the shape a binding must refuse loudly. */
-    public static class SabotagedPanel extends UINode implements Networked<String> {
+    public static class SabotagedPanel extends UIElement implements Networked<String> {
 
         public static final Name NAME = Name.of("sabotagedpanel");
 
@@ -822,7 +822,7 @@ public class WindowLifecycleTest {
         }
     }
 
-    public static class NotifyingPanel extends UINode implements Networked<String> {
+    public static class NotifyingPanel extends UIElement implements Networked<String> {
 
         public static final Name NAME = Name.of("notifyingpanel");
 
@@ -852,7 +852,7 @@ public class WindowLifecycleTest {
      * whoever holds it. No {@code UiType} of its own needed for the field case: the parent's
      * registration registers its tag.
      */
-    public static class SavePanel extends UINode implements Networked<String> {
+    public static class SavePanel extends UIElement implements Networked<String> {
 
         public static final Name NAME = Name.of("savepanel");
 
@@ -903,7 +903,7 @@ public class WindowLifecycleTest {
     }
 
     /** A parent with a nested panel. The child is BUILT in layout, with the slice only it knows. */
-    public static class ParentPanel extends UINode implements Networked<String> {
+    public static class ParentPanel extends UIElement implements Networked<String> {
 
         public static final Name NAME = Name.of("parentpanel");
 
@@ -935,7 +935,7 @@ public class WindowLifecycleTest {
     }
 
     /** Attaches the same child id twice — the collision the scope set exists to refuse. */
-    public static class DoubleAttachPanel extends UINode implements Networked<String> {
+    public static class DoubleAttachPanel extends UIElement implements Networked<String> {
 
         public static final Name NAME = Name.of("doubleattachpanel");
 
@@ -962,7 +962,7 @@ public class WindowLifecycleTest {
     }
 
     /** A parent reaching into a child's element — the boundary that used to be silently crossed. */
-    public static class OverridingPanel extends UINode implements Networked<String> {
+    public static class OverridingPanel extends UIElement implements Networked<String> {
 
         public static final Name NAME = Name.of("overridingpanel");
 
@@ -989,7 +989,7 @@ public class WindowLifecycleTest {
     }
 
     /** A child that arrives AFTER the window opened — dynamic content, named by hand. */
-    public static class LateChildPanel extends UINode implements Networked<String> {
+    public static class LateChildPanel extends UIElement implements Networked<String> {
 
         public static final Name NAME = Name.of("latechildpanel");
 
@@ -1077,7 +1077,7 @@ public class WindowLifecycleTest {
                 }
 
                 @Override
-                public void contentReplaced(UINode newRoot) {
+                public void contentReplaced(UIElement newRoot) {
                 }
             };
         }

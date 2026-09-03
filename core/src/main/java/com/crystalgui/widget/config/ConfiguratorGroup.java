@@ -2,7 +2,7 @@ package com.crystalgui.widget.config;
 
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.text.UIText;
 
 /**
@@ -23,7 +23,7 @@ import com.crystalgui.widget.text.UIText;
  * <p>Which also means every box inside a collapsed group measures 0 — the same trap a closed
  * {@code Dialog} sets, and worth knowing before asserting on anything inside one.</p>
  */
-public class ConfiguratorGroup extends UINode {
+public class ConfiguratorGroup extends UIElement {
 
     public static final Name NAME = Name.of("configuratorgroup");
 
@@ -48,10 +48,10 @@ public class ConfiguratorGroup extends UINode {
     public final Signal.Value<Boolean> collapsedChanged =
             new Signal.Value<>();
 
-    private final UINode head = new UINode();
-    private final UINode arrow = new UINode();
+    private final UIElement head = new UIElement();
+    private final UIElement arrow = new UIElement();
     private final UIText title;
-    private final UINode content = new UINode();
+    private final UIElement content = new UIElement();
 
     private final String titleText;
 
@@ -88,11 +88,11 @@ public class ConfiguratorGroup extends UINode {
     }
 
     /** Where rows go. Public because a group's contents are the caller's, unlike its chrome. */
-    public UINode content() {
+    public UIElement content() {
         return content;
     }
 
-    public UINode head() {
+    public UIElement head() {
         return head;
     }
 
@@ -121,7 +121,7 @@ public class ConfiguratorGroup extends UINode {
     }
 
     /** Convenience: add a row and get the group back, so a panel reads as a tree. */
-    public ConfiguratorGroup row(UINode child) {
+    public ConfiguratorGroup row(UIElement child) {
         content.append(child);
         return this;
     }

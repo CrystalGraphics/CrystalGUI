@@ -1,8 +1,7 @@
 package com.crystalgui.app.shadergraph;
 
-import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.workbench.dock.banner.DockBanners;
 import com.crystalgui.workbench.dock.panel.DockInput;
@@ -102,7 +101,7 @@ public final class ShaderGraphContribution {
                     // An empty box rather than null when the graph has since closed: a tab with nothing
                     // behind it is visible and reportable, a silently absent one looks like a failed
                     // restore.
-                    return graph == null ? new UINode() : graph.source();
+                    return graph == null ? new UIElement() : graph.source();
                 });
 
         // AND WHY THAT TAB IS NOT AN ORDINARY EDITOR. It is setReadOnly(true), so typing in it silently

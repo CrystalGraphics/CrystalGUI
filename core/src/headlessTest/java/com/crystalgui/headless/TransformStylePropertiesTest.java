@@ -1,12 +1,12 @@
 package com.crystalgui.headless;
 
-import com.crystalgui.net.mirror.UINodeMirror;
+import com.crystalgui.net.mirror.UIElementMirror;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.border.LengthPercent;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.UITransform;
 import org.junit.Test;
 
@@ -28,7 +28,7 @@ public class TransformStylePropertiesTest {
 
     @Test
     public void defaultsAreIdentityAndCentred() {
-        UINode element = new UINode();
+        UIElement element = new UIElement();
         assertTrue(element.getStyle().getGeneralGroup().transform().isIdentity());
         assertEquals(LengthPercent.percent(0.5f), element.getStyle().getGeneralGroup().transformOriginX());
         assertEquals(LengthPercent.percent(0.5f), element.getStyle().getGeneralGroup().transformOriginY());
@@ -99,7 +99,7 @@ public class TransformStylePropertiesTest {
      */
     @Test
     public void transformsRoundTripToAClient() {
-        UINode element = new UINode();
+        UIElement element = new UIElement();
         element.getStyle().getGeneralGroup().transform(UITransform.of(
                 UITransform.Op.translate(LengthPercent.px(10f), LengthPercent.percent(0.25f)),
                 UITransform.Op.scale(2f, 3f),
@@ -109,7 +109,7 @@ public class TransformStylePropertiesTest {
                 .transformOrigin(LengthPercent.px(4f), LengthPercent.percent(0f));
 
         for (DynamicOps<?> ops : new DynamicOps<?>[]{JsonOps.INSTANCE, PlainOps.INSTANCE}) {
-            UINode clone = roundTrip(element, ops);
+            UIElement clone = roundTrip(element, ops);
             assertEquals("the op list survives in order", element.getStyle().getGeneralGroup().transform(), clone.getStyle().getGeneralGroup().transform());
             assertEquals(LengthPercent.px(4f), clone.getStyle().getGeneralGroup().transformOriginX());
             assertEquals(LengthPercent.percent(0f), clone.getStyle().getGeneralGroup().transformOriginY());
@@ -122,7 +122,7 @@ public class TransformStylePropertiesTest {
      */
     @Test
     public void lengthPercentValuedPropertiesRoundTrip() {
-        UINode element = new UINode();
+        UIElement element = new UIElement();
         element.getStyle().getGeneralGroup()
                 .textOffsetY(LengthPercent.px(1.5f))
                 .outlineWidth(LengthPercent.percent(0.1f));
@@ -132,7 +132,7 @@ public class TransformStylePropertiesTest {
         assertEquals(LengthPercent.percent(0.1f), style.outlineWidth());
     }
 
-    private static <T> UINode roundTrip(UINode source, DynamicOps<T> ops) {
-        return new UINodeMirror<>(ops).decode(new UINodeMirror<>(ops).describe(source));
+    private static <T> UIElement roundTrip(UIElement source, DynamicOps<T> ops) {
+        return new UIElementMirror<>(ops).decode(new UIElementMirror<>(ops).describe(source));
     }
 }

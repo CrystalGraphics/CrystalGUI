@@ -1,10 +1,8 @@
 package com.crystalgui.style.node;
 
 import com.crystalgui.style.GeneralGroup;
-import com.crystalgui.ui.service.Input;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.style.sheet.StyleSheet;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.testsupport.UiDocumentTestBase;
@@ -36,7 +34,7 @@ public class TextStylePropertiesCssTest extends UiDocumentTestBase {
      * {@code TextField} paints its own text and measures lazily, so it never gets there.</p>
      */
     private GeneralGroup styled(String css) {
-        UINode root = new UINode();
+        UIElement root = new UIElement();
         root.setId("host");
         TextField field = new TextField();
         root.append(field);
@@ -107,7 +105,7 @@ public class TextStylePropertiesCssTest extends UiDocumentTestBase {
      */
     @Test
     public void textOffsetInheritsToAnInternalLabel() {
-        UINode root = new UINode();
+        UIElement root = new UIElement();
         root.setId("host");
         Button button = new Button("hi");
         root.append(button);
@@ -117,7 +115,7 @@ public class TextStylePropertiesCssTest extends UiDocumentTestBase {
 
         // The label is a PART in the button's shadow tree now, not an internal child of it -- so it
         // is not in `children()` at all, and reaching it from a theme is what `::part(label)` is for.
-        UINode label = part(button, Button.LABEL_PART);
+        UIElement label = part(button, Button.LABEL_PART);
         assertEquals("the label the theme cannot select directly",
                 1f, label.getStyle().getGeneralGroup().textOffsetY().value, 0.0001f);
     }

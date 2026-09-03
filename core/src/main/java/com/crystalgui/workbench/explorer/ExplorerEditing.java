@@ -3,7 +3,7 @@ package com.crystalgui.workbench.explorer;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.control.TextField;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
@@ -167,7 +167,7 @@ final class ExplorerEditing {
      * Wires one row's input. Once, in {@code createTemplate} -- a listener may only be attached once, and
      * a recycled row keeps the one it was built with.
      */
-    void installEditor(UINode row, TextField editor) {
+    void installEditor(UIElement row, TextField editor) {
         editor.onSubmit.connect(this::commitEdit);
         editor.onBlur.attachListener((element, event) -> {
             // BLUR COMMITS, as VS Code's does. Cancelling on blur means clicking away from a name you have
@@ -203,7 +203,7 @@ final class ExplorerEditing {
      * occupant's editor -- the same reason every other data-driven class here is swapped rather than
      * added.</p>
      */
-    void applyEditing(UINode row, ProjectFileTree.RowParts parts, CgPath item) {
+    void applyEditing(UIElement row, ProjectFileTree.RowParts parts, CgPath item) {
         boolean active = editing != null && editing.path().equals(item);
         if (active) row.addClass(ProjectFileTree.EDITING_CLASS);
         else row.removeClass(ProjectFileTree.EDITING_CLASS);
@@ -242,6 +242,6 @@ final class ExplorerEditing {
 
     /** The row element already primed for the current edit. @see #applyEditing */
     @Nullable
-    private UINode primed;
+    private UIElement primed;
 
 }

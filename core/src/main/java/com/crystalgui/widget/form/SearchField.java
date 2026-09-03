@@ -1,6 +1,5 @@
 package com.crystalgui.widget.form;
 
-import com.crystalgui.workbench.chrome.menu.MenuBarView;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.contract.Event;
@@ -12,7 +11,7 @@ import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import javax.annotation.Nullable;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.widget.control.TextField;
@@ -41,7 +40,7 @@ import com.crystalgui.ui.dom.Attribute;
  * clear affordance without this class naming a single colour or size. {@link #acceptsPublicChildren()} is
  * false for the same reason every other composite's is.</p>
  */
-public class SearchField extends UINode {
+public class SearchField extends UIElement {
 
     public static final Name NAME = Name.of("searchfield");
 
@@ -115,9 +114,9 @@ public class SearchField extends UINode {
 
     private final ShadowRoot shadow;
 
-    private final UINode icon = new UINode();
+    private final UIElement icon = new UIElement();
     private final TextField field = new TextField();
-    private final UINode clear = new UINode();
+    private final UIElement clear = new UIElement();
 
     /**
      * Created on the first {@link #addOption}, never before.
@@ -128,7 +127,7 @@ public class SearchField extends UINode {
      * existing is the only spelling of "costs nothing" that is actually free.</p>
      */
     @Nullable
-    private UINode options;
+    private UIElement options;
 
     /** Fires on every keystroke — see the constructor's note on why this is not deferred to Enter. */
     public final Signal.Action onQueryChanged = new Signal.Action();
@@ -212,10 +211,10 @@ public class SearchField extends UINode {
      * <p>A consumer that wants none of this calls it never and is untouched — there is no strip until the
      * first call.</p>
      */
-    public SearchField addOption(UINode option) {
+    public SearchField addOption(UIElement option) {
         if (option == null) return this;
         if (options == null) {
-            options = new UINode();
+            options = new UIElement();
             options.set(Attribute.PART, OPTIONS_PART);
             // AFTER the clear button, matching IntelliJ: the one control whose presence changes with the
             // query sits next to the text it clears, rather than beyond a fixed strip.
@@ -259,7 +258,7 @@ public class SearchField extends UINode {
 
     /** The strip, or null until something has been mounted in it. */
     @Nullable
-    public UINode options() {
+    public UIElement options() {
         return options;
     }
 

@@ -1,7 +1,6 @@
 package com.crystalgui.workbench.chrome.problems;
 
-import com.crystalgui.workbench.chrome.preferences.Preferences;
-import com.crystalgui.core.collection.tree.FilteredTreeSource;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.core.command.ClipboardCommands;
 import com.crystalgui.core.command.CommandRegistry;
@@ -10,7 +9,6 @@ import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.search.SearchMatch;
 import com.crystalgui.core.search.SearchMatcher;
 import com.crystalgui.core.search.SearchQuery;
-import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.Resource;
@@ -25,7 +23,6 @@ import com.crystalgui.text.diagnostic.ProblemNode;
 import com.crystalgui.text.diagnostic.ProblemsTreeSource;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.service.Input;
 import com.crystalgui.ui.service.AnchoredPlacement;
@@ -70,7 +67,7 @@ import javax.annotation.Nullable;
  * <p>Because it changes the tree's shape rather than its paint — see {@link ProblemsTreeSource}. A file
  * whose only error is filtered out has to stop being a row.</p>
  */
-public class ProblemsPanel extends UINode implements DataProvider {
+public class ProblemsPanel extends UIElement implements DataProvider {
 
     public static final Name NAME = Name.of("problemspanel");
 
@@ -83,7 +80,7 @@ public class ProblemsPanel extends UINode implements DataProvider {
      * container calls, so nothing is lost by the interface arriving with the thing that reads it —
      * and declaring a second interface now would mean guessing its shape a batch early.</p>
      */
-    public UINode headerContent() {
+    public UIElement headerContent() {
         return tabs;
     }
 
@@ -183,7 +180,7 @@ public class ProblemsPanel extends UINode implements DataProvider {
      */
     public final Signal.Value<ProblemNode> onQuickFixesRequested = new Signal.Value<>();
 
-    private final UINode content = new UINode();
+    private final UIElement content = new UIElement();
     private final UIText empty = new UIText("No problems have been detected in the workspace");
 
     @Nullable
@@ -264,7 +261,7 @@ public class ProblemsPanel extends UINode implements DataProvider {
         syncTabs();
     }
 
-    private UINode buildTab(UINode tab, String label, boolean fileScope) {
+    private UIElement buildTab(UIElement tab, String label, boolean fileScope) {
         tab.addClass(TAB_CLASS);
         tab.setFocusPolicy(FocusPolicy.CLICK);
         UIText text = new UIText(label);
@@ -418,18 +415,18 @@ public class ProblemsPanel extends UINode implements DataProvider {
     /** The count beside {@code File}, which is the only tab IntelliJ badges. */
     public static final String TAB_COUNT_CLASS = "__tab-count__";
 
-    private final UINode body = new UINode();
-    private final UINode head = new UINode();
-    private final UINode gutterMark = new UINode();
-    private final UINode viewOptions = new UINode();
+    private final UIElement body = new UIElement();
+    private final UIElement head = new UIElement();
+    private final UIElement gutterMark = new UIElement();
+    private final UIElement viewOptions = new UIElement();
     private final Menu viewMenu = new Menu();
     private MenuItem errorsItem;
     private MenuItem warningsItem;
     private MenuItem infosItem;
 
-    private final UINode tabs = new UINode();
-    private final UINode fileTab = new UINode();
-    private final UINode projectTab = new UINode();
+    private final UIElement tabs = new UIElement();
+    private final UIElement fileTab = new UIElement();
+    private final UIElement projectTab = new UIElement();
     private final UIText fileCount = new UIText("");
 
     /** The file in front, so {@link #ACTIVE_FILE_ONLY} has something to narrow to. */
@@ -771,7 +768,7 @@ public class ProblemsPanel extends UINode implements DataProvider {
          * tree scrolls and a listener may only be attached once, so a captured node would keep folding
          * whichever file its slot was first used for. The same trap the editor's gutter arrows document.</p>
          */
-        private final Map<UINode, ProblemNode> rowItems = new IdentityHashMap<>();
+        private final Map<UIElement, ProblemNode> rowItems = new IdentityHashMap<>();
 
         /**
          * What Copy puts on the clipboard — <b>the message, and nothing else</b>.
@@ -793,15 +790,15 @@ public class ProblemsPanel extends UINode implements DataProvider {
         }
 
         @Override
-        public UINode createTemplate() {
-            UINode row = new UINode();
+        public UIElement createTemplate() {
+            UIElement row = new UIElement();
             row.addClass(ROW_CLASS);
 
             // THE ONE PART THAT KEEPS THE POINTER. Everything else refuses it so a press lands on the row —
             // click targeting takes the exact element hit and never walks up to a handler-bearing ancestor.
             // A chevron is a control in its own right, which is what lets a file fold on ONE click while
             // choosing a problem still takes two.
-            UINode twisty = new UINode();
+            UIElement twisty = new UIElement();
             twisty.addClass(TWISTY_CLASS);
             twisty.onMouseDown.attachListener((element, event) -> {
                 ProblemNode node = rowItems.get(row);
@@ -840,7 +837,7 @@ public class ProblemsPanel extends UINode implements DataProvider {
                 if (index >= 0) tree.onRowActivated.emit(index);
             }, false, false);
 
-            UINode icon = new UINode();
+            UIElement icon = new UIElement();
             icon.addClass(ICON_CLASS);
             icon.setHitTest(false);
 
@@ -871,10 +868,10 @@ public class ProblemsPanel extends UINode implements DataProvider {
         }
 
         @Override
-        public void bind(ProblemNode item, TreeRow<ProblemNode> row, int index, UINode template) {
+        public void bind(ProblemNode item, TreeRow<ProblemNode> row, int index, UIElement template) {
             rowItems.put(template, item);
-            List<UINode> parts = template.children();
-            UINode icon = parts.get(1);
+            List<UIElement> parts = template.children();
+            UIElement icon = parts.get(1);
             UIText label = (UIText) parts.get(2);
             UIText detail = (UIText) parts.get(3);
             UIText count = (UIText) parts.get(4);
@@ -922,7 +919,7 @@ public class ProblemsPanel extends UINode implements DataProvider {
         }
     }
 
-    private static void setTag(UINode row, String cls, boolean present) {
+    private static void setTag(UIElement row, String cls, boolean present) {
         if (present) row.addClass(cls);
         else row.removeClass(cls);
     }

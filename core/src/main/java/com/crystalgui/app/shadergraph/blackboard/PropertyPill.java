@@ -1,19 +1,13 @@
 package com.crystalgui.app.shadergraph.blackboard;
 
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.graph.GraphProperty;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.event.MouseEvent;
-import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgMouseCodes;
-import com.crystalgui.widget.control.TextField;
-import com.crystalgui.ui.event.FocusEvent;
-import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.widget.text.UIText;
-
-import javax.annotation.Nullable;
 
 /**
  * One row of the Blackboard: a capsule holding the property's name, with its type dim and right-aligned.
@@ -30,7 +24,7 @@ import javax.annotation.Nullable;
  * is worth copying exactly: a property that is declared but hidden from the material inspector is
  * otherwise indistinguishable from one that is not, and the difference is invisible in the graph.</p>
  */
-public class PropertyPill extends UINode {
+public class PropertyPill extends UIElement {
 
     public static final String PILL_CLASS = "__property-pill__";
     public static final String CAPSULE_CLASS = "__capsule__";
@@ -50,13 +44,13 @@ public class PropertyPill extends UINode {
 
     private final String propertyId;
 
-    private final UINode capsule = new UINode();
-    private final UINode dot = new UINode();
+    private final UIElement capsule = new UIElement();
+    private final UIElement dot = new UIElement();
     private final UIText name;
     private final UIText type;
 
     /** The floating copy shown while dragging. One per pill, re-registered per drag. @see #buildGhost */
-    private final UINode ghost = new UINode();
+    private final UIElement ghost = new UIElement();
     private final UIText ghostName = new UIText("");
 
     private boolean selected;
@@ -152,7 +146,7 @@ public class PropertyPill extends UINode {
     }
 
     /** The capsule, which is what a drag ghost should picture. */
-    public UINode capsule() {
+    public UIElement capsule() {
         return capsule;
     }
 
@@ -245,9 +239,9 @@ public class PropertyPill extends UINode {
         ghost.addClass(PILL_CLASS);
         ghost.addClass(GHOST_CLASS);
 
-        UINode body = new UINode();
+        UIElement body = new UIElement();
         body.addClass(CAPSULE_CLASS);
-        UINode ghostDot = new UINode();
+        UIElement ghostDot = new UIElement();
         ghostDot.addClass(DOT_CLASS);
         ghostName.addClass(NAME_CLASS);
 

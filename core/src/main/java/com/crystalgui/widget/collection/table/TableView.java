@@ -1,7 +1,6 @@
 package com.crystalgui.widget.collection.table;
 
 import com.crystalgui.core.collection.table.SortOrder;
-import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
@@ -11,11 +10,10 @@ import com.crystalgui.style.property.visual.text.TextOverflow;
 import com.crystalgui.style.property.visual.text.WhiteSpace;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.collection.list.ListRenderer;
 import com.crystalgui.widget.collection.list.ListView;
-import com.crystalgui.widget.collection.table.TableColumn;
 import com.crystalgui.widget.text.UIText;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.TaffyPosition;
@@ -64,7 +62,7 @@ public class TableView<T> extends ListView<T> {
     private final ObservableList<T> source;
 
     private final List<TableColumn<T>> columns = new ArrayList<>();
-    private final UINode header = new UINode();
+    private final UIElement header = new UIElement();
 
     /**
      * The live header cells, parallel to {@link #columns}.
@@ -76,10 +74,10 @@ public class TableView<T> extends ListView<T> {
      * captured pointer routes <em>every</em> subsequent event to that target. Clicks and drags both died.
      * Clicking a header to sort did the same to the cell under the cursor.</p>
      */
-    private final List<UINode> headerCells = new ArrayList<>();
+    private final List<UIElement> headerCells = new ArrayList<>();
 
     /** The live dividers, parallel to {@link #headerCells} minus the last — repositioned, never rebuilt. */
-    private final List<UINode> headerDividers = new ArrayList<>();
+    private final List<UIElement> headerDividers = new ArrayList<>();
 
     @Getter @Nullable
     private TableColumn<T> sortedColumn;
@@ -321,7 +319,7 @@ public class TableView<T> extends ListView<T> {
     private void rebuildHeader() {
         // removeInternalChild one by one: clearAllChildren deliberately refuses to touch internal
         // children, which is the guard that stops a caller wiping a widget's own structure.
-        for (UINode child : new ArrayList<>(header.children())) header.remove(child);
+        for (UIElement child : new ArrayList<>(header.children())) header.remove(child);
         headerCells.clear();
         headerDividers.clear();
         List<Float> widths = resolvedWidths();
@@ -330,7 +328,7 @@ public class TableView<T> extends ListView<T> {
             final TableColumn<T> column = columns.get(i);
             final float width = i < widths.size() ? widths.get(i) : column.getWidth();
 
-            UINode cell = new UINode();
+            UIElement cell = new UIElement();
             cell.addClass(HEADER_CELL_CLASS);
             if (sortedColumn == column && sortOrder == SortOrder.ASCENDING) cell.addClass(SORTED_ASC_CLASS);
             if (sortedColumn == column && sortOrder == SortOrder.DESCENDING) cell.addClass(SORTED_DESC_CLASS);
@@ -346,7 +344,7 @@ public class TableView<T> extends ListView<T> {
             headerCells.add(cell);
 
             if (column.isResizable() && i < columns.size() - 1) {
-                UINode divider = newDivider(column, i);
+                UIElement divider = newDivider(column, i);
                 header.append(divider);
                 headerDividers.add(divider);
             } else {
@@ -373,7 +371,7 @@ public class TableView<T> extends ListView<T> {
         float offset = 0f;
         for (int i = 0; i < headerDividers.size() && i < widths.size(); i++) {
             offset += widths.get(i);
-            UINode divider = headerDividers.get(i);
+            UIElement divider = headerDividers.get(i);
             if (divider == null) continue;
             final float left = offset - DIVIDER_HALF_WIDTH;
             StyleGroup.defaultPipeline(divider.getStyle().getLayoutGroup(), l -> l.left(left));
@@ -383,7 +381,7 @@ public class TableView<T> extends ListView<T> {
     /** Moves the sort markers between existing header cells. */
     private void updateSortClasses() {
         for (int i = 0; i < headerCells.size() && i < columns.size(); i++) {
-            UINode cell = headerCells.get(i);
+            UIElement cell = headerCells.get(i);
             cell.removeClass(SORTED_ASC_CLASS);
             cell.removeClass(SORTED_DESC_CLASS);
             if (columns.get(i) != sortedColumn) continue;
@@ -401,8 +399,8 @@ public class TableView<T> extends ListView<T> {
      * mechanism — a positional drag through {@code UIDragController} with no activation threshold, since
      * a divider must track the very first pixel.</p>
      */
-    private UINode newDivider(TableColumn<T> column, int columnIndex) {
-        UINode divider = new UINode();
+    private UIElement newDivider(TableColumn<T> column, int columnIndex) {
+        UIElement divider = new UIElement();
         divider.addClass(DIVIDER_CLASS);
         // Out of flow — see DIVIDER_HALF_WIDTH. positionDividers() supplies the left inset.
         StyleGroup.defaultPipeline(divider.getStyle().getLayoutGroup(),
@@ -431,16 +429,16 @@ public class TableView<T> extends ListView<T> {
     private void installRowRenderer() {
         setRenderer(new ListRenderer<T>() {
             @Override
-            public UINode createTemplate() {
-                UINode row = new UINode();
+            public UIElement createTemplate() {
+                UIElement row = new UIElement();
                 StyleGroup.defaultPipeline(row.getStyle().getLayoutGroup(),
                         l -> l.flexDirection(FlexDirection.ROW));
                 for (TableColumn<T> column : columns) {
-                    UINode cell;
+                    UIElement cell;
                     if (column.getCellRenderer() != null) {
                         cell = column.getCellRenderer().createTemplate();
                     } else {
-                        cell = new UINode();
+                        cell = new UIElement();
                         UIText text = new UIText("");
                         text.setHitTest(false);
                         cell.append(text);
@@ -453,7 +451,7 @@ public class TableView<T> extends ListView<T> {
                     // truncation is legible as truncation.
                     StyleGroup.defaultPipeline(cell.getStyle().getGeneralGroup(),
                             g -> g.overflow(Overflow.HIDDEN));
-                    for (UINode inner : cell.children()) {
+                    for (UIElement inner : cell.children()) {
                         StyleGroup.defaultPipeline(inner.getStyle().getGeneralGroup(),
                                 g -> g.whiteSpace(WhiteSpace.NOWRAP)
                                         .textOverflow(TextOverflow.ELLIPSIS));
@@ -464,11 +462,11 @@ public class TableView<T> extends ListView<T> {
             }
 
             @Override
-            public void bind(T item, int index, UINode template) {
+            public void bind(T item, int index, UIElement template) {
                 List<Float> widths = resolvedWidths();
                 for (int i = 0; i < columns.size() && i < template.children().size(); i++) {
                     TableColumn<T> column = columns.get(i);
-                    UINode cell = template.children().get(i);
+                    UIElement cell = template.children().get(i);
                     final float width = i < widths.size() ? widths.get(i) : column.getWidth();
                     StyleGroup.defaultPipeline(cell.getStyle().getLayoutGroup(), l -> l.width(width));
                     if (column.getCellRenderer() != null) {

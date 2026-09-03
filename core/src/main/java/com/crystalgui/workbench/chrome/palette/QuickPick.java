@@ -4,7 +4,6 @@ import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.async.FrameProfile;
-import com.crystalgui.core.collection.list.FixedHeightStrategy;
 import com.crystalgui.core.collection.pick.QuickPickEntry;
 import com.crystalgui.core.collection.pick.QuickPickItem;
 import com.crystalgui.core.collection.pick.QuickPickSource;
@@ -14,7 +13,7 @@ import com.crystalgui.core.signal.Signal;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.overlay.Popover;
@@ -156,9 +155,9 @@ public class QuickPick extends Popover {
      * hidden and focus has been restored — see {@link #accept()}. */
     public final Signal.Value<String> onAccepted = new Signal.Value<>();
 
-    private final UINode content = new UINode();
-    private final UINode header = new UINode();
-    private final UINode headerSpacer = new UINode();
+    private final UIElement content = new UIElement();
+    private final UIElement header = new UIElement();
+    private final UIElement headerSpacer = new UIElement();
     private final UIText title = new UIText("");
     private final UIText truncation = new UIText("");
 
@@ -337,7 +336,7 @@ public class QuickPick extends Popover {
     }
 
     /** The header bar, so a caller can put its own controls in it. @see #setTitle */
-    public UINode headerBar() {
+    public UIElement headerBar() {
         return header;
     }
 
@@ -370,7 +369,7 @@ public class QuickPick extends Popover {
     private void moveClamped(float left, float top) {
         // A promoted node's containing block is whatever HOSTS it, which is the document
         // while there is no desktop and the WindowFrame once 6.6 lands one.
-        UINode container = document();
+        UIElement container = document();
         float maxLeft = Float.MAX_VALUE, maxTop = Float.MAX_VALUE;
         Box containerBox = container == null ? null : container.box();
         Box box = box();
@@ -421,7 +420,7 @@ public class QuickPick extends Popover {
         // `UIResizer` writes at INLINE, per the CSS spec's rule for a user resize. A widget that writes
         // its own measurement at IMPORTANT therefore beats the handle -- so the grabber could change the
         // height and never the width, and half a resize working reads as a broken widget rather than an
-        // unsupported gesture. `UINode.markUserSized` states the remedy outright: "a widget whose size
+        // unsupported gesture. `UIElement.markUserSized` states the remedy outright: "a widget whose size
         // the user may take writes that size at a LOWER origin". The position is not the user's until
         // they drag it, at which point this method stops running.
         StyleGroup.defaultPipeline(getStyle().getLayoutGroup(), l -> l.width(width));
@@ -605,7 +604,7 @@ public class QuickPick extends Popover {
     // ── Row rendering ───────────────────────────────────────────────────────────────────────────
 
     /** A row's parts, plus the index it is currently showing. */
-    private static final class Row extends UINode {
+    private static final class Row extends UIElement {
         /**
          * The kind glyph, built with the template and hidden when unused.
          *
@@ -622,19 +621,19 @@ public class QuickPick extends Popover {
          * machinery: a {@link SymbolIcon} stacks modifier layers as internal children, a file icon is one
          * overlay drawable. Exactly one is ever shown.</p>
          */
-        final UINode fileIcon = new UINode();
+        final UIElement fileIcon = new UIElement();
         final UIText category = new UIText("");
         final UIText label = new UIText("");
         /** Dim, trailing, never highlighted. @see QuickPickItem#description */
         final UIText description = new UIText("");
-        final UINode spacer = new UINode();
+        final UIElement spacer = new UIElement();
         /**
          * A ROW of key boxes, not one string.
          *
          * <p>{@code "Ctrl+Shift+P"} as a single text can only ever be plain text, and every editor draws
          * each key as its own bordered box. Splitting it here is what lets a sheet style a key at all.</p>
          */
-        final UINode accelerator = new UINode();
+        final UIElement accelerator = new UIElement();
 
         /**
          * A FIXED set of key boxes, built once with the template and hidden when unused.
@@ -646,7 +645,7 @@ public class QuickPick extends Popover {
          * the row was recycled and bound a second time. That is exactly the "scroll it away and back and
          * it fixes itself" report.</p>
          */
-        final List<UINode> keyBoxes = new ArrayList<>();
+        final List<UIElement> keyBoxes = new ArrayList<>();
         final List<UIText> keyLabels = new ArrayList<>();
         final List<UIText> keySeparators = new ArrayList<>();
 
@@ -662,7 +661,7 @@ public class QuickPick extends Popover {
     private final class RowRenderer implements ListRenderer<QuickPickEntry> {
 
         @Override
-        public UINode createTemplate() {
+        public UIElement createTemplate() {
             Row row = new Row();
             row.icon.addClass(ICON_CLASS);
             row.fileIcon.addClass(FILE_ICON_CLASS);
@@ -691,7 +690,7 @@ public class QuickPick extends Popover {
                     row.keySeparators.add(plus);
                     row.accelerator.append(plus);
                 }
-                UINode box = new UINode();
+                UIElement box = new UIElement();
                 box.addClass(KEY_CLASS);
                 box.setHitTest(false);
                 UIText label = new UIText("");
@@ -720,7 +719,7 @@ public class QuickPick extends Popover {
         }
 
         @Override
-        public void bind(QuickPickEntry entry, int index, UINode template) {
+        public void bind(QuickPickEntry entry, int index, UIElement template) {
             Row row = (Row) template;
             row.index = index;
 
@@ -784,7 +783,7 @@ public class QuickPick extends Popover {
             for (int i = 0; i < row.keySeparators.size(); i++) show(row.keySeparators.get(i), i + 1 < shown);
         }
 
-        private void show(UINode element, boolean visible) {
+        private void show(UIElement element, boolean visible) {
             StyleGroup.inlinePipeline(element.getStyle().getLayoutGroup(),
                     l -> l.display(visible ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
         }
@@ -800,7 +799,7 @@ public class QuickPick extends Popover {
         }
 
         @Override
-        public void unbind(UINode template) {
+        public void unbind(UIElement template) {
             Row row = (Row) template;
             row.index = -1;
             row.label.highlights().remove(MATCH_HIGHLIGHT);
@@ -810,7 +809,7 @@ public class QuickPick extends Popover {
 
     /** Present so a caller can style "no results" without reaching for the list internals. */
     @Nullable
-    public UINode contentElement() {
+    public UIElement contentElement() {
         return content;
     }
 }

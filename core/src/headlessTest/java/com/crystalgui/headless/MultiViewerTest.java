@@ -1,5 +1,6 @@
 package com.crystalgui.headless;
 
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.InMemoryTransport;
@@ -8,8 +9,7 @@ import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.dom.UINodeRegistry;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Slider;
 import org.junit.After;
@@ -30,13 +30,13 @@ import static org.junit.Assert.fail;
  *
  * <p><i>"One session, one client"</i> was the first thing a real server invalidated. The tree belongs to
  * the session rather than to a viewer, so a fan-out is a list of <b>routers</b>, not a list of sessions
- * over one tree — {@code UINode.setObserver} holds one observer, so the latter is not available and
+ * over one tree — {@code UIElement.setObserver} holds one observer, so the latter is not available and
  * making it a list would cost every mutation in the application to serve a case most windows never
  * have.</p>
  */
 public class MultiViewerTest {
 
-    private UINode root;
+    private UIElement root;
     private Slider slider;
     private Button button;
 
@@ -46,17 +46,17 @@ public class MultiViewerTest {
     private ProtocolConnection<Object> serverB;
     private ProtocolConnection<Object> clientA;
     private ProtocolConnection<Object> clientB;
-    private ServerUiSession<UINode, Object> server;
-    private ClientUiSession<UINode, Object> viewerA;
-    private ClientUiSession<UINode, Object> viewerB;
+    private ServerUiSession<UIElement, Object> server;
+    private ClientUiSession<UIElement, Object> viewerA;
+    private ClientUiSession<UIElement, Object> viewerB;
     private long clock;
 
     @Before
     public void setUp() {
         Protocols.resetForTesting();
-        UINodeRegistry.bootstrap();
+        UIElementRegistry.bootstrap();
 
-        root = new UINode();
+        root = new UIElement();
         button = new Button("Press me");
         slider = new Slider();
         slider.setRange(0f, 10f);
@@ -365,7 +365,7 @@ public class MultiViewerTest {
         assertEquals("a real interaction must still be reported", 1, reports.get());
     }
 
-    private static Slider sliderOf(ClientUiSession<UINode, Object> viewer) {
+    private static Slider sliderOf(ClientUiSession<UIElement, Object> viewer) {
         return (Slider) viewer.root().children().get(1);
     }
 

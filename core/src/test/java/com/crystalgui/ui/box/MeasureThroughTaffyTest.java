@@ -10,7 +10,7 @@ import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.text.UIText;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.FlexWrap;
@@ -42,7 +42,7 @@ public class MeasureThroughTaffyTest extends UiDocumentTestBase {
 
     private static UIDocument rowOfTwo(FlexWrap wrap, UIText[] out) {
         UIDocument document = new UIDocument();
-        UINode row = new UINode();
+        UIElement row = new UIElement();
         StyleGroup.inlinePipeline(row.getStyle().getLayoutGroup(), l -> {
             l.width(200);
             l.flexDirection(FlexDirection.ROW);

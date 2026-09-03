@@ -38,7 +38,7 @@ import javax.annotation.Nullable;
  *
  * <p>It started on the document, which forced every kind to carry its own copy of the on-disk bytes and
  * its own comparison — a field and two methods duplicated per kind, and an abstract base could not absorb
- * it because a graph editor is a widget and already extends {@code UINode}. It belongs on this side
+ * it because a graph editor is a widget and already extends {@code UIElement}. It belongs on this side
  * anyway: "differs from disk" is a question about the disk, and the document only ever knew its own
  * content.</p>
  */

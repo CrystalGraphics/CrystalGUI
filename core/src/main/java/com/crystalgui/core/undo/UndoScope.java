@@ -1,6 +1,6 @@
 package com.crystalgui.core.undo;
 
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.UiDataKeys;
 import com.crystalgui.core.data.DataKey;
 
@@ -33,15 +33,15 @@ public interface UndoScope {
      * @param from typically the focused element — {@code CommandContext.source()}
      */
     @Nullable
-    static UndoStack nearest(@Nullable UINode from) {
+    static UndoStack nearest(@Nullable UIElement from) {
         UndoScope scope = nearestScope(from);
         return scope == null ? null : scope.undoStack();
     }
 
     /** @see #nearest */
     @Nullable
-    static UndoScope nearestScope(@Nullable UINode from) {
-        for (UINode element = from; element != null; element = element.parent()) {
+    static UndoScope nearestScope(@Nullable UIElement from) {
+        for (UIElement element = from; element != null; element = element.parent()) {
             if (element instanceof UndoScope scope) return scope;
         }
         return null;

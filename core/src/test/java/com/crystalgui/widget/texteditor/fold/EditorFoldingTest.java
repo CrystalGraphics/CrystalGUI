@@ -1,12 +1,9 @@
 package com.crystalgui.widget.texteditor.fold;
 
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.texteditor.EditorTestBase;
-import com.crystalgraphics.platform.input.CgKeyCodes;
-import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.widget.texteditor.TextEditor;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -87,7 +84,7 @@ public class EditorFoldingTest extends EditorTestBase {
         showEditor();
 
         boolean found = false;
-        for (UINode line : linesOf()) {
+        for (UIElement line : linesOf()) {
             String text = ((UIText) line.children().get(0)).getText();
             if (text.contains("void f()")) found = true;
         }
@@ -114,7 +111,7 @@ public class EditorFoldingTest extends EditorTestBase {
         showEditor();
 
         int collapsed = 0;
-        for (UINode arrow : visibleFoldArrows()) {
+        for (UIElement arrow : visibleFoldArrows()) {
             if (arrow.hasClass(TextEditor.FOLD_COLLAPSED_CLASS)) collapsed++;
         }
         assertEquals("exactly the folded one", 1, collapsed);
@@ -197,7 +194,7 @@ public class EditorFoldingTest extends EditorTestBase {
         // Every arrow on screen now belongs to a row far down the document. Note the assertion is NOT on
         // the realised line count: the viewport shows the same number of rows whatever is folded, so a
         // count that far from the document's end proves nothing.
-        java.util.List<UINode> arrows = visibleFoldArrows();
+        java.util.List<UIElement> arrows = visibleFoldArrows();
         assertFalse("some arrows are on screen", arrows.isEmpty());
         assertEquals("nothing folded yet", 0, collapsedStartRows().size());
 
@@ -286,13 +283,13 @@ public class EditorFoldingTest extends EditorTestBase {
         var family = com.crystalgui.render.text.FontFamilyCache.resolve(
                 java.util.List.of("crystalgui:ui/fonts/MinecraftRegular.otf"), 16);
 
-        java.util.List<UINode> furniture = new java.util.ArrayList<>();
+        java.util.List<UIElement> furniture = new java.util.ArrayList<>();
         furniture.addAll(allWithClass(TextEditor.FOLD_CLASS));
         furniture.addAll(allWithClass(TextEditor.FOLD_PLACEHOLDER_CLASS));
         assertFalse("there is furniture to check", furniture.isEmpty());
 
-        for (UINode element : furniture) {
-            for (UINode child : element.children()) {
+        for (UIElement element : furniture) {
+            for (UIElement child : element.children()) {
                 if (!(child instanceof UIText label)) continue;
                 String text = label.getText();
                 for (int i = 0; i < text.length(); i++) {
@@ -340,15 +337,15 @@ public class EditorFoldingTest extends EditorTestBase {
     public void aPointerCanActuallyHitAFoldArrow() {
         buildFoldable();
 
-        java.util.List<UINode> arrows = visibleFoldArrows();
+        java.util.List<UIElement> arrows = visibleFoldArrows();
         assertFalse("there are arrows", arrows.isEmpty());
-        UINode arrow = arrows.get(0);
+        UIElement arrow = arrows.get(0);
 
         float[] at = screenCentreOf(arrow);
         // RETARGETED, as dispatch does before it calls anyone. The editor hosts a shadow tree, so
         // the box under a point in the text area is its SLOT -- a real node with a real box that no
         // listener outside the editor ever sees.
-        UINode hit = hitTarget(at[0], at[1]);
+        UIElement hit = hitTarget(at[0], at[1]);
 
         assertNotNull("the pointer hits something at the arrow", hit);
         assertTrue("and it is the arrow, not the editor behind it -- got " + hit.classes(),
@@ -361,12 +358,12 @@ public class EditorFoldingTest extends EditorTestBase {
         buildFoldable();
         int open = linesOf().size();
 
-        UINode arrow = visibleFoldArrows().get(0);
+        UIElement arrow = visibleFoldArrows().get(0);
         float[] at = screenCentreOf(arrow);
         // RETARGETED, as dispatch does before it calls anyone. The editor hosts a shadow tree, so
         // the box under a point in the text area is its SLOT -- a real node with a real box that no
         // listener outside the editor ever sees.
-        UINode hit = hitTarget(at[0], at[1]);
+        UIElement hit = hitTarget(at[0], at[1]);
         assertNotNull(hit);
 
         var press = new com.crystalgui.ui.event.MouseEvent.Down(hit,
@@ -392,14 +389,14 @@ public class EditorFoldingTest extends EditorTestBase {
         editor.toggleFoldAt(1);
         showEditor();
 
-        UINode chip = childWithClass(TextEditor.FOLD_PLACEHOLDER_CLASS);
+        UIElement chip = childWithClass(TextEditor.FOLD_PLACEHOLDER_CLASS);
         assertNotNull("there is a chip", chip);
 
         float[] at = screenCentreOf(chip);
         // RETARGETED, as dispatch does before it calls anyone. The editor hosts a shadow tree, so
         // the box under a point in the text area is its SLOT -- a real node with a real box that no
         // listener outside the editor ever sees.
-        UINode hit = hitTarget(at[0], at[1]);
+        UIElement hit = hitTarget(at[0], at[1]);
         assertNotNull(hit);
         assertTrue("the pointer reaches the chip, not the text behind it -- got " + hit.classes(),
                 hit.hasClass(TextEditor.FOLD_PLACEHOLDER_CLASS));
@@ -431,7 +428,7 @@ public class EditorFoldingTest extends EditorTestBase {
         editor.toggleFoldAt(1);
         showEditor();
 
-        UINode chip = childWithClass(TextEditor.FOLD_PLACEHOLDER_CLASS);
+        UIElement chip = childWithClass(TextEditor.FOLD_PLACEHOLDER_CLASS);
         assertNotNull(chip);
         String text = ((UIText) chip.children().get(0)).getText();
 
@@ -446,7 +443,7 @@ public class EditorFoldingTest extends EditorTestBase {
         editor.toggleFoldAt(0);
         showEditor();
 
-        UINode chip = childWithClass(TextEditor.FOLD_PLACEHOLDER_CLASS);
+        UIElement chip = childWithClass(TextEditor.FOLD_PLACEHOLDER_CLASS);
         assertNotNull(chip);
         assertEquals("nothing to absorb, and nothing invented",
                 "...", ((UIText) chip.children().get(0)).getText());
@@ -468,7 +465,7 @@ public class EditorFoldingTest extends EditorTestBase {
         showEditor();
 
         String painted = null;
-        for (UINode line : linesOf()) {
+        for (UIElement line : linesOf()) {
             String text = ((UIText) line.children().get(0)).getText();
             if (text.contains("void f()")) painted = text;
         }
@@ -483,7 +480,7 @@ public class EditorFoldingTest extends EditorTestBase {
         buildFoldable();
 
         boolean found = false;
-        for (UINode line : linesOf()) {
+        for (UIElement line : linesOf()) {
             String text = ((UIText) line.children().get(0)).getText();
             if (text.contains("void f()")) {
                 assertTrue("an open block keeps its brace", text.contains("{"));
@@ -512,8 +509,8 @@ public class EditorFoldingTest extends EditorTestBase {
         editor.setCaret(brace);
         showEditor();
 
-        UINode chip = childWithClass(TextEditor.FOLD_PLACEHOLDER_CLASS);
-        UINode caret = childWithClass(TextEditor.CARET_CLASS);
+        UIElement chip = childWithClass(TextEditor.FOLD_PLACEHOLDER_CLASS);
+        UIElement caret = childWithClass(TextEditor.CARET_CLASS);
         assertNotNull("the chip is on screen", chip);
         assertNotNull("and so is the caret", caret);
 
@@ -541,7 +538,7 @@ public class EditorFoldingTest extends EditorTestBase {
         editor.toggleFoldAt(1);
         showEditor();
 
-        UINode chip = childWithClass(TextEditor.FOLD_PLACEHOLDER_CLASS);
+        UIElement chip = childWithClass(TextEditor.FOLD_PLACEHOLDER_CLASS);
         assertNotNull(chip);
         float box = chip.box().height();
         float line = editor.lineHeight();
@@ -551,8 +548,8 @@ public class EditorFoldingTest extends EditorTestBase {
 
         // Centred: the space above the chip within its row equals the space below. Against the chip's OWN
         // row -- the collapsed header -- not just any line, or the comparison is off by a whole line.
-        UINode ownRow = null;
-        for (UINode candidate : linesOf()) {
+        UIElement ownRow = null;
+        for (UIElement candidate : linesOf()) {
             if (((UIText) candidate.children().get(0)).getText().contains("void f()")) ownRow = candidate;
         }
         assertNotNull("found the collapsed header row", ownRow);
@@ -606,7 +603,7 @@ public class EditorFoldingTest extends EditorTestBase {
         showEditor();
         showEditor();
 
-        UINode chip = childWithClass(TextEditor.FOLD_PLACEHOLDER_CLASS);
+        UIElement chip = childWithClass(TextEditor.FOLD_PLACEHOLDER_CLASS);
         UIText glyph = (UIText) chip.children().get(0);
         assertEquals("the chip is set in the editor's own size", 31f,
                 glyph.getStyle().getGeneralGroup().fontSize(), 0.01f);
@@ -624,19 +621,19 @@ public class EditorFoldingTest extends EditorTestBase {
     @Test
     public void theEditorStillTakesClicksWhileSomethingIsFolded() {
         buildFoldable();
-        UINode beforeHit = hitTarget(screenCentreOf(editor)[0], screenCentreOf(editor)[1]);
+        UIElement beforeHit = hitTarget(screenCentreOf(editor)[0], screenCentreOf(editor)[1]);
         assertNotNull(beforeHit);
 
         editor.toggleFoldAt(1);
         showEditor();
 
         // A point in the text area, well clear of the gutter and of the collapsed row's chip.
-        UINode line = linesOf().get(0);
+        UIElement line = linesOf().get(0);
         float[] at = screenCentreOf(line);
         // RETARGETED, as dispatch does before it calls anyone. The editor hosts a shadow tree, so
         // the box under a point in the text area is its SLOT -- a real node with a real box that no
         // listener outside the editor ever sees.
-        UINode hit = hitTarget(at[0], at[1]);
+        UIElement hit = hitTarget(at[0], at[1]);
 
         assertNotNull("a press over the text must reach something", hit);
         assertFalse("and it must not be swallowed by folding furniture: " + hit.classes(),
@@ -654,12 +651,12 @@ public class EditorFoldingTest extends EditorTestBase {
         editor.toggleFoldAt(1);
         showEditor();
 
-        UINode line = linesOf().get(0);
+        UIElement line = linesOf().get(0);
         float[] at = screenCentreOf(line);
         // RETARGETED, as dispatch does before it calls anyone. The editor hosts a shadow tree, so
         // the box under a point in the text area is its SLOT -- a real node with a real box that no
         // listener outside the editor ever sees.
-        UINode hit = hitTarget(at[0], at[1]);
+        UIElement hit = hitTarget(at[0], at[1]);
         assertSame(editor, hit);
 
         var press = new com.crystalgui.ui.event.MouseEvent.Down(hit,

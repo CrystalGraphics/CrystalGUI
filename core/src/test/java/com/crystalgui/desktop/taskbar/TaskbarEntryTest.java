@@ -1,6 +1,5 @@
 package com.crystalgui.desktop.taskbar;
 
-import com.crystalgui.core.async.Progress;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgraphics.platform.input.CgMouseCodes;
@@ -9,13 +8,11 @@ import com.crystalgui.core.window.WindowPolicy;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
 
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -47,7 +44,7 @@ public class TaskbarEntryTest extends UiDocumentTestBase {
         Desktop.setAnimationsEnabled(false);
     }
 
-    private UINode root;
+    private UIElement root;
 
     @After
     public void animationsBackOn() {
@@ -61,7 +58,7 @@ public class TaskbarEntryTest extends UiDocumentTestBase {
         // detaches and `close()` destroys only once the flight ends, so the assertion reads the state
         // BEFORE the gesture took effect and the numbers it does get are mid-flight fractions.
         Desktop.setAnimationsEnabled(false);
-        root = new UINode().layout(l -> l.width(800).height(600));
+        root = new UIElement().layout(l -> l.width(800).height(600));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
         settle();
@@ -165,7 +162,7 @@ public class TaskbarEntryTest extends UiDocumentTestBase {
 
         frame.setBadge("3");
         settle();
-        UINode slot = entryOf(frame).getPostIcon();
+        UIElement slot = entryOf(frame).getPostIcon();
         assertNotNull("a badge did not reach the entry", slot);
         assertTrue("the badge is not on screen", onScreen(slot));
 
@@ -249,11 +246,11 @@ public class TaskbarEntryTest extends UiDocumentTestBase {
                 first, Desktop.of(document).activeWindow());
     }
 
-    private void pressMiddle(UINode target) {
+    private void pressMiddle(UIElement target) {
         pressAt(target, CgMouseCodes.MIDDLE_BUTTON);
     }
 
-    private void pressLeft(UINode target) {
+    private void pressLeft(UIElement target) {
         pressAt(target, CgMouseCodes.LEFT_BUTTON);
         // A click is a pair, and a Button activates on the UP.
         var box = target.box();
@@ -264,7 +261,7 @@ public class TaskbarEntryTest extends UiDocumentTestBase {
         settle();
     }
 
-    private void pressAt(UINode target, int button) {
+    private void pressAt(UIElement target, int button) {
         var box = target.box();
         frame();
         document.input().consumeMouseEvent(new CgSystemInput.Mouse.Event(
@@ -282,7 +279,7 @@ public class TaskbarEntryTest extends UiDocumentTestBase {
      * slot that has never been shown or hidden reports neither value and a test comparing against
      * {@code NONE} passes by accident. A box is a question every state can answer.</p>
      */
-    private static boolean onScreen(UINode element) {
+    private static boolean onScreen(UIElement element) {
         // ...and NO box is the same answer as a zero-wide one: a hidden node has none at all here.
         return widthOf(element) > 0f;
     }

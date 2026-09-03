@@ -1,9 +1,9 @@
 package com.crystalgui.widget.graph;
 
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.canvas.WorldRect;
 import org.joml.Vector2f;
 import com.crystalgraphics.platform.input.CgMouseCodes;
-import com.crystalgui.graph.PortDirection;
 import com.crystalgui.graph.port.BasicPortType;
 import com.crystalgui.graph.port.PortType;
 import com.crystalgui.style.StyleGroup;
@@ -11,7 +11,6 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.canvas.CanvasView;
 import org.junit.Test;
 
@@ -228,8 +227,8 @@ public class GraphBatchPortTest extends UiDocumentTestBase {
         withDefaultStyles();
         CanvasView canvas = new CanvasView();
         GraphView graph = new GraphView();
-        List<UINode> widgets = List.of(canvas, graph);
-        for (UINode widget : widgets) {
+        List<UIElement> widgets = List.of(canvas, graph);
+        for (UIElement widget : widgets) {
             layout(widget, l -> l.width(400f).height(240f));
             document.append(widget);
         }
@@ -243,7 +242,7 @@ public class GraphBatchPortTest extends UiDocumentTestBase {
         frame();
 
         List<String> offenders = new ArrayList<>();
-        for (UINode widget : List.of(canvas, graph, node)) {
+        for (UIElement widget : List.of(canvas, graph, node)) {
             Box box = boxOf(widget);
             if (box == null) offenders.add(widget.getClass().getSimpleName() + ": no box");
             else if (!(box.width() > 0f) || !(box.height() > 0f)) {
@@ -370,7 +369,7 @@ public class GraphBatchPortTest extends UiDocumentTestBase {
         CanvasView top = new CanvasView();
         layout(top, l -> l.width(400f).height(200f));
         // A TALL SPACER between them, so the second canvas is a long way down its parent.
-        UINode spacer = new UINode();
+        UIElement spacer = new UIElement();
         layout(spacer, l -> l.width(400f).height(500f));
         CanvasView low = new CanvasView();
         layout(low, l -> l.width(400f).height(200f));
@@ -464,7 +463,7 @@ public class GraphBatchPortTest extends UiDocumentTestBase {
     @Test
     public void aMarqueeSelectsWhatItIsDrawnOver() {
         withDefaultStyles();
-        UINode spacer = new UINode();
+        UIElement spacer = new UIElement();
         layout(spacer, l -> l.width(600f).height(220f));
         document.append(spacer);
         GraphView view = new GraphView();

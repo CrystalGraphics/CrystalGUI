@@ -1,7 +1,7 @@
 package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
@@ -46,7 +46,7 @@ public final class RulersPart extends EditorViewPart {
             if (column <= 0) continue;
             final float left = pad + column * advance - editor.scrollLeft();
             if (left < pad || left > editor.textViewportWidth()) continue;
-            UINode rule = pool.next();
+            UIElement rule = pool.next();
             StyleGroup.defaultPipeline(rule.getStyle().getLayoutGroup(),
                     l -> l.positionType(TaffyPosition.ABSOLUTE)
                             .left(left).top(0f).width(1f).height(height));

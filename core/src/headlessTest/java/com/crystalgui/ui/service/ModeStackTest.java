@@ -13,7 +13,7 @@ import static org.junit.Assert.assertTrue;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.headless.ClassReferences;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -101,7 +101,7 @@ public class ModeStackTest {
     @Test
     public void aModeThatDoesNotWantAKeyLetsItThrough() {
         UIDocument document = new UIDocument();
-        UINode node = at("node", 0, 0, 100, 100).setFocusPolicy(FocusPolicy.FOCUSABLE);
+        UIElement node = at("node", 0, 0, 100, 100).setFocusPolicy(FocusPolicy.FOCUSABLE);
         document.append(node);
         frame(document);
         document.focus().requestFocus(node);
@@ -136,8 +136,8 @@ public class ModeStackTest {
     @Test
     public void aDragEatsEscapeAndTellsItsTargetAndItsSource() {
         UIDocument document = new UIDocument();
-        UINode source = at("source", 0, 0, 100, 100);
-        UINode target = at("target", 200, 0, 100, 100);
+        UIElement source = at("source", 0, 0, 100, 100);
+        UIElement target = at("target", 200, 0, 100, 100);
         document.append(source).append(target);
         frame(document);
 
@@ -171,8 +171,8 @@ public class ModeStackTest {
     @Test
     public void rejectionIsTheDefaultAndAcceptanceIsReReadEveryFrame() {
         UIDocument document = new UIDocument();
-        UINode source = at("source", 0, 0, 100, 100);
-        UINode target = at("target", 200, 0, 100, 100);
+        UIElement source = at("source", 0, 0, 100, 100);
+        UIElement target = at("target", 200, 0, 100, 100);
         document.append(source).append(target);
         frame(document);
         List<String> drops = new ArrayList<>();
@@ -195,8 +195,8 @@ public class ModeStackTest {
     @Test
     public void theSourceAndItsSubtreeAreNeverADropTarget() {
         UIDocument document = new UIDocument();
-        UINode source = at("source", 0, 0, 200, 200);
-        UINode inside = at("inside", 10, 10, 50, 50);
+        UIElement source = at("source", 0, 0, 200, 200);
+        UIElement inside = at("inside", 10, 10, 50, 50);
         source.append(inside);
         document.append(source);
         frame(document);
@@ -211,7 +211,7 @@ public class ModeStackTest {
     @Test
     public void aDragEndsOnTheButtonThatStartedIt() {
         UIDocument document = new UIDocument();
-        UINode source = at("source", 0, 0, 100, 100);
+        UIElement source = at("source", 0, 0, 100, 100);
         document.append(source);
         frame(document);
         List<String> log = new ArrayList<>();

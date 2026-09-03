@@ -7,7 +7,7 @@ import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.collection.list.ListRenderer;
 import com.crystalgui.widget.collection.list.ListView;
 import com.crystalgui.widget.collection.table.TableColumn;
@@ -38,14 +38,14 @@ public class CollectionBatchPortTest extends UiDocumentTestBase {
     private static ListRenderer<String> labels() {
         return new ListRenderer<>() {
             @Override
-            public UINode createTemplate() {
-                UINode row = new UINode();
+            public UIElement createTemplate() {
+                UIElement row = new UIElement();
                 row.append(new UIText(""));
                 return row;
             }
 
             @Override
-            public void bind(String item, int index, UINode template) {
+            public void bind(String item, int index, UIElement template) {
                 ((UIText) template.children().get(0)).setText(item);
             }
         };
@@ -155,12 +155,12 @@ public class CollectionBatchPortTest extends UiDocumentTestBase {
         ListView<String> list = new ListView<>(model);
         list.setRenderer(new ListRenderer<>() {
             @Override
-            public UINode createTemplate() {
-                return new UINode();
+            public UIElement createTemplate() {
+                return new UIElement();
             }
 
             @Override
-            public void bind(String item, int index, UINode template) {
+            public void bind(String item, int index, UIElement template) {
                 template.removeClass("kind-even").removeClass("kind-odd");
                 template.addClass("kind-" + item);
             }
@@ -175,7 +175,7 @@ public class CollectionBatchPortTest extends UiDocumentTestBase {
         frame();
 
         List<String> both = new ArrayList<>();
-        for (UINode row : list.children()) {
+        for (UIElement row : list.children()) {
             if (!row.hasClass(ListView.ROW_CLASS)) continue;
             if (row.hasClass("kind-even") && row.hasClass("kind-odd")) both.add(String.valueOf(row));
         }
@@ -206,14 +206,14 @@ public class CollectionBatchPortTest extends UiDocumentTestBase {
     private static TreeRenderer<String> treeLabels() {
         return new TreeRenderer<>() {
             @Override
-            public UINode createTemplate() {
-                UINode row = new UINode();
+            public UIElement createTemplate() {
+                UIElement row = new UIElement();
                 row.append(new UIText(""));
                 return row;
             }
 
             @Override
-            public void bind(String item, TreeRow<String> row, int index, UINode template) {
+            public void bind(String item, TreeRow<String> row, int index, UIElement template) {
                 ((UIText) template.children().get(0)).setText(item);
             }
         };
@@ -292,8 +292,8 @@ public class CollectionBatchPortTest extends UiDocumentTestBase {
         TableView<String> table = new TableView<>(rows(5));
         table.addColumn(TableColumn.<String>of("Name", s -> s).flexible());
 
-        List<UINode> widgets = List.of(list, tree, table);
-        for (UINode widget : widgets) {
+        List<UIElement> widgets = List.of(list, tree, table);
+        for (UIElement widget : widgets) {
             layout(widget, l -> l.width(300f).height(150f));
             document.append(widget);
         }
@@ -301,7 +301,7 @@ public class CollectionBatchPortTest extends UiDocumentTestBase {
         frame();
 
         List<String> offenders = new ArrayList<>();
-        for (UINode widget : widgets) {
+        for (UIElement widget : widgets) {
             Box box = boxOf(widget);
             if (box == null) offenders.add(widget.getClass().getSimpleName() + ": no box");
             else if (!(box.width() > 0f) || !(box.height() > 0f)) {
@@ -339,7 +339,7 @@ public class CollectionBatchPortTest extends UiDocumentTestBase {
         frame();
         frame();
 
-        UINode thumb = list.verticalScroller().thumb();
+        UIElement thumb = list.verticalScroller().thumb();
         Box bar = boxOf(thumb);
         assertNotNull("the scrollbar has no thumb box -- the fixture is not scrollable", bar);
         assertEquals("the fixture must start at the top", 0f, list.box().scrollTop(), 0.01f);

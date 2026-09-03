@@ -1,16 +1,12 @@
 package com.crystalgui.workbench.dock.layout;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.widget.layout.SplitView;
 import com.crystalgui.workbench.dock.DockArea;
 import com.crystalgui.workbench.dock.drag.DockDropZone;
-import com.crystalgui.workbench.dock.layout.DockLayout;
-import com.crystalgui.workbench.dock.layout.DockLeaf;
 import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
-import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import com.crystalgui.workbench.dock.panel.DockPanelRegistry;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import org.junit.Test;
@@ -49,16 +45,17 @@ import static org.junit.Assert.assertTrue;
 public class SplitPaneGrowChainTest extends UiDocumentTestBase {
 
 
+
     /** outer → middle → leaf, each filling both axes the only two ways there are. */
-    private static UINode growChain(UINode leaf) {
-        UINode outer = fill(new UINode());
-        UINode middle = fill(new UINode());
+    private static UIElement growChain(UIElement leaf) {
+        UIElement outer = fill(new UIElement());
+        UIElement middle = fill(new UIElement());
         outer.append(middle);
         middle.append(fill(leaf));
         return outer;
     }
 
-    private static UINode fill(UINode element) {
+    private static UIElement fill(UIElement element) {
         return element.layout(l -> l.widthPercent(100f).height(0).flexGrow(1f));
     }
 
@@ -67,10 +64,10 @@ public class SplitPaneGrowChainTest extends UiDocumentTestBase {
      *
      * @param zone which way the second panel splits off, i.e. which of the pane's axes ends up stretched
      */
-    private DockArea dockWithTwoPanels(UINode content, DockDropZone zone) {
-        DockPanelRegistry<UINode> registry = new DockPanelRegistry<>();
+    private DockArea dockWithTwoPanels(UIElement content, DockDropZone zone) {
+        DockPanelRegistry<UIElement> registry = new DockPanelRegistry<>();
         registry.register(DockPanelDescriptor.document("subject", "Subject"), ref -> content);
-        registry.register(DockPanelDescriptor.document("other", "Other"), ref -> new UINode());
+        registry.register(DockPanelDescriptor.document("other", "Other"), ref -> new UIElement());
 
         DockLeaf centre = new DockLeaf(new DockPanelRef("subject"));
         centre.setCentral(true);
@@ -78,21 +75,22 @@ public class SplitPaneGrowChainTest extends UiDocumentTestBase {
         layout.drop(centre, zone, new DockLeaf(new DockPanelRef("other")));
 
         DockArea dock = new DockArea(registry, layout);
-        UINode root = new UINode().layout(l -> l.widthPercent(100f).heightPercent(100f)
-                .flexDirection(FlexDirection.COLUMN));
+        UIElement root = new UIElement().layout(l -> l.widthPercent(100f).heightPercent(100f)
+                                                      .flexDirection(FlexDirection.COLUMN));
         root.append(dock);
 
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
+
         for (int i = 0; i < 5; i++) frame();
         return dock;
     }
 
-    private static float height(UINode element) {
+    private static float height(UIElement element) {
         return element.box().height();
     }
 
-    private static float width(UINode element) {
+    private static float width(UIElement element) {
         return element.box().width();
     }
 
@@ -102,8 +100,8 @@ public class SplitPaneGrowChainTest extends UiDocumentTestBase {
      */
     @Test
     public void aGrowChainFillsAPaneOfAHorizontalSplit() {
-        UINode leaf = new UINode();
-        UINode outer = growChain(leaf);
+        UIElement leaf = new UIElement();
+        UIElement outer = growChain(leaf);
         dockWithTwoPanels(outer, DockDropZone.SPLIT_RIGHT);
 
         assertTrue("the first box did not fill the pane -- the fixture is wrong", height(outer) > 0f);
@@ -130,11 +128,12 @@ public class SplitPaneGrowChainTest extends UiDocumentTestBase {
         split.setPercentage(25f);
         split.layout(l -> l.width(400).height(400));
 
-        UINode root = new UINode().layout(l -> l.width(600).height(600)
-                .flexDirection(FlexDirection.COLUMN));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(600)
+                                                      .flexDirection(FlexDirection.COLUMN));
         root.append(split);
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
+
         for (int i = 0; i < 4; i++) frame();
 
         float first = width(split.first());
@@ -152,16 +151,17 @@ public class SplitPaneGrowChainTest extends UiDocumentTestBase {
      */
     @Test
     public void aSplitWithNoHeightOfItsOwnStillShowsItsContent() {
-        UINode tall = new UINode().layout(l -> l.width(50).height(120));
+        UIElement tall = new UIElement().layout(l -> l.width(50).height(120));
         SplitView split = new SplitView();
         split.first().append(tall);
         split.layout(l -> l.width(400).heightAuto());
 
-        UINode root = new UINode().layout(l -> l.width(600).heightAuto()
-                .flexDirection(FlexDirection.COLUMN));
+        UIElement root = new UIElement().layout(l -> l.width(600).heightAuto()
+                                                      .flexDirection(FlexDirection.COLUMN));
         root.append(split);
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
+
         for (int i = 0; i < 4; i++) frame();
 
         assertTrue("a content-sized split collapsed its panes to nothing",

@@ -1,6 +1,7 @@
 package com.crystalgui.widget.canvas;
 
 import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.ui.box.Box;
 import com.crystalgraphics.platform.CgPlatform;
@@ -12,8 +13,6 @@ import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.style.property.visual.border.LengthPercent;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.service.Animation;
 import com.crystalgui.ui.UITransform;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.event.MouseEvent;
@@ -53,7 +52,7 @@ import java.util.Set;
  * <ul>
  *   <li><b>World</b> — where nodes live. Unaffected by pan or zoom. What you author.</li>
  *   <li><b>Logical</b> — the engine's layout space, what {@code RuntimeCache.getX()} and
- *       {@link UINode#toLocal} speak. {@link #getPanX()} is in these units.</li>
+ *       {@link UIElement#toLocal} speak. {@link #getPanX()} is in these units.</li>
  *   <li><b>Physical</b> — raw pointer pixels, as delivered by {@code MouseEvent.getPosition()}.
  *       Differs from logical by {@code uiScale}.</li>
  * </ul>
@@ -67,7 +66,7 @@ import java.util.Set;
  * subtly wrong at the extremes. {@link #centerOnWorld} exists for the times you genuinely want to
  * think in world units.</p>
  */
-public class CanvasView extends UINode  {
+public class CanvasView extends UIElement {
 
     /**
      * This widget's kind.
@@ -88,7 +87,7 @@ public class CanvasView extends UINode  {
      * decision rather than a hard-coded one. */
     public static final String PANNING_CLASS = "__panning__";
 
-    private final UINode content = new UINode();
+    private final UIElement content = new UIElement();
 
     @Getter
     private float panX, panY;
@@ -123,10 +122,10 @@ public class CanvasView extends UINode  {
 
     /** Not a bookkeeping duplicate of the style: this is what {@link #isCulled} answers, and it keeps
      * the un-cull path from writing to every node on every tick. */
-    private final Set<UINode> culled = new HashSet<>();
+    private final Set<UIElement> culled = new HashSet<>();
 
-    /** @see #setCullExempt(UINode, boolean) */
-    private final Set<UINode> cullExempt = new HashSet<>();
+    /** @see #setCullExempt(UIElement, boolean) */
+    private final Set<UIElement> cullExempt = new HashSet<>();
 
     private boolean ticking;
 
@@ -173,7 +172,7 @@ public class CanvasView extends UINode  {
         // i.e. everywhere except where you actually want to grab.
         this.events.getGroup(MouseEvent.Down.class).attachListener((el, event) -> {
             if (!panEnabled || !isEnabled()) return;
-            if (isBackgroundGestureExempt(((UINode) event.getTarget()))) return;
+            if (isBackgroundGestureExempt(((UIElement) event.getTarget()))) return;
             if (!isPanTrigger(event)) return;
             event.stopPropagation();
             beginPan(event.getPosition().x(), event.getPosition().y(), event.getButtonId());
@@ -187,7 +186,7 @@ public class CanvasView extends UINode  {
             // only claims the wheel while it actually scrolls -- deliberately, so a list at its end chains
             // outward -- so a menu whose list is short or already at the bottom hands the wheel straight
             // to this handler, and the graph zooms under an open menu. That is never what was meant.
-            if (isBackgroundGestureExempt(((UINode) event.getTarget()))) return;
+            if (isBackgroundGestureExempt(((UIElement) event.getTarget()))) return;
             float notches = event.getScroll();
             if (notches == 0f) return;
             // NEGATED, and the sign is not guessable: in this engine a POSITIVE notch means the wheel
@@ -208,11 +207,11 @@ public class CanvasView extends UINode  {
     /**
      * The transformed plane nodes live on.
      *
-     * <p>Handed out rather than proxied: it is an ordinary {@link UINode}, and everything a caller
+     * <p>Handed out rather than proxied: it is an ordinary {@link UIElement}, and everything a caller
      * might want to do to a container — {@code querySelector}, {@code clearAllChildren}, a background
      * — should keep working rather than needing a forwarding method each.</p>
      */
-    public UINode content() {
+    public UIElement content() {
         return content;
     }
 
@@ -233,9 +232,9 @@ public class CanvasView extends UINode  {
      * and out of anything that treats the plane's children as the document.</p>
      */
     /** Floating panels that sit over the canvas and are not part of it. @see #addOverlay */
-    private final java.util.Set<UINode> overlays = new java.util.HashSet<>();
+    private final java.util.Set<UIElement> overlays = new java.util.HashSet<>();
 
-    public CanvasView addOverlay(UINode panel) {
+    public CanvasView addOverlay(UIElement panel) {
         StyleGroup.defaultPipeline(panel.getStyle().getLayoutGroup(),
                 l -> l.positionType(TaffyPosition.ABSOLUTE));
         overlays.add(panel);
@@ -258,7 +257,7 @@ public class CanvasView extends UINode  {
      * first press <em>every</em> panel matches "already frontmost" and nothing is ever raised at all.</p>
      */
     @Nullable
-    private UINode frontmostOverlay;
+    private UIElement frontmostOverlay;
 
     /**
      * Clicking an overlay brings it to the front — every window manager's oldest rule, and the one thing
@@ -281,7 +280,7 @@ public class CanvasView extends UINode  {
      * <p>It also raises on a press rather than on a click, which is what makes a drag start on top instead
      * of sliding under the other panel for the duration of the gesture.</p>
      */
-    private void raiseOnPress(UINode panel) {
+    private void raiseOnPress(UIElement panel) {
         panel.onMouseDown.attachListener((element, event) -> {
             // Already frontmost: nothing to write, and writing anyway would burn a z-index per press.
             if (frontmostOverlay == panel) return;
@@ -305,22 +304,22 @@ public class CanvasView extends UINode  {
      * canvas's own resize handles and anything else the engine hangs there, so "internal child of this"
      * would claim things that are genuinely the canvas's.</p>
      */
-    protected boolean isInsideOverlay(@Nullable UINode target) {
+    protected boolean isInsideOverlay(@Nullable UIElement target) {
         if (overlays.isEmpty()) return false;
-        for (UINode element = target; element != null && element != this; element = element.parent()) {
+        for (UIElement element = target; element != null && element != this; element = element.parent()) {
             if (overlays.contains(element)) return true;
         }
         return false;
     }
 
     /** Whether a background gesture should ignore this target entirely — promoted, or a floating panel. */
-    protected boolean isBackgroundGestureExempt(@Nullable UINode target) {
+    protected boolean isBackgroundGestureExempt(@Nullable UIElement target) {
         return isInsidePromotedChild(target) || isInsideOverlay(target);
     }
 
     /** Adds {@code node} to the plane at a world position. Absolute positioning is what makes a node
      * placeable at all; a flow child would be laid out by the plane instead. */
-    public CanvasView addNode(UINode node, float worldX, float worldY) {
+    public CanvasView addNode(UIElement node, float worldX, float worldY) {
         StyleGroup.defaultPipeline(node.getStyle().getLayoutGroup(),
                 l -> l.positionType(TaffyPosition.ABSOLUTE));
         moveNode(node, worldX, worldY);
@@ -330,7 +329,7 @@ public class CanvasView extends UINode  {
 
     /** Moves an already-added node. Written at INLINE, so a caller's own later {@code layout()} call
      * and a stylesheet still compete through the normal cascade. */
-    public CanvasView moveNode(UINode node, float worldX, float worldY) {
+    public CanvasView moveNode(UIElement node, float worldX, float worldY) {
         StyleGroup.inlinePipeline(node.getStyle().getLayoutGroup(), l -> l.left(worldX).top(worldY));
         return this;
     }
@@ -402,7 +401,7 @@ public class CanvasView extends UINode  {
     @Nullable
     public WorldRect contentBounds() {
         WorldRect union = null;
-        for (UINode child : content.children()) {
+        for (UIElement child : content.children()) {
             WorldRect rect = worldBoundsOf(child);
             union = union == null ? rect : union.union(rect);
         }
@@ -419,7 +418,7 @@ public class CanvasView extends UINode  {
      * intersects nothing, so a node nobody has measured is culled until it has a size, which is what
      * a zero-area node should be.</p>
      */
-    public WorldRect worldBoundsOf(UINode node) {
+    public WorldRect worldBoundsOf(UIElement node) {
         Box cache = node.box();
         if (cache == null) return new WorldRect(0f, 0f, 0f, 0f);
         // A NODE IS A CHILD OF THE PLANE, so `x()` -- the offset from its host's border-box origin --
@@ -454,7 +453,7 @@ public class CanvasView extends UINode  {
     /**
      * Physical pointer position → world coordinates.
      *
-     * <p>Routed through {@link UINode#toLocal}, so it stays correct under {@code uiScale},
+     * <p>Routed through {@link UIElement#toLocal}, so it stays correct under {@code uiScale},
      * an ancestor transform, and an ancestor's scroll offset — none of which this widget knows
      * about.</p>
      */
@@ -467,7 +466,7 @@ public class CanvasView extends UINode  {
 
     /**
      * World coordinates → the engine's logical space — the same frame {@code RuntimeCache.getX()} and
-     * {@link UINode#toLocal} report in, <b>not</b> physical pixels.
+     * {@link UIElement#toLocal} report in, <b>not</b> physical pixels.
      */
     public Vector2f worldToViewport(float worldX, float worldY) {
         return new Vector2f(contentOriginX() + panX + zoom * worldX,
@@ -476,7 +475,7 @@ public class CanvasView extends UINode  {
 
     /**
      * The exact inverse of {@link #worldToViewport}: a point in the engine's logical space — what
-     * {@link UINode#toLocal} returns and what a {@code DragListener} on this canvas reports —
+     * {@link UIElement#toLocal} returns and what a {@code DragListener} on this canvas reports —
      * back into world coordinates.
      *
      * <p>Distinct from {@link #screenToWorld}, which starts from <em>physical</em> pointer pixels. Both
@@ -504,7 +503,7 @@ public class CanvasView extends UINode  {
         if (enabled) {
             ensureTicking();
         } else {
-            for (UINode node : Set.copyOf(culled)) applyCulled(node, false);
+            for (UIElement node : Set.copyOf(culled)) applyCulled(node, false);
         }
         return this;
     }
@@ -514,7 +513,7 @@ public class CanvasView extends UINode  {
         return this;
     }
 
-    public boolean isCulled(UINode node) {
+    public boolean isCulled(UIElement node) {
         return culled.contains(node);
     }
 
@@ -527,12 +526,12 @@ public class CanvasView extends UINode  {
      * taking everything it draws with it. An exempt element is expected to cull its own drawing, where
      * it knows what it is drawing.</p>
      *
-     * <p>Deliberately a set on the canvas rather than a flag on {@code UINode}: it is a fact about
+     * <p>Deliberately a set on the canvas rather than a flag on {@code UIElement}: it is a fact about
      * this canvas's relationship with that child, not a property of the element. The same shape as
      * {@code setScrollExempt}, which is on the element only because scrolling is an ambient capability
      * of every element and culling is not.</p>
      */
-    public CanvasView setCullExempt(UINode node, boolean exempt) {
+    public CanvasView setCullExempt(UIElement node, boolean exempt) {
         if (exempt) {
             cullExempt.add(node);
             // It may already be culled from a previous pass; the exemption has to undo that or it stays
@@ -544,7 +543,7 @@ public class CanvasView extends UINode  {
         return this;
     }
 
-    public boolean isCullExempt(UINode node) {
+    public boolean isCullExempt(UIElement node) {
         return cullExempt.contains(node);
     }
 
@@ -563,7 +562,7 @@ public class CanvasView extends UINode  {
     public void updateCulling() {
         if (!cullingEnabled) return;
         WorldRect view = visibleWorldRect().expand(cullMargin);
-        for (UINode child : content.children()) {
+        for (UIElement child : content.children()) {
             if (cullExempt.contains(child)) continue;
             applyCulled(child, !view.intersects(worldBoundsOf(child)));
         }
@@ -590,7 +589,7 @@ public class CanvasView extends UINode  {
      * <p>What is genuinely given up is layout cost for off-screen nodes. That is the smaller half:
      * layout recomputes only when dirty, while paint happens every single frame.</p>
      */
-    private void applyCulled(UINode node, boolean cull) {
+    private void applyCulled(UIElement node, boolean cull) {
         if (cull == culled.contains(node)) return;
         if (cull) {
             culled.add(node);
@@ -603,7 +602,7 @@ public class CanvasView extends UINode  {
 
     /** Removes only <em>our</em> candidate — a caller's own {@code opacity} at any other origin, and
      * a theme's, survive being culled and uncalled. */
-    private void clearCullOpacity(UINode node) {
+    private void clearCullOpacity(UIElement node) {
         node.getStyle().getGeneralGroup().set(StyleOrigin.INLINE, StylePropertyRegistry.OPACITY, null);
     }
 
@@ -639,8 +638,8 @@ public class CanvasView extends UINode  {
      * to ask this first, and each of them was found the same way: by a popup that looked dead because the
      * canvas underneath had taken its input.</p>
      */
-    protected boolean isInsidePromotedChild(@Nullable UINode target) {
-        for (UINode element = target; element != null && element != this; element = element.parent()) {
+    protected boolean isInsidePromotedChild(@Nullable UIElement target) {
+        for (UIElement element = target; element != null && element != this; element = element.parent()) {
             if (document().isPromoted(element)) return true;
         }
         return false;

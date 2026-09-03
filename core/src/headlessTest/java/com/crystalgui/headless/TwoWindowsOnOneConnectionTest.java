@@ -9,8 +9,8 @@ import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.dom.UINodeRegistry;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Slider;
 import org.junit.After;
@@ -54,36 +54,36 @@ public class TwoWindowsOnOneConnectionTest {
     private ProtocolConnection<Object> serverSide;
     private ProtocolConnection<Object> clientSide;
 
-    private UINode rootOne;
-    private UINode rootTwo;
+    private UIElement rootOne;
+    private UIElement rootTwo;
     private Slider sliderOne;
     private Slider sliderTwo;
     private Button buttonOne;
     private Button buttonTwo;
 
-    private ServerUiSession<UINode, Object> windowOne;
-    private ServerUiSession<UINode, Object> windowTwo;
+    private ServerUiSession<UIElement, Object> windowOne;
+    private ServerUiSession<UIElement, Object> windowTwo;
 
-    private ClientUiSessions<UINode, Object> client;
-    private final List<ClientUiSession<UINode, Object>> created = new ArrayList<>();
+    private ClientUiSessions<UIElement, Object> client;
+    private final List<ClientUiSession<UIElement, Object>> created = new ArrayList<>();
 
     @Before
     public void setUp() {
         Protocols.resetForTesting();
-        UINodeRegistry.bootstrap();
+        UIElementRegistry.bootstrap();
 
         link = InMemoryTransport.pair();
         serverSide = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "alice");
         clientSide = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
 
-        rootOne = new UINode();
+        rootOne = new UIElement();
         buttonOne = new Button("one");
         sliderOne = new Slider();
         sliderOne.setRange(0f, 10f);
         rootOne.append(buttonOne);
         rootOne.append(sliderOne);
 
-        rootTwo = new UINode();
+        rootTwo = new UIElement();
         buttonTwo = new Button("two");
         sliderTwo = new Slider();
         sliderTwo.setRange(0f, 10f);
@@ -114,8 +114,8 @@ public class TwoWindowsOnOneConnectionTest {
         }
     }
 
-    private ClientUiSession<UINode, Object> clientWindow(int id) {
-        ClientUiSession<UINode, Object> session = client.session(id);
+    private ClientUiSession<UIElement, Object> clientWindow(int id) {
+        ClientUiSession<UIElement, Object> session = client.session(id);
         assertNotNull("no client session for window " + id, session);
         return session;
     }
@@ -132,8 +132,8 @@ public class TwoWindowsOnOneConnectionTest {
         assertEquals("two client sessions", 2, client.sessionCount());
         assertEquals("and onSession heard about both", 2, created.size());
 
-        UINode one = clientWindow(1).root();
-        UINode two = clientWindow(2).root();
+        UIElement one = clientWindow(1).root();
+        UIElement two = clientWindow(2).root();
         assertNotNull("window 1 must have a tree", one);
         assertNotNull("window 2 must have a tree", two);
         assertNotSame("and they must not be the same tree", one, two);
@@ -261,11 +261,11 @@ public class TwoWindowsOnOneConnectionTest {
         windowOne.close("done");
         settle();
 
-        UINode replacementRoot = new UINode();
+        UIElement replacementRoot = new UIElement();
         Button replacementButton = new Button("reopened");
         replacementRoot.append(replacementButton);
 
-        ServerUiSession<UINode, Object> replacement = Sessions.serveOn(1, replacementRoot, serverSide);
+        ServerUiSession<UIElement, Object> replacement = Sessions.serveOn(1, replacementRoot, serverSide);
         replacement.open();
         for (int i = 0; i < 24; i++) {
             link[0].deliver();
@@ -342,10 +342,10 @@ public class TwoWindowsOnOneConnectionTest {
         ProtocolConnection<Object> soloClient =
                 Protocols.open(solo[1], PlainOps.INSTANCE, () -> { }, null);
 
-        UINode root = new UINode();
+        UIElement root = new UIElement();
         root.append(new Button("solo"));
-        ServerUiSession<UINode, Object> server = Sessions.serveOn(7, root, soloServer);
-        ClientUiSession<UINode, Object> view = Sessions.viewOn(soloClient);
+        ServerUiSession<UIElement, Object> server = Sessions.serveOn(7, root, soloServer);
+        ClientUiSession<UIElement, Object> view = Sessions.viewOn(soloClient);
 
         server.open();
         for (int i = 0; i < 24; i++) {

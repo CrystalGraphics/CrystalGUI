@@ -7,10 +7,9 @@ import com.crystalgui.net.SheetRef;
 import com.crystalgui.net.protocol.Envelope;
 import com.crystalgui.net.protocol.EnvelopeCodec;
 import com.crystalgui.net.protocol.UiMethods;
-import com.crystalgui.serialization.Codecs;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Checkbox;
 import com.crystalgui.widget.control.Slider;
 import com.crystalgui.widget.control.TextField;
@@ -33,11 +32,11 @@ public class SessionHandshakeTest {
 
     private InMemoryTransport<Object> serverLink;
     private InMemoryTransport<Object> clientLink;
-    private ServerUiSession<UINode, Object> server;
-    private ClientUiSession<UINode, Object> client;
+    private ServerUiSession<UIElement, Object> server;
+    private ClientUiSession<UIElement, Object> client;
 
-    private static UINode buildUi() {
-        UINode root = new UINode();
+    private static UIElement buildUi() {
+        UIElement root = new UIElement();
         root.setId("settings").addClass("panel");
         root.layout(l -> l.width(220).height(140));
 
@@ -116,7 +115,7 @@ public class SessionHandshakeTest {
         server.open();
         settle();
 
-        UINode rebuilt = client.root();
+        UIElement rebuilt = client.root();
         assertNotNull("the client should have a tree", rebuilt);
         assertEquals("settings", rebuilt.id());
         assertTrue(rebuilt.hasClass("panel"));
@@ -187,7 +186,7 @@ public class SessionHandshakeTest {
 
         // A second server session over the same link, for an identical UI — identical content, so
         // identical hash. The client, and therefore its cache, is the same object.
-        ServerUiSession<UINode, Object> second =
+        ServerUiSession<UIElement, Object> second =
                 Sessions.serve(8, buildUi(), serverLink);
         second.open();
         assertEquals("precondition: an identical UI must hash the same",
@@ -209,7 +208,7 @@ public class SessionHandshakeTest {
     @Test
     public void anIdenticalUiProducesAnIdenticalHash() {
         InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
-        ServerUiSession<UINode, Object> other = Sessions.serve(9, buildUi(), pair[0]);
+        ServerUiSession<UIElement, Object> other = Sessions.serve(9, buildUi(), pair[0]);
         server.open();
         other.open();
         assertEquals(server.descHash(), other.descHash());
@@ -217,11 +216,11 @@ public class SessionHandshakeTest {
 
     @Test
     public void aDifferentUiProducesADifferentHash() {
-        UINode changed = buildUi();
+        UIElement changed = buildUi();
         ((Checkbox) changed.children().get(1)).setChecked(false);
 
         InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
-        ServerUiSession<UINode, Object> other = Sessions.serve(9, changed, pair[0]);
+        ServerUiSession<UIElement, Object> other = Sessions.serve(9, changed, pair[0]);
         server.open();
         other.open();
         assertNotEquals(server.descHash(), other.descHash());
@@ -240,7 +239,7 @@ public class SessionHandshakeTest {
         Object bogus = EnvelopeCodec.encode(PlainOps.INSTANCE,
                 new Envelope.Notification<>(UiMethods.OPEN_WINDOW, open.encode()));
         clientLink.setReceiver(raw -> { });
-        ClientUiSession<UINode, Object> isolated = Sessions.view(clientLink);
+        ClientUiSession<UIElement, Object> isolated = Sessions.view(clientLink);
         serverLink.send(bogus);
         clientLink.deliver();
         isolated.tick();

@@ -2,7 +2,6 @@ package com.crystalgui.widget.graph.node;
 
 import com.crystalgui.widget.graph.GraphNode;
 import com.crystalgui.widget.graph.NodePort;
-import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.undo.CompositeEdit;
 import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.undo.UndoStack;
@@ -11,7 +10,7 @@ import com.crystalgui.graph.NodeData;
 import com.crystalgui.graph.NodeField;
 import com.crystalgui.graph.NodeType;
 import com.crystalgui.graph.SetNodeFieldEdit;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.config.ConfigControl;
 
 import javax.annotation.Nullable;
@@ -57,7 +56,7 @@ public final class NodeFieldBinder {
         if (nodeId == null) return;
 
         for (NodeField field : type.fields()) {
-            UINode control = buildControl(field, document, nodeId, undo, onChange);
+            UIElement control = buildControl(field, document, nodeId, undo, onChange);
             if (control == null) continue;
 
             if (field.isPortField()) {
@@ -87,7 +86,7 @@ public final class NodeFieldBinder {
      * @return the control, or {@code null} when nothing is registered for the field's kind
      */
     @Nullable
-    public static UINode buildControl(NodeField field, GraphDocument document, String nodeId,
+    public static UIElement buildControl(NodeField field, GraphDocument document, String nodeId,
                                          @Nullable UndoStack undo, @Nullable Runnable onChange) {
         return buildControl(field, document, nodeId, undo, onChange, null);
     }
@@ -104,7 +103,7 @@ public final class NodeFieldBinder {
      * user actually edits one of the new boxes.</p>
      */
     @Nullable
-    public static UINode buildControl(NodeField field, GraphDocument document, String nodeId,
+    public static UIElement buildControl(NodeField field, GraphDocument document, String nodeId,
                                          @Nullable UndoStack undo, @Nullable Runnable onChange,
                                          @Nullable String presetValue) {
         String current = presetValue != null ? presetValue : currentValue(document, nodeId, field);
@@ -112,7 +111,7 @@ public final class NodeFieldBinder {
         // told apart from the echo of its own write.
         String[] lastWritten = { current };
 
-        UINode control = NodeFieldWidgets.create(field, current, value -> {
+        UIElement control = NodeFieldWidgets.create(field, current, value -> {
             lastWritten[0] = value;
             write(document, undo, nodeId, field, value, onChange);
         });
@@ -139,11 +138,11 @@ public final class NodeFieldBinder {
      * @param nodeIds every node to write; ones that no longer exist are skipped at apply time
      */
     @Nullable
-    public static UINode buildMultiControl(NodeField field, GraphDocument document,
+    public static UIElement buildMultiControl(NodeField field, GraphDocument document,
                                               List<String> nodeIds, String displayNodeId,
                                               @Nullable UndoStack undo, @Nullable Runnable onChange) {
         String current = currentValue(document, displayNodeId, field);
-        UINode control = NodeFieldWidgets.create(field, current, value -> {
+        UIElement control = NodeFieldWidgets.create(field, current, value -> {
             List<Edit> edits = new ArrayList<>();
             for (String nodeId : nodeIds) {
                 SetNodeFieldEdit edit = SetNodeFieldEdit.of(document, nodeId, field.id(), value);
@@ -177,7 +176,7 @@ public final class NodeFieldBinder {
      * control holding that value, and re-applying it would fight a caret mid-type. Skipped entirely while
      * a gesture is live, so a scrub is not interrupted by its own per-frame writes.</p>
      */
-    private static void followDocument(@Nullable UINode control, GraphDocument document, String nodeId,
+    private static void followDocument(@Nullable UIElement control, GraphDocument document, String nodeId,
                                        NodeField field, String[] lastWritten, @Nullable Runnable onChange) {
         if (control == null) return;
         if (!(control instanceof ConfigControl config)) return;
@@ -213,7 +212,7 @@ public final class NodeFieldBinder {
      * what makes the collapse independent of how long the user lingered; see
      * {@link UndoStack#beginMergeRun()}.</p>
      */
-    private static void bracketGestures(@Nullable UINode control, @Nullable UndoStack undo) {
+    private static void bracketGestures(@Nullable UIElement control, @Nullable UndoStack undo) {
         if (undo == null || !(control instanceof ConfigControl config)) return;
         config.interacting.connect(active -> {
             if (Boolean.TRUE.equals(active)) undo.beginMergeRun();

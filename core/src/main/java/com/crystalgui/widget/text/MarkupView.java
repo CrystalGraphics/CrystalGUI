@@ -10,8 +10,7 @@ import com.crystalgui.text.markup.MarkupSpan;
 import com.crystalgui.text.syntax.Language;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.widget.text.SyntaxHighlighting;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.text.TextRange;
 import com.crystalgui.widget.scroll.ScrollerView;
 import java.util.ArrayList;
@@ -71,7 +70,7 @@ import javax.annotation.Nullable;
  * been replaced, so the band lands on whatever characters moved into them. {@link UIText}'s own note
  * records this as the failure that is not a stale colour but a colour over the wrong text entirely.</p>
  */
-public class MarkupView extends UINode {
+public class MarkupView extends UIElement {
 
     public static final Name NAME = Name.of("markupview");
 
@@ -319,7 +318,7 @@ public class MarkupView extends UINode {
             // far past what registering a node costs, so the expense is inside building ONE of them and
             // the kinds do completely different work.
             long one = FrameProfile.begin();
-            UINode node = build(block);
+            UIElement node = build(block);
             FrameProfile.step(one, "markup.block " + block.kind() + " spans=" + block.spans().size()
                     + " kids=" + block.children().size());
             if (node != null) {
@@ -414,7 +413,7 @@ public class MarkupView extends UINode {
     // ── Building ─────────────────────────────────────────────────────────────
 
     @Nullable
-    private UINode build(MarkupBlock block) {
+    private UIElement build(MarkupBlock block) {
         switch (block.kind()) {
             case PARAGRAPH:
                 return text(block.spans(), PARAGRAPH_CLASS);
@@ -451,7 +450,7 @@ public class MarkupView extends UINode {
      * <p>The text is set verbatim. {@code MarkupParser} does not collapse whitespace inside {@code <pre>},
      * so the indentation here is the author's and the stylesheet must not re-wrap it.</p>
      */
-    private UINode codeBlock(MarkupBlock block) {
+    private UIElement codeBlock(MarkupBlock block) {
         // A SCROLLERVIEW, so a sample wider than the popup gets a BAR rather than being cut off at the
         // edge with nothing to say it continues. A plain node with `overflow: auto` scrolls too --
         // scrolling is a node capability here, not a widget feature -- but it scrolls invisibly, and a
@@ -489,8 +488,8 @@ public class MarkupView extends UINode {
         }
     }
 
-    private UINode list(MarkupBlock block) {
-        UINode box = new UINode();
+    private UIElement list(MarkupBlock block) {
+        UIElement box = new UIElement();
         box.addClass(LIST_CLASS);
         boolean ordered = block.level() == 1;
         int index = 1;
@@ -503,19 +502,19 @@ public class MarkupView extends UINode {
         return box;
     }
 
-    private UINode item(MarkupBlock block, String marker) {
-        UINode row = new UINode();
+    private UIElement item(MarkupBlock block, String marker) {
+        UIElement row = new UIElement();
         row.addClass(ITEM_CLASS);
 
         UIText bullet = new UIText(marker);
         bullet.addClass(BULLET_CLASS);
         row.append(bullet);
 
-        UINode body = new UINode();
+        UIElement body = new UIElement();
         body.addClass(ITEM_BODY_CLASS);
         if (!block.spans().isEmpty()) body.append(text(block.spans(), PARAGRAPH_CLASS));
         for (MarkupBlock child : block.children()) {
-            UINode built = build(child);
+            UIElement built = build(child);
             if (built != null) body.append(built);
         }
         row.append(body);
@@ -533,11 +532,11 @@ public class MarkupView extends UINode {
      * "Implementation Requirements:" is longer than the column and must break inside it while its value
      * stays beside it. Two independent columns would let the two drift apart vertically.</p>
      */
-    private UINode definitions(MarkupBlock block) {
-        UINode box = new UINode();
+    private UIElement definitions(MarkupBlock block) {
+        UIElement box = new UIElement();
         box.addClass(DEFINITIONS_CLASS);
 
-        UINode detail = null;
+        UIElement detail = null;
         for (MarkupBlock child : block.children()) {
             if (child.kind() == MarkupBlock.Kind.TERM) {
                 detail = openRow(box, spansOf(child));
@@ -550,7 +549,7 @@ public class MarkupView extends UINode {
             // exceptions is the everyday case -- and replacing meant every value but the last vanished
             // with nothing to show it had.
             for (MarkupBlock content : child.children()) {
-                UINode built = build(content);
+                UIElement built = build(content);
                 if (built != null) detail.append(built);
             }
         }
@@ -563,8 +562,8 @@ public class MarkupView extends UINode {
      * <p>Terms and details are <b>siblings</b> in HTML rather than nested, so pairing them is this view's
      * job: the row is the thing that owns both, and it has to exist before either does.</p>
      */
-    private UINode openRow(UINode box, List<MarkupSpan> label) {
-        UINode row = new UINode();
+    private UIElement openRow(UIElement box, List<MarkupSpan> label) {
+        UIElement row = new UIElement();
         row.addClass(DEFINITION_ROW_CLASS);
         box.append(row);
 
@@ -572,7 +571,7 @@ public class MarkupView extends UINode {
         terms.add(term);
         row.append(term);
 
-        UINode detail = new UINode();
+        UIElement detail = new UIElement();
         detail.addClass(DETAIL_CLASS);
         row.append(detail);
         return detail;
@@ -592,8 +591,8 @@ public class MarkupView extends UINode {
      * a table whose rules and text disagree rather than a table missing a feature. The grid is built
      * here, once, and {@link #alignTables} reads the slots rather than the list positions.</p>
      */
-    private UINode table(MarkupBlock block) {
-        UINode box = new TableGrid();
+    private UIElement table(MarkupBlock block) {
+        UIElement box = new TableGrid();
         box.addClass(TABLE_CLASS);
 
         List<List<Placed>> rows = new ArrayList<>();
@@ -604,13 +603,13 @@ public class MarkupView extends UINode {
             }
             if (child.kind() != MarkupBlock.Kind.ROW) continue;
 
-            UINode row = new UINode();
+            UIElement row = new UIElement();
             row.addClass(TABLE_ROW_CLASS);
             box.append(row);
 
             List<Placed> cells = new ArrayList<>();
             for (MarkupBlock cellBlock : child.children()) {
-                UINode cell = cell(cellBlock);
+                UIElement cell = cell(cellBlock);
                 row.append(cell);
                 cells.add(new Placed(cell, 0, cellBlock.colspan(), cellBlock.rowspan()));
             }
@@ -626,7 +625,7 @@ public class MarkupView extends UINode {
      * <p>{@code column} is what a span makes non-obvious: without one it is the cell's index in its row,
      * and with one it is not, in that row or in any row a {@code rowspan} reaches into.</p>
      */
-    private record Placed(UINode cell, int column, int colspan, int rowspan) {
+    private record Placed(UIElement cell, int column, int colspan, int rowspan) {
     }
 
     /**
@@ -685,7 +684,7 @@ public class MarkupView extends UINode {
      * <p>Drawn in {@code paintDecoration} — after the children, so a line is never hidden under a cell's
      * background, and before the outline, which belongs to the box rather than to its contents.</p>
      */
-    private static final class TableGrid extends UINode {
+    private static final class TableGrid extends UIElement {
 
         /**
          * How wide a grid line is drawn, in LOGICAL pixels.
@@ -702,8 +701,8 @@ public class MarkupView extends UINode {
         @Override
         public void paintDecoration(CgUiPaintContext ctx, Box box) {
             super.paintDecoration(ctx, box);
-            List<UINode> rows = new ArrayList<>();
-            for (UINode child : children()) {
+            List<UIElement> rows = new ArrayList<>();
+            for (UIElement child : children()) {
                 if (child.classes().contains(TABLE_ROW_CLASS)) rows.add(child);
             }
             if (rows.isEmpty()) return;
@@ -715,11 +714,11 @@ public class MarkupView extends UINode {
             // tables stacked.
             int colour = getStyle().getGeneralGroup().borderColor();
 
-            UINode widest = rows.get(0);
-            for (UINode row : rows) {
+            UIElement widest = rows.get(0);
+            for (UIElement row : rows) {
                 if (row.children().size() > widest.children().size()) widest = row;
             }
-            List<UINode> columns = widest.children();
+            List<UIElement> columns = widest.children();
             if (columns.isEmpty()) return;
 
             // EVERY BOX IS NULLABLE, and here that is not defensive noise: a row is a live node whose box
@@ -775,12 +774,12 @@ public class MarkupView extends UINode {
             //
             // Clamped to the inset edges so an interior line meets the outer rule instead of poking half
             // a stroke past it at the top and bottom.
-            for (UINode row : rows) {
+            for (UIElement row : rows) {
                 Box rowBox = row.box();
                 if (rowBox == null) continue;
                 float y0 = Math.max(localY(box, rowBox), top);
                 float y1 = Math.min(localY(box, rowBox) + rowBox.height(), bottom);
-                List<UINode> cells = row.children();
+                List<UIElement> cells = row.children();
                 for (int i = 0; i + 1 < cells.size(); i++) {
                     Box cell = cells.get(i).box();
                     if (cell == null) continue;
@@ -827,17 +826,17 @@ public class MarkupView extends UINode {
      * does not contribute a width. Its column is then sized by the other rows, which is the right answer:
      * a paragraph in a table cell should wrap, not set the column.</p>
      */
-    private UINode cell(MarkupBlock block) {
-        UINode built;
+    private UIElement cell(MarkupBlock block) {
+        UIElement built;
         List<MarkupSpan> spans = spansOf(block);
         boolean simple = !spans.isEmpty() && block.children().size() <= 1;
         if (simple) {
             built = contentSized(text(spans, TABLE_CELL_CLASS));
         } else {
-            built = new UINode();
+            built = new UIElement();
             built.addClass(TABLE_CELL_CLASS);
             for (MarkupBlock child : block.children()) {
-                UINode content = build(child);
+                UIElement content = build(child);
                 if (content != null) built.append(content);
             }
         }
@@ -976,19 +975,19 @@ public class MarkupView extends UINode {
         return List.of();
     }
 
-    private UINode quote(MarkupBlock block) {
-        UINode box = new UINode();
+    private UIElement quote(MarkupBlock block) {
+        UIElement box = new UIElement();
         box.addClass(QUOTE_CLASS);
 
-        UINode rule = new UINode();
+        UIElement rule = new UIElement();
         rule.addClass(QUOTE_RULE_CLASS);
         box.append(rule);
 
-        UINode body = new UINode();
+        UIElement body = new UIElement();
         body.addClass(ITEM_BODY_CLASS);
         if (!block.spans().isEmpty()) body.append(text(block.spans(), PARAGRAPH_CLASS));
         for (MarkupBlock child : block.children()) {
-            UINode built = build(child);
+            UIElement built = build(child);
             if (built != null) body.append(built);
         }
         box.append(body);

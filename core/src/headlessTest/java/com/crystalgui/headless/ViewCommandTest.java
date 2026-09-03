@@ -14,8 +14,8 @@ import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.dom.UINodeRegistry;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.TextField;
 import java.util.ArrayList;
@@ -37,9 +37,9 @@ public class ViewCommandTest {
     private InMemoryTransport<Object>[] link;
     private ProtocolConnection<Object> serverEnd;
     private ProtocolConnection<Object> clientEnd;
-    private ServerUiSession<UINode, Object> server;
-    private ClientUiSession<UINode, Object> client;
-    private UINode root;
+    private ServerUiSession<UIElement, Object> server;
+    private ClientUiSession<UIElement, Object> client;
+    private UIElement root;
     private TextField field;
     private Button button;
 
@@ -48,9 +48,9 @@ public class ViewCommandTest {
     @Before
     public void setUp() {
         Protocols.resetForTesting();
-        UINodeRegistry.bootstrap();
+        UIElementRegistry.bootstrap();
 
-        root = new UINode();
+        root = new UIElement();
         field = new TextField();
         button = new Button("Press");
         root.append(field);
@@ -139,7 +139,7 @@ public class ViewCommandTest {
     /** An element the client has never been described cannot be named. */
     @Test
     public void aCommandAboutAnUndescribedElementIsNotSent() {
-        UINode stranger = new UINode();
+        UIElement stranger = new UIElement();
         server.viewOn(ViewCommand.FOCUS, stranger, null);
         settle();
         assertTrue(applied.isEmpty());

@@ -3,8 +3,6 @@ package com.crystalgui.ui.dom;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.core.async.UiThread;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import org.junit.Test;
@@ -32,7 +30,7 @@ import org.junit.Test;
 public class FrameThreadOwnershipTest extends UiDocumentTestBase {
 
     /** Builds a document and paints it once, so this thread owns its tree. */
-    private UIDocument paintedWindow(UINode root) {
+    private UIDocument paintedWindow(UIElement root) {
         document.append(root);
         frame();
         return document;
@@ -40,13 +38,13 @@ public class FrameThreadOwnershipTest extends UiDocumentTestBase {
 
     @Test
     public void mutatingAPaintedTreeOffItsFrameThreadIsRefused() throws Exception {
-        UINode root = new UINode();
+        UIElement root = new UIElement();
         paintedWindow(root);
 
         final Throwable[] raised = new Throwable[1];
         Thread other = new Thread(() -> {
             try {
-                root.append(new UINode());
+                root.append(new UIElement());
             } catch (Throwable t) {
                 raised[0] = t;
             }
@@ -69,8 +67,8 @@ public class FrameThreadOwnershipTest extends UiDocumentTestBase {
 
     @Test
     public void removingOffTheFrameThreadIsRefusedToo() throws Exception {
-        UINode root = new UINode();
-        UINode child = new UINode();
+        UIElement root = new UIElement();
+        UIElement child = new UIElement();
         root.append(child);
         paintedWindow(root);
 
@@ -96,12 +94,12 @@ public class FrameThreadOwnershipTest extends UiDocumentTestBase {
      */
     @Test
     public void anUnpaintedTreeHasNoOwnerAndRefusesNobody() throws Exception {
-        UINode root = new UINode();
+        UIElement root = new UIElement();
 
         final Throwable[] raised = new Throwable[1];
         Thread other = new Thread(() -> {
             try {
-                root.append(new UINode());
+                root.append(new UIElement());
             } catch (Throwable t) {
                 raised[0] = t;
             }
@@ -116,23 +114,23 @@ public class FrameThreadOwnershipTest extends UiDocumentTestBase {
 
     @Test
     public void theOwningThreadItselfIsNeverRefused() {
-        UINode root = new UINode();
+        UIElement root = new UIElement();
         paintedWindow(root);
-        root.append(new UINode());
+        root.append(new UIElement());
         root.remove(root.children().get(0));
     }
 
     @Test
     public void aHostMayTurnTheGuardOff() throws Exception {
         // It exists because refusing to be turned off is how a safety check gets deleted.
-        UINode root = new UINode();
+        UIElement root = new UIElement();
         paintedWindow(root);
         UiThread.setEnforcing(false);
         try {
             final Throwable[] raised = new Throwable[1];
             Thread other = new Thread(() -> {
                 try {
-                    root.append(new UINode());
+                    root.append(new UIElement());
                 } catch (Throwable t) {
                     raised[0] = t;
                 }

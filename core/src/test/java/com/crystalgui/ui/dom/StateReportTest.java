@@ -36,18 +36,18 @@ import org.junit.Test;
 public class StateReportTest extends UiDocumentTestBase {
 
     /** Records who was reported, in order. */
-    private static final class Recorder extends TreeObserver.Adapter<UINode> {
-        final List<UINode> stateChanges = new ArrayList<>();
+    private static final class Recorder extends TreeObserver.Adapter<UIElement> {
+        final List<UIElement> stateChanges = new ArrayList<>();
 
         @Override
-        public void stateChanged(UINode node) {
+        public void stateChanged(UIElement node) {
             stateChanges.add(node);
         }
     }
 
-    private Recorder observing(UINode root) {
+    private Recorder observing(UIElement root) {
         Recorder recorder = new Recorder();
-        new UINodeTreeSource(root).observe(recorder);
+        new UIElementTreeSource(root).observe(recorder);
         return recorder;
     }
 
@@ -112,7 +112,7 @@ public class StateReportTest extends UiDocumentTestBase {
      */
     @Test
     public void nestedShadowTreesWalkAllTheWayOut() {
-        UINode outer = new UINode();
+        UIElement outer = new UIElement();
         Button inner = new Button("inner");
         outer.attachShadow().append(inner);
         document.append(outer);

@@ -2,7 +2,7 @@ package com.crystalgui.workbench.dock.panel;
 
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 
 /**
  * A view that can be <b>pointed at</b> things, rather than built for one — VS Code's {@code EditorPane},
@@ -31,7 +31,7 @@ import com.crystalgui.ui.dom.UINode;
 public interface DockPane extends Disposable {
 
     /** The element the dock puts in the tab. Stable for the life of the pane. */
-    UINode view();
+    UIElement view();
 
     /**
      * Point this pane at an input — on first show, and on every retarget.

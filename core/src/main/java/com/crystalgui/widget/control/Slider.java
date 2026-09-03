@@ -13,7 +13,7 @@ import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.ShadowRoot;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.AlignItems;
@@ -56,7 +56,7 @@ import com.crystalgui.ui.box.Box;
  * jumps to that position first and then tracks. Both are LDLib2 idioms
  * ({@code Scroller} and {@code ColorSelector} respectively) — it has no slider of its own.</p>
  */
-public class Slider extends UINode {
+public class Slider extends UIElement {
 
     public static final Name NAME = Name.of("slider");
 
@@ -120,9 +120,9 @@ public class Slider extends UINode {
     public final Signal.Value<Float> onValueChanged = new Signal.Value<>();
 
     private final ShadowRoot shadow;
-    private final UINode fill;
-    private final UINode thumb;
-    private final UINode spacer;
+    private final UIElement fill;
+    private final UIElement thumb;
+    private final UIElement spacer;
 
     private float min = 0f;
     private float max = 1f;
@@ -188,8 +188,8 @@ public class Slider extends UINode {
         }, false, false);
     }
 
-    private UINode newPart(String partName) {
-        UINode part = new UINode();
+    private UIElement newPart(String partName) {
+        UIElement part = new UIElement();
         part.set(Attribute.PART, partName);
         shadow.append(part);
         part.setHitTest(false); // keep :hover/:active on the slider root
@@ -300,7 +300,7 @@ public class Slider extends UINode {
      * The content box's left edge, in this slider's OWN space.
      *
      * <p>No {@code box().x()} term. The painter draws every box with the pose set from its own world
-     * matrix and {@link UINode#toLocal} answers in that same space, so a coordinate compared against
+     * matrix and {@link UIElement#toLocal} answers in that same space, so a coordinate compared against
      * this must not carry the slider's position within its parent. The old engine's
      * {@code screenToLocal} did not subtract the element's origin, so both halves carried a
      * {@code getX()} that cancelled out; keeping one of them makes the thumb land at an offset that

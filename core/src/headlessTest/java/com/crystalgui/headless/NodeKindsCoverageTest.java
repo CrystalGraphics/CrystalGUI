@@ -4,8 +4,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UINodeRegistry;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UIElementRegistry;
 import java.io.IOException;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Modifier;
@@ -50,7 +50,7 @@ public class NodeKindsCoverageTest {
             "com/crystalgui/workbench");
 
     /**
-     * Every {@link UINode} subclass under a ported layer that declares a {@code public static final
+     * Every {@link UIElement} subclass under a ported layer that declares a {@code public static final
      * Name NAME}.
      */
     private static Map<Class<?>, Name> declaredKinds() throws IOException {
@@ -71,12 +71,12 @@ public class NodeKindsCoverageTest {
                     } catch (ClassNotFoundException | LinkageError e) {
                         continue;
                     }
-                    if (!UINode.class.isAssignableFrom(type)) continue;
+                    if (!UIElement.class.isAssignableFrom(type)) continue;
                     // AN ABSTRACT CLASS IS NOT A KIND -- it has no factory to register and nothing
                     // decodes into one. It still ANSWERS for a NAME, because `findStaticGetter` finds
-                    // an INHERITED field: ConfigControl and ValueControl both reported UINode's own
+                    // an INHERITED field: ConfigControl and ValueControl both reported UIElement's own
                     // `crystalgui:element`, so the walk asked the registry to build one and got a bare
-                    // UINode back. Skipping them does not weaken the check -- a CONCRETE subclass that
+                    // UIElement back. Skipping them does not weaken the check -- a CONCRETE subclass that
                     // forgets its NAME still inherits one and is still caught, which is the trap this
                     // exists for and the one M6.2 hit five times in its first tranche.
                     if (Modifier.isAbstract(type.getModifiers())) continue;
@@ -131,7 +131,7 @@ public class NodeKindsCoverageTest {
             // isRegistered() bootstraps, which is the point: nothing here has touched the widget
             // classes on purpose -- if the answer depended on that, the test would be asserting
             // its own imports rather than the classpath.
-            if (!UINodeRegistry.isRegistered(entry.getValue())) {
+            if (!UIElementRegistry.isRegistered(entry.getValue())) {
                 missing.add(entry.getKey().getName() + " declares " + entry.getValue()
                         + " -- add it to its layer's NodeKinds service");
             }
@@ -145,13 +145,13 @@ public class NodeKindsCoverageTest {
         Map<Class<?>, Name> declared = declaredKinds();
         List<String> wrong = new ArrayList<>();
         for (Map.Entry<Class<?>, Name> entry : declared.entrySet()) {
-            if (!UINodeRegistry.isRegistered(entry.getValue())) continue;
+            if (!UIElementRegistry.isRegistered(entry.getValue())) continue;
             // A CASCADE-ONLY kind has no factory on purpose: nothing describes a workbench, a window
             // or a dock over a wire, and inventing an argument to satisfy this walk is what
             // `registerTag` exists to stop. Still REGISTERED -- the check above is the one that
             // matters for it, since an unregistered tag matches nothing in any sheet.
-            if (!UINodeRegistry.isBuildable(entry.getValue())) continue;
-            UINode built = UINodeRegistry.create(entry.getValue());
+            if (!UIElementRegistry.isBuildable(entry.getValue())) continue;
+            UIElement built = UIElementRegistry.create(entry.getValue());
             if (!entry.getKey().isInstance(built)) {
                 wrong.add(entry.getValue() + " builds a " + built.getClass().getSimpleName()
                         + ", but " + entry.getKey().getSimpleName() + " declares that name");
@@ -171,7 +171,7 @@ public class NodeKindsCoverageTest {
     @Test
     public void theRegistryAnswersForAKindThisTestNeverMentions() {
         Set<String> locals = new LinkedHashSet<>();
-        for (Name name : UINodeRegistry.names()) locals.add(name.local());
+        for (Name name : UIElementRegistry.names()) locals.add(name.local());
         assertTrue("the three built-ins are always there", locals.containsAll(
                 List.of("element", "slot", "document")));
         assertTrue("and a LAYER's kinds arrived through the service, with nothing having "

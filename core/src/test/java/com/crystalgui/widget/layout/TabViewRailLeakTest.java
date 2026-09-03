@@ -1,12 +1,8 @@
 package com.crystalgui.widget.layout;
 
-import com.crystalgui.widget.scroll.ScrollerView;
-import com.crystalgui.workbench.dock.DockGroup;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.Attribute;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.widget.layout.Tab;
-import com.crystalgui.widget.layout.TabView;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -31,9 +27,9 @@ public class TabViewRailLeakTest extends UiDocumentTestBase {
         return countTabs(view);
     }
 
-    private static int countTabs(UINode element) {
+    private static int countTabs(UIElement element) {
         int count = element instanceof Tab ? 1 : 0;
-        for (UINode child : element.children()) count += countTabs(child);
+        for (UIElement child : element.children()) count += countTabs(child);
         return count;
     }
 
@@ -69,8 +65,8 @@ public class TabViewRailLeakTest extends UiDocumentTestBase {
     @Test
     public void clearingTabContentFirstStillLetsClearTabsWork() {
         TabView view = new TabView();
-        view.addTab("one").content().append(new UINode());
-        view.addTab("two").content().append(new UINode());
+        view.addTab("one").content().append(new UIElement());
+        view.addTab("two").content().append(new UIElement());
 
         for (Tab tab : view.getTabs()) tab.content().removeAll();
         view.clearTabs();

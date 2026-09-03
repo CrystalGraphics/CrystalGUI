@@ -1,7 +1,6 @@
 package com.crystalgui.widget.canvas;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiDocumentTestBase;
@@ -38,8 +37,8 @@ public class CanvasResizeTest extends UiDocumentTestBase {
         // The dock-pane shape: fills a column it does not know the size of.
         graph.layout(l -> l.widthPercent(100f).height(0).flexGrow(1f));
 
-        UINode root = new UINode().layout(l -> l.widthPercent(100f).heightPercent(100f)
-                .flexDirection(FlexDirection.COLUMN));
+        UIElement root = new UIElement().layout(l -> l.widthPercent(100f).heightPercent(100f)
+                                                      .flexDirection(FlexDirection.COLUMN));
         root.append(graph);
 
         document.append(root);

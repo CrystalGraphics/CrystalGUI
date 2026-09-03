@@ -1,9 +1,8 @@
 package com.crystalgui.widget.texteditor;
 
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.text.TextPoint;
-import com.crystalgui.widget.texteditor.TextEditor;
 
 import org.junit.Test;
 
@@ -43,7 +42,7 @@ public class EditorRevealTest extends EditorTestBase {
     }
 
     private void attachAndSettle(TextEditor made) {
-        UINode root = new UINode().layout(l -> l.width(300).height(200));
+        UIElement root = new UIElement().layout(l -> l.width(300).height(200));
         root.append(made);
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);

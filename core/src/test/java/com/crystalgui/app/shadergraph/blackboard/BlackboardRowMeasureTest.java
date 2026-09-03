@@ -1,13 +1,11 @@
 package com.crystalgui.app.shadergraph.blackboard;
 
-import com.crystalgui.widget.text.UIText;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.graph.GraphProperty;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -41,7 +39,7 @@ public class BlackboardRowMeasureTest extends UiDocumentTestBase {
     private void mount() {
         graphDocument = new GraphDocument();
         board = new BlackboardPanel(graphDocument, "test", new UndoStack());
-        UINode root = new UINode().layout(l -> l.width(600).height(400));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400));
         root.append(board);
         document.append(root);
         // Without the user-agent sheet the rows have no geometry at all, and every width below would be
@@ -61,7 +59,7 @@ public class BlackboardRowMeasureTest extends UiDocumentTestBase {
 
     private float capsuleWidthOf(int row) {
         PropertyPill pill = board.pills().get(row);
-        for (UINode child : pill.children()) {
+        for (UIElement child : pill.children()) {
             if (child.hasClass(PropertyPill.CAPSULE_CLASS)) {
                 return child.box().width();
             }

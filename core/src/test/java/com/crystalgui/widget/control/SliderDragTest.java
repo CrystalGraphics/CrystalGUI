@@ -1,16 +1,10 @@
 package com.crystalgui.widget.control;
 
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.service.Drag;
-import com.crystalgui.ui.service.Input;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
-import com.crystalgui.widget.control.Slider;
-import org.joml.Matrix4f;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.*;

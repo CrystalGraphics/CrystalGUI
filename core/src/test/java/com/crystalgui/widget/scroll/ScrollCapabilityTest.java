@@ -1,7 +1,7 @@
 package com.crystalgui.widget.scroll;
 
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Overflow;
 import dev.vfyjxf.taffy.style.FlexDirection;
@@ -9,7 +9,6 @@ import com.crystalgui.testsupport.UiDocumentTestBase;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
-import com.crystalgraphics.platform.input.CgSystemInput;
 
 /**
  * Scrolling as an <b>element capability</b>, with no widget involved.
@@ -19,7 +18,7 @@ import com.crystalgraphics.platform.input.CgSystemInput;
  * state on the element, applied through the transform chain. There is no viewport wrapper and no
  * content wrapper, which is the whole point (LDLib's equivalent needs both, plus 11 more nodes).</p>
  *
- * <p>Every test here uses a plain {@link UINode}. If any of them needed {@code ScrollerView}, the
+ * <p>Every test here uses a plain {@link UIElement}. If any of them needed {@code ScrollerView}, the
  * capability wouldn't actually be in the engine.</p>
  */
 public class ScrollCapabilityTest extends UiDocumentTestBase {
@@ -72,7 +71,7 @@ public class ScrollCapabilityTest extends UiDocumentTestBase {
     /** Programmatic scrolling works on hidden, which is the half of it people don't expect. */
     @Test
     public void hiddenIsProgrammaticallyScrollable() {
-        UINode hidden = scrollingList(Overflow.HIDDEN);
+        UIElement hidden = scrollingList(Overflow.HIDDEN);
         assertTrue(hidden.isScrollContainer());
         assertFalse(hidden.allowsUserScrolling());
         hidden.scrollTo(hidden.scrollLeft(), 60f);
@@ -82,7 +81,7 @@ public class ScrollCapabilityTest extends UiDocumentTestBase {
     /** No bare element responds to the wheel — not even {@code overflow: auto}. */
     @Test
     public void bareElementsIgnoreTheWheel() {
-        UINode scroller = scrollingList(Overflow.AUTO);
+        UIElement scroller = scrollingList(Overflow.AUTO);
         UIDocument window = scroller.document();
         var c = scroller.box();
         int x = Math.round((c.x() + 10f) * 2f), y = Math.round((c.y() + 20f) * 2f);
@@ -110,7 +109,7 @@ public class ScrollCapabilityTest extends UiDocumentTestBase {
 
     @Test
     public void contentBoundsAreMeasuredFromChildren() {
-        UINode scroller = scrollingList(Overflow.AUTO);
+        UIElement scroller = scrollingList(Overflow.AUTO);
         assertEquals(ROWS * ROW_H, scroller.box().scrollHeight(), 0.5f);
         assertEquals(VIEWPORT, scroller.box().clientHeight(), 0.5f);
         assertEquals(ROWS * ROW_H - VIEWPORT, scroller.box().maxScrollTop(), 0.5f);
@@ -119,7 +118,7 @@ public class ScrollCapabilityTest extends UiDocumentTestBase {
     /** The container's own box must not grow to fit its content — that's what overflow buys. */
     @Test
     public void scrollingDoesNotResizeTheContainer() {
-        UINode scroller = scrollingList(Overflow.AUTO);
+        UIElement scroller = scrollingList(Overflow.AUTO);
         float before = scroller.box().height();
         scroller.scrollTo(scroller.scrollLeft(), 60f);
         assertEquals(before, scroller.box().height(), 0.5f);
@@ -128,7 +127,7 @@ public class ScrollCapabilityTest extends UiDocumentTestBase {
 
     @Test
     public void scrollIsClampedToTheContent() {
-        UINode scroller = scrollingList(Overflow.AUTO);
+        UIElement scroller = scrollingList(Overflow.AUTO);
         scroller.scrollTo(scroller.scrollLeft(), 9999f);
         assertEquals(ROWS * ROW_H - VIEWPORT, scroller.scrollTop(), 0.5f);
         scroller.scrollTo(scroller.scrollLeft(), -50f);
@@ -138,23 +137,23 @@ public class ScrollCapabilityTest extends UiDocumentTestBase {
     /** Assigning scrollTop to an unscrollable element does nothing, as in the DOM. */
     @Test
     public void nonScrollContainersIgnoreScrolling() {
-        UINode plain = scrollingList(Overflow.VISIBLE);
+        UIElement plain = scrollingList(Overflow.VISIBLE);
         plain.scrollTo(plain.scrollLeft(), 50f);
         assertEquals(0f, plain.scrollTop(), 0.5f);
 
-        UINode clipped = scrollingList(Overflow.CLIP);
+        UIElement clipped = scrollingList(Overflow.CLIP);
         clipped.scrollTo(clipped.scrollLeft(), 50f);
         assertEquals("overflow:clip must not scroll", 0f, clipped.scrollTop(), 0.5f);
     }
 
     @Test
     public void clampScrollPullsBackWhenContentShrinks() {
-        UINode scroller = scrollingList(Overflow.AUTO);
+        UIElement scroller = scrollingList(Overflow.AUTO);
         scroller.scrollTo(scroller.scrollLeft(), 100f);
         assertEquals(100f, scroller.scrollTop(), 0.5f);
 
         scroller.removeAll();
-        scroller.append(new UINode().layout(l -> l.width(80).height(ROW_H)));
+        scroller.append(new UIElement().layout(l -> l.width(80).height(ROW_H)));
         layOut(scroller);
         scroller.box().clampScroll();
 
@@ -171,10 +170,10 @@ public class ScrollCapabilityTest extends UiDocumentTestBase {
      */
     @Test
     public void hitTestingFollowsTheScroll() {
-        UINode scroller = scrollingList(Overflow.AUTO);
+        UIElement scroller = scrollingList(Overflow.AUTO);
         UIDocument window = scroller.document();
-        UINode firstRow = scroller.children().get(0);
-        UINode fourthRow = scroller.children().get(3);
+        UIElement firstRow = scroller.children().get(0);
+        UIElement fourthRow = scroller.children().get(3);
 
         // SURFACE pixels. `worldX()` already has the root transform baked in, so the offset into
         // the box is the only part that scales -- and this fixture runs at uiScale 1, where the old
@@ -196,9 +195,9 @@ public class ScrollCapabilityTest extends UiDocumentTestBase {
     /** Content scrolled out of the viewport must not be clickable, even though it still exists. */
     @Test
     public void contentScrolledOutOfViewIsNotHittable() {
-        UINode scroller = scrollingList(Overflow.AUTO);
+        UIElement scroller = scrollingList(Overflow.AUTO);
         UIDocument window = scroller.document();
-        UINode firstRow = scroller.children().get(0);
+        UIElement firstRow = scroller.children().get(0);
 
         scroller.scrollTo(scroller.scrollLeft(), 150f); // pushes rows 0-2 above the viewport
 
@@ -213,8 +212,8 @@ public class ScrollCapabilityTest extends UiDocumentTestBase {
     /** Scroll-exempt children (a scroll container's own scrollbars) must stay put. */
     @Test
     public void scrollExemptChildrenDoNotMove() {
-        UINode scroller = scrollingList(Overflow.AUTO);
-        UINode bar = new UINode().layout(l -> l.width(10).height(VIEWPORT));
+        UIElement scroller = scrollingList(Overflow.AUTO);
+        UIElement bar = new UIElement().layout(l -> l.width(10).height(VIEWPORT));
         bar.setScrollExempt(true);
         scroller.append(bar);
         layOut(scroller);
@@ -248,8 +247,8 @@ public class ScrollCapabilityTest extends UiDocumentTestBase {
     @Test
     public void scrollIntoViewSkipsAnAncestorAnExemptChildDoesNotMoveWith() {
         for (boolean exempt : new boolean[]{true, false}) {
-            UINode scroller = scrollingList(Overflow.SCROLL);
-            UINode pinned = new UINode().layout(l -> l.positionType(
+            UIElement scroller = scrollingList(Overflow.SCROLL);
+            UIElement pinned = new UIElement().layout(l -> l.positionType(
                     dev.vfyjxf.taffy.style.TaffyPosition.ABSOLUTE).top(0f).left(0f).width(80).height(20));
             pinned.setScrollExempt(exempt);
             scroller.append(pinned);
@@ -270,26 +269,26 @@ public class ScrollCapabilityTest extends UiDocumentTestBase {
         }
     }
 
-    private UINode withOverflow(Overflow mode) {
-        UINode e = new UINode();
+    private UIElement withOverflow(Overflow mode) {
+        UIElement e = new UIElement();
         StyleGroup.defaultPipeline(e.getStyle().getGeneralGroup(), g -> g.overflow(mode));
         return e;
     }
 
     /** A 100px-tall box with 200px of rows in it — a plain element, no widget. */
-    private UINode scrollingList(Overflow mode) {
-        UINode scroller = withOverflow(mode);
+    private UIElement scrollingList(Overflow mode) {
+        UIElement scroller = withOverflow(mode);
         scroller.layout(l -> l.width(80).height(VIEWPORT).flexDirection(FlexDirection.COLUMN));
         for (int i = 0; i < ROWS; i++) {
-            scroller.append(new UINode().layout(l -> l.width(80).height(ROW_H)));
+            scroller.append(new UIElement().layout(l -> l.width(80).height(ROW_H)));
         }
         layOut(scroller);
         return scroller;
     }
 
-    private void layOut(UINode scroller) {
+    private void layOut(UIElement scroller) {
         if (scroller.document() == null) {
-            UINode root = new UINode().layout(l -> l.width(400).height(300));
+            UIElement root = new UIElement().layout(l -> l.width(400).height(300));
             root.append(scroller);
             document.append(root);
         }

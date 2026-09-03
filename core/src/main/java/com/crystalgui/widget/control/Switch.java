@@ -14,7 +14,7 @@ import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.ShadowRoot;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.AlignItems;
 import dev.vfyjxf.taffy.style.FlexDirection;
@@ -46,7 +46,7 @@ import dev.vfyjxf.taffy.style.FlexDirection;
  * <p>Not a part — so {@code switch} and {@code switch:checked} style it directly, with nothing to
  * reach through.</p>
  */
-public class Switch extends UINode {
+public class Switch extends UIElement {
 
     public static final Name NAME = Name.of("switch");
 
@@ -83,8 +83,8 @@ public class Switch extends UINode {
     public final Signal.Value<Boolean> onCheckedChanged = new Signal.Value<>();
 
     private final ShadowRoot shadow;
-    private final UINode spacer;
-    private final UINode knob;
+    private final UIElement spacer;
+    private final UIElement knob;
     private boolean checked;
 
     public Switch() {
@@ -99,12 +99,12 @@ public class Switch extends UINode {
 
         this.shadow = attachShadow();
 
-        this.spacer = new UINode();
+        this.spacer = new UIElement();
         spacer.set(Attribute.PART, SPACER_PART);
         spacer.setHitTest(false);
         shadow.append(spacer);
 
-        this.knob = new UINode();
+        this.knob = new UIElement();
         knob.set(Attribute.PART, KNOB_PART);
         knob.setHitTest(false);
         shadow.append(knob);
@@ -136,7 +136,7 @@ public class Switch extends UINode {
     }
 
     /** The knob, for a subclass that needs to style or measure it. */
-    protected final UINode knob() {
+    protected final UIElement knob() {
         return knob;
     }
 

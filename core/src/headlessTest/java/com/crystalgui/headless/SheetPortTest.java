@@ -225,7 +225,7 @@ public class SheetPortTest {
      *
      * <p>§1.5: the sheets name 55 tags and {@code ElementRegistry} registers 23. The other 32 —
      * {@code texteditor}, {@code graphnode}, {@code workbench}, {@code runpanel} and the rest — match
-     * only through the old engine's lowercased-class-name fallback, which {@code UINodeRegistry} does
+     * only through the old engine's lowercased-class-name fallback, which {@code UIElementRegistry} does
      * not have. A port that registers the 23 and not the 32 turns thirty-two widgets unstyled in one
      * commit, with no error anywhere.</p>
      *
@@ -251,7 +251,7 @@ public class SheetPortTest {
         // one commit, when a widget registered from its own static initialiser and this test had to
         // force-load the class it was asking about; @see com.crystalgui.ui.dom.NodeKinds.
         Set<String> registered = new LinkedHashSet<>();
-        for (com.crystalgui.ui.dom.Name name : com.crystalgui.ui.dom.UINodeRegistry.names()) {
+        for (com.crystalgui.ui.dom.Name name : com.crystalgui.ui.dom.UIElementRegistry.names()) {
             registered.add(name.local());
         }
         List<String> missing = new ArrayList<>();

@@ -1,7 +1,6 @@
 package com.crystalgui.widget.texteditor.suggest;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.text.TextBuffer;
@@ -11,8 +10,6 @@ import com.crystalgui.text.lang.CompletionProvider;
 import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.text.lang.Versioned;
 import com.crystalgui.widget.text.UIText;
-import com.crystalgui.widget.texteditor.suggest.CompletionPopup;
-import com.crystalgui.widget.texteditor.suggest.CompletionSession;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -71,7 +68,7 @@ public class CompletionPopupWidthTest extends UiDocumentTestBase {
         // DELIBERATELY NARROW. The bug needs rows that do not fit; in a roomy popup the spacer takes up
         // the slack and nothing is ever asked to give, which is why a first attempt at this test passed
         // against the broken rule.
-        UINode root = new UINode().layout(l -> l.width(320).height(600));
+        UIElement root = new UIElement().layout(l -> l.width(320).height(600));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
 
@@ -97,7 +94,7 @@ public class CompletionPopupWidthTest extends UiDocumentTestBase {
 
         Map<String, Float> widthByType = new HashMap<>();
         int measured = 0;
-        for (UINode row : rowsIn(popup)) {
+        for (UIElement row : rowsIn(popup)) {
             UIText detail = detailOf(row);
             if (detail == null || detail.getText().isEmpty()) continue;
             measured++;
@@ -132,7 +129,7 @@ public class CompletionPopupWidthTest extends UiDocumentTestBase {
      */
     @Test
     public void nothingInARowIsPaintedOutsideThePopup() {
-        UINode root = new UINode().layout(l -> l.width(320).height(600));
+        UIElement root = new UIElement().layout(l -> l.width(320).height(600));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
 
@@ -153,7 +150,7 @@ public class CompletionPopupWidthTest extends UiDocumentTestBase {
 
         float popupRight = popup.box().x() + popup.box().width();
         int checked = 0;
-        for (UINode row : rowsIn(popup)) {
+        for (UIElement row : rowsIn(popup)) {
             UIText detail = detailOf(row);
             if (detail == null || detail.getText().isEmpty()) continue;
             checked++;
@@ -178,7 +175,7 @@ public class CompletionPopupWidthTest extends UiDocumentTestBase {
      */
     @Test
     public void everyRealisedRowIsTheSameWidth() {
-        UINode root = new UINode().layout(l -> l.width(420).height(600));
+        UIElement root = new UIElement().layout(l -> l.width(420).height(600));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
 
@@ -202,7 +199,7 @@ public class CompletionPopupWidthTest extends UiDocumentTestBase {
 
         float first = -1f;
         int checked = 0;
-        for (UINode row : rowsIn(popup)) {
+        for (UIElement row : rowsIn(popup)) {
             float width = row.box().width();
             if (width <= 0f) continue;          // pooled and hidden templates measure nothing
             checked++;
@@ -224,8 +221,8 @@ public class CompletionPopupWidthTest extends UiDocumentTestBase {
     }
 
     /** The type column — the last child of a row, after the growing spacer. */
-    private static UIText detailOf(UINode row) {
-        for (UINode child : row.children()) {
+    private static UIText detailOf(UIElement row) {
+        for (UIElement child : row.children()) {
             if (child.hasClass(CompletionPopup.DETAIL_CLASS) && child instanceof UIText text) return text;
         }
         return null;
@@ -240,14 +237,14 @@ public class CompletionPopupWidthTest extends UiDocumentTestBase {
      * draft of this test chasing a phantom — every assertion was about the measuring stick, which is
      * <em>supposed</em> to be wider than the box, so it failed against perfectly correct geometry.</p>
      */
-    private static List<UINode> rowsIn(UINode popup) {
-        List<UINode> found = new ArrayList<>();
+    private static List<UIElement> rowsIn(UIElement popup) {
+        List<UIElement> found = new ArrayList<>();
         collectRows(popup, popup, found);
         return found;
     }
 
-    private static void collectRows(UINode element, UINode popup, List<UINode> out) {
+    private static void collectRows(UIElement element, UIElement popup, List<UIElement> out) {
         if (element.hasClass(CompletionPopup.ROW_CLASS) && element.parent() != popup) out.add(element);
-        for (UINode child : element.children()) collectRows(child, popup, out);
+        for (UIElement child : element.children()) collectRows(child, popup, out);
     }
 }

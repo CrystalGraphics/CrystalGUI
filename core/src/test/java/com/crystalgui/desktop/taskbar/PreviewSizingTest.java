@@ -6,13 +6,11 @@ import com.crystalgui.ui.box.Box;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.ui.service.Input;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -41,7 +39,7 @@ public class PreviewSizingTest extends UiDocumentTestBase {
     @Before
     public void build() {
         Desktop.setAnimationsEnabled(false);
-        UINode root = new UINode().layout(l -> l.width(600).height(400));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
         input = document.input();
@@ -77,7 +75,7 @@ public class PreviewSizingTest extends UiDocumentTestBase {
             frame();
         }
         assertEquals("the preview is showing a different document", target, taskbar.previewedWindow());
-        for (UINode child : taskbar.children()) {
+        for (UIElement child : taskbar.children()) {
             if (child instanceof WindowPreview panel) return panel;
         }
         throw new AssertionError("the taskbar has no preview panel");

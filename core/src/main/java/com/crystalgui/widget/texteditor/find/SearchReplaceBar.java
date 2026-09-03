@@ -1,5 +1,6 @@
 package com.crystalgui.widget.texteditor.find;
 
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.texteditor.TextEditor;
 import java.util.Map;
 import java.util.List;
@@ -16,15 +17,12 @@ import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.form.SearchField;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.widget.text.UIText;
-
-import dev.vfyjxf.taffy.style.TaffyDisplay;
 
 import javax.annotation.Nullable;
 import java.util.function.BooleanSupplier;
@@ -51,7 +49,7 @@ import java.util.function.Consumer;
  * <p>New here: a <b>chevron</b> that expands the replace row, a replace box with <b>Preserve case</b>, and
  * <b>Replace</b> / <b>Replace All</b> / <b>Exclude</b>.</p>
  */
-public class SearchReplaceBar extends UINode {
+public class SearchReplaceBar extends UIElement {
     /**
      * Its own kind. Every concrete node needs one, and a subclass that declares none
      * INHERITS its supertype's — so this would have reported {@code element} and matched
@@ -83,11 +81,11 @@ public class SearchReplaceBar extends UINode {
 
     private final TextEditor editor;
 
-    private final UINode rows = new UINode();
-    private final UINode findRow = new UINode();
-    private final UINode replaceRow = new UINode();
-    private final UINode findTrailing = new UINode();
-    private final UINode replaceTrailing = new UINode();
+    private final UIElement rows = new UIElement();
+    private final UIElement findRow = new UIElement();
+    private final UIElement replaceRow = new UIElement();
+    private final UIElement findTrailing = new UIElement();
+    private final UIElement replaceTrailing = new UIElement();
 
     private final Button chevron = new Button("");
     private final SearchField findBox = new SearchField();
@@ -154,7 +152,7 @@ public class SearchReplaceBar extends UINode {
 
         editor.onChanged.connect(text -> refresh());
 
-        for (UINode element : new UINode[]{findBox.field(), replaceBox.field(),
+        for (UIElement element : new UIElement[]{findBox.field(), replaceBox.field(),
                 replaceOne, replaceAll, exclude}) {
             bindTab(element);
         }
@@ -447,8 +445,8 @@ public class SearchReplaceBar extends UINode {
      * <p>Hidden rows are skipped rather than focused invisibly, so a folded replace row is not three dead
      * Tab stops.</p>
      */
-    private List<UINode> tabRing() {
-        List<UINode> ring = new ArrayList<>();
+    private List<UIElement> tabRing() {
+        List<UIElement> ring = new ArrayList<>();
         ring.add(findBox.field());
         if (replaceShown) ring.add(replaceBox.field());
         ring.addAll(findOptions);
@@ -463,10 +461,10 @@ public class SearchReplaceBar extends UINode {
 
     /** Moves along the ring, wrapping. Returns false when focus is not on it at all. */
     private boolean moveTab(int delta) {
-        List<UINode> ring = tabRing();
+        List<UIElement> ring = tabRing();
         UIDocument window = document();
         if (window == null || ring.isEmpty()) return false;
-        UINode focused = window.focus().focused();
+        UIElement focused = window.focus().focused();
         int at = ring.indexOf(focused);
         if (at < 0) return false;
         int next = Math.floorMod(at + delta, ring.size());
@@ -475,7 +473,7 @@ public class SearchReplaceBar extends UINode {
     }
 
     /** Tab and Shift+Tab, on everything the ring contains. */
-    private void bindTab(UINode element) {
+    private void bindTab(UIElement element) {
         element.onKeyDown.attachListener((el, event) -> {
             if (event.getKeyCode() != CgKeyCodes.KEY_TAB) return;
             // THE RING IS Tab AND Shift+Tab, so a Ctrl-held Tab belongs to somebody else -- the desktop's
@@ -536,8 +534,8 @@ public class SearchReplaceBar extends UINode {
     /** The one Tooltip per control. @see #refreshTooltips */
     private final Map<Button, Tooltip> attached = new HashMap<>();
 
-    private final List<UINode> findOptions = new ArrayList<>();
-    private final List<UINode> replaceOptions = new ArrayList<>();
+    private final List<UIElement> findOptions = new ArrayList<>();
+    private final List<UIElement> replaceOptions = new ArrayList<>();
 
     /**
      * Keeps the editor's text clear of the bar.
@@ -693,19 +691,19 @@ public class SearchReplaceBar extends UINode {
     }
 
     @Nullable
-    public UINode replaceRow() {
+    public UIElement replaceRow() {
         return replaceRow;
     }
 
     /** The parts are this widget's own structure. */
     /** A node's border-box width, or zero before it has a box. @see com.crystalgui.ui.box.Box */
-    private static float boxHeight(UINode node) {
+    private static float boxHeight(UIElement node) {
         Box box = node.box();
         return box == null ? 0f : box.height();
     }
 
     /** @see #boxHeight */
-    private static float boxWidth(UINode node) {
+    private static float boxWidth(UIElement node) {
         Box box = node.box();
         return box == null ? 0f : box.width();
     }

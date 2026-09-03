@@ -10,7 +10,7 @@ import com.crystalgui.graph.GraphProperty;
 import com.crystalgui.graph.NodeData;
 import com.crystalgui.graph.NodeType;
 import com.crystalgui.graph.PortSpec;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.graph.GraphNode;
 
 import javax.annotation.Nullable;
@@ -139,9 +139,9 @@ public final class ShaderPropertyNodes {
         if (!title.equals(node.getTitle())) node.setTitle(title);
 
         boolean wanted = property != null && property.exposed();
-        UINode dot = findDot(node);
+        UIElement dot = findDot(node);
         if (wanted && dot == null) {
-            UINode added = new UINode();
+            UIElement added = new UIElement();
             added.addClass(EXPOSED_DOT_CLASS);
             // Scenery: the title bar is the node's drag handle, so the dot must not take the press.
             added.setHitTest(false);
@@ -152,8 +152,8 @@ public final class ShaderPropertyNodes {
     }
 
     @Nullable
-    private static UINode findDot(GraphNode node) {
-        for (UINode child : node.titleBar().children()) {
+    private static UIElement findDot(GraphNode node) {
+        for (UIElement child : node.titleBar().children()) {
             if (child.hasClass(EXPOSED_DOT_CLASS)) return child;
         }
         return null;

@@ -29,13 +29,13 @@ import javax.annotation.Nullable;
 public final class ResizeHandles {
 
     /**
-     * Attaches one handle as the node's own structure. @see UINode#appendAmbient
+     * Attaches one handle as the node's own structure. @see UIElement#appendAmbient
      *
      * <p>Here rather than on {@code Resizer} because only this package can reach the structural
      * insert, and this class is already the engine's half of the arrangement: it states when handles
      * exist, so it can also state that they are the engine's and not a caller's.</p>
      */
-    public static void attach(UINode target, UINode handle) {
+    public static void attach(UIElement target, UIElement handle) {
         target.appendAmbient(handle);
     }
 
@@ -49,7 +49,7 @@ public final class ResizeHandles {
          * re-resolves a property whenever anything about an element's match changes, so this sees
          * {@code BOTH} many times over for a node that already has its handles.</p>
          */
-        void apply(UINode node, Resize mode);
+        void apply(UIElement node, Resize mode);
     }
 
     @Nullable
@@ -69,7 +69,7 @@ public final class ResizeHandles {
      * <p>{@code null} is what a listener is handed for a property nothing has written at any origin —
      * the initial value is not a candidate — so it means {@code none} here, which is the initial.</p>
      */
-    public static void apply(UINode node, @Nullable Resize mode) {
+    public static void apply(UIElement node, @Nullable Resize mode) {
         Installer current = installer;
         if (current != null) current.apply(node, mode == null ? Resize.NONE : mode);
     }
