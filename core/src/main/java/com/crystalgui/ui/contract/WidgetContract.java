@@ -10,7 +10,6 @@ import java.util.Set;
 import javax.annotation.Nullable;
 
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.UIElement;
 import com.crystalgui.ui.dom.NodeContract;
 
 /**

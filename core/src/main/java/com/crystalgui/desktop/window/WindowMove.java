@@ -8,7 +8,6 @@ import org.joml.Vector2f;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.input.UIDragController;
 
 import javax.annotation.Nullable;
 

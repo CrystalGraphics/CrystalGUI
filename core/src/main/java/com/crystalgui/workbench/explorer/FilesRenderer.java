@@ -18,7 +18,7 @@ import com.crystalgui.widget.text.UIText;
 import com.crystalgui.widget.collection.tree.TreeRenderer;
 import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.workbench.decoration.FileDecoration;
-import com.crystalgui.ui.input.UIInputHandler;
+import com.crystalgui.ui.service.Input;
 
 import javax.annotation.Nullable;
 
@@ -151,7 +151,7 @@ final class FilesRenderer implements TreeRenderer<CgPath> {
         // leaves the selection alone -- and because the row's own listeners are target-phase only, a
         // press that lands here reaches neither the row's double-click nor its drag.
         twisty.onMouseDown.attachListener((element, event) -> {
-            if (event.getDetail() == UIInputHandler.KEYBOARD_DETAIL) return;
+            if (event.getDetail() == Input.KEYBOARD_DETAIL) return;
             CgPath item = tree.itemForRow(row);
             if (item == null || !tree.source().isDirectory(item)) return;
             tree.treeView().setExpanded(item, !tree.treeView().isExpanded(item));

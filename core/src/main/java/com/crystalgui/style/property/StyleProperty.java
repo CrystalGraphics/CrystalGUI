@@ -71,6 +71,17 @@ public class StyleProperty<VALUE> {
     }
 
 
+    /**
+     * <b>Old-engine only, and it cannot be retyped.</b> Tried as {@code Styleable} -- the interface both
+     * engines implement -- and it does not fit: every listener registered against it calls something
+     * only a {@code UIElement} has ({@code onResizeModeChanged}, {@code invalidateFocusableChain},
+     * {@code TaffyBridge::set*}). This whole mechanism IS the old cascade's bridge into Taffy, which
+     * is why the new engine has no use for it: {@code BoxStyle} reads {@code ComputedStyle} directly,
+     * and the two changes that still need a hook go through {@code UINode.computedChanged}.
+     *
+     * <p>So it is deleted with the old engine rather than migrated, even though it sits in the shared
+     * {@code style/} package -- one of the few places where "shared" and "survives" come apart.</p>
+     */
     public void notifyListeners(UIElement element, @Nullable VALUE oldVal, @Nullable VALUE newVal) {
         for (var listener : styleChangeListeners) {
             listener.onComputedChange(element, this, oldVal, newVal);

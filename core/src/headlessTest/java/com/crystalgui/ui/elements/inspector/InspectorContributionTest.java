@@ -219,7 +219,7 @@ public class InspectorContributionTest {
         List<String> seen = new ArrayList<>();
         InspectorRegistry.register(new InspectorSection() {
             @Override public String tab() { return "Element"; }
-            @Override public boolean accepts(DataContext context) { return context.has(UiDataKeys.ELEMENT); }
+            @Override public boolean accepts(DataContext context) { return context.has(UIElement.ELEMENT); }
             @Override public void build(InspectorForm form, DataContext context) {
                 seen.add("element");
                 form.header("Element");

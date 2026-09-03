@@ -1,5 +1,7 @@
 package com.crystalgui.ui.elements.chrome;
 
+import com.crystalgui.ui.UIElement;
+
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
@@ -57,7 +59,7 @@ public final class ChromeCommands {
                         // VIEW, which is where VS Code keeps it too -- the palette is a way of looking
                         // at the command set rather than an edit.
                         .menu(MenuId.MAIN_VIEW, "1_appearance", 10)
-                        .run(context -> CommandPalette.open(context.data().get(UiDataKeys.WINDOW)))
-                        .enabledWhen(context -> context.data().get(UiDataKeys.WINDOW) != null)));
+                        .run(context -> CommandPalette.open(context.data().get(UIElement.WINDOW)))
+                        .enabledWhen(context -> context.data().get(UIElement.WINDOW) != null)));
     }
 }

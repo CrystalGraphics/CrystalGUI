@@ -1,5 +1,7 @@
 package com.crystalgui.ui.elements.chrome;
 
+import com.crystalgui.ui.UIElement;
+
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
@@ -39,12 +41,12 @@ public final class MainMenuCommands {
                 // one bar's state, which is the same reason Workbench.SHOW_PROBLEMS reads WORKBENCH rather
                 // than closing over a workbench.
                 .toggledWhereData(data -> {
-                    MenuBarView bar = data.get(UiDataKeys.MENU_BAR);
+                    MenuBarView bar = data.get(UIElement.MENU_BAR);
                     return bar != null && bar.isCollapsed();
                 })
-                .enabledWhereData(data -> data.get(UiDataKeys.MENU_BAR) != null)
+                .enabledWhereData(data -> data.get(UIElement.MENU_BAR) != null)
                 .runWithData(data -> {
-                    MenuBarView bar = data.get(UiDataKeys.MENU_BAR);
+                    MenuBarView bar = data.get(UIElement.MENU_BAR);
                     // An explicit Boolean, which is what turns the automatic width check OFF -- a user who
                     // asks for a burger must keep it when the window is widened again.
                     if (bar != null) bar.setCollapsed(!bar.isCollapsed());

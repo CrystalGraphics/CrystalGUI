@@ -9,7 +9,6 @@ import com.crystalgraphics.platform.gl.state.CgGlSlot;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgui.ui.UIWindow;
 
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -161,11 +160,14 @@ public final class CgUiLifecycle implements CgLifecycleListener {
      */
     @Override
     public void onDestroy() {
-        try {
-            UIWindow.shutdownAll();
-        } catch (Throwable t) {
-            CrystalGuiCore.LOGGER.warn("CgUiLifecycle: failed to take the windows off screen", t);
-        }
+        // NO DOCUMENT TEARDOWN HERE, and that is not an omission. `UIWindow.shutdownAll()` detached
+        // each window's desktop and cleared an attached-window back-pointer -- tree bookkeeping on a
+        // tree the process is about to stop having. This file's own rule for `onDestroy` says the same
+        // thing about caches: at game shutdown there is no next context to protect, so anything that
+        // only tidies state is ceremony rather than correctness. What genuinely must happen on close
+        // -- writing the session -- is the HOST's, and `CgUiScreen` does it when the screen closes.
+        //
+        // What stays below is the one thing nobody else frees.
         try {
             CgUiPaintContext.destroy();
         } catch (Throwable t) {

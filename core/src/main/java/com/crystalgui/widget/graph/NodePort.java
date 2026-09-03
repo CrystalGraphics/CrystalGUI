@@ -13,7 +13,6 @@ import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.event.MouseEvent;
-import com.crystalgui.ui.input.UIDragController;
 import lombok.Getter;
 import org.joml.Vector2f;
 
@@ -500,9 +499,9 @@ public class NodePort extends UINode {
         // Snapshotted so onDragEnd can tell a wire that landed from one that did not: a drop on a port
         // fires DragEvent.Drop (and therefore connects) before the drag ends.
         //
-        // That ordering is a real guarantee of UIDragController and not an assumption — it was written
+        // That ordering is a real guarantee of `Drag` and not an assumption — it was written
         // here first and was FALSE, which made a wire dropped on a valid port connect and open the
-        // create-node menu at the same time. See UIDragController.endDrag.
+        // create-node menu at the same time. See `Drag`'s end-of-drag ordering.
         final int startingConnections = getConnectionCount();
         Drag.startWithPayload(this, rawX, rawY, this,
                 new Drag.Listener() {

@@ -17,7 +17,7 @@ import com.crystalgui.net.ClientUiSessions;
 import com.crystalgui.net.mirror.UINodeMirror;
 import com.crystalgui.net.SheetRef;
 import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.ui.ElementRegistry;
+import com.crystalgui.ui.dom.UINodeRegistry;
 import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
@@ -83,7 +83,10 @@ public final class ClientWindows {
         // A description addresses widgets by tag, and an unregistered tag THROWS on decode rather than
         // degrading to a styleless div. Idempotent, and every lookup would trigger it anyway; it is here
         // so the dependency is visible at the one place trees get rebuilt.
-        ElementRegistry.bootstrapBuiltins();
+        // `UINodeRegistry.bootstrap()`, which runs every `NodeKinds` service once -- the new engine's
+        // answer to a hand-written list of builtins, and what makes the registry's contents a function
+        // of what is on the classpath rather than of what somebody remembered to add.
+        UINodeRegistry.bootstrap();
 
         /*
          * INSTALLED THE MOMENT THE CONNECTION EXISTS, which is the race this class exists to remove.

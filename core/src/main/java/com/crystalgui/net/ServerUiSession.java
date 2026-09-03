@@ -15,7 +15,6 @@ import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.net.mirror.ElementNodeMirror;
 import com.crystalgui.net.mirror.NodeMirror;
 import com.crystalgui.net.mirror.ServerTreeMirror;
 import com.crystalgui.net.mirror.TreeOps;

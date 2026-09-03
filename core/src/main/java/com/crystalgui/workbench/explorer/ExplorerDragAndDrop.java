@@ -11,9 +11,8 @@ import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.dnd.DragGhost;
 import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.event.MouseEvent;
-import com.crystalgui.ui.input.UIInputHandler;
+import com.crystalgui.ui.service.Input;
 import com.crystalgraphics.platform.input.CgMouseCodes;
-import com.crystalgui.ui.input.UIDragController;
 
 import javax.annotation.Nullable;
 import java.util.List;
@@ -90,7 +89,7 @@ final class ExplorerDragAndDrop {
             //
             // KEYBOARD_DETAIL is the opt-out the input handler already provides for exactly this, and
             // GraphView is the widget that found it: Enter synthesized a press and started a marquee.
-            if (event.getDetail() == UIInputHandler.KEYBOARD_DETAIL) return;
+            if (event.getDetail() == Input.KEYBOARD_DETAIL) return;
             UIDocument window = tree.treeView().document();
             CgPath item = tree.itemForRow(row);
             if (window == null || item == null || item.isProjectRoot()) return;

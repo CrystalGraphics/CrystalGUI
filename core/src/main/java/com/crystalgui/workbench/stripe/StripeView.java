@@ -35,8 +35,7 @@ import com.crystalgui.workbench.region.RegionSide;
 import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
-import com.crystalgui.ui.input.UIDragController;
-import com.crystalgui.ui.input.UIInputHandler;
+import com.crystalgui.ui.service.Input;
 
 
 import javax.annotation.Nullable;
@@ -709,7 +708,7 @@ public class StripeView extends UINode {
             // MouseEvent.Down carrying the PHYSICAL cursor position -- so activating a rail button from
             // the keyboard would start a drag anchored wherever the mouse happened to be resting, and one
             // that can never end, because capture is released by a real button-up that is not coming.
-            if (event.getDetail() == UIInputHandler.KEYBOARD_DETAIL) return;
+            if (event.getDetail() == Input.KEYBOARD_DETAIL) return;
             // A FRESH PRESS RE-ARMS the button. The latch is disarmed by the release it suppresses, but a
             // drag that ended anywhere other than on this button never reaches that release.
             suppressActivation = false;

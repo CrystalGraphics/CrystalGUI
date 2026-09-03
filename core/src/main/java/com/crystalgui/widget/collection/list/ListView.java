@@ -21,7 +21,7 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.input.FocusPolicy;
-import com.crystalgui.ui.input.UIInputHandler;
+import com.crystalgui.ui.service.Input;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.widget.scroll.ScrollerView;
@@ -681,7 +681,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
             // the modifier logic against whatever keys happen to be held and re-decides a selection the
             // arrow keys just made.
             tracked.onMouseDown.attachListener((el, event) -> {
-                if (event.getDetail() == UIInputHandler.KEYBOARD_DETAIL) return;
+                if (event.getDetail() == Input.KEYBOARD_DETAIL) return;
                 // THE PRIMARY BUTTON CHOOSES; the secondary one only asks. A right-click opens a menu
                 // ABOUT a row and must leave the selection alone — otherwise the menu destroys the very
                 // selection it was opened over, which for a multi-selection cannot be undone. The menu
@@ -691,7 +691,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
                 if (index2 >= 0) pressRow(index2);
             }, false, true);
             tracked.onMouseUp.attachListener((el, event) -> {
-                if (event.getDetail() == UIInputHandler.KEYBOARD_DETAIL) return;
+                if (event.getDetail() == Input.KEYBOARD_DETAIL) return;
                 if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
                 int index2 = indexOfRowElement(tracked);
                 if (index2 >= 0) releaseRow(index2);

@@ -584,7 +584,7 @@ public class Workbench extends UIElement {
         // ANSWERED HERE, NOT BY THE BAR. The walk only finds ancestors, and the menu bar is a SIBLING of
         // the content everything is focused inside -- so a command resolving outward from a focused editor
         // would never reach it. The workbench is the nearest thing that is an ancestor of both.
-        if (key == UiDataKeys.MENU_BAR) return menuBar;
+        if (key == UIElement.MENU_BAR) return menuBar;
         return super.getData(key);
     }
 

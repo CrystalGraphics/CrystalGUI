@@ -49,6 +49,7 @@ import com.crystalgui.ui.event.EventTarget;
 import com.crystalgui.ui.event.UIEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.input.keymap.Keymap;
+import com.crystalgui.ui.elements.chrome.MenuBarView;
 import com.crystalgui.ui.tree.UITreeTraversal;
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
@@ -81,6 +82,27 @@ import com.crystalgui.core.command.CommandContext;
  */
 @Accessors(chain = true)
 public class UIElement implements KeymapScope, EventTarget, Styleable, SettingsScope, DataProvider {
+
+    // ── The keys only this engine can answer ────────────────────────────────────────────────────
+    //
+    // Moved off `UiDataKeys`, which is SHARED and now names no engine at all. A DataKey's TYPE is the
+    // thing it names, so a `DataKey<UIElement>` and a `DataKey<UIWindow>` cannot mean anything on the
+    // other engine -- and one of them was already being answered with a new-engine object, which
+    // compiled and then failed the cast in `DataContext` with nobody the wiser. They live with the
+    // class that provides them until it goes.
+
+    /**
+     * The element the walk started at — the focused one.
+     *
+     * <p>Answered by {@code UIElement} itself, so it is never null in a non-empty context. Mostly for a
+     * command that needs somewhere to anchor a popup rather than a subject to act on.</p>
+     */
+    public static final DataKey<UIElement> ELEMENT =
+            DataKey.create("element", UIElement.class);
+    public static final DataKey<UIWindow> WINDOW =
+            DataKey.create("window", UIWindow.class);
+    public static final DataKey<MenuBarView> MENU_BAR =
+            DataKey.create("menuBar", MenuBarView.class);
     private static final Comparator<UIElement> Z_INDEX_DESCENDING = (a, b) -> Integer.compare(b.style.generalGroup.zIndex(), a.style.generalGroup.zIndex());
 
     // ── Core state ───────────────────────────────────────────────────────────
@@ -353,10 +375,10 @@ public class UIElement implements KeymapScope, EventTarget, Styleable, SettingsS
     @Override
     @Nullable
     public Object getData(DataKey<?> key) {
-        if (key == UiDataKeys.ELEMENT) return this;
+        if (key == UIElement.ELEMENT) return this;
         // Answered here rather than by the root, so it costs nothing and cannot be missing: the walk
         // stops at the first element that answers, and every element knows its own window.
-        if (key == UiDataKeys.WINDOW) return getAttachedWindow();
+        if (key == UIElement.WINDOW) return getAttachedWindow();
         return null;
     }
 

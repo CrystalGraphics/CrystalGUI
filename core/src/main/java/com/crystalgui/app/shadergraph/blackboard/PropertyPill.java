@@ -6,7 +6,6 @@ import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.event.MouseEvent;
-import com.crystalgui.ui.input.UIDragController;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.widget.control.TextField;
