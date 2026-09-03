@@ -48,7 +48,7 @@ public final class CrystalEditorCommands {
      *
      * <p>These held a {@code CrystalEditor} <em>and</em> a {@code UIDocument}, so they could not be
      * registered once: the second editor would have driven the first. Both now come from the data
-     * context — {@link CrystalEditor#CRYSTAL_EDITOR} and {@link UiDataKeys#WINDOW} — which answers with
+     * context — {@link CrystalEditor#CRYSTAL_EDITOR} and {@link CommandPalette#SURFACE} — which answers with
      * the editor and window the <b>focused</b> element is in. Two windows on one screen therefore save
      * the right layout each, which the captured version could not have done at all.</p>
      *
@@ -82,7 +82,7 @@ public final class CrystalEditorCommands {
                             (int) surface.width(), (int) surface.height());
                 })
                 .enabledWhen(context -> editorFor(context) != null
-                        && context.data().get(UiDataKeys.WINDOW) != null));
+                        && context.data().get(CommandPalette.SURFACE) != null));
 
         registry.register(Command.of(RESTORE_LAYOUT, "Restore Window Layout")
                 .binding("Mod+O")
