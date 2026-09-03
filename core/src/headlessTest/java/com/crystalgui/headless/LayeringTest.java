@@ -222,17 +222,20 @@ public class LayeringTest {
      * on UI networking.</p>
      *
      * <p>Read bottom-up: the provider tier knows nothing above it; {@code fs.project} knows the
-     * provider; the server knows both; the protocol is shared; the client may name the protocol and
-     * nothing on the server. Empty packages pass vacuously, which is the plan working — they fill in
-     * at F2, F3 and F4.</p>
+     * provider; {@code fs.protocol} is shared and knows both; the server knows all three; the client
+     * knows everything except the server. Empty packages pass vacuously, which is the plan working —
+     * they fill in at F2, F3 and F4.</p>
      */
     @Test
     public void theFilesystemTiersDoNotReachUpward() throws IOException {
         Path root = ClassReferences.mainClassesRoot(getClass());
         List<String> tiers = List.of(
                 "com/crystalgui/fs/project/",
-                "com/crystalgui/fs/server/",
+                // SHARED, and therefore below both halves rather than between them. A server that
+                // could not name the protocol could not answer, and a protocol that named either half
+                // would put one of them on the other's classpath.
                 "com/crystalgui/fs/protocol/",
+                "com/crystalgui/fs/server/",
                 "com/crystalgui/fs/client/");
         List<String> offences = new ArrayList<>();
         for (int i = 0; i < tiers.size(); i++) {

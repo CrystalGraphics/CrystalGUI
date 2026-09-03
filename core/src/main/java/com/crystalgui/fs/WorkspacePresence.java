@@ -40,6 +40,21 @@ public final class WorkspacePresence {
     /** path → the actors who have it open, in the order they opened it. */
     private final Map<CgPath, Map<String, String>> byPath = new LinkedHashMap<>();
 
+    /**
+     * Who has UNSAVED changes, per path.
+     *
+     * <p>{@code plan_fs_rewrite.md} D12. Presence answered "who has this open", which is the wrong
+     * question for the moment it matters: two people find out they are both editing a file when the
+     * second one saves and is refused with a conflict, by which point both have work to reconcile.
+     * "X is editing this file" on the first keystroke is what every collaborative editor shows, and it
+     * costs one flag.</p>
+     *
+     * <p>Set by the CLIENT, because only the client knows: dirtiness is {@code version !=
+     * savedVersion} on a document the server does not hold. It is cleared by a save, which the server
+     * does see, so a client that disconnects mid-edit leaves a flag {@link #left} takes away.</p>
+     */
+    private final Map<CgPath, java.util.Set<String>> editing = new LinkedHashMap<>();
+
     /** Bumped by every change. @see #version */
     private int version;
 
@@ -55,6 +70,13 @@ public final class WorkspacePresence {
         if (here == null) return;
         if (here.remove(actor.id()) != null) version++;
         if (here.isEmpty()) byPath.remove(path);
+        // AND THE FLAG. A dirty marker outliving the document it describes is a banner saying somebody
+        // is editing a file they closed, which nothing would ever take down.
+        java.util.Set<String> dirtyHere = editing.get(path);
+        if (dirtyHere != null) {
+            dirtyHere.remove(actor.id());
+            if (dirtyHere.isEmpty()) editing.remove(path);
+        }
     }
 
     /**
@@ -72,7 +94,52 @@ public final class WorkspacePresence {
             if (entry.getValue().remove(actor.id()) != null) changed = true;
             if (entry.getValue().isEmpty()) it.remove();
         }
+        for (java.util.Iterator<Map.Entry<CgPath, java.util.Set<String>>> it = editing.entrySet().iterator();
+             it.hasNext(); ) {
+            Map.Entry<CgPath, java.util.Set<String>> entry = it.next();
+            if (entry.getValue().remove(actor.id())) changed = true;
+            if (entry.getValue().isEmpty()) it.remove();
+        }
         if (changed) version++;
+    }
+
+    /**
+     * Records whether this actor has unsaved changes to this path.
+     *
+     * <p>Only meaningful for a path the actor has open — an editing flag on a file nobody has open is
+     * a flag nothing will ever clear.</p>
+     */
+    public synchronized void setEditing(WorkspaceActor actor, CgPath path, boolean dirty) {
+        Map<String, String> here = byPath.get(path);
+        if (here == null || !here.containsKey(actor.id())) return;
+        java.util.Set<String> dirtyHere = editing.get(path);
+        boolean was = dirtyHere != null && dirtyHere.contains(actor.id());
+        if (was == dirty) return;
+        if (dirty) {
+            editing.computeIfAbsent(path, ignored -> new LinkedHashSet<>()).add(actor.id());
+        } else if (dirtyHere != null) {
+            dirtyHere.remove(actor.id());
+            if (dirtyHere.isEmpty()) editing.remove(path);
+        }
+        version++;
+    }
+
+    /** Whether that actor has unsaved changes to that path. */
+    public synchronized boolean isEditing(WorkspaceActor actor, CgPath path) {
+        java.util.Set<String> here = editing.get(path);
+        return here != null && here.contains(actor.id());
+    }
+
+    /** Everyone editing {@code path} except {@code actor}, by display name. */
+    public synchronized List<String> whoElseIsEditing(WorkspaceActor actor, CgPath path) {
+        java.util.Set<String> dirtyHere = editing.get(path);
+        Map<String, String> here = byPath.get(path);
+        if (dirtyHere == null || here == null) return Collections.emptyList();
+        List<String> others = new ArrayList<>();
+        for (String id : dirtyHere) {
+            if (!id.equals(actor.id()) && here.containsKey(id)) others.add(here.get(id));
+        }
+        return others;
     }
 
     /** Everyone with {@code path} open, by display name. */
