@@ -1861,7 +1861,7 @@ caught it; and the port-colour fixture wrote `#FF3C8CFF` in the ENGINE's `0xAARR
 sheet reads `#RRGGBBAA`, which is a documented invariant walked into while writing the test for a
 different one.
 
-### 6.5 — The editor · **XL** · after: 6.3
+### 6.5 — The editor · **XL** · after: 6.3 · **SHIPPED 2026-09-01**
 
 *The largest single class in the port, and a package that splits five ways for **7 public types and
 78 published members** — the same rate per file 6.6 paid and was accepted at. This section said the
@@ -2321,7 +2321,7 @@ but only after the cascade-shared retention of `appliedByElement` is confirmed t
 `moveTo`. `DockArea`'s *"rebuilds are deferred by a frame, always"* stays. `RunPanel` is in another
 module and its tests run under `:language:test` with natives — skip cleanly there.
 
-### 6.8 — Networking on the new engine · **L** · after: 6.7
+### 6.8 — Networking on the new engine · **L** · after: 6.7 · **SHIPPED 2026-09-02**
 
 > **Gained the Machine example from 6.7, and the dependency decided it.** It is a `Networked` panel:
 > it names `ServerWindows`, `UiType`, `MountedWindow` and `ServerScope`, every one of which lives in
@@ -2746,6 +2746,33 @@ named as a fix in a batch's row list. The `taffy/` fastutil replacement. Anythin
 | Ported files written from scratch | — | **0** — every one is the codemod's copy; 6.0's machinery is the only new code |
 | Hand-edited sites | — | ≈443 (§2.7), held per batch to the budget line in §5 |
 | Upward references across the layering (§2.6) | untested | 0, asserted by `LayeringTest` |
+
+**Measured at close (2026-09-03).** Every row above holds, with three corrections worth keeping.
+
+- **`addInternalChild`, `getRuntimeCache()` and `importantPipeline` are 0 in code** — 23, 11 and 1
+  textual hits remain and every one is a comment or a javadoc explaining what the old engine did.
+  That is the intended end state, not residue: the rows that record a hazard are the reason the
+  hazard is not repeated.
+- **The `__part__` row's target was wrong, and D1-REVERSED (§4.7) is what governs.** It reads "497 →
+  0" while its own parenthetical says kinds B and C become *plain classes* — which are still spelled
+  `__x__`, that being the class-name convention. 524 survive and that is correct: only 23 of 44
+  widgets may host a shadow tree, so 21 widgets' scaffolding is light children by design. The real
+  guard is `SheetPortTest`, which passes: no `::part(a)::part(b)` anywhere, every `__x__` classified,
+  every tag registered.
+- **D22 is met by a different mechanism than D22 proposed.** The plan called for rows positioned by
+  `box().setTransform(translate)`. What shipped keeps rows at absolute `top` offsets and makes the
+  SCROLL a pose translate applied when painting descendants — so a row is placed once when it is
+  realised and nothing re-places per scrolled frame. Same metric, one mechanism instead of two, and
+  it falls out of the engine rather than being a widget's responsibility.
+
+**M6's residue — what is deliberately left open.**
+
+| | Why it is open |
+|---|---|
+| `Focus.scopeOf` never finds a delegating shadow root | 6.10 found the branch could never fire, before the split as well as after. Repairing it is a behaviour change needing a test, not a port. Invariant row carries it |
+| 76 old-engine test files never ported | Skipped by decision at 6.9a and deleted with the engine they tested. Their subjects are covered by the ported suites except for the two below |
+| `ServerBehaviourLoopTest`, `TabViewDescriptionTest` | **Coverage genuinely lost.** The first pinned a server-side tick loop's re-entrancy, the second a `TabView`'s described form. Neither has a counterpart on the new engine and neither was rewritten. Recorded here because a loss nobody writes down is a loss nobody restores |
+| Sheets still spell `__x__` | Correct per D1-REVERSED, above — not residue, but it looks like it against the stale metric, which is why the metric is corrected rather than the sheets |
 
 ---
 
