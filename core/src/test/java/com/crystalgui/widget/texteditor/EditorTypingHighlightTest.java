@@ -10,7 +10,7 @@ import com.crystalgui.text.Rope;
 import com.crystalgui.text.syntax.SyntaxToken;
 import com.crystalgui.text.syntax.SyntaxTokenizer;
 import com.crystalgui.widget.text.UIText;
-import com.crystalgui.ui.text.TextRange;
+import com.crystalgui.text.TextRange;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;

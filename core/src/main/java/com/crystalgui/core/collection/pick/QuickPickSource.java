@@ -1,11 +1,9 @@
 package com.crystalgui.core.collection.pick;
 
-import com.crystalgui.core.collection.pick.QuickPickEntry;
-import com.crystalgui.core.collection.pick.QuickPickItem;
 import com.crystalgui.core.search.SearchMatch;
 import com.crystalgui.core.search.SearchMatcher;
 import com.crystalgui.core.search.SearchQuery;
-import com.crystalgui.ui.text.TextRange;
+import com.crystalgui.text.TextRange;
 
 import java.util.ArrayList;
 import java.util.Comparator;

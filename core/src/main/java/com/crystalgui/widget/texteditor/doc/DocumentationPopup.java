@@ -32,7 +32,7 @@ import com.crystalgui.widget.scroll.ScrollerView;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.widget.text.SyntaxHighlighting;
-import com.crystalgui.ui.text.TextRange;
+import com.crystalgui.text.TextRange;
 import com.crystalgui.widget.texteditor.EditorCommands;
 import com.crystalgui.widget.texteditor.TextEditor;
 import lombok.Getter;

@@ -6,7 +6,7 @@ import com.crystalgui.style.property.visual.text.WhiteSpace;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.widget.text.UIText;
-import com.crystalgui.ui.text.TextRange;
+import com.crystalgui.text.TextRange;
 import org.junit.Test;
 
 import java.util.List;

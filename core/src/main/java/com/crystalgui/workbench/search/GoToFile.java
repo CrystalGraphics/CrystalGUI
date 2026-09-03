@@ -16,7 +16,7 @@ import com.crystalgui.workbench.chrome.palette.QuickPick;
 import com.crystalgui.core.collection.pick.QuickPickEntry;
 import com.crystalgui.core.collection.pick.QuickPickItem;
 import com.crystalgui.core.collection.pick.QuickPickSource.ResultSink;
-import com.crystalgui.ui.text.TextRange;
+import com.crystalgui.text.TextRange;
 
 import javax.annotation.Nullable;
 

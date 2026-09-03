@@ -14,7 +14,7 @@ import javax.annotation.Nullable;
 import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.ui.projection.Projections;
+import com.crystalgui.net.projection.Projections;
 
 /**
  * <b>One open window on a connection, server side</b> — the handle {@link ServerWindows#open} returns.

@@ -94,7 +94,7 @@ public class EngineBoundaryTest {
             // deliberately absent: the sessions and the mirror seam are generic over `Styleable` and
             // name neither engine, which is what makes them one implementation rather than two.
             "com/crystalgui/net/window/",
-            "com/crystalgui/ui/projection/");
+            "com/crystalgui/net/projection/");
 
     /**
      * The classes in {@code ui/dom} that are the SEAM rather than the node tree — everything else in

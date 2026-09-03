@@ -1,7 +1,7 @@
 package com.crystalgui.search;
 
 import com.crystalgui.core.search.SearchQuery;
-import com.crystalgui.ui.text.TextRange;
+import com.crystalgui.text.TextRange;
 import com.crystalgui.text.search.SearchResults;
 import com.crystalgui.text.search.TextSearch;
 
