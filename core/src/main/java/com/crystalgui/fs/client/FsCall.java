@@ -38,7 +38,7 @@ final class FsCall<T> {
 
     private Caller<T> caller;
     private final DynamicOps<T> ops;
-    private final com.crystalgui.fs.client.Health health;
+    private final Health health;
 
     /**
      * Calls in flight, by key.

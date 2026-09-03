@@ -215,7 +215,7 @@ public final class WorkspaceService {
      * {@code FsHello} now. @see com.crystalgui.fs.CgFileCapability#PATH_CASE_SENSITIVE
      */
     public boolean caseSensitive() {
-        return files.has(com.crystalgui.fs.CgFileCapability.PATH_CASE_SENSITIVE);
+        return files.has(CgFileCapability.PATH_CASE_SENSITIVE);
     }
 
     /**

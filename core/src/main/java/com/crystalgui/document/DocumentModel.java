@@ -2,6 +2,8 @@ package com.crystalgui.document;
 
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.undo.UndoStack;
+import com.crystalgui.text.diagnostic.DiagnosticSet;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * <b>What an open document IS</b> — headless, and the one thing a {@link Document} holds.
@@ -70,6 +72,22 @@ public interface DocumentModel {
      */
     default boolean mergeable() {
         return false;
+    }
+
+    /**
+     * What is wrong with this document, or null when it has nothing to report.
+     *
+     * <p><b>Asked of the MODEL, not of a view.</b> The workbench used to bind its Problems panel to the
+     * active {@code TextEditor}'s set, so a shader graph — which has no text editor — left the panel
+     * empty by construction while its compiler produced a dozen attributed errors with nowhere to go.
+     * A diagnostic describes a document; a document has one set; two views onto it show the same one.</p>
+     *
+     * <p><b>The same instance every time.</b> A view binds to it and listens, so a fresh set per call
+     * would leave the panel watching one nobody writes to.</p>
+     */
+    @Nullable
+    default DiagnosticSet diagnostics() {
+        return null;
     }
 
     /**

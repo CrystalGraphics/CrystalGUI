@@ -11,6 +11,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -53,7 +54,7 @@ public final class DocumentKind {
     @Nullable
     private String icon;
     @Nullable
-    private Function<byte[], DocumentModel> model;
+    private BiFunction<Resource, byte[], DocumentModel> model;
     @Nullable
     private Function<Document, DocumentEditor> editor;
     @Nullable
@@ -92,11 +93,24 @@ public final class DocumentKind {
         return this;
     }
 
-    /** How bytes become a document. Required. */
-    public DocumentKind model(Function<byte[], DocumentModel> factory) {
+    /**
+     * How bytes become a document. Required.
+     *
+     * <p><b>The resource is handed over too</b>, and it has to be: a text model resolves its language,
+     * its tokenizer, its folding and its indentation from the file's NAME, so a factory that could not
+     * see what it was a model of would have to be told separately — which is the two-calls-that-are-one
+     * shape {@code DocumentType} was replaced for.</p>
+     */
+    public DocumentKind model(BiFunction<Resource, byte[], DocumentModel> factory) {
         checkOpen();
         this.model = Objects.requireNonNull(factory, "factory");
         return this;
+    }
+
+    /** For a model that does not care where it came from — a graph, a blob. */
+    public DocumentKind model(Function<byte[], DocumentModel> factory) {
+        Objects.requireNonNull(factory, "factory");
+        return model((resource, bytes) -> factory.apply(bytes));
     }
 
     /**
@@ -134,7 +148,7 @@ public final class DocumentKind {
     public DocumentKind text(@Nullable Language language) {
         checkOpen();
         this.language = language;
-        return model(TextDocumentModel::of);
+        return model((resource, bytes) -> TextDocumentModel.of(bytes));
     }
 
     // ── Reading ─────────────────────────────────────────────────────────────────────────────────
@@ -180,9 +194,9 @@ public final class DocumentKind {
     }
 
     /** @throws RuntimeException whatever the model factory throws for bytes it cannot decode */
-    public DocumentModel createModel(byte[] bytes) {
+    public DocumentModel createModel(Resource resource, byte[] bytes) {
         if (model == null) throw new IllegalStateException(id + " declares no model");
-        return model.apply(bytes);
+        return model.apply(resource, bytes);
     }
 
     /** @throws IllegalStateException if this kind has no editor — ask {@link #hasEditor()} first */
@@ -278,6 +292,7 @@ public final class DocumentKind {
 
     /** For a caller that has a supplier rather than a function — a kind whose model takes no bytes. */
     public DocumentKind model(Supplier<DocumentModel> factory) {
-        return model(bytes -> factory.get());
+        Objects.requireNonNull(factory, "factory");
+        return model((resource, bytes) -> factory.get());
     }
 }

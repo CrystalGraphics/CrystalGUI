@@ -1,8 +1,10 @@
 package com.crystalgui.fs;
 
-import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.project.ProjectRegistry;
+import com.crystalgui.fs.project.WorkspaceProject;
 import java.io.IOException;
+import java.nio.channels.SeekableByteChannel;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileAlreadyExistsException;
@@ -11,6 +13,7 @@ import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -295,8 +298,8 @@ public final class LocalFileSystem implements CgFileSystem {
                     "offset and length must not be negative: " + offset + ", " + length);
         }
         Path file = resolve(path);
-        try (java.nio.channels.SeekableByteChannel channel =
-                     java.nio.file.Files.newByteChannel(file, java.nio.file.StandardOpenOption.READ)) {
+        try (SeekableByteChannel channel =
+                     Files.newByteChannel(file, StandardOpenOption.READ)) {
             long size = channel.size();
             if (offset >= size) return new byte[0];
             int wanted = (int) Math.min((long) length, size - offset);
@@ -310,7 +313,7 @@ public final class LocalFileSystem implements CgFileSystem {
             buffer.flip();
             buffer.get(out);
             return out;
-        } catch (java.nio.file.NoSuchFileException missing) {
+        } catch (NoSuchFileException missing) {
             throw CgFileSystemException.notFound(path);
         } catch (java.io.IOException failed) {
             throw new CgFileSystemException(CgFileError.UNKNOWN, "cannot read " + path, failed);
@@ -365,7 +368,7 @@ public final class LocalFileSystem implements CgFileSystem {
     private static CgFileSystemException io(CgPath path, IOException cause) {
         // The message names the PATH, never the cause's text: an IOException routinely carries a
         // server-side absolute path, and this reaches a client.
-        if (cause instanceof java.nio.file.AccessDeniedException) {
+        if (cause instanceof AccessDeniedException) {
             return new CgFileSystemException(CgFileError.NO_PERMISSIONS, "not permitted: " + path, cause);
         }
         return new CgFileSystemException(CgFileError.UNKNOWN, "io error at " + path, cause);

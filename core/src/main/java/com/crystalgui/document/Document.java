@@ -3,10 +3,9 @@ package com.crystalgui.document;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.fs.Resource;
-
-import org.jetbrains.annotations.Nullable;
-
+import com.crystalgui.text.diagnostic.DiagnosticSet;
 import java.util.Objects;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * <b>One open document</b> — an object with an identity that survives being renamed.
@@ -147,6 +146,12 @@ public final class Document {
 
     public UndoStack history() {
         return model.history();
+    }
+
+    /** What is wrong with it — the MODEL's set. @see DocumentModel#diagnostics */
+    @Nullable
+    public DiagnosticSet diagnostics() {
+        return model.diagnostics();
     }
 
     /**

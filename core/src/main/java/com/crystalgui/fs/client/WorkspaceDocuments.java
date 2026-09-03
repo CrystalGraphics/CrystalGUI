@@ -13,14 +13,13 @@ import com.crystalgui.document.Documents;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.protocol.FsError;
 import com.crystalgui.fs.protocol.FsMessages;
-
-import org.jetbrains.annotations.Nullable;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.BiConsumer;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * <b>Open documents, over the wire</b> — where {@code document}'s headless model meets the filesystem.
@@ -69,7 +68,7 @@ public final class WorkspaceDocuments {
      * {@code onWillSaveTextDocument}, minus the veto — a participant that could refuse a save is a
      * participant that can lose somebody's work to a bug in a formatter.</p>
      */
-    public final List<java.util.function.BiConsumer<Document, SaveReason>> onWillSave =
+    public final List<BiConsumer<Document, SaveReason>> onWillSave =
             new ArrayList<>();
 
     /** Why a save is happening, which a participant legitimately branches on. */
@@ -120,13 +119,16 @@ public final class WorkspaceDocuments {
         }
 
         PendingReply<DocumentReference> opened = new PendingReply<>(null);
-        workspace.files().read(resource)
+        boolean fromServer = Resource.SCHEME_PROJECT.equals(resource.scheme());
+        // ONE DOOR. A project resource goes over the wire; a decompiled class or a generated shader goes
+        // to whatever registered its scheme. Routing here is what makes this the ONE open lane -- the
+        // second lane existed because there was nowhere else to say it.
+        workspace.read(resource)
                 .onError(opened::fail)
-                .then(response -> {
-                    byte[] content = response.content();
+                .then(content -> {
                     Document document;
                     try {
-                        document = new Document(resource, kind, kind.createModel(content));
+                        document = new Document(resource, kind, kind.createModel(resource, content));
                     } catch (RuntimeException undecodable) {
                         // A model that cannot take the bytes must FAIL rather than open empty: an empty
                         // document reports itself modified against the file it could not read, and the
@@ -135,10 +137,15 @@ public final class WorkspaceDocuments {
                                 resource + " could not be opened: " + undecodable));
                         return;
                     }
-                    document.setEtag(response.etag());
                     document.setState(DocumentState.CLEAN);
                     DocumentReference reference = documents.open(resource, ignored -> document);
-                    attach(document);
+                    if (fromServer) {
+                        // AND ONLY THE SERVER'S FILES ARE WATCHED. Nothing on the far side knows about a
+                        // decompiled class, so a watch on one is a subscription to an event that can
+                        // never arrive -- and it would cost a real subscription slot to say nothing.
+                        workspace.files().stat(resource).then(stat -> document.setEtag(stat.etag()));
+                        attach(document);
+                    }
                     opened.resolve(reference);
                 });
         return opened;
@@ -244,7 +251,7 @@ public final class WorkspaceDocuments {
      *              conflict dialog, and never a default
      */
     public Reply<Void> save(Document document, SaveReason reason, boolean force) {
-        for (java.util.function.BiConsumer<Document, SaveReason> participant : onWillSave) {
+        for (BiConsumer<Document, SaveReason> participant : onWillSave) {
             participant.accept(document, reason);
         }
         byte[] content = document.model().encode();

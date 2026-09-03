@@ -418,7 +418,8 @@ public class DocumentModelTest {
                 .files(DocumentKind.FilePatterns.extension("notes"))
                 .text(null);
 
-        assertTrue(kind.createModel("hi".getBytes(StandardCharsets.UTF_8)) instanceof TextDocumentModel);
+        assertTrue(kind.createModel(file("a.notes"), "hi".getBytes(StandardCharsets.UTF_8))
+                instanceof TextDocumentModel);
     }
 
     // ── Bytes ───────────────────────────────────────────────────────────────────────────────────
