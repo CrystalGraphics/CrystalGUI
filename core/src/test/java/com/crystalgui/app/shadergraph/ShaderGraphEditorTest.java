@@ -1,6 +1,9 @@
 package com.crystalgui.app.shadergraph;
 
+import com.crystalgui.serialization.JsonOps;
+import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.dom.UIElement;
+import com.google.gson.JsonElement;
 import com.crystalgui.app.shadergraph.node.ShaderPropertyNodes;
 import com.crystalgui.widget.graph.GraphNode;
 import com.crystalgui.style.sheet.StyleSheet;
@@ -242,11 +245,15 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
     }
 
     /**
-     * <b>Where the canvas was looking survives the file.</b>
+     * <b>Where the canvas was looking survives a reopen — through the session, not the file.</b>
      *
-     * <p>In the file rather than the layout, which is Unity's choice for a {@code .shadergraph}: a graph
-     * is an asset you arrange, and reopening one at the origin loses real work because where things sit
-     * relative to the viewport is part of how it reads.</p>
+     * <p>A workspace is shared, so a camera in the document is one camera for everybody: whoever saves
+     * last imposes their view, and two people editing the graph conflict over a field neither of them
+     * touched. It is view state by the engine's own boundary — looking around is not an edit, which is
+     * why it never went on the undo stack either.</p>
+     *
+     * <p>{@code ShaderGraphViewStateTest} holds the rest of it, including the counter-assertion that the
+     * file carries no camera at all.</p>
      */
     @Test
     public void theCanvasViewSurvivesASaveAndReopen() {
@@ -256,6 +263,8 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
         editor.graph().setPan(-120f, 64f);
 
         byte[] saved = editor.encode();
+        StateMap<JsonElement> view = new StateMap<>(JsonOps.INSTANCE);
+        editor.writeViewState(view);
 
         ShaderGraphEditor reopened = new ShaderGraphEditor();
         UIElement host = new UIElement().layout(l -> l.width(800).height(500));
@@ -263,6 +272,7 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
         document.append(host);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
         reopened.adopt(saved);
+        reopened.readViewState(new StateMap<>(JsonOps.INSTANCE, view.encode()));
 
         assertEquals(2.5f, reopened.graph().getZoom(), 0.001f);
         assertEquals(-120f, reopened.graph().getPanX(), 0.001f);

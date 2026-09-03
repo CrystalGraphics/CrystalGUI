@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.document.DocumentModel;
+import com.crystalgui.serialization.StateMap;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.ui.dom.UIElement;
 import com.google.gson.JsonParser;
@@ -715,25 +716,6 @@ public class ShaderGraphEditor extends UIElement
 
 
     /**
-     * Writes the canvas's pan and zoom onto the document, so {@link #encode()} carries them.
-     *
-     * <p>Written RAW rather than through {@code SetSettingEdit}: looking around a graph is not an edit and
-     * must not land on the undo stack, or Ctrl+Z would move the camera instead of undoing. @see #VIEW_ZOOM</p>
-     */
-    private void captureView() {
-        var settings = graph.getDocument().settings();
-        settings.setRaw(SettingsLayer.DOCUMENT, VIEW_ZOOM, String.valueOf(graph.getZoom()));
-        settings.setRaw(SettingsLayer.DOCUMENT, VIEW_PAN_X, String.valueOf(graph.getPanX()));
-        settings.setRaw(SettingsLayer.DOCUMENT, VIEW_PAN_Y, String.valueOf(graph.getPanY()));
-        // ONLY WHEN THERE IS A BOX TO RECORD. An unmeasured panel yields "", and writing that would both
-        // erase a good rect from the file and churn the settings layer on frames where nothing moved.
-        String preview = rectOf(mainPreview);
-        if (!preview.isEmpty()) settings.setRaw(SettingsLayer.DOCUMENT, VIEW_PREVIEW_RECT, preview);
-        String board = rectOf(blackboard);
-        if (!board.isEmpty()) settings.setRaw(SettingsLayer.DOCUMENT, VIEW_BLACKBOARD_RECT, board);
-    }
-
-    /**
      * A panel's box as {@code left,top,width,height}, in its containing block's space.
      *
      * <p>Empty while the panel has not been laid out, and {@link #applyRect} refuses an empty string —
@@ -790,6 +772,14 @@ public class ShaderGraphEditor extends UIElement
     }
 
     /** Puts the canvas back where the file says it was. A file without them is left at the default. */
+    /**
+     * Seeds the camera from the file, for a graph this client has no session entry for.
+     *
+     * <p>Where you were looking is {@link #readViewState} and is per person; this is the fallback when
+     * nobody here has looked at this graph before, and it reads values a client wrote before the camera
+     * moved out of the file. Nothing writes these keys any more, so a graph saved from here carries no
+     * camera at all — see {@link #writeViewState}.</p>
+     */
     private void restoreView() {
         var settings = graph.getDocument().settings();
         Float zoom = readFloat(settings.raw(VIEW_ZOOM));
@@ -806,6 +796,44 @@ public class ShaderGraphEditor extends UIElement
         // rather than a flag that nothing but a drag ever set.
         if (applyRect(mainPreview, settings.raw(VIEW_PREVIEW_RECT))) mainPreview.markPlaced();
         if (applyRect(blackboard, settings.raw(VIEW_BLACKBOARD_RECT))) blackboard.markPlaced();
+    }
+
+    /**
+     * Where <b>this person</b> was looking — pan, zoom and the two floating panels.
+     *
+     * <p>Per session, never in the file. A shared workspace has one graph and several people reading
+     * it: with the camera in the document, whoever saves last imposes their view on everyone else, and
+     * two people editing the same graph conflict over a field neither of them touched. It is also view
+     * state by the engine's own boundary — looking around is not an edit, which is why it never went on
+     * the undo stack either.</p>
+     */
+    @Override
+    public <T> void writeViewState(StateMap<T> out) {
+        out.putFloat(VIEW_ZOOM, graph.getZoom());
+        out.putFloat(VIEW_PAN_X, graph.getPanX());
+        out.putFloat(VIEW_PAN_Y, graph.getPanY());
+        // ONLY WHEN THERE IS A BOX TO RECORD. An unmeasured panel yields "", and writing that would
+        // erase a good rect rather than leave the one already stored.
+        String preview = rectOf(mainPreview);
+        if (!preview.isEmpty()) out.putString(VIEW_PREVIEW_RECT, preview);
+        String board = rectOf(blackboard);
+        if (!board.isEmpty()) out.putString(VIEW_BLACKBOARD_RECT, board);
+    }
+
+    /** @see #writeViewState */
+    @Override
+    public <T> void readViewState(StateMap<T> in) {
+        float zoom = in.getFloat(VIEW_ZOOM, 0f);
+        if (zoom > 0f) graph.setZoom(zoom);
+        // BOTH OR NEITHER: a pan is a point, and applying one axis from a record that carries only the
+        // other moves the camera somewhere nobody left it.
+        if (in.has(VIEW_PAN_X) && in.has(VIEW_PAN_Y)) {
+            graph.setPan(in.getFloat(VIEW_PAN_X, 0f), in.getFloat(VIEW_PAN_Y, 0f));
+        }
+        // A RESTORED POSITION IS A DELIBERATE ONE, and each panel has to be TOLD -- the re-clamp that
+        // tracks a resizing canvas is gated on having been placed, which only a drag otherwise sets.
+        if (applyRect(mainPreview, in.getString(VIEW_PREVIEW_RECT, ""))) mainPreview.markPlaced();
+        if (applyRect(blackboard, in.getString(VIEW_BLACKBOARD_RECT, ""))) blackboard.markPlaced();
     }
 
     @Nullable
@@ -1314,7 +1342,6 @@ public class ShaderGraphEditor extends UIElement
     /** The graph as it stands, in the serialized form {@link GraphCodecs#DOCUMENT} defines. */
     @Override
     public byte[] encode() {
-        captureView();
         return GraphCodecs.DOCUMENT.encode(JsonOps.INSTANCE, graph.getDocument())
                 .toString().getBytes(StandardCharsets.UTF_8);
     }
