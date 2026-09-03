@@ -106,7 +106,7 @@ public class FileEventsReachTheClientTest {
         List<CgFileEvent> events = service.drainFileEvents();
         if (!events.isEmpty()) {
             rpc.notifyFileEvents(events,
-                    (method, args) -> serverSide.call(method, args, null, null), PlainOps.INSTANCE);
+                    (method, args) -> serverSide.notify(method, args), PlainOps.INSTANCE);
         }
         for (int i = 0; i < 8; i++) {
             link[0].deliver();

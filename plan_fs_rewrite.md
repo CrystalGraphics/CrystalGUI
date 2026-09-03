@@ -828,18 +828,29 @@ public surface has changed.
 2. **`fs.protocol`:** a record and a `Codec` per message (`Codecs.map`); `FsMethods`; `FsError`;
    `FsHello` (protocol version, case rule, name rule, size tiers, capabilities). Every codec
    round-trips through `JsonOps` and `PlainOps` and tolerates an unknown field. *D14, D21.*
-3. **Retrofit `WorkspaceRpc` and `WorkspaceClient` onto the codecs** — same behaviour, typed payloads,
-   pushes sent as notifications and received through `onNotify`. `WorkspaceProtocol` deleted.
-   `WorkspaceProtocolTest` passes unchanged in intent; `aPushIsANotification`;
-   `aConflictIsStructured`. *N17, N24, N27.*
-4. **Operation ids on mutations** and a bounded recent-operations table on the server.
-   `aWriteRetriedAfterATimeoutIsNotAConflict`. *D17.*
-5. **Chunked read and paged listing as `Stream`s** over the ranged read: `fs/read` answers size and
-   etag, `fs/readChunk(resource, etag, offset, length)`, `fs/list` pages above a size.
-   `aLargeListingArrivesInPages`; `aChunkedReadIsAStream`. *D15, D20.*
+3. **Pushes become notifications** on both sides — the client subscribes through `onNotify`, the host
+   and every test wire the notifier to `notify`, and the javadoc that instructed callers to send a
+   request is corrected. `aPushIsANotification`, asserted on `MessageRouter.pendingRequests()` with a
+   counter-control, because the payload arrives either way. *(Shipped.)* *N24.*
 
-*Done when* the old client and server speak the new protocol and no `StateMap` key is a string
-constant.
+   > **The full retrofit of `WorkspaceRpc` and `WorkspaceClient` onto the codecs was NOT done, and
+   > deliberately.** The step's reason was "so the wire changes once", which holds when F3 and F4 are
+   > distant. They are the next two milestones, and both delete the class being retrofitted —
+   > `WorkspaceRpc` at F3.5 and `WorkspaceClient` at F4.5. Retrofitting 700 lines of hand-packed
+   > `StateMap` reads to delete them within the hour is the double-pay this plan's own §9 preamble
+   > names, with none of the benefit. The codecs exist and are proven by round trip; `fs.server` and
+   > `fs.client` are written **against them** rather than converted to them. `WorkspaceProtocol` goes
+   > with `WorkspaceRpc` at F3.
+4. **Operation ids** ride on `PathRequest`, `MoveRequest` and `WriteRequest` as of F2's codecs; the
+   server's recent-operations table is F3's, since it belongs to the binding that answers.
+   `aWriteRetriedAfterATimeoutIsNotAConflict` moves to F3. *D17.*
+5. **Chunked read and paged listing** — the wire shapes exist (`ReadResponse` carries a transfer id and
+   a size, `ListRequest`/`ListResponse` carry a cursor) and the provider serves ranges. Wrapping them
+   in `Stream<T>` is the CLIENT's, so it lands with the client at F4.
+   `aLargeListingArrivesInPages` and `aChunkedReadIsAStream` move there. *D15, D20.*
+
+*Done when* every payload round-trips over both ops, the provider serves a range, and no push opens a
+call. The string keys go with the two classes that spell them, at F3 and F4.
 
 ### F3 — The server
 

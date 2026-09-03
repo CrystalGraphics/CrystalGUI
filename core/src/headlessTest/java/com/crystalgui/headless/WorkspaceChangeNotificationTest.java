@@ -83,7 +83,7 @@ public class WorkspaceChangeNotificationTest {
     /** What a host's tick does: poll, push, deliver. */
     private int tickServer() {
         int sent = rpc.pollAndNotify(
-                (method, args) -> server.call(method, args, null, null), PlainOps.INSTANCE);
+                (method, args) -> server.notify(method, args), PlainOps.INSTANCE);
         pump();
         return sent;
     }

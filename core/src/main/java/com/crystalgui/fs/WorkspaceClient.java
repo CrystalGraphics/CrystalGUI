@@ -83,6 +83,19 @@ public final class WorkspaceClient<T> {
                   Consumer<StateMap<T>> onResult, Consumer<String> onError);
     }
 
+    /**
+     * How this client subscribes to what the server says without being asked.
+     *
+     * <p>Separate from {@link WorkspaceRpc.Registrar} because the two are different message kinds and
+     * were conflated: a push was registered through {@code onRequest} and sent through {@code call}, so
+     * {@code fs.changed}, {@code fs.presence} and {@code fs.capabilities} each opened a call the client
+     * answered with nothing and the server held a pending entry and a ten-second timeout slot for.
+     * {@code plan_fs_rewrite.md} N24 — the router has had {@code onNotify} the whole time.</p>
+     */
+    public interface Subscriber<T> {
+        void subscribe(String method, Consumer<StateMap<T>> handler);
+    }
+
     /** Told how far a chunked read has got. Both figures are bytes; {@code total} never changes. */
     @FunctionalInterface
     public interface Progress {
@@ -97,7 +110,7 @@ public final class WorkspaceClient<T> {
      *            make the filesystem a fact about the engine.</p>
      */
     public WorkspaceClient(ClientUiSession<?, T> session, DynamicOps<T> ops) {
-        this(session::call, session::onCall, ops);
+        this(session::call, session::onNotify, ops);
         // RECORDED, or the first rebind to this same wire would not recognise it and would re-register
         // the push handlers on a router that already has them -- which MessageRouter refuses outright.
         this.boundTo = session;
@@ -112,7 +125,7 @@ public final class WorkspaceClient<T> {
      * comes off the connection here, because a connection <em>does</em> expose its own.</p>
      */
     public WorkspaceClient(ProtocolConnection<T> connection) {
-        this(connection::call, connection::onRequest, connection.ops());
+        this(connection::call, connection::onNotify, connection.ops());
         // @see the note on the session constructor: a client that does not know what it is bound to
         // cannot tell a rebind from a re-bind to the same thing.
         this.boundTo = connection;
@@ -189,7 +202,7 @@ public final class WorkspaceClient<T> {
         if (connection == null || connection == boundTo) return false;
         Object previous = boundTo;
         boundTo = connection;
-        bind(connection::call, connection::onRequest);
+        bind(connection::call, connection::onNotify);
         // The memo follows the client, or the next forConnection on this wire builds a SECOND client and
         // MessageRouter refuses its duplicate fs.changed registration -- from wherever that second
         // consumer happens to be constructed. @see #forConnection
@@ -205,7 +218,7 @@ public final class WorkspaceClient<T> {
     public boolean rebind(ClientUiSession<?, T> session) {
         if (session == null || session == boundTo) return false;
         boundTo = session;
-        bind(session::call, session::onCall);
+        bind(session::call, session::onNotify);
         reestablish();
         return true;
     }
@@ -247,10 +260,10 @@ public final class WorkspaceClient<T> {
     @Nullable
     private Runnable onRebound;
 
-    private WorkspaceClient(Caller<T> caller, WorkspaceRpc.Registrar<T> registrar,
+    private WorkspaceClient(Caller<T> caller, Subscriber<T> subscriber,
                             com.crystalgui.serialization.DynamicOps<T> ops) {
         this.ops = ops;
-        bind(caller, registrar);
+        bind(caller, subscriber);
     }
 
     /**
@@ -262,20 +275,18 @@ public final class WorkspaceClient<T> {
      * — those belong to whoever asked, not to the wire, which is the whole reason this client's identity
      * is worth preserving across a reconnect rather than building a second one.</p>
      */
-    private void bind(Caller<T> caller, WorkspaceRpc.Registrar<T> registrar) {
+    private void bind(Caller<T> caller, Subscriber<T> subscriber) {
         this.caller = caller;
         // The server pushes these; nothing asks for them. Registered here rather than left to a caller,
         // because a client that reads a file is watching it (see read) and would otherwise be sent
         // notifications with no handler.
-        registrar.register(WorkspaceProtocol.PRESENCE, (args, respond) -> {
+        subscriber.subscribe(WorkspaceProtocol.PRESENCE, args -> {
             applyPresence(args);
-            respond.ok(null);
         });
-        registrar.register(WorkspaceProtocol.CAPABILITIES, (args, respond) -> {
+        subscriber.subscribe(WorkspaceProtocol.CAPABILITIES, args -> {
             applyCapabilities(args);
-            respond.ok(null);
         });
-        registrar.register(WorkspaceProtocol.CHANGED, (args, respond) -> {
+        subscriber.subscribe(WorkspaceProtocol.CHANGED, args -> {
             CgPath path = CgPath.parse(args.getString(WorkspaceProtocol.PATH, ""));
             String kind = args.getString(WorkspaceProtocol.KIND, WorkspaceProtocol.KIND_MODIFIED);
             String etag = args.has(WorkspaceProtocol.ETAG)
@@ -283,7 +294,6 @@ public final class WorkspaceClient<T> {
             // Before the handler runs: a handler that re-reads must not be served the stale bytes.
             cachedContent.remove(path);
             if (onChanged != null) onChanged.accept(new FileChanged(path, kind, etag));
-            respond.ok(null);
         });
     }
 

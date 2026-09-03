@@ -63,6 +63,40 @@ public interface CgFileSystem {
     byte[] read(CgPath path);
 
     /**
+     * <b>Part of a file</b> — the capability {@link CgFileCapability#FILE_OPEN_READ_WRITE_CLOSE} names,
+     * which was declared and implemented by nothing.
+     *
+     * <p>What it is for: {@code WorkspaceRpc}'s chunked transfer snapshotted the whole file into memory
+     * and handed out slices of it, so four peers opening four 100 MB files cost 400 MB of server heap to
+     * send bytes it had already read. Its own javadoc named this fix. With a ranged read a transfer is
+     * {@code (resource, etag, size)} and holds nothing at all.</p>
+     *
+     * <p>The default is the honest fallback rather than a refusal: an implementation that can only read
+     * whole files still answers correctly, and only pays the whole file per chunk. Advertising the
+     * capability is what says the range is served natively.</p>
+     *
+     * @param offset where to start, in bytes. Past the end answers empty rather than throwing — a reader
+     *               walking to EOF should stop, not fail
+     * @param length how many bytes at most. The answer is shorter at the end of the file, which is how a
+     *               caller knows it has reached it
+     * @throws CgFileSystemException as {@link #read}, plus {@link CgFileError#INVALID_PATH} for a
+     *                               negative offset or length
+     */
+    default byte[] read(CgPath path, long offset, int length) {
+        if (offset < 0 || length < 0) {
+            throw new CgFileSystemException(CgFileError.INVALID_PATH,
+                    "offset and length must not be negative: " + offset + ", " + length);
+        }
+        byte[] whole = read(path);
+        if (offset >= whole.length) return new byte[0];
+        int from = (int) offset;
+        int to = (int) Math.min((long) whole.length, offset + length);
+        byte[] slice = new byte[to - from];
+        System.arraycopy(whole, from, slice, 0, slice.length);
+        return slice;
+    }
+
+    /**
      * Replaces or creates a file.
      *
      * <p>The two flags are VS Code's, and both are needed to express what an editor actually does:

@@ -246,7 +246,7 @@ public class WorkspacePresenceTest {
             // The push rides the poll the host runs every tick -- see WorkspaceRpc.pollPresence.
             rpc.pollAndNotify((method, args) -> {
                 pushes++;
-                server.call(method, args, null, null);
+                server.notify(method, args);
             }, PlainOps.INSTANCE);
         }
     }

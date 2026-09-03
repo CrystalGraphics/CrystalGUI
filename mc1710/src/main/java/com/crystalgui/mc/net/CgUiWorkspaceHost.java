@@ -248,7 +248,7 @@ public final class CgUiWorkspaceHost {
                 }
                 try {
                     entry.getValue().pollAndNotify(
-                            (method, args) -> connection.call(method, args, null, null),
+                            (method, args) -> connection.notify(method, args),
                             PlainOps.INSTANCE);
                 } catch (RuntimeException failed) {
                     // One player's watcher must not stop every other player being polled.
@@ -272,7 +272,7 @@ public final class CgUiWorkspaceHost {
             if (connection == null) continue;
             try {
                 entry.getValue().notifyFileEvents(events,
-                        (method, args) -> connection.call(method, args, null, null),
+                        (method, args) -> connection.notify(method, args),
                         PlainOps.INSTANCE);
             } catch (RuntimeException failed) {
                 // One player's dispatch must not stop every other player hearing about the change.

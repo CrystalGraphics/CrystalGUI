@@ -100,7 +100,7 @@ public class WorkspaceCapabilitiesTest {
      * separately and a notification simply found nobody home.</p>
      */
     private void push() {
-        rpc.notifyCapabilities((method, args) -> serverSide.call(method, args, null, null),
+        rpc.notifyCapabilities((method, args) -> serverSide.notify(method, args),
                 PlainOps.INSTANCE);
     }
 
