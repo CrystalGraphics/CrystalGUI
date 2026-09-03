@@ -1,9 +1,24 @@
 # The UI host — a lifecycle engine for networked windows
 
-**Status: Parts I–V SHIPPED 2026-08-27**, in seven commits (P0 → P4, docs, and the naming pass).
-**Part VI is LIVE DESIGN** for a second, larger rewrite — notes accumulated as they are decided
-rather than written up at the end, so nothing is re-derived. See Part V for what implementation
-changed about the shipped design and for the findings the build itself turned up.
+**Status: CLOSED at M8, 2026-09-04.** Parts I–V shipped 2026-08-27 in seven commits (P0 → P4, docs,
+the naming pass); Parts VI and VII shipped the second rewrite 2026-08-28 as `Networked<M>`. This
+document is kept as the **record of why the layer exists** — the audit, its seventeen findings, and
+what each of the six deleted classes was tried as first. It is not a live plan and nothing here is
+outstanding.
+
+Everything the file describes as open was settled by Part VII or by `plan_ui_rewrite.md` M7:
+
+| VI.7 asked | Settled |
+|---|---|
+| **How panel ids get declared** — (A) two factories and id constants, or (B) a declare-once base class | **(B), by field binding.** `UiType.build` names each field after itself and `UiType.bindFields` resolves the same names out of the rebuilt tree, so an id appears once — as the field's own name — and neither half types a string. The leaning was "(A) first, (B) once three panels prove the shape"; the shape proved itself in one |
+| **Whether `ServerWindow` stays a class you extend** | It does not. It is the handle `open()` returns — session, key dedup, close matrix — and the authoring surface is `Networked<M>` |
+| **What `onClosed` means after the split** | One hook, `closed(CloseReason)`, on both sides, with a machine-readable code beside the human-readable detail. A reason that meant different things to the two halves was worse than none |
+| **Whether a declared-but-unregistered type warns** | Unreachable: there is no client registration to omit. `ui/openWindow` names the panel class and the client initialises it, guarded |
+| **Where `WindowType` lives** | Nowhere. `WindowType` is one of the six classes Part VII deleted; identity is the `UiType` on the panel |
+
+What M7 added on top, and where it is written down: `Presentation` (7.1), `ClientScope.addLocal`
+(7.2) and `ServerScope.stream` (7.0) — all in `plan_ui_rewrite.md`, with the authoring surface in
+`docs/CGUI_BUILDING_UIS.md` and the protocol in `docs/CGUI_SERVER_AND_SERIALIZATION.md`.
 
 Written 2026-08-27, from an aggressive audit of the Machine example stack
 (`core/src/main/java/com/crystalgui/example/machine/`, `mc1710/src/main/java/com/crystalgui/mc/example/`)
@@ -1180,7 +1195,7 @@ Small, and each is useful well beyond this plan.
 
 ---
 
-## VI.7 — Open forks
+## VI.7 — Open forks · **all settled; see the status block at the top**
 
 **How panel ids get declared.** Both modes need to agree on them, and drift between them is a silent
 failure.

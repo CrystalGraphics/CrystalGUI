@@ -958,11 +958,51 @@ window.
 **Accepts:** a 10,000-row list over loopback with bounded traffic; a networked panel docked, undocked,
 restored across a reconnect.
 
-### M8 — Hardening and docs · S · after: M7, and F7 of `plan_fs_rewrite.md`
+### M8 — Hardening and docs · S · after: M7, and F7 of `plan_fs_rewrite.md` — **SHIPPED 2026-09-04**
 
 One close-out with F7: its two probes and its docs step land here. Two-viewer fixtures for every server-side feature, `clientSmoke` (every contracted widget round-trips
 over loopback), the networking primer and `CGUI_SERVER_AND_SERIALIZATION.md` rewritten to the new
 protocol, `AGENTS.md`'s invariants table reduced to what still holds, `plan_ui_host.md` closed out.
+
+> **`clientSmoke` was the only item that could still find something, and it found four things.**
+> Written as a coverage walk over `WidgetContracts.all()` rather than as a Gradle task booting a
+> client — the parenthetical above says what it asserts, and "over loopback" is a headless property.
+> `WidgetContractRoundTripTest` names its subjects, which means it tests the widgets somebody
+> remembered; the failure this exists for is the opposite one.
+>
+> 1. **A widget whose parts are light children doubles on decode.** A part added with
+>    `appendStructural` is still a light child, so `describedChildren()` hands out the widget's own
+>    scaffolding and the far side builds it AND adopts it: **2n−1 elements**, across the whole config
+>    kit and `ColorSelector`. `Dialog` and `SplitView` failed louder — both refuse public children, so
+>    decoding threw and took every widget holding one down with it.
+> 2. **`acceptsDescribedChildren()` was declared, documented and read by nothing** — the write-only
+>    state slot in its other direction. Held as an assertion rather than enforced in the encoder,
+>    because obeying it there would silently DROP a caller's appended child on any widget whose
+>    contract forgot to declare it.
+> 3. **Eighteen state slots across ten widgets never travelled.** A setter that changes contracted
+>    state and marks nothing dirty writes into the server's own copy and nowhere else, so the widget
+>    shows its opening value for ever. Nothing else could mark them: the part the value is drawn in is
+>    the widget's own structure, which the observer never hears about.
+> 4. **A colour control could not be described at all** — a `CgUiDrawable` at INLINE origin, which the
+>    codec refuses rather than drops. Fixed by (1) rather than by a codec or an origin change: a part
+>    that is never described never has to have a wire form. **The origin change was tried first and
+>    reverted** — `EngineBoundaryTest` forbids an IMPORTANT write from anything in `widget/`, and it
+>    was right to.
+>
+> **The invariants prune found less than the row count suggested.** 23 stale identifiers renamed
+> (`UINodeRegistry`/`UINodeTreeSource`/`UINodeMirror` → their `UIElement` forms) and **six rows
+> deleted**, each for restating in one line something the frame lifecycle, the Taffy defaults table or
+> a fuller row already said — the terse copy being the one that goes stale. The rest of the 428 rows
+> describe live behaviour, and saying so accurately is worth more than manufacturing deletions. The
+> table now states its own maintenance rule at the top.
+>
+> **The two-viewer gap was 7.1's and 7.2's**, not the session's: `MultiViewerTest` already covers the
+> session's own features with fifteen. Three added — a placement is the window's so two viewers see
+> the same one; a panel's workspace is its OWNER's whoever is watching; and a local child is one
+> viewer's and the other never sees it.
+>
+> **Not done: the two-process `runClient -PcgJoin` check.** It needs a person at two clients, which is
+> the user's to run. Everything reachable headlessly is.
 
 ---
 
@@ -996,7 +1036,7 @@ names it.
 | M4 | global sheet application, `contentReplaced`, VERSION-only skew handling |
 | M6 | old `ui/` core, `TopLayer`, `mirrored`, the internal flag, `UIFrameTicker` interface, engine `importantPipeline` writes, `WindowChrome` flag juggling, promotion special cases, the second coordinate chain, `Disposer` as a tree, `UiThread` marker |
 | M7 | `WidgetCensus` tier 4 whole — the `ListView`, `TableView`, `TreeView` and `ArrayControl` markers (7.0, 7.3); K5 closed (7.1). The fs track's own deletions are ledgered per milestone in `plan_fs_rewrite.md` §9 |
-| M8 | invariants rows that describe nothing; `plan_ui_host.md` closed out; F7's docs step |
+| M8 | **Done.** Six invariant rows that restated a rule stated in full elsewhere, and 23 stale identifiers in surviving ones; `plan_ui_host.md` closed out (VI.7's four open forks were all settled by Part VII); F7's docs step, as the two networking documents |
 
 ---
 
