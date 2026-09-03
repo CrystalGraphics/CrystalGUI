@@ -625,7 +625,7 @@ refcount test (open twice, close twice, engine sheet list unchanged), eviction r
 N10: a refused request reaches the client AS a refusal (not a timeout), an un-declared type cannot be
 opened by a client at all, and a resolver that re-derives from `args` is not fooled by a forged one.
 
-### M5 — The three-tree engine core · XL · after: M0 (S1, S2), D2–D4
+### M5 — The three-tree engine core · XL · after: M0 (S1, S2), D2–D4 · **SHIPPED 2026-08-30**
 
 > **SHIPPED 2026-08-30, in seven minor milestones — see `plan_m5.md` §4 for what each one found.**
 > `ui.dom` (node tree, shadow roots, slots, retargeting, lifecycle, thread affinity per tree),
@@ -676,7 +676,7 @@ networking half of this milestone is a `TreeSource` and a `NodeMirror` and nothi
 hit-test rows become acceptance tests against the new services; layout runs in one pass on the
 gallery's trees.
 
-### M6 — The port · XL · after: M5
+### M6 — The port · XL · after: M5 · **SHIPPED 2026-09-03** (6.0–6.10; see plan_m6.md §8 for the close-out)
 
 > **Broken into minor milestones 6.0–6.9 in `plan_m6.md` (2026-08-31), after measuring the whole old
 > engine.** Five corrections to the paragraph below are recorded there and should be read first: the
