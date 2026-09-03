@@ -1,7 +1,10 @@
 package com.crystalgui.fs;
 
-import org.junit.After;
-import org.junit.Before;
+import com.crystalgui.core.async.Reply;
+import com.crystalgui.core.dispose.Disposable;
+import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.serialization.PlainOps;
+
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -19,12 +22,6 @@ import static org.junit.Assert.assertTrue;
  * only safe if the project scheme's spelling does not move by a single byte.</p>
  */
 public class ResourceTest {
-
-    @Before
-    @After
-    public void resetRegistry() {
-        ResourceRegistry.resetForTesting();
-    }
 
     // ── The compatibility guarantee ─────────────────────────────────────────────────────────────
 
@@ -123,57 +120,71 @@ public class ResourceTest {
         assertEquals(one.hashCode(), two.hashCode());
     }
 
-    // ── The registry ────────────────────────────────────────────────────────────────────────────
+    // ── Which side answers for a scheme ─────────────────────────────────────────────────────────
+
+    /** A workspace with no wire behind it. Every test here asks about routing, never about content. */
+    private static Workspace offline() {
+        return Workspace.over((method, args, onResult, onError) -> { }, (method, handler) -> { },
+                PlainOps.INSTANCE);
+    }
 
     @Test
     public void anUnregisteredSchemeHasNoProviderAndIsReadOnly() {
+        Workspace workspace = offline();
         Resource resource = Resource.of("nobody", "x");
-        assertNull(ResourceRegistry.providerFor(resource));
+        assertNull(workspace.providerFor(resource));
         assertTrue("refusing to write something nobody claims is the safe direction",
-                ResourceRegistry.isReadOnly(resource));
+                workspace.isReadOnly(resource));
     }
 
     @Test
     public void aProjectResourceIsWritable() {
-        assertFalse(ResourceRegistry.isReadOnly(Resource.parse("mymod.proj:a.txt")));
+        assertFalse(offline().isReadOnly(Resource.parse("mymod.proj:a.txt")));
     }
 
     @Test
     public void aRegisteredProviderAnswersForItsScheme() {
-        ResourceContentProvider provider = resource -> "hello".getBytes();
-        ResourceRegistry.register("greeting", provider);
+        Workspace workspace = offline();
+        workspace.registerScheme("greeting", resource -> Reply.of("hello".getBytes()));
 
         Resource resource = Resource.of("greeting", "x");
-        // WHAT IT ANSWERS, not which object -- `providerFor` hands back a timing wrapper around the
-        // registered provider, so an identity assertion here is really an assertion that the frame guard
-        // does not exist. @see ResourceRegistry.Timed
-        assertEquals("hello", new String(ResourceRegistry.providerFor(resource).read(resource)));
-        assertTrue("providers are read-only unless they say otherwise",
-                ResourceRegistry.isReadOnly(resource));
+        byte[][] got = {null};
+        workspace.read(resource).then(bytes -> got[0] = bytes);
+        assertEquals("hello", new String(got[0]));
+        assertTrue("providers are read-only unless they say otherwise", workspace.isReadOnly(resource));
+    }
+
+    @Test
+    public void withdrawingASchemeTakesItsProviderWithIt() {
+        Workspace workspace = offline();
+        Disposable registration =
+                workspace.registerScheme("greeting", resource -> Reply.of("hello".getBytes()));
+        registration.dispose();
+        assertNull(workspace.providerFor(Resource.of("greeting", "x")));
     }
 
     /**
-     * The project scheme takes a provider and is still never READ through one.
+     * A provider may claim the project scheme, and a project file is still never READ through one.
      *
-     * <p>The refusal used to be at registration and moved to the read, because a provider answers two
-     * questions and only one of them is about bytes: {@code symbolOf} says what a resource IS, which is
-     * how a tab draws its glyph, and the author's own files need that answered as much as a library's.
-     * Refusing at registration refused both.</p>
-     *
-     * <p>So this asserts the invariant that actually matters -- a project file's content comes from the
-     * workspace client and from nowhere else -- rather than the mechanism that used to enforce it.</p>
+     * <p>A provider answers two questions and only one is about bytes: {@code symbolOf} says what a
+     * resource IS, which is how a tab draws its glyph, and the author's own files need that answered as
+     * much as a library's. So the guard is on the read rather than on the registration.</p>
      */
     @Test
     public void theProjectSchemeIsNeverReadThroughAProvider() {
-        ResourceRegistry.register(Resource.SCHEME_PROJECT, resource -> "leaked".getBytes());
+        Workspace workspace = offline();
+        workspace.registerScheme(Resource.SCHEME_PROJECT,
+                resource -> Reply.of("leaked".getBytes()));
 
         Resource mine = Resource.parse("mymod.proj:src/Main.java");
-        assertEquals(Resource.SCHEME_PROJECT, mine.scheme());
-        assertNull("a project file's bytes come from the workspace client, never a provider",
-                ResourceRegistry.contentProviderFor(mine));
-        // AND THE OTHER HALF still resolves, which is the whole reason the guard moved.
+        byte[][] got = {null};
+        // NO WIRE BEHIND THIS WORKSPACE, so the read never settles -- which is the assertion: it went to
+        // the wire rather than to the provider sitting right there with an answer.
+        workspace.read(mine).then(bytes -> got[0] = bytes);
+        assertNull("a project file's bytes come from the server, never a provider", got[0]);
+        // AND THE OTHER HALF still resolves, which is the whole reason the guard is where it is.
         assertNotNull("what a project resource IS is still a question somebody can answer",
-                ResourceRegistry.providerFor(mine));
+                workspace.providerFor(mine));
     }
 
     @Test(expected = IllegalArgumentException.class)

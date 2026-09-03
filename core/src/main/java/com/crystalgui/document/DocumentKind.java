@@ -61,6 +61,7 @@ public final class DocumentKind {
     private Consumer<Document> status;
     @Nullable
     private Language language;
+    private boolean isFallback;
     private boolean frozen;
 
     private DocumentKind(String id, String displayName) {
@@ -83,6 +84,24 @@ public final class DocumentKind {
     public DocumentKind files(Matcher... rules) {
         checkOpen();
         Collections.addAll(matchers, rules);
+        return this;
+    }
+
+    /**
+     * Claims whatever no other kind does — <b>at most one kind may</b>.
+     *
+     * <p>"File" is that kind: every text file the workbench has no special handling for, plus every
+     * resource in a scheme somebody registered. Without it, opening an unrecognised extension answers
+     * "nothing knows how to open this" — which is right for a graph format nobody registered and wrong
+     * for a {@code .txt}.</p>
+     *
+     * <p>It is consulted only after every matcher has been asked, so a kind claiming {@code .md} still
+     * wins for Markdown. {@link DocumentKinds#register} refuses a second one, because which fallback
+     * applied would otherwise depend on registration order.</p>
+     */
+    public DocumentKind fallback() {
+        checkOpen();
+        this.isFallback = true;
         return this;
     }
 
@@ -173,6 +192,11 @@ public final class DocumentKind {
 
     public boolean hasEditor() {
         return editor != null;
+    }
+
+    /** @see #fallback() */
+    public boolean isFallback() {
+        return isFallback;
     }
 
     /**

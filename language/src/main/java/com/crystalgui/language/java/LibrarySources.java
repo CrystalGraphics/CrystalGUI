@@ -4,8 +4,12 @@ import com.crystalgui.core.async.JobKey;
 import com.crystalgui.core.async.JobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.ResourceContentProvider;
-import com.crystalgui.fs.ResourceRegistry;
+import com.crystalgui.core.async.Reply;
+import com.crystalgui.core.dispose.Disposable;
+import com.crystalgui.core.signal.Connection;
+import com.crystalgui.core.signal.Signal;
+import com.crystalgui.fs.client.ContentProvider;
+import com.crystalgui.fs.client.ContentProviders;
 import com.crystalgui.language.java.assist.AttachedSources;
 import com.crystalgui.language.java.classpath.HostClasspath;
 
@@ -33,7 +37,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <h3>Host-side, and that is not a detail</h3>
  *
- * <p>{@code ResourceRegistry} and {@code ResourceContentProvider} live in {@code com.crystalgui.fs},
+ * <p>{@code ContentProviders} and {@code ContentProvider} live in {@code com.crystalgui.fs.client},
  * which {@code EngineClassLoader} does <b>not</b> delegate to its parent — so a class the engine band
  * loads may not name them, and {@code BandLoadedCodeAvoidsWorkspaceTypesTest} fails the commit that
  * makes one. This class names no engine type at all: {@code AttachedSources} is reached through
@@ -59,7 +63,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * is cached too, as a sentinel: CFR meeting bytecode it cannot read will not read it on the next click
  * either, and retrying per click turns one slow answer into a stutter.</p>
  */
-public final class LibrarySources implements ResourceContentProvider {
+public final class LibrarySources implements ContentProvider {
 
     private static final byte[] NOTHING = new byte[0];
 
@@ -101,8 +105,18 @@ public final class LibrarySources implements ResourceContentProvider {
      * must not end with two providers, and the registry keeps the last one registered anyway.</p>
      */
     public static void register() {
-        ResourceRegistry.register(Resource.SCHEME_LIBRARY, new LibrarySources());
+        ContentProviders.contribute(Resource.SCHEME_LIBRARY, INSTANCE);
     }
+
+    /**
+     * One provider for the process, because everything it holds already is.
+     *
+     * <p>{@code SYMBOLS} and {@code PENDING} are statics — a class's declaration is a fact about the
+     * classpath, not about which server you are on — so a second instance would share them anyway and
+     * differ only in which listener list it announced to. Being one instance is what lets
+     * {@link #onDidResolveSymbol} reach every workspace that adopted it.</p>
+     */
+    private static final LibrarySources INSTANCE = new LibrarySources();
 
     /**
      * {@code ArrayList.java} for a type with attached source, {@code FlexDirection.class} for one
@@ -167,7 +181,7 @@ public final class LibrarySources implements ResourceContentProvider {
             if (SYMBOLS.containsKey(binaryName)) return SYMBOLS.get(binaryName);
         }
         scheduleDescribe(resource, binaryName);
-        // NOT YET, rather than an answer bought with a frame. @see ResourceRegistry#onSymbolResolved
+        // NOT YET, rather than an answer bought with a frame. @see #onDidResolveSymbol
         return null;
     }
 
@@ -202,13 +216,27 @@ public final class LibrarySources implements ResourceContentProvider {
                         SYMBOLS.put(binaryName, described);
                     }
                     PENDING.remove(binaryName);
-                    ResourceRegistry.symbolResolved(resource);
+                    RESOLVED.emit(resource);
                 })
                 .submit();
     }
 
     /** Names a describe is already running for. @see #scheduleDescribe */
     private static final Set<String> PENDING = ConcurrentHashMap.newKeySet();
+
+    /**
+     * A class this provider had answered "not yet" about now has a symbol.
+     *
+     * <p>Emitted on the UI thread, from inside {@code JobScheduler}'s drain — which is what makes
+     * storing it and announcing it safe to do together, and what lets a widget act on it directly.</p>
+     */
+    private static final Signal.Value<Resource> RESOLVED = new Signal.Value<>();
+
+    @Override
+    public Disposable onDidResolveSymbol(java.util.function.Consumer<Resource> listener) {
+        Connection subscription = RESOLVED.connect(listener::accept);
+        return subscription::disconnect;
+    }
 
     /**
      * What the engine says a type is, or null.
@@ -238,7 +266,18 @@ public final class LibrarySources implements ResourceContentProvider {
     private static final Map<String, SymbolInfo> SYMBOLS = new HashMap<>();
 
     @Override
-    public byte[] read(Resource resource) {
+    public Reply<byte[]> read(Resource resource) {
+        // OFF THE FRAME THREAD, which is what a Reply is for here: this opens an archive, and when
+        // there is no attached source it runs a decompiler -- measured in hundreds of milliseconds.
+        // The seam it replaces was synchronous and reached from a paint path, so every caller wrapped
+        // it in a job anyway and the one that did not decompiled a class on the frame thread.
+        return JobScheduler.shared()
+                .job(JobKey.of(LibrarySources.class, "read-" + resource), JobLane.LATENCY,
+                        context -> readNow(resource))
+                .submit();
+    }
+
+    private byte[] readNow(Resource resource) {
         if (resource == null) return NOTHING;
         // THE CLASSPATH IS DETECTED AT READ TIME rather than captured at registration. A resource is a
         // NAME, and what answers it can change within a session: a source archive downloaded by
@@ -253,7 +292,7 @@ public final class LibrarySources implements ResourceContentProvider {
     }
 
     /**
-     * Where a member is declared in this class's reconstructed text. @see ResourceContentProvider#locate
+     * Where a member is declared in this class's reconstructed text. @see ContentProvider#locate
      *
      * <h3>Resolved, never searched — and a USE answers as well as the declaration</h3>
      *
@@ -269,13 +308,22 @@ public final class LibrarySources implements ResourceContentProvider {
      * matching keeps it from offering the middle of a longer identifier, which would cost a resolve
      * apiece for answers that can never match.</p>
      *
-     * <p><b>Off the UI thread by contract</b>, because this parses. The text is whatever
-     * {@link #read} would return — attached source or the cached decompile, banner included — so the
-     * offsets are the ones the viewer is showing.</p>
+     * <p><b>Off the UI thread</b>, because this parses. The text is whatever {@link #read} would
+     * return — attached source or the cached decompile, banner included — so the offsets are the ones
+     * the viewer is showing. A {@link Reply} rather than a blocking call is what says so in the
+     * signature: the seam this replaces was synchronous and its own javadoc asked every caller to
+     * remember.</p>
      */
     @Override
+    public Reply<TextPoint> locate(Resource resource, String member) {
+        return JobScheduler.shared()
+                .job(JobKey.of(LibrarySources.class, "locate"), JobLane.LATENCY,
+                        context -> locateNow(resource, member))
+                .submit();
+    }
+
     @Nullable
-    public TextPoint locate(Resource resource, String member) {
+    private TextPoint locateNow(Resource resource, String member) {
         if (resource == null || member == null || member.isEmpty()) return null;
         List<String> classpath = HostClasspath.detect();
         String text = AttachedSources.forClasspath(classpath).textOf(resource.path());

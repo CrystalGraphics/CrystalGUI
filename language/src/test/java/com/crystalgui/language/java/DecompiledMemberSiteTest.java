@@ -1,7 +1,9 @@
 package com.crystalgui.language.java;
 
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.ResourceRegistry;
+import com.crystalgui.core.async.JobScheduler;
+import com.crystalgui.fs.client.ContentProvider;
+import com.crystalgui.fs.client.ContentProviders;
 import com.crystalgui.language.engine.EngineHost;
 import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.engine.JavaEngine;
@@ -147,10 +149,38 @@ public class DecompiledMemberSiteTest {
         assertNull("a member nothing declares was given a position", locate("noSuchMemberAnywhere"));
     }
 
-    /** Through the registry, which is the instance the workbench asks. */
+    /** Through the contribution, which is what a workspace adopts. */
     private static TextPoint locate(String member) {
         Resource resource = Resource.of(Resource.SCHEME_LIBRARY, "com.crystalgui.text.TextBuffer");
-        return ResourceRegistry.providerFor(resource).locate(resource, member);
+        TextPoint[] found = {null};
+        boolean[] settled = {false};
+        // A REPLY, so the answer lands on a DRAIN rather than on this call. Locating decompiles and then
+        // parses the output, which is the same order of cost as producing it -- hundreds of
+        // milliseconds, which is exactly why it is not synchronous.
+        providerFor(resource).locate(resource, member)
+                .then(point -> found[0] = point)
+                .always(() -> settled[0] = true);
+        // WAITING ON THE SETTLEMENT, not on the value: null is a legitimate answer here (the
+        // counter-assertion below asks for one), so a loop that stopped when the value appeared would
+        // spin the whole budget for the case that is meant to be quick.
+        long deadline = System.currentTimeMillis() + 60_000L;
+        while (!settled[0] && System.currentTimeMillis() < deadline) {
+            JobScheduler.shared().drain();
+            try {
+                Thread.sleep(5L);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        return found[0];
+    }
+
+    private static ContentProvider providerFor(Resource resource) {
+        for (ContentProviders.Contribution contribution : ContentProviders.all()) {
+            if (contribution.scheme().equals(resource.scheme())) return contribution.provider();
+        }
+        throw new AssertionError("nothing is contributed for " + resource.scheme());
     }
 
     /**

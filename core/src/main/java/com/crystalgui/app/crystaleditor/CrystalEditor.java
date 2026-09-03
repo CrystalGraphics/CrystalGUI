@@ -7,7 +7,7 @@ import com.crystalgui.core.notify.NotificationEvent;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.core.notify.StatusBar;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.fs.WorkspaceClient;
+import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.app.shadergraph.ShaderGraphContribution;
 import com.crystalgui.core.settings.Settings;
 import com.crystalgui.core.settings.SettingsCodec;
@@ -31,7 +31,8 @@ import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLayoutCodec;
 import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
 import com.crystalgui.workbench.region.DockRegion;
-import com.crystalgui.document.FileDocument;
+import com.crystalgui.document.DocumentEditor;
+import com.crystalgui.workbench.editor.EditorService;
 import com.crystalgui.workbench.Workbench;
 import com.crystalgui.ui.input.FocusPolicy;
 
@@ -221,10 +222,10 @@ public class CrystalEditor extends UIElement implements Disposable, WindowChrome
         ChromeCommands.register();
     }
 
-    public CrystalEditor(WorkspaceClient<?> client) {
+    public CrystalEditor(Workspace workspace) {
         super(NAME);
         setFocusPolicy(FocusPolicy.NONE);
-        workbench = new Workbench(client);
+        workbench = new Workbench(workspace);
         // BOTH CHANNELS INTO ONE LINE. A notification is an event and wins the line when it arrives; the
         // ambient text is what is left showing between them. Flattening is this application's choice --
         // a host with room for a toast area would connect them separately instead.
@@ -337,8 +338,9 @@ public class CrystalEditor extends UIElement implements Disposable, WindowChrome
      * workbench states what it just opened. Focus supersedes it the moment there is one.</p>
      */
     private void refreshInspector() {
-        FileDocument active = workbench.activeDocument();
-        if (active != null) inspector.inspect(active.view());
+        EditorService.Tab active = workbench.editors().active();
+        DocumentEditor view = active == null ? null : active.editor();
+        if (view != null) inspector.inspect(view.view());
     }
 
 

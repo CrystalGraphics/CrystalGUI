@@ -41,6 +41,13 @@ public final class DocumentKinds {
                         + "registered — ids must be namespaced, e.g. 'mymod:" + kind.id() + "'");
             }
         }
+        if (kind.isFallback()) {
+            for (DocumentKind existing : kinds) {
+                if (!existing.isFallback()) continue;
+                throw new IllegalStateException("'" + existing.id() + "' is already the fallback kind; "
+                        + "which one applied would depend on registration order");
+            }
+        }
         kind.freeze();
         kinds.add(kind);
         onDidChange.emit();
@@ -60,10 +67,15 @@ public final class DocumentKinds {
      */
     @Nullable
     public DocumentKind forResource(Resource resource) {
+        DocumentKind fallback = null;
         for (int i = kinds.size() - 1; i >= 0; i--) {
-            if (kinds.get(i).matches(resource)) return kinds.get(i);
+            DocumentKind kind = kinds.get(i);
+            if (kind.matches(resource)) return kind;
+            if (kind.isFallback()) fallback = kind;
         }
-        return null;
+        // ONLY AFTER EVERY MATCHER, so a kind claiming an extension still wins for it. @see
+        // DocumentKind#fallback
+        return fallback;
     }
 
     @Nullable

@@ -6,6 +6,7 @@ import com.crystalgui.core.async.Reply;
 import com.crystalgui.core.async.ReplyError;
 import com.crystalgui.core.async.Stream;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.protocol.FsError;
@@ -83,6 +84,65 @@ public final class FileOperations {
 
     public UndoStack undoStack() {
         return undoStack;
+    }
+
+    /**
+     * Records an operation so Ctrl+Z in the explorer can take it back.
+     *
+     * <p>Both halves only <b>issue</b> a call; neither waits for one. That is the honest shape: the
+     * operation is already asynchronous, and an {@link Edit} that blocked would block the frame. The
+     * view updates when the answer arrives, through the same {@link #onDidRun} every other change takes,
+     * so undo is not a second way for a tree to learn about a change.</p>
+     */
+    private void record(String label, Runnable redo, Runnable undo) {
+        if (isReplay()) return;
+        undoStack.push(new FileEdit(label, redo, undo));
+    }
+
+    /**
+     * Whether this call is the stack replaying a step rather than somebody making one.
+     *
+     * <p>Undo issues the inverse operation and redo issues the original, both through these same
+     * methods — so without this each replay would push another entry and the stack would grow on every
+     * Ctrl+Z.</p>
+     *
+     * <p><b>Asked when the call is issued, never when it settles.</b> A delete records its step from the
+     * answer, because the trash id it needs arrives with it — and by then the stack has finished
+     * applying and would say no. So the answer is taken up front and carried.</p>
+     */
+    private boolean isReplay() {
+        return undoStack.isApplying();
+    }
+
+    /** @see #record */
+    private static final class FileEdit implements Edit {
+
+        private final String label;
+        private final Runnable redo;
+        private final Runnable undo;
+
+        // A class rather than a record: a record's component accessors would be named apply() and
+        // undo(), which collide with Edit's own methods.
+        FileEdit(String label, Runnable redo, Runnable undo) {
+            this.label = label;
+            this.redo = redo;
+            this.undo = undo;
+        }
+
+        @Override
+        public void apply() {
+            redo.run();
+        }
+
+        @Override
+        public void undo() {
+            undo.run();
+        }
+
+        @Override
+        public String label() {
+            return label;
+        }
     }
 
     // ── Reading ─────────────────────────────────────────────────────────────────────────────────
@@ -189,24 +249,61 @@ public final class FileOperations {
 
     /** Creates a file that must not already exist. */
     public Reply<String> create(Resource resource, byte[] content) {
-        return mutate(resource, FsMethods.CREATE, FsMessages.writeRequest(),
+        Reply<String> created = mutate(resource, FsMethods.CREATE, FsMessages.writeRequest(),
                 op -> new FsMessages.WriteRequest(resource.toString(), content, "", true, false, op));
+        record("create " + resource.name(),
+                () -> create(resource, content),
+                () -> delete(resource));
+        return created;
     }
 
     public Reply<String> mkdir(Resource resource) {
-        return mutate(resource, FsMethods.MKDIR, FsMessages.pathRequest(),
+        Reply<String> made = mutate(resource, FsMethods.MKDIR, FsMessages.pathRequest(),
                 op -> new FsMessages.PathRequest(resource.toString(), op));
+        record("create " + resource.name(),
+                () -> mkdir(resource),
+                () -> delete(resource));
+        return made;
     }
 
-    /** Moves a file to the trash, answering the id that can restore it. */
+    /**
+     * Moves a file to the trash, answering the id that can restore it.
+     *
+     * <p><b>The trash id is what makes a delete undoable</b>, and it arrives with the answer rather than
+     * before it — so the undo entry is recorded when the delete succeeds, not when it is issued. A
+     * delete the server refuses leaves nothing on the stack, which is right: Ctrl+Z must not offer to
+     * take back something that never happened.</p>
+     */
     public Reply<String> delete(Resource resource) {
+        boolean replay = isReplay();
         return mutate(resource, FsMethods.DELETE, FsMessages.pathRequest(),
-                op -> new FsMessages.PathRequest(resource.toString(), op));
+                        op -> new FsMessages.PathRequest(resource.toString(), op))
+                .then(trashId -> {
+                    // NO TRASH, NO UNDO. A host without one deletes for good, and offering to take it
+                    // back would be a promise nothing can keep.
+                    if (replay || trashId == null || trashId.isEmpty()) return;
+                    undoStack.push(new FileEdit("delete " + resource.name(),
+                            () -> delete(resource),
+                            () -> restore(trashId)));
+                });
+    }
+
+    /** Puts back what a delete moved to the trash. */
+    public Reply<String> restore(String trashId) {
+        return calls.send(FsMethods.RESTORE, FsMessages.pathRequest(),
+                        new FsMessages.PathRequest(trashId), FsMessages.etagResponse())
+                .map(FsMessages.EtagResponse::etag);
     }
 
     public Reply<String> rename(Resource from, Resource to, boolean overwrite) {
-        return mutate(from, FsMethods.RENAME, FsMessages.moveRequest(),
+        Reply<String> moved = mutate(from, FsMethods.RENAME, FsMessages.moveRequest(),
                 op -> new FsMessages.MoveRequest(from.toString(), to.toString(), overwrite, op));
+        // NEVER OVERWRITING ON THE WAY BACK, whatever the original did: undoing a move that replaced
+        // something must not replace whatever is at the source now.
+        record("move " + from.name(),
+                () -> rename(from, to, overwrite),
+                () -> rename(to, from, false));
+        return moved;
     }
 
     /**
@@ -248,6 +345,45 @@ public final class FileOperations {
                 .onError(chained::fail));
         chained.always(() -> queues.remove(resource, chained));
         return chained;
+    }
+
+    /**
+     * Copies a file — <b>a read and a create</b>, because the server has no copy verb.
+     *
+     * <p>Honest about what it costs: a file's bytes are what a copy is OF, and across a wire they have
+     * to travel. A server-side copy would be a better answer for a large file and is a protocol change
+     * rather than a client one.</p>
+     */
+    public Reply<String> copy(Resource from, Resource to) {
+        PendingReply<String> done = new PendingReply<>(null);
+        read(from)
+                .onError(done::fail)
+                .then(content -> create(to, content.content())
+                        .onError(done::fail)
+                        .then(done::resolve));
+        return done;
+    }
+
+    /**
+     * {@code notes.txt} → {@code notes copy.txt} → {@code notes copy 2.txt}.
+     *
+     * <p>VS Code's {@code findValidPasteFileTarget}. Here rather than in a widget because it is a rule
+     * about naming a file in this workspace, and both the explorer's paste and its drop ask it.</p>
+     *
+     * @param taken names already present in the destination folder
+     */
+    public static String incrementalName(String name, List<String> taken) {
+        if (!taken.contains(name)) return name;
+        int dot = name.lastIndexOf('.');
+        // A leading dot is the whole name of a dotfile, not an extension -- ".gitignore copy", never
+        // "gitignore copy.". Same rule LanguageRegistry applies when it decides a language.
+        String stem = dot > 0 ? name.substring(0, dot) : name;
+        String suffix = dot > 0 ? name.substring(dot) : "";
+        String candidate = stem + " copy" + suffix;
+        for (int n = 2; taken.contains(candidate); n++) {
+            candidate = stem + " copy " + n + suffix;
+        }
+        return candidate;
     }
 
     /** Whether anything is outstanding for this resource. For a test, and for the health readout. */
@@ -326,6 +462,10 @@ public final class FileOperations {
 
         public Batch rename(Resource from, Resource to, boolean overwrite) {
             return track(from, FileOperations.this.rename(from, to, overwrite));
+        }
+
+        public Batch copy(Resource from, Resource to) {
+            return track(from, FileOperations.this.copy(from, to));
         }
 
         public Batch mkdir(Resource resource) {

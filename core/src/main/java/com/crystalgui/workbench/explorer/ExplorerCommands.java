@@ -10,7 +10,8 @@ import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.WorkspaceFileService;
+import com.crystalgui.fs.Resource;
+import com.crystalgui.fs.client.FileOperations;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.overlay.ContextMenu;
@@ -352,20 +353,27 @@ public final class ExplorerCommands {
         if (destination == null || CLIPBOARD.isEmpty()) return;
         boolean moving = CLIPBOARD.mode() == ExplorerClipboard.Mode.CUT;
 
-        // ONE UNDO STEP FOR THE WHOLE PASTE, the same rule the drop follows -- see
-        // WorkspaceFileService.batch for why the group cannot be closed at the end of this loop.
-        WorkspaceFileService.Batch batch = workbench.files().batch(moving ? "move files" : "paste files");
+        // ONE UNDO STEP FOR THE WHOLE PASTE, the same rule the drop follows -- and it settles when its
+        // members do, rather than when the caller remembers to say so. The batch used to take `track()`
+        // runnables, so a `continue` that skipped one left the group open for good.
+        workbench.files().batch(moving ? "move files" : "paste files", batch ->
+                pasteInto(workbench, batch, destination, moving)).then(result -> {
+            if (result.isCompletelySuccessful()) return;
+            for (FileOperations.Failure failure : result.failures()) {
+                Notifications.show(Notification.error("Could not " + result.label())
+                        .withDetail(failure.resource().name() + " -- " + failure.error().detail()));
+            }
+        });
+    }
+
+    private static void pasteInto(Workbench workbench, FileOperations.Batch batch,
+                                  CgPath destination, boolean moving) {
         for (CgPath source : CLIPBOARD.consumeIfCut()) {
-            // CLAIMED FIRST, so every path out of this iteration -- including the two refusals below --
-            // settles its share of the batch. A `continue` that skipped it would leave the group open
-            // forever and the whole paste would never become one undo step.
-            Runnable done = batch.track();
             // A folder pasted into itself, or into its own descendant, would move a directory under
             // itself -- which the filesystem refuses with a message about paths rather than about the
             // gesture. Refusing here says the useful thing.
             if (source.equals(destination) || source.contains(destination)) {
                 Notifications.show(Notification.error("Cannot paste").withDetail(source.name() + " into itself"));
-                done.run();
                 continue;
             }
             CgPath into = destination.resolve(source.name());
@@ -378,8 +386,7 @@ public final class ExplorerCommands {
                 //
                 // This used to fire ONLY for paste-in-place, so a copy into a folder that already had the
                 // name went through as a plain write. That is the data-loss half of the same line.
-                into = destination.resolve(WorkspaceFileService.incrementalName(
-                        source.name(), taken));
+                into = destination.resolve(FileOperations.incrementalName(source.name(), taken));
             } else if (moving && taken.contains(into.name())) {
                 // A MOVE ONTO A NAMESAKE IS DESTRUCTIVE AND IS REFUSED, not silently renamed.
                 //
@@ -390,18 +397,11 @@ public final class ExplorerCommands {
                 // one exists -- and it says which name, which is what makes it actionable.
                 Notifications.show(Notification.error("Cannot move " + source.name())
                         .withDetail(destination.name() + " already has a " + into.name()));
-                done.run();
                 continue;
             }
-            CgPath finalTarget = into;
-            if (moving) {
-                // ONE completion hook, not two copies of it -- the batch has to be told either way.
-                workbench.files().move(source, finalTarget, false, done);
-            } else {
-                workbench.files().copyFile(source, finalTarget, done);
-            }
+            if (moving) batch.rename(Resource.of(source), Resource.of(into), false);
+            else batch.copy(Resource.of(source), Resource.of(into));
         }
-        batch.sealed();
     }
 
     /** The names already in a folder, as far as the tree has listed it — for incremental naming. */
@@ -434,11 +434,12 @@ public final class ExplorerCommands {
      *
      * <p><b>Unknown is yes</b>, and deliberately: the cached answer is per project while the real check
      * is per path, and it can be stale or not yet arrived. A wrongly-greyed command is a thing the user
-     * cannot do and cannot explain; a wrongly-live one fails with a reason the server wrote. @see
-     * WorkspaceClient#mayWrite</p>
+     * cannot do and cannot explain; a wrongly-live one fails with a reason the server wrote.
+     * @see com.crystalgui.fs.client.Workspace.Capabilities#mayWrite</p>
      */
     private static boolean mayWrite(@Nullable Workbench workbench, @Nullable CgPath path) {
-        return workbench == null || workbench.files().mayWrite(path);
+        if (workbench == null || path == null) return true;
+        return workbench.workspace().capabilities().mayWrite(Resource.of(path));
     }
 
     /** Where a New lands: inside the selection when it is a folder, beside it when it is a file. */
@@ -495,7 +496,7 @@ public final class ExplorerCommands {
     private static void createEntry(Workbench workbench, CgPath path, boolean folder) {
         {
             if (folder) {
-                workbench.files().createFolder(path);
+                workbench.files().mkdir(Resource.of(path));
             } else {
                 // OPENED, not merely created. Making a file is a statement of intent to edit it, and every
                 // editor that has a New File treats it that way -- VS Code, IntelliJ and Visual Studio all
@@ -505,7 +506,8 @@ public final class ExplorerCommands {
                 //
                 // A FOLDER is deliberately not opened: there is nothing to edit, and revealing it would
                 // fight the selection the user is about to make inside it.
-                workbench.files().create(path, "", () -> workbench.openFile(path), null);
+                workbench.files().create(Resource.of(path), new byte[0])
+                        .then(etag -> workbench.openFile(path));
             }
         }
     }
@@ -525,13 +527,17 @@ public final class ExplorerCommands {
         ProjectFileTree tree = workbench.fileTree();
         if (tree != null && tree.document() != null) {
             tree.reveal(path);
-            tree.beginRename(path, name -> workbench.files().move(path, parent.resolve(name), false));
+            tree.beginRename(path, name -> rename(workbench, path, parent.resolve(name)));
             return;
         }
         InputDialog.ask(UIElement.sourceOf(context), "Rename", "New name", path.name(), name -> {
             if (name.equals(path.name())) return;
-            workbench.files().move(path, parent.resolve(name), false);
+            rename(workbench, path, parent.resolve(name));
         });
+    }
+
+    private static void rename(Workbench workbench, CgPath from, CgPath to) {
+        workbench.files().rename(Resource.of(from), Resource.of(to), false);
     }
 
     /**
@@ -549,14 +555,14 @@ public final class ExplorerCommands {
         if (!workbench.resolve(WorkbenchSettings.CONFIRM_DELETE)) {
             // Turned off deliberately, so it deletes. Still routed through the same file service, so undo
             // and the trash behave identically -- the setting removes the question, not the safety net.
-            workbench.files().delete(path, directory);
+            workbench.files().delete(Resource.of(path));
             return;
         }
 
         InputDialog.confirm(UIElement.sourceOf(context), "Delete",
                 directory ? "Delete '" + path.name() + "' and everything in it?"
                         : "Delete '" + path.name() + "'?",
-                () -> workbench.files().delete(path, directory));
+                () -> workbench.files().delete(Resource.of(path)));
     }
 
     /**

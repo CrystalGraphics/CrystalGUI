@@ -12,7 +12,6 @@ import com.crystalgui.style.theme.UiTheme;
 import com.crystalgui.style.theme.UiThemeManager;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.texteditor.TextEditor;
-import com.crystalgui.document.TextFileDocument;
 
 import com.crystalgui.workbench.explorer.WorkspaceTreeSource;
 import java.util.ArrayList;
@@ -297,7 +296,8 @@ public final class WorkbenchSettings {
         workbench.fileTree().treeView().refresh();
 
         for (CgPath path : workbench.openPaths()) {
-            if (workbench.documentFor(path) instanceof TextFileDocument text) applyTo(workbench, text.editor());
+            TextEditor editor = workbench.editorFor(path);
+            if (editor != null) applyTo(workbench, editor);
         }
     }
 

@@ -315,7 +315,7 @@ public class SourceArchivesTest {
     public void ourOwnSourcesAreShippedAndReachableFromTheClasspath() {
         SourceArchives.Archive bundled = new SourceArchives.ResourceArchive(
                 SourceArchives.class.getClassLoader(), BundledSources.PREFIX);
-        String text = bundled.read("com/crystalgui/ui/UIElement.java");
+        String text = bundled.read("com/crystalgui/ui/dom/UIElement.java");
         assertNotNull("core's sources are not in the jar — see tasks.jar in core/build.gradle.kts", text);
         assertTrue("that is not UIElement", text.contains("public class UIElement"));
     }

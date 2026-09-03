@@ -5,7 +5,7 @@ import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.ClipboardCommands;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.WorkspaceFileService;
+import com.crystalgui.document.DocumentState;
 import com.crystalgui.language.run.RunSessions;
 import com.crystalgui.language.run.exec.ScriptInput;
 import com.crystalgui.language.run.exec.ScriptOutput;
@@ -129,14 +129,21 @@ public final class RunPanels {
         // is over, and `Operation.source()` is the only place the old path still exists by the time this
         // fires. Both come off `onDidRun` rather than `onWillRun` -- a delete the server refuses must not
         // take the row with it.
-        workbench.files().onDidRun.connect(operation -> {
-            if (operation == null) return;
-            if (operation.kind() == WorkspaceFileService.Kind.DELETE) {
-                sessions.forget(Resource.of(operation.target()));
-            } else if (operation.kind() == WorkspaceFileService.Kind.MOVE && operation.source() != null) {
-                sessions.forget(Resource.of(operation.source()));
-            }
+        //
+        // THROUGH THE DOCUMENT STORE, not through this client's own operations. A file can be deleted or
+        // renamed by anybody -- another player, a git checkout, an editor outside the game -- and the
+        // server reports all of them the same way. Listening to what THIS client did covered one case
+        // of three, and it read as the panel being right because the case it covered is the one you
+        // test by hand.
+        workbench.documents().onDidChangeState.connect((document, state) -> {
+            if (state == DocumentState.ORPHANED) sessions.forget(document.resource());
         });
+        workbench.documents().onDidOpen.connect(document ->
+                // A RENAME MOVES THE RUN, it does not end it. The session is about the SCRIPT, and a
+                // script that was renamed while it was running is still running -- ending it there
+                // dropped the transcript, the elapsed time and the Stop button for a run that was still
+                // going, with the process left with nothing pointing at it.
+                document.onDidChangeResource.connect(sessions::retarget));
 
         // REMOVING A SCRIPT TAKES ITS OUTPUT WITH IT, and that is the whole point of the verb: the
         // complaint it answers is a console that fills up with runs you have finished reading. Dropping

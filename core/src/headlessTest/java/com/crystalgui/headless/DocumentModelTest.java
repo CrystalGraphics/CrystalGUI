@@ -75,6 +75,26 @@ public class DocumentModelTest {
      * character — invisible on screen, and fatal to anything that parses from offset zero — and saving
      * wrote it back as three more bytes of content.
      */
+    /**
+     * The ending READOUT reports the file's, not the buffer's.
+     *
+     * <p>The buffer is normalised to LF the moment it loads — every offset in the engine counts a break
+     * as one unit — so detecting on the way out reports LF for every file in the workspace, including
+     * the CRLF one the readout exists to tell you about. There is nothing left in the text to detect;
+     * the ending is a fact the buffer remembers.</p>
+     */
+    @Test
+    public void theEndingReadoutReportsTheFilesEndingAndNotTheBuffers() {
+        TextDocumentModel crlf = TextDocumentModel.of(
+                "one\r\ntwo".getBytes(StandardCharsets.UTF_8));
+        assertEquals(LineEnding.CRLF, crlf.buffer().lineEnding());
+        assertEquals("and the text itself is LF, which is why asking the buffer is the only way",
+                "one\ntwo", crlf.buffer().toString());
+
+        TextDocumentModel lf = TextDocumentModel.of("one\ntwo".getBytes(StandardCharsets.UTF_8));
+        assertEquals(LineEnding.LF, lf.buffer().lineEnding());
+    }
+
     @Test
     public void aByteOrderMarkIsConsumedOnReadAndWrittenBackOnSave() {
         byte[] onDisk = new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF, 'h', 'i'};

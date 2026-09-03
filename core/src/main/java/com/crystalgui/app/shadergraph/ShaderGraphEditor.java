@@ -14,7 +14,9 @@ import com.crystalgui.ui.dom.Name;
 import java.nio.charset.StandardCharsets;
 
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.document.FileDocument;
+import com.crystalgui.document.DocumentEditor;
+import com.crystalgui.document.DocumentModel;
+import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.ui.dom.UIElement;
 import com.google.gson.JsonParser;
 import com.crystalgui.serialization.JsonOps;
@@ -99,7 +101,8 @@ import javax.annotation.Nullable;
  * that. Doing it from {@link #connected()} makes it the widget's own business, the same way
  * {@code ListView} starts its ticker: by the time layout has run, the element is attached by definition.</p>
  */
-public class ShaderGraphEditor extends UIElement implements FileDocument, Disposable.Gl, DataProvider {
+public class ShaderGraphEditor extends UIElement
+        implements DocumentModel, DocumentEditor, Disposable.Gl, DataProvider {
     /** A whole shader graph editor. Named by the sheets. */
     public static final Name NAME = Name.of("shadergrapheditor");
 
@@ -211,6 +214,7 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
         // declarations nobody asked for surprises anything that walks it, and a generated settings panel
         // is precisely such a thing. Idempotent, since registering replaces.
         ShaderGraphSettings.register();
+        countChanges();
 
         graph.addClass(GRAPH_CLASS);
         source.addClass(SOURCE_CLASS);
@@ -450,7 +454,7 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
      * is in the generated source, and there is no caret in it until you look at it again.</p>
      */
     @Override
-    public void setActive(boolean active) {
+    public void activated(boolean active) {
         statusActive = active;
         if (!active) {
             if (compileEntry != null) compileEntry.dispose();
@@ -1245,7 +1249,15 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
         return dot > 0 ? name.substring(0, dot) : name;
     }
 
-    @Override
+    /**
+     * Which file this graph is, or null before it has been told.
+     *
+     * <p>Not a {@code DocumentModel} member any more: a document's identity belongs to the
+     * {@link com.crystalgui.document.Document} that holds it, so a model reporting its own resource was
+     * a second copy of a fact that moves on a rename. This is kept because the graph itself uses it — a
+     * derived resource for the generated source is built from it — and it is <b>set</b> by the kind's
+     * model factory rather than being the document's own answer.</p>
+     */
     @Nullable
     public Resource resource() {
         return resource;
@@ -1260,8 +1272,43 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
      * are view state and cannot make a file dirty.</p>
      */
     @Override
-    public Connection onDidChange(Runnable listener) {
-        return graph.undoStack().onChanged.connect(listener);
+    public Signal.Action onChanged() {
+        return onChanged;
+    }
+
+    /**
+     * Monotonic, and bumped from the one place a graph changes — its undo stack.
+     *
+     * <p>Every document change goes through an {@code Edit} by construction, which is the boundary this
+     * codebase draws between document state and view state, so "something was pushed, undone or redone"
+     * is exactly "the content changed". Pan, zoom and selection move nothing here, which is correct:
+     * they are view state and cannot make a file dirty.</p>
+     *
+     * <p><b>A counter rather than an encode-and-compare.</b> Dirtiness is {@code version() !=
+     * savedVersion()}, so a graph that recompiles every frame costs nothing to ask about — where
+     * serialising it to answer the same question was a whole shader graph written out sixty times a
+     * second.</p>
+     */
+    @Override
+    public int version() {
+        return version;
+    }
+
+    @Override
+    public UndoStack history() {
+        return graph.undoStack();
+    }
+
+    private int version;
+
+    private final Signal.Action onChanged = new Signal.Action();
+
+    /** Wired once, in the constructor. @see #version() */
+    private void countChanges() {
+        graph.undoStack().onChanged.connect(() -> {
+            version++;
+            onChanged.emit();
+        });
     }
 
     /** The graph as it stands, in the serialized form {@link GraphCodecs#DOCUMENT} defines. */
@@ -1318,6 +1365,10 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
     @Override
     public void adopt(byte[] bytes) {
         String text = new String(bytes, StandardCharsets.UTF_8);
+        // THE VERSION MOVES, because adopting is a change to the document -- and the store marks it
+        // clean immediately afterwards, which is what makes "loaded, untouched" the same state as
+        // "just saved" rather than a graph that reports itself modified the moment it opens.
+        version++;
         boolean blank = text.trim().isEmpty();
         GraphDocument loaded = blank
                 ? new GraphDocument()

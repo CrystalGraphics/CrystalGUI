@@ -2,9 +2,11 @@ package com.crystalgui.workbench;
 
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.desktop.Desktop;
-import com.crystalgui.document.DocumentViewState;
-import com.crystalgui.document.FileDocument;
+import com.crystalgui.document.EditorInput;
+import com.crystalgui.document.DocumentEditor;
+import com.crystalgui.workbench.editor.EditorService;
 import com.crystalgui.fs.CgPath;
+import com.crystalgui.fs.Resource;
 import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.StateMap;
@@ -322,15 +324,17 @@ public final class WorkbenchSession {
         List<CgPath> expanded = workbench.fileTree().treeView().expandedItems();
         out.putList(KEY_EXPANDED, expanded, (entry, path) -> entry.putString(KEY_PATH, path.toString()));
 
-        // ASKED OF THE DOCUMENTS THAT EXIST, and only those: `documentFor` CREATES on demand, so walking
-        // anything wider here would build every editor in the session just to save it -- which is the
-        // cost lazy tabs exist to avoid, paid at the one moment nobody is watching for it.
+        // ASKED OF THE TABS THAT EXIST, because a view state belongs to a VIEW: two split panes onto one
+        // file have one document and two carets, and the document has neither of them.
         Map<CgPath, JsonElement> files = new LinkedHashMap<>();
-        for (CgPath path : workbench.openPaths()) {
-            if (!(workbench.documentFor(path) instanceof DocumentViewState stateful)) continue;
-            StateMap<JsonElement> view = new StateMap<>(JsonOps.INSTANCE);
-            stateful.writeViewState(view);
-            files.put(path, view.encode());
+        for (EditorService.Tab tab : workbench.editors().tabs()) {
+            CgPath path = tab.resource().asPath();
+            if (path == null) continue;
+            DocumentEditor view = tab.editor();
+            if (view == null) continue;
+            StateMap<JsonElement> state = new StateMap<>(JsonOps.INSTANCE);
+            view.writeViewState(state);
+            files.put(path, state.encode());
         }
         // AND THEN WHAT WE ARE STILL HOLDING FOR A TAB NOBODY OPENED.
         //
@@ -689,10 +693,11 @@ public final class WorkbenchSession {
     private void applyViewState(CgPath path) {
         JsonElement view = pendingViewState.remove(path);
         if (view == null) return;
-        FileDocument document = workbench.documentFor(path);
-        if (!(document instanceof DocumentViewState stateful)) return;
+        EditorService.Tab tab = workbench.editors().tabFor(EditorInput.of(Resource.of(path)));
+        DocumentEditor editor = tab == null ? null : tab.editor();
+        if (editor == null) return;
         try {
-            stateful.readViewState(new StateMap<>(JsonOps.INSTANCE, view));
+            editor.readViewState(new StateMap<>(JsonOps.INSTANCE, view));
         } catch (RuntimeException refused) {
             CrystalGuiCore.LOGGER.warn("Could not restore where {} was left; opening it at the top",
                     path, refused);

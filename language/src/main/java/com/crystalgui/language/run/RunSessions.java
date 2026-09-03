@@ -254,6 +254,28 @@ public final class RunSessions {
         if (removed) onDidChange.emit(script);
     }
 
+    /**
+     * Follows a script that was renamed — <b>the run does not end.</b>
+     *
+     * <p>A session is about the script, and a script renamed while it is running is still running: the
+     * process is alive, its transcript is still filling, and its Stop button still means something. The
+     * workspace used to report a rename as a delete, so this arrived as {@link #forget} and took all
+     * three away, leaving a live process with nothing pointing at it.</p>
+     *
+     * <p>Nothing happens when the old name has no session, which is the ordinary case — most files that
+     * are renamed have never been run.</p>
+     */
+    public void retarget(Resource from, Resource to) {
+        Session moved;
+        synchronized (this) {
+            moved = sessions.remove(from);
+            if (moved == null) return;
+            sessions.put(to, moved);
+            version++;
+        }
+        onDidChange.emit(to);
+    }
+
     // NO clear(). It was the obvious counterpart to `forget` and nothing ever wanted it: a workspace
     // closing takes the whole `RunSessions` with it, and "forget every run" is not a gesture either
     // reference offers -- IntelliJ's run tabs are closed one at a time. The signal it emitted carried a

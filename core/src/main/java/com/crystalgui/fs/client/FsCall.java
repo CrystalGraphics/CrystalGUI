@@ -31,7 +31,7 @@ import java.util.function.Consumer;
 final class FsCall<T> {
 
     /** How a message reaches the far side. The connection's {@code call}, in production. */
-    interface Caller<T> {
+    public interface Caller<T> {
         void call(String method, @Nullable StateMap<T> args,
                   Consumer<StateMap<T>> onResult, Consumer<String> onError);
     }
