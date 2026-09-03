@@ -156,7 +156,12 @@ public final class InMemoryFileSystem implements CgFileSystem {
         Node sourceParent = lookupParentDirectory(from);
         sourceParent.children.remove(nameOf(from));
         targetParent.children.put(targetName, source);
-        source.mtime = tick();
+        // THE MTIME IS NOT TOUCHED, because a rename does not modify a file -- on every real
+        // filesystem the inode moves and its timestamps go with it. This used to re-stamp it, which
+        // made the fake disagree with production about the one fact a rename preserves: `WatchHub`
+        // pairs an external delete-and-create into a rename by matching their etags, and an etag is
+        // mtime + size. So a rename was unpairable here and pairable everywhere else, which is the
+        // worst direction for a fake to be wrong in.
     }
 
     // ── Seeding, for tests and fixtures ─────────────────────────────────────────────────────────

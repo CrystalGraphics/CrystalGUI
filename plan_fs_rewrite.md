@@ -864,15 +864,26 @@ call. The string keys go with the two classes that spell them, at F3 and F4.
    `editingPresenceReachesTheOtherClientOnTheFirstKeystroke`. *D19, D12.*
 3. **Transfers by `(resource, etag, size)`** over the ranged read, nothing retained; streaming writes
    above the inline threshold. `aTransferHoldsNoBytes` (heap measured across four 100 MB transfers). *D9, D20.*
-4. **`WorkspaceBinding`** — one per connection as a `ProtocolConnection` attachment: decode, service,
-   encode; the audit line; the rate limit; name validation; the NUL sniff reported on read.
-   `everyMutationIsAudited`; `aFloodIsRefusedWithACode`; `aReservedNameIsRefusedBeforeTheWrite`. *D22, D24.*
-5. **`CgUiWorkspaceHost`** reduced to building one service per server, contributing the binding and
-   ticking the hub. `WorkspaceRpc`, `WorkspaceWatcher` and the three statics deleted; `serverSmoke`
-   green. *N26.*
+4. **The audit and the rate limit** — `WorkspaceAudit`, a line per mutation naming actor, operation and
+   resource, with the limit riding the same counter and its own `FsError` code. **Idempotent
+   mutations** — `RecentOperations`, so a write retried after a timeout is answered from the table
+   rather than refused as a conflict against the caller's own earlier write.
+   `everyMutationIsAudited`; `aFloodIsRefusedAndOnlyForTheActorFlooding`;
+   `aWriteRetriedAfterATimeoutIsNotAConflict`. *(Shipped.)* *D17, D22.*
+5. **`WorkspaceBinding`** — one per connection as a `ProtocolConnection` attachment: decode, service,
+   encode, audit, limit, name validation, the NUL sniff. `CgUiWorkspaceHost` reduced to one service per
+   server; `WorkspaceRpc`, `WorkspaceWatcher` and the three statics deleted; `serverSmoke` green.
+   *N26, D24.*
 
-*Done when* `WorkspaceServiceTest`, `WorkspaceMutationTest` and the trash suite pass against
-`fs.server`, and the two-client watch suite is green.
+   > **Moved to F4, and it is one step rather than two.** The binding and the client are the two ends of
+   > one wire: deleting `WorkspaceRpc` leaves `WorkspaceClient` with nothing to talk to, and every
+   > workspace suite is red between the two commits. F3 ships the machinery the binding is made of —
+   > the hub, the audit, the limit, the operations table, editing presence — each tested on its own,
+   > and F4 lands both ends together.
+
+*Done when* the two-client watch suite is green, editing presence is carried, and every mutation is
+audited and rate-limited. The MOVE of `WorkspaceService` and its neighbours into `fs.server` goes with
+the binding at F4, for the reason above: the class the tests import is the one the cutover replaces.
 
 ### F4 — The client
 
@@ -891,8 +902,12 @@ call. The string keys go with the two classes that spell them, at F3 and F4.
 4. **`Backup` and `LocalHistory`** on `ConfigStorage`: delta-stored, bounded, skipped above the first
    size tier. `anUnsavedDocumentSurvivesAQuit`; `keepMineIsRecoverableFromLocalHistory`. *D11, D13.*
 5. **Reconnect** as re-subscription of the handle set from one place; the client is the connection
-   attachment. `WorkspaceReconnectTest` rewritten against handles. `WorkspaceClient`,
-   `WorkspaceFileService`, `WorkingCopies` and `Mc1710Workspace`'s rebind deleted. *N15, N16, N19.*
+   attachment. `WorkspaceReconnectTest` rewritten against handles. *N15, N16, N19.*
+6. **The cutover, both ends at once** (F3.5, moved here): `fs.server.WorkspaceBinding` over the codecs
+   as a connection attachment, `WorkspaceService` and its neighbours moved into `fs.server`, the host
+   reduced to one service per server. Then the deletions: `WorkspaceRpc`, `WorkspaceProtocol`,
+   `WorkspaceWatcher`, `WorkspaceClient`, `WorkspaceFileService`, `WorkingCopies`, and
+   `Mc1710Workspace`'s rebind. `serverSmoke` green. *N26, D24.*
 
 *Done when* every rewritten client suite is green and `WorkspaceClient` no longer exists.
 
