@@ -226,10 +226,16 @@ one class, where it used to mean a record in the union, an arm in each of two co
 
 `EnvelopeCodec.VERSION = 1`, carried in the `ui/openWindow` payload and checked on open.
 
-Methods are namespaced with a slash, after LSP's `textDocument/hover` — `ui/*` here, `workspace/*` for
-the file protocol, `script/*` for a runtime in `language/` that `core` never learns about. `UiMethods`
+Methods are namespaced with a slash, after LSP's `textDocument/hover` — `ui/*` here, `fs/*` for the
+file protocol, `script/*` for a runtime in `language/` that `core` never learns about. `UiMethods`
 lists the `ui/*` names as **a convenience, not a registry**: nothing enumerates them and nothing
-validates against them. A peer may send any string, and an unknown one is answered with
+validates against them.
+
+> **`fs/*` is the one that is not like this.** Its names are in `FsMethods` and its payloads are
+> records with codecs in `FsMessages`, so a field written on one side is provably the field read on the
+> other — which is the difference between a protocol two ends implement and one two ends *agree* on.
+> The `ui/*` side is deliberately looser because a widget tree's content is not a fixed vocabulary;
+> a filesystem's twenty verbs are. See `com.crystalgui.fs.protocol`. A peer may send any string, and an unknown one is answered with
 `ProtocolErrors.METHOD_NOT_FOUND` rather than dropped. The moment that file becomes the list of legal
 methods it is `UIPacket` again with different syntax.
 

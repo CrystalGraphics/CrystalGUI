@@ -444,6 +444,23 @@ tasks.named<JavaExec>(runTask) {
         systemProperty("crystalgui.wire.probe", "true")
     }
 
+    // -PcgEditorProbe opens the editor and then works through it, on the INTEGRATED server. That
+    // configuration is the one a player actually runs and the one no other probe covers: every other
+    // probe here closes the GUI or never opens one, which is how a `doesGuiPauseGame` returning true
+    // took the whole workspace down in single-player with nothing in the log. A dedicated server
+    // cannot be paused by a client GUI, so this deliberately refuses to run in multiplayer.
+    if (providers.gradleProperty("cgEditorProbe").isPresent) {
+        systemProperty("crystalgui.editor.probe", "true")
+    }
+
+    // -PcgTwoClientProbe=writer|watcher, run on BOTH of two clients joined to one runServer. The
+    // watcher subscribes and reports what reached it; the writer creates a file and then edits it.
+    // Everything the watcher, presence and the conflict path exist for is a statement about a SECOND
+    // client, and one client is the fixture that passes against all of it.
+    providers.gradleProperty("cgTwoClientProbe").orNull?.let { role ->
+        systemProperty("crystalgui.twoclient.probe", role)
+    }
+
     // -PcgJoin=host[:port] makes the client connect straight to a server instead of the main menu.
     // 1.7.10's own Main parses --server/--port, and Minecraft.startGame goes to GuiConnecting when
     // serverName is set -- so this needs no code of ours, only the arguments.
