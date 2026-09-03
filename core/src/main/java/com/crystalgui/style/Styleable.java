@@ -24,7 +24,7 @@ import javax.annotation.Nullable;
  * is the composed parent, which is what an inherited property comes from (a value set on the host
  * reaches its parts, as on the web — spike S2's finding).</p>
  */
-public interface Styleable {
+public interface Styleable extends StyleScope {
 
     // ── Identity ─────────────────────────────────────────────────────────────
 

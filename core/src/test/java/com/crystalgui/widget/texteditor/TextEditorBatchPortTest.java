@@ -13,6 +13,7 @@ import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UINode;
 import java.util.List;
 import org.junit.Test;
 
@@ -376,13 +377,13 @@ public class TextEditorBatchPortTest extends UiDocumentTestBase {
                 3, editor.caretRow());
     }
 
-    private static UIElement findByClass(UIElement at, String cls) {
-        if (at.classes().contains(cls)) return at;
+    private static UIElement findByClass(UINode at, String cls) {
+        if (at instanceof UIElement self && self.classes().contains(cls)) return self;
         for (UIElement child : at.children()) {
             UIElement hit = findByClass(child, cls);
             if (hit != null) return hit;
         }
-        UIElement shadow = at.shadowRoot();
+        UINode shadow = at instanceof UIElement element ? element.shadowRoot() : null;
         return shadow == null ? null : findByClass(shadow, cls);
     }
 }

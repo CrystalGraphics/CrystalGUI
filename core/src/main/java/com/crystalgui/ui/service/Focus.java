@@ -171,7 +171,14 @@ public final class Focus {
     public UIElement scopeOf(@Nullable UIElement node) {
         for (UIElement at = node; at != null; at = at.composedParent()) {
             if (at.get(Attribute.FOCUS_SCOPE)) return at;
-            if (at instanceof ShadowRoot && ((ShadowRoot) at).delegatesFocus()) return at;
+            // A DELEGATING SHADOW ROOT WAS TESTED HERE AND THE TEST COULD NEVER FIRE. The walk is
+            // over COMPOSED parents, and a shadow root is transparent in the composed tree -- a
+            // part's composedParent() is the HOST, never the root -- so `at` was never one, in any
+            // tree, before the split as well as after. The javadoc's "a delegating shadow root" has
+            // therefore never been reachable. Left OUT rather than repaired because repairing it is
+            // a change of behaviour, not a port: this method answers a UIElement and a shadow root
+            // is not one, so the honest candidate is the HOST, and whether a delegating composite
+            // should be its own Tab scope is a question for a milestone that can test it.
         }
         return document;
     }
@@ -256,7 +263,10 @@ public final class Focus {
         if (node == null) return null;
         ShadowRoot shadow = node.shadowRoot();
         if (shadow == null || !shadow.delegatesFocus()) return node;
-        UIElement inside = firstFocusableIn(shadow);
+        // THE HOST, not the shadow root, and the walked set is identical: a host's
+        // composedChildren() ARE its shadow tree's children, and `order` skips the scope itself.
+        // firstFocusableIn takes an element, which a shadow root is no longer.
+        UIElement inside = firstFocusableIn(node);
         return inside != null ? inside : node;
     }
 

@@ -9,6 +9,7 @@ import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.ShadowRoot;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.event.UIEvent;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 import java.util.ArrayList;
@@ -328,7 +329,7 @@ public abstract class UiDocumentTestBase extends UiTestBase {
         return found;
     }
 
-    private static UIElement findPart(UIElement at, String partName) {
+    private static UIElement findPart(UINode at, String partName) {
         for (UIElement child : at.children()) {
             if (partName.equals(child.get(Attribute.PART))) return child;
             UIElement deeper = findPart(child, partName);

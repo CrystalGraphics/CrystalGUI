@@ -25,7 +25,7 @@ import javax.annotation.Nullable;
  * focusing the host focuses the first focusable thing inside instead — the composite's answer to
  * "a focusable container is a wall".</p>
  */
-public final class ShadowRoot extends UIElement {
+public final class ShadowRoot extends UINode {
 
     /**
      * <b>The HOST, because a shadow root has no parent and the walk must still get out.</b>
@@ -133,7 +133,7 @@ public final class ShadowRoot extends UIElement {
     }
 
     /** Slots in THIS tree: light descendants, never inside a nested host's own shadow tree. */
-    private static void collectSlots(UIElement at, List<UISlot> into) {
+    private static void collectSlots(UINode at, List<UISlot> into) {
         for (UIElement child : at.children()) {
             if (child instanceof UISlot) into.add((UISlot) child);
             collectSlots(child, into);
