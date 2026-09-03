@@ -3,26 +3,6 @@
 # leaving the rest alone; the generator preserves confirmations by name.
 #
 # CLASS	path	lines	destination	batch	how	status
-CLASS	editor/CrystalEditor	500	app/editor	6.7	copy	ported
-CLASS	editor/CrystalEditorCommands	94	app/editor	6.7	copy	ported
-CLASS	graph/shader/BlackboardPanel	1361	app/shadergraph/blackboard	6.4	copy	ported
-CLASS	graph/shader/CategoryHeader	134	app/shadergraph/blackboard	6.4	copy	ported
-CLASS	graph/shader/InlineRename	166	app/shadergraph/blackboard	6.4	copy	ported
-CLASS	graph/shader/MainPreviewPanel	466	app/shadergraph/preview	6.4	copy	ported
-CLASS	graph/shader/PropertyPill	296	app/shadergraph/blackboard	6.4	copy	ported
-CLASS	graph/shader/ShaderColorFieldWidget	112	app/shadergraph/node	6.4	copy	ported
-CLASS	graph/shader/ShaderGraphBridge	490	app/shadergraph	6.4	copy	ported
-CLASS	graph/shader/ShaderGraphContribution	167	app/shadergraph	6.7	copy	ported
-CLASS	graph/shader/ShaderGraphEditor	1309	app/shadergraph	6.7	copy	ported
-CLASS	graph/shader/ShaderGraphPreviews	247	app/shadergraph/preview	6.4	copy	ported
-CLASS	graph/shader/ShaderGraphSettings	95	app/shadergraph	6.4	copy	ported
-CLASS	graph/shader/ShaderInspectorSections	668	app/shadergraph	6.7	copy	ported
-CLASS	graph/shader/ShaderNodeLibrary	46	graph/shader	6.4	move	in-place
-CLASS	graph/shader/ShaderNodePreview	82	app/shadergraph/preview	6.4	copy	ported
-CLASS	graph/shader/ShaderPortArity	284	app/shadergraph/node	6.4	copy	ported
-CLASS	graph/shader/ShaderPropertyForm	261	app/shadergraph	6.4	copy	ported
-CLASS	graph/shader/ShaderPropertyNodes	241	app/shadergraph/node	6.4	copy	ported
-CLASS	graph/shader/ShaderVectorFieldWidget	89	app/shadergraph/node	6.4	copy	ported
 CLASS	net/window/ClientScope	92	net/window	6.8	move	in-place
 CLASS	net/window/ClientWindowContext	96	net/window	6.8	move	in-place
 CLASS	net/window/ClientWindows	589	net/window	6.8	move	in-place

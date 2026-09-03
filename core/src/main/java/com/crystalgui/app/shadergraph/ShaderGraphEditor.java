@@ -7,7 +7,7 @@ import com.crystalgui.app.shadergraph.node.ShaderPropertyNodes;
 import com.crystalgui.app.shadergraph.preview.MainPreviewPanel;
 import com.crystalgui.app.shadergraph.preview.ShaderGraphPreviews;
 import com.crystalgui.core.data.DataProvider;
-import com.crystalgui.graph.shader.ShaderNodeLibrary;
+
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
 import java.util.Arrays;

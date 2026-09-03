@@ -23,7 +23,7 @@ import com.crystalgui.widget.layout.PageStack;
 import com.crystalgui.widget.layout.SplitView;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.text.UIText;
-import com.crystalgui.ui.elements.tree.*;
+import com.crystalgui.widget.collection.tree.*;
 import com.crystalgui.ui.event.KeyboardEvent;
 
 import javax.annotation.Nullable;

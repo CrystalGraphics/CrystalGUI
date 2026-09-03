@@ -1,4 +1,7 @@
-package com.crystalgui.graph.shader;
+package com.crystalgui.app.shadergraph;
+
+import com.crystalgui.app.shadergraph.node.ShaderColorFieldWidget;
+import com.crystalgui.app.shadergraph.node.ShaderVectorFieldWidget;
 
 import com.crystalgraphics.shadergraph.CgShaderNodeRegistry;
 import com.crystalgui.graph.NodeTypeRegistry;
