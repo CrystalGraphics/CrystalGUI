@@ -1,6 +1,6 @@
 # The UI rewrite — one plan over both audits
 
-**Status: M0–M6 shipped (M6 on 2026-09-03). M7 is next, and is interleaved with `plan_fs_rewrite.md`'s F0–F7 into one flow — see M7 §7.A for the order.** This knits `plan_ui_network_audit.md` (the wire,
+**Status: COMPLETE. M0–M8 shipped, 2026-09-04**, interleaved with `plan_fs_rewrite.md`'s F0–F7 into the one flow M7 §7.A gives. One thing is deliberately outstanding and is a person's to run rather than a milestone's: the two-process `runClient -PcgJoin` check with two clients scrolled apart (7.4). This knits `plan_ui_network_audit.md` (the wire,
 sessions, contracts, presentation) and `plan_engine_core_audit.md` (the three-tree engine) into one
 ordered set of milestones. Each audit stays the reference for *why*; this document is the reference
 for *what, in which order, gated by what*. Where the two audits' step lists disagreed on order, this
