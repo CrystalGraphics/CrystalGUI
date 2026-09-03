@@ -24,7 +24,9 @@ looks like a needed helper is the symptom of one that does not — see
 | `Resource` — URI schemes, virtual documents | **shipped** | [Resources](#resources) |
 | `DockPane` — retargetable panel views | **shipped** | [Panes and placement](#panes-and-placement) |
 | `DockService` — `open(input, placement)` | **shipped** as `Workbench.open` | [Opening things](#opening-things) |
-| `DocumentType` — a file type, declared by its owner | **shipped** | [Contributions](#contributions) |
+| `DocumentKind` — a file type, declared by its owner | **shipped** | [Contributions](#contributions) |
+| `Workspace` — the server's filesystem, from the client | **shipped** | [Resources](#resources) |
+| `EditorService` — one lane for opening anything | **shipped** | [Opening things](#opening-things) |
 | `Inspector` — one inspector, any subject | **shipped** | [Contributions](#contributions) |
 | `Notifications` / `StatusBar` — events and ambient text, plus their views (`StatusBarView`, `NotificationsView`, `NotificationBalloons`) | **shipped** | [Notifications and status](#notifications-and-status) |
 | `DockBannerProvider` — a strip above a panel | **shipped** | [Contributions](#contributions) |
@@ -231,16 +233,16 @@ behaves.
 |---|---|---|
 | `CrystalEditor` | every `ShaderGraphEditor` it builds | replaced a `graphs` list that was never pruned, so every graph ever opened stayed reachable for the session |
 | `ShaderGraphEditor` | its `MainPreviewPanel` | that panel's `delete()` had **no caller anywhere** — its `createOwned` target and meshes leaked for the life of the process |
-| `OpenDocuments.close` | the document it drops | only reached today when a file is **deleted or moved**; closing a *tab* does not come through here yet |
+| `DocumentReference` | one holder's claim on a document | the model is disposed by the **last** reference released, so a tab, the Problems panel and a background compile can each hold one |
 | `CgUiLifecycle` | the GL gate and its queue | not an owner — the seam |
 
 ### What disposes, and what deliberately does not
 
 | Action | Disposes? | Why |
 |---|---|---|
-| **Close a tab** | **yes**, when it was the last panel showing that path | `DockArea.onDidClosePanel` → `Workbench` releases the document and emits `onDidCloseDocument`. Guarded on "is anything else still showing this", because one document can have several panels — releasing on the first close leaves the surviving tab drawing something torn down, which is worse than the leak because it fails while looking fine. Derived resources are skipped: releasing a graph because its generated-source tab closed would take the document with it |
-| **Rename / move a file** | **no** | Goes through `OpenDocuments.retarget`, not `close`. It is the same document at a new address; disposing and rebuilding would discard unsaved work and churn GL for a path change |
-| **Delete a file** | **yes** | `WorkspaceFileService` closes what was open under it. The document is genuinely dead |
+| **Close a tab** | **releases that tab's reference** | `EditorService.close` drops the `DocumentReference` and nothing more. The model is disposed when the **last** holder releases — which may be the Problems panel, an index or a background compile, later than the tab and never earlier. Releasing on the tab's close is the "Parser is closed" defect: the surviving holder is left reading something torn down, which fails while looking fine |
+| **Rename / move a file** | **no** | `Document.retarget` moves it. It is the same document at a new address; disposing and rebuilding would discard unsaved work and churn GL for a path change |
+| **Delete a file** | **no — it is ORPHANED** | The buffer is kept and the document moves to `DocumentState.ORPHANED`, because closing the tab would throw away text the user may well want to write back. That is the whole reason a buffer is worth more than the file |
 | **Close the editor** | yes | `Disposer.dispose(editor)` — the root of the tree |
 | **Context destroyed** | yes | `CgGraphicsLifecycle`, which is where pooled GL objects are supposed to die |
 
@@ -593,8 +595,8 @@ at all. A field is discoverable by autocomplete and impossible to publish to fro
 | `onDidChangeLayout` | `DockArea` | the activity bar's `:checked` sweep |
 | `onDidRegister` | `DockPanelRegistry` | the activity bar's descriptor walk |
 | `onDidLoadListing` | `WorkspaceTreeSource` | `WorkbenchSession.tick`'s per-frame restore retry |
-| `onDidChangeDirty` | `OpenDocuments` | `encode()` on every open document, every frame |
-| `onDidChange(Runnable)` | `FileDocument` (SPI) | — the source the above is built from |
+| `onDidChangeState` | `WorkspaceDocuments` | a per-frame poll of every open document's dirtiness |
+| `onChanged()` | `DocumentModel` (SPI) | — the source the above is built from |
 | `onDidChangeFocus` | `Input` | the Inspector's application-supplied subject — see below |
 
 **`onDidChangeFocus` is the one that unlocked the Inspector.** `FocusEvent.Focus`/`Blur` are dispatched
@@ -751,9 +753,9 @@ content, where the column layout alone puts it at the bottom.
 | Separators are **elements**, not borders | The paint path takes `border().left` as *the* border width and strokes a uniform box, so `border-width-left` drew a rectangle around every readout instead of a rule between two. `Breadcrumbs` spells its separators the same way |
 | `breadcrumbs()` is the one widget, not an item | A trail is clickable and structured. The host sets it; the view still derives nothing |
 
-**A document publishes its own items, through `FileDocument.setActive(boolean)`.** The workbench knows
+**A view publishes its own items, through `DocumentEditor.activated(boolean)`.** The workbench knows
 exactly one thing no document can work out for itself — which tab is in front — and that is all it says.
-`TextFileDocument` answers with caret, line ending, encoding and indent; a shader graph answers with a
+`TextEditorView` answers with caret, line ending, encoding and indent; a shader graph answers with a
 compile summary; an image answers with neither.
 
 The first cut had `Workbench` writing the text readouts directly. It worked, and it does not scale: every
@@ -840,7 +842,8 @@ against mutants.
 
 ## Resources
 
-`com.crystalgui.fs` — `Resource`, `ResourceContentProvider`, `ResourceRegistry`.
+`com.crystalgui.fs` — `Resource`, `CgPath`. `com.crystalgui.fs.client` — `Workspace` and its facades,
+`ContentProvider`, `ContentProviders`.
 
 **A tab's input, whether or not it is a file.** A workbench opens things with no disk presence — a
 generated shader, a diff, an untitled buffer — and both references model that with a *scheme* rather than
@@ -867,35 +870,58 @@ keep a map for, and because it survives `parse` it survives a saved session with
 Five graphs give five distinct generated resources — which is what makes a compiled source a *document per
 graph* rather than one shared panel showing whichever is in front.
 
+### Who answers for a scheme — `ContentProvider`
+
+```java
+workspace.registerScheme("library", new LibrarySources());   // this server's
+ContentProviders.contribute("library", new LibrarySources()); // the process's
+```
+
+A provider answers three questions and only one is about bytes: `read` (the content), `symbolOf` (what
+the resource *is*, which is how a tab draws its glyph) and `locate` (where a member of it is declared).
+Every answer is a `Reply`, because the work can be real — reading a source archive is I/O and
+decompiling a class is hundreds of milliseconds, and neither may land on a frame.
+
+Register through `Workspace.registerScheme` when the scheme belongs to one server, and through
+`ContentProviders.contribute` when it belongs to the process — a language stack registers at mod init,
+long before any world is joined, so it has no workspace to be handed and `core/` may never name
+`language/`. Each workspace drains the contributions into its own table, so two servers in one client
+keep separate ones.
+
 ### Rules
 
-- **The project scheme refuses a provider.** It is read through the workspace client, which needs a
-  session and a round trip; a provider is a synchronous byte-returning method reached from a paint path.
+- **A project resource's CONTENT always comes from the server**, whatever has registered the scheme.
+  `Workspace.read` checks the scheme before it checks the provider table, so a provider registered for
+  `project://` — which is how the author's own `.java` files get a declaration glyph — is never asked
+  for their bytes.
 - **Unregistered schemes are read-only.** Refusing to write something nobody claims is the safe direction.
 - **`read()` must answer when the origin is gone** — empty bytes, never a throw. A derived tab outlives
   what it was derived from, and a pane can render a banner over empty but not over an exception.
-- Registration is explicit and global, for the same reasons commands are.
+- **Registration answers a `Disposable`**, so a mod that unloads takes its schemes with it.
 
-### `FileDocument.resource()` — and what it deleted
+### The document is the identity; the resource is a property of it
 
-A document says what it *is* (IntelliJ's `FileEditor.getFile()`, VS Code's `EditorInput.resource`).
-Without it, going from a document back to its address needs a map maintained beside the document store —
-`CrystalEditor` had `Map<String, ShaderGraphEditor>` plus a **reverse linear scan** to answer "which graph
-is this". Gone, with `graphForPath` and `pathOf`.
+`Document.resource()` is what it is *currently* called, and `onDidChangeResource` is the one event a
+store subscribes to — so a rename **moves** the document rather than orphaning every map keyed on its
+old name. IntelliJ's `VirtualFile` is the same object after a rename and its
+`VFilePropertyChangeEvent` is this signal.
 
-The generated shader's tab input is now the derived resource itself, so a restored session resolves by
-**parsing its own input** — nothing has to have been rebuilt first, which the map could not promise.
+That matters because a rename can come from anywhere. The server reports one as a single change
+carrying both ends, `WorkspaceDocuments` retargets the document, and the workbench moves the tab **in
+place** so it keeps its position and its selection. A rename reported as a deletion closes the tab
+instead, which is what happens to anyone reading `path` alone.
 
-### `OpenDocuments` stays keyed by `CgPath`, deliberately
+### One store, keyed by `Resource`
 
-It is the *disk* store: `onDisk` bytes, `unreadable`, `requested`, `markSaved`. A derived resource has no
-disk presence, so re-keying would give every entry fields half of them can never use — the flag-shaped
-design schemes exist to replace. **A derived document needs a provider and a view, not a slot in the file
-store.**
+`Documents` holds every open document by resource, so a project file, a decompiled class and a
+generated shader source are all in it and there is one way to open any of them. Keyed by `CgPath`,
+anything that was not a project file could not be in the store at all — which is what forces a second
+open lane into existence.
 
-No session version bump either. That tab's state used to be the graph's bare path, which parses as a
-project resource with no origin; reading it as the origin itself is one line, and the forms are
-unambiguous — a derived resource always has an origin, a bare path never does.
+Whether `Main.java` and `main.java` are one document is the **host's** rule, and only the server knows
+it: it arrives in the protocol's greeting and is handed to `Documents.setKeyStrategy`. `Resource`
+equality stays strict, exactly as VS Code keeps `URI` strict and folds in `extUri` — a key that folded
+would make two genuinely different files on a case-sensitive host collide.
 
 ---
 
@@ -1164,19 +1190,32 @@ steps kept running into and the two below finally apply — IntelliJ's extension
 `contributes` manifest. The test of it is mechanical: **`com.crystalgui.editor` imports exactly one name
 from `com.crystalgui.graph`**, the contribution it enables.
 
-### `DocumentType` — which editor opens which file
+### `DocumentKind` — which editor opens which file
 
 ```java
-workbench.contribute(DocumentType.of("shadergraph.file", "Shader Graph")
-        .forExtensions("shadergraph")
-        .document(path -> new ShaderGraphEditor().setResource(Resource.of(path))));
+workbench.contribute(DocumentKind.of("crystalshader:graph", "Shader Graph")
+        .files(DocumentKind.FilePatterns.extension("shadergraph"))
+        .icon("crystalshader:graph")
+        .model((resource, bytes) -> GraphModel.decode(bytes))   // what it IS
+        .editor(GraphView::new)                                 // one way of looking at it
+        .status(GraphStatus::contribute),                       // while it is in front
+        "shadergraph");                                         // and the panel binding
 ```
 
-Declared by the package that owns the type, not by the application. It replaced
-`registerDocumentType(id, title, factory)` **plus** `bindEditorExtensions(id, …)` — two calls that are
-meaningless apart: a factory with no binding never opens anything, and a binding with no factory threw
-`"No document factory for panel type"` *when a user opened a file*. Two calls that must both happen are
-one fact, and `contribute` refuses an incomplete type on the spot.
+Declared by the package that owns the type, not by the application. **One call**, because a factory
+with no binding never opens anything and a binding with no factory fails at the moment somebody opens a
+file — two calls that must both happen are one fact, and `contribute` refuses an incomplete kind on the
+spot.
+
+**The model and the view are declared separately**, and that split is what the rest of the layer rests
+on: a model knows its content and nothing about paths, tabs, saving or windows, so a document analyses
+with no tab open and two split panes share one parse tree. `.editor` is optional — a kind that can be
+opened, analysed and saved with nothing to look at it is what a build artefact is.
+
+At most one kind may call `.fallback()`, and that is the "File" kind: every text file nothing else
+claims, plus every resource in a registered scheme. Without it, opening an unrecognised extension
+answers "nothing knows how to open this", which is right for a graph format nobody registered and
+wrong for a `.txt`.
 
 ### `Inspector` — one inspector, any subject
 
@@ -1210,8 +1249,8 @@ IntelliJ's `EditorNotificationProvider`. Facts about a tab that the tab cannot s
 *read-only*, *out of date*. The motivating case: `compiled_graph.shader` is `setReadOnly(true)`, so typing
 in it silently does nothing, which reads as a **broken editor** rather than as a generated file.
 
-- **Asked with the `DockPanelRef`, not a document** — deliberately. The generated source tab is *not* a
-  `FileDocument`; it is a panel type whose ref carries the derived `Resource` in its state. A
+- **Asked with the `DockPanelRef`, not a document** — deliberately. The generated source tab is not a
+  document of its own; it is a panel type whose ref carries the derived `Resource` in its state. A
   document-shaped question could not have been asked about the one tab that needed it.
 - **Wrapping happens in `DockGroup.contentFor`**, the single place every panel passes through — document
   tabs, pane-backed panels and plain registry-built ones alike.
@@ -1384,7 +1423,7 @@ document.diagnostics().changeOne(services.id(), compiled.problems());
 | **Absence is the feature flag, and there is no other one** | Three tiers degrade independently and each absence is silent: no engine → grammar colouring, no grammar → keyword lexer, neither → plain text. A `enableSemanticHighlighting` boolean would be a second source of truth about what is actually loaded, and the two disagree the moment a native fails to load |
 | **Per DOCUMENT, never per editor** | The same file in two split panes is one document. Two sets would double every compile, publish two competing diagnostic slices into one `DiagnosticSet`, and disagree about which version they had reached |
 | **`LanguageServices.close()` is the ONLY close on the seam** | `SemanticTokenProvider` has one too and nothing outside an implementation may call it — an editor closing a provider releases something it was only lent, while the document's other view carries on using it |
-| **The document owns them — `TextFileDocument.dispose()`** | Not the widget. The dock rebuilds every panel on every split and drag, so releasing on widget teardown frees a parse tree for a document that is still open and rebuilds it next frame. **This is also what finally calls `SyntaxTokenizer.close()`**: that method has existed since the seam did and nothing in the application ever reached it, so every text document's native parse tree survived until the process ended |
+| **The document owns them — `TextDocumentModel.dispose()`** | Not the widget. The dock rebuilds every panel on every split and drag, so releasing on widget teardown frees a parse tree for a document that is still open and rebuilds it next frame. **This is also what finally calls `SyntaxTokenizer.close()`**: that method has existed since the seam did and nothing in the application ever reached it, so every text document's native parse tree survived until the process ended |
 | **`setLanguageServices` unsubscribes, it does not close** | Same reason — the editor holds, the document owns |
 | **Diagnostics are NOT on this interface** | They already have a home with a per-owner model built for exactly this. `services.id()` is the owner key; mirroring the list here would be two copies with no rule about which is authoritative |
 | **Every answer carries the document version it describes** | `Versioned<T>`. The consumer picks the staleness policy, because there are three correct ones and they are not interchangeable: **discard** for hover and go-to-definition, **keep adjusted** for diagnostics, **keep per line** for semantic tokens — dropping those on every keystroke flickers the file back to lexer colouring and restores it 300ms later |
@@ -1622,6 +1661,6 @@ nobody has opened without fetching the project.
 ### File operations
 
 `ExplorerCommands` resolves conflicts rather than writing through them: a **copy** onto a taken name gets
-`WorkspaceFileService.incrementalName`, and a **move** onto one is refused with the name in the message.
+`FileOperations.incrementalName`, and a **move** onto one is refused with the name in the message.
 Every path out of a paste iteration must call its `batch.track()` runnable, including the refusals — a
 `continue` that skips it leaves the undo group open forever.
