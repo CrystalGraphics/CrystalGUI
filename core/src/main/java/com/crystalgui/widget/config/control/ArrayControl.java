@@ -11,6 +11,13 @@ import com.crystalgui.widget.config.ValueControl;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
+import com.crystalgui.serialization.StateMap;
+import com.crystalgui.ui.contract.Event;
+import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgui.ui.contract.State;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.Name;
 
 /**
@@ -50,6 +57,38 @@ public class ArrayControl extends ValueControl<List<Object>> {
     public static final String FOOT_CLASS = "__foot__";
     public static final String ENTRY_CLASS = "__entry__";
     public static final String EMPTY_CLASS = "__empty__";
+
+    /**
+     * The entries, each as the text its own control shows.
+     *
+     * <p>Text and not a typed list, because this is the one control whose value type is not fixed by
+     * its class: a {@link ConfigDescriptor#element() element} descriptor says what one entry is, and a
+     * {@link State} slot is declared once for the whole kind. So an entry crosses as what it reads as
+     * and is coerced back by the element's own kind on arrival — faithful for the kinds a config array
+     * actually holds (text, numbers, booleans, a choice, an asset path), and for anything else exactly
+     * the string the entry's control was showing.</p>
+     */
+    public static final State<ArrayControl, List<String>> ENTRIES = State.of("entries",
+            StateTypes.stringListUnder("v"),
+            ArrayControl::entriesAsText, ArrayControl::setEntriesFromText, List.of());
+
+    /** An entry was added, removed or edited. Immediate: each is a discrete action. */
+    public static final Event<ArrayControl, List<String>> CHANGED = Event.of("change",
+            (control, sink) -> control.changed.connect(raw -> sink.accept(control.entriesAsText())),
+            new Event.Payload<List<String>>() {
+                @Override public <T> void write(StateMap<T> out, List<String> raw) {
+                    StateTypes.stringListUnder("v").put(out, "value", raw);
+                }
+                @Override public <T> List<String> read(StateMap<T> in) {
+                    return StateTypes.stringListUnder("v").get(in, "value", List.of());
+                }
+            }, RatePolicy.IMMEDIATE);
+
+    public static final WidgetContract<ArrayControl> CONTRACT = WidgetContracts.register(
+            WidgetContract.of(ArrayControl.class, "arraycontrol")
+                    .state(ENTRIES)
+                    .event(CHANGED)
+                    .build());
 
     private final UIElement body = new UIElement();
     private final UIElement foot = new UIElement();
@@ -160,5 +199,45 @@ public class ArrayControl extends ValueControl<List<Object>> {
 
     public int size() {
         return values.size();
+    }
+
+    /** Each entry as the text its own control shows. @see #ENTRIES */
+    public List<String> entriesAsText() {
+        List<String> out = new ArrayList<>(values.size());
+        for (Object value : values) out.add(value == null ? "" : String.valueOf(value));
+        return out;
+    }
+
+    /**
+     * Replaces the entries, coercing each by the element descriptor's kind.
+     *
+     * <p>The coercion is here rather than in {@code ConfigControls} because only this control knows
+     * what one of its entries IS. Handing a number entry's text straight to that factory yields
+     * {@code 0} — silently, since it takes anything that is not a {@code Number} as zero — which is the
+     * shape a wire format is worst at: a list that arrives the right length and the wrong values.</p>
+     */
+    public void setEntriesFromText(@Nullable List<String> entries) {
+        List<Object> coerced = new ArrayList<>(entries == null ? 0 : entries.size());
+        if (entries != null) for (String entry : entries) coerced.add(coerce(entry));
+        setValue(coerced);
+    }
+
+    @Nullable
+    private Object coerce(@Nullable String entry) {
+        if (entry == null) return null;
+        switch (element.kind()) {
+            case NUMBER:
+                try {
+                    return Double.valueOf(entry);
+                } catch (NumberFormatException notANumber) {
+                    // NOT A FAILURE. The far side may be a version that wrote this entry as something
+                    // else, and a list that is one entry odd beats a window that refuses to open.
+                    return Double.valueOf(0d);
+                }
+            case BOOLEAN:
+                return Boolean.valueOf(entry);
+            default:
+                return entry;
+        }
     }
 }

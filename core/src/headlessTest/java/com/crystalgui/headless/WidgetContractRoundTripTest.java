@@ -9,7 +9,9 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.serialization.PlainOps;
+import com.crystalgui.widget.config.control.ArrayControl;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.contract.Event;
@@ -245,6 +247,47 @@ public class WidgetContractRoundTripTest {
         dropdown.select(1);
 
         assertEquals(1, heard.get());
+    }
+
+    // ── A value that is not a scalar ─────────────────────────────────────────
+
+    /**
+     * <b>An array control round trips.</b>
+     *
+     * <p>The one control whose value type is not fixed by its class: an element descriptor says what
+     * one entry is, and a {@code State} slot is declared once for the whole kind. So entries cross as
+     * the text they read as and are coerced back by the element's own kind — which is why the fixture
+     * is a NUMBER array rather than a text one. Handing a number entry's text to
+     * {@code ConfigControls} yields {@code 0}, silently, since it takes anything that is not a
+     * {@code Number} as zero: a list that arrives the right length and the wrong values.</p>
+     */
+    @Test
+    public void anArrayControlRoundTrips() {
+        ConfigDescriptor numbers = ConfigDescriptor
+                .of("weights", "Weights", ConfigDescriptor.Kind.ARRAY)
+                .element(ConfigDescriptor.number("weights.entry", ""));
+        ArrayControl from = new ArrayControl(numbers, List.of(1.5d, 2.5d, 3d));
+        ArrayControl to = roundTrip(ArrayControl.CONTRACT, from, new ArrayControl(numbers, null));
+
+        assertEquals(3, to.size());
+        assertEquals("coerced back to numbers, not left as their text",
+                List.of(1.5d, 2.5d, 3d), to.getValue());
+    }
+
+    /** ...and an entry the far side wrote as something else costs that entry and nothing more. */
+    @Test
+    public void anUnreadableArrayEntryDoesNotRefuseTheList() {
+        ConfigDescriptor numbers = ConfigDescriptor
+                .of("weights", "Weights", ConfigDescriptor.Kind.ARRAY)
+                .element(ConfigDescriptor.number("weights.entry", ""));
+        ArrayControl to = new ArrayControl(numbers, null);
+        StateMap<Object> wire = new StateMap<>(PlainOps.INSTANCE);
+        wire.putList("entries", List.of("1.5", "not a number", "3"),
+                (entry, item) -> entry.putString("v", item));
+        ArrayControl.CONTRACT.read(to, new StateMap<>(PlainOps.INSTANCE, wire.encode()));
+
+        assertEquals("the list arrived whole", 3, to.size());
+        assertEquals(List.of(1.5d, 0d, 3d), to.getValue());
     }
 
     // ── Rate policy ──────────────────────────────────────────────────────────
