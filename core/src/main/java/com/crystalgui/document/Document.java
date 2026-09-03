@@ -157,9 +157,21 @@ public final class Document {
      * afterwards — which is correct, and is what a version records that a byte comparison cannot.</p>
      */
     public void markSaved(@Nullable String newEtag) {
-        this.savedVersion = model.version();
+        markSavedAt(model.version(), newEtag);
+    }
+
+    /**
+     * The same, for a save whose bytes were taken at an EARLIER version.
+     *
+     * <p>Which is every save that crosses a wire: the content is encoded, the write travels, and the
+     * person goes on typing. Recording "the version now" would call the document clean while holding
+     * edits the file does not have — and the next reload would discard them without asking. This is the
+     * property a byte comparison cannot express at all.</p>
+     */
+    public void markSavedAt(int version, @Nullable String newEtag) {
+        this.savedVersion = version;
         this.etag = newEtag;
-        setState(DocumentState.CLEAN);
+        setState(isDirty() ? DocumentState.DIRTY : DocumentState.CLEAN);
         onDidSave.emit();
     }
 
