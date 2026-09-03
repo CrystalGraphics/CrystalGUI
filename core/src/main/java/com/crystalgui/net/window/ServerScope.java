@@ -7,6 +7,7 @@ import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.net.RowWindows;
 import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.net.SheetRef;
 import com.crystalgui.net.protocol.Call;
@@ -140,6 +141,59 @@ public final class ServerScope {
                                        Function<T, Object> key, Function<T, UIElement> create,
                                        BiConsumer<UIElement, T> apply) {
         projections().each(items, into, key, create, apply);
+        return this;
+    }
+
+    /**
+     * Keeps a container's children matching the <b>window</b> of a collection viewers are looking at.
+     *
+     * <pre>{@code
+     * io.stream(inventory, source, ItemRow::new, ItemRow::show);
+     * }</pre>
+     *
+     * <p>{@link #projectEach}'s answer for a collection too large to describe: the server holds all of
+     * it and describes only what somebody can see. A ten thousand row list costs a window rather than
+     * ten thousand described elements, and the window slides as the viewer scrolls rather than the
+     * list being re-sent.</p>
+     *
+     * <p>Rows arrive as <b>ordinary described subtrees</b>, so a row may hold a real {@code Button}
+     * that reports like any other widget — which is the difference between this and a display list, and
+     * the reason it is worth doing on the mirror rather than beside it.</p>
+     *
+     * <h3>Every viewer sees the union of the windows</h3>
+     *
+     * <p>Rows are structure, and structure goes to every viewer: a tree delta renumbers both ends, so
+     * withholding one from a viewer scrolled elsewhere would leave it addressing elements by numbers
+     * the server has moved on from. Two viewers at the same place cost one window between them; two
+     * scrolled apart cost two. That is the one multi-viewer cost here and it is bounded by
+     * viewers × window. @see RowWindows</p>
+     *
+     * <h3>A window at the end FOLLOWS</h3>
+     *
+     * <p>A viewer whose window reaches the last row is taken to be watching the tail, so appended rows
+     * are described without it asking. That is what a log wants; without it every appended line is a
+     * round trip to discover that the line after it exists too.</p>
+     *
+     * @param into   the container whose described children are the window. Nothing else may add
+     *               children to it — {@code ClientScope.addLocal} is how a client adds its own
+     * @param source the whole collection: its count, a range of it, and a stable key per row
+     * @param create builds a row element for a row seen for the first time
+     * @param apply  writes a row into its element, every run; cheap because widget setters are
+     *               idempotent
+     */
+    public <T> ServerScope stream(UIElement into, RowSource<T> source,
+                                  Function<T, UIElement> create, BiConsumer<UIElement, T> apply) {
+        Objects.requireNonNull(into, "into");
+        Objects.requireNonNull(source, "source");
+        RowWindows windows = session.streamRows(into, source::count);
+        // THE WINDOW IS READ PER RUN, not captured: it moves when a viewer scrolls and when one joins
+        // or leaves, and a supplier that closed over the range it saw once would describe the rows
+        // somebody was looking at when the panel opened, for ever.
+        projections().each(() -> {
+                    RowWindows.Window required = windows.required(source.count());
+                    return required.to() <= required.from()
+                            ? List.<T>of() : source.rows(required.from(), required.to());
+                }, into, source::keyOf, create, apply);
         return this;
     }
 

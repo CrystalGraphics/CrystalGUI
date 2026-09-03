@@ -150,6 +150,16 @@ public final class UiMethods {
 
     public static final String EVENT = "ui/event";
 
+    /**
+     * A viewer says which rows of a streamed collection it is looking at — {@code {nid, from, to}}.
+     *
+     * <p>A <b>request</b>, because the answer is the count: the viewer needs a scrollbar before it
+     * needs rows, and a notification would leave it guessing until the first delta arrived. The rows
+     * themselves are not the answer — they arrive as ordinary described children, since a row may hold
+     * a real {@code Button} that reports like any other and structure is what the mirror is for.</p>
+     */
+    public static final String ROWS = "ui/rows";
+
     /** {@code ui/openWindow}: the window's <b>type</b> — what a client dispatches local behaviour on. */
     public static final String TYPE = "type";
 
