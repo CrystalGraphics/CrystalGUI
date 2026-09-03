@@ -153,7 +153,7 @@ public final class ScreenOverlay {
 
         // Promoted into the top layer -- a dialog, a menu, a tooltip, the switcher. The promoted node
         // ITSELF is a legitimate hit, so this matches at depth zero.
-        for (UIElement walk = hit; walk != null; walk = walk.parent()) {
+        for (UIElement walk = hit; walk != null; walk = walk.parentElement()) {
             if (window.isPromoted(walk)) return hit;
         }
 
@@ -169,7 +169,7 @@ public final class ScreenOverlay {
         // so a click at the bottom of the screen belongs to the game.
         Desktop desktop = Desktop.ifPresent(window);
         UIElement layer = desktop == null ? null : desktop.windowLayer();
-        for (UIElement walk = hit; walk != null; walk = walk.parent()) {
+        for (UIElement walk = hit; walk != null; walk = walk.parentElement()) {
             if (walk instanceof WindowFrame) return hit;
             if (walk == layer) return null;
         }

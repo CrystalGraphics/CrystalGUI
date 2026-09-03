@@ -169,7 +169,7 @@ public class NodeControlKitTest extends UiDocumentTestBase {
     public void theRowIsAFloorNotACap() {
         openWindow();
         UIElement widget = controlInNode(NodeField.Kind.NUMBER);
-        UIElement row = widget.parent();
+        UIElement row = widget.parentElement();
         assertTrue("the control row must not be shorter than its floor, was " + height(row),
                 height(row) >= ROW_H - 0.5f);
         assertTrue("a control must never be taller than the row containing it",

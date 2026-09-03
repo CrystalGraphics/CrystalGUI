@@ -139,7 +139,7 @@ public class MenuItem extends Button {
     /** The menu this row belongs to, or null while it is unparented. */
     @Nullable
     private Menu owningMenu() {
-        for (UIElement element = parent(); element != null; element = element.parent()) {
+        for (UIElement element = parentElement(); element != null; element = element.parentElement()) {
             if (element instanceof Menu menu) return menu;
         }
         return null;

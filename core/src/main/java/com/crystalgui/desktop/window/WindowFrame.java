@@ -745,7 +745,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
      */
     private boolean pressedInContent(@Nullable UIElement target) {
         if (target == null || target == this) return false;
-        for (UIElement at = target; at != null; at = at.parent()) {
+        for (UIElement at = target; at != null; at = at.parentElement()) {
             if (at == content) return true;
         }
         return false;
@@ -798,7 +798,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
         if (chrome == null || chrome == adoptedChrome) return;
         releaseChrome();
 
-        chromeOrigin = chrome.parent();
+        chromeOrigin = chrome.parentElement();
         chromeOriginIndex = chromeOrigin == null ? -1 : chromeOrigin.indexOf(chrome);
 
         adoptedChrome = chrome;
@@ -1320,7 +1320,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
      */
     @Nullable
     public static WindowFrame of(@Nullable UIElement element) {
-        for (UIElement el = element; el != null; el = el.parent()) {
+        for (UIElement el = element; el != null; el = el.parentElement()) {
             if (el instanceof WindowFrame) return (WindowFrame) el;
         }
         return null;
@@ -1476,7 +1476,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
      * have been a silent widening of a method every caller in the engine already relies on.</p>
      */
     private boolean isInclusiveAncestorOf(@Nullable UIElement element) {
-        for (UIElement walk = element; walk != null; walk = walk.parent()) {
+        for (UIElement walk = element; walk != null; walk = walk.parentElement()) {
             if (walk == this) return true;
         }
         return false;
@@ -1579,7 +1579,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
         // subtree for free. SYNCHRONOUS here because a direct hide() is; an animated departure has
         // already cascaded at gesture time and this pass skips what it started. @see #isToolWindow()
         cascadeHideOwnedToolWindows(Departure.NOW);
-        UIElement layer = parent();
+        UIElement layer = parentElement();
         if (layer == null) {
             markHidden();
             return;
@@ -1591,7 +1591,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
         // in close(); a frame has to do it here, because hide() is reached from requestClose, from
         // minimise, from dispose and from a caller, and only one of those is a place to remember it.
         WindowFrame ownedBy = null;
-        UIElement above = layer.parent();
+        UIElement above = layer.parentElement();
         // AN OWNED FRAME IS A CHILD OF ITS OWNER, with no slot in between since the slot was
         // deleted -- so the question is simply whether the layer it is leaving IS a window.
         if (layer instanceof WindowFrame candidate) ownedBy = candidate;
@@ -2381,7 +2381,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
     @Override
     @Nullable
     public UIElement resizeContainingBlock() {
-        return parent();
+        return parentElement();
     }
     /**
      * Re-clamps this window against the work area as it is now.

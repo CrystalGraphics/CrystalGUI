@@ -334,7 +334,7 @@ public final class ExplorerCommands {
 
     /** Everything selected — what the commands that act on several things ask for. */
     private static List<CgPath> targets(CommandContext context) {
-        for (UIElement element = UIElement.sourceOf(context); element != null; element = element.parent()) {
+        for (UIElement element = UIElement.sourceOf(context); element != null; element = element.parentElement()) {
             if (element instanceof ProjectFileTree tree) return tree.selectedPaths();
         }
         return List.of();
@@ -413,7 +413,7 @@ public final class ExplorerCommands {
 
     @Nullable
     private static CgPath target(CommandContext context) {
-        for (UIElement element = UIElement.sourceOf(context); element != null; element = element.parent()) {
+        for (UIElement element = UIElement.sourceOf(context); element != null; element = element.parentElement()) {
             if (element instanceof ProjectFileTree tree) return tree.selectedPath();
         }
         return null;

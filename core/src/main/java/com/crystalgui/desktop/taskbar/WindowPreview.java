@@ -132,7 +132,7 @@ public class WindowPreview extends UIElement {
     }
 
     private static boolean isWithin(@Nullable UIElement element, UIElement ancestor) {
-        for (UIElement walk = element; walk != null; walk = walk.parent()) {
+        for (UIElement walk = element; walk != null; walk = walk.parentElement()) {
             if (walk == ancestor) return true;
         }
         return false;

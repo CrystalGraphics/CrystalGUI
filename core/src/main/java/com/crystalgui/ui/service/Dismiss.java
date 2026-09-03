@@ -115,7 +115,7 @@ public final class Dismiss {
             // A watcher's scope is the one CONTAINING it, never itself: a dialog is a scope, and
             // asking `scopeOf(dialog)` would answer the dialog -- so a dialog's own Escape would
             // never be found from the window it is in. Same shape as the modality bug 5.5 found.
-            UIElement enclosing = focus.scopeOf(watcher.parent() == null ? watcher : watcher.parent());
+            UIElement enclosing = focus.scopeOf(watcher.parentElement() == null ? watcher : watcher.parentElement());
             if (enclosing == wanted) return watcher;
         }
         return null;

@@ -240,7 +240,7 @@ public class NodeCreationMenu extends Popover {
         final float startTop = placed == null ? 0f : placed.y();
         // No payload, no drop targets, no activation threshold: a move must track the first pixel.
         Drag.start(
-                window.root(), pointerX, pointerY,
+                window, pointerX, pointerY,
                 (mx, my, sx, sy, dx, dy) -> moveTo(startLeft + dx, startTop + dy));
     }
 

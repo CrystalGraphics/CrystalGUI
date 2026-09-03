@@ -554,7 +554,7 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
     /** Walks up from whatever was hit to the row element the tree knows about. */
     @Nullable
     UIElement rowElementFor(@Nullable UIElement hit) {
-        for (UIElement element = hit; element != null; element = element.parent()) {
+        for (UIElement element = hit; element != null; element = element.parentElement()) {
             if (element.hasClass(ROW_CLASS)) return element;
         }
         return null;

@@ -101,7 +101,7 @@ public final class UIElementTreeSource implements TreeSource<UIElement> {
     @Override
     @Nullable
     public UIElement parentOf(UIElement node) {
-        return node == root ? null : node.parent();
+        return node == root ? null : node.parentElement();
     }
 
     /** The light children — the described tree. A shadow tree is not part of it. */

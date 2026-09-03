@@ -556,7 +556,7 @@ public class NavigatorView<T> extends UIElement {
             arrow.addClass(ARROW_CLASS);
             arrow.onMouseDown.attachListener((element, event) -> {
                 if (tree == null) return;
-                int at = tree.indexOfRowElement(element.parent());
+                int at = tree.indexOfRowElement(element.parentElement());
                 if (at < 0) return;
                 event.stopPropagation();
                 tree.toggleExpandedAt(at);

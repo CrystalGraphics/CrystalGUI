@@ -170,7 +170,7 @@ final class WindowMove {
      * {@code CLICK_NOT_TABBABLE}, deliberately — cannot answer yes for every press in it.</p>
      */
     private boolean captionPressIsAControl(@Nullable UIElement target) {
-        for (UIElement walk = target; walk != null && walk != bar; walk = walk.parent()) {
+        for (UIElement walk = target; walk != null && walk != bar; walk = walk.parentElement()) {
             if (walk.focusPolicy().isFocusable()) return true;
         }
         return false;

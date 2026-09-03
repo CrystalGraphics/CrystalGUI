@@ -136,7 +136,7 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
     }
 
     private static UIElement outward(UIElement node) {
-        UIElement parent = node.parent();
+        UIElement parent = node.parentElement();
         if (parent != null) return parent;
         return node instanceof ShadowRoot shadow ? shadow.host() : null;
     }
@@ -714,7 +714,7 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
     }
 
     private static boolean isInside(UIElement element, UIElement ancestor) {
-        for (UIElement walk = element; walk != null; walk = walk.parent()) {
+        for (UIElement walk = element; walk != null; walk = walk.parentElement()) {
             if (walk == ancestor) return true;
         }
         return false;

@@ -306,7 +306,7 @@ public class CanvasView extends UIElement {
      */
     protected boolean isInsideOverlay(@Nullable UIElement target) {
         if (overlays.isEmpty()) return false;
-        for (UIElement element = target; element != null && element != this; element = element.parent()) {
+        for (UIElement element = target; element != null && element != this; element = element.parentElement()) {
             if (overlays.contains(element)) return true;
         }
         return false;
@@ -639,7 +639,7 @@ public class CanvasView extends UIElement {
      * canvas underneath had taken its input.</p>
      */
     protected boolean isInsidePromotedChild(@Nullable UIElement target) {
-        for (UIElement element = target; element != null && element != this; element = element.parent()) {
+        for (UIElement element = target; element != null && element != this; element = element.parentElement()) {
             if (document().isPromoted(element)) return true;
         }
         return false;

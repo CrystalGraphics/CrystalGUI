@@ -619,7 +619,7 @@ public class WindowSwitcher extends UIElement {
          * A press on the button's own children counts, which is why this walks rather than compares.</p>
          */
         private boolean isWithinClose(@Nullable UIElement target) {
-            for (UIElement walk = target; walk != null && walk != this; walk = walk.parent()) {
+            for (UIElement walk = target; walk != null && walk != this; walk = walk.parentElement()) {
                 if (walk == close) return true;
             }
             return false;

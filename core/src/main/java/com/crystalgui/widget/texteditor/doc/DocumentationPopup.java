@@ -903,7 +903,7 @@ public final class DocumentationPopup extends Popover {
      * shared widgets and every other consumer is relying on that press continuing to bubble.</p>
      */
     private boolean ownsItsOwnPress(@Nullable UIElement target) {
-        for (UIElement at = target; at != null && at != this; at = at.parent()) {
+        for (UIElement at = target; at != null && at != this; at = at.parentElement()) {
             // BY CLASS for the resizer, because `UIResizer` is package-private and cannot be named from
             // here; by TYPE for the scroller, which is an ordinary public widget.
             if (at.hasClass(Resizer.RESIZER_CLASS) || at instanceof Scroller) return true;
@@ -928,7 +928,7 @@ public final class DocumentationPopup extends Popover {
      */
     private void beginMove(float rawX, float rawY) {
         UIDocument window = document();
-        UIElement frame = parent();
+        UIElement frame = parentElement();
         Box self = box();
         if (window == null || frame == null || self == null) return;
 

@@ -633,7 +633,7 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
     /** Whether {@code node} is the dialog, inside it, or the backdrop it owns. */
     private static boolean partOf(UIElement node, Dialog dialog) {
         if (node.hasClass(Dialog.BACKDROP_CLASS)) return true;
-        for (UIElement walk = node; walk != null; walk = walk.parent()) {
+        for (UIElement walk = node; walk != null; walk = walk.parentElement()) {
             if (walk == dialog) return true;
         }
         return false;

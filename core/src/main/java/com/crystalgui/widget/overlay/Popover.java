@@ -429,7 +429,7 @@ public class Popover extends UIElement {
      */
     @Nullable
     public Popover parentPopover() {
-        for (UIElement el = popoverInvoker(); el != null; el = el.parent()) {
+        for (UIElement el = popoverInvoker(); el != null; el = el.parentElement()) {
             if (el instanceof Popover popover && popover != this && popover.isOpen()) return popover;
         }
         return null;

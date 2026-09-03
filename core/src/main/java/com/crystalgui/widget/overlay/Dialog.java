@@ -357,7 +357,7 @@ public class Dialog extends UIElement {
         } else if (backdrop == null) {
             // THE BACKDROP GOES BESIDE THE DIALOG, not inside it: the sheet sizes it to 100% of its
             // containing block, and inside the dialog that is the dialog.
-            UIElement host = parent();
+            UIElement host = parentElement();
             if (host != null) host.append(ensureBackdrop());
         }
         window.focus().pushModal(this);
