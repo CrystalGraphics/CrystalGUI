@@ -25,6 +25,7 @@ import com.crystalgui.fs.WorkspaceActor;
 import com.crystalgui.fs.WorkspacePermission;
 import com.crystalgui.fs.WorkspaceService;
 import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.project.ProjectInfo;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.server.ServerWorkspace;
@@ -37,6 +38,7 @@ import com.crystalgui.net.window.ClientWindowContext;
 import com.crystalgui.net.window.ClientWindows;
 import com.crystalgui.net.window.Presentation;
 import com.crystalgui.net.window.ServerScope;
+import com.crystalgui.net.window.ServerWindow;
 import com.crystalgui.net.window.ServerWindows;
 import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.net.window.Networked;
@@ -63,6 +65,22 @@ public class PresentationTest {
     private ProtocolConnection<Object> serverEnd;
     private ProtocolConnection<Object> clientEnd;
 
+    /**
+     * A SECOND viewer, on its own wire — built <b>only by the tests that need one</b>.
+     *
+     * <p>Not in {@code setUp}, and that is not tidiness. {@code ClientWindows.CLIENT} is a single static:
+     * a client is one process talking to one server, and {@code requestOpen} takes no connection because
+     * there is only one it could mean. Opening a second client connection in the fixture re-points it, so
+     * every {@code requestOpen} in this file would ask down the wrong wire — which is a property of the
+     * fixture and not of anything being tested.</p>
+     */
+    private InMemoryTransport<Object>[] linkB;
+    private ProtocolConnection<Object> serverEndB;
+    private ProtocolConnection<Object> clientEndB;
+
+    /** Every context the second client's mount was handed. */
+    private final List<ClientWindowContext> mountedB = new ArrayList<>();
+
     /** Every context the mount was handed, in order. */
     private final List<ClientWindowContext> mounted = new ArrayList<>();
 
@@ -76,7 +94,7 @@ public class PresentationTest {
         link = InMemoryTransport.pair();
         serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "player");
         clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
-        ClientWindows.of(clientEnd).setMount(new RecordingMount());
+        ClientWindows.of(clientEnd).setMount(new RecordingMount(mounted));
     }
 
     @After
@@ -86,20 +104,40 @@ public class PresentationTest {
         ServerWindows.resetOpenableForTesting();
     }
 
+    /** Builds the second viewer's wire. @see #linkB */
+    private void secondViewer() {
+        linkB = InMemoryTransport.pair();
+        serverEndB = Protocols.open(linkB[0], PlainOps.INSTANCE, () -> { }, "second");
+        clientEndB = Protocols.open(linkB[1], PlainOps.INSTANCE, () -> { }, null);
+        ClientWindows.of(clientEndB).setMount(new RecordingMount(mountedB));
+    }
+
     private void settle() {
-        for (int i = 0; i < 8; i++) {
+        for (int i = 0; i < 10; i++) {
             link[0].deliver();
             link[1].deliver();
             serverEnd.tick();
             clientEnd.tick();
+            if (linkB == null) continue;
+            linkB[0].deliver();
+            linkB[1].deliver();
+            serverEndB.tick();
+            clientEndB.tick();
         }
     }
 
     /** Records what it was given and does nothing with it — a host with only a desktop. */
-    private final class RecordingMount implements WindowMount {
+    private static final class RecordingMount implements WindowMount {
+
+        private final List<ClientWindowContext> into;
+
+        RecordingMount(List<ClientWindowContext> into) {
+            this.into = into;
+        }
+
         @Override
         public MountedWindow mount(ClientWindowContext context) {
-            mounted.add(context);
+            into.add(context);
             return new MountedWindow() {
                 @Override
                 public void closedByServer(String reason) {
@@ -220,6 +258,73 @@ public class PresentationTest {
 
         assertEquals(List.of(false), answers);
         assertTrue("nothing was mounted", mounted.isEmpty());
+    }
+
+    // ── Two viewers ─────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>A placement is the WINDOW's, so two viewers see the same one.</b>
+     *
+     * <p>It rides {@code ui/openWindow}, which is built once and kept — so a viewer joining an hour
+     * later is sent exactly what the first one saw. A placement resolved per viewer would be a window
+     * that is an editor tab for one person and a floating window for another, which is not a thing a
+     * server ever meant to say.</p>
+     */
+    @Test
+    public void bothViewersSeeTheSamePlacement() {
+        secondViewer();
+        ServerWindow<TinyPanel> window =
+                ServerWindows.of(serverEnd).open(TinyPanel.TYPE, null, Presentation.EDITOR_TAB);
+        window.session().addViewer(serverEndB);
+        settle();
+
+        assertEquals(2, window.session().viewerCount());
+        assertEquals(1, mounted.size());
+        assertEquals(1, mountedB.size());
+        assertEquals(Presentation.EDITOR_TAB, mounted.get(0).presentation());
+        assertEquals("the second viewer was told the same thing, not asked",
+                Presentation.EDITOR_TAB, mountedB.get(0).presentation());
+    }
+
+    /**
+     * <b>A panel's workspace is its OWNER's, whoever is watching.</b>
+     *
+     * <p>A window has one owner and may have many viewers, and only the owner's connection carries the
+     * binding a panel acts through. Resolving per viewer would make a write's actor depend on who
+     * happened to be looking — and with two viewers there is no answer to "which one" that is not a
+     * guess. What a per-viewer answer is genuinely for is an EVENT, which carries the viewer that sent
+     * it; a panel's own reads and writes are the window's.</p>
+     */
+    @Test
+    public void aPanelsWorkspaceIsItsOwnersWhoeverIsWatching() {
+        secondViewer();
+        WorkspaceService owners = workspace();
+        new WorkspaceBinding<>(owners, new WatchHub(owners), WorkspaceActor.LOCAL, "player",
+                PlainOps.INSTANCE).installOn(serverEnd);
+        // A DIFFERENT workspace on the second viewer's wire, so "the owner's" is provable rather than
+        // merely plausible: with one service on both, either answer looks correct.
+        WorkspaceService others = new WorkspaceService(
+                new ProjectRegistry().register(() -> List.of(
+                        new WorkspaceProject("other", "Other", Paths.get("/srv/other")))),
+                new InMemoryFileSystem().seed("other:z.txt", "z"), WorkspacePermission.ALLOW_ALL);
+        new WorkspaceBinding<>(others, new WatchHub(others), WorkspaceActor.LOCAL, "second",
+                PlainOps.INSTANCE).installOn(serverEndB);
+
+        List<String> projects = new ArrayList<>();
+        TinyPanel.onServe = io -> {
+            ServerWorkspace fs = io.workspace();
+            assertNotNull(fs);
+            for (ProjectInfo project : fs.projects()) projects.add(project.id());
+        };
+        try {
+            ServerWindow<TinyPanel> window = ServerWindows.of(serverEnd).open(TinyPanel.TYPE, null);
+            window.session().addViewer(serverEndB);
+            settle();
+        } finally {
+            TinyPanel.onServe = null;
+        }
+
+        assertEquals("the owner's workspace, not the second viewer's", List.of("demo"), projects);
     }
 
     // ── The workspace through the scope ─────────────────────────────────────────────────────────

@@ -227,6 +227,66 @@ public class LocalChildTest {
         return count;
     }
 
+    /**
+     * <b>A local child is one viewer's, and the other viewer never sees it.</b>
+     *
+     * <p>The clearest statement of what "local" means, and the one a single-client fixture cannot make:
+     * two people looking at one window each add their own controls, neither travels, and the server has
+     * no idea either exists. A local child that reached the mirror would reach <em>every</em> viewer —
+     * one person's copy button appearing on everybody's screen.</p>
+     */
+    @Test
+    public void aLocalChildBelongsToOneViewerAndNotTheOther() {
+        InMemoryTransport<Object>[] linkB = InMemoryTransport.pair();
+        ProtocolConnection<Object> serverB = Protocols.open(linkB[0], PlainOps.INSTANCE, () -> { }, "bob");
+        ProtocolConnection<Object> clientB = Protocols.open(linkB[1], PlainOps.INSTANCE, () -> { }, null);
+        List<ClientWindowContext> mountedB = new ArrayList<>();
+        ClientWindows.of(clientB).setMount(context -> {
+            mountedB.add(context);
+            return new WindowMount.MountedWindow() {
+                @Override
+                public void closedByServer(String reason) {
+                }
+
+                @Override
+                public void focus() {
+                }
+
+                @Override
+                public void contentReplaced(UIElement newRoot) {
+                }
+            };
+        });
+
+        ServerWindow<RowPanel> served = ServerWindows.of(serverEnd).open(RowPanel.TYPE, null);
+        served.session().addViewer(serverB);
+        for (int i = 0; i < 12; i++) {
+            link[0].deliver();
+            link[1].deliver();
+            linkB[0].deliver();
+            linkB[1].deliver();
+            serverEnd.tick();
+            clientEnd.tick();
+            serverB.tick();
+            clientB.tick();
+        }
+
+        assertEquals(2, served.session().viewerCount());
+        assertFalse("bob got the window too", mountedB.isEmpty());
+        RowPanel alice = client();
+        RowPanel bob = (RowPanel) mountedB.get(mountedB.size() - 1).root();
+
+        assertEquals("each viewer added its own", 1, localCount(alice.rows));
+        assertEquals(1, localCount(bob.rows));
+        assertNotSame("...and they are different elements, on different trees",
+                localIn(alice.rows), localIn(bob.rows));
+        assertEquals("the server knows about neither", 1,
+                served.panel().rows.describedChildren().size());
+        assertEquals("...and describes neither to either of them",
+                1, alice.rows.describedChildren().size());
+        assertEquals(1, bob.rows.describedChildren().size());
+    }
+
     /** The one local child under {@code parent}, or null. */
     @Nullable
     private static UIElement localIn(UIElement parent) {
