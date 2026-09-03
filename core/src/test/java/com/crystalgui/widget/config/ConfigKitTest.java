@@ -13,7 +13,7 @@ import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.ui.elements.config.*;
+import com.crystalgui.widget.config.*;
 import com.crystalgui.widget.config.control.ArrayControl;
 import com.crystalgui.core.config.ConfigDescriptor;
 import org.junit.Ignore;

@@ -2,7 +2,7 @@ package com.crystalgui.core.notify;
 
 import com.crystalgui.core.signal.Signal;
 
-import com.crystalgui.ui.elements.inspector.InspectorRegistry;
+import com.crystalgui.widget.config.inspector.InspectorRegistry;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
