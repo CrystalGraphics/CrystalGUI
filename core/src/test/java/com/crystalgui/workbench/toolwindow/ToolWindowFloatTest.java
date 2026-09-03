@@ -1,6 +1,7 @@
 package com.crystalgui.workbench.toolwindow;
 
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.ShadowRoot;
@@ -135,7 +136,7 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
         return false;
     }
 
-    private static UIElement outward(UIElement node) {
+    private static UIElement outward(UINode node) {
         UIElement parent = node.parentElement();
         if (parent != null) return parent;
         return node instanceof ShadowRoot shadow ? shadow.host() : null;

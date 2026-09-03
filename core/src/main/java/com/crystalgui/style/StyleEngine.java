@@ -34,7 +34,7 @@ public final class StyleEngine {
     private final Supplier<? extends Collection<? extends Styleable>> elements;
 
     /** A sheet and the subtree it is installed for; a null root is the whole tree. */
-    private record Installed(StyleSheet sheet, @Nullable Styleable root) {
+    private record Installed(StyleSheet sheet, @Nullable StyleScope root) {
     }
 
     @Getter
@@ -139,12 +139,12 @@ public final class StyleEngine {
      * how a composite's own sheet reaches its parts and nothing outside them; an unscoped sheet
      * reaches into no shadow tree at all, except through {@code ::part()}.
      */
-    public void addStylesheet(StyleSheet sheet, @Nullable Styleable root) {
+    public void addStylesheet(StyleSheet sheet, @Nullable StyleScope root) {
         sheets.add(new Installed(sheet, root));
         markAllDirty();
     }
 
-    /** Removes EVERY installation of {@code sheet}, whatever it was scoped to. @see #removeStylesheet(StyleSheet, Styleable) */
+    /** Removes EVERY installation of {@code sheet}, whatever it was scoped to. @see #removeStylesheet(StyleSheet, StyleScope) */
     public void removeStylesheet(StyleSheet sheet) {
         if (sheets.removeIf(installed -> installed.sheet() == sheet)) {
             markAllDirty();
@@ -159,7 +159,7 @@ public final class StyleEngine {
      * so closing either window would unstyle the other — silently, and only ever with two of them
      * open.</p>
      */
-    public void removeStylesheet(StyleSheet sheet, @Nullable Styleable root) {
+    public void removeStylesheet(StyleSheet sheet, @Nullable StyleScope root) {
         if (sheets.removeIf(installed -> installed.sheet() == sheet && installed.root() == root)) {
             markAllDirty();
         }
@@ -726,9 +726,12 @@ public final class StyleEngine {
     }
 
     /** Hops from {@code element} up to {@code root} inclusive, or -1 when {@code root} is not above it. */
-    private static int proximityOf(Styleable element, Styleable root) {
+    private static int proximityOf(StyleScope element, StyleScope root) {
         int hops = 0;
-        for (Styleable at = element; at != null; at = at.getParent(), hops++) {
+        // THE SCOPE CHAIN, not getParent(). They differ at exactly one place and it is the one that
+        // matters here: getParent() answers null when the parent is a shadow root, so a sheet scoped
+        // to a composite's own shadow root would be unreachable from every part inside it.
+        for (StyleScope at = element; at != null; at = at.styleScopeParent(), hops++) {
             if (at == root) return hops;
         }
         return -1;

@@ -5,6 +5,7 @@ import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.settings.Settings;
 import com.crystalgui.core.settings.SettingsScope;
 import com.crystalgui.ui.input.keymap.Keymap;
+import com.crystalgui.style.StyleScope;
 import com.crystalgui.ui.input.keymap.KeymapScope;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -41,7 +42,7 @@ import javax.annotation.Nullable;
  *
  * <p>Not here: everything a stylesheet, a box or an event needs. That is {@link UIElement}.</p>
  */
-public abstract class UINode implements KeymapScope, SettingsScope {
+public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
 
     protected UINode(Name name) {
         this.name = Objects.requireNonNull(name, "name");
@@ -232,6 +233,19 @@ public abstract class UINode implements KeymapScope, SettingsScope {
         return parent == null ? null : parent.asElement();
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>The light parent INCLUDING a shadow root — deliberately not {@code getParent()}, which stops
+     * at a shadow boundary so an outside combinator cannot reach in. A sheet scoped to a composite's
+     * shadow root has to be findable from the parts inside it.</p>
+     */
+    @Override
+    @Nullable
+    public final StyleScope styleScopeParent() {
+        return parent;
+    }
+
     /** The parent NODE: an element, a shadow root, a document, or null. @see #parentElement() */
     @Nullable
     public final UINode parent() {
@@ -398,9 +412,10 @@ public abstract class UINode implements KeymapScope, SettingsScope {
             throw new IllegalArgumentException("A node cannot contain itself");
         }
         if (child instanceof UIDocument) throw new IllegalArgumentException("A document is a root, never a child");
-        if (child instanceof ShadowRoot) {
-            throw new IllegalArgumentException("A shadow root belongs to its host; attach one with attachShadow()");
-        }
+        // A SHADOW ROOT WAS REFUSED HERE AND NO LONGER CAN BE PASSED. It is a UINode and not a
+        // UIElement, so `refuseAsChild(UIElement)` cannot receive one and `append` cannot be handed
+        // one -- the check moved from run time to the signature. A document is still checked because
+        // UIDocument IS a UIElement, deliberately: ours is the root element as well as the document.
         // ONLY WHAT DECLARED ITSELF FIXED, never anything merely slotless. An unslotted light child
         // is the web's own state and three tests pin it; a widget that called
         // `refusePublicChildren()` has promised more than that. See that method.

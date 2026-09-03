@@ -417,37 +417,8 @@ public class UIElement extends UINode implements EventTarget, Styleable {
     public final Set<Attribute<?>> setAttributes() {
         return Collections.unmodifiableSet(attributes.keySet());
     }
-
-    // ── Light tree ───────────────────────────────────────────────────────────
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    
     // ── Shadow tree ──────────────────────────────────────────────────────────
-
-
-
-
-
-
 
     public ShadowRoot attachShadow() {
         return attachShadow(false);
@@ -476,28 +447,6 @@ public class UIElement extends UINode implements EventTarget, Styleable {
     public final ShadowRoot shadowRoot() {
         return shadowRoot;
     }
-
-
-
-
-    // ── Composed tree ────────────────────────────────────────────────────────
-
-
-
-
-
-
-
-    // ── Lifecycle hooks ──────────────────────────────────────────────────────
-
-
-
-
-
-
-
-
-
 
     // ── Styleable: what the cascade asks (plan_m5.md D5.2) ───────────────────
 
@@ -766,7 +715,7 @@ public class UIElement extends UINode implements EventTarget, Styleable {
         markExposedParts(shadowRoot, engine);
     }
 
-    private static void markExposedParts(UIElement at, StyleEngine engine) {
+    private static void markExposedParts(UINode at, StyleEngine engine) {
         for (UIElement child : at.children) {
             if (!child.frozen && !child.get(Attribute.PART).isEmpty()) engine.markDirty(child);
             if (child.shadowRoot == null) markExposedParts(child, engine);
@@ -919,20 +868,6 @@ public class UIElement extends UINode implements EventTarget, Styleable {
         if (next != null) addClass(next);
         return this;
     }
-
-
-    // ── Querying: the light tree, as on the web ──────────────────────────────
-
-
-
-
-
-
-
-    // ── Commands and keys ────────────────────────────────────────────────────
-
-
-
 
     // ── Default actions ──────────────────────────────────────────────────────
 
@@ -1195,20 +1130,6 @@ public class UIElement extends UINode implements EventTarget, Styleable {
         }
         TreeObserver.Dispatch.stateChanged(target.observer, target);
     }
-
-    // ── Wiring: document, observer, shadow flag ──────────────────────────────
-
-
-
-
-
-
-
-
-    // ── Mutation bookkeeping ─────────────────────────────────────────────────
-
-
-
 
     @Override
     public String toString() {

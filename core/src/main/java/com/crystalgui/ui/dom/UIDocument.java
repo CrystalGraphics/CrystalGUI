@@ -486,19 +486,31 @@ public final class UIDocument extends UIElement {
         styles.calculateStyle(deltaSeconds);
     }
 
-    /** Every connected node, light and shadow — what a sheet change has to re-match. */
+    /**
+     * Every connected ELEMENT, light and shadow — what a sheet change has to re-match.
+     *
+     * <p><b>A shadow root is not one, and used to be.</b> It is a {@code DocumentFragment}: no id, no
+     * classes, no tag a selector can name. Collecting it meant every shadow root in the tree was
+     * matched against every selector in every sheet and cascaded into a full {@code ElementStyle}
+     * that nothing ever read — the box tree walks {@code composedChildren()}, where a shadow root is
+     * transparent by construction, so it is never laid out and never painted. One wasted entry per
+     * shadow-hosting widget INSTANCE. A sheet writing {@code shadow-root { }} matched it, silently.
+     * Nothing could see any of it, because a cascade result nobody reads looks exactly like no
+     * cascade at all; the Node/Element split is what turned it into a compile error.</p>
+     */
     public List<UIElement> allNodes() {
         List<UIElement> out = new ArrayList<>();
         collect(this, out);
         return out;
     }
 
-    private static void collect(UIElement at, List<UIElement> into) {
+    private static void collect(UINode at, List<UIElement> into) {
         if (at.isFrozen()) return;   // frozen is not live: it matches nothing
-        into.add(at);
+        UIElement self = at.asElement();
+        if (self != null) into.add(self);
         for (UIElement child : at.children()) collect(child, into);
-        ShadowRoot shadow = at.shadowRoot();
-        if (shadow != null) collect(shadow, into);
+        // Its CHILDREN are elements and are styled; the root itself is walked THROUGH, not into.
+        if (self != null && self.shadowRoot() != null) collect(self.shadowRoot(), into);
     }
 
     // ── Ids ──────────────────────────────────────────────────────────────────

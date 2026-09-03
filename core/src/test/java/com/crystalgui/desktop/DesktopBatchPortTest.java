@@ -2,6 +2,7 @@ package com.crystalgui.desktop;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.input.keymap.KeyStroke;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -867,13 +868,13 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
         assertSame("and the foreground keeps the keyboard", front, desktop().activeWindow());
     }
 
-    private static UIElement findByClass(UIElement at, String cls) {
-        if (at.classes().contains(cls)) return at;
+    private static UIElement findByClass(UINode at, String cls) {
+        if (at instanceof UIElement self && self.classes().contains(cls)) return self;
         for (UIElement child : at.children()) {
             UIElement hit = findByClass(child, cls);
             if (hit != null) return hit;
         }
-        UIElement shadow = at.shadowRoot();
+        UINode shadow = at instanceof UIElement element ? element.shadowRoot() : null;
         return shadow == null ? null : findByClass(shadow, cls);
     }
 }
