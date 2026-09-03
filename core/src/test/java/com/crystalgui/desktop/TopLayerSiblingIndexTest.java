@@ -1,6 +1,5 @@
 package com.crystalgui.desktop;
 
-import com.crystalgui.ui.TopLayer;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.style.sheet.StyleSheet;

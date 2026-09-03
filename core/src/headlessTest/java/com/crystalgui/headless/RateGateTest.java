@@ -4,7 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import com.crystalgui.ui.ElementRegistry;
+import com.crystalgui.ui.dom.UINodeRegistry;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.contract.RateGate;
 import com.crystalgui.ui.contract.RatePolicy;
@@ -37,7 +37,7 @@ public class RateGateTest {
 
     @Before
     public void setUp() {
-        ElementRegistry.bootstrapBuiltins();
+        UINodeRegistry.bootstrap();
         slider = new Slider();
         field = new TextField();
         button = new Button("Press");

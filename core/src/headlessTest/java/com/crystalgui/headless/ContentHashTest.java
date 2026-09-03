@@ -4,7 +4,6 @@ import com.crystalgui.net.mirror.UINodeMirror;
 import com.crystalgui.serialization.ContentHash;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.UIDescriptionCodec;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.control.Checkbox;
 import com.crystalgui.widget.control.Slider;

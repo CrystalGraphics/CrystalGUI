@@ -1412,10 +1412,14 @@ public class UINode implements EventTarget, Styleable, KeymapScope, SettingsScop
     }
 
     /** Every class that has had {@link #registerCommands} run for it. */
-    private static final Set<Class<?>> COMMANDS_REGISTERED = ConcurrentHashMap.newKeySet();
 
     void runCommandHooks() {
-        if (COMMANDS_REGISTERED.add(getClass())) registerCommands(CommandRegistry.global());
+        // KEYED TO THE REGISTRY, never to a static set on this class. A static latch outlives
+        // `CommandRegistry.resetForTesting()`: the reset empties the registry, the next node of an
+        // already-seen class registers nothing, and the command is simply absent -- no throw, no log,
+        // just a key that stopped working. `contribute` records the contributor ON the registry, so
+        // clearing one clears the other.
+        CommandRegistry.global().contribute(getClass(), this::registerCommands);
         bindKeys();
     }
 

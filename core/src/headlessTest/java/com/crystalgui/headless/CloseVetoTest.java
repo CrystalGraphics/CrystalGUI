@@ -21,7 +21,7 @@ import com.crystalgui.net.window.UiType;
 import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.net.window.WindowProtocol;
 import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.ui.ElementRegistry;
+import com.crystalgui.ui.dom.UINodeRegistry;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.text.UIText;
 import java.util.ArrayList;
@@ -110,7 +110,7 @@ public class CloseVetoTest {
         Protocols.resetForTesting();
         WindowProtocol.resetForTesting();
         WindowProtocol.register();
-        ElementRegistry.bootstrapBuiltins();
+        UINodeRegistry.bootstrap();
         GuardedPanel.REFUSE.set(false);
         GuardedPanel.ASKED.clear();
 

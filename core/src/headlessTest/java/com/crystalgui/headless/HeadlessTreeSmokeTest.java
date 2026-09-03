@@ -3,7 +3,7 @@ package com.crystalgui.headless;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UINodeRegistry;
 import com.crystalgui.style.sheet.DeclarationParser;
-import com.crystalgui.ui.ElementRegistry;
+import com.crystalgui.ui.dom.UINodeRegistry;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Checkbox;

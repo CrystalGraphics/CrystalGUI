@@ -230,7 +230,7 @@ public class WidgetContractRoundTripTest {
         assertTrue(TabView.CONTRACT.eventKinds().contains("select"));
         assertTrue(ColorSelector.CONTRACT.eventKinds().contains("change"));
         assertTrue(SplitView.CONTRACT.eventKinds().contains("value"));
-        assertTrue(com.crystalgui.ui.elements.Tab.CONTRACT.eventKinds()
+        assertTrue(com.crystalgui.widget.layout.Tab.CONTRACT.eventKinds()
                 .contains("closeRequested"));
     }
 

@@ -9,7 +9,7 @@ import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.ui.ElementRegistry;
+import com.crystalgui.ui.dom.UINodeRegistry;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.TextField;
@@ -46,7 +46,7 @@ public class RatePolicyTest {
     @Before
     public void setUp() {
         Protocols.resetForTesting();
-        ElementRegistry.bootstrapBuiltins();
+        UINodeRegistry.bootstrap();
         root = new UINode();
         field = new TextField();
         button = new Button("Press");

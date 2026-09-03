@@ -9,7 +9,7 @@ import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.ElementRegistry;
+import com.crystalgui.ui.dom.UINodeRegistry;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Slider;
@@ -70,7 +70,7 @@ public class TwoWindowsOnOneConnectionTest {
     @Before
     public void setUp() {
         Protocols.resetForTesting();
-        ElementRegistry.bootstrapBuiltins();
+        UINodeRegistry.bootstrap();
 
         link = InMemoryTransport.pair();
         serverSide = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "alice");

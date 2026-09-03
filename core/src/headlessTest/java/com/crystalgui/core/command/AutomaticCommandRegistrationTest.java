@@ -1,6 +1,7 @@
 package com.crystalgui.core.command;
 
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UINode;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -19,8 +20,8 @@ import static org.junit.Assert.assertNull;
  * layout path. All three failed the same way — silently, with the widget looking finished and its keys
  * doing nothing.</p>
  *
- * <p>What this pins is the pair of guarantees that replaced them: {@link UIElement#registerCommands} runs
- * exactly once per concrete class, and {@link UIElement#bindKeys} runs for every instance. The split is
+ * <p>What this pins is the pair of guarantees that replaced them: {@link UINode#registerCommands} runs
+ * exactly once per concrete class, and {@link UINode#bindKeys} runs for every instance. The split is
  * load-bearing — a command is one application-wide fact, while a <em>binding on an element</em> is what
  * scopes a chord to a widget, so it has to be on each one.</p>
  */
@@ -29,15 +30,31 @@ public class AutomaticCommandRegistrationTest {
     private static final AtomicInteger REGISTRATIONS = new AtomicInteger();
     private static final AtomicInteger BINDINGS = new AtomicInteger();
 
+    /**
+     * <b>Attached, because registration happens on CONNECT.</b> The old element ran
+     * {@code registerCommands} from an instance initialiser -- so merely constructing a widget was
+     * enough, and a per-instance contribution made there was handed a field that had not been
+     * assigned yet. {@code UINode} runs it from {@link UINode#connected()} instead, where the node is
+     * built. A fixture that only constructs therefore registers nothing, which is the shape of every
+     * failure here.
+     */
+    private <N extends UINode> N attach(N node) {
+        document.append(node);
+        return node;
+    }
+
+    private UIDocument document;
+
     @Before
     public void setUp() {
+        document = new UIDocument();
         CommandRegistry.global().resetForTesting();
         REGISTRATIONS.set(0);
         BINDINGS.set(0);
     }
 
     /** A widget with commands of its own, declared the only way there is. */
-    private static class Widget extends UIElement {
+    private static class Widget extends UINode {
         @Override
         protected void registerCommands(CommandRegistry registry) {
             REGISTRATIONS.incrementAndGet();
@@ -52,7 +69,7 @@ public class AutomaticCommandRegistrationTest {
         }
     }
 
-    private static class OtherWidget extends UIElement {
+    private static class OtherWidget extends UINode {
         @Override
         protected void registerCommands(CommandRegistry registry) {
             registry.register(Command.of("other.doThing", "Do Other Thing").run(context -> {
@@ -62,20 +79,20 @@ public class AutomaticCommandRegistrationTest {
 
     @Test
     public void buildingAWidgetRegistersItsCommands() {
-        new Widget();
+        attach(new Widget());
         assertNotNull(CommandRegistry.global().get("widget.doThing"));
     }
 
     @Test
     public void registrationHappensOncePerClassHoweverManyInstances() {
-        for (int i = 0; i < 50; i++) new Widget();
+        for (int i = 0; i < 50; i++) attach(new Widget());
         assertEquals(1, REGISTRATIONS.get());
     }
 
     @Test
     public void everyInstanceBindsItsOwnKeys() {
-        Widget first = new Widget();
-        Widget second = new Widget();
+        Widget first = attach(new Widget());
+        Widget second = attach(new Widget());
         assertEquals(2, BINDINGS.get());
         // Not merely counted: each carries the binding, which is what scopes the chord to the widget.
         assertNotNull(first.keymap().chordFor("widget.doThing"));
@@ -85,27 +102,27 @@ public class AutomaticCommandRegistrationTest {
     /**
      * <b>The failure a static latch produces, and the reason once-ness lives on the registry.</b>
      *
-     * <p>A {@code ClassValue} latch on {@code UIElement} outlives {@link CommandRegistry#resetForTesting()}:
+     * <p>A {@code ClassValue} latch on {@code UINode} outlives {@link CommandRegistry#resetForTesting()}:
      * the reset empties the registry, the next widget of an already-seen class registers nothing, and the
      * command is simply absent — no throw, no log, just a key that stopped working. Keying the record to
      * the registry means clearing one clears the other.</p>
      */
     @Test
     public void aResetRegistryIsRepopulatedByTheNextWidget() {
-        new Widget();
+        attach(new Widget());
         assertNotNull(CommandRegistry.global().get("widget.doThing"));
 
         CommandRegistry.global().resetForTesting();
         assertNull(CommandRegistry.global().get("widget.doThing"));
 
-        new Widget();
+        attach(new Widget());
         assertNotNull(CommandRegistry.global().get("widget.doThing"));
     }
 
     @Test
     public void oneWidgetsRegistrationDoesNotSuppressAnothers() {
-        new Widget();
-        new OtherWidget();
+        attach(new Widget());
+        attach(new OtherWidget());
         assertNotNull(CommandRegistry.global().get("widget.doThing"));
         assertNotNull(CommandRegistry.global().get("other.doThing"));
     }

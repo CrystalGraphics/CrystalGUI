@@ -4,7 +4,7 @@ package com.crystalgui.language.grammar;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.text.syntax.Language;
 import com.crystalgui.text.syntax.LanguageRegistry;
-import com.crystalgui.ui.text.SyntaxHighlighting;
+import com.crystalgui.widget.text.SyntaxHighlighting;
 
 /**
  * Puts this module's real parsers in front of {@code core}'s built-in lexers.

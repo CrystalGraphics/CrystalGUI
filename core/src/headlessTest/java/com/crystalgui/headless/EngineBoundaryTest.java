@@ -2,6 +2,7 @@ package com.crystalgui.headless;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertNotNull;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -31,6 +32,38 @@ import org.junit.Test;
  * everywhere.</p>
  */
 public class EngineBoundaryTest {
+
+    /**
+     * <b>THE STRANGLER LINE IS GONE, because there is nothing left on the other side of it.</b>
+     *
+     * <p>This file spent M5 and M6 asserting that two engines coexisted without leaking into each
+     * other -- that the new tree wrote nothing at {@code IMPORTANT} origin, and that the old one
+     * still did. The second half is now unassertable: {@code UIElement} does not exist, so a scan for
+     * it can only ever find nothing, and a test that cannot fail is worse than no test.</p>
+     *
+     * <p>What survives is the half that was always the point: the new engine must not reach for the
+     * cascade to write geometry. That assertion is unchanged and now applies to the WHOLE TREE rather
+     * than to a list of packages, which is what "the boundary test's forbid list becomes the whole
+     * tree" means in the plan.</p>
+     */
+    @Test
+    public void theOldEngineIsGone() {
+        // From the compiled classes, not the working directory -- a test's cwd is the module's, and
+        // `DataKeyCollisionTest` already walks up to `settings.gradle.kts` for exactly this reason.
+        java.nio.file.Path root = null;
+        for (java.nio.file.Path p = ClassReferences.mainClassesRoot(EngineBoundaryTest.class);
+             p != null; p = p.getParent()) {
+            if (java.nio.file.Files.isRegularFile(p.resolve("settings.gradle.kts"))) { root = p; break; }
+        }
+        assertNotNull("cannot find the repository root", root);
+        java.nio.file.Path main = root.resolve("core/src/main/java/com/crystalgui");
+        assertTrue("the source root moved", java.nio.file.Files.isDirectory(main));
+        for (String gone : new String[]{"ui/elements", "ui/UIElement.java", "ui/UIWindow.java",
+                "ui/ElementRegistry.java", "ui/TopLayer.java", "ui/input/UIInputHandler.java",
+                "serialization/UIDescriptionCodec.java", "ui/dom/ElementTreeSource.java"}) {
+            assertFalse(gone + " is still here", java.nio.file.Files.exists(main.resolve(gone)));
+        }
+    }
 
     /** The new engine. */
     private static final List<String> NEW_PACKAGES = List.of(
@@ -198,24 +231,5 @@ public class EngineBoundaryTest {
         assertTrue("the new engine writes into the cascade:\n" + String.join("\n", offences), offences.isEmpty());
     }
 
-    @Test
-    public void andTheOldEngineDOESWriteAtImportant() throws IOException {
-        // The negative control for the rule above: UIText's geometry feedback is an IMPORTANT write.
-        Path root = ClassReferences.mainClassesRoot(EngineBoundaryTest.class);
-        java.util.Set<String> members = ClassReferences.memberReferencesOf(
-                root.resolve("com/crystalgui/ui/elements/UIText.class"));
-        assertTrue("the member scan found no importantPipeline call in UIText -- it is not detecting anything",
-                members.contains("com/crystalgui/style/StyleGroup.importantPipeline"));
-    }
 
-    @Test
-    public void andTheOldEngineDOESNameUIElement() throws IOException {
-        // The negative control: the widgets are written against UIElement, so the same detector run
-        // there must fire. A scan that finds nothing anywhere is not a scan.
-        Path root = ClassReferences.mainClassesRoot(EngineBoundaryTest.class);
-        List<String> offences = ClassReferences.offences(
-                root, "com/crystalgui/ui/elements/", List.of("com/crystalgui/ui/UIElement"));
-        assertFalse("the scan found no UIElement reference even under ui/elements -- it is not "
-                + "detecting anything", offences.isEmpty());
-    }
 }
