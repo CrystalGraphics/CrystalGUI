@@ -104,9 +104,10 @@ public final class ServerWindows {
      */
     private static final Map<String, Openable<?, ?>> OPENABLE = new LinkedHashMap<>();
 
-    /** A declared type and the authority that decides each request for it. */
+    /** A declared type, the authority that decides each request for it, and where it opens. */
     private record Openable<P extends UIElement & Networked<M>, M>(UiType<P, M> type,
-                                                                   OpenResolver<M> resolver) {
+                                                                   OpenResolver<M> resolver,
+                                                                   Presentation presentation) {
     }
 
     /**
@@ -133,7 +134,23 @@ public final class ServerWindows {
      */
     public static <P extends UIElement & Networked<M>, M> void openable(UiType<P, M> type,
                                                                         OpenResolver<M> resolver) {
-        OPENABLE.put(type.id(), new Openable<>(type, resolver));
+        openable(type, resolver, Presentation.WINDOW);
+    }
+
+    /**
+     * As {@link #openable(UiType, OpenResolver)}, and says where a granted window should appear.
+     *
+     * <p>Declared with the resolver rather than passed by the client, for the reason the resolver
+     * itself is: where a panel belongs is the mod's statement about its own UI, and a client that
+     * could name a placement could ask for a tool window to open as an editor tab. It also makes a
+     * <b>restore</b> land back where the panel was — the client re-asks by key and holds no memory of
+     * how the window was presented the first time.</p>
+     */
+    public static <P extends UIElement & Networked<M>, M> void openable(UiType<P, M> type,
+                                                                        OpenResolver<M> resolver,
+                                                                        Presentation presentation) {
+        OPENABLE.put(type.id(), new Openable<>(type, resolver,
+                presentation == null ? Presentation.WINDOW : presentation));
     }
 
     /** Forgets every declaration. For tests, which share statics. */
@@ -195,7 +212,7 @@ public final class ServerWindows {
         if (model == null) return false;   // an ordinary answer
 
         try {
-            open(declared.type(), model);
+            open(declared.type(), model, declared.presentation());
             return true;
         } catch (RuntimeException failed) {
             CrystalGuiCore.LOGGER.error("Could not open <{}> for a client that asked: {}",
@@ -240,7 +257,24 @@ public final class ServerWindows {
      *                               wiring mistake rather than something to resolve silently
      */
     public <P extends UIElement & Networked<M>, M> ServerWindow<P> open(UiType<P, M> type, @Nullable M model) {
+        return open(type, model, Presentation.WINDOW);
+    }
+
+    /**
+     * Opens a window and says <b>where it would like to appear</b>.
+     *
+     * <pre>{@code
+     * ServerWindows.of(connection).open(MachinePanel.TYPE, machine, Presentation.EDITOR_TAB);
+     * }</pre>
+     *
+     * <p>A hint and nothing more: a client with a workbench honours it, a client with only a desktop
+     * opens a window, and neither is an error. @see Presentation</p>
+     */
+    public <P extends UIElement & Networked<M>, M> ServerWindow<P> open(UiType<P, M> type,
+                                                                        @Nullable M model,
+                                                                        Presentation presentation) {
         if (type == null) throw new IllegalArgumentException("type is null");
+        if (presentation == null) presentation = Presentation.WINDOW;
 
         P panel = type.build(model);
         String key = panel.key(model);
@@ -286,6 +320,7 @@ public final class ServerWindows {
                 .setType(type.id())
                 .setTitle(title)
                 .setKey(key)
+                .setPresentation(presentation.encode())
                 // What makes the client need NO registration call: the open names the class, the
                 // client initialises it (guarded), and initialising it registers its tag.
                 .setUiClass(type.uiClass().getName());

@@ -228,11 +228,35 @@ public final class ClientWindows {
         windows.ask(type, args, onGranted);
     }
 
+    /**
+     * As {@link #requestOpen(UiType, StateMap, Consumer)}, naming the type by <b>id</b>.
+     *
+     * <p>For a caller that holds only what a session recorded: a restored layout has a type id string
+     * and no {@code UiType} object, and loading the panel class to get one would defeat the point of a
+     * lazy tab. It grants nothing extra — the id is what travels either way, and the server's
+     * {@link #openable} declaration is the authority in both cases.</p>
+     */
+    public static void requestOpen(String typeId, @Nullable StateMap<Object> args,
+                                   @Nullable Consumer<Boolean> onGranted) {
+        ClientWindows windows = CLIENT;
+        if (windows == null) {
+            CrystalGuiCore.LOGGER.warn("Asked to open <{}> with no connection to a server", typeId);
+            if (onGranted != null) onGranted.accept(false);
+            return;
+        }
+        windows.ask(typeId, args, onGranted);
+    }
+
     private <P extends UIElement & Networked<M>, M> void ask(
             UiType<P, M> type, @Nullable StateMap<Object> args,
             @Nullable java.util.function.Consumer<Boolean> onGranted) {
+        ask(type.id(), args, onGranted);
+    }
+
+    private void ask(String typeId, @Nullable StateMap<Object> args,
+                     @Nullable java.util.function.Consumer<Boolean> onGranted) {
         StateMap<Object> out = new StateMap<>(connection.ops());
-        out.putString(UiMethods.TYPE, type.id());
+        out.putString(UiMethods.TYPE, typeId);
         if (args != null) out.putRaw("args", args.encode());
         connection.router().request(UiMethods.REQUEST_OPEN, out.encode(),
                 answer -> {
@@ -246,7 +270,7 @@ public final class ClientWindows {
                     // A TIMEOUT IS NOT A REFUSAL, and the caller is told the same thing for both --
                     // because from where it stands they are the same: no window. What separates them is
                     // a log line, which is where somebody debugging should look.
-                    CrystalGuiCore.LOGGER.warn("Asking to open <{}> failed: {}", type.id(), error);
+                    CrystalGuiCore.LOGGER.warn("Asking to open <{}> failed: {}", typeId, error);
                     if (onGranted != null) onGranted.accept(false);
                 });
     }
@@ -514,6 +538,11 @@ public final class ClientWindows {
         @Override
         public String key() {
             return session.key();
+        }
+
+        @Override
+        public Presentation presentation() {
+            return Presentation.parse(session.presentation());
         }
 
         @Override

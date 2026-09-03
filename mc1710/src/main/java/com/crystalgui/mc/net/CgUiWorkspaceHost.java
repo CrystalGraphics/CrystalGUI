@@ -128,7 +128,7 @@ public final class CgUiWorkspaceHost {
 
         WorkspaceBinding<Object> binding = new WorkspaceBinding<>(
                 live, hub, actorFor(peer), peer, PlainOps.INSTANCE);
-        binding.installOn(connection::onRequest);
+        binding.installOn(connection);
         BY_PEER.put(peer, binding);
         CONNECTIONS.put(peer, connection);
         CrystalGuiCore.LOGGER.info("[cgui-fs] workspace bound for {}", actorFor(peer).id());

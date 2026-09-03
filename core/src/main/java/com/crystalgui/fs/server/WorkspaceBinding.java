@@ -15,6 +15,7 @@ import com.crystalgui.fs.protocol.FsHello;
 import com.crystalgui.fs.protocol.FsMessages;
 import com.crystalgui.fs.protocol.FsMethods;
 import com.crystalgui.net.protocol.Call;
+import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.serialization.Codec;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.StateMap;
@@ -32,7 +33,7 @@ import org.jetbrains.annotations.Nullable;
  *
  * <pre>{@code
  * WorkspaceBinding<T> binding = new WorkspaceBinding<>(service, hub, actor, peer, ops);
- * binding.installOn(connection::onRequest);
+ * binding.installOn(connection);
  * }</pre>
  *
  * <p>Twenty methods over {@code fs.protocol}'s codecs, so a field written on one side is provably the
@@ -92,6 +93,29 @@ public final class WorkspaceBinding<T> {
 
     public WorkspaceAudit audit() {
         return audit;
+    }
+
+    /**
+     * Registers every method <b>and</b> makes this binding findable from the connection.
+     *
+     * <p>The attachment is what {@code ServerScope.workspace()} reads: a panel serving a window on this
+     * wire gets the filesystem bound to the same peer, with the actor already decided, rather than
+     * re-shipping a listing through the UI mirror.</p>
+     */
+    public void installOn(ProtocolConnection<T> connection) {
+        installOn(connection::onRequest);
+        // A factory that ignores the connection, because this binding cannot be built from one: it needs
+        // the service, the hub and the actor, all of which are the host's to decide.
+        connection.attachment(WorkspaceBinding.class, wire -> this);
+    }
+
+    /**
+     * A view of the workspace as the peer this binding was bound for.
+     *
+     * <p>What a server-side panel is handed. @see ServerWorkspace</p>
+     */
+    public ServerWorkspace workspace() {
+        return new ServerWorkspace(service, actor);
     }
 
     /** Registers every method. */

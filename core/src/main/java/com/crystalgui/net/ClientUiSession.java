@@ -98,6 +98,9 @@ public final class ClientUiSession<N extends Styleable, T> {
     /** What the server said this window is, for a client that dispatches behaviour on it. */
     private String type = "";
     private String title = "";
+
+    /** @see #presentation() */
+    private String presentation = "";
     @Nullable
     private String key;
 
@@ -240,6 +243,16 @@ public final class ClientUiSession<N extends Styleable, T> {
         return key;
     }
 
+    /**
+     * Where the server would like this window to appear, in its wire form, or {@code ""}.
+     *
+     * <p>{@code Presentation.parse} turns it into something to act on, and answers a desktop window for
+     * anything it does not recognise. @see UiMethods#PRESENTATION</p>
+     */
+    public String presentation() {
+        return presentation;
+    }
+
     public boolean hasCached(String descHash) {
         return descriptionCache.containsKey(descHash);
     }
@@ -309,6 +322,7 @@ public final class ClientUiSession<N extends Styleable, T> {
             this.title = in.getString(UiMethods.TITLE, "");
             String named = in.getString(UiMethods.KEY, "");
             this.key = named.isEmpty() ? null : named;
+            this.presentation = in.getString(UiMethods.PRESENTATION, "");
 
             String hash = in.getString("hash", "");
             T cached = descriptionCache.get(hash);

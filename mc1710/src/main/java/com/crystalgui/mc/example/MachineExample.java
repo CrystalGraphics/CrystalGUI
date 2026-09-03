@@ -3,6 +3,7 @@ package com.crystalgui.mc.example;
 import com.crystalgui.app.machine.MachineModel;
 import com.crystalgui.app.machine.MachineTrace;
 import com.crystalgui.app.machine.ui.MachinePanel;
+import com.crystalgui.net.window.Presentation;
 import com.crystalgui.net.window.ServerWindows;
 
 import cpw.mods.fml.common.FMLCommonHandler;
@@ -47,10 +48,18 @@ public final class MachineExample {
          * and RE-DERIVES from it -- checking the block is loaded and the player is near it -- because
          * anything a client sends is a claim rather than a fact.
          */
+        /*
+         * ...AND AS AN EDITOR TAB, which is the placement declared here rather than named by the client.
+         *
+         * A machine's controls are a thing you work in, so they belong beside the files rather than in a
+         * window floating over them -- and once it is a tab the workbench's whole vocabulary applies to
+         * it: it splits, it drags, it tears out and it comes back on the next join. A host with no
+         * workbench opens a window instead and nothing here changes.
+         */
         ServerWindows.openable(MachinePanel.TYPE, (viewer, args) -> {
             MachineTrace.log(MachineTrace.SERVER, "a client asked for a panel");
             return MACHINE;
-        });
+        }, Presentation.EDITOR_TAB);
         FMLCommonHandler.instance().bus().register(new ServerHandler());
     }
 

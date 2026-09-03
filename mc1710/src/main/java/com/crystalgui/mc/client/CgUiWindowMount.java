@@ -11,6 +11,7 @@ import com.crystalgui.net.window.ClientWindowContext;
 import com.crystalgui.net.window.ScopedSheets;
 import com.crystalgui.net.window.SheetSupply;
 import com.crystalgui.net.window.WindowMount;
+import com.crystalgui.workbench.Workbench;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.style.sheet.StyleSheet;
@@ -72,13 +73,20 @@ public final class CgUiWindowMount implements WindowMount {
      * ever pressed a key to open the screen; the window waits, and lands the moment there is somewhere
      * for it to land.</p>
      */
-    public static void bind(@Nullable ProtocolConnection<Object> connection) {
+    public static void bind(@Nullable ProtocolConnection<Object> connection,
+                            @Nullable Workbench workbench) {
         if (connection == null || connection == boundTo) return;
         boundTo = connection;
+        // THE WORKBENCH FIRST, falling back to this one. A server may ask for an editor tab or a tool
+        // window; only the workbench can honour that, and it hands everything else straight back here --
+        // so a client with no workbench opens every window on the desktop, which is the hint working
+        // rather than failing. @see com.crystalgui.net.window.Presentation
+        WindowMount mount = workbench == null ? INSTANCE : workbench.windowMount(INSTANCE);
         ClientWindows.of(connection)
                 .setSheetSupply(sheetSupply())
-                .setMount(INSTANCE);
-        CrystalGuiCore.LOGGER.info("[cgui-ui] server windows will open on the desktop");
+                .setMount(mount);
+        CrystalGuiCore.LOGGER.info("[cgui-ui] server windows will open on the {}",
+                workbench == null ? "desktop" : "workbench");
     }
 
     /**

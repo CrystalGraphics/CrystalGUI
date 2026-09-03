@@ -33,6 +33,15 @@ public interface ClientWindowContext {
     String key();
 
     /**
+     * <b>Where the server would like this window to appear.</b> A hint, never an instruction.
+     *
+     * <p>{@link Presentation#WINDOW} from a server that named none, and from any placement this client
+     * does not recognise. A mount with nowhere but a desktop is right to ignore it entirely: opening
+     * somewhere else beats not opening.</p>
+     */
+    Presentation presentation();
+
+    /**
      * The themes the server named, <b>in the order it named them</b>.
      *
      * <p>Order is load-bearing and must not be sorted: the style engine's sheet list is flat and

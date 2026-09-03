@@ -774,6 +774,36 @@ overscan; bytes bounded); `scrollingSlidesTheWindowAndReleasesRowsBehindIt`;
 
 #### 7.1 — Workbench citizenship, and the workspace through the scope · M · after: 7.0, F3, F4, F5
 
+> **SHIPPED.** `Presentation` on `ui/openWindow`, `NetworkedPanels` as the workbench's `WindowMount`,
+> `ClientScope.workspace()` / `ServerScope.workspace()`, and the Machine example declared
+> `EDITOR_TAB`. Nine tests in `PresentationTest` (headless) and eight in `NetworkedPanelsTest`.
+>
+> **Three deviations, each recorded rather than quietly taken.**
+>
+> 1. **A networked tab is a `DockPanelRef`, not an `EditorInput`.** The plan said *"the fourth input
+>    kind on F5's one lane"*, and the first three — a file, a library class, a generated source — are
+>    all a `Resource` whose scheme decides where the bytes come from. `EditorService.open` reads
+>    those bytes: `documents.open(input.resource())`. A networked panel has none, so making it an
+>    `EditorInput` means a scheme whose provider answers a fake document, which is exactly the shape
+>    that fails silently a milestone later. What "one lane" is protecting is that a tab is opened in
+>    one place, and for a panel that is a `DockPanelRef` — which also buys the split, the drag, the
+>    tear-out and the session record for nothing.
+> 2. **A placement is declared with the resolver, never sent by the client.** The plan had
+>    `requestOpen(type, {key})` and a `presentation` on the ref. Both are true, and the placement is
+>    read from `openable(type, resolver, presentation)` instead: where a panel belongs is the mod's
+>    statement about its own UI, and a restore holds no memory of how the window was presented the
+>    first time — so a client that named one could ask for a tool window as a tab.
+> 3. **The manifest is a session key of its own.** The plan expected the ref alone to carry enough.
+>    It does not: the descriptor a ref decodes against is registered on first sight of a window of
+>    that type, so on a fresh launch there is none and the ref is dropped before anything can ask.
+>
+> **Three defects found by building it**, none reachable before a server could open a workbench
+> panel: `Workbench.othersEditing` NPE'd on a dock panel that is not a file, out of the active-panel
+> signal inside the click; `ToolWindowManager.showPanel`'s docked branch dropped a show asked for
+> before its region existed, while the windowed branch beside it remembered; and the replay hook for
+> that was a one-shot covering only the frame the workbench joined a window.
+
+
 **K5 closed.** A server can open a panel *as an editor tab* or *as a tool window*, and the workbench's
 own dock, tear-out and session machinery applies to it — VS Code's `WebviewPanel`/`WebviewView`, the
 port the audit named.
