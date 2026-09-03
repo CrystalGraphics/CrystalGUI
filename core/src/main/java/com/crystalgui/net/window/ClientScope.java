@@ -1,6 +1,7 @@
 package com.crystalgui.net.window;
 
 import com.crystalgui.ui.dom.UIElement;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
@@ -77,6 +78,36 @@ public final class ClientScope {
     }
 
     /** The window this panel is mounted in — title, key, sheets, {@code userClosed}. */
+    /**
+     * <b>Adds a control of the viewer's own</b> to a served element — the one door for it.
+     *
+     * <pre>{@code
+     * io.addLocal(row, new Button("Copy"));    // no round trip, no server involvement
+     * }</pre>
+     *
+     * <p>{@link Networked#client} runs over <em>every</em> build of the tree and its javadoc already
+     * says to write it as though nothing had been set up before. What it could not do is <em>add</em>
+     * anything: a child appended by hand is an ordinary described child, so the next {@code insert} the
+     * server sends lands one index off — silently, because an index is an int and every one of them
+     * still resolves to something. This marks the child first, which is what makes it invisible to the
+     * mirror and keeps it out of the described positions.</p>
+     *
+     * <p>The child is <b>owned by this panel instance</b>. A re-describe builds a fresh tree and fresh
+     * panels, so the old locals go with the old tree and {@code client(io)} adds them again — which is
+     * exactly what that hook running on every bind is for.</p>
+     *
+     * <p>A local control follows served state through the served widget's own signal: a state delta
+     * runs the ordinary setter, which fires the ordinary signal. There is no binding API here because
+     * there is nothing for one to do.</p>
+     */
+    public ClientScope addLocal(UIElement parent, UIElement child) {
+        Objects.requireNonNull(parent, "parent");
+        Objects.requireNonNull(child, "child");
+        child.markLocal();
+        parent.append(child);
+        return this;
+    }
+
     /**
      * <b>The workspace on this connection</b> — the same filesystem the editor reads.
      *

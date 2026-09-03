@@ -412,6 +412,14 @@ public final class ClientWindows {
         return true;
     }
 
+    /** Removes every child a viewer added under {@code element}. @see ClientScope#addLocal */
+    private static void dropLocals(UIElement element) {
+        for (UIElement child : new ArrayList<>(element.children())) {
+            if (child.isLocal()) element.remove(child);
+            else dropLocals(child);
+        }
+    }
+
     /**
      * Finds every {@link Networked} element under {@code element}, carrying the id-path prefix its
      * scope derives from — the client half of {@link ServerScope#attach}'s naming rule.
@@ -486,6 +494,11 @@ public final class ClientWindows {
          * attached them in a tree built by the same class.</p>
          */
         void bindPanels(boolean firstMount) {
+            // WHATEVER THE LAST BIND ADDED, gone before this one runs. client(io) is written as though
+            // nothing had been set up before -- that is its whole contract -- so it calls addLocal again,
+            // and on a re-delivered openWindow the tree may be the SAME one. Without this the viewer's
+            // own controls double on every re-bind, which nothing anywhere reports.
+            if (!firstMount) dropLocals(root);
             List<Networked<?>> found = new ArrayList<>();
             List<String> prefixes = new ArrayList<>();
             UiType.bindFields(root);

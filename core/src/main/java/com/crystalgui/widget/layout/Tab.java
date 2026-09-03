@@ -154,7 +154,7 @@ public class Tab extends Button {
      */
     @Override
     public List<UIElement> describedChildren() {
-        return content().children();
+        return withoutLocals(content().children());
     }
 
     @Override
