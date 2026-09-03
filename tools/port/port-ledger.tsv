@@ -5,7 +5,7 @@
 # CLASS	path	lines	destination	batch	how	status
 CLASS	net/window/ClientScope	92	net/window	6.8	move	in-place
 CLASS	net/window/ClientWindowContext	96	net/window	6.8	move	in-place
-CLASS	net/window/ClientWindows	589	net/window	6.8	move	in-place
+CLASS	net/window/ClientWindows	592	net/window	6.8	move	in-place
 CLASS	net/window/CloseReason	53	net/window	6.8	move	in-place
 CLASS	net/window/Networked	257	net/window	6.8	move	in-place
 CLASS	net/window/OpenResolver	58	net/window	6.8	move	in-place
@@ -18,233 +18,7 @@ CLASS	net/window/UiType	345	net/window	6.8	move	in-place
 CLASS	net/window/ViewCommands	123	net/window	6.8	move	in-place
 CLASS	net/window/WindowMount	74	net/window	6.8	move	in-place
 CLASS	net/window/WindowProtocol	57	net/window	6.8	move	in-place
-CLASS	ui/elements/Button	208	widget/control	6.1	copy	ported
-CLASS	ui/elements/Checkbox	156	widget/control	6.1	copy	ported
-CLASS	ui/elements/CheckboxGroup	58	widget/control	6.1	copy	ported
-CLASS	ui/elements/ColorSelector	767	widget/form	6.2	copy	ported
-CLASS	ui/elements/Dialog	605	widget/overlay	6.2	copy	ported
-CLASS	ui/elements/DialogManager	144	widget/overlay	6.2	copy	ported
-CLASS	ui/elements/DragGhost	248	widget/dnd	6.1	copy	ported
-CLASS	ui/elements/Dropdown	212	widget/overlay	6.2	copy	ported
-CLASS	ui/elements/InputDialog	178	widget/overlay	6.2	copy	ported
-CLASS	ui/elements/InsertionMarker	468	widget/dnd	6.1	copy	ported
-CLASS	ui/elements/MarkupView	1034	widget/text	6.1	copy	ported
-CLASS	ui/elements/Menu	572	widget/overlay	6.2	copy	ported
-CLASS	ui/elements/MenuItem	235	widget/overlay	6.2	copy	ported
-CLASS	ui/elements/Popover	519	widget/overlay	6.2	copy	ported
-CLASS	ui/elements/ProgressBar	229	widget/control	6.1	copy	ported
-CLASS	ui/elements/Scroller	385	widget/scroll	6.1	copy	ported
-CLASS	ui/elements/ScrollerView	307	widget/scroll	6.1	copy	ported
-CLASS	ui/elements/SearchField	284	widget/form	6.2	copy	ported
-CLASS	ui/elements/Slider	316	widget/control	6.1	copy	ported
-CLASS	ui/elements/SplitView	877	widget/layout	6.2	copy	ported
-CLASS	ui/elements/Switch	135	widget/control	6.1	copy	ported
-CLASS	ui/elements/SymbolIcon	221	widget/control	6.1	copy	ported
-CLASS	ui/elements/Tab	247	widget/layout	6.2	copy	ported
-CLASS	ui/elements/TabView	605	widget/layout	6.2	copy	ported
-CLASS	ui/elements/TextField	1240	widget/control	6.1	copy	ported
-CLASS	ui/elements/Tooltip	605	widget/overlay	6.2	copy	ported
-CLASS	ui/elements/UIText	1244	widget/text	6.1	copy	ported
-CLASS	ui/elements/WidgetCensus	222	app	6.7	copy	ported
-CLASS	ui/elements/canvas/CanvasOverlayMove	232	widget/canvas	6.4	copy	ported
-CLASS	ui/elements/canvas/CanvasView	725	widget/canvas	6.4	copy	ported
-CLASS	ui/elements/canvas/WorldRect	77	widget/canvas	6.4	copy	ported
-CLASS	ui/elements/chrome/Breadcrumbs	166	workbench/chrome/status	6.3	copy	ported
-CLASS	ui/elements/chrome/ChromeCommands	63	workbench/chrome/menu	6.3	copy	ported
-CLASS	ui/elements/chrome/CommandPalette	153	workbench/chrome/palette	6.3	copy	ported
-CLASS	ui/elements/chrome/ContextMenu	309	widget/overlay	6.2	copy	ported
-CLASS	ui/elements/chrome/MainMenuCommands	89	workbench/chrome/menu	6.3	copy	ported
-CLASS	ui/elements/chrome/MenuBarView	645	workbench/chrome/menu	6.3	copy	ported
-CLASS	ui/elements/chrome/MenuBuilder	231	widget/overlay	6.2	copy	ported
-CLASS	ui/elements/chrome/NavigatorView	623	workbench/chrome/preferences	6.3	copy	ported
-CLASS	ui/elements/chrome/NotificationBalloons	314	workbench/chrome/notification	6.3	copy	ported
-CLASS	ui/elements/chrome/NotificationCard	217	workbench/chrome/notification	6.3	copy	ported
-CLASS	ui/elements/chrome/NotificationsView	200	workbench/chrome/notification	6.3	copy	ported
-CLASS	ui/elements/chrome/PageStack	149	widget/layout	6.2	copy	ported
-CLASS	ui/elements/chrome/Preferences	288	workbench/chrome/preferences	6.3	copy	ported
-CLASS	ui/elements/chrome/ProblemsCommands	84	workbench/chrome/problems	6.3	copy	ported
-CLASS	ui/elements/chrome/ProblemsPanel	932	workbench/chrome/problems	6.3	copy	ported
-CLASS	ui/elements/chrome/ProcessesPopover	214	workbench/chrome/status	6.3	copy	ported
-CLASS	ui/elements/chrome/ProgressStatusItem	215	workbench/chrome/status	6.3	copy	ported
-CLASS	ui/elements/chrome/QuickPick	795	workbench/chrome/palette	6.3	copy	ported
-CLASS	ui/elements/chrome/StatusBarView	427	workbench/chrome/status	6.3	copy	ported
-CLASS	ui/elements/config/ConfigControl	243	widget/config	6.2	copy	ported
-CLASS	ui/elements/config/ConfigControlContracts	93	widget/config	6.2	copy	ported
-CLASS	ui/elements/config/ConfigControls	83	widget/config	6.2	copy	ported
-CLASS	ui/elements/config/Configurator	82	widget/config	6.2	copy	ported
-CLASS	ui/elements/config/ConfiguratorGroup	125	widget/config	6.2	copy	ported
-CLASS	ui/elements/config/ConfiguratorPanel	195	widget/config	6.2	copy	ported
-CLASS	ui/elements/config/SettingsConfigurator	173	widget/config	6.2	copy	ported
-CLASS	ui/elements/config/ValueControl	85	widget/config	6.2	copy	ported
-CLASS	ui/elements/config/control/ArrayControl	155	widget/config/control	6.2	copy	ported
-CLASS	ui/elements/config/control/AssetControl	80	widget/config/control	6.2	copy	ported
-CLASS	ui/elements/config/control/BooleanControl	54	widget/config/control	6.2	copy	ported
-CLASS	ui/elements/config/control/ColorControl	151	widget/config/control	6.2	copy	ported
-CLASS	ui/elements/config/control/HeaderControl	55	widget/config/control	6.2	copy	ported
-CLASS	ui/elements/config/control/InfoControl	69	widget/config/control	6.2	copy	ported
-CLASS	ui/elements/config/control/MaskControl	159	widget/config/control	6.2	copy	ported
-CLASS	ui/elements/config/control/MatrixControl	109	widget/config/control	6.2	copy	ported
-CLASS	ui/elements/config/control/NumberControl	295	widget/config/control	6.2	copy	ported
-CLASS	ui/elements/config/control/SelectControl	68	widget/config/control	6.2	copy	ported
-CLASS	ui/elements/config/control/SliderControl	92	widget/config/control	6.2	copy	ported
-CLASS	ui/elements/config/control/TextControl	87	widget/config/control	6.2	copy	ported
-CLASS	ui/elements/config/control/VectorControl	123	widget/config/control	6.2	copy	ported
-CLASS	ui/elements/desktop/Desktop	1360	desktop	6.6	copy	ported
-CLASS	ui/elements/desktop/DesktopCommands	158	desktop	6.6	copy	ported
-CLASS	ui/elements/desktop/DesktopSession	245	desktop	6.6	copy	ported
-CLASS	ui/elements/desktop/ScreenOverlay	156	desktop/host	6.6	copy	ported
-CLASS	ui/elements/desktop/SnapZones	257	desktop/window	6.6	copy	ported
-CLASS	ui/elements/desktop/SystemMenu	251	desktop/window	6.6	copy	ported
-CLASS	ui/elements/desktop/Taskbar	567	desktop/taskbar	6.6	copy	ported
-CLASS	ui/elements/desktop/TaskbarDesigner	586	desktop/taskbar	6.6	copy	ported
-CLASS	ui/elements/desktop/TaskbarEntryMotion	268	desktop/taskbar	6.6	copy	ported
-CLASS	ui/elements/desktop/TaskbarPreviews	540	desktop/taskbar	6.6	copy	ported
-CLASS	ui/elements/desktop/WindowAnimation	291	desktop/motion	6.6	copy	ported
-CLASS	ui/elements/desktop/WindowAnimator	515	desktop/motion	6.6	copy	ported
-CLASS	ui/elements/desktop/WindowChrome	55	desktop/window	6.6	copy	ported
-CLASS	ui/elements/desktop/WindowCommands	284	desktop/window	6.6	copy	ported
-CLASS	ui/elements/desktop/WindowFrame	2426	desktop/window	6.6	copy	ported
-CLASS	ui/elements/desktop/WindowGeometryAnimation	156	desktop/motion	6.6	copy	ported
-CLASS	ui/elements/desktop/WindowIcon	164	desktop/window	6.1	copy	ported
-CLASS	ui/elements/desktop/WindowKeyboardMove	183	desktop/window	6.6	copy	ported
-CLASS	ui/elements/desktop/WindowMotion	21	desktop/motion	6.6	copy	ported
-CLASS	ui/elements/desktop/WindowMove	411	desktop/window	6.6	copy	ported
-CLASS	ui/elements/desktop/WindowPreview	236	desktop/taskbar	6.6	copy	ported
-CLASS	ui/elements/desktop/WindowRegistry	214	desktop/window	6.6	copy	ported
-CLASS	ui/elements/desktop/WindowSnapshot	210	desktop/window	6.6	copy	ported
-CLASS	ui/elements/desktop/WindowSwitcher	628	desktop/switcher	6.6	copy	ported
-CLASS	ui/elements/desktop/WindowThumbnail	337	desktop/taskbar	6.6	copy	ported
-CLASS	ui/elements/dock/DockArea	1192	workbench/dock	6.7	copy	ported
-CLASS	ui/elements/dock/DockBannerBar	56	workbench/dock/banner	6.7	copy	ported
-CLASS	ui/elements/dock/DockBannerProvider	43	workbench/dock/banner	6.7	copy	ported
-CLASS	ui/elements/dock/DockBanners	49	workbench/dock/banner	6.7	copy	ported
-CLASS	ui/elements/dock/DockBranch	104	workbench/dock/layout	6.7	copy	ported
-CLASS	ui/elements/dock/DockCommands	208	workbench/dock	6.7	copy	ported
-CLASS	ui/elements/dock/DockDragPayload	61	workbench/dock/drag	6.7	copy	ported
-CLASS	ui/elements/dock/DockDropZone	46	workbench/dock/drag	6.7	copy	ported
-CLASS	ui/elements/dock/DockDropZones	159	workbench/dock/drag	6.7	copy	ported
-CLASS	ui/elements/dock/DockGroup	863	workbench/dock	6.7	copy	ported
-CLASS	ui/elements/dock/DockInput	103	workbench/dock/panel	6.7	copy	ported
-CLASS	ui/elements/dock/DockLayout	521	workbench/dock/layout	6.7	copy	ported
-CLASS	ui/elements/dock/DockLayoutCodec	213	workbench/dock/layout	6.7	copy	ported
-CLASS	ui/elements/dock/DockLeaf	182	workbench/dock/layout	6.7	copy	ported
-CLASS	ui/elements/dock/DockNode	101	workbench/dock/layout	6.7	copy	ported
-CLASS	ui/elements/dock/DockOpenOptions	60	workbench/dock/panel	6.7	copy	ported
-CLASS	ui/elements/dock/DockOrientation	21	workbench/dock/layout	6.7	copy	ported
-CLASS	ui/elements/dock/DockPane	66	workbench/dock/panel	6.7	copy	ported
-CLASS	ui/elements/dock/DockPaneProvider	23	workbench/dock/panel	6.7	copy	ported
-CLASS	ui/elements/dock/DockPanelDescriptor	202	workbench/dock/panel	6.7	copy	ported
-CLASS	ui/elements/dock/DockPanelKind	50	workbench/dock/panel	6.7	copy	ported
-CLASS	ui/elements/dock/DockPanelRef	119	workbench/dock/layout	6.7	copy	ported
-CLASS	ui/elements/dock/DockPanelRegistry	368	workbench/dock/panel	6.7	copy	ported
-CLASS	ui/elements/dock/DockPath	131	workbench/dock/layout	6.7	copy	ported
-CLASS	ui/elements/dock/DockPlacement	141	workbench/dock/drag	6.7	copy	ported
-CLASS	ui/elements/dock/DockRegion	74	workbench/region	6.7	copy	ported
-CLASS	ui/elements/dock/DockWindow	199	workbench/dock	6.7	copy	ported
-CLASS	ui/elements/dock/RegionSide	58	workbench/region	6.7	copy	ported
-CLASS	ui/elements/dock/ViewId	84	workbench/view	6.7	copy	ported
-CLASS	ui/elements/editor/CompletionPopup	897	widget/texteditor/suggest	6.5	copy	ported
-CLASS	ui/elements/editor/CompletionRanking	174	widget/texteditor/suggest	6.5	copy	ported
-CLASS	ui/elements/editor/CompletionSession	521	widget/texteditor/suggest	6.5	copy	ported
-CLASS	ui/elements/editor/CurrentLinePart	76	widget/texteditor/part	6.5	copy	ported
-CLASS	ui/elements/editor/DecorationPool	121	widget/texteditor/part	6.5	copy	ported
-CLASS	ui/elements/editor/DiagnosticActions	95	widget/texteditor/lang	6.5	copy	ported
-CLASS	ui/elements/editor/DiffBandsPart	134	widget/texteditor/part	6.5	copy	ported
-CLASS	ui/elements/editor/DiffChevronPart	135	widget/texteditor/part	6.5	copy	ported
-CLASS	ui/elements/editor/DiffDecorations	113	widget/texteditor/diff	6.5	copy	ported
-CLASS	ui/elements/editor/DocumentationPopup	1516	widget/texteditor/doc	6.5	copy	ported
-CLASS	ui/elements/editor/EditorCommands	534	widget/texteditor	6.5	copy	ported
-CLASS	ui/elements/editor/EditorDiagnostics	221	widget/texteditor/lang	6.5	copy	ported
-CLASS	ui/elements/editor/EditorFind	312	widget/texteditor/find	6.5	copy	ported
-CLASS	ui/elements/editor/EditorFolding	374	widget/texteditor/fold	6.5	copy	ported
-CLASS	ui/elements/editor/EditorLanguageFeatures	514	widget/texteditor/lang	6.5	copy	ported
-CLASS	ui/elements/editor/EditorSuggest	250	widget/texteditor/suggest	6.5	copy	ported
-CLASS	ui/elements/editor/EditorViewPart	109	widget/texteditor/part	6.5	copy	ported
-CLASS	ui/elements/editor/ErrorStripePart	269	widget/texteditor/part	6.5	copy	ported
-CLASS	ui/elements/editor/FoldingDecorationsPart	306	widget/texteditor/part	6.5	copy	ported
-CLASS	ui/elements/editor/GutterEdgePart	60	widget/texteditor/part	6.5	copy	ported
-CLASS	ui/elements/editor/HoverDocumentation	281	widget/texteditor/doc	6.5	copy	ported
-CLASS	ui/elements/editor/IndentGuidesPart	132	widget/texteditor/part	6.5	copy	ported
-CLASS	ui/elements/editor/InspectionWidgetPart	220	widget/texteditor/part	6.5	copy	ported
-CLASS	ui/elements/editor/LineNumbersPart	135	widget/texteditor/part	6.5	copy	ported
-CLASS	ui/elements/editor/QuickFixBulbPart	182	widget/texteditor/part	6.5	copy	ported
-CLASS	ui/elements/editor/RulersPart	55	widget/texteditor/part	6.5	copy	ported
-CLASS	ui/elements/editor/SearchReplaceBar	685	widget/texteditor/find	6.5	copy	ported
-CLASS	ui/elements/editor/SelectionsPart	124	widget/texteditor/part	6.5	copy	ported
-CLASS	ui/elements/editor/SquigglesPart	176	widget/texteditor/part	6.5	copy	ported
-CLASS	ui/elements/editor/TextEditor	6166	widget/texteditor	6.5	copy	ported
-CLASS	ui/elements/editor/ViewCursorsPart	163	widget/texteditor/part	6.5	copy	ported
-CLASS	ui/elements/editor/WhitespacePart	93	widget/texteditor/part	6.5	copy	ported
-CLASS	ui/elements/editor/ZoomIndicatorPart	181	widget/texteditor/part	6.5	copy	ported
-CLASS	ui/elements/graph/GraphCommands	275	widget/graph	6.4	copy	ported
-CLASS	ui/elements/graph/GraphConnection	30	widget/graph	6.4	copy	ported
-CLASS	ui/elements/graph/GraphNode	634	widget/graph	6.4	copy	ported
-CLASS	ui/elements/graph/GraphSelection	198	widget/graph	6.4	copy	ported
-CLASS	ui/elements/graph/GraphView	1758	widget/graph	6.4	copy	ported
-CLASS	ui/elements/graph/NodeCreationMenu	639	widget/graph/node	6.4	copy	ported
-CLASS	ui/elements/graph/NodeFieldBinder	241	widget/graph/node	6.4	copy	ported
-CLASS	ui/elements/graph/NodeFieldWidgets	191	widget/graph/node	6.4	copy	ported
-CLASS	ui/elements/graph/NodePort	487	widget/graph	6.4	copy	ported
-CLASS	ui/elements/graph/NodeWidgetFactory	144	widget/graph	6.4	copy	ported
-CLASS	ui/elements/graph/NodeWireLayer	285	widget/graph	6.4	copy	ported
-CLASS	ui/elements/graph/PortDefaultEditor	395	widget/graph	6.4	copy	ported
-CLASS	ui/elements/inspector/Inspector	448	widget/config/inspector	6.2	copy	ported
-CLASS	ui/elements/inspector/InspectorForm	129	widget/config/inspector	6.2	copy	ported
-CLASS	ui/elements/inspector/InspectorRegistry	75	widget/config/inspector	6.2	copy	ported
-CLASS	ui/elements/inspector/InspectorSection	92	widget/config/inspector	6.2	copy	ported
-CLASS	ui/elements/list/ListRenderer	74	widget/collection/list	6.3	copy	ported
-CLASS	ui/elements/list/ListView	1411	widget/collection/list	6.3	copy	ported
-CLASS	ui/elements/table/TableCellRenderer	18	widget/collection/table	6.3	copy	ported
-CLASS	ui/elements/table/TableColumn	156	widget/collection/table	6.3	copy	ported
-CLASS	ui/elements/table/TableView	522	widget/collection/table	6.3	copy	ported
-CLASS	ui/elements/tree/TreeRenderer	41	widget/collection/tree	6.3	copy	ported
-CLASS	ui/elements/tree/TreeSearch	1145	widget/collection/tree	6.3	copy	ported
-CLASS	ui/elements/tree/TreeView	451	widget/collection/tree	6.3	copy	ported
-CLASS	ui/elements/workbench/ConflictDialog	167	workbench/diff	6.7	copy	ported
-CLASS	ui/elements/workbench/DiffView	303	workbench/diff	6.7	copy	ported
-CLASS	ui/elements/workbench/DocumentType	101	document	6.7	copy	ported
-CLASS	ui/elements/workbench/DocumentViewState	48	document	6.7	copy	ported
-CLASS	ui/elements/workbench/ExplorerClipboard	95	workbench/explorer	6.7	copy	ported
-CLASS	ui/elements/workbench/ExplorerCommands	578	workbench/explorer	6.7	copy	ported
-CLASS	ui/elements/workbench/ExplorerDragAndDrop	195	workbench/explorer	6.7	copy	ported
-CLASS	ui/elements/workbench/ExplorerEditing	247	workbench/explorer	6.7	copy	ported
-CLASS	ui/elements/workbench/ExplorerFind	140	workbench/explorer	6.7	copy	ported
-CLASS	ui/elements/workbench/FileDocument	178	document	6.7	copy	ported
-CLASS	ui/elements/workbench/FilesRenderer	300	workbench/explorer	6.7	copy	ported
-CLASS	ui/elements/workbench/GoToFile	352	workbench/search	6.7	copy	ported
-CLASS	ui/elements/workbench/HeaderContributor	30	workbench/view	6.7	copy	ported
-CLASS	ui/elements/workbench/MergeView	531	workbench/diff	6.7	copy	ported
-CLASS	ui/elements/workbench/OpenDocuments	266	document	6.7	copy	ported
-CLASS	ui/elements/workbench/ProjectFileTree	837	workbench/explorer	6.7	copy	ported
-CLASS	ui/elements/workbench/ProjectIndex	382	workbench/search	6.7	copy	ported
-CLASS	ui/elements/workbench/QueryLocation	115	workbench/search	6.7	copy	ported
-CLASS	ui/elements/workbench/RecentFiles	94	document	6.7	copy	ported
-CLASS	ui/elements/workbench/RegionDropOverlay	367	workbench/region	6.7	copy	ported
-CLASS	ui/elements/workbench/RegionDropZones	193	workbench/region	6.7	copy	ported
-CLASS	ui/elements/workbench/RegionHost	213	workbench/region	6.7	copy	ported
-CLASS	ui/elements/workbench/SplitFill	76	workbench/region	6.7	copy	ported
-CLASS	ui/elements/workbench/StripeRail	63	workbench/stripe	6.7	copy	ported
-CLASS	ui/elements/workbench/StripeView	962	workbench/stripe	6.7	copy	ported
-CLASS	ui/elements/workbench/ToolWindowFrame	258	workbench/toolwindow	6.7	copy	ported
-CLASS	ui/elements/workbench/ToolWindowLayout	212	workbench/toolwindow	6.7	copy	ported
-CLASS	ui/elements/workbench/ToolWindowManager	650	workbench/toolwindow	6.7	copy	ported
-CLASS	ui/elements/workbench/ToolWindowState	266	workbench/toolwindow	6.7	copy	ported
-CLASS	ui/elements/workbench/ToolWindowType	81	workbench/toolwindow	6.7	copy	ported
-CLASS	ui/elements/workbench/ViewContainer	245	workbench/view	6.7	copy	ported
-CLASS	ui/elements/workbench/ViewContainerRegistry	151	workbench/view	6.7	copy	ported
-CLASS	ui/elements/workbench/Workbench	3212	workbench	6.7	copy	ported
-CLASS	ui/elements/workbench/WorkbenchMenus	137	workbench	6.7	copy	ported
-CLASS	ui/elements/workbench/WorkbenchRegions	270	workbench/region	6.7	copy	ported
-CLASS	ui/elements/workbench/WorkbenchSession	749	workbench	6.7	copy	ported
-CLASS	ui/elements/workbench/WorkbenchSettings	313	workbench	6.7	copy	ported
-CLASS	ui/elements/workbench/WorkspaceTreeSource	861	workbench/explorer	6.7	copy	ported
-CLASS	ui/elements/workbench/decoration/DiagnosticDecorations	102	workbench/decoration	6.7	copy	ported
-CLASS	ui/elements/workbench/decoration/FileDecoration	70	workbench/decoration	6.7	copy	ported
-CLASS	ui/elements/workbench/decoration/FileDecorationProvider	41	workbench/decoration	6.7	copy	ported
-CLASS	ui/elements/workbench/decoration/FileDecorations	136	workbench/decoration	6.7	copy	ported
-CLASS	ui/elements/workbench/document/TextFileDocument	272	document	6.7	copy	ported
 CLASS	ui/text/HighlightRegistry	117	ui/text	stays	move	in-place
-CLASS	ui/text/SyntaxHighlighting	283	widget/text	6.5	copy	ported
 CLASS	ui/text/TextRange	44	ui/text	stays	move	in-place
 CLASS	language/run/view/MappingCommands	174	language/run/view	6.7	move	in-place
 CLASS	language/run/view/RunConsoleView	646	language/run/view	6.7	move	in-place
@@ -257,13 +31,20 @@ CLASS	language/run/view/ScriptWorkbench	567	language/run/view	6.7	move	in-place
 CLASS	language/run/view/TailFollow	127	language/run/view	6.7	move	in-place
 #
 # PART	owner	name	kind	uses	source	why
+PART	(unowned)	corner	A	7	proposed	leaf in every rule
 PART	(unowned)	error	A	1	proposed	leaf in every rule
+PART	(unowned)	fill	A	9	proposed	leaf in every rule, scoped by an ancestor in 3
+PART	(unowned)	h-scroller	A	3	proposed	leaf in every rule
+PART	(unowned)	knob	A	8	proposed	leaf in every rule
 PART	(unowned)	markup-h1	A	1	proposed	leaf in every rule
 PART	(unowned)	markup-h2	A	1	proposed	leaf in every rule
 PART	(unowned)	markup-h3	A	1	proposed	leaf in every rule
 PART	(unowned)	markup-h4	A	1	proposed	leaf in every rule
 PART	(unowned)	markup-h5	A	1	proposed	leaf in every rule
 PART	(unowned)	markup-h6	A	1	proposed	leaf in every rule
+PART	(unowned)	menu	B	12	proposed	a rule selects through it (10)
+PART	(unowned)	monogram	A	5	proposed	leaf in every rule, scoped by an ancestor in 5
+PART	(unowned)	options	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	(unowned)	region-auxiliary	A	1	proposed	leaf in every rule
 PART	(unowned)	region-panel	A	1	proposed	leaf in every rule
 PART	(unowned)	region-sidebar	A	1	proposed	leaf in every rule
@@ -275,12 +56,16 @@ PART	(unowned)	resizer-right	A	3	proposed	leaf in every rule
 PART	(unowned)	resizer-top	A	3	proposed	leaf in every rule
 PART	(unowned)	resizer-top-left	A	3	proposed	leaf in every rule
 PART	(unowned)	resizer-top-right	A	3	proposed	leaf in every rule
+PART	(unowned)	tail	A	5	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	(unowned)	thumb	A	29	proposed	leaf in every rule, scoped by an ancestor in 11
 PART	(unowned)	tile-1	A	2	proposed	leaf in every rule
 PART	(unowned)	tile-2	A	2	proposed	leaf in every rule
 PART	(unowned)	tile-3	A	2	proposed	leaf in every rule
 PART	(unowned)	tile-4	A	2	proposed	leaf in every rule
 PART	(unowned)	tile-5	A	2	proposed	leaf in every rule
 PART	(unowned)	tile-6	A	2	proposed	leaf in every rule
+PART	(unowned)	track	A	4	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	(unowned)	v-scroller	A	3	proposed	leaf in every rule
 PART	(unowned)	warning	A	1	proposed	leaf in every rule
 PART	ArrayControl	add	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	ArrayControl	array	B	10	confirmed	a rule selects through it (9)
@@ -308,16 +93,12 @@ PART	Breadcrumbs	crumb	B	0	confirmed	leaf in every rule
 PART	Breadcrumbs	crumb-current	B	0	confirmed	leaf in every rule
 PART	Breadcrumbs	crumb-icon	B	0	confirmed	leaf in every rule
 PART	Breadcrumbs	crumb-sep	B	0	confirmed	leaf in every rule
-PART	Button	post-icon	A	0	confirmed	leaf in every rule
-PART	Button	pre-icon	A	0	confirmed	leaf in every rule
-PART	Button	underlay	A	0	confirmed	leaf in every rule
 PART	CanvasView	content	B	0	confirmed	leaf in every rule
 PART	CanvasView	panning	C	2	confirmed	state adjective
 PART	CategoryHeader	arrow	B	4	confirmed	leaf in every rule, scoped by an ancestor in 4
 PART	CategoryHeader	category	B	0	confirmed	leaf in every rule
 PART	CategoryHeader	collapsed	C	4	confirmed	state adjective
 PART	CategoryHeader	name	B	3	confirmed	leaf in every rule, scoped by an ancestor in 3
-PART	Checkbox	mark	A	0	confirmed	leaf in every rule
 PART	ColorControl	alpha-bar	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	ColorControl	alpha-fill	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	ColorControl	color	B	4	confirmed	a rule selects through it (4)
@@ -420,11 +201,7 @@ PART	DocumentationPopup	pinned	C	1	confirmed	state adjective
 PART	DocumentationPopup	problem-only	C	2	confirmed	state adjective
 PART	DragGhost	drag-ghost	B	14	confirmed	a rule selects through it (6)
 PART	DragGhost	flipped	C	2	confirmed	state adjective
-PART	DragGhost	label	A	4	confirmed	leaf in every rule, scoped by an ancestor in 4
-PART	DragGhost	pre-icon	A	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	DragGhost	unlabelled	C	2	confirmed	state adjective
-PART	Dropdown	chevron	A	0	confirmed	leaf in every rule
-PART	Dropdown	menu	A	0	confirmed	leaf in every rule
 PART	EditorFind	editor-find	B	4	confirmed	a rule selects through it (3)
 PART	ErrorStripePart	error-stripe	B	1	confirmed	leaf in every rule
 PART	ErrorStripePart	error-stripe-error	B	1	confirmed	leaf in every rule
@@ -506,7 +283,6 @@ PART	MatrixControl	matrix	B	3	confirmed	a rule selects through it (2)
 PART	MatrixControl	matrix-cell	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	MatrixControl	matrix-row	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	Menu	has-checkable	C	7	confirmed	state adjective
-PART	Menu	items	A	0	confirmed	leaf in every rule
 PART	Menu	separator	A	0	confirmed	leaf in every rule
 PART	MenuBarView	burger	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	MenuBarView	burger-bar	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
@@ -615,7 +391,6 @@ PART	ProcessesPopover	label	B	2	confirmed	leaf in every rule, scoped by an ances
 PART	ProcessesPopover	process-row	B	8	confirmed	a rule selects through it (7)
 PART	ProcessesPopover	processes	B	12	confirmed	a rule selects through it (11)
 PART	ProcessesPopover	title	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
-PART	ProgressBar	fill	A	0	confirmed	leaf in every rule
 PART	ProgressBar	indeterminate	A	0	confirmed	leaf in every rule
 PART	ProgressStatusItem	cancel	B	3	confirmed	leaf in every rule, scoped by an ancestor in 3
 PART	ProgressStatusItem	count	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
@@ -692,21 +467,10 @@ PART	RunRail	run-rail	A	0	proposed	leaf in every rule
 PART	RunRail	run-rail-glyph	A	10	proposed	leaf in every rule, scoped by an ancestor in 10
 PART	RunRail	run-rail-name	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	RunRail	run-rail-time	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	Scroller	head	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
-PART	Scroller	tail	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
-PART	Scroller	thumb	A	2	confirmed	leaf in every rule, scoped by an ancestor in 2
-PART	Scroller	track	A	0	confirmed	leaf in every rule
 PART	Scroller	vertical	C	12	confirmed	state adjective
-PART	ScrollerView	corner	A	0	confirmed	leaf in every rule
-PART	ScrollerView	h-scroller	A	1	confirmed	leaf in every rule
-PART	ScrollerView	v-scroller	A	1	confirmed	leaf in every rule
-PART	SearchField	clear	A	2	confirmed	leaf in every rule, scoped by an ancestor in 2
-PART	SearchField	field	A	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	SearchField	focused	C	1	confirmed	state adjective
-PART	SearchField	icon	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	SearchField	not-found	B	2	confirmed	a rule selects through it (1)
 PART	SearchField	on	C	2	confirmed	state adjective
-PART	SearchField	options	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	SearchField	search-field	B	14	confirmed	a rule selects through it (6)
 PART	SearchField	search-option	A	4	confirmed	leaf in every rule
 PART	SearchReplaceBar	expanded	C	1	confirmed	state adjective
@@ -735,9 +499,6 @@ PART	ShaderNodePreview	preview-image	B	0	confirmed	leaf in every rule
 PART	ShaderPropertyNodes	exposed-dot	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	ShaderPropertyNodes	property-linked	B	4	confirmed	leaf in every rule
 PART	ShaderPropertyNodes	property-node	B	20	confirmed	a rule selects through it (14)
-PART	Slider	fill	A	0	confirmed	leaf in every rule
-PART	Slider	spacer	A	0	confirmed	leaf in every rule
-PART	Slider	thumb	A	0	confirmed	leaf in every rule
 PART	SliderControl	slider	B	6	confirmed	a rule selects through it (5)
 PART	SplitView	divider	B	6	confirmed	leaf in every rule, scoped by an ancestor in 6
 PART	SplitView	dragging	C	2	confirmed	state adjective
@@ -768,11 +529,7 @@ PART	StripeView	stripe-separator	A	1	confirmed	leaf in every rule, scoped by an 
 PART	StripeView	stripe-spacer	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	SvgGradient	tag	A	0	proposed	leaf in every rule
 PART	SvgResolver	tag	A	0	proposed	leaf in every rule
-PART	Switch	knob	A	0	confirmed	leaf in every rule
-PART	Switch	spacer	A	0	confirmed	leaf in every rule
 PART	SymbolIcon	completion-icon	A	4	confirmed	leaf in every rule
-PART	SymbolIcon	completion-mark-final	A	2	confirmed	leaf in every rule
-PART	SymbolIcon	completion-mark-static	A	2	confirmed	leaf in every rule
 PART	SystemMenu	jump-list	B	2	confirmed	leaf in every rule
 PART	SystemMenu	rising	C	1	confirmed	state adjective
 PART	Tab	close	A	0	confirmed	leaf in every rule
@@ -855,7 +612,6 @@ PART	ToolWindowFrame	dock	A	2	confirmed	leaf in every rule, scoped by an ancesto
 PART	ToolWindowFrame	floating	C	0	confirmed	state adjective
 PART	ToolWindowFrame	tool-window	B	10	confirmed	a rule selects through it (9)
 PART	ToolWindowFrame	windowed	C	0	confirmed	state adjective
-PART	Tooltip	label	A	0	confirmed	leaf in every rule
 PART	TreeSearch	dimmed	C	1	confirmed	state adjective
 PART	TreeSearch	find-bar	B	32	confirmed	a rule selects through it (31)
 PART	TreeSearch	find-close	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
@@ -875,13 +631,9 @@ PART	TreeSearch	searching	C	0	confirmed	state adjective
 PART	TreeView	collapsed	C	4	confirmed	state adjective
 PART	TreeView	expanded	C	0	confirmed	state adjective
 PART	TreeView	leaf	C	0	confirmed	state adjective
-PART	UIElement	resizer	A	1	proposed	leaf in every rule
-PART	UIElement	user-sized-height	B	1	proposed	a rule selects through it (1)
-PART	UIElement	user-sized-width	B	2	proposed	a rule selects through it (1)
 PART	UINode	user-sized-height	B	1	proposed	a rule selects through it (1)
 PART	UINode	user-sized-width	B	2	proposed	a rule selects through it (1)
 PART	UIText	syntax	C	54	confirmed	leaf in every rule
-PART	UIWindow	overlays	A	0	proposed	leaf in every rule
 PART	VectorControl	axis	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	VectorControl	vector	B	4	confirmed	a rule selects through it (3)
 PART	VectorControl	vector-cell	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
@@ -904,14 +656,12 @@ PART	WindowFrame	icon	B	1	confirmed	leaf in every rule, scoped by an ancestor in
 PART	WindowFrame	maximize	B	5	confirmed	leaf in every rule, scoped by an ancestor in 5
 PART	WindowFrame	maximized	C	2	confirmed	state adjective
 PART	WindowFrame	minimize	B	3	confirmed	leaf in every rule, scoped by an ancestor in 3
-PART	WindowFrame	overlays	B	0	confirmed	leaf in every rule
 PART	WindowFrame	pin	B	5	confirmed	leaf in every rule, scoped by an ancestor in 5
 PART	WindowFrame	pinned	C	1	confirmed	state adjective
 PART	WindowFrame	title	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	WindowFrame	title-bar	B	28	confirmed	a rule selects through it (24)
 PART	WindowFrame	window	B	35	confirmed	a rule selects through it (31)
 PART	WindowIcon	branded	C	1	confirmed	state adjective
-PART	WindowIcon	monogram	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	WindowIcon	tile-mono	A	1	confirmed	leaf in every rule
 PART	WindowIcon	window-icon	B	11	confirmed	a rule selects through it (1)
 PART	WindowKeyboardMove	keyboard-moving	C	0	confirmed	state adjective

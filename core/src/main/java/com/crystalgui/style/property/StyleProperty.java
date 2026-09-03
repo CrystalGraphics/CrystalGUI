@@ -1,6 +1,5 @@
 package com.crystalgui.style.property;
 
-import com.crystalgui.ui.UIElement;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
@@ -22,7 +21,6 @@ public class StyleProperty<VALUE> {
     public final Class<VALUE> type;
     public final VALUE initialValue;
     public final ValueParser<VALUE> valueParser;
-    private final List<StyleChangeListener<VALUE>> styleChangeListeners = new ArrayList<>();
     @Setter
     @Getter
     private IValueInterpolator<VALUE> interpolator = IValueInterpolator.BINARY;
@@ -71,35 +69,22 @@ public class StyleProperty<VALUE> {
     }
 
 
-    /**
-     * <b>Old-engine only, and it cannot be retyped.</b> Tried as {@code Styleable} -- the interface both
-     * engines implement -- and it does not fit: every listener registered against it calls something
-     * only a {@code UIElement} has ({@code onResizeModeChanged}, {@code invalidateFocusableChain},
-     * {@code TaffyBridge::set*}). This whole mechanism IS the old cascade's bridge into Taffy, which
-     * is why the new engine has no use for it: {@code BoxStyle} reads {@code ComputedStyle} directly,
-     * and the two changes that still need a hook go through {@code UINode.computedChanged}.
-     *
-     * <p>So it is deleted with the old engine rather than migrated, even though it sits in the shared
-     * {@code style/} package -- one of the few places where "shared" and "survives" come apart.</p>
-     */
-    public void notifyListeners(UIElement element, @Nullable VALUE oldVal, @Nullable VALUE newVal) {
-        for (var listener : styleChangeListeners) {
-            listener.onComputedChange(element, this, oldVal, newVal);
-        }
-    }
-
-    public StyleProperty<VALUE> addListener(StyleChangeListener<VALUE> listener) {
-        styleChangeListeners.add(listener);
-        return this;
-    }
+    // ── The property-listener API is GONE, with the engine it existed for ───────────────────────
+    //
+    // `notifyListeners(UIElement, ...)`, `addListener` and `StyleChangeListener`. Retyping them to
+    // `Styleable` -- the interface both engines implement -- was tried and did not fit: every
+    // listener registered against them called something only a `UIElement` has
+    // (`onResizeModeChanged`, `invalidateFocusableChain`, `TaffyBridge::set*`). The mechanism WAS the
+    // old cascade's bridge into Taffy, which is why nothing replaced it: `BoxStyle` reads
+    // `ComputedStyle` directly, and the two changes that still need a hook go through
+    // `UINode.computedChanged`.
+    //
+    // Worth a note rather than a silent deletion because this sits in the SHARED `style/` package --
+    // one of the few places where "shared" and "survives" came apart.
 
     @FunctionalInterface
     public interface ValueParser<T> {
         StyleValue<T> parse(String rawValue);
     }
 
-    @FunctionalInterface
-    public interface StyleChangeListener<T> {
-        void onComputedChange(UIElement element, StyleProperty<T> p, @Nullable T oldVal, @Nullable T newVal);
-    }
 }

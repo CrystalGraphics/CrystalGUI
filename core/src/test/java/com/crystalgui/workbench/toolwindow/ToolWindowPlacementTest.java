@@ -1,6 +1,5 @@
 package com.crystalgui.workbench.toolwindow;
 
-import com.crystalgui.serialization.UIDescriptionCodec;
 import com.crystalgui.workbench.dock.DockArea;
 import com.crystalgui.workbench.region.RegionHost;
 import com.crystalgui.serialization.JsonOps;

@@ -7,7 +7,7 @@ import com.crystalgui.net.protocol.Envelope;
 import com.crystalgui.net.protocol.EnvelopeCodec;
 import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.ui.ElementRegistry;
+import com.crystalgui.ui.dom.UINodeRegistry;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Slider;
@@ -41,7 +41,7 @@ public class TreeOpsTest {
 
     @Before
     public void setUp() {
-        ElementRegistry.bootstrapBuiltins();
+        UINodeRegistry.bootstrap();
         root = new UINode();
         root.append(new UIText("first"));
         root.append(new Button("Press me"));

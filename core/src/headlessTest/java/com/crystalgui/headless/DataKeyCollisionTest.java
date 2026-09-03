@@ -108,11 +108,13 @@ public class DataKeyCollisionTest {
                 while (m.find()) found++;
             }
         }
-        // NINETEEN TODAY, and the floor is deliberately just under it rather than a round number:
-        // the point is to fail when the scan stops finding ANYTHING -- a renamed factory, a moved
-        // source root, a walk that reads no files -- not to police how many keys the engine has.
-        assertTrue("the scan found " + found + " DataKey declarations -- there are ~19, so this is "
-                + "looking in the wrong place or matching the wrong thing", found >= 15);
+        // THIRTEEN TODAY, down from nineteen: the old engine took six with it, three of them keys
+        // only it could answer (`DataKey<UIElement>`, `DataKey<UIWindow>`, and one naming its own
+        // menu bar). The floor is deliberately just under the real count rather than a round number
+        // -- the point is to fail when the scan stops finding ANYTHING (a renamed factory, a moved
+        // source root, a walk that reads no files), not to police how many keys the engine has.
+        assertTrue("the scan found " + found + " DataKey declarations -- there are ~13, so this is "
+                + "looking in the wrong place or matching the wrong thing", found >= 10);
     }
 
     private static Path repoRoot() {

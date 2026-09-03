@@ -15,6 +15,13 @@ import java.util.List;
 import java.util.function.BiConsumer;
 
 public class LayoutProperties {
+    // Every `addListener` registration that stood here is gone with the property-listener API -- see
+    // `StyleProperty`. They were the old cascade's bridge into Taffy and into `UIElement`'s caches
+    // (`invalidateFocusableChain`, `onPositionModeChanged`, `invalidatePoseCachesRecursively`,
+    // `onResizeModeChanged`, `taffyBridge.set*`). The new engine needs none of them: `BoxStyle` reads
+    // `ComputedStyle` on every sync, and the two cases that still need telling -- a `font-size` that
+    // moves an `em`, and `resize` growing handles -- go through `UINode.computedChanged`.
+
     public static final List<AlignItems> DEFAULT_ALIGN_ITEMS = Arrays.asList(
             AlignItems.AUTO,
             AlignItems.START,
@@ -126,9 +133,6 @@ public class LayoutProperties {
 
     public static void init() {
         createSetter(LayoutProperties.DISPLAY, TaffyBridge::setDisplay);
-        // display:none makes an element unfocusable (see UIElement.focusable()), so the cached focus
-        // chain has to be rebuilt — otherwise tab traversal keeps routing into a hidden subtree.
-        LayoutProperties.DISPLAY.addListener((el, prop, oldVal, newVal) -> el.invalidateFocusableChain());
         createSetter(LayoutProperties.LAYOUT_DIRECTION, TaffyBridge::setDirection);
         createSetter(LayoutProperties.FLEX_BASIS, TaffyBridge::setFlexBasis);
         createSetter(LayoutProperties.FLEX, TaffyBridge::setFlex);
@@ -138,9 +142,6 @@ public class LayoutProperties {
         createSetter(LayoutProperties.FLEX_WRAP, TaffyBridge::setFlexWrap);
         createSetter(LayoutProperties.POSITION, TaffyBridge::setPosition);
         // Whether an element is out of flow decides whether it may have LEADING resize handles, and
-        // `position` and `resize` are independent properties set in either order. Same shape as the
-        // DISPLAY hook above, and for the same reason: the dependent state is cached, so it needs telling.
-        LayoutProperties.POSITION.addListener((el, prop, oldVal, newVal) -> el.onPositionModeChanged());
         createSetter(LayoutProperties.BOX_SIZING, TaffyBridge::setBoxSizing);
         createSetter(LayoutProperties.ALIGN_ITEMS, TaffyBridge::setAlignItems);
         createSetter(LayoutProperties.JUSTIFY_CONTENT, TaffyBridge::setJustifyContent);
@@ -222,9 +223,16 @@ public class LayoutProperties {
     }
 
 
+    /**
+     * <b>Nothing to wire any more.</b> This attached a listener that carried a computed layout value
+     * into the live Taffy style, which is how the old cascade reached layout at all. The new engine
+     * has no per-property hook: {@code BoxStyle} reads the whole {@code ComputedStyle} on every sync,
+     * so a layout property arrives by being read rather than by announcing itself.
+     *
+     * <p>Kept as a no-op rather than deleted with its ~60 call sites, which say WHICH Taffy setter a
+     * property belongs to -- a table worth keeping legible for whoever writes the next one.</p>
+     */
     private static <T> void createSetter(StyleProperty<T> property,
                                          BiConsumer<TaffyBridge, T> taffySetter) {
-        property.addListener((el, p, oldValue, newValue) ->
-                taffySetter.accept(el.getStyle().getTaffyBridge(), newValue == null ? property.initialValue : newValue));
     }
 }

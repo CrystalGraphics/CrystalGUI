@@ -27,6 +27,22 @@ import javax.annotation.Nullable;
  */
 public final class ShadowRoot extends UINode {
 
+    /**
+     * <b>The HOST, because a shadow root has no parent and the walk must still get out.</b>
+     *
+     * <p>{@code commandParent()} is the step {@code DataContext} and the keymap resolver take
+     * outward from wherever a gesture landed, and {@code UINode}'s answer is {@code parent()} --
+     * which is null here by design ({@link #host()} is the way up). So the walk stopped at the
+     * boundary: a command invoked from inside ANY composite -- which is every widget with a shadow
+     * tree -- resolved against nothing, and a {@code DataKey} its host answers came back null with
+     * nothing reporting it. Encapsulation is about which RULES match a node, never about which
+     * questions it may ask outward.</p>
+     */
+    @Override
+    public com.crystalgui.ui.input.keymap.KeymapScope commandParent() {
+        return host();
+    }
+
     /** A shadow root: never a light child, never described, never styled from outside. */
     public static final Name NAME = Name.of("shadow-root");
 
