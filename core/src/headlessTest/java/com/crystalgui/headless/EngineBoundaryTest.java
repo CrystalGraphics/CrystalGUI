@@ -85,6 +85,10 @@ public class EngineBoundaryTest {
             // because the old engine still named them and a move into a new-engine package is what
             // this test exists to catch.
             "com/crystalgui/document/",
+            // THE WORKED EXAMPLES, for the same reason as the applications below: a `DocumentEditor`
+            // is made of widgets, so an example classified as old-engine reads as the old engine
+            // reaching into the new one -- which is the opposite of what it is.
+            "com/crystalgui/example/",
             // THE APPLICATIONS (6.4). Without this the shader graph is classified as OLD engine, and
             // every reference it makes into `widget` reads as the old engine reaching into the new
             // one -- which is the opposite of what it is.

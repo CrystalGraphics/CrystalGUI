@@ -7,7 +7,9 @@ named it was read, not remembered.
 > **Scope.** `com.crystalgui.fs` (37 files), `com.crystalgui.document` (6), the protocol and wire
 > layers they ride on, and every workbench seam that opens, saves, watches, decorates or persists a
 > file. The UI mirror (`net.mirror`, `net.window`, `net.projection`) is out of scope. The consumer
-> API is open: nothing here has shipped.
+> **F0-F6 shipped.** F7 remains: two probes, and the authoring surface into
+> `docs/CGUI_BUILDING_UIS.md`. The API below is what was built, with the divergences
+> recorded in each step.
 >
 > **Decided before this plan was written:** the synchronisation point is the **save**, as it is
 > today. Live co-editing is not pursued (§4).
@@ -958,16 +960,31 @@ is offered back.
 halves of the wire are built and tested; the old pair stays until the workbench stops calling it, which
 is the step that needs a client on screen.
 
-### F6 — Documents that are not text, and the example
+### F6 — Documents that are not text, and the example — **SHIPPED**
 
-1. **`GraphDocument`** out of `ShaderGraphEditor` (or implemented on it), version from its undo stack;
-   `ShaderGraphContribution` → `ShaderGraphKind`; the generated-source tab's origin as a field; graph
-   view state through the same seam text uses. `aGraphEditDoesNotSerialiseTheGraph`;
-   `aGraphConflictOffersNoMerge`; `aGraphsPanAndZoomSurviveASessionRestore`. *D8.*
-2. **`BytesDocumentModel`** and its read-only viewer for anything with no kind.
-   `anUnboundFileOpensAsBytes`.
-3. **`com.crystalgui.example.notes`** and `WorkspaceApiTest`: the example and the shader graph name
-   nothing outside `fs.client`, `document` and `core.async`, asserted on the constant pool.
+1. ~~**`GraphDocument`** out of `ShaderGraphEditor` (or implemented on it), version from its undo
+   stack; `ShaderGraphContribution` → `ShaderGraphKind`; the generated-source tab's origin as a field;
+   graph view state through the same seam text uses.~~ **Implemented ON `ShaderGraphEditor`** rather
+   than extracted, and saying so is more honest than splitting it: the canvas holds the
+   `GraphDocument`, the previews and the Blackboard are bound to that instance at construction, and a
+   load copies into it rather than replacing it. A second object in front of it would be a wrapper
+   with nothing of its own to hold. The day a graph offers two views of one document is the day it is
+   worth separating. All three tests shipped.
+2. ~~**`BytesDocumentModel`** and its read-only viewer for anything with no kind.~~ **The model had
+   existed since F1 with nothing building one** — the fallback kind decoded every file as UTF-8, so a
+   PNG opened as replacement characters in a WRITABLE editor and the first save wrote them back over
+   the file. `TextEncoding.looksBinary` existed for that decision and had no caller either. Both wired;
+   `BinaryFileView` is the viewer.
+3. ~~**`com.crystalgui.example.notes`** and `WorkspaceApiTest`~~ — a checklist: a headless
+   `NotesModel` whose every change is an `Edit`, a `NotesView` that owns none of the state, and a
+   `NotesKind` that is the whole registration. **The claim was narrowed by measuring it**: a
+   `DocumentEditor` answers a `UIElement`, so a view of a document is made of widgets by construction
+   and no example can say otherwise. What IS assertable, and is what the layer rests on, is the SPLIT
+   — the model reaches no widget and no element, the declaration reaches nothing but the document
+   layer, and the view reaches widgets and still not the application. The shader graph is not held to
+   it: it is a widget-heavy application whose kind declaration is the small part.
+   Registered by the harness scenes on a seeded `todo.notes`, because an example nothing builds is
+   dead code.
 
 ### F7 — Proof and record
 
