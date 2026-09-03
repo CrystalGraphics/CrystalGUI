@@ -22,7 +22,7 @@ import com.crystalgui.workbench.WorkbenchSession;
 import com.crystalgui.workbench.WorkbenchSettings;
 import com.crystalgui.widget.config.inspector.Inspector;
 import com.crystalgui.widget.config.inspector.InspectorRegistry;
-import com.crystalgui.ui.UiDataKeys;
+import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.desktop.window.WindowChrome;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.workbench.chrome.menu.ChromeCommands;

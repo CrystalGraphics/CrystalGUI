@@ -1,4 +1,6 @@
-package com.crystalgui.ui;
+package com.crystalgui.core.data;
+
+import com.crystalgui.ui.data.UiDataKeys;
 
 /**
  * What cut, copy and paste mean <em>here</em> — IntelliJ's {@code CutProvider}/{@code CopyProvider}/

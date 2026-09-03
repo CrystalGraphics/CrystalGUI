@@ -1,8 +1,6 @@
-package com.crystalgui.ui;
+package com.crystalgui.ui.event;
 
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.ui.event.EventTarget;
-import com.crystalgui.ui.event.UIEvent;
 
 import java.util.HashMap;
 

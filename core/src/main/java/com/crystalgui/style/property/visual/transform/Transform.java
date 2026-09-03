@@ -1,4 +1,4 @@
-package com.crystalgui.ui;
+package com.crystalgui.style.property.visual.transform;
 
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import org.joml.Matrix4f;
@@ -43,10 +43,10 @@ import java.util.List;
  * <p>Immutable. Build with {@link #IDENTITY} and {@link #then}, or the {@link #scale}/{@link #translate}
  * shorthands; {@link #isIdentity()} is the fast path callers check before doing any matrix work at all.</p>
  */
-public final class UITransform {
+public final class Transform {
 
     /** No-op. The default for every element, and the value {@link #isIdentity()} short-circuits on. */
-    public static final UITransform IDENTITY = new UITransform(Collections.emptyList());
+    public static final Transform IDENTITY = new Transform(Collections.emptyList());
 
     /** Which CSS function an {@link Op} is, and therefore which of its fields carry meaning. */
     public enum Kind {
@@ -87,55 +87,55 @@ public final class UITransform {
 
     private final List<Op> ops;
 
-    private UITransform(List<Op> ops) {
+    private Transform(List<Op> ops) {
         this.ops = ops;
     }
 
     /** Wraps an already-ordered function list. The list is defensively copied. */
-    public static UITransform of(List<Op> ops) {
+    public static Transform of(List<Op> ops) {
         if (ops == null || ops.isEmpty()) return IDENTITY;
-        return new UITransform(Collections.unmodifiableList(new ArrayList<>(ops)));
+        return new Transform(Collections.unmodifiableList(new ArrayList<>(ops)));
     }
 
-    public static UITransform of(Op... ops) {
+    public static Transform of(Op... ops) {
         return of(Arrays.asList(ops));
     }
 
-    public static UITransform scale(float uniform) {
+    public static Transform scale(float uniform) {
         return of(Op.scale(uniform, uniform));
     }
 
-    public static UITransform scale(float x, float y) {
+    public static Transform scale(float x, float y) {
         return of(Op.scale(x, y));
     }
 
-    public static UITransform translate(float x, float y) {
+    public static Transform translate(float x, float y) {
         return of(Op.translate(LengthPercent.px(x), LengthPercent.px(y)));
     }
 
     /** @param radians clockwise, since Y grows downward here. */
-    public static UITransform rotate(float radians) {
+    public static Transform rotate(float radians) {
         return of(Op.rotate(radians));
     }
 
     /** Appends {@code op} after everything already here — i.e. CSS's left-to-right order. */
-    public UITransform then(Op op) {
+    public Transform then(Op op) {
         List<Op> next = new ArrayList<>(ops.size() + 1);
         next.addAll(ops);
         next.add(op);
-        return new UITransform(Collections.unmodifiableList(next));
+        return new Transform(Collections.unmodifiableList(next));
     }
 
-    public UITransform withTranslate(float x, float y) {
+    public Transform withTranslate(float x, float y) {
         return then(Op.translate(LengthPercent.px(x), LengthPercent.px(y)));
     }
 
-    public UITransform withScale(float x, float y) {
+    public Transform withScale(float x, float y) {
         return then(Op.scale(x, y));
     }
 
     /** @param radians clockwise, since Y grows downward here. */
-    public UITransform withRotation(float radians) {
+    public Transform withRotation(float radians) {
         return then(Op.rotate(radians));
     }
 
@@ -210,7 +210,7 @@ public final class UITransform {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (!(o instanceof UITransform other)) return false;
+        if (!(o instanceof Transform other)) return false;
         return ops.equals(other.ops);
     }
 

@@ -1,12 +1,9 @@
 package com.crystalgui.core.undo;
 
-import com.crystalgui.ui.UiDataKeys;
+import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.core.command.Command;
-import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
-
-import javax.annotation.Nullable;
 
 /**
  * The built-in {@code edit.undo} / {@code edit.redo} commands, and their default bindings.

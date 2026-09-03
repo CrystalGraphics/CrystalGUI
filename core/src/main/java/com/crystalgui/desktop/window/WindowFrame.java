@@ -22,7 +22,7 @@ import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.UITransform;
+import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.service.Focus;
 import com.crystalgui.widget.control.Button;
@@ -358,12 +358,12 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
         // goes with the transform, because a photograph taken about a pinned corner is the artefact
         // this suppression exists to avoid.
         Float wasOpacity = box.opacity() < 1f ? box.opacity() : null;
-        UITransform wasTransform = box.transform().isIdentity() ? null : box.transform();
+        Transform wasTransform = box.transform().isIdentity() ? null : box.transform();
         Float wasOriginX = box.transformOriginX();
         Float wasOriginY = box.transformOriginY();
         if (wasOpacity != null) box.setOpacity(1f);
         if (wasTransform != null) {
-            box.setTransform(UITransform.IDENTITY);
+            box.setTransform(Transform.IDENTITY);
             box.setTransformOrigin(null, null);
         }
         try {
@@ -2231,13 +2231,13 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
 
     /** Where the running animation is headed, or null if none is. @see WindowAnimator#currentTarget */
     @Nullable
-    com.crystalgui.ui.UITransform animationTarget() {
+    Transform animationTarget() {
         return animator.currentTarget();
     }
 
     /** Where the running animation started, or null if none is. @see WindowAnimator#currentStart */
     @Nullable
-    com.crystalgui.ui.UITransform animationStart() {
+    Transform animationStart() {
         return animator.currentStart();
     }
 

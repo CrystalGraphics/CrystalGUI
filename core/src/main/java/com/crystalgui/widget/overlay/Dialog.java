@@ -4,7 +4,7 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.EventListenerGroup;
+import com.crystalgui.ui.event.EventListenerGroup;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.State;

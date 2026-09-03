@@ -1374,7 +1374,7 @@ public interface DataContext {
 }
 ```
 
-Standard keys — `com.crystalgui.ui.UiDataKeys`:
+Standard keys — `com.crystalgui.ui.data.UiDataKeys`:
 
 | Key | Type | Supplied by |
 |---|---|---|

@@ -2,7 +2,7 @@ package com.crystalgui.ui.service;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgMouseCodes;
-import com.crystalgui.ui.UITransform;
+import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
@@ -218,7 +218,7 @@ public final class Drag implements InputMode {
         // root transform's inverse and nothing more -- but going through the matrix is what keeps it
         // right when uiScale moves.
         org.joml.Vector4f p = new org.joml.Vector4f(surfaceX, surfaceY, 0f, 1f).mul(top.worldToLocal());
-        box.setTransform(UITransform.translate(p.x - ghostOffsetX, p.y - ghostOffsetY));
+        box.setTransform(Transform.translate(p.x - ghostOffsetX, p.y - ghostOffsetY));
     }
 
     private void releaseGhost() {

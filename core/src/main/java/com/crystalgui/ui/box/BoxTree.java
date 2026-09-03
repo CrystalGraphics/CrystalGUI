@@ -5,7 +5,7 @@ import com.crystalgui.style.ComputedStyle;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.border.LengthPercent;
-import com.crystalgui.ui.UITransform;
+import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import dev.vfyjxf.taffy.geometry.FloatSize;
@@ -591,7 +591,7 @@ public final class BoxTree {
             hostScrollTop = 0f;
         }
         box.localToWorld.set(hostWorld).translate(box.x - hostScrollLeft, box.y - hostScrollTop, 0f);
-        UITransform transform = box.transform();
+        Transform transform = box.transform();
         if (!transform.isIdentity()) {
             if (box.mirrorRoot) {
                 // A MIRROR ROOT SCALES ABOUT ITS OWN CORNER, never about its source's

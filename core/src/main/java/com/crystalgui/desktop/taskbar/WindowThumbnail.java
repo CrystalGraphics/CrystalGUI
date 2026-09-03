@@ -8,7 +8,7 @@ import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.UITransform;
+import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
@@ -351,11 +351,11 @@ public class WindowThumbnail extends UIElement {
         // TRANSLATE THEN SCALE, in that order and never the other. A transform list applies
         // LEFT TO RIGHT as matrix multiplication, so `scale then translate` would scale the offset too
         // and put the picture at a fraction of where it belongs -- the ordering `SvgTransform.parse`
-        // once got backwards and that UITransform's own javadoc states.
-        mirror.setTransform(UITransform.of(
-                UITransform.Op.translate(LengthPercent.px((self.width() - width) / 2f),
+        // once got backwards and that Transform's own javadoc states.
+        mirror.setTransform(Transform.of(
+                Transform.Op.translate(LengthPercent.px((self.width() - width) / 2f),
                         LengthPercent.px((self.height() - height) / 2f)),
-                UITransform.Op.scale(scale, scale)));
+                Transform.Op.scale(scale, scale)));
     }
 
     private void dropMirror() {

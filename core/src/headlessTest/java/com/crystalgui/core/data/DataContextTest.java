@@ -1,7 +1,7 @@
 package com.crystalgui.core.data;
 
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.ui.UiDataKeys;
+import com.crystalgui.ui.data.UiDataKeys;
 
 import org.junit.Test;
 

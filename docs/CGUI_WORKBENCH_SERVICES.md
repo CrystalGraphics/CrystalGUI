@@ -290,7 +290,7 @@ release the same way, because none of them is doing anything — leaving the tre
 ## Data context
 
 `com.crystalgui.core.data` — `DataKey`, `DataProvider`, `DataContext`. Standard keys in
-`com.crystalgui.ui.UiDataKeys`.
+`com.crystalgui.ui.data.UiDataKeys`.
 
 How a command finds its subject without naming the widget that supplies it. Ported from IntelliJ's
 `DataKey`/`DataProvider`/`DataContext`.
