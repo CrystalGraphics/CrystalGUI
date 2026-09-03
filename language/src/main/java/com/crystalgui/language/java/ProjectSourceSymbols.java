@@ -1,8 +1,10 @@
 package com.crystalgui.language.java;
 
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.ResourceContentProvider;
-import com.crystalgui.fs.ResourceRegistry;
+import com.crystalgui.core.async.Reply;
+import com.crystalgui.fs.client.ContentProvider;
+import com.crystalgui.fs.client.ContentProviders;
+import com.crystalgui.fs.protocol.FsError;
 import com.crystalgui.text.lang.ProjectSourcesRegistry;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.text.lang.SymbolKind;
@@ -18,7 +20,7 @@ import java.util.Set;
  *
  * <h3>The same door a library tab already knocks on</h3>
  *
- * <p>{@code ResourceContentProvider.symbolOf} exists and {@code LibrarySources} answers it for
+ * <p>{@code ContentProvider.symbolOf} exists and {@code LibrarySources} answers it for
  * {@code library://} — which is why a {@code FlexDirection.class} tab draws an enum glyph and hovers
  * "Final enum". Nothing was registered for {@code project://}, so the identical question about the
  * author\'s own file had no one to ask, and every {@code .java} row in the tree drew the file-type icon.
@@ -58,11 +60,14 @@ import java.util.Set;
  * matches the file's, which is a second fact to get wrong. A file with no type at all (a
  * {@code package-info.java}, or one still being typed) answers null and keeps its file-type icon.</p>
  */
-public final class ProjectSourceSymbols implements ResourceContentProvider {
+public final class ProjectSourceSymbols implements ContentProvider {
 
     /** Registers this for {@code project://}. Idempotent — the registry holds one provider per scheme. */
     public static void register() {
-        ResourceRegistry.register(Resource.SCHEME_PROJECT, new ProjectSourceSymbols());
+        // THE PROJECT SCHEME, whose CONTENT is still the server's: a provider answers what a file
+        // DECLARES, and `Workspace.read` checks the scheme before it checks the table so this is never
+        // asked for a project file's bytes. @see com.crystalgui.fs.client.Workspace#registerScheme
+        ContentProviders.contribute(Resource.SCHEME_PROJECT, new ProjectSourceSymbols());
     }
 
     /**
@@ -73,8 +78,9 @@ public final class ProjectSourceSymbols implements ResourceContentProvider {
      * with its own idea of what is current.</p>
      */
     @Override
-    public byte[] read(Resource resource) {
-        return null;
+    public Reply<byte[]> read(Resource resource) {
+        return Reply.failed(new FsError(FsError.NOT_PERMITTED,
+                "a project file's content is the server's; this provider answers symbolOf only"));
     }
 
     /**

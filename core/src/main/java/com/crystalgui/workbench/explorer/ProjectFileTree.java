@@ -9,7 +9,7 @@ import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.undo.UndoScope;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.WorkspaceClient;
+import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.core.data.ClipboardActions;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
@@ -221,9 +221,17 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
         return this;
     }
 
-    public ProjectFileTree(WorkspaceClient<?> client) {
+    /** The workspace this tree is a view of — what a row asks when it wants a symbol. */
+    private final Workspace workspace;
+
+    public Workspace workspace() {
+        return workspace;
+    }
+
+    public ProjectFileTree(Workspace workspace) {
         super(NAME);
-        this.source = new WorkspaceTreeSource(client);
+        this.workspace = workspace;
+        this.source = new WorkspaceTreeSource(workspace);
         this.tree = new TreeView<>(source);
         tree.addClass(TREE_CLASS);
         tree.setRenderer(new FilesRenderer(this));
@@ -588,7 +596,7 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
      * hidden panel deliberately waits. Idempotent, and safe to call from anywhere: a reconnect is not a
      * frame event and arrives whenever the wire happens to move.</p>
      *
-     * @see com.crystalgui.fs.WorkspaceClient#onRebound
+     * @see com.crystalgui.fs.client.Workspace#onDidReconnect
      */
     public void markListingsStale() {
         staleListings = true;

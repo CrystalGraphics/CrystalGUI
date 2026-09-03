@@ -9,13 +9,17 @@ import com.crystalgui.fs.WorkspaceOperation;
 import com.crystalgui.fs.WorkspacePermission;
 import com.crystalgui.fs.project.ProjectInfo;
 import com.crystalgui.fs.project.WorkspaceProject;
-import com.crystalgui.fs.WorkspaceRpc;
+import com.crystalgui.fs.server.WatchHub;
+import com.crystalgui.fs.server.WorkspaceBinding;
+import com.crystalgui.fs.protocol.FsMessages;
+import com.crystalgui.fs.protocol.FsMethods;
 import com.crystalgui.fs.CgFileEvent;
 import com.crystalgui.fs.NioFileEventSource;
 import com.crystalgui.fs.WorkspaceService;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
+import com.crystalgui.serialization.StateMap;
 
 import com.mojang.authlib.GameProfile;
 import cpw.mods.fml.common.FMLCommonHandler;
@@ -40,8 +44,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>This is the vision the filesystem layer was built for, and the reason {@code Mc1710Workspace}'s
  * javadoc reserved it as <i>"a transport swap rather than a rewrite"</i>. It turned out to be exactly
- * that: {@link WorkspaceRpc} already installed onto anything with a {@code register(method, handler)},
- * and {@code WorkspaceClient} only ever used its session to call and to register. Neither needed a
+ * that: {@link WorkspaceBinding} installs onto anything with a {@code register(method, handler)}, and
+ * a workspace client only ever uses its connection to call and to register. Neither needed a
  * redesign — they needed somewhere to be plugged in, which is what {@link Protocols} became.</p>
  *
  * <h3>Files live on the server's machine, and single-player is not a special case</h3>
@@ -53,9 +57,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * testable at all: a bug that only appears when the two halves are genuinely apart would otherwise wait
  * for a dedicated server to find it.</p>
  *
- * <h3>One {@link WorkspaceRpc} per connection, because an actor is per player</h3>
+ * <h3>One {@link WorkspaceBinding} per connection, because an actor is per player</h3>
  *
- * <p>{@code WorkspaceRpc} binds an actor at construction, and permission is checked per call against that
+ * <p>A binding takes its actor at construction, and permission is checked per call against that
  * actor. Sharing one across players would mean every request was authorised as whoever connected first.
  * It also holds the watcher, so per-connection is what makes "tell <em>this</em> client what changed"
  * meaningful.</p>
@@ -80,7 +84,17 @@ public final class CgUiWorkspaceHost {
     /** Seconds between watcher polls, per connection. */
     private static final float POLL_SECONDS = 0.5f;
 
-    private static final Map<Object, WorkspaceRpc<Object>> BY_PEER = new ConcurrentHashMap<>();
+    private static final Map<Object, WorkspaceBinding<Object>> BY_PEER = new ConcurrentHashMap<>();
+
+    /**
+     * ONE hub for the whole server, not one per player.
+     *
+     * <p>A watch costs an OS handle and Linux caps them per user, so N players watching one workspace
+     * must not mean N subscriptions on one directory. It also means every path is stat-ed at most once
+     * per tick however many peers are watching it — which is what a per-connection watcher could not do,
+     * and it was doing it twice a second per file per peer.</p>
+     */
+    private static WatchHub hub;
     private static final Map<Object, ProtocolConnection<Object>> CONNECTIONS = new ConcurrentHashMap<>();
 
     private static volatile WorkspaceService service;
@@ -112,9 +126,10 @@ public final class CgUiWorkspaceHost {
         WorkspaceService live = service();
         if (live == null) return;
 
-        WorkspaceRpc<Object> rpc = new WorkspaceRpc<>(live, actorFor(peer));
-        rpc.installOn(connection::onRequest);
-        BY_PEER.put(peer, rpc);
+        WorkspaceBinding<Object> binding = new WorkspaceBinding<>(
+                live, hub, actorFor(peer), peer, PlainOps.INSTANCE);
+        binding.installOn(connection::onRequest);
+        BY_PEER.put(peer, binding);
         CONNECTIONS.put(peer, connection);
         CrystalGuiCore.LOGGER.info("[cgui-fs] workspace bound for {}", actorFor(peer).id());
     }
@@ -147,6 +162,7 @@ public final class CgUiWorkspaceHost {
         // directory. Never throws -- a workspace that cannot be watched still works, half a second
         // behind, and refusing to serve it would be a far worse answer.
         service.attachEvents(NioFileEventSource.open(PROJECT_ID, root, project.excludes()));
+        hub = new WatchHub(service);
         return service;
     }
 
@@ -239,23 +255,17 @@ public final class CgUiWorkspaceHost {
             if (untilPoll > 0f) return;
             untilPoll = POLL_SECONDS;
 
-            List<Object> gone = new ArrayList<>();
-            for (Map.Entry<Object, WorkspaceRpc<Object>> entry : BY_PEER.entrySet()) {
-                ProtocolConnection<Object> connection = CONNECTIONS.get(entry.getKey());
-                if (connection == null) {
-                    gone.add(entry.getKey());
-                    continue;
-                }
-                try {
-                    entry.getValue().pollAndNotify(
-                            (method, args) -> connection.notify(method, args),
-                            PlainOps.INSTANCE);
-                } catch (RuntimeException failed) {
-                    // One player's watcher must not stop every other player being polled.
-                    CrystalGuiCore.LOGGER.error("[cgui-fs] watcher poll failed: {}", failed.getMessage());
-                }
+            // ONE RESCAN FOR THE SERVER, then a message each. It was one poll per peer, which stat-ed
+            // every watched file once per player twice a second.
+            if (service == null || hub == null) return;
+            try {
+                fanOut(hub.poll(actorForAny()));
+            } catch (RuntimeException failed) {
+                CrystalGuiCore.LOGGER.error("[cgui-fs] watcher poll failed: {}", failed.getMessage());
             }
-            for (Object key : gone) BY_PEER.remove(key);
+            for (Object key : new ArrayList<>(BY_PEER.keySet())) {
+                if (CONNECTIONS.get(key) == null) BY_PEER.remove(key);
+            }
         }
     }
 
@@ -267,19 +277,42 @@ public final class CgUiWorkspaceHost {
      * business, and telling it would leak which files exist to somebody who never asked.</p>
      */
     private static void fanOut(List<CgFileEvent> events) {
-        for (Map.Entry<Object, WorkspaceRpc<Object>> entry : BY_PEER.entrySet()) {
+        if (hub == null) return;
+        // THE HUB DECIDES WHO HEARS WHAT, once for the batch: it coalesces per path, pairs a deletion
+        // and a creation carrying one etag into a RENAME, and rescans wholesale when the OS reports an
+        // overflow. None of that can be done per peer without doing it N times.
+        fanOut(hub.tick(actorForAny(), events));
+    }
+
+    /** Sends each peer its own list. A peer with nothing to hear about is absent from the map. */
+    private static void fanOut(Map<Object, List<FsMessages.FileChange>> byPeer) {
+        for (Map.Entry<Object, WorkspaceBinding<Object>> entry : BY_PEER.entrySet()) {
             ProtocolConnection<Object> connection = CONNECTIONS.get(entry.getKey());
             if (connection == null) continue;
+            List<FsMessages.FileChange> mine = entry.getValue().changesFor(byPeer);
+            if (mine.isEmpty()) continue;
             try {
-                entry.getValue().notifyFileEvents(events,
-                        (method, args) -> connection.notify(method, args),
-                        PlainOps.INSTANCE);
+                connection.notify(FsMethods.CHANGED, new StateMap<>(PlainOps.INSTANCE,
+                        FsMessages.changedNotification().encode(PlainOps.INSTANCE,
+                                new FsMessages.ChangedNotification(mine))));
             } catch (RuntimeException failed) {
                 // One player's dispatch must not stop every other player hearing about the change.
                 CrystalGuiCore.LOGGER.error("[cgui-fs] file-event dispatch failed: {}",
                         failed.getMessage());
             }
         }
+    }
+
+    /**
+     * An actor for the SERVER's own re-stat, which is not any one player's.
+     *
+     * <p>The hub reads a file to answer whether it moved, and reading is permission-checked — so the
+     * poll needs somebody to be. It is the server itself: a change is a fact about the disk, and whether
+     * a given player may hear about it is decided per subscription, which is what a peer's watch list
+     * already is.</p>
+     */
+    private static WorkspaceActor actorForAny() {
+        return () -> "server";
     }
 
     /** Forgets a peer. Called when its connection closes, or the maps grow for the life of the server. */
@@ -290,6 +323,9 @@ public final class CgUiWorkspaceHost {
         // to everybody else, for the rest of the server's life. @see WorkspacePresence#left
         WorkspaceService live = service;
         if (live != null) live.presence().left(actorFor(peer));
+        // AND ITS SUBSCRIPTIONS, or the hub goes on stat-ing files for a player who has gone -- the
+        // per-peer half of the same leak the presence line above closes.
+        if (hub != null) hub.forget(peer);
 
         BY_PEER.remove(peer);
         CONNECTIONS.remove(peer);

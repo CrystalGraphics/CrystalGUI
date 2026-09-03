@@ -79,6 +79,20 @@ public final class Workspace implements Disposable {
         this.calls = new FsCall<>(caller, ops, health);
         this.files = new FileOperations(calls);
         subscribe(subscriber, ops);
+        // DRAINED INTO THIS WORKSPACE'S OWN TABLE, and kept in step. A language module contributes at
+        // mod init, long before any world is joined -- so it cannot be handed a workspace, and it must
+        // not name one either. @see ContentProviders
+        adoptContributions();
+        ContentProviders.onDidChange.connect(this::adoptContributions);
+    }
+
+    private void adoptContributions() {
+        for (ContentProviders.Contribution contribution : ContentProviders.all()) {
+            // A SCHEME REGISTERED DIRECTLY ON THIS WORKSPACE WINS, because it was registered against
+            // THIS server -- a contribution is a process-wide default and an instance registration is a
+            // statement about one connection.
+            providers.putIfAbsent(contribution.scheme(), contribution.provider());
+        }
     }
 
     /**
@@ -140,14 +154,16 @@ public final class Workspace implements Disposable {
      * scheme twice replaces the first, which is right for a hot reload and is why this returns a handle
      * rather than refusing.</p>
      *
-     * @throws IllegalArgumentException for the project scheme, whose content is the server's by
-     *                                  definition — a provider there would answer instead of the wire
+     * <h3>The project scheme may be registered, and its CONTENT still comes from the server</h3>
+     *
+     * <p>A provider answers three questions and only one of them is about bytes: what this resource
+     * holds ({@link ContentProvider#symbolOf}), where a member of it is declared
+     * ({@link ContentProvider#locate}), and what it says. For a project file the first two are the
+     * language engine's — a {@code .java} row shows what the file DECLARES, and only a compiler knows —
+     * while the third is the server's by definition. So {@link #read} checks the scheme before it checks
+     * the table, and a provider registered here is never asked for a project file's bytes.</p>
      */
     public Disposable registerScheme(String scheme, ContentProvider provider) {
-        if (Resource.SCHEME_PROJECT.equals(scheme)) {
-            throw new IllegalArgumentException(
-                    "the project scheme's content is the server's; a provider here would answer instead");
-        }
         providers.put(scheme, provider);
         return () -> providers.remove(scheme, provider);
     }
@@ -158,6 +174,11 @@ public final class Workspace implements Disposable {
         return resource == null ? null : providers.get(resource.scheme());
     }
 
+    /** Every registered provider, for a caller that must subscribe to all of them. */
+    public List<ContentProvider> providers() {
+        return List.copyOf(providers.values());
+    }
+
     /**
      * Reads any resource — <b>the one door</b>.
      *
@@ -166,6 +187,11 @@ public final class Workspace implements Disposable {
      * caller above ever asks which kind of thing it is holding.</p>
      */
     public Reply<byte[]> read(Resource resource) {
+        // THE SCHEME BEFORE THE TABLE. A project file's bytes are the server's whatever has registered
+        // to describe the scheme -- a provider is there to say what the file DECLARES, not to serve it.
+        if (Resource.SCHEME_PROJECT.equals(resource.scheme())) {
+            return files.read(resource).map(FsMessages.ReadResponse::content);
+        }
         ContentProvider provider = providerFor(resource);
         if (provider != null) return provider.read(resource);
         return files.read(resource).map(FsMessages.ReadResponse::content);
@@ -174,6 +200,8 @@ public final class Workspace implements Disposable {
     /** Whether this resource refuses writes. An unregistered non-project scheme is read-only. */
     public boolean isReadOnly(Resource resource) {
         if (resource == null) return true;
+        // Same rule as `read`: a project file is the server's, and whether it may be written is the
+        // server's answer rather than a provider's.
         if (Resource.SCHEME_PROJECT.equals(resource.scheme())) return false;
         ContentProvider provider = providerFor(resource);
         // REFUSING TO WRITE SOMETHING NOBODY CLAIMS is the right default: a scheme with no provider has
@@ -279,6 +307,10 @@ public final class Workspace implements Disposable {
      * already present, never re-asked, and change notifications stopped permanently for exactly the
      * files that were open. No error, no log line, and an editor that simply stopped noticing edits.</p>
      */
+    public void rebind(ProtocolConnection<Object> connection) {
+        rebind(connection::call, connection::onNotify, connection.ops());
+    }
+
     public void rebind(FsCall.Caller<Object> caller, Subscriber subscriber, DynamicOps<Object> ops) {
         // NOT A NEW OBJECT: the workbench, the index and every open document hold this one. What moves
         // is where its calls go and who it is listening to.

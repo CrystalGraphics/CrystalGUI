@@ -5,7 +5,8 @@ import com.crystalgui.ui.dom.UIElementTreeSource;
 import com.crystalgui.net.mirror.UIElementMirror;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.WorkspaceClient;
+import com.crystalgui.fs.Resource;
+import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
@@ -131,7 +132,7 @@ public final class CgUiSessionProbe {
     private static volatile boolean deltaWriteStarted;
     private static volatile boolean reported;
 
-    private static WorkspaceClient<Object> files;
+    private static Workspace files;
     private static int clientTicks;
 
     private CgUiSessionProbe() {
@@ -400,57 +401,59 @@ public final class CgUiSessionProbe {
             if (files == null) {
                 ProtocolConnection<Object> connection = CgUiConnections.client();
                 if (connection == null) return;
-                files = WorkspaceClient.forConnection(connection);
+                files = Workspace.of(connection);
             }
 
             if (!filesAsked) {
                 filesAsked = true;
-                files.list(CgPath.ofProject(CgUiWorkspaceHost.PROJECT_ID),
-                        entries -> {
-                            CrystalGuiCore.LOGGER.info("[session-probe] listed {} entries from the server",
-                                    entries.size());
-                            if (!entries.isEmpty()) pass("9 files (B1/B2)");
-                        },
-                        failure -> CrystalGuiCore.LOGGER.error("[session-probe] listing failed: {}",
-                                failure.code()));
+                files.files().list(Resource.of(CgPath.ofProject(CgUiWorkspaceHost.PROJECT_ID)))
+                        .then(listing -> {
+                            CrystalGuiCore.LOGGER.info("[session-probe] listed {} entries from the "
+                                    + "server", listing.entries().size());
+                            if (!listing.entries().isEmpty()) pass("9 files (B1/B2)");
+                        })
+                        .onError(failure -> CrystalGuiCore.LOGGER.error(
+                                "[session-probe] listing failed: {}", failure.code()));
                 return;
             }
             if (!done("9 files (B1/B2)") || deltaWriteStarted) return;
 
-            // C5 -- read, write a CHANGE SET, re-read. The re-read is conditional on the etag, so it
-            // also exercises the cache path rather than merely the write.
+            // Read, write CONDITIONALLY on the etag that read handed back, re-read, put it back. The
+            // etag is the whole point: the server re-stats before it writes, so a file that moved
+            // underneath this client is refused rather than clobbered.
             deltaWriteStarted = true;
-            CgPath readme = CgPath.of(CgUiWorkspaceHost.PROJECT_ID, "README.md");
-            files.read(readme,
-                    first -> {
+            Resource readme = Resource.of(CgPath.of(CgUiWorkspaceHost.PROJECT_ID, "README.md"));
+            files.files().read(readme)
+                    .onError(failure -> CrystalGuiCore.LOGGER.error(
+                            "[session-probe] README read failed: {}", failure.code()))
+                    .then(first -> {
                         String before = new String(first.content(), StandardCharsets.UTF_8);
                         CrystalGuiCore.LOGGER.info("[session-probe] README is {} bytes", before.length());
-                        // Replace the first line's "#" with "#!" -- one change, not the whole file.
-                        files.writeDelta(readme, List.of(new Change(0, 1, "#!")),
-                                etag -> files.read(readme,
-                                        second -> {
-                                            String after =
-                                                    new String(second.content(), StandardCharsets.UTF_8);
-                                            boolean applied = after.startsWith("#!");
-                                            CrystalGuiCore.LOGGER.info("[session-probe] after "
-                                                    + "writeDelta the file starts \"{}\"",
+                        String edited = "#!" + before.substring(Math.min(1, before.length()));
+                        files.files()
+                                .write(readme, edited.getBytes(StandardCharsets.UTF_8), first.etag())
+                                .onError(failure -> CrystalGuiCore.LOGGER.error(
+                                        "[session-probe] conditional write failed: {}", failure.code()))
+                                .then(etag -> files.files().read(readme)
+                                        .onError(f -> CrystalGuiCore.LOGGER.error(
+                                                "[session-probe] re-read failed: {}", f.code()))
+                                        .then(second -> {
+                                            String after = new String(second.content(),
+                                                    StandardCharsets.UTF_8);
+                                            CrystalGuiCore.LOGGER.info("[session-probe] after the "
+                                                    + "conditional write the file starts \"{}\"",
                                                     after.substring(0, Math.min(12, after.length())));
-                                            if (applied) {
-                                                // Put it back, so a repeat run starts from the same file.
-                                                files.writeDelta(readme, List.of(new Change(0, 2, "#")),
-                                                        e -> pass("10 writeDelta + cache (C5)"),
-                                                        f -> CrystalGuiCore.LOGGER.error(
-                                                                "[session-probe] restore failed: {}",
-                                                                f.code()));
-                                            }
-                                        },
-                                        f -> CrystalGuiCore.LOGGER.error(
-                                                "[session-probe] re-read failed: {}", f.code())),
-                                failure -> CrystalGuiCore.LOGGER.error(
-                                        "[session-probe] writeDelta failed: {}", failure.code()));
-                    },
-                    failure -> CrystalGuiCore.LOGGER.error("[session-probe] README read failed: {}",
-                            failure.code()));
+                                            if (!after.startsWith("#!")) return;
+                                            // Put it back, so a repeat run starts from the same file.
+                                            files.files().write(readme,
+                                                            before.getBytes(StandardCharsets.UTF_8),
+                                                            second.etag())
+                                                    .then(e -> pass("10 conditional write + cache (C5)"))
+                                                    .onError(f -> CrystalGuiCore.LOGGER.error(
+                                                            "[session-probe] restore failed: {}",
+                                                            f.code()));
+                                        }));
+                    });
         }
 
         private void report(String prefix) {

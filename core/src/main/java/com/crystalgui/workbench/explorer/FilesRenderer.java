@@ -2,8 +2,7 @@ package com.crystalgui.workbench.explorer;
 
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.ResourceContentProvider;
-import com.crystalgui.fs.ResourceRegistry;
+import com.crystalgui.fs.client.ContentProvider;
 import com.crystalgui.fs.project.SourceRoots;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.asset.FileIconTheme;
@@ -280,9 +279,9 @@ final class FilesRenderer implements TreeRenderer<CgPath> {
      * stack is built on rather than a fallback invented here.</p>
      */
     @Nullable
-    private static SymbolInfo declaredIn(CgPath file) {
+    private SymbolInfo declaredIn(CgPath file) {
         Resource resource = Resource.of(file);
-        ResourceContentProvider provider = ResourceRegistry.providerFor(resource);
+        ContentProvider provider = tree.workspace().providerFor(resource);
         if (provider == null) return null;
         SymbolInfo symbol = provider.symbolOf(resource);
         return symbol == null || symbol.kind() == null ? null : symbol;

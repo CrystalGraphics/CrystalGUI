@@ -10,8 +10,8 @@ import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import com.crystalgui.workbench.dock.drag.DockPlacement;
 import com.crystalgui.widget.config.inspector.InspectorRegistry;
-import com.crystalgui.document.DocumentType;
-import com.crystalgui.document.FileDocument;
+import com.crystalgui.document.Document;
+import com.crystalgui.document.DocumentKind;
 import com.crystalgui.workbench.Workbench;
 
 import javax.annotation.Nullable;
@@ -66,11 +66,17 @@ public final class ShaderGraphContribution {
      * not.</p>
      */
     public static void register(Workbench workbench) {
-        workbench.contribute(DocumentType.of(GRAPH_TYPE, "Shader Graph")
-                .forExtensions("shadergraph")
-                .document(path -> {
+        // A GRAPH IS ITS OWN MODEL AND ITS OWN VIEW, and saying so is more honest than splitting it: the
+        // canvas holds the GraphDocument, the previews and the Blackboard are bound to that instance at
+        // construction, and a load copies into it rather than replacing it (see GraphView.load). A second
+        // object in front of it would be a wrapper with nothing of its own to hold. What the split DOES
+        // buy elsewhere -- two views of one document -- a graph does not yet offer, and the day it does
+        // is the day this is worth separating.
+        workbench.contribute(DocumentKind.of(GRAPH_TYPE, "Shader Graph")
+                .files(DocumentKind.FilePatterns.extension("shadergraph"))
+                .model((resource, bytes) -> {
                     ShaderGraphEditor editor = new ShaderGraphEditor();
-                    editor.setResource(Resource.of(path));
+                    editor.setResource(resource);
                     // THE GRAPH ASKS, THE SHELL DECIDES -- and the shell is this contribution now rather
                     // than the application. The graph knows it can emit GLSL and nothing about docks.
                     editor.onViewGeneratedRequested.connect(() -> showGenerated(workbench, editor));
@@ -88,8 +94,11 @@ public final class ShaderGraphContribution {
                         editor.blackboard().onPropertySelected.connect(
                                 id -> InspectorRegistry.subjectChanged());
                     }
+                    editor.adopt(bytes);
                     return editor;
-                }));
+                })
+                .editor(document -> (ShaderGraphEditor) document.model()),
+                "shadergraph");
 
         // A DOCUMENT, one per graph -- not a singleton view following the front tab. Five open graphs have
         // five different generated shaders, and one shared panel cannot be diffed against another, cannot
@@ -160,7 +169,7 @@ public final class ShaderGraphContribution {
         // one line against invalidating every saved layout that had the tab open.
         Resource origin = parsed.origin() != null ? parsed.origin() : parsed;
         if (!origin.isProject()) return null;
-        FileDocument document = workbench.documentFor(origin.asPath());
-        return document instanceof ShaderGraphEditor graph ? graph : null;
+        Document document = workbench.documentFor(origin.asPath());
+        return document != null && document.model() instanceof ShaderGraphEditor graph ? graph : null;
     }
 }

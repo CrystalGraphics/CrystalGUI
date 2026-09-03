@@ -2,8 +2,8 @@ package com.crystalgui.language.java;
 
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.ResourceContentProvider;
-import com.crystalgui.fs.ResourceRegistry;
+import com.crystalgui.fs.client.ContentProvider;
+import com.crystalgui.fs.client.ContentProviders;
 import com.crystalgui.language.TestWorkspace;
 import com.crystalgui.text.lang.ProjectSourcesRegistry;
 import com.crystalgui.text.lang.SymbolInfo;
@@ -39,7 +39,7 @@ public class ProjectSourceResourceTest {
     @Before
     public void openWorkspace() {
         ProjectSourcesRegistry.resetForTesting();
-        ResourceRegistry.resetForTesting();
+        ContentProviders.resetForTesting();
         workspace = new TestWorkspace(".java");
         ProjectSourcesRegistry.contribute(workspace);
         ProjectSourceSymbols.register();
@@ -48,30 +48,34 @@ public class ProjectSourceResourceTest {
     @After
     public void close() {
         ProjectSourcesRegistry.resetForTesting();
-        ResourceRegistry.resetForTesting();
+        ContentProviders.resetForTesting();
     }
 
     private static SymbolInfo askAbout(String qualifiedName) {
         Resource resource = Resource.of(
                 CgPath.parse("proj:" + ROOT + "/" + qualifiedName.replace('.', '/') + ".java"));
-        ResourceContentProvider provider = ResourceRegistry.providerFor(resource);
-        assertNotNull("nothing is registered for project://, so no row can ever ask", provider);
+        ContentProvider provider = providerFor(resource);
+        assertNotNull("nothing is contributed for project://, so no row can ever ask", provider);
         return provider.symbolOf(resource);
     }
 
     /**
      * <b>The registry accepts a provider for {@code project://} at all.</b>
      *
-     * <p>The regression guard, and the whole bug: it threw here, so {@code register()} failed and the
-     * feature was inert with nothing on screen to say why. Registration is about DESCRIBING a scheme;
-     * reading a project file still goes through the workspace client, which
-     * {@code contentProviderFor} is what now enforces.</p>
+     * <p>Describing a scheme and serving its bytes are different questions: a project file's content
+     * comes from the server, and {@code Workspace.read} checks the scheme before it checks the provider
+     * table so a contribution here can never answer instead of the wire.</p>
      */
     @Test
     public void aProviderCanDescribeTheProjectScheme() {
-        assertNotNull(ResourceRegistry.providerFor(Resource.of(CgPath.parse("proj:src/main/java/A.java"))));
-        assertNull("a project file's BYTES never come from a provider",
-                ResourceRegistry.contentProviderFor(Resource.of(CgPath.parse("proj:a/B.java"))));
+        assertNotNull(providerFor(Resource.of(CgPath.parse("proj:src/main/java/A.java"))));
+    }
+
+    private static ContentProvider providerFor(Resource resource) {
+        for (ContentProviders.Contribution contribution : ContentProviders.all()) {
+            if (contribution.scheme().equals(resource.scheme())) return contribution.provider();
+        }
+        return null;
     }
 
     /** <b>...and answers what the file declares, from its unsaved text.</b> */

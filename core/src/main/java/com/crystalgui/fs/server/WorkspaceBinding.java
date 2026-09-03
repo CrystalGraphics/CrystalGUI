@@ -222,6 +222,20 @@ public final class WorkspaceBinding<T> {
             return trashId;
         }));
 
+        // WHAT MAKES A DELETE REVERSIBLE. `delete` answers a trash id and nothing could redeem it, so
+        // the id was a receipt for something the client had no way to ask for.
+        registry.register(FsMethods.RESTORE, (args, respond) -> mutate(respond, () -> {
+            FsMessages.PathRequest request = decode(FsMessages.pathRequest(), args);
+            String repeat = operations.answerFor(request.op());
+            if (repeat != null) return repeat;
+
+            CgPath restored = service.restore(actor, request.path());
+            hub.noteWritten(restored, null);
+            audit.record(actor, WorkspaceOperation.WRITE, restored);
+            operations.record(request.op(), restored.toString());
+            return restored.toString();
+        }));
+
         registry.register(FsMethods.RENAME, (args, respond) -> mutate(respond, () -> {
             FsMessages.MoveRequest request = decode(FsMessages.moveRequest(), args);
             CgPath from = CgPath.parse(request.from());

@@ -8,7 +8,10 @@ import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.project.SourceRoots;
 import com.crystalgui.fs.project.ProjectInfo;
-import com.crystalgui.fs.WorkspaceClient;
+import com.crystalgui.fs.Resource;
+import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.protocol.FsError;
+import com.crystalgui.fs.protocol.FsMessages;
 import com.crystalgui.core.search.SearchMatch;
 import com.crystalgui.core.search.SearchMatcher;
 import com.crystalgui.core.search.SearchQuery;
@@ -24,11 +27,11 @@ import java.util.Set;
 import javax.annotation.Nullable;
 
 /**
- * A {@link TreeDataSource} over an asynchronous {@link WorkspaceClient} — the file tree's model.
+ * A {@link TreeDataSource} over an asynchronous {@link Workspace} — the file tree's model.
  *
  * <h3>Answer from what has arrived; request what has not</h3>
  *
- * <p>{@code TreeDataSource} is synchronous because it is a UI contract, and {@code WorkspaceClient} is not
+ * <p>{@code TreeDataSource} is synchronous because it is a UI contract, and a workspace is not
  * because it is a network round trip. A directory whose listing is still in flight reports <b>no</b>
  * children, which is honest, and resolves itself when the response lands and the view is refreshed. Every
  * remote file browser works this way; the alternative is blocking the render thread on a round trip.</p>
@@ -109,7 +112,7 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
         return x.name().compareToIgnoreCase(y.name());
     }
 
-    private final WorkspaceClient<?> client;
+    private final Workspace workspace;
     private final List<CgPath> roots = new ArrayList<>();
     private final Map<String, String> projectNames = new HashMap<>();
     private final Map<CgPath, List<CgPath>> children = new HashMap<>();
@@ -159,8 +162,8 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
     @Nullable
     private String failure;
 
-    public WorkspaceTreeSource(WorkspaceClient<?> client) {
-        this.client = client;
+    public WorkspaceTreeSource(Workspace workspace) {
+        this.workspace = workspace;
     }
 
     /** The last failure, for a status line. Null when nothing has gone wrong. */
@@ -193,19 +196,22 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
         // be -- and asking it here rather than at construction means it inherits that timing for free
         // instead of needing its own rule. The server pushes every change afterwards, so this is a seed
         // and never a poll: calling it per menu open would be the round trip the cache exists to avoid.
-        // @see WorkspaceClient#mayWrite
-        client.refreshCapabilities();
+        //
+        // THE GREETING, which is what a capability refresh became: the server states its own facts once
+        // and pushes its capabilities as a notification, so nothing has to ask per refresh.
+        // @see com.crystalgui.fs.protocol.FsHello
+        workspace.greet();
         // SAID OUT LOUD, both ways round. The comment above notes that a call made too early is "thrown
         // away with no error at all" -- so the empty tree it produces is indistinguishable from a tree
         // that was never asked, from a server with no projects, and from an answer still in flight. Four
         // states, one appearance, and a report of it can only ever be "it was empty". Two lines make the
         // log say which.
         CrystalGuiCore.LOGGER.info("[cgui-fs] asking for the project list");
-        client.projects(infos -> {
+        workspace.projects().then(infos -> {
             CrystalGuiCore.LOGGER.info("[cgui-fs] project list: {} project(s)", infos.size());
             roots.clear();
-            for (ProjectInfo info : infos) {
-                CgPath root = info.root();
+            for (FsMessages.ProjectEntry info : infos) {
+                CgPath root = CgPath.of(info.id(), "");
                 roots.add(root);
                 directories.add(root);
                 projectNames.put(info.id(), info.displayName());
@@ -216,7 +222,7 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
             indexRevision++;
             dirty = true;
             onLoaded.run();
-        }, error -> {
+        }).onError(error -> {
             failure = "projects failed: " + error.code();
             dirty = true;
             CrystalGuiCore.LOGGER.warn("[cgui-fs] project listing refused: {} — the tree will retry",
@@ -260,7 +266,7 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
 
     public java.util.List<String> sourceRootsOf(String projectId) {
         java.util.List<String> declared = projectSourceRoots.get(projectId);
-        return declared == null ? com.crystalgui.fs.project.SourceRoots.CONVENTION : declared;
+        return declared == null ? SourceRoots.CONVENTION : declared;
     }
 
     /**
@@ -821,13 +827,14 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
     private void request(CgPath directory) {
         if (!requested.add(directory)) return;
         inFlight.add(directory);
-        client.list(directory, entries -> {
+        workspace.files().list(Resource.of(directory)).then(listing -> {
             inFlight.remove(directory);
+            List<FsMessages.Entry> entries = listing.entries();
             List<CgPath> paths = new ArrayList<>(entries.size());
-            for (CgFileEntry entry : entries) {
+            for (FsMessages.Entry entry : entries) {
                 CgPath child = directory.resolve(entry.name());
                 paths.add(child);
-                if (entry.isDirectory()) directories.add(child);
+                if (entry.directory()) directories.add(child);
             }
             // Sorted AFTER every child has been recorded as a directory or not -- the comparator asks
             // `directories`, so sorting inside the loop above would order against a set still being built.
@@ -842,12 +849,12 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
             }
             dirty = true;
             onDidLoadListing.emit(directory);
-        }, failed -> {
+        }).onError(failed -> {
             inFlight.remove(directory);
             // Retryable rather than latched -- the listing may have failed because the directory was
             // being written to.
             requested.remove(directory);
-            if (failed.error() != CgFileError.FILE_NOT_FOUND) {
+            if (!failed.is(FsError.NOT_FOUND)) {
                 children.put(directory, List.of());
                 indexRevision++;
                 // Announced too. A refused listing is still an ANSWER about this directory, and a
