@@ -54,7 +54,7 @@ public final class Mc1710Workspace {
      * would hand the next caller a fresh client on the next connection, which is the rebuild this method
      * exists to avoid.</p>
      */
-    Workspace client() {
+    public Workspace client() {
         ProtocolConnection<Object> connection = CgUiConnections.client();
         if (connection == null) return workspace;
         if (workspace == null) {

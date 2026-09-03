@@ -20,8 +20,9 @@ beside this file. Nothing here assumes you have read them.
 7. [Nesting panels](#7-nesting-panels)
 8. [Opening and closing](#8-opening-and-closing)
 9. [Remembering things](#9-remembering-things)
-10. [Writing your own widget](#10-writing-your-own-widget)
-11. [Cheat sheet](#11-cheat-sheet)
+10. [Owning a file type](#10-owning-a-file-type)
+11. [Writing your own widget](#11-writing-your-own-widget)
+12. [Cheat sheet](#12-cheat-sheet)
 
 ---
 
@@ -32,6 +33,7 @@ beside this file. Nothing here assumes you have read them.
 | A settings screen, a HUD, a tool panel — nothing another player needs to see | **client-only** | the client |
 | A machine, a shop, a shared control panel — a server owns the truth | **networked** | both, from one class |
 | The client already has the data, but pressing a button must reach the server | **client-only, plus your own messages** | the client — see [§6](#6-sending-your-own-messages) |
+| A file format of your own, opening in the editor like any other file | **a document kind** | the client, over the workspace — see [§10](#10-owning-a-file-type) |
 
 Two questions decide it, and Minecraft has already answered both for you.
 
@@ -879,7 +881,156 @@ field's text, a selection. It works for any widget with a contract (see below).
 
 ---
 
-## 10. Writing your own widget
+## 10. Owning a file type
+
+You have a file format — a shader graph, a machine recipe, a checklist — and you want it to open in
+the editor like any other file. **One declaration.**
+
+```java
+public final class NotesKind {
+    public static final DocumentKind KIND = DocumentKind.of("mymod:notes", "Notes")
+            .files(FilePatterns.extension("notes"))     // a name, an extension or a glob
+            .icon("mymod:notes")
+            .model((resource, bytes) -> NotesModel.decode(bytes))   // what it IS
+            .editor(NotesView::new);                                 // one way of looking at it
+
+    public static Disposable register(DocumentKinds kinds) {
+        return kinds.register(KIND);
+    }
+}
+```
+
+From that one call: `.notes` files open with your icon, Ctrl+Z reaches your edits, Ctrl+S encodes and
+writes with the etag, a change on the server reloads a clean document and marks a dirty one, an
+unsaved file survives a quit, and the session brings back where each person was looking.
+
+There is nothing else to register. No factory to bind separately, no panel type to declare, no reader
+to add to a switch — and registration **refuses a kind with no model**, so a half-done one fails here
+rather than at the moment somebody opens a file.
+
+`register` answers a `Disposable`, so a mod that unloads takes its file type with it.
+
+> The whole thing is in `com.crystalgui.example.notes` — a model, a view and a declaration, about two
+> hundred lines. It is the shortest way to read this section.
+
+### The model is what the document IS
+
+```java
+public final class NotesModel extends AbstractDocumentModel {
+
+    static NotesModel decode(byte[] bytes) { … }
+
+    @Override public byte[] encode() { … }          // what a save writes
+    @Override public void adopt(byte[] bytes) { … }  // the file changed underneath you
+
+    public void add(String text) { apply(new AddEdit(text)); }   // every change, through apply
+}
+```
+
+**`apply(Edit)` is the one door.** It runs the edit, moves the version and puts it on the history — so
+Ctrl+Z reaches `add` with nothing else written, and dirtiness is a version comparison rather than a
+serialise-and-compare.
+
+**`adopt` is not an edit.** A file changing underneath you is not something you did, so it goes
+through `adopted()` instead: the version moves and a view redraws, and nothing lands on the undo
+stack. Putting a reload on the stack lets Ctrl+Z resurrect the text the reload replaced.
+
+**A model names no widget.** That is what lets your document be analysed, saved and searched with no
+tab open anywhere — which is the state the Problems panel and a background pass both want it in. It is
+also the rule that quietly stops being true if a model reaches for one control "just for a moment".
+
+### The view is only a view
+
+```java
+public final class NotesView implements DocumentEditor {
+    public NotesView(Document document) {
+        this.model = document.as(NotesModel.class);
+        this.subscription = model.onItemsChanged.connect(this::rebuild);
+    }
+
+    @Override public UIElement view() { return root; }
+    @Override public void disposeView() { subscription.disconnect(); }
+}
+```
+
+Every gesture calls a method on the model; nothing is written back in the view. That is what lets two
+of these exist over one document with no synchronisation between them — a split pane, a preview, a
+diff. Follow the **model's** signal, never the widgets: an edit made anywhere, an undo, or a reload
+because the file changed on the server all reach you the same way.
+
+`disposeView` releases what the **view** owns. The model is the document's and outlives every view of
+it — it is disposed when the last holder lets go, which may be later than your tab closing.
+
+### Where somebody was looking is theirs
+
+```java
+@Override public <T> void writeViewState(StateMap<T> out) { out.putFloat("zoom", zoom); }
+@Override public <T> void readViewState(StateMap<T> in)   { zoom = in.getFloat("zoom", 1f); }
+```
+
+Caret, scroll, folds, pan, zoom, which panel was open — these go here, and the session stores them per
+person.
+
+**Never put them in `encode()`.** A workspace is shared: with the camera in the file, whoever saves
+last imposes their view on everybody, two people editing conflict over a field neither of them
+touched, and a three-way merge has to be resolved over somebody's viewport. It looks completely fine
+while one person is testing, which is what makes it worth stating.
+
+### Reaching the workspace
+
+```java
+workspace.files().read(resource).then(answer -> …).onError(error -> …);
+workspace.files().write(resource, bytes, etag).then(newEtag -> …);
+workspace.files().batch("move files", batch -> batch.rename(from, to, false));
+
+workspace.watch(folder, true).onChanged.connect(changes -> …);
+workspace.presence().whoIsEditing(resource);
+workspace.capabilities().isValidName(typed);
+workspace.health().roundTripMillis();
+```
+
+Every answer is a `Reply`: `then` for the value, `onError` for the failure, `map` to chain, `all` to
+wait on several. **Continuations run on the frame thread**, so you may touch a widget straight from
+inside one.
+
+A failure is structured — `error.code()`, `error.detail()`, and for a conflict the etag the file
+actually holds, so "keep mine" needs no second round trip to find out what it is now.
+
+You rarely need any of this to own a file type: the document layer does the reading and writing for
+you. It is here for a tree, a picker or a panel that goes looking at the workspace itself.
+
+### Content that is not on disk
+
+A decompiled class, a generated shader, a scratch buffer — anything with a scheme of its own:
+
+```java
+workspace.registerScheme("mymod-generated", new MyProvider());   // this server's
+ContentProviders.contribute("mymod-generated", new MyProvider()); // the process's
+```
+
+Use `contribute` when you register at mod init and have no workspace to be handed. A provider answers
+`read`, and optionally `symbolOf` (what the thing IS, which is how a tab draws its glyph) and
+`locate`. Every answer is a `Reply`, because opening an archive or running a decompiler must not land
+on a frame.
+
+Then `openResource` opens it exactly as it opens a file — there is one lane, and which side answered
+is not the caller's business.
+
+### When it does not work
+
+| What you see | What it is |
+|---|---|
+| Registration throws | The kind has no `.model(…)`. A kind that cannot open anything is refused where it is written, not where it is used |
+| Your file opens as plain text | Nothing claims the extension — check `.files(…)`, and note that a leading dot means the whole name (`.gitignore` is a name, not a `gitignore` extension) |
+| Ctrl+Z moves the camera instead of undoing | A view-state write went through `apply`. Looking around is not an edit |
+| Ctrl+Z resurrects text a reload replaced | `adopt` went through `apply` too. Use `adopted()` |
+| The tab is dirty the moment it opens | `encode()` does not round-trip what `decode` was given — most often a trailing newline, or a field written in a different order |
+| Everyone sees the same scroll position | View state is in `encode()`. It belongs in `writeViewState` |
+| A second split pane shows a stale copy | The view is following its own widgets rather than the model's signal |
+
+---
+
+## 11. Writing your own widget
 
 Most of the time you compose the widgets you have and there is nothing to do here. Read this when you
 write a real widget of your own that either **carries state** or **reports interactions**.
@@ -1040,7 +1191,7 @@ the question gets answered while it is still cheap.
 
 ---
 
-## 11. Cheat sheet
+## 12. Cheat sheet
 
 ```java
 // ── client-only ────────────────────────────────────────────────────────────

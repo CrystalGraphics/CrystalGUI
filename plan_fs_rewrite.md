@@ -7,9 +7,9 @@ named it was read, not remembered.
 > **Scope.** `com.crystalgui.fs` (37 files), `com.crystalgui.document` (6), the protocol and wire
 > layers they ride on, and every workbench seam that opens, saves, watches, decorates or persists a
 > file. The UI mirror (`net.mirror`, `net.window`, `net.projection`) is out of scope. The consumer
-> **F0-F6 shipped.** F7 remains: two probes, and the authoring surface into
-> `docs/CGUI_BUILDING_UIS.md`. The API below is what was built, with the divergences
-> recorded in each step.
+> **F0-F7 shipped.** The API below is what was built, with every divergence recorded in the step it
+> belongs to — the largest being that the graph is its own model rather than one extracted from it,
+> and that `WorkspaceApiTest`'s claim was narrowed by measuring it.
 >
 > **Decided before this plan was written:** the synchronisation point is the **save**, as it is
 > today. Live co-editing is not pursued (§4).
@@ -986,14 +986,28 @@ is the step that needs a client on screen.
    Registered by the harness scenes on a seeded `todo.notes`, because an example nothing builds is
    dead code.
 
-### F7 — Proof and record
+### F7 — Proof and record — **SHIPPED**
 
-1. **Two probes:** one that runs with the editor open (Phase 6.9), one with two clients on two
-   processes; both report `Workspace.health()`, which is the number that decides whether optimistic
-   explorer updates are ever worth revisiting.
-2. **The record:** the authoring surface (§6) into `docs/CGUI_BUILDING_UIS.md`;
-   `CGUI_SERVER_AND_SERIALIZATION.md` §7 and `CGUI_WORKBENCH_SERVICES.md` §Resources rewritten from the
-   code; `AGENTS.md`'s fs rows and package map re-verified.
+1. ~~**Two probes:**~~ `-PcgEditorProbe` opens the editor and then works through it, on the
+   **integrated** server — the configuration a player runs and the one no other probe covered, because
+   every other one closes the GUI or never opens one. That is what hid a `doesGuiPauseGame` deadlock:
+   a screen that pauses the world stops the server ticking, so the editor asks the integrated server
+   for the project list and the integrated server is not listening *because the editor being open is
+   what stopped it*. It refuses to run in multiplayer, where a client GUI cannot pause anything and the
+   assertion would be vacuous.
+
+   `-PcgTwoClientProbe=writer|watcher` is the other half, run on two clients joined to one
+   `runServer`: the writer creates a file and then edits it, the watcher subscribes and reports what
+   reached it. Everything the watcher, presence and the conflict path exist for is a statement about a
+   SECOND client, and one client is the fixture that passes against all of it. Both report
+   `Workspace.health()`.
+2. ~~**The record**~~ — the authoring surface is §10 of `docs/CGUI_BUILDING_UIS.md` ("Owning a file
+   type"), written from the failures rather than from the API and ending in a symptom→cause table for
+   the silent ones. `CGUI_WORKBENCH_SERVICES.md`'s Resources, disposal, contributions and status
+   sections and `AGENTS.md`'s seven fs rows and package map were rewritten during the cutover, which is
+   where that doc's own rule says they belonged. `CGUI_SERVER_AND_SERIALIZATION.md` §7 named the file
+   protocol `workspace/*`; it is `fs/*`, and the entry now says why that one is typed where `ui/*` is
+   deliberately not.
 
 ---
 

@@ -18,6 +18,7 @@ import com.crystalgui.core.window.WindowState;
 import com.crystalgui.mc.net.CgUiConnections;
 import com.crystalgui.net.protocol.ProtocolConnection;
 
+import com.crystalgui.fs.client.Workspace;
 import javax.annotation.Nullable;
 
 import net.minecraft.client.Minecraft;
@@ -128,6 +129,18 @@ public final class CgUiScreen extends GuiScreen {
 
     private static UIDocument uiWindow;
     private static Mc1710Workspace workspace;
+
+    /**
+     * The workspace this screen's editor is using, or null before there is one.
+     *
+     * <p>For {@code CgUiEditorOpenProbe}, which has to work through the SAME workspace the editor is
+     * using rather than opening one of its own — a second one would answer over the same wire and
+     * prove nothing about whether the screen stopped the server from ticking.</p>
+     */
+    @Nullable
+    public static Workspace workspaceForProbe() {
+        return workspace == null ? null : workspace.client();
+    }
     /** The window the editor lives in. @see #initGui */
     private static WindowFrame editorWindow;
 
