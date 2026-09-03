@@ -457,11 +457,16 @@ public final class WorkspaceRpc<T> {
      * a greyed-out Delete for the rest of the session. The host calls this when whatever backs its
      * {@link WorkspacePermission} moves.</p>
      *
-     * <p><b>The notifier must send a REQUEST</b> — {@code (method, args) -> connection.call(method, args,
-     * null, null)}, exactly as {@link #pollAndNotify}'s callers do. {@code WorkspaceClient} registers its
-     * inbound methods through {@link Registrar}, which is {@code onRequest}, and {@code MessageRouter}
-     * keys request and notification handlers separately — so a {@code notify} here finds nobody home and
-     * fails silently, which is precisely how it failed the first time it was written.</p>
+     * <p><b>The notifier sends a NOTIFICATION</b> — {@code (method, args) -> connection.notify(method,
+     * args)}, exactly as {@link #pollAndNotify}'s callers do.</p>
+     *
+     * <p>This paragraph used to say the opposite, and it was right about the mechanism and wrong about
+     * which end to fix. {@code MessageRouter} keys request and notification handlers separately, and
+     * {@code WorkspaceClient} registered its inbound methods through {@code onRequest} — so a
+     * {@code notify} found nobody home and failed silently, and the conclusion drawn was to send a
+     * request. What that cost is {@code plan_fs_rewrite.md} N24: every push opened a call the client
+     * answered with nothing, and the server held a pending entry and a ten-second timeout slot for an
+     * answer carrying no information. The client subscribes through {@code onNotify} now.</p>
      */
     public void notifyCapabilities(Notifier<T> notifier, com.crystalgui.serialization.DynamicOps<T> ops) {
         StateMap<T> out = new StateMap<>(ops);

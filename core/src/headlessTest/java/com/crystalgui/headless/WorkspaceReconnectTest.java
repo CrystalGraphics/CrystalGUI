@@ -112,7 +112,7 @@ public class WorkspaceReconnectTest {
     /** What a host's tick does: poll the watcher, push, deliver. @return how many changes were sent */
     private int tickServer() {
         int sent = wire.rpc.pollAndNotify(
-                (method, args) -> wire.server.call(method, args, null, null), PlainOps.INSTANCE);
+                (method, args) -> wire.server.notify(method, args), PlainOps.INSTANCE);
         pump();
         return sent;
     }

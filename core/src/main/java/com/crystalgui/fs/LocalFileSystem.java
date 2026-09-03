@@ -81,6 +81,9 @@ public final class LocalFileSystem implements CgFileSystem {
     public Set<CgFileCapability> capabilities() {
         List<CgFileCapability> caps = new ArrayList<>();
         caps.add(CgFileCapability.FILE_READ_WRITE);
+        // A REAL ranged read, over a seekable channel -- so a transfer holds (resource, etag, size) and
+        // never the bytes. Declared and implemented by nothing until F2.
+        caps.add(CgFileCapability.FILE_OPEN_READ_WRITE_CLOSE);
         caps.add(CgFileCapability.FILE_ATOMIC_WRITE);
         if (caseSensitive) caps.add(CgFileCapability.PATH_CASE_SENSITIVE);
         return CgFileCapability.of(caps.toArray(new CgFileCapability[0]));
@@ -278,6 +281,42 @@ public final class LocalFileSystem implements CgFileSystem {
      * the first time does not exist yet — {@code toRealPath} would simply throw. Whatever does not exist
      * cannot be a symlink, so checking the part that does is sufficient and complete.</p>
      */
+    /**
+     * Reads a window of a file without loading the rest of it.
+     *
+     * <p>A {@link java.nio.channels.SeekableByteChannel} rather than {@code Files.readAllBytes} plus a
+     * copy, which is the whole point: the transfer path exists so a 100 MB file can be sent without the
+     * server holding 100 MB.</p>
+     */
+    @Override
+    public byte[] read(CgPath path, long offset, int length) {
+        if (offset < 0 || length < 0) {
+            throw new CgFileSystemException(CgFileError.INVALID_PATH,
+                    "offset and length must not be negative: " + offset + ", " + length);
+        }
+        Path file = resolve(path);
+        try (java.nio.channels.SeekableByteChannel channel =
+                     java.nio.file.Files.newByteChannel(file, java.nio.file.StandardOpenOption.READ)) {
+            long size = channel.size();
+            if (offset >= size) return new byte[0];
+            int wanted = (int) Math.min((long) length, size - offset);
+            java.nio.ByteBuffer buffer = java.nio.ByteBuffer.allocate(wanted);
+            channel.position(offset);
+            while (buffer.hasRemaining() && channel.read(buffer) > 0) {
+                // Short reads are legal and routine on a network mount; loop until the window is full
+                // or the channel is done, and hand back whatever arrived.
+            }
+            byte[] out = new byte[buffer.position()];
+            buffer.flip();
+            buffer.get(out);
+            return out;
+        } catch (java.nio.file.NoSuchFileException missing) {
+            throw CgFileSystemException.notFound(path);
+        } catch (java.io.IOException failed) {
+            throw new CgFileSystemException(CgFileError.UNKNOWN, "cannot read " + path, failed);
+        }
+    }
+
     private Path resolve(CgPath path) {
         WorkspaceProject project = projects.require(path);
         Path root = project.root().toAbsolutePath().normalize();
