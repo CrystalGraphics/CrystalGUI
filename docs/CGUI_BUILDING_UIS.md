@@ -65,10 +65,10 @@ You can mix them freely. A networked panel can sit inside a client-only screen.
 
 ## 2. A client-only UI
 
-A UI is a tree of `UIElement`s. Build the tree, hand it to a `UIWindow`, and paint it every frame.
+A UI is a tree of `UINode`s. Build the tree, hand it to a `UIDocument`, and paint it every frame.
 
 ```java
-UIElement root = new UIElement();
+UINode root = new UINode();
 root.layout(l -> l.paddingAll(16).gapAll(8));
 
 UIText title = new UIText("Furnace");
@@ -80,7 +80,7 @@ root.addChildren(title, light, keepLit);
 light.attachListener(() -> System.out.println("lit!"));
 keepLit.attachListener(on -> System.out.println("keep lit: " + on));
 
-UIWindow window = new UIWindow(Ui.of(root));
+UIDocument window = new UIDocument(Ui.of(root));
 window.init(screenWidth, screenHeight);
 ```
 
@@ -97,7 +97,7 @@ window.getInputHandler().consumeMouseEvent(event);
 window.getInputHandler().consumeKeyboardEvent(event);
 ```
 
-That is the whole contract. **`UIWindow` is not a Minecraft screen** — it deliberately implements no
+That is the whole contract. **`UIDocument` is not a Minecraft screen** — it deliberately implements no
 Minecraft interface, so you own the host. On 1.7.10 that is a `GuiScreen` whose `drawScreen` calls
 `paintFrame` and whose input handlers forward events;
 `mc1710/.../CgUiScreen` is a working example to copy.
@@ -187,19 +187,19 @@ selectors, `~`/`+`, `@media`, `@import`.
 
 ## 4. A networked UI
 
-One class describes the whole thing. It **is** a `UIElement`, so it nests anywhere an element does,
+One class describes the whole thing. It **is** a `UINode`, so it nests anywhere an element does,
 and `furnacepanel { }` styles it.
 
 You write it as `Networked<YourDataType>` — a panel is always a **view of something**, and that
 something is your own object.
 
 ```java
-public final class FurnacePanel extends UIElement implements Networked<FurnaceData> {
+public final class FurnacePanel extends UINode implements Networked<FurnaceData> {
 
     public static final UiType<FurnacePanel, FurnaceData> TYPE =
             UiType.of("mymod:furnace", FurnacePanel::new);
 
-    // Every UIElement field is a part of this panel. Declared = created and named for you.
+    // Every UINode field is a part of this panel. Declared = created and named for you.
     public Switch power;
     public Slider throughput;
     public ProgressBar burn;
@@ -208,12 +208,12 @@ public final class FurnacePanel extends UIElement implements Networked<FurnaceDa
 
     @Override
     public void build(FurnaceData model) {        // SERVER, once — the structure
-        addChild(new UIText("Furnace"));
-        addChild(row("Power", power));
-        addChild(row("Rate", throughput));
-        addChild(row("Burn", burn));
-        addChild(status);
-        addChild(purge);
+        append(new UIText("Furnace"));
+        append(row("Power", power));
+        append(row("Rate", throughput));
+        append(row("Burn", burn));
+        append(status);
+        append(purge);
     }
 
     @Override
@@ -545,7 +545,7 @@ Four things worth knowing:
 
 | Hook | Runs | For |
 |---|---|---|
-| `build(model)` | server, once | structure — `addChild`, rows, classes |
+| `build(model)` | server, once | structure — `append`, rows, classes |
 | `serve(model, io)` | server, once | what the UI *does* |
 | `tick(model)` | server, per world tick | logic of your own; usually omitted — the screen is kept up to date by [projections](#keeping-the-screen-up-to-date--projections) |
 | `stillValid(model, viewer)` | server, per tick | `false` closes the window (player walked away) |
@@ -566,7 +566,7 @@ Two rules that save real debugging:
 
 ### Why fields become widgets
 
-Every non-static `UIElement` field is a part. On the server they are created and given
+Every non-static `UINode` field is a part. On the server they are created and given
 `setId(fieldName)`; on the client they are found again by that name. So the name is written once — as
 the thing you were going to write anyway.
 
@@ -791,7 +791,7 @@ public EnginePanel engine;
 
 @Override public void build(FurnaceData model) {
     engine = EnginePanel.TYPE.build(model.engine());
-    addChild(engine);
+    append(engine);
 }
 
 @Override public void serve(FurnaceData model, ServerScope io) {
@@ -904,7 +904,7 @@ WidgetContract<W>        // the two lists, registered under the widget's tag
 A dial that holds an angle and reports when you turn it:
 
 ```java
-public class Dial extends UIElement {
+public class Dial extends UINode {
 
     // ── the contract, first thing in the class ──────────────────────────────
 
@@ -1044,9 +1044,9 @@ the question gets answered while it is still cheap.
 
 ```java
 // ── client-only ────────────────────────────────────────────────────────────
-UIElement root = new UIElement().layout(l -> l.paddingAll(12).gapAll(6));
-root.addChild(new Button("Go").attachListener(() -> …));
-UIWindow window = new UIWindow(Ui.of(root));
+UINode root = new UINode().layout(l -> l.paddingAll(12).gapAll(6));
+root.append(new Button("Go").attachListener(() -> …));
+UIDocument window = new UIDocument(Ui.of(root));
 window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
 window.init(w, h);
 // per frame: window.paintFrame();
@@ -1054,7 +1054,7 @@ window.init(w, h);
 // ── networked ──────────────────────────────────────────────────────────────
 public static final UiType<MyPanel, MyModel> TYPE = UiType.of("mymod:thing", MyPanel::new);
 
-build(m)       → addChild(...)                       server, once
+build(m)       → append(...)                       server, once
 serve(m, io)   → io.on(widget, Widget.EVENT, ...)    server, once
 io.project(w, State, m::get)                         server, stated once, kept true
 client(io)     → widget.attachListener(...)          client, on mount AND

@@ -1,6 +1,13 @@
 # CrystalGUI Widgets
 
-> **Current-state reference** for `core/src/main/java/com/crystalgui/ui/elements/` — twelve classes.
+> **Current-state reference** for `core/src/main/java/com/crystalgui/widget/`, layered so a build fails
+> when a layer reaches upward (`LayeringTest`): `.control` < `.text`/`.scroll` < `.overlay` <
+> `.form`/`.layout` < `.collection` < `.graph` < `.config` < `.canvas` < `.dnd` < `.texteditor`.
+>
+> **A widget's TIER is decided by what it COMPOSES, not by what it is.** `Dropdown` is a control by
+> every reading of the word and it holds a `Menu`, so it cannot live in `.control` — that tier may name
+> only `control`/`text`/`scroll`, and `Menu` is `overlay`. Same for `ColorSelector` and `SearchField`.
+> The tier is a fact about the dependency graph, which is why it is checkable rather than intended.
 >
 > Companions: `CGUI_STYLE_RENDER_PIPELINE.md` (how the cascade and painting actually work) and
 > `CGUI_SERVER_AND_SERIALIZATION.md` (how widget state travels to a client).
@@ -13,45 +20,81 @@
 
 These rules are enforced in code and invisible from any single class. Every widget below obeys them.
 
-### Composite widgets refuse public children
+### A widget DECLARES that its structure is fixed
 
-`acceptsPublicChildren()` returns `false` on `Button`, `Checkbox`, `Switch`, `Slider`, `SplitView`,
-`Scroller`, `TabView` and `TextField` — `addChild` throws. Only elements *designed* to hold children
-accept them:
+`refusePublicChildren()`, called in the constructor **every other one chains through** — on the no-arg
+one a `new Dialog("title")` never makes the declaration at all, which is most dialogs.
+
+It is a promise a widget makes about itself and **not** something derived from whether it has a default
+slot. That was tried: an unslotted light child is the WEB's ordinary state — it sits in the light tree,
+out of the composed tree, drawn by nobody, and it is legal — so deriving the refusal turned a documented
+state into a throw and took three tests with it.
 
 | Accepts children | How you put content in it |
 |---|---|
-| `UIElement` | `addChild` |
-| `ScrollerView` | `addChild` — it *is* the viewport |
+| `UINode` | `append` |
+| `ScrollerView` | `append` — it *is* the viewport, through its slot |
 | `SplitView` | `first()` / `second()`, or `first(content)` / `second(content)` |
 | `TabView` | never directly — `addTab(label).content()` |
 
 When adding a widget, give it a **named accessor** for its content rather than opening the tree.
 
-### Structure is internal children
+### Structure is a SHADOW TREE; a caller's content needs a SLOT
 
-`markAsInternal()` / `addInternalChild()` build a widget's parts. They are skipped by public traversal
-and each carries a `__double-underscore__` class that themes target. The full set in use today:
+`attachShadow()` plus `appendStructural`, with each part carrying a `part` name a theme reaches through
+`::part(name)`. The names are the old `__double-underscore__` classes with the wrapper removed —
+`__mark__` became `mark`, `__thumb__` became `thumb`.
 
-```
-__pre-icon__  __post-icon__   (Button)
-__mark__                      (Checkbox)
-__spacer__  __knob__          (Switch)
-__fill__  __thumb__  __spacer__          (Slider)
-__track__  __thumb__  __head__  __tail__  __vertical__   (Scroller)
-__v-scroller__  __h-scroller__  __corner__               (ScrollerView)
-__first__  __divider__  __second__  __vertical__         (SplitView)
-__strip__  __rail__  __strip-bar__  __panes__            (TabView)
-__top__  __bottom__  __left__  __right__                 (TabView, on the root)
-__pane__                      (Tab)
-```
+**A widget that takes content must give its slot a home.** A light child of a shadow-hosting node with
+no default slot is in no composed tree at all: no box, no paint, no promotion, and nothing anywhere
+reporting a problem. Three widgets got this wrong in one batch and each looked like a different bug —
+`ScrollerView` put a caller's rows beside its scrollbars, `Menu` appended its items INTO its own `items`
+part so every `menuitem` rule in every sheet reached nothing, and `Dropdown` put its whole `Menu` in its
+shadow tree, which put the items inside one twice over.
 
-One class name appears in a *comment* but is not added by any code today — `__stepped__`
-(`ore.css:208`, would let a theme style discrete sliders). Don't write CSS against it until something
-actually adds it.
+**And the slot must be told to fill.** A slot is an ordinary box between the host and its content, so
+`align-items: stretch` on the host reaches the SLOT and stops there — a menu's rows sized to their text
+and the focus bar stopped short of the menu's edge.
 
-Every one is exposed as a `public static final String` constant on its widget — reference
-`Slider.THUMB_CLASS`, not the literal.
+### A widget may host a shadow tree only if nothing reaches THROUGH its structure
+
+`::part()` has no spelling for a part under a part, a tag under a part, or a nested widget's part.
+Measured over the shipped sheets: **23 widgets can, 21 cannot, and 220 rules have no `::part()`
+spelling at all** — `colorselector` alone accounts for 51. A subclass cannot un-shadow its parent
+(`Dropdown extends Button`), so decide the base class first.
+
+**What a shadow tree buys is the SLOT**, not the part naming: a caller's content cannot land among a
+widget's parts, which is what `.__content__` cost three separate times.
+
+### A pseudo-class after `::part()` describes the PART, not the host
+
+`dropdown::part(menu):open` asks whether the MENU is open. Parts before the pseudo-element describe the
+originator; parts after it describe the pseudo-element. That is CSS's rule and collapsing it made a
+dropdown's menu match the closed-popup `opacity: 0` and match nothing that lifted it again — it opened,
+promoted, placed itself correctly, and drew at zero alpha.
+
+### A subclass inherits its parent's `Name` unless given its own
+
+`Dropdown extends Button`, `MenuItem extends Button`, `Menu extends Popover` — each chained to the
+public parent constructor, so all three reported the wrong tag and every rule they have in every sheet
+matched nothing. A widget meant to be extended takes a **protected `(Name, ...)` constructor**. Which
+answer is right is a judgement: a dropdown deliberately does not answer `button`, while a widget wanting
+everything the supertype has plus a modifier passes the supertype's `NAME` and adds a class.
+
+### A widget that paints its own content must be `Measurable`
+
+`TextField` draws its glyphs itself and has no child nodes, so nothing in the box tree had anything to
+size it from: it laid out **215x0** — present, styled, bordered, drawing its icon and placeholder, with
+no height at all, so a click aimed at it landed on whatever was behind. The old engine never needed this
+because a Taffy leaf with no measure function fell back to whatever the sheet said, and the shipped
+sheets give every field a height. It is the widget a THEME sizes that breaks.
+
+### A listener on a shadow host can never see its own parts
+
+`event.getTarget()` is retargeted before the listener runs, and a listener attached to the host is
+OUTSIDE its own shadow root. The old idiom — one listener on the widget, an if-chain comparing the
+target against its shadow parts — compiles, runs, and takes the wrong branch forever. Attach
+inside the shadow tree, and `stopPropagation()` there.
 
 ### A widget's CSS identity is its tag, not its Java supertype
 
@@ -82,12 +125,12 @@ StyleGroup.importantPipeline(getStyle().getGeneralGroup(), g -> g.display(NONE))
 ```
 
 `importantPipeline` is for state a stylesheet must *not* be able to override — `Tab` hides a
-deselected pane that way. (`UIElement.moveInlineAsDefault()` also exists and does the same job
+deselected pane that way. (`UINode.moveInlineAsDefault()` also exists and does the same job
 retroactively, but no widget uses it; prefer `defaultPipeline`.)
 
 ### Pseudo-classes come from getters
 
-`PseudoClasses` binds each selector to a real `UIElement` method:
+`PseudoClasses` binds each selector to a real `UINode` method:
 
 | Selector | Method |
 |---|---|
@@ -105,7 +148,7 @@ selected flag is the whole of how `tab:checked` works.
 
 `:focus-visible` is the web's rule and the one a focus ring should hang off: true for keyboard and
 programmatic focus, false after a mouse click — except on elements that take text input
-(`consumesTextInput()`), which always ring. `UIInputHandler` decides it from `FocusSource`; see
+(`consumesTextInput()`), which always ring. `Input` decides it from `FocusSource`; see
 `CGUI_STYLE_RENDER_PIPELINE.md` §2. Note hyphenated names resolve via `PseudoClasses.lookup`, not
 `valueOf`.
 
@@ -113,11 +156,16 @@ programmatic focus, false after a mouse click — except on elements that take t
 
 - **`attachListener(l, capture, bubble)` always subscribes the target phase.** The two booleans are
   additive, not a mode selector.
-- **`UIFrameTicker`** — implement it and call `registerTicker(this)` on the window. Returning `false`
-  from `tickFrame(delta)` drops the registration. The set is `HashSet`-backed so re-registering is
-  idempotent, and there is deliberately no unregister. Used by `Scroller` (press-and-hold repeat),
-  `ScrollerView` and `TextField` (caret blink).
-- **Register the tag** in `ElementRegistry.bootstrapBuiltins()` — one line, `register(tag, Class,
+- **Per-frame work is an `Animation` hook OWNED by the node** — `document.animation()`, not a ticker
+  the widget registers on the window and can never unregister. It stops when the node leaves the tree,
+  which the old one-way registration could not guarantee: a hidden window's ticker carried on
+  invisibly, and the contract that it must return `false` lived only on the interface. Used by
+  `Scroller` (press-and-hold repeat), `ScrollerView` and `TextField` (caret blink).
+- **Anything that reads GEOMETRY uses `afterLayout`.** An ordinary hook runs BEFORE this frame's
+  layout — the frame is animation → style → layout — so a hook that measures reads the previous
+  frame's box, or none at all on the first.
+- **Declare the tag** as a `NAME` constant on the class and register it from a `NodeKinds`
+  service, which `UINodeRegistry.bootstrap()` runs. (`register(tag, Class,
   factory)`. Without it the widget has no `tagName()`, cannot be a CSS type selector, and cannot be
   serialized. Current tags: `element`, `button`, `checkbox`, `scroller`, `scrollerview`, `slider`,
   `splitview`, `switch`, `tab`, `tabview`, `textfield`, `text`.
@@ -133,7 +181,7 @@ Button b = new Button("Click me");
 b.attachListener(() -> count++);        // or: b.onPressed
 b.setText("Now this");
 b.setPreIcon(icon);  b.setPostIcon(null);   // null clears
-b.setEnabled(false);                        // inherited from UIElement
+b.setEnabled(false);                        // inherited from UINode
 ```
 
 Activates on press-then-release **over the same element** (dragging off cancels), and on Space/Enter
@@ -154,7 +202,7 @@ c.setGroup(group);                      // normal usage — not group.register(c
 Checkbox current = group.getCurrent();
 ```
 
-`CheckboxGroup` is a plain object, **not a `UIElement`** — it has no place in the tree and no styling.
+`CheckboxGroup` is a plain object, **not a `UINode`** — it has no place in the tree and no styling.
 With `allowEmpty(false)` it refuses to let you un-check the last checked box, giving radio-button
 semantics.
 
@@ -253,8 +301,8 @@ t.bindTextTo(someProperty);             // or: t.text  (Property<String>)
 a width by CSS — wrap it in a fixed-width slot element when you need aligned columns:
 
 ```java
-UIElement slot = new UIElement().layout(l -> l.width(58));
-slot.addChild(new UIText("label"));
+UINode slot = new UINode().layout(l -> l.width(58));
+slot.append(new UIText("label"));
 ```
 
 Consumes `color`, `font-size`, `font-family`, plus `text-offset-x`/`text-offset-y` (paint-time glyph
@@ -262,14 +310,14 @@ nudge, applied *after* the wrap width is read so it can never affect geometry; p
 per-axis against this element's own box). Wraps at the font's own metrics and does **not** honour
 `line-height` yet.
 
-- Tag `text` · no internal children
+- Tag `text` · no shadow parts
 - Scenes: `cgui-text` (wrapping, font fallback, live binding), `cgui-gallery`
 
 ## 7. `Scroller` and `ScrollerView`
 
 Two different things, and the distinction is the point.
 
-**Scrolling is an ordinary `UIElement` capability.** Any element with `overflow: hidden`/`auto`
+**Scrolling is an ordinary `UINode` capability.** Any element with `overflow: hidden`/`auto`
 scrolls — `setScrollTop`, `setScrollLeft`, `setScroll`, `setScrollImmediate`, `scrollIntoView`,
 `getMaxScrollTop/Left`, `getScrollWidth/Height`, `getClientWidth/Height`, `setScrollExempt`. A bare
 element scrolls **programmatically only**; it never listens to the wheel.
@@ -278,7 +326,7 @@ element scrolls **programmatically only**; it never listens to the wheel.
 
 ```java
 ScrollerView view = new ScrollerView();
-view.addChild(content);                 // accepts public children — it IS the viewport
+view.append(content);                 // accepts public children — it IS the viewport
 view.setScrollbarsVisible(false);       // scrollable, just no visible bars
 view.refreshScrollers();                // cheap + idempotent; auto-called from onLayoutChanged
 view.verticalScroller(); view.horizontalScroller(); view.corner();
@@ -311,7 +359,7 @@ Step buttons exist but are `display: none` by default — a theme enables them w
 ```java
 SplitView sv = new SplitView();
 sv.setOrientation(SplitView.Orientation.VERTICAL);   // adds __vertical__ to the root
-sv.first(leftContent).second(rightContent);          // or sv.first().addChild(…)
+sv.first(leftContent).second(rightContent);          // or sv.first().append(…)
 sv.setPercentage(35f).setLimits(10f, 90f);           // 0..100, NOT 0..1
 sv.attachListener(pct -> …);                         // or: onPercentageChanged
 sv.divider();
@@ -331,7 +379,7 @@ The panes accept children; the `SplitView` itself does not. Splits nest.
 TabView tv = new TabView();
 tv.setTabSide(TabView.TabSide.LEFT);        // TOP | BOTTOM | LEFT | RIGHT
 Tab first = tv.addTab("General");           // the FIRST tab added is auto-selected
-first.content().addChild(page);             // content() is the pane — an ordinary element
+first.content().append(page);             // content() is the pane — an ordinary element
 tv.addTabAt("Inserted", 1);
 tv.selectIndex(2);  tv.getSelectedTab();  tv.getTabs();
 tv.removeTab(first);  tv.clearTabs();
@@ -384,16 +432,16 @@ Tooltip tip = Tooltip.attach(anchor, "explain this");   // shown on hover, hidde
 tip.detach();                                            // remove it again
 ```
 
-`Tooltip.attach` is a **static factory on the widget**, deliberately not `UIElement.setTooltip`.
-`UIElement` is the core DOM node every widget builds on; a tooltip is a widget, so putting the wiring
-there inverted the dependency (core importing `ui.elements`) and made every element in the tree carry
+`Tooltip.attach` is a **static factory on the widget**, deliberately not `UINode.setTooltip`.
+`UINode` is the core DOM node every widget builds on; a tooltip is a widget, so putting the wiring
+there inverted the dependency (core importing `widget`) and made every element in the tree carry
 a field for a feature most never use. It was also where a real bug lived: a set/clear/set cycle
 attached a second pair of hover listeners each time. Creating the tooltip and its listeners in one
 call makes that unrepresentable.
 
 **Why it needs the top layer.** A tooltip's whole job is to draw *outside* the thing it describes.
-`drawSubtree` paints depth-first under every ancestor's scissor, so before promotion a tooltip on a
-row inside an `overflow: hidden` scroller was clipped to the scroller. See `TopLayer`.
+`the paint walk` paints depth-first under every ancestor's scissor, so before promotion a tooltip on a
+row inside an `overflow: hidden` scroller was clipped to the scroller. See `UIDocument.promote`.
 
 **Structure.** Internal child of the anchor — which keeps the cascade behaving like the web's, since
 it inherits `color`/`font-family` from where it sits in the tree rather than from wherever it paints.
@@ -428,12 +476,12 @@ A floating, movable panel — the web's `<dialog>`, **modeless** form.
 
 ```java
 Dialog panel = new Dialog("Inspector");
-stage.addChild(panel);          // stage is the containing block: dialogs are position: absolute
+stage.append(panel);          // stage is the containing block: dialogs are position: absolute
 panel.moveTo(20, 20).show();
-panel.getContent().addChild(...);
+panel.getContent().append(...);
 ```
 
-**Named `Dialog`, not `UIWindow`** — that name already means the runtime/Document analogue, and
+**Named `Dialog`, not `UIDocument`** — that name already means the runtime/Document analogue, and
 reusing it would be actively misleading.
 
 **Modeless on purpose.** Only `showModal()` adds a dialog to the top layer; `show()` leaves it in
@@ -445,7 +493,7 @@ does not: joins the **top layer**, makes everything outside it **inert**, and **
 close watcher (a cancelable `onCancel`, then `close()`). *Focus trapping is not a fourth feature* — it
 falls out of inertness, which is why there is no trap code anywhere. Nesting works and unwinds in order.
 
-A modal also gets a `__backdrop__` scrim: an internal child promoted to the top layer just *before* the
+A modal also gets a `__backdrop__` scrim: an shadow part promoted to the top layer just *before* the
 dialog, so it paints behind it and covers the whole window (`100%` against the initial containing block,
 same as the dialog's own offsets). Not a `::backdrop` pseudo-element — the style engine has none — but the
 same idea via the substitute the widgets already use. It is `setHitTest(false)` and inert, because it is
@@ -459,7 +507,7 @@ decoration rather than a control.
 the machinery that turns a close request into a `cancel` event and then a close — so browsers do not
 close a modeless dialog on Escape either. The affordance is the `__close__` button instead, which
 browsers leave to the author because their dialogs ship no chrome. (Escape *during a drag* cancels the
-drag — `UIInputHandler` consumes it before focus routing, so the innermost live interaction wins.)
+drag — `Input` consumes it before focus routing, so the innermost live interaction wins.)
 
 **Focus** follows the spec: the focus delegate (first focusable descendant) else the dialog itself on
 `show()`, and on `close()` focus returns to whatever held it beforehand. Clicking the title bar also
@@ -505,7 +553,7 @@ class** — `Menu` — anchored to an element or to a point, which is how the we
 
 ```java
 Menu menu = new Menu();
-parent.addChild(menu);                    // must be in the tree to be promoted
+parent.append(menu);                    // must be in the tree to be promoted
 menu.addItem("Cut").attachListener(...);
 menu.showFor(button, button);             // dropdown-style: under an element
 menu.showAt(x, y, null);                  // context menu: at the pointer
@@ -550,7 +598,7 @@ the menu". `hide()` alone closes a popover and its *descendants*, which leaves a
 > context menu — naming its trigger surface makes that whole surface unable to dismiss the menu. Nothing is
 > lost by passing `null`: a popover opened during a press is already protected from that press.
 
-**Menus do focus-follows-hover.** Hovering a row focuses it via `UIInputHandler.requestPointerFocus`, so
+**Menus do focus-follows-hover.** Hovering a row focuses it via `Input.requestPointerFocus`, so
 exactly one row is ever highlighted and the keyboard continues from wherever the pointer left off.
 `requestPointerFocus` is the no-ring, no-scroll variant — a focus ring trailing the mouse is what
 `:focus-visible` exists to prevent, and `menuitem`'s row highlight is its focus affordance instead.
@@ -560,7 +608,7 @@ things that are easy to forget: the item does not close its parent (an ordinary 
 to the *row* rather than to the menu, and it prefers `Side.RIGHT` so it sits beside rather than on top.
 `MenuItem.getSubmenu()`/`hasSubmenu()` expose the relationship. Closing a parent closes its submenus.
 
-`Dropdown` is a `Button` that owns a `Menu` as an internal child and keeps its label in step with the
+`Dropdown` is a `Button` that owns a `Menu` as an shadow part and keeps its label in step with the
 selection. Pressing it **toggles**. Its `writeState` records the **index, not the text** — the label is
 derived, so restoring the text would put the right words on a control that still thinks nothing is selected.
 
@@ -605,13 +653,13 @@ panel.generalStyle(g -> g.resize(Resize.BOTH));   // or in CSS: resize: both;
   real work, guaranteeing a resizable box contains its content.
 
 The rule this establishes, worth reusing: **if the web expresses it as a CSS property, make it ambient
-on `UIElement`; if the web expresses it as an element, make it a widget.**
+on `UINode`; if the web expresses it as an element, make it a widget.**
 
 ---
 
 ## 12b. `CanvasView` — the pan/zoom plane
 
-`com.crystalgui.ui.elements.canvas` · tag `canvasview` · `cgui-gallery` → **canvas** page · P6.2.2
+`com.crystalgui.widget.canvas` · tag `canvasview` · `cgui-gallery` → **canvas** page · P6.2.2
 
 An unbounded plane viewed through a fixed window: wheel-zoom about the cursor, middle- or
 Space+left-drag to pan, `fitToContent()`, and off-screen culling. The substrate the node graph sits
@@ -650,13 +698,13 @@ CanvasView            overflow: hidden — the window, and the element gestures 
 - **A bare left-drag does not pan.** It is reserved for 6.2.4's marquee. Middle-drag always pans;
   Space+left is the escape hatch for a mouse with no usable middle button (Figma/Blender/Photoshop's
   answer). The gesture is read in the **capture** phase so it beats whatever is under the cursor.
-- **Three coordinate spaces**: world (what you author), logical (what `RuntimeCache.getX()` and
+- **Three coordinate spaces**: world (what you author), logical (what `the box tree.getX()` and
   `screenToLocal` speak), physical (raw pointer pixels). `screenToWorld` crosses all three;
   `worldToViewport` returns *logical*, not physical, and says so.
 
 ### Culling skips paint, not layout
 
-Off-screen nodes get `opacity: 0` at IMPORTANT origin, which `drawSubtree` early-returns on.
+Off-screen nodes get `opacity: 0` at IMPORTANT origin, which `the paint walk` early-returns on.
 `display: none` is the obvious choice and is wrong here: a culled node's layout collapses, and its
 layout rect is precisely the input the cull decision is computed from — so it could never be
 un-culled without a cache of where it used to be, which goes stale the moment anything moves it.
@@ -680,7 +728,7 @@ AABB test per node.
 
 ## 12c. The node graph — `GraphView`, `GraphNode`, `NodePort`
 
-`com.crystalgui.ui.elements.graph` · tags `graphview` / `graphnode` / `nodeport` ·
+`com.crystalgui.widget.graph` · tags `graphview` / `graphnode` / `nodeport` ·
 `cgui-gallery` → **graph** page · P6.2.3
 
 Unity Shader Graph's construction, literally: a title bar, two port columns, controls, a preview slot,
@@ -772,7 +820,7 @@ changing one widget's behaviour.
 | `cgui-styling` | selectors, cascade, `!important`, transitions, background cross-fades |
 | `cgui-visual-layers` | overflow masking, opacity isolation, scissor vs mask |
 | `cgui-nineslice` | 9-slice tiling modes, CPU 9-quad path vs SDF shader path |
-| `cgui-test` | the original raw-`UIElement` DOM smoke test |
+| `cgui-test` | the original raw-`UINode` DOM smoke test |
 
 All are `INTERACTIVE` and **stay open until you close the window** — they do not exit on their own.
 Kill lingering `java.exe` processes matching `harness` after a run.

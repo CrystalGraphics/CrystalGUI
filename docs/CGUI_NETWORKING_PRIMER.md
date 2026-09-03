@@ -821,7 +821,7 @@ a description is self-sufficient where a `MenuType` is only a key to code.
 
 ### `ServerUiSession` — owns the tree, never lays it out
 
-**There is no `UIWindow` anywhere in it.** That absence *is* the headless story, structurally rather
+**There is no `UIDocument` anywhere in it.** That absence *is* the headless story, structurally rather
 than by flag: no window → no Taffy tree → no style engine → no layout → **no path into text
 measurement**, which is the one thing that genuinely needs a font stack.
 
@@ -866,7 +866,7 @@ used.
 |---|---|
 | `NetworkIds` | Element ids are a **depth-first position**, computed on both sides, **never transmitted**. The description stays a pure description, and there's no id table to get out of step. The **count** is sent at open, because a client whose widget constructors differ would shift every id past the divergence — refused rather than misapplied. |
 | `ContentHash` | SHA-256 of a canonical encoding. Map keys sorted, type tags and counts written before each container, so two structurally different trees can't collide. This is what makes re-opening free. |
-| `UIDescriptionCodec` | `{tag, id?, class[]?, style{}?, flags?, focus?, state{}?, children[]?}`. Skips internal children. **Throws on an unknown tag** — a styleless div where a slider should be is worse than a refusal. |
+| `UINodeMirror` | `{tag, id?, class[]?, style{}?, flags?, focus?, state{}?, children[]?}`. Skips shadow parts. **Throws on an unknown tag** — a styleless div where a slider should be is worse than a refusal. |
 | `SheetRef` | `(hash, id?)` — one shape covering four cases: client has the theme (nothing transfers), version skew (fetch), datapack-only theme (fetch), generated sheet (hash is the whole identity). |
 | `UiEventKinds` | The closed set: `activate`, `toggle`, `value`, `text`. |
 
@@ -1129,7 +1129,7 @@ WindowProtocol.register();
 ServerWindows.of(c).open(MyPanel.TYPE, model);
 
 // ONE class is the whole UI — widgets as fields, both halves as methods:
-public final class MyPanel extends UIElement implements Networked<MyModel> {
+public final class MyPanel extends UINode implements Networked<MyModel> {
     public static final UiType<MyPanel, MyModel> TYPE = UiType.of("mymod:panel", MyPanel::new);
 
     public Button save;                      // created and NAMED for you: the field name is the id
@@ -1137,9 +1137,9 @@ public final class MyPanel extends UIElement implements Networked<MyModel> {
     public EnginePanel engines;              // a nested Networked panel — composition is nesting
 
     @Override public void layout(MyModel m) {                    // structure. SERVER, once
-        addChild(save); addChild(status);
+        append(save); append(status);
         engines = EnginePanel.TYPE.build(m.engines());           // the parent knows the slice
-        addChild(engines);
+        append(engines);
     }
     @Override public void serve(MyModel m, ServerScope io) {     // before open(), enforced
         io.sheet(SheetRef.ofResource("mymod:theme", hash), css);

@@ -1,6 +1,11 @@
 # The new engine — what replaced what
 
-**Audience: someone who knows the old engine and needs to find the thing they used to call `X`.**
+**Audience: someone reading a commit, a comment or an old branch that still names the class it went by.**
+
+> **The old engine is DELETED** (6.9b). Every `X` on the left of these tables is gone from the tree —
+> this is the record of what it was and what took its place, not a migration guide. It stays because
+> two decades of comments and a long commit history name those classes, and because the HABITS at the
+> bottom are the part that still costs review time.
 
 The M6 rewrite deleted one class that did four jobs and replaced it with three trees and four
 services. Most of the confusion in review is not "how does this work" — it is "where did that go",
