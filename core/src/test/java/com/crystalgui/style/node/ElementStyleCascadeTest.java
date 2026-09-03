@@ -230,4 +230,49 @@ public class ElementStyleCascadeTest extends UiDocumentTestBase {
      * the animation shadow -- is shared between the engines and is covered by what remains here and by
      * `ui.dom.UINodeStylePassTest`.
      */
+
+    // ── Recovered from the old-engine twin ──────────────────────────────────────────────────────
+    //
+    // TWO of the seven the port dropped, moved here before that file goes with the engine it was
+    // written against. `moveInlineAsDefault` is `ElementStyle`'s and the cascade SURVIVES the
+    // deletion -- `style/` is shared, not ported -- so this is machinery that is still running and
+    // would otherwise have lost its only cover.
+    //
+    // The other five went after all, and finding out why is worth more than the tests were: they
+    // assert what a PROPERTY LISTENER is handed, and `StyleProperty.notifyListeners` takes a
+    // `UIElement`. The mechanism is old-engine-only. The new engine routes the same question through
+    // `UINode.computedChanged`, which is what grows resize handles from `resize` and re-matches a
+    // subtree when `font-size` moves. So the listener API is part of the batch-6 removal even though
+    // it lives in the shared `style/` package -- one of the few places where "shared" and "survives"
+    // come apart.
+
+    @Test
+    public void moveInlineAsDefaultLetsAStylesheetOverrideAfterward() {
+        var prop = newProp("default");
+        var element = new UINode();
+
+        element.getStyle().putCandidate(prop, StyleSlot.of(prop, StyleOrigin.INLINE, 0, 0, "widget-baseline"));
+        element.getStyle().moveInlineAsDefault();
+
+        // Before the demotion this STYLESHEET candidate could never have won (INLINE always beats
+        // STYLESHEET regardless of specificity) — after it, DEFAULT correctly loses to STYLESHEET.
+        element.getStyle().putCandidate(prop, StyleSlot.of(prop, StyleOrigin.STYLESHEET, 10, 0, "sheet-override"));
+
+        assertEquals("sheet-override", element.getStyle().getComputed(prop));
+    }
+    @Test
+    public void moveInlineAsDefaultOnlyTouchesInlineOriginCandidates() {
+        var prop = newProp("default");
+        var element = new UINode();
+
+        element.getStyle().putCandidate(prop, StyleSlot.of(prop, StyleOrigin.STYLESHEET, 10, 0, "sheet-value"));
+        element.getStyle().putCandidate(prop, StyleSlot.of(prop, StyleOrigin.INLINE, 0, 0, "inline-value"));
+        assertEquals("inline-value", element.getStyle().getComputed(prop));
+
+        element.getStyle().moveInlineAsDefault();
+
+        // The pre-existing STYLESHEET candidate is untouched; only the (now-demoted) former INLINE
+        // one changed rank, and DEFAULT is lower priority than STYLESHEET, so the sheet value wins now.
+        assertEquals("sheet-value", element.getStyle().getComputed(prop));
+    }
 }
