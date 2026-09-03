@@ -13,7 +13,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  * <h3>Why a guard rather than an audit</h3>
  *
  * <p>Two operations cost this application its frame rate and neither was visible from its call site.
- * {@code ResourceContentProvider.symbolOf(Resource)} reads exactly like a property getter and ran a
+ * {@code ContentProvider.symbolOf(Resource)} reads exactly like a property getter and ran a
  * 761ms compile the first time it was asked about a class. {@code HostClasspath.detect()} reads like a
  * getter and opened <em>every jar on the classpath</em> — 3-5ms over 23 entries, against an 8.3ms budget
  * at 120Hz, on a presentation provider the dock re-reads on every strip rebuild. Its own javadoc said

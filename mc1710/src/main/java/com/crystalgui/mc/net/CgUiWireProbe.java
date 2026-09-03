@@ -51,7 +51,7 @@ public final class CgUiWireProbe {
     private static final int PAYLOAD_BYTES = 4 * 1024 * 1024;
 
     /**
-     * Under {@code WorkspaceRpc.INLINE_MAX_BYTES}, so its read answers in ONE message.
+     * Under {@code WorkspaceBinding.INLINE_LIMIT}, so its read answers in ONE message.
      *
      * <p>The control. Above that cap a read becomes a chunked <b>pull</b> — the client asks for each
      * 256 KB piece and waits — and comparing the two is the only way to tell a slow wire from a serial
@@ -250,7 +250,7 @@ public final class CgUiWireProbe {
             out.append("If the chunked download is nonetheless the slowest, the ceiling is not what "
                             + "binds: a read above")
                     .append(System.getProperty("line.separator"));
-            out.append("WorkspaceRpc.INLINE_MAX_BYTES is a PULL -- the client asks for each 256 KB "
+            out.append("WorkspaceBinding.INLINE_LIMIT is a PULL -- the client asks for each 256 KB "
                             + "piece and waits a round")
                     .append(System.getProperty("line.separator"));
             out.append("trip -- while a write of any size is one streamed message. Compare the two "

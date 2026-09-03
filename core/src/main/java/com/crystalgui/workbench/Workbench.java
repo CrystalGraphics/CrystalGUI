@@ -136,10 +136,11 @@ import com.crystalgui.text.lang.ProjectSourcesRegistry;
  * updated on open. A remembered path saves the last file <em>opened</em>, which is the wrong one the moment
  * you switch tabs — and silently, because it reports success.</p>
  *
- * <h3>Editors are cached per path</h3>
+ * <h3>A panel's content comes from the open tab, never from a fresh read</h3>
  *
- * <p>{@code DockArea} asks the registry for a panel's content on every rebuild, so handing back a fresh
- * editor each time would discard unsaved edits on every split, drag or close.</p>
+ * <p>{@code DockArea} asks the registry for a panel's content on every rebuild — a split, a drag, a
+ * layout restore — so it is answered from {@link EditorService}, which holds the tab and its document.
+ * Reading the file there instead would discard unsaved edits on every one of those.</p>
  */
 public class Workbench extends UIElement implements DataProvider {
     /** The shell. `ua/workbench.css` names the tag. */
@@ -2224,10 +2225,9 @@ public class Workbench extends UIElement implements DataProvider {
     /**
      * Keeps the dock in step with what the document store did.
      *
-     * <p>This was an inner {@code WorkingCopies} class the file service called back into, with three
-     * the service had to remember to call in the right order. The store <b>announces</b> instead — and
-     * it hears about another client's rename through the same {@code fs.changed} as its own, so a file
-     * renamed from anywhere moves the tab rather than only a rename issued here.</p>
+     * <p>The store announces what happened to a document and the dock follows. It hears about another
+     * client's rename through the same {@code fs.changed} as its own, so a file renamed from anywhere
+     * moves its tab — not only one renamed from here.</p>
      */
     private void followDocuments() {
         documents.onDidClose.connect(document -> {
@@ -2291,26 +2291,22 @@ public class Workbench extends UIElement implements DataProvider {
     }
 
     /**
-     * Registers a document kind: how to build it, and the dock panel that shows it.
-     *
-     * <p>One call rather than two, because the panel content simply <em>is</em> the document view.
-     * Separating them would let a host register a panel type it has no document for, which builds a tab
-     * that cannot be saved and reports nothing wrong.</p>
-     *
-     * <p>Bind it to files with {@link #bindEditorExtensions} and friends. A type with no binding is
-     * reachable only by opening its ref directly, which is what a panel that is not file-backed does.</p>
-     */
-    /**
      * Registers a kind of document, and the dock panel that shows one — <b>the whole registration</b>.
      *
-     * <p>What a package that owns a file type calls, and the only thing an application has to know about
-     * that package. It replaces a {@code registerDocumentType} plus one binding call per pattern kind,
-     * which could be — and were — half-done: a factory with no binding never opened anything, and a
-     * binding with no factory threw at the moment somebody opened a file.</p>
+     * <p>What a package that owns a file type calls, and the only thing an application has to know
+     * about that package. One call rather than two, because the panel's content simply <em>is</em> a
+     * view of the document: separated, a host can register a panel type it has no kind for, which
+     * builds a tab that cannot be saved and reports nothing wrong.</p>
+     *
+     * <pre>{@code
+     * workbench.contribute(DocumentKind.of("mymod:graph", "Shader Graph")
+     *         .model(GraphModel::decode)
+     *         .editor(GraphView::new), "shadergraph");
+     * }</pre>
      *
      * <p>The panel's factory reaches the tab through {@link EditorService} rather than reading the file
-     * itself, which is what makes a split, a drag and a layout restore all show the SAME document. The
-     * lane that read here is why re-opening a moved tab used to overwrite whatever was unsaved in it.</p>
+     * itself, which is what makes a split, a drag and a layout restore all show the SAME document —
+     * rather than one that re-read over whatever was unsaved in it.</p>
      */
     public Workbench contribute(DocumentKind kind) {
         kinds.register(kind);

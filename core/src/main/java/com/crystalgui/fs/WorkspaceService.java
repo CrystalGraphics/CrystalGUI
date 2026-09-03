@@ -79,7 +79,7 @@ public final class WorkspaceService {
      * <p><b>One per project, not one per peer.</b> Every watch costs an OS handle and Linux caps them at
      * 8,192 per user by default, so N players sharing a workspace must not mean N watchers on the same
      * directory. It lives here for the same reason presence does: this is the one object every
-     * {@code WorkspaceRpc} already shares.</p>
+     * every connection's binding already shares.</p>
      */
     public void attachEvents(CgFileEventSource source) {
         this.events = source == null ? CgFileEventSource.NONE : source;
@@ -101,7 +101,7 @@ public final class WorkspaceService {
     /**
      * Who has what open, across every peer.
      *
-     * <p>Lives here because this is the one object every {@link WorkspaceRpc} shares — each has its own
+     * <p>Lives here because this is the one object every connection's binding shares — each has its own
      * actor and its own watcher, so a per-connection home could only ever answer about itself, which is
      * the opposite of what presence means. @see WorkspacePresence</p>
      */
@@ -116,7 +116,7 @@ public final class WorkspaceService {
      *
      * <p>Asked against the project's own <b>root</b>, so it is a per-project answer to a per-path
      * question. That is a deliberate coarsening and the reason
-     * {@link WorkspaceProtocol#CAPABILITIES} is documented as a hint: a host may allow writes under
+     * {@code fs/capabilities} is documented as a hint: a host may allow writes under
      * {@code src/} and refuse them under {@code config/}, and no per-project broadcast can say so.
      * Nothing here relaxes anything — {@link #authorise} still runs on the real path for every
      * operation, which is where the trust actually lives.</p>

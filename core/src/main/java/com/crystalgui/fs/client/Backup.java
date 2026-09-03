@@ -17,17 +17,11 @@ import java.util.Objects;
  * <b>Unsaved work, written where the server cannot lose it</b> — VS Code's
  * {@code IWorkingCopyBackupService}, and the thing {@code files.hotExit} is built on.
  *
- * <h3>Phase 5.3, designed and never built</h3>
- *
- * <p>{@code plan_fs_rewrite.md} N32: no unsaved document was ever written to {@code ConfigStorage}, so
- * a crash, a quit or a dropped connection lost the edit. And it is not only a crash — a save needs the
- * <em>server</em>, so a workspace whose connection has gone is a workspace where nothing can be saved
- * at all, and the only thing standing between a person and their afternoon is a client-side copy.</p>
- *
  * <h3>Client-side, deliberately</h3>
  *
- * <p>The server is what may have gone away. A backup that needed the wire would be unavailable in
- * precisely the situation it exists for.</p>
+ * <p>A save needs the <em>server</em>, so a workspace whose connection has gone is one where nothing
+ * can be saved at all — and the server is exactly what may have gone away. A backup that needed the
+ * wire would be unavailable in precisely the situation it exists for.</p>
  *
  * <h3>What it makes possible upstream</h3>
  *

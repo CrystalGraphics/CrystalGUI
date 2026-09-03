@@ -51,8 +51,8 @@ public final class TextEditorView implements DocumentEditor {
      * Where these four sit among each other, taken from VS Code's {@code editorStatus.ts}.
      *
      * <p>Higher is further left, so the right-hand group reads {@code 51:39  4 spaces  UTF-8  LF} — the
-     * reference's own sequence. They used to render in whatever order the lines below happened to run
-     * in, which is a layout decided by an implementation detail of one method.</p>
+     * reference's own sequence. Stated rather than left to the order the lines below happen to run in,
+     * which would make the layout an implementation detail of one method.</p>
      */
     private static final int CARET_PRIORITY = 100;
     private static final int INDENT_PRIORITY = 99;

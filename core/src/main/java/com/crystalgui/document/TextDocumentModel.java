@@ -12,22 +12,18 @@ import com.crystalgui.text.lang.LanguageServices;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * A text document — <b>a {@link TextBuffer}, plus the language machinery that belongs to it</b>.
+ * A text document — a {@link TextBuffer}, plus the language machinery that belongs to it.
  *
- * <h3>No new model was written</h3>
- *
- * <p>{@code TextBuffer} already had the rope, a monotonic version, the line ending, the undo stack, the
- * decoration set, the diagnostic set and a change signal. It was <em>unused as a document model</em>
- * only because the document layer sat above {@code widget} and talked to a {@code TextEditor} instead —
- * adapting {@code editor.onChanged}, which hands over a {@code String} of the whole text per keystroke,
- * to a buffer sitting one package below with everything already computed.</p>
+ * <p>The buffer is the document: the rope, a monotonic version, the line ending, the charset, the undo
+ * stack, the decorations, the diagnostics and a change signal are all already there. This adds the
+ * language, its tokenizer and its services, and nothing else.</p>
  *
  * <h3>The language services are the MODEL's, not a view's</h3>
  *
- * <p>They hung off the editor, so two panes onto one file would have held two parse trees and a
- * document with no tab could not analyse at all — which is the state the Problems panel, a background
- * compile and Go to Definition all want it in. Same boundary the buffer already draws for diagnostics
- * and decorations: a diagnostic describes a <b>document</b>.</p>
+ * <p>So two panes onto one file share one parse tree, and a document with no tab still analyses —
+ * which is the state the Problems panel, a background compile and Go to Definition all want it in. The
+ * same boundary the buffer already draws for diagnostics and decorations: they describe a
+ * <b>document</b>.</p>
  */
 public final class TextDocumentModel implements DocumentModel {
 

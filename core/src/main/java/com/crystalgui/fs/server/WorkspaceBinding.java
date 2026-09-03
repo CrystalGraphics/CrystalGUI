@@ -28,27 +28,22 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * <b>One connection's end of the filesystem</b> — decode, ask the service, encode.
+ * One connection's end of the filesystem — decode, ask the service, encode.
  *
- * <h3>What it replaces</h3>
+ * <pre>{@code
+ * WorkspaceBinding<T> binding = new WorkspaceBinding<>(service, hub, actor, peer, ops);
+ * binding.installOn(connection::onRequest);
+ * }</pre>
  *
- * <p>{@code WorkspaceRpc.installOn} was 230 lines of hand-packed {@code StateMap} puts against forty
- * string keys, mirrored by hand at the other end. This is the same twenty methods over
- * {@code fs.protocol}'s codecs, which is what makes a field written on one side provably the field read
- * on the other.</p>
+ * <p>Twenty methods over {@code fs.protocol}'s codecs, so a field written on one side is provably the
+ * field read on the other. It also owns the three things that belong to one connection: the
+ * {@link WorkspaceAudit} that records and rate-limits this actor's mutations, the
+ * {@link RecentOperations} table that makes a write retried after a timeout idempotent, and this peer's
+ * entry in the shared {@link WatchHub}.</p>
  *
- * <p>It also holds the three things a per-connection binding is the right owner of and that were
- * previously nowhere: the {@link WorkspaceAudit} that records and rate-limits this actor's mutations,
- * the {@link RecentOperations} table that makes a retried write idempotent, and this peer's entry in
- * the shared {@link WatchHub}.</p>
- *
- * <h3>Per connection, as an attachment — never a static map</h3>
- *
- * <p>{@code plan_fs_rewrite.md} N26, D24. The host kept three static maps of peers plus a static
- * service, so a second server in one process — which a dev environment is — shared one workspace
- * between them. A binding is created by {@code ProtocolConnection.attachment} and dies with the
- * connection, which is also what makes {@link #close} the one place a disconnected peer's
- * subscriptions and presence are dropped.</p>
+ * <p><b>One per connection</b>, dying with it — which is what makes {@link #close} the single place a
+ * disconnected peer's subscriptions and presence are dropped. A second server in one process, which a
+ * dev environment is, gets its own.</p>
  */
 public final class WorkspaceBinding<T> {
 
@@ -69,7 +64,7 @@ public final class WorkspaceBinding<T> {
     /**
      * Open transfers, by id — <b>{@code (path, etag, size)} and never the bytes</b>.
      *
-     * <p>{@code WorkspaceRpc.Transfer} held a snapshot of the whole file, so four peers opening four
+     * <p>Holding a snapshot of the whole file means four peers opening four
      * 100 MB files cost 400 MB of server heap to send bytes already on disk. Its own javadoc named the
      * ranged read as the fix; the provider serves one now.</p>
      */
@@ -345,9 +340,8 @@ public final class WorkspaceBinding<T> {
     /**
      * Runs a read and turns every failure into a coded one.
      *
-     * <p>{@code plan_fs_rewrite.md} N17: a conflict travelled as {@code "CONFLICT " + etag} and was
-     * recovered by splitting a sentence. Every failure carries a code now, and a conflict carries the
-     * etag the file actually holds as a field.</p>
+     * <p>Every failure carries a code, and a conflict carries the etag the file actually holds — which
+     * is the only actionable thing in the only failure that needs action.</p>
      */
     private void guard(Call.Responder<T> respond, Answering<T> work) {
         try {

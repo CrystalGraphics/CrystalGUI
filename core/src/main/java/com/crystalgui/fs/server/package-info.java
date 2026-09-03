@@ -1,8 +1,9 @@
 /**
  * <b>The server's workspace</b> — authorisation, etags, the trash, presence and watching.
  *
- * <p>Empty until F3 of {@code plan_fs_rewrite.md}, which moves {@code WorkspaceService} and its
- * neighbours here and replaces {@code WorkspaceWatcher} with a {@code WatchHub}. The package exists
+ * <p>{@link com.crystalgui.fs.server.WorkspaceBinding} is one connection's end;
+ * {@link com.crystalgui.fs.server.WatchHub} is the one subscription table the whole server shares.
+ * The package exists
  * now so the tier ordering {@code LayeringTest.theFilesystemTiersDoNotReachUpward} asserts is in place
  * before anything is written into it, rather than being added after the first violation.</p>
  *

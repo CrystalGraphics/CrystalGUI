@@ -24,7 +24,7 @@ import javax.annotation.Nullable;
  *
  * <p>{@code AGENTS.md} is explicit that a second registry beside CrystalGraphics' is how a loader ends up
  * wiring one and not the other. This is a dependency handed to whoever needs it, exactly as
- * {@link WorkspaceClient} already is, so there is nothing to forget to register.</p>
+ * {@link com.crystalgui.fs.client.Workspace} already is, so there is nothing to forget to register.</p>
  */
 public interface ConfigStorage {
 

@@ -1173,7 +1173,7 @@ public class ShaderGraphEditor extends UIElement
     }
     
 
-    // ── As a FileDocument ───────────────────────────────────────────────────────────────────────
+    // ── As a DocumentModel ──────────────────────────────────────────────────────────────────────
 
     /**
      * This widget IS the panel, so there is nothing to wrap.

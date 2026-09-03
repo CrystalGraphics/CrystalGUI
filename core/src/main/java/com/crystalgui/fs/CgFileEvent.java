@@ -5,7 +5,7 @@ import javax.annotation.Nullable;
 /**
  * One thing the filesystem did, as reported by the operating system rather than inferred from a stat.
  *
- * <p>Deliberately <b>not</b> {@code WorkspaceWatcher.Change}: that one carries an etag and is the answer
+ * <p>Deliberately not a wire-level change: that carries an etag and is the answer
  * to <i>"what should this client be told"</i>, which is a question with authorisation and per-peer state
  * behind it. This is the raw notification underneath, before anyone has decided whether it matters or who
  * may hear about it.</p>
@@ -24,7 +24,7 @@ public final class CgFileEvent {
          * <p>Every OS primitive underneath drops events under load: a {@code WatchKey} raises this once
          * its queue exceeds 512 on default Linux settings, and Windows' {@code ReadDirectoryChangesW} has
          * the same shape with its own buffer. The documented recovery is to re-scan, which is why
-         * {@link WorkspaceWatcher}'s etag poll survives a real watcher rather than being replaced by
+         * the etag poll survives a real watcher rather than being replaced by
          * one.</p>
          *
          * <p><b>A consumer that ignores this reports most changes</b>, which is worse than reporting none

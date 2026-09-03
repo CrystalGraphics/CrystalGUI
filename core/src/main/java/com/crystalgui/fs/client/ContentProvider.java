@@ -13,19 +13,13 @@ import org.jetbrains.annotations.Nullable;
  * <b>Where a non-project resource's content comes from</b> — a decompiler, a code generator, a scratch
  * buffer.
  *
- * <h3>This is what makes one open lane possible</h3>
+ * <p>Register one per scheme, through {@link Workspace#registerScheme} for a scheme that belongs to
+ * one server or {@link ContentProviders#contribute} for one that belongs to the process. The client
+ * then routes on the scheme and no caller above ever asks which side answered.</p>
  *
- * <p>{@code plan_fs_rewrite.md} N1. A project file went over the wire and everything else went down a
- * second lane in the workbench, because there was nowhere to say "this resource's bytes come from
- * somewhere other than the server". With a provider per scheme there is one {@code open}: the client
- * routes on the scheme and the caller never knows which side answered.</p>
- *
- * <h3>Asynchronous by construction</h3>
- *
- * <p>{@code ResourceContentProvider.read} was synchronous and its own javadoc noted it was "reached
- * from a paint path" — so every caller wrapped it in a job anyway, and the one that did not decompiled
- * a class on the frame thread. A {@link Reply} is what a job already is, so a provider that has to do
- * real work hands one back and a provider that has the bytes answers immediately.</p>
+ * <p><b>Every answer is a {@link Reply}</b>, because the work can be real: reading a source archive is
+ * I/O and decompiling a class is hundreds of milliseconds, and neither may land on a frame. A provider
+ * that already holds the bytes answers immediately.</p>
  */
 public interface ContentProvider {
 
@@ -82,8 +76,7 @@ public interface ContentProvider {
      * exist at that moment and does here: this provider generated it and holds it cached.</p>
      *
      * <p>A {@link Reply}, because an exact answer means parsing the generated text — the same order of
-     * cost as producing it. The old seam was synchronous and its own javadoc said to call it off the
-     * UI thread, which every caller then had to remember.</p>
+     * cost as producing it, which must not land on a frame.</p>
      */
     default Reply<TextPoint> locate(Resource resource, String member) {
         return Reply.of(null);

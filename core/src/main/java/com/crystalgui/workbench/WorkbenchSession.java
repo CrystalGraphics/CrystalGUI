@@ -186,7 +186,7 @@ public final class WorkbenchSession {
      * desktop record either.</p>
      *
      * <p>What made it read as an editor bug rather than a persistence gap is that the <em>file</em>
-     * survived: {@code openPaths()} reads {@code OpenDocuments}, which is document-level, so the caret
+     * survived: {@code openPaths()} reads the document store, which is document-level, so the caret
      * and scroll were saved perfectly with no tab left to land in.</p>
      *
      * <h3>Here rather than in the desktop record, and that is not arbitrary</h3>

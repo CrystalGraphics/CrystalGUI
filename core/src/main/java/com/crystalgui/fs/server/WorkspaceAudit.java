@@ -18,7 +18,7 @@ import java.util.function.LongSupplier;
  *
  * <h3>Why a workspace needs one and a filesystem does not</h3>
  *
- * <p>{@code plan_fs_rewrite.md} D22. This server hands a remote peer write access to a directory on
+ * <p>This server hands a remote peer write access to a directory on
  * somebody's machine. Every other system that does that keeps a record: it is what makes "a file I did
  * not touch has changed" answerable, and it is the difference between a permission model and a
  * permission model you can trust. The workspace had none — a write was authorised, performed, and left

@@ -13,10 +13,8 @@ import java.util.Objects;
 /**
  * The registered {@link DocumentKind}s — <b>an instance, never a static.</b>
  *
- * <p>{@code plan_fs_rewrite.md} D24, A1. {@code ResourceRegistry} is static and so were the host's three
- * peer maps, which means a second workspace in one process cannot have its own: a {@code DockWindow}
- * makes two workbenches per process ordinary, and two servers in one client is what a dev environment
- * looks like. {@code Markers} was made an instance for exactly this reason.</p>
+ * <p>Per workbench, because two of them in one process is ordinary — a {@code DockWindow} makes it so,
+ * and two servers in one client is what a dev environment looks like. Each keeps its own kinds.</p>
  *
  * <p>Registration answers a {@link Disposable}, so a mod that unloads takes its kinds with it. A second
  * registration of the same id is refused rather than silently winning, for the reason a duplicate

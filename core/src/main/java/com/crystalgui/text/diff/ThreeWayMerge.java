@@ -21,7 +21,7 @@ import javax.annotation.Nullable;
  * too. What is left — regions both sides changed <em>differently</em> — is the only thing a person genuinely
  * has to decide, and it is usually a handful. That reduction is the entire value of a merger.</p>
  *
- * <p>The base is not hypothetical here: {@code WorkspaceClient} already retains the bytes it last read from
+ * <p>The base is not hypothetical here: {@code LocalHistory} retains the bytes last written to
  * the server as {@code cachedContent}. That is precisely the common ancestor of the editor's buffer and
  * whatever the server now holds, so the conflict case has a base for free and never falls back to two-way.</p>
  *

@@ -12,22 +12,13 @@ import java.util.Objects;
 /**
  * Where a module that owns a scheme <b>contributes</b> its provider, without holding a workspace.
  *
- * <h3>The inversion, not a registry</h3>
+ * <p>For a module that has no {@link Workspace} to hand: a language stack registers its providers at
+ * mod init, long before any world is joined, and {@code core/} may never name {@code language/} — the
+ * same inversion {@code ProjectSourcesRegistry} and {@code TypeSearchRegistry} use.</p>
  *
- * <p>{@code plan_fs_rewrite.md} D24. A language module registers its providers from a static
- * {@code register()} that runs at mod init — long before any world is joined, so there is no
- * {@link Workspace} to hand it. And it must not name one either: {@code core/} may never depend on
- * {@code language/}, which is the same reason {@code ProjectSourcesRegistry} and
- * {@code TypeSearchRegistry} exist and point the same way.</p>
- *
- * <p>So this holds contributions and every {@link Workspace} <b>drains it into its own table</b> at
- * construction and stays subscribed. The table stays per workspace, which is the property that matters:
- * two servers in one client are two workspaces, and one shared provider table would mean one server's
- * library scheme answering the other's requests.</p>
- *
- * <p>This is what {@code ResourceRegistry} could not be. It was a static map <em>and</em> the thing
- * every reader asked, so its contents were the process's rather than a workspace's — and its
- * {@code onSymbolResolved} was a static signal every workbench in the process stayed subscribed to.</p>
+ * <p>Every workspace <b>drains this into its own table</b> at construction and stays subscribed, so the
+ * table is still per workspace: two servers in one client keep separate ones, and a scheme registered
+ * directly on a workspace wins over a contribution here.</p>
  */
 public final class ContentProviders {
 

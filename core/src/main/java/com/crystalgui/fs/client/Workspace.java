@@ -22,31 +22,24 @@ import java.util.function.UnaryOperator;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * <b>The workspace, from the client</b> — one entry point, sub-facades by noun, nothing static.
+ * The client's handle on a workspace that lives on the server.
  *
  * <pre>{@code
+ * Workspace workspace = Workspace.of(connection);
+ *
  * workspace.files().read(resource).then(content -> …).onError(error -> …);
  * workspace.watch(folder, true).onChanged.connect(changes -> …);
  * workspace.capabilities().isValidName(typed);
  * }</pre>
  *
- * <h3>What it replaces</h3>
+ * <p>Work is grouped by noun: {@link #files()} reads and writes, {@link #presence()} says who else has
+ * a file open, {@link #capabilities()} what this actor may do, {@link #health()} how the connection is
+ * doing. Every event is a {@code Signal} and every registration answers a {@link Disposable}, so any
+ * number of consumers can subscribe and each releases its own.</p>
  *
- * <p>{@code plan_fs_rewrite.md} N15. {@code WorkspaceClient} was 832 lines doing seven jobs: an RPC
- * facade, an etag cache, a content cache, a watch memo, capability and presence caches with their push
- * handlers, a chunked-pull state machine, and connection rebinding with a static memo — with three
- * parallel {@code Map<CgPath, …>} fields declared wherever each feature happened to land.</p>
- *
- * <p>Four of its subscriptions were single slots ({@code onFileChanged}, {@code onCapabilitiesChanged},
- * {@code onPresenceChanged}, {@code onRebound}), so a second subscriber silently evicted the first —
- * which is N16, and why every event here is a {@code Signal} and every registration answers a
- * {@link Disposable}.</p>
- *
- * <h3>One per connection, and it is an attachment</h3>
- *
- * <p>Never a static and never a registry keyed by connection: a second workspace in one process is
- * ordinary (two servers in a dev client, a dock window), and {@code WorkspaceClient.forConnection}'s
- * static {@code WeakHashMap} outlived the mechanism written to replace it.</p>
+ * <p><b>One per connection</b>, held as an attachment on it — a second workspace in one process is
+ * ordinary (two servers in a dev client, a dock window), and each keeps its own watches, caches and
+ * scheme table.</p>
  */
 public final class Workspace implements Disposable {
 
@@ -95,12 +88,7 @@ public final class Workspace implements Disposable {
         }
     }
 
-    /**
-     * The workspace on this connection, created on first ask.
-     *
-     * <p>{@code ProtocolConnection.attachment} keyed by class, which is the mechanism the static map it
-     * replaces was written to make unnecessary — and which nothing ever moved onto.</p>
-     */
+    /** The workspace on this connection, created on first ask and shared by every later caller. */
     public static Workspace of(ProtocolConnection<Object> connection) {
         return connection.attachment(Workspace.class, wire -> {
             Workspace workspace = new Workspace(wire::call,
@@ -146,22 +134,19 @@ public final class Workspace implements Disposable {
     /**
      * Registers where a scheme's content comes from — a decompiler, a code generator, a scratch buffer.
      *
-     * <p>An <b>instance</b>, not a static registry: a second workspace in one process is ordinary, and
-     * two of them sharing one provider table means one server's library scheme answering the other's
-     * requests. {@code ResourceRegistry} was static and this is what replaces it.</p>
+     * <p>Per workspace, so two servers in one client keep separate tables and one server's library
+     * scheme cannot answer the other's requests. A module that has no workspace to hand contributes
+     * through {@link ContentProviders} instead.</p>
      *
      * <p>Answers a {@link Disposable}, so a mod that unloads takes its schemes with it. Registering a
-     * scheme twice replaces the first, which is right for a hot reload and is why this returns a handle
-     * rather than refusing.</p>
+     * scheme twice replaces the first, which is what a hot reload wants.</p>
      *
-     * <h3>The project scheme may be registered, and its CONTENT still comes from the server</h3>
-     *
-     * <p>A provider answers three questions and only one of them is about bytes: what this resource
+     * <p>The project scheme may be registered too, and a project file's <b>content</b> still comes from
+     * the server: a provider answers three questions and only one is about bytes — what the resource
      * holds ({@link ContentProvider#symbolOf}), where a member of it is declared
-     * ({@link ContentProvider#locate}), and what it says. For a project file the first two are the
-     * language engine's — a {@code .java} row shows what the file DECLARES, and only a compiler knows —
-     * while the third is the server's by definition. So {@link #read} checks the scheme before it checks
-     * the table, and a provider registered here is never asked for a project file's bytes.</p>
+     * ({@link ContentProvider#locate}), and what it says. The first two are the language engine's even
+     * for the author's own files. {@link #read} checks the scheme before the table, so a provider here
+     * is never asked for a project file's bytes.</p>
      */
     public Disposable registerScheme(String scheme, ContentProvider provider) {
         providers.put(scheme, provider);
@@ -183,8 +168,7 @@ public final class Workspace implements Disposable {
      * Reads any resource — <b>the one door</b>.
      *
      * <p>A project resource goes over the wire; anything else goes to whatever registered its scheme.
-     * That routing is the whole of what made a second open lane necessary, and it lives here so no
-     * caller above ever asks which kind of thing it is holding.</p>
+     * The routing lives here so no caller above ever has to ask which kind of thing it is holding.</p>
      */
     public Reply<byte[]> read(Resource resource) {
         // THE SCHEME BEFORE THE TABLE. A project file's bytes are the server's whatever has registered
@@ -213,9 +197,8 @@ public final class Workspace implements Disposable {
      * Where unsaved work and per-save history are kept.
      *
      * <p>Supplied by the host, because only it knows where this client's own writable data lives — a
-     * config directory on one loader, a profile folder on another. Without one, a workspace still works
-     * and simply offers no hot exit and no timeline: both are strictly additive, and a client with
-     * nowhere to write must not refuse to run.</p>
+     * config directory on one loader, a profile folder on another. Without one a workspace still works
+     * and simply offers no hot exit and no timeline.</p>
      */
     public Workspace setStorage(@Nullable ConfigStorage storage) {
         this.backup = storage == null ? null : new Backup(storage);
@@ -282,8 +265,8 @@ public final class Workspace implements Disposable {
      * How two resources are decided to be one document on THIS server.
      *
      * <p>Identity on a case-sensitive host; a lower-cased project path on one that folds. Handed to
-     * {@code Documents.setKeyStrategy}, which is where it decides whether {@code Main.java} and
-     * {@code main.java} are one open document. {@link Resource} equality stays strict, exactly as
+     * {@code Documents.setKeyStrategy}, where it decides whether {@code Main.java} and {@code main.java}
+     * are one open document. {@link Resource} equality stays strict — the folding is the store's, as
      * VS Code keeps {@code URI} strict and folds in {@code extUri}.</p>
      */
     public UnaryOperator<Resource> documentKeyStrategy() {
@@ -299,13 +282,12 @@ public final class Workspace implements Disposable {
     // ── Reconnect ───────────────────────────────────────────────────────────────────────────────
 
     /**
-     * The wire moved. Re-ask the greeting and re-subscribe everything that was watched.
+     * The wire moved. Re-asks the greeting and re-subscribes everything that was watched.
      *
-     * <p><b>A subscription is an INTENT to be re-issued, never a record to be trusted.</b> The client's
-     * memo of what it had told the server is a fact about a <em>peer</em>, so after a reconnect it
-     * records promises the new peer never made — and the old client's {@code finishRead} saw the path
-     * already present, never re-asked, and change notifications stopped permanently for exactly the
-     * files that were open. No error, no log line, and an editor that simply stopped noticing edits.</p>
+     * <p><b>A subscription is an intent to be re-issued, never a record to be trusted.</b> "I have
+     * already asked the server to watch this" is a fact about a <em>peer</em>, so across a reconnect it
+     * records promises the new peer never made — and change notifications then stop permanently for
+     * exactly the files that were open, with no error and no log line.</p>
      */
     public void rebind(ProtocolConnection<Object> connection) {
         rebind(connection::call, connection::onNotify, connection.ops());
@@ -429,8 +411,8 @@ public final class Workspace implements Disposable {
         /**
          * Who has <b>unsaved changes</b> to it.
          *
-         * <p>The question that matters, and the one presence could not answer: two people found out
-         * they were both editing a file when the second one saved and was refused.</p>
+         * <p>The question worth asking before you start typing: without it two people find out they
+         * were both editing a file when the second one saves and is refused.</p>
          */
         public List<String> whoIsEditing(Resource resource) {
             return editing.getOrDefault(resource.toString(), List.of());
@@ -449,8 +431,8 @@ public final class Workspace implements Disposable {
         }
 
         void clear() {
-            // PUSHED STATE DESCRIBING A SERVER NOBODY IS TALKING TO. Kept across a rebind it would
-            // show players from the world you just left as having your files open.
+            // PUSHED STATE DESCRIBES A SERVER NOBODY IS TALKING TO. Kept across a rebind it would show
+            // players from the world you just left as having your files open.
             open.clear();
             editing.clear();
         }

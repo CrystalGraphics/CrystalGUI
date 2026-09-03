@@ -163,7 +163,7 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
      *
      * <p>Exists for one caller: a <b>runtime</b> that has just run the file and has something to say
      * about it — a thrown exception at a line — and holds nothing but the file's {@code Resource}. The
-     * services belong to the document ({@code TextFileDocument} owns them), and there is exactly one per
+     * services belong to the document ({@code TextDocumentModel} owns them), and there is exactly one per
      * open file, so the file is a valid key. Concurrent because a run reports from its own thread; the
      * lookup is thread-safe and what it answers is then only ever <em>called</em> on the UI thread.</p>
      */

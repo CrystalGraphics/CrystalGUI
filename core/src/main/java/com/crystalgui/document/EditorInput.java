@@ -7,20 +7,11 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Objects;
 
 /**
- * <b>What a tab was opened WITH</b> — VS Code's {@code EditorInput}, IntelliJ's {@code FileEditor}'s file.
+ * What a tab was opened WITH — VS Code's {@code EditorInput}, IntelliJ's {@code FileEditor}'s file.
  *
- * <h3>One lane, and there were two</h3>
- *
- * <p>{@code plan_fs_rewrite.md} N1. A project file opened through {@code openFile(CgPath)} and a library
- * class through {@code openResource(Resource)}, into two different stores with two different state keys,
- * and the second lane cost roughly four hundred lines re-deriving open, adopt and presentation. Every
- * caller had to know which kind of thing it was holding, and the two answered differently to the tab
- * strip, the session record and the dock.</p>
- *
- * <p>An input is a {@link Resource} plus what to do with it, so a project file, a decompiled class, a
- * generated shader source and — at M7 — a server-described panel are the same lane. Which one it is,
- * where the bytes come from and whether it may be saved are all read off the resource's scheme by
- * whoever opens it.</p>
+ * <p>A {@link Resource} plus what to do with it, so a project file, a decompiled class and a generated
+ * shader source all open through one lane. Which one it is, where its bytes come from and whether it
+ * may be saved are read off the resource's scheme by whoever opens it, not by the caller.</p>
  */
 public final class EditorInput {
 

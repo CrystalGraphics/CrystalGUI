@@ -26,7 +26,7 @@ import java.util.Set;
  * <h3>Order is declared, not accidental</h3>
  *
  * <p>Entries used to render in the order their writers happened to run, so the right-hand group's layout
- * was decided by whichever line of {@code TextFileDocument.setActive} came first. Both references order
+ * was decided by whichever line of the view's activation came first. Both references order
  * explicitly — VS Code by {@code priority}, IntelliJ by widget {@code anchor} — because the bar is glanced
  * at, and a readout that moves between sessions cannot be glanced at at all.</p>
  *

@@ -11,7 +11,7 @@ import java.nio.charset.StandardCharsets;
  *
  * <h3>None of this existed</h3>
  *
- * <p>{@code plan_fs_rewrite.md} G1: the original filesystem plan said a BOM would be stripped, recorded
+ * <p>A BOM is stripped on the way in and written back on the way out, recorded
  * and re-emitted, and it was never built — there is no reference to a byte-order mark anywhere in the
  * filesystem, the document layer or the text package. Every read was
  * {@code new String(bytes, UTF_8)} and every save {@code getBytes(UTF_8)}, so a UTF-8 file with a BOM

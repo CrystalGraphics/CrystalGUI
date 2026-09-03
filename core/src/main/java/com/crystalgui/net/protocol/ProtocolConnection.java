@@ -109,7 +109,7 @@ public final class ProtocolConnection<T> {
      * The one instance of {@code type} for this connection, built on first ask.
      *
      * <p><b>What three static {@code WeakHashMap}s were.</b> {@code UiWindowMux.of},
-     * {@code ClientUiSessions.forConnection} and {@code WorkspaceClient.forConnection} each memoised
+     * {@code ClientUiSessions.forConnection} and the workspace each memoised
      * "the X for this connection" independently, each with the same javadoc explaining the same
      * singleton-per-connection reason, and each relying on <em>garbage collection</em> rather than on
      * the lifecycle to let go. The connection is the natural owner of anything scoped to it, so the
@@ -210,7 +210,7 @@ public final class ProtocolConnection<T> {
      * Serves a method. The handler must answer exactly once — the router enforces it.
      *
      * <p>Shaped as {@link Call.Handler} rather than {@link MessageRouter.RequestHandler} so that
-     * {@code WorkspaceRpc.Registrar} and {@code ServerUiSession::onCall} remain interchangeable: a
+     * {@code WorkspaceBinding.Registrar} and {@code ServerUiSession::onCall} stay interchangeable: a
      * subsystem is written once and installs onto either.</p>
      */
     public ProtocolConnection<T> onRequest(String method, Call.Handler<T> handler) {

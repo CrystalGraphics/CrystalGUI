@@ -151,7 +151,7 @@ public final class JavaLanguage {
 
         // AND WHAT SERVES A `library://` RESOURCE, so go-to-declaration into a classpath type has
         // somewhere to land. Registered here rather than by the workbench for the reason every other
-        // contribution is: the shell must not name a language, and `ResourceRegistry` is the seam that
+        // contribution is: the shell must not name a language, and `ContentProviders` is the seam that
         // lets it open a scheme without knowing what fills it.
         //
         // NOT conditional on the engine having opened, like the command above and for the same reason:
@@ -472,7 +472,7 @@ public final class JavaLanguage {
      *
      * <p><b>What it does not fix:</b> an editor already open when the band lands still has no analysis
      * until its document is reopened. Re-attaching services to a live document is
-     * {@code TextFileDocument}'s business, and this is deliberately not that.</p>
+     * the document model's business, and this is deliberately not that.</p>
      */
     public static synchronized JavaEngine engine() {
         if (engine != null) return engine;

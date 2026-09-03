@@ -24,21 +24,21 @@ import java.util.Objects;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * <b>Opening things</b> — one lane, whatever kind of thing it is.
+ * The open tabs — <b>one lane, whatever kind of thing is being opened</b>.
  *
- * <h3>There were two, and the second cost four hundred lines</h3>
+ * <pre>{@code
+ * editors.open(EditorInput.of(resource)).then(tab -> …).onError(failure -> …);
+ * editors.saveActive();
+ * editors.onDidChangeState.connect(tab -> …);
+ * }</pre>
  *
- * <p>{@code plan_fs_rewrite.md} N1. A project file opened through {@code openFile(CgPath)} into
- * {@code OpenDocuments}; a library class or a generated shader source opened through
- * {@code openResource(Resource)} into a parallel {@code Map<String, TextEditor>} on the workbench, with
- * its own state key ({@code RESOURCE_STATE} beside {@code PATH_STATE}), its own loaded-set, and its own
- * re-derivation of adopt and presentation. The lane's own javadoc called it a stopgap "until a second
- * non-file document kind turns up". Two did.</p>
+ * <p>A project file, a decompiled class and a generated shader source all go through {@link #open},
+ * because a document is keyed by {@link Resource} and where its bytes come from is the workspace's
+ * question. A new kind of thing to open is a new {@code DocumentKind}, never a second lane.</p>
  *
- * <p>The cause was that the document store was keyed by {@code CgPath}, so anything that was not a
- * project file could not be in it. Keyed by {@link Resource} there is one store and one lane, and a
- * fourth input kind — M7's server-described panel — is a new {@code DocumentKind} rather than a third
- * lane.</p>
+ * <p>A {@link Tab} exists <b>immediately</b>, in {@link DocumentState#LOADING}, and is filled when the
+ * read lands — which is what lets a session restore put twelve tabs on screen at once rather than
+ * revealing them one round trip at a time.</p>
  *
  * <h3>An editor is a view; the document outlives it</h3>
  *

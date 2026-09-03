@@ -6,7 +6,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * <b>What each mutation answered, so a retry is answered the same way</b> — D17's other half.
+ * What each mutation answered, so a call retried after a timeout is answered rather than performed
+ * again.
  *
  * <h3>The failure it prevents</h3>
  *

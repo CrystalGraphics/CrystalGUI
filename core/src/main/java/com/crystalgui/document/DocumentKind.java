@@ -33,17 +33,16 @@ import java.util.function.Supplier;
  * etag, a change on the server reloads or conflicts according to whether the document is dirty, an
  * unsaved graph survives a quit, and the session carries the view state.</p>
  *
- * <h3>The split this makes that {@code DocumentType} could not</h3>
+ * <h3>The model and the view are declared separately</h3>
  *
- * <p>{@code DocumentType} answered a {@code FileDocument}, which was a widget — so the model and the
- * view were one object and neither could exist without the other. A kind names them separately, which
- * is what lets a document analyse with no tab open and two panes share one parse tree.</p>
+ * <p>{@link #model} says what the document IS and {@link #editor} says what one way of looking at it
+ * is. That is what lets a document analyse with no tab open, and two split panes share one parse
+ * tree.</p>
  *
  * <h3>A kind with no model is refused</h3>
  *
- * <p>Registration throws rather than accepting a declaration that cannot open anything.
- * {@code registerDocumentType} plus {@code bindEditorExtensions} were two calls that were meaningless
- * apart and were shipped half-done, which put the failure at the moment a person opened a file.</p>
+ * <p>Registration throws rather than accepting a declaration that cannot open anything — a half-done
+ * one would otherwise fail at the moment a person opens a file.</p>
  */
 public final class DocumentKind {
 
@@ -117,8 +116,7 @@ public final class DocumentKind {
      *
      * <p><b>The resource is handed over too</b>, and it has to be: a text model resolves its language,
      * its tokenizer, its folding and its indentation from the file's NAME, so a factory that could not
-     * see what it was a model of would have to be told separately — which is the two-calls-that-are-one
-     * shape {@code DocumentType} was replaced for.</p>
+     * see what it was a model of would have to be told in a second call.</p>
      */
     public DocumentKind model(BiFunction<Resource, byte[], DocumentModel> factory) {
         checkOpen();

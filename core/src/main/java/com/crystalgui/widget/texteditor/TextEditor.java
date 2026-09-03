@@ -2188,7 +2188,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * <p>The old services are <b>not closed</b> here, only unsubscribed. Services belong to the document
      * ({@link LanguageServices}), and the same file open in two panes is two editors holding one set —
      * so closing on replacement would release a compiler still in use by the other view. The owner is
-     * whoever created it, which today is {@code TextFileDocument}.</p>
+     * whoever created it, which today is {@code TextDocumentModel}.</p>
      *
      * <p>The subscription is the same one {@link #setTokenizer} makes and for the same reason: a compile
      * lands without the document changing, so nothing else would ever prompt a re-query and the semantic
@@ -2569,7 +2569,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * <p><b>Not called from the widget's own teardown</b>, deliberately. A widget can be removed from the
      * tree and re-added, and a dock rebuild does exactly that on every split and drag; closing the parse
      * tree there would free natives for a document that is still open and rebuild them on the next frame.
-     * The document is what ends, so the document calls this — {@code TextFileDocument.dispose()}.</p>
+     * The document is what ends, so the document calls this — {@code TextDocumentModel.dispose()}.</p>
      *
      * <p>Idempotent, because the paths that reach it overlap: a file deleted while its tab is open can
      * plausibly arrive from both ends.</p>

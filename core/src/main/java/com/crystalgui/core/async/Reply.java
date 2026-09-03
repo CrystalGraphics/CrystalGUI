@@ -13,14 +13,10 @@ import java.util.function.Function;
  * <b>One shape for every answer that is not ready yet</b> — a job on a worker, a call across a wire, a
  * provider that has to decompile something first.
  *
- * <h3>Four conventions became one</h3>
- *
- * <p>{@code plan_fs_rewrite.md} N31 counted them, all live at once and none convertible to another:
- * callback pairs ({@code read(path, onOk, onFail)}), {@code (Runnable, Consumer)} pairs plus three
- * signals plus {@code Batch.track()} runnables, {@code JobScheduler.job(…).onDone(…)}, and a
- * synchronous {@code read} that every caller wrapped in a job anyway. A caller composing two of them
- * writes the composition by hand, and the file service's own javadoc records the undo transaction that
- * never closed because one completion was forgotten.</p>
+ * <p>One shape, so two answers compose: chain with {@link #then} and {@link #map}, wait on several
+ * with {@link #all}, and handle failure once with {@link #onError}. Callback pairs cannot be composed
+ * at all — a caller wanting the second answer after the first writes the nesting by hand, and a
+ * completion forgotten in one branch is a step that never finishes with nothing to see.</p>
  *
  * <h3>Continuations run on the frame thread</h3>
  *

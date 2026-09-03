@@ -20,7 +20,7 @@ import javax.annotation.Nullable;
  *
  * <h3>A provider, for the same reason the other three surfaces are</h3>
  *
- * <p>Asked per panel and answering or declining is {@link com.crystalgui.ui.elements.workbench.DocumentType},
+ * <p>Asked per panel, and answering or declining is a decision about that panel alone,
  * {@code InspectorSection} and {@code Command.menu} again: the package that knows why a tab is special
  * says so, and neither the dock nor the application enumerates the cases. A file type that wants a
  * "restored from backup" banner registers one and nothing here changes.</p>
@@ -28,7 +28,7 @@ import javax.annotation.Nullable;
  * <h3>Asked with the {@link DockPanelRef}, not with a document</h3>
  *
  * <p>Deliberately, and the motivating case is why: the generated source tab is <b>not</b> a
- * {@code FileDocument} — it is a panel type whose ref carries the derived {@code Resource} in its state.
+ * a document — it is a panel type whose ref carries the derived {@code Resource} in its state.
  * A document-shaped question could not have been asked about the one tab that needed it.</p>
  */
 public interface DockBannerProvider {

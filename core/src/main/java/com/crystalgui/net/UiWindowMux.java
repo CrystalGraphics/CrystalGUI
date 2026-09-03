@@ -29,7 +29,7 @@ import java.util.Set;
  * <h3>Why it is a layer above the router rather than a change to it</h3>
  *
  * <p>{@code MessageRouter} is the generic transport vocabulary: it knows requests, responses,
- * notifications, cancels and correlation, and it knows nothing about windows — {@code WorkspaceRpc} and a
+ * notifications, cancels and correlation, and it knows nothing about windows — the filesystem and a
  * future {@code script/*} bind to it and have no window to be keyed by. Teaching it {@code UiMethods.WINDOW}
  * would put one subsystem's payload shape into the layer every other subsystem shares. So the split is
  * the same one {@link com.crystalgui.net.wire.FrameMultiplexer} already makes a layer down: the generic

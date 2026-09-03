@@ -24,17 +24,18 @@ import java.util.function.Supplier;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * <b>Reading and writing files</b> — every answer a {@link Reply}, every partial answer a
- * {@link Stream}.
+ * Reading and writing files — every answer a {@link Reply}, every partial answer a {@link Stream}.
  *
- * <h3>What one shape replaces</h3>
+ * <pre>{@code
+ * files.read(resource).then(answer -> …).onError(error -> …);
+ * files.write(resource, bytes, etag).then(newEtag -> …);
+ * files.batch("move files", batch -> batch.rename(from, to, false)).then(result -> …);
+ * }</pre>
  *
- * <p>{@code plan_fs_rewrite.md} N31 counted four conventions live at once: callback pairs on the
- * client, {@code (Runnable, Consumer)} pairs plus three signals plus {@code Batch.track()} runnables on
- * the file service, {@code JobScheduler.job(…).onDone(…)} in the viewer lane, and a synchronous read
- * every caller wrapped in a job anyway. A caller composing two of them wrote the composition by hand,
- * and the file service's own javadoc records the undo transaction that never closed because one
- * completion was forgotten.</p>
+ * <p>Reached through {@link Workspace#files()}. Every mutation carries an operation id, so a call
+ * retried after a timeout is answered rather than performed twice, and announces itself through
+ * {@link #onWillRun}, {@link #onDidRun} and {@link #onDidFail} — which is where an undo stack, an audit
+ * view and a file tree all listen rather than each call site reporting for itself.</p>
  *
  * <h3>Operations are serialised per resource</h3>
  *
@@ -69,11 +70,11 @@ public final class FileOperations {
             new Signal.Pair<>();
 
     /**
-     * The workspace's own undo history.
+     * The workspace's own undo history — creates, moves and deletes.
      *
-     * <p>Not a document's. An {@code UndoStack} belongs to whatever it undoes, and a file operation
-     * undoes a change to the workspace rather than to any one file's contents — which is why the
-     * explorer is the scope this is reached through, and why Ctrl+Z in an editor still reaches the
+     * <p>Not a document's: an {@code UndoStack} belongs to whatever it undoes, and a file operation
+     * changes the workspace rather than any one file's contents. The explorer is the scope this is
+     * reached through, so Ctrl+Z there takes back a rename while Ctrl+Z in an editor still reaches the
      * editor's own.</p>
      */
     private final UndoStack undoStack = new UndoStack();
@@ -89,10 +90,10 @@ public final class FileOperations {
     /**
      * Records an operation so Ctrl+Z in the explorer can take it back.
      *
-     * <p>Both halves only <b>issue</b> a call; neither waits for one. That is the honest shape: the
-     * operation is already asynchronous, and an {@link Edit} that blocked would block the frame. The
-     * view updates when the answer arrives, through the same {@link #onDidRun} every other change takes,
-     * so undo is not a second way for a tree to learn about a change.</p>
+     * <p>Both halves only <b>issue</b> a call; neither waits for one. The operation is already
+     * asynchronous and an {@link Edit} that blocked would block the frame — so a view updates when the
+     * answer arrives, through the same {@link #onDidRun} every other change takes. Undo is not a second
+     * way for a tree to learn about a change.</p>
      */
     private void record(String label, Runnable redo, Runnable undo) {
         if (isReplay()) return;
@@ -176,10 +177,10 @@ public final class FileOperations {
     /**
      * A file's bytes, <b>pipelined</b> — the chunks arrive as they land and the whole is the result.
      *
-     * <p>{@code WorkspaceClient.pullChunk} was a recursive callback chain with a one-shot restart,
-     * written that way because a single-valued reply cannot say "more is coming". It also asked for one
-     * window at a time and waited, so a 4 MB read over a 50 ms link took 64 round trips in series.
-     * A window of outstanding requests is what a stream makes expressible.</p>
+     * <p>A file above the inline limit is answered as a transfer, and this pulls it through: each chunk
+     * reaches {@link Stream#onPartial} as it lands, and the whole sequence is the settled value. Use it
+     * when there is something to do with a partial answer — a progress bar, a partial parse — and
+     * {@link #read} otherwise.</p>
      */
     public Stream<byte[]> readStream(Resource resource) {
         PendingStream<byte[]> stream = new PendingStream<>(null);
@@ -350,9 +351,9 @@ public final class FileOperations {
     /**
      * Copies a file — <b>a read and a create</b>, because the server has no copy verb.
      *
-     * <p>Honest about what it costs: a file's bytes are what a copy is OF, and across a wire they have
-     * to travel. A server-side copy would be a better answer for a large file and is a protocol change
-     * rather than a client one.</p>
+     * <p>The bytes are what a copy is <em>of</em>, and across a wire they have to travel. A server-side
+     * copy would be a better answer for a large file and is a protocol change rather than a client
+     * one.</p>
      */
     public Reply<String> copy(Resource from, Resource to) {
         PendingReply<String> done = new PendingReply<>(null);
@@ -368,7 +369,7 @@ public final class FileOperations {
      * {@code notes.txt} → {@code notes copy.txt} → {@code notes copy 2.txt}.
      *
      * <p>VS Code's {@code findValidPasteFileTarget}. Here rather than in a widget because it is a rule
-     * about naming a file in this workspace, and both the explorer's paste and its drop ask it.</p>
+     * about naming a file in this workspace, and both the explorer's paste and its drop ask for it.</p>
      *
      * @param taken names already present in the destination folder
      */
@@ -397,9 +398,9 @@ public final class FileOperations {
     /**
      * Several operations as one undo step, with failures reported per item.
      *
-     * <p>{@code WorkspaceFileService.Batch} took {@code track()} runnables the caller had to remember to
-     * call, and its own javadoc records the transaction that never closed when one was forgotten. The
-     * batch settles when its members do, because a {@link Reply} says when it is finished.</p>
+     * <p>The batch settles when its members do, and its result names the ones that failed: the eleven
+     * files that copied stay copied and the one that did not is reported. Failing wholesale would hand
+     * the caller an error and no list, so it could not say which.</p>
      */
     public Reply<BatchResult> batch(String label, Consumer<Batch> body) {
         Batch batch = new Batch(label);

@@ -664,7 +664,7 @@ public class DockGroup extends UIElement {
      * <p>{@link #rebuildStrip} used to call {@link #contentFor} for every panel in the leaf, so restoring a
      * session with five tabs open built five editors on the frame the workbench appeared — four of them
      * behind a {@code display: none} nobody was going to look at. For a document that is not a cheap
-     * element: {@code Workbench.registerDocumentType} builds a {@link com.crystalgui.ui.elements.editor
+     * element: a document kind builds a {@link com.crystalgui.ui.elements.editor
      * .TextEditor}, a fresh tokenizer with its own parse tree, a fresh {@code LanguageServices} that
      * starts a compile, and reads the file off disk. <b>Measured at ~480 ms for two tabs</b> in a real
      * client, which was the largest single item left in a first editor open.</p>
@@ -719,7 +719,7 @@ public class DockGroup extends UIElement {
      * <h3>Here, because this is the only place every panel passes through</h3>
      *
      * <p>A banner has to work for a tab that is <b>not</b> a document — the generated shader is a panel
-     * type, not a {@code FileDocument} — so hanging it off the document layer would have missed the one
+     * type, not a document — so hanging it off the document layer would have missed the one
      * case that asked for it. {@code contentFor} sees every kind: document tabs, pane-backed panels and
      * plain registry-built ones alike.</p>
      *

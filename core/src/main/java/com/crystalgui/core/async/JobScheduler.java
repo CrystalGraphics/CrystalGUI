@@ -176,7 +176,7 @@ public final class JobScheduler implements Disposable {
      *
      * <h3>The builder is not the {@link Reply}; {@link #submit()} answers one</h3>
      *
-     * <p>{@code plan_fs_rewrite.md} left this open as a risk — "write {@code Reply} first and see whether
+     * <p>This was left open as a risk — "write {@code Reply} first and see whether
      * {@code Job} can extend it" — and the answer is that it cannot, for a reason worth keeping: a
      * {@code Job} is a <b>description</b> and nothing runs until {@code submit()}, while a {@code Reply}
      * is an answer that is already on its way. A type that is both would have a {@code then} that

@@ -6,25 +6,18 @@ import com.crystalgui.text.diagnostic.DiagnosticSet;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * <b>What an open document IS</b> — headless, and the one thing a {@link Document} holds.
+ * What an open document IS — headless, and the one thing a {@link Document} holds.
  *
- * <h3>The layer this replaces did not have one</h3>
- *
- * <p>{@code plan_fs_rewrite.md} §0: there was no first-class "document the workspace holds". A text
- * document was a record wrapping a {@code TextEditor}, so the model <em>was</em> the widget — the
- * status subscription had to be {@code static} because a record has no instance state, and the whole
- * {@code document} package sat above {@code widget}, which left the one headless document model the
- * engine has ({@code TextBuffer}) sitting a package below, unused as one.</p>
- *
- * <p>So: a model knows its content and nothing about paths, tabs, saving, etags or windows. It can be
- * built and edited and asked whether it has changed with no display anywhere.</p>
+ * <p>A model knows its content and nothing about paths, tabs, saving, etags or windows, so it can be
+ * built, edited and asked whether it has changed with no display anywhere. That is what lets the
+ * Problems panel, a background compile and Go to Definition work on a file nobody has a tab open
+ * onto.</p>
  *
  * <h3>Version, not a comparison</h3>
  *
- * <p>{@link #version()} is a counter every change bumps, and it is what dirtiness is made of:
- * {@code version() != savedVersion}. Dirtiness used to be {@code encode()} compared against the bytes
- * read from disk, run for every open document on every change — which for a shader graph means
- * serialising the whole graph to JSON to decide whether a tab needs an asterisk.</p>
+ * <p>{@link #version()} is a counter every change bumps, and dirtiness is made of it:
+ * {@code version() != savedVersion}. Comparing encoded bytes instead would mean serialising a whole
+ * shader graph to JSON to decide whether its tab needs an asterisk.</p>
  *
  * @see AbstractDocumentModel for the base that makes {@code apply(Edit)} the one door
  */
@@ -77,10 +70,9 @@ public interface DocumentModel {
     /**
      * What is wrong with this document, or null when it has nothing to report.
      *
-     * <p><b>Asked of the MODEL, not of a view.</b> The workbench used to bind its Problems panel to the
-     * active {@code TextEditor}'s set, so a shader graph — which has no text editor — left the panel
-     * empty by construction while its compiler produced a dozen attributed errors with nowhere to go.
-     * A diagnostic describes a document; a document has one set; two views onto it show the same one.</p>
+     * <p><b>Asked of the MODEL, not of a view.</b> A diagnostic describes a document, so a document has
+     * one set and two views onto it show the same one — and a kind with no text editor behind it (a
+     * shader graph, whose compiler produces attributed errors) still has somewhere to put them.</p>
      *
      * <p><b>The same instance every time.</b> A view binds to it and listens, so a fresh set per call
      * would leave the panel watching one nobody writes to.</p>

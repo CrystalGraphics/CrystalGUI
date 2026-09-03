@@ -8,13 +8,11 @@ import org.jetbrains.annotations.Nullable;
 /**
  * Why a filesystem call failed — <b>a code, a detail, and the etag a conflict lost to</b>.
  *
- * <h3>It was a sentence</h3>
+ * <h3>A code and fields, never a sentence</h3>
  *
- * <p>{@code plan_fs_rewrite.md} N17. A conflict travelled as {@code "CONFLICT " + etag} and was
- * re-parsed at the other end by splitting on a space, so the one piece of machine-readable information
- * in the most important failure the protocol has arrived inside prose. A handler that wanted to branch
- * on the kind compared strings, and {@code Failure.code()} might or might not name a
- * {@link CgFileError} depending on which layer had raised it.</p>
+ * <p>A conflict carries {@link #actualEtag()} as a field, so the one actionable thing in the most
+ * important failure the protocol has does not have to be recovered by splitting prose — and a handler
+ * branches on {@link #is} rather than comparing strings.</p>
  *
  * <p>A {@link ReplyError}, so a filesystem failure and a cancelled job reach a caller through the same
  * {@code onError}. What this adds is the field a conflict is useless without.</p>

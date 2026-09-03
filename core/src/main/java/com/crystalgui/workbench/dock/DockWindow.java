@@ -75,7 +75,7 @@ public class DockWindow extends WindowFrame {
     public DockWindow(DockPanelRegistry<UIElement> registry, DockLayout layout, String title) {
         super(title);
         addClass(DOCK_WINDOW_CLASS);
-        // DESTROY, not hide: a torn-out window's content is documents that live in OpenDocuments, and
+        // DESTROY, not hide: a torn-out window's content is documents the store owns, and
         // the window itself holds nothing worth keeping once its last tab has gone.
         setPolicy(WindowPolicy.DESTROY_ON_CLOSE);
 

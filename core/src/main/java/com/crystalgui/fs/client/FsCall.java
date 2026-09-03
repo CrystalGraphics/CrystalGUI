@@ -16,17 +16,11 @@ import java.util.function.Consumer;
 /**
  * <b>One typed call across the wire, as a {@link Reply}</b> — and the coalescing that goes with it.
  *
- * <h3>Three things the callback pairs could not do</h3>
- *
- * <p>{@code plan_fs_rewrite.md} N18, N17. {@code WorkspaceClient} took an
- * {@code (onResult, onError)} pair per method, so: two reads of one path in flight were two round
- * trips, because nothing knew they were the same question; a caller could not cancel, because
- * {@code MessageRouter.cancel} existed and nothing exposed it; and a failure arrived as a string that
- * had to be split on a space to recover the etag a conflict lost to.</p>
- *
- * <p>Every call goes through here now. A key coalesces — a second caller asking the same question while
- * the first is in flight gets the same reply — and a failure is parsed once, into a {@link FsError}
- * with its code and its etag as fields.</p>
+ * <p>Every call this client makes goes through here, which buys three things at once. A key
+ * <b>coalesces</b>: a second caller asking the same question while the first is in flight gets the same
+ * reply rather than a second round trip. A {@link Reply} can be <b>cancelled</b>, which withdraws the
+ * request from the router. And a failure is <b>parsed once</b>, into an {@link FsError} carrying its
+ * code and its etag as fields rather than as a sentence to split.</p>
  */
 final class FsCall<T> {
 
@@ -125,10 +119,9 @@ final class FsCall<T> {
     /**
      * Turns the wire's {@code CODE detail} into a typed failure.
      *
-     * <p>The one place a failure string is read. {@code WorkspaceClient} parsed
-     * {@code "CONFLICT " + etag} at its call sites, so the etag — the only actionable thing in the only
-     * failure that needs action — was recovered by splitting a sentence, in each of the places that
-     * cared.</p>
+     * <p>The one place a failure string is read, so the etag a conflict carries — the only actionable
+     * thing in the only failure that needs action — is a field rather than something each caller
+     * recovers by splitting a sentence.</p>
      */
     static FsError parse(@Nullable String error) {
         if (error == null || error.isEmpty()) return new FsError(FsError.FAILED, "no reason given");
