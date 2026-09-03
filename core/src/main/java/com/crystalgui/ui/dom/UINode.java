@@ -53,6 +53,20 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
     @Nullable
     UINode parent;
 
+    /**
+     * <b>{@code UIElement}, not {@code UINode}, and that is the narrower and truer type.</b>
+     *
+     * <p>{@link ShadowRoot} and {@link UIDocument} are the only nodes that are not elements, and both
+     * are ROOTS — either can be a parent, neither can ever be a child. So every child really is an
+     * element, and typing this {@code List<UINode>} would be strictly weaker: it would claim a shadow
+     * root can be appended, which is what {@code refuseAsChild} used to check at run time and what
+     * the signature now makes impossible.</p>
+     *
+     * <p>The web draws the same line for the same reason. {@code Node.childNodes} is a {@code NodeList}
+     * only because there are Text and Comment nodes; {@code ParentNode.children} is an
+     * {@code HTMLCollection} of <em>Elements</em>. This engine has no text node — text is a widget
+     * over a box — so there is nothing left that is a child and not an element.</p>
+     */
     final List<UIElement> children = new ArrayList<>();
 
     final List<UIElement> childrenView = Collections.unmodifiableList(children);
@@ -81,7 +95,14 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
     /** Whether an ancestor link crosses into a shadow tree — such a node is never observed. */
     boolean inShadow;
 
-    /** An observer installed on THIS node by a source over it. */
+    /**
+     * An observer installed on THIS node by a source over it.
+     *
+     * <p>Bound to {@code UIElement} for the reason above one level on: the mirror describes the LIGHT
+     * TREE, and {@code inserted(N node, N parent, int)} needs both ends describable. A shadow root is
+     * never described — its {@code observer} is null by construction — which is why the two reporting
+     * sites reach for {@link #asElement()} rather than widening the seam.</p>
+     */
     @Nullable
     TreeObserver<UIElement> ownObserver;
 
