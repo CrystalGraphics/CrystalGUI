@@ -17,7 +17,7 @@ import com.crystalgui.text.Change;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.overlay.Dropdown;
-import com.crystalgui.widget.control.ProgressBar;
+import com.crystalgui.widget.display.ProgressBar;
 import com.crystalgui.widget.control.Slider;
 import com.crystalgui.widget.layout.Tab;
 import com.crystalgui.widget.layout.TabView;
