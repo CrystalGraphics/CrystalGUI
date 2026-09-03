@@ -7,7 +7,7 @@ import com.crystalgui.fs.Resource;
 import com.crystalgui.language.run.RunSessions;
 import com.crystalgui.language.run.RunState;
 import com.crystalgui.language.run.console.RunElapsed;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.widget.collection.list.ListRenderer;
@@ -45,7 +45,7 @@ import java.util.Map;
  * <p>Which is what makes the rail a control rather than a caption, and it is why the per-script filter was
  * built first: this is the picker for it. The head's dropdown was a stand-in for exactly this and is gone.</p>
  */
-public final class RunRail extends UINode {
+public final class RunRail extends UIElement {
 
     public static final String RAIL_CLASS = "__run-rail__";
     public static final String ROW_NAME_CLASS = "__run-rail-name__";
@@ -154,7 +154,7 @@ public final class RunRail extends UINode {
         // a script is first run; the STATE changes on every transition, and a script finishing changes no
         // set at all. So a finished script kept its green dot until something else happened to rebuild the
         // list, and running a second script appeared to "fix" the first one's mark.
-        for (Map.Entry<Integer, UINode> realised : list.realisedRows().entrySet()) {
+        for (Map.Entry<Integer, UIElement> realised : list.realisedRows().entrySet()) {
             writeRow(realised.getKey(), realised.getValue());
         }
     }
@@ -223,7 +223,7 @@ public final class RunRail extends UINode {
      * <p>Shared by {@code bind} and the per-frame pass so the two cannot disagree — which is exactly what
      * happened when only the clock was written here and the mark was left to {@code bind}.</p>
      */
-    private void writeRow(int index, UINode element) {
+    private void writeRow(int index, UIElement element) {
         RunSessions showing = sessions;
         Row row = rows(element);
         if (showing == null || row == null || index <= 0 || index - 1 >= known.size()) return;
@@ -241,7 +241,7 @@ public final class RunRail extends UINode {
      * the element and the cascade resolves whichever rule happens to win. That reads as a random colour
      * rather than as a stale class.
      */
-    private void swapState(UINode glyph, @Nullable RunState state) {
+    private void swapState(UIElement glyph, @Nullable RunState state) {
         for (RunState value : RunState.values()) {
             glyph.removeClass(STATE_CLASS_PREFIX + value.name().toLowerCase(Locale.ROOT));
         }
@@ -286,7 +286,7 @@ public final class RunRail extends UINode {
      * then never appears to update however correct the lookup is.</p>
      */
     private static final class Row {
-        private final UINode glyph = new UINode();
+        private final UIElement glyph = new UIElement();
         private final UIText name = new UIText("");
         private final UIText time = new UIText("");
         @Nullable private Tooltip tooltip;
@@ -301,10 +301,10 @@ public final class RunRail extends UINode {
         }
     }
 
-    private final Map<UINode, Row> rows = new HashMap<>();
+    private final Map<UIElement, Row> rows = new HashMap<>();
 
     @Nullable
-    private Row rows(UINode element) {
+    private Row rows(UIElement element) {
         return rows.get(element);
     }
 
@@ -312,8 +312,8 @@ public final class RunRail extends UINode {
     private final class Rows implements ListRenderer<Resource> {
 
         @Override
-        public UINode createTemplate() {
-            UINode element = new UINode();
+        public UIElement createTemplate() {
+            UIElement element = new UIElement();
             Row row = new Row();
             row.glyph.addClass(ROW_GLYPH_CLASS);
             row.glyph.setHitTest(false);
@@ -331,7 +331,7 @@ public final class RunRail extends UINode {
         }
 
         @Override
-        public void bind(@Nullable Resource item, int index, UINode template) {
+        public void bind(@Nullable Resource item, int index, UIElement template) {
             Row row = rows(template);
             if (row == null) return;
 

@@ -5,9 +5,9 @@ import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.net.wire.CgNetworkChannel;
 import com.crystalgui.serialization.ContentHash;
 import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.net.mirror.UINodeMirror;
-import com.crystalgui.ui.ElementRegistry;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.net.mirror.UIElementMirror;
+import com.crystalgui.ui.dom.UIElementRegistry;
+import com.crystalgui.ui.dom.UIElement;
 
 import cpw.mods.fml.common.FMLCommonHandler;
 import net.minecraft.server.MinecraftServer;
@@ -207,21 +207,21 @@ public final class CgUiServerSmoke {
         String detail = "";
         boolean ok = false;
         try {
-            ElementRegistry.bootstrapBuiltins();
+            UIElementRegistry.bootstrap();
 
-            UINode root = new UINode();
+            UIElement root = new UIElement();
             root.setId("smoke-root");
             root.addClass("panel");
-            UINode child = new UINode();
+            UIElement child = new UIElement();
             child.setId("smoke-child");
             root.append(child);
 
-            Object encoded = new UINodeMirror<>(PlainOps.INSTANCE).describe(root);
+            Object encoded = new UIElementMirror<>(PlainOps.INSTANCE).describe(root);
             String hashA = ContentHash.of(PlainOps.INSTANCE, encoded);
             String hashB = ContentHash.of(PlainOps.INSTANCE,
-                    new UINodeMirror<>(PlainOps.INSTANCE).describe(root));
+                    new UIElementMirror<>(PlainOps.INSTANCE).describe(root));
 
-            UINode decoded = new UINodeMirror<>(PlainOps.INSTANCE).decode(encoded);
+            UIElement decoded = new UIElementMirror<>(PlainOps.INSTANCE).decode(encoded);
 
             boolean stable = hashA.equals(hashB);
             boolean shape = decoded != null

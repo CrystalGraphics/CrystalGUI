@@ -1,7 +1,8 @@
 package com.crystalgui.mc.net;
 
-import com.crystalgui.ui.dom.UINodeTreeSource;
-import com.crystalgui.net.mirror.UINodeMirror;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UIElementTreeSource;
+import com.crystalgui.net.mirror.UIElementMirror;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.WorkspaceClient;
@@ -13,8 +14,7 @@ import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.text.Change;
-import com.crystalgui.ui.ElementRegistry;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.overlay.Dropdown;
 import com.crystalgui.widget.control.ProgressBar;
@@ -110,8 +110,8 @@ public final class CgUiSessionProbe {
         for (String check : ORDER) CHECKS.put(check, false);
     }
 
-    private static volatile ServerUiSession<UINode, Object> server;
-    private static volatile ClientUiSession<UINode, Object> client;
+    private static volatile ServerUiSession<UIElement, Object> server;
+    private static volatile ClientUiSession<UIElement, Object> client;
 
     private static Slider serverSlider;
     private static UIText addedLater;
@@ -120,7 +120,7 @@ public final class CgUiSessionProbe {
     private static InMemoryTransport<Object>[] extraLink;
     private static ProtocolConnection<Object> extraServer;
     private static ProtocolConnection<Object> extraClient;
-    private static ClientUiSession<UINode, Object> extraViewer;
+    private static ClientUiSession<UIElement, Object> extraViewer;
 
     private static volatile boolean deltaSent;
     private static volatile boolean eventSent;
@@ -151,7 +151,7 @@ public final class CgUiSessionProbe {
 
     /** <b>Server thread.</b> A tree that exercises C3 and C4 as well as the basics. */
     private static void openServer(ProtocolConnection<Object> connection) {
-        UINode root = new UINode();
+        UIElement root = new UIElement();
         root.append(new UIText("hello from the server"));
 
         Button button = new Button("Press me");
@@ -180,8 +180,8 @@ public final class CgUiSessionProbe {
         dropdown.select(2);
         root.append(dropdown);
 
-        ServerUiSession<UINode, Object> session = new ServerUiSession<>(WINDOW_ID, new UINodeTreeSource(root),
-                new UINodeMirror<>(connection.ops()), connection);
+        ServerUiSession<UIElement, Object> session = new ServerUiSession<>(WINDOW_ID, new UIElementTreeSource(root),
+                new UIElementMirror<>(connection.ops()), connection);
         session.on(button, Button.ACTIVATE, ctx -> pass("5 event"));
         session.open();
         server = session;
@@ -191,8 +191,8 @@ public final class CgUiSessionProbe {
 
     /** <b>Client thread.</b> */
     private static void openClient(ProtocolConnection<Object> connection) {
-        ElementRegistry.bootstrapBuiltins();
-        ClientUiSession<UINode, Object> session = new ClientUiSession<>(new UINodeMirror<>(connection.ops()), connection);
+        UIElementRegistry.bootstrap();
+        ClientUiSession<UIElement, Object> session = new ClientUiSession<>(new UIElementMirror<>(connection.ops()), connection);
         session.onWindowOpened(root -> {
             if (root != null) pass("1 tree");
             CrystalGuiCore.LOGGER.info("[session-probe] tree rebuilt: {} children",
@@ -273,7 +273,7 @@ public final class CgUiSessionProbe {
                 extraLink = InMemoryTransport.pair();
                 extraServer = Protocols.open(extraLink[0], PlainOps.INSTANCE, () -> { }, "probe-viewer");
                 extraClient = Protocols.open(extraLink[1], PlainOps.INSTANCE, () -> { }, null);
-                extraViewer = new ClientUiSession<>(new UINodeMirror<>(extraClient.ops()), extraClient);
+                extraViewer = new ClientUiSession<>(new UIElementMirror<>(extraClient.ops()), extraClient);
                 extraViewer.onWindowOpened(root -> {
                     if (root != null) pass("8 fan-out (C1)");
                     CrystalGuiCore.LOGGER.info("[session-probe] second viewer rebuilt {} children",
@@ -335,13 +335,13 @@ public final class CgUiSessionProbe {
         /** C3 and C4, read off the rebuilt tree. */
         private void checkDescribedState() {
             if (done("2 tabs (C3)") && done("3 widget state (C4)")) return;
-            List<UINode> children = client.root().children();
+            List<UIElement> children = client.root().children();
             // The reshape inserts at 0, so index off the END -- which is also a small check that the
             // tree really is the one that was described.
             int n = children.size();
-            UINode tabsElement = children.get(n - 3);
-            UINode progressElement = children.get(n - 2);
-            UINode dropdownElement = children.get(n - 1);
+            UIElement tabsElement = children.get(n - 3);
+            UIElement progressElement = children.get(n - 2);
+            UIElement dropdownElement = children.get(n - 1);
 
             if (tabsElement instanceof TabView tabs && tabs.getTabs().size() == 2) {
                 boolean labels = "Editor".equals(tabs.getTabs().get(0).getText())
@@ -364,7 +364,7 @@ public final class CgUiSessionProbe {
         private void checkDelta() {
             if (done("4 state delta") || !deltaSent) return;
             int n = client.root().children().size();
-            UINode mirrored = client.root().children().get(n - 4);
+            UIElement mirrored = client.root().children().get(n - 4);
             if (mirrored instanceof Slider slider && Math.abs(slider.getValue() - 0.75f) < 1e-4f) {
                 pass("4 state delta");
             }
@@ -373,7 +373,7 @@ public final class CgUiSessionProbe {
         private void pressWhenReady() {
             if (eventSent || !done("4 state delta")) return;
             int n = client.root().children().size();
-            UINode mirrored = client.root().children().get(n - 5);
+            UIElement mirrored = client.root().children().get(n - 5);
             if (!(mirrored instanceof Button)) return;
             eventSent = true;
             // The REAL widget: what reports is a listener the client attached from the description.
@@ -383,12 +383,12 @@ public final class CgUiSessionProbe {
         /** C2 — the child arrived, and the slider's update still landed after renumbering. */
         private void checkReshape() {
             if (done("7 reshape (C2)") || !reshapeSent) return;
-            List<UINode> children = client.root().children();
+            List<UIElement> children = client.root().children();
             if (children.size() != 7) return;
             if (!(children.get(0) instanceof UIText text)) return;
             if (!"added after open".equals(text.getText())) return;
             // And the slider is still the slider, at its shifted index.
-            UINode slider = children.get(children.size() - 4);
+            UIElement slider = children.get(children.size() - 4);
             if (slider instanceof Slider s && Math.abs(s.getValue() - 0.75f) < 1e-4f) {
                 pass("7 reshape (C2)");
             }

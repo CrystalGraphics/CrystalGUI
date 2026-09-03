@@ -11,9 +11,7 @@ import com.crystalgui.language.run.ScriptCommands;
 import com.crystalgui.language.run.console.ConsoleFilter;
 import com.crystalgui.language.run.console.ConsoleSettings;
 import com.crystalgui.language.run.console.RunConsole;
-import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.service.Animation;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.layout.SplitView;
@@ -41,7 +39,7 @@ import java.util.function.BooleanSupplier;
  *
  * <p>What survives unchanged is the toolbar and the eviction notice, because neither was about rows.</p>
  */
-public final class RunPanel extends UINode  {
+public final class RunPanel extends UIElement {
 
     /**
      * This panel's kind, which 49 rules in {@code ua/panels.css} are written against.
@@ -129,7 +127,7 @@ public final class RunPanel extends UINode  {
 
     private final RunConsoleView view = new RunConsoleView();
     private final UIText notice = new UIText("");
-    private final UINode stripe = new UINode();
+    private final UIElement stripe = new UIElement();
     /**
      * The rail and its own toolbar, as one column.
      *
@@ -138,8 +136,8 @@ public final class RunPanel extends UINode  {
      * <em>script</em>, which is what the rail lists, while wrap and scroll act on the <em>transcript</em>.
      * Each toolbar sits with the thing it operates on.</p>
      */
-    private final UINode leftColumn = new UINode();
-    private final UINode runBar = new UINode();
+    private final UIElement leftColumn = new UIElement();
+    private final UIElement runBar = new UIElement();
     /**
      * The rule under the run bar.
      *
@@ -148,7 +146,7 @@ public final class RunPanel extends UINode  {
      * nothing at all. The find bar spent a session on exactly this, and {@code statusbarview} spells its
      * separators the same way.</p>
      */
-    private final UINode separator = new UINode();
+    private final UIElement separator = new UIElement();
 
     /**
      * The row under the toolbar: the rail, the transcript, and the console's control stripe.
@@ -157,7 +155,7 @@ public final class RunPanel extends UINode  {
      * which script's output am I looking at, and two controls for one question is the arrangement where
      * they drift apart.</p>
      */
-    private final UINode body = new UINode();
+    private final UIElement body = new UIElement();
     private final RunRail rail = new RunRail();
     private boolean railShown;
 
@@ -313,8 +311,8 @@ public final class RunPanel extends UINode  {
      * tab stops in front of the transcript — the same reason the rail and the input row attach rather
      * than hide.</p>
      */
-    private final UINode emptyNote = new UINode();
-    private final UINode emptyLines = new UINode();
+    private final UIElement emptyNote = new UIElement();
+    private final UIElement emptyLines = new UIElement();
     private final UIText emptyHeading = new UIText("To run a script, do one of the following:");
     private final UIText emptyRunLine = new UIText("");
     private final UIText emptyPaletteLine =
@@ -398,7 +396,7 @@ public final class RunPanel extends UINode  {
      * {@code if (!previous.remove(child)) previous.remove(child)}. This is that pair,
      * named, so a caller cannot half-remember it.</p>
      */
-    private static void detach(UINode parent, UINode child) {
+    private static void detach(UIElement parent, UIElement child) {
         if (child.parent() != parent) return;
         if (!parent.remove(child)) parent.remove(child);
     }
@@ -694,26 +692,26 @@ public final class RunPanel extends UINode  {
         if (wanted == inputShown) return;
         inputShown = wanted;
 
-        UINode host = inputHost();
+        UIElement host = inputHost();
         if (wanted) {
             host.append(inputField);
             inputField.setText("");
             // POINTER focus: this is not a keyboard gesture and the ring would outline the field on every
-            // read a script makes. @see UINode#requestPointerFocus
+            // read a script makes. @see UIElement#requestPointerFocus
             inputField.document().focus().requestPointerFocus(inputField);
         } else {
             // ASKED OF THE FIELD, not of the window's input handler: UIInputHandler implements
             // CgSystemInput, a CrystalGraphics platform type core takes as compileOnly and does not pass
             // on, so naming it from here fails to compile on a supertype nobody meant to depend on.
             boolean hadFocus = inputField.isFocused();
-            UINode parent = inputField.parent();
+            UIElement parent = inputField.parent();
             if (parent != null) detach(parent, inputField);
             if (hadFocus) document().focus().requestPointerFocus(view.element());
         }
     }
 
     /** The transcript's own pane while there is one, and the panel otherwise. @see #refreshInput */
-    private UINode inputHost() {
+    private UIElement inputHost() {
         SplitView built = split;
         return built == null ? this : built.pane(1);
     }

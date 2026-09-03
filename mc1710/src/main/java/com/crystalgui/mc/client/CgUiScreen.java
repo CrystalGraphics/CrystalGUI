@@ -11,10 +11,7 @@ import com.crystalgui.fs.LocalConfigStorage;
 import com.crystalgui.language.run.view.RunPanels;
 import com.crystalgui.language.run.view.ScriptWorkbench;
 import com.crystalgui.style.sheet.StyleSheet;
-import com.crystalgui.ui.Ui;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.core.window.WindowPolicy;
 import com.crystalgui.core.window.WindowState;
@@ -64,7 +61,7 @@ public final class CgUiScreen extends GuiScreen {
      * <b>The host sizes the root, and nothing else will.</b>
      *
      * <p>{@code UIDocument.init(w, h)} looks like it does this and does not: all it calls is
-     * {@code UINode.initScreen}, whose entire body is {@code runtimeCache.resetCache()} plus the
+     * {@code UIElement.initScreen}, whose entire body is {@code runtimeCache.resetCache()} plus the
      * same call on each child. The root therefore has <em>no</em> width or height of its own, and with
      * Taffy's defaults here ({@code flex-direction: COLUMN}, {@code min-size: 0}, no explicit size) it
      * sizes to content — so every percentage and every {@code flex-grow} inside it resolves against

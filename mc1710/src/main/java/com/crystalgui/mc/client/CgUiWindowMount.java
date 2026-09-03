@@ -14,7 +14,7 @@ import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.style.sheet.StyleSheet;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.core.window.WindowState;
@@ -250,7 +250,7 @@ public final class CgUiWindowMount implements WindowMount {
         }
 
         @Override
-        public void contentReplaced(UINode newRoot) {
+        public void contentReplaced(UIElement newRoot) {
             // The session decoded a FRESH tree, so the one in this frame is no longer being updated.
             frame.setContent(newRoot);
         }
