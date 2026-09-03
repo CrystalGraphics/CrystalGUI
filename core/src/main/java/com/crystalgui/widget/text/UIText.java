@@ -28,7 +28,7 @@ import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.text.HighlightRegistry;
-import com.crystalgui.ui.text.TextRange;
+import com.crystalgui.text.TextRange;
 import dev.vfyjxf.taffy.style.TaffyDimension;
 import java.util.ArrayDeque;
 import java.util.ArrayList;

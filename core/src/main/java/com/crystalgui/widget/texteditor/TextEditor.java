@@ -56,7 +56,7 @@ import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.text.HighlightRegistry;
 import com.crystalgui.widget.text.SyntaxHighlighting;
-import com.crystalgui.ui.text.TextRange;
+import com.crystalgui.text.TextRange;
 import com.crystalgui.widget.texteditor.diff.DiffDecorations;
 import com.crystalgui.widget.texteditor.doc.DocumentationPopup;
 import com.crystalgui.widget.texteditor.find.EditorFind;

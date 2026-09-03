@@ -23,7 +23,7 @@ import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.text.UIText;
-import com.crystalgui.ui.text.TextRange;
+import com.crystalgui.text.TextRange;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 
 import javax.annotation.Nullable;

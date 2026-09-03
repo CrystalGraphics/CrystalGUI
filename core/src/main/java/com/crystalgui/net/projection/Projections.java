@@ -1,4 +1,4 @@
-package com.crystalgui.ui.projection;
+package com.crystalgui.net.projection;
 
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.ui.dom.UIElement;

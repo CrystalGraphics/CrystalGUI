@@ -1,4 +1,6 @@
-package com.crystalgui.ui.text;
+package com.crystalgui.text;
+
+import com.crystalgui.ui.text.HighlightRegistry;
 
 import javax.annotation.Nullable;
 

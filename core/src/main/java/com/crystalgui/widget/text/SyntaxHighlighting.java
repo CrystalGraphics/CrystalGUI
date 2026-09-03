@@ -10,8 +10,7 @@ import com.crystalgui.text.syntax.LanguageRegistry;
 import com.crystalgui.text.syntax.SyntaxToken;
 import com.crystalgui.text.syntax.KeywordTokenizer;
 import com.crystalgui.text.syntax.SyntaxTokenizer;
-import com.crystalgui.ui.text.TextRange;
-import com.crystalgui.widget.text.UIText;
+import com.crystalgui.text.TextRange;
 
 import javax.annotation.Nullable;
 

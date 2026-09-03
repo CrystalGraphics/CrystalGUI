@@ -8,9 +8,8 @@ import com.crystalgui.text.WordOperations;
 import com.crystalgui.text.search.SearchResults;
 import com.crystalgui.text.search.TextSearch;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.text.TextRange;
+import com.crystalgui.text.TextRange;
 import com.crystalgui.widget.texteditor.TextEditor;
-import com.crystalgui.widget.texteditor.doc.HoverDocumentation;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
 import org.jetbrains.annotations.Nullable;

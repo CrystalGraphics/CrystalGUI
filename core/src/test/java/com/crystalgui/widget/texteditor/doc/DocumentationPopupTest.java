@@ -14,7 +14,7 @@ import com.crystalgui.text.lang.SymbolModifier;
 import com.crystalgui.text.lang.TypeRef;
 import com.crystalgui.text.syntax.SyntaxToken;
 import com.crystalgui.widget.text.UIText;
-import com.crystalgui.ui.text.TextRange;
+import com.crystalgui.text.TextRange;
 import org.junit.Before;
 import org.junit.Test;
 

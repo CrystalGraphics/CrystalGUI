@@ -10,7 +10,7 @@ import com.crystalgui.text.syntax.SyntaxToken;
 import com.crystalgui.text.syntax.SyntaxTokenizer;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.widget.texteditor.TextEditor;
-import com.crystalgui.ui.text.TextRange;
+import com.crystalgui.text.TextRange;
 import org.junit.Test;
 
 import java.util.ArrayList;

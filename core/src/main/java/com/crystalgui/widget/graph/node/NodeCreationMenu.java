@@ -23,7 +23,7 @@ import com.crystalgui.widget.collection.tree.TreeView;
 import com.crystalgui.core.search.SearchMatch;
 import com.crystalgui.core.search.SearchMatcher;
 import com.crystalgui.core.search.SearchQuery;
-import com.crystalgui.ui.text.TextRange;
+import com.crystalgui.text.TextRange;
 
 import java.util.ArrayList;
 import java.util.List;

@@ -27,7 +27,7 @@ import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.text.lang.SymbolModifier;
-import com.crystalgui.ui.text.TextRange;
+import com.crystalgui.text.TextRange;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 
 import java.util.ArrayList;

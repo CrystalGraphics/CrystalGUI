@@ -8,7 +8,7 @@ import com.crystalgui.text.diagnostic.DiagnosticTag;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.widget.texteditor.TextEditor;
 // The HIGHLIGHT range type, not the document one -- a highlight addresses one view line's UIText.
-import com.crystalgui.ui.text.TextRange;
+import com.crystalgui.text.TextRange;
 
 import org.junit.Test;
 
