@@ -1,6 +1,6 @@
 package com.crystalgui.app;
 
-import com.crystalgui.app.editor.CrystalEditor;
+import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.app.shadergraph.ShaderGraphEditor;
 import com.crystalgui.ui.dom.NodeContract;
 import com.crystalgui.ui.dom.NodeKinds;

@@ -1,4 +1,4 @@
-package com.crystalgui.app.editor;
+package com.crystalgui.app.crystaleditor;
 
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.dispose.Disposable;

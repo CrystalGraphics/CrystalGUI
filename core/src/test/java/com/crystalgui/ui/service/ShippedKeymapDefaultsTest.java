@@ -14,7 +14,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
-import com.crystalgui.app.editor.CrystalEditorCommands;
+import com.crystalgui.app.crystaleditor.CrystalEditorCommands;
 import com.crystalgui.workbench.chrome.menu.ChromeCommands;
 import com.crystalgui.workbench.explorer.ExplorerCommands;
 
