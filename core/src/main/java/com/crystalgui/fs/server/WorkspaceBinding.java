@@ -1,6 +1,7 @@
 package com.crystalgui.fs.server;
 
 import com.crystalgui.fs.CgFileEntry;
+import com.crystalgui.fs.CgFileError;
 import com.crystalgui.fs.CgFileEvent;
 import com.crystalgui.fs.CgFileSystemException;
 import com.crystalgui.fs.CgPath;
@@ -18,15 +19,13 @@ import com.crystalgui.serialization.Codec;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.text.TextEncoding;
-
-import org.jetbrains.annotations.Nullable;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * <b>One connection's end of the filesystem</b> — decode, ask the service, encode.
@@ -160,7 +159,7 @@ public final class WorkspaceBinding<T> {
             FsMessages.ChunkRequest request = decode(FsMessages.chunkRequest(), args);
             Transfer transfer = transfers.get(request.transfer());
             if (transfer == null) {
-                throw new CgFileSystemException(com.crystalgui.fs.CgFileError.FILE_NOT_FOUND,
+                throw new CgFileSystemException(CgFileError.FILE_NOT_FOUND,
                         "no such transfer: " + request.transfer());
             }
             int length = Math.min(request.length() <= 0 ? CHUNK_BYTES : request.length(), CHUNK_BYTES);
@@ -375,7 +374,7 @@ public final class WorkspaceBinding<T> {
         String name = path.name();
         if (name != null && !name.isEmpty() && !hello().isValidName(name)) {
             audit.refused(actor, WorkspaceOperation.WRITE, path, "invalid name");
-            throw new CgFileSystemException(com.crystalgui.fs.CgFileError.INVALID_PATH,
+            throw new CgFileSystemException(CgFileError.INVALID_PATH,
                     "'" + name + "' is not a name this host will accept");
         }
     }

@@ -102,6 +102,7 @@ public final class TextDocumentModel implements DocumentModel {
     }
 
     /** The buffer's set — a document's problems belong to its document. */
+    @Override
     public DiagnosticSet diagnostics() {
         return buffer.diagnostics();
     }

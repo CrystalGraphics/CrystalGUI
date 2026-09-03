@@ -3,6 +3,7 @@ package com.crystalgui.fs.client;
 import com.crystalgui.core.async.Reply;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.protocol.FsHello;
@@ -11,14 +12,14 @@ import com.crystalgui.fs.protocol.FsMethods;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.StateMap;
-
-import org.jetbrains.annotations.Nullable;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Consumer;
+import java.util.function.UnaryOperator;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * <b>The workspace, from the client</b> — one entry point, sub-facades by noun, nothing static.
@@ -55,6 +56,9 @@ public final class Workspace implements Disposable {
     private final Capabilities capabilities = new Capabilities();
     private final Health health = new Health();
     private final Map<Resource, Watch> watches = new LinkedHashMap<>();
+
+    /** Where a non-project scheme's content comes from. @see #schemes */
+    private final Map<String, ContentProvider> providers = new LinkedHashMap<>();
 
     /** Unsaved work and per-save history, both client-local. Absent until a host supplies a store. */
     @Nullable
@@ -103,7 +107,7 @@ public final class Workspace implements Disposable {
 
     /** How this workspace hears what the server says without being asked. */
     public interface Subscriber {
-        void subscribe(String method, java.util.function.Consumer<StateMap<Object>> handler);
+        void subscribe(String method, Consumer<StateMap<Object>> handler);
     }
 
     // ── The facades ─────────────────────────────────────────────────────────────────────────────
@@ -126,6 +130,58 @@ public final class Workspace implements Disposable {
     }
 
     /**
+     * Registers where a scheme's content comes from — a decompiler, a code generator, a scratch buffer.
+     *
+     * <p>An <b>instance</b>, not a static registry: a second workspace in one process is ordinary, and
+     * two of them sharing one provider table means one server's library scheme answering the other's
+     * requests. {@code ResourceRegistry} was static and this is what replaces it.</p>
+     *
+     * <p>Answers a {@link Disposable}, so a mod that unloads takes its schemes with it. Registering a
+     * scheme twice replaces the first, which is right for a hot reload and is why this returns a handle
+     * rather than refusing.</p>
+     *
+     * @throws IllegalArgumentException for the project scheme, whose content is the server's by
+     *                                  definition — a provider there would answer instead of the wire
+     */
+    public Disposable registerScheme(String scheme, ContentProvider provider) {
+        if (Resource.SCHEME_PROJECT.equals(scheme)) {
+            throw new IllegalArgumentException(
+                    "the project scheme's content is the server's; a provider here would answer instead");
+        }
+        providers.put(scheme, provider);
+        return () -> providers.remove(scheme, provider);
+    }
+
+    /** What provides this resource, or null when the server does. */
+    @Nullable
+    public ContentProvider providerFor(Resource resource) {
+        return resource == null ? null : providers.get(resource.scheme());
+    }
+
+    /**
+     * Reads any resource — <b>the one door</b>.
+     *
+     * <p>A project resource goes over the wire; anything else goes to whatever registered its scheme.
+     * That routing is the whole of what made a second open lane necessary, and it lives here so no
+     * caller above ever asks which kind of thing it is holding.</p>
+     */
+    public Reply<byte[]> read(Resource resource) {
+        ContentProvider provider = providerFor(resource);
+        if (provider != null) return provider.read(resource);
+        return files.read(resource).map(FsMessages.ReadResponse::content);
+    }
+
+    /** Whether this resource refuses writes. An unregistered non-project scheme is read-only. */
+    public boolean isReadOnly(Resource resource) {
+        if (resource == null) return true;
+        if (Resource.SCHEME_PROJECT.equals(resource.scheme())) return false;
+        ContentProvider provider = providerFor(resource);
+        // REFUSING TO WRITE SOMETHING NOBODY CLAIMS is the right default: a scheme with no provider has
+        // no storage behind it at all.
+        return provider == null || provider.isReadOnly(resource);
+    }
+
+    /**
      * Where unsaved work and per-save history are kept.
      *
      * <p>Supplied by the host, because only it knows where this client's own writable data lives — a
@@ -133,7 +189,7 @@ public final class Workspace implements Disposable {
      * and simply offers no hot exit and no timeline: both are strictly additive, and a client with
      * nowhere to write must not refuse to run.</p>
      */
-    public Workspace setStorage(@Nullable com.crystalgui.core.storage.ConfigStorage storage) {
+    public Workspace setStorage(@Nullable ConfigStorage storage) {
         this.backup = storage == null ? null : new Backup(storage);
         this.history = storage == null ? null : new LocalHistory(storage);
         return this;
@@ -202,8 +258,8 @@ public final class Workspace implements Disposable {
      * {@code main.java} are one open document. {@link Resource} equality stays strict, exactly as
      * VS Code keeps {@code URI} strict and folds in {@code extUri}.</p>
      */
-    public java.util.function.UnaryOperator<Resource> documentKeyStrategy() {
-        if (hello.caseSensitive()) return java.util.function.UnaryOperator.identity();
+    public UnaryOperator<Resource> documentKeyStrategy() {
+        if (hello.caseSensitive()) return UnaryOperator.identity();
         return resource -> {
             CgPath path = resource.asPath();
             if (path == null) return resource;

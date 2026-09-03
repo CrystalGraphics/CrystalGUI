@@ -1,21 +1,26 @@
 package com.crystalgui.fs.client;
 
+import com.crystalgui.core.async.PendingReply;
 import com.crystalgui.core.async.PendingStream;
 import com.crystalgui.core.async.Reply;
+import com.crystalgui.core.async.ReplyError;
 import com.crystalgui.core.async.Stream;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.protocol.FsError;
 import com.crystalgui.fs.protocol.FsMessages;
 import com.crystalgui.fs.protocol.FsMethods;
-
-import org.jetbrains.annotations.Nullable;
-
+import com.crystalgui.serialization.Codec;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * <b>Reading and writing files</b> — every answer a {@link Reply}, every partial answer a
@@ -59,11 +64,25 @@ public final class FileOperations {
      * {@code code()} handles both without knowing which layer raised it. {@code FsError} is what a
      * filesystem failure actually carries, and it is a {@code ReplyError}.</p>
      */
-    public final Signal.Pair<Resource, com.crystalgui.core.async.ReplyError> onDidFail =
+    public final Signal.Pair<Resource, ReplyError> onDidFail =
             new Signal.Pair<>();
+
+    /**
+     * The workspace's own undo history.
+     *
+     * <p>Not a document's. An {@code UndoStack} belongs to whatever it undoes, and a file operation
+     * undoes a change to the workspace rather than to any one file's contents — which is why the
+     * explorer is the scope this is reached through, and why Ctrl+Z in an editor still reaches the
+     * editor's own.</p>
+     */
+    private final UndoStack undoStack = new UndoStack();
 
     FileOperations(FsCall<?> calls) {
         this.calls = calls;
+    }
+
+    public UndoStack undoStack() {
+        return undoStack;
     }
 
     // ── Reading ─────────────────────────────────────────────────────────────────────────────────
@@ -195,8 +214,8 @@ public final class FileOperations {
      * operation id so a retry after a timeout is answered rather than performed again.
      */
     private <A> Reply<String> mutate(Resource resource, String method,
-                                     com.crystalgui.serialization.Codec<A> codec,
-                                     java.util.function.Function<String, A> args) {
+                                     Codec<A> codec,
+                                     Function<String, A> args) {
         String op = "op-" + operationIds.incrementAndGet();
         return after(resource, () -> {
             onWillRun.emit(resource);
@@ -213,7 +232,7 @@ public final class FileOperations {
      * <p>The queue is the reply itself: each operation's completion is what starts the next. A resource
      * with nothing outstanding starts immediately, so the ordinary case pays one map lookup.</p>
      */
-    private <R> Reply<R> after(Resource resource, java.util.function.Supplier<Reply<R>> work) {
+    private <R> Reply<R> after(Resource resource, Supplier<Reply<R>> work) {
         Reply<?> previous = queues.get(resource);
         if (previous == null || previous.isDone()) {
             Reply<R> started = work.get();
@@ -221,8 +240,8 @@ public final class FileOperations {
             started.always(() -> queues.remove(resource, started));
             return started;
         }
-        com.crystalgui.core.async.PendingReply<R> chained =
-                new com.crystalgui.core.async.PendingReply<>(null);
+        PendingReply<R> chained =
+                new PendingReply<>(null);
         queues.put(resource, chained);
         previous.always(() -> work.get()
                 .then(chained::resolve)
@@ -246,12 +265,12 @@ public final class FileOperations {
      * call, and its own javadoc records the transaction that never closed when one was forgotten. The
      * batch settles when its members do, because a {@link Reply} says when it is finished.</p>
      */
-    public Reply<BatchResult> batch(String label, java.util.function.Consumer<Batch> body) {
+    public Reply<BatchResult> batch(String label, Consumer<Batch> body) {
         Batch batch = new Batch(label);
         body.accept(batch);
 
-        com.crystalgui.core.async.PendingReply<BatchResult> settled =
-                new com.crystalgui.core.async.PendingReply<>(() -> {
+        PendingReply<BatchResult> settled =
+                new PendingReply<>(() -> {
                     for (Reply<?> member : batch.members) member.cancel();
                 });
         // SETTLED, not SUCCEEDED. `Reply.all` fails on the first failure, which is right for "I need all
@@ -279,7 +298,7 @@ public final class FileOperations {
         }
     }
 
-    public record Failure(Resource resource, com.crystalgui.core.async.ReplyError error) {
+    public record Failure(Resource resource, ReplyError error) {
     }
 
     /** The operations of one batch, gathered. */

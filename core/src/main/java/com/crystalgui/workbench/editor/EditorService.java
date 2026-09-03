@@ -2,6 +2,7 @@ package com.crystalgui.workbench.editor;
 
 import com.crystalgui.core.async.PendingReply;
 import com.crystalgui.core.async.Reply;
+import com.crystalgui.core.async.ReplyError;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.document.Document;
@@ -15,14 +16,12 @@ import com.crystalgui.fs.client.Backup;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.client.WorkspaceDocuments;
 import com.crystalgui.fs.protocol.FsError;
-
-import org.jetbrains.annotations.Nullable;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * <b>Opening things</b> — one lane, whatever kind of thing it is.
@@ -224,7 +223,7 @@ public final class EditorService implements Disposable {
         @Nullable
         private DocumentEditor editor;
         @Nullable
-        private com.crystalgui.core.async.ReplyError failure;
+        private ReplyError failure;
         private DocumentState state = DocumentState.LOADING;
 
         private Tab(EditorInput input) {
@@ -255,7 +254,7 @@ public final class EditorService implements Disposable {
 
         /** Why it failed, when it did. */
         @Nullable
-        public com.crystalgui.core.async.ReplyError failure() {
+        public ReplyError failure() {
             return failure;
         }
 
@@ -294,7 +293,7 @@ public final class EditorService implements Disposable {
             onDidChangeState.emit(this);
         }
 
-        private void fail(com.crystalgui.core.async.ReplyError error) {
+        private void fail(ReplyError error) {
             this.failure = error;
             this.state = DocumentState.FAILED;
             onDidChangeState.emit(this);
