@@ -677,7 +677,9 @@ The client needs **no fragment concept at all**: a fragment arrives as ordinary 
 with ordinary reported-event names and calls methods like any other — which is the point of the
 description architecture. A window whose fragment needs client-local behaviour wires it from the
 window's own `ClientWindowBehaviour`; if that ever gets heavy, a client-side scope registry is
-additive later.
+additive later. *(Taken up at M7 7.1 in `plan_ui_rewrite.md`: `ClientScope.workspace()` and
+`ServerScope.workspace()` hand a panel the fs workspace from the connection attachment, so a file list
+is read through the fs protocol and never re-shipped through the mirror.)*
 
 Deferred deliberately: **detaching** a fragment from a live window (releasing its scoped methods
 needs a per-`(method, window)` release on `UiWindowMux`, which today releases whole windows only).

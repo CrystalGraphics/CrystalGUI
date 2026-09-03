@@ -1,5 +1,7 @@
 package com.crystalgui.fs;
 
+import com.crystalgui.fs.project.WorkspaceProject;
+import com.crystalgui.fs.project.ProjectRegistry;
 import java.io.IOException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.DirectoryStream;

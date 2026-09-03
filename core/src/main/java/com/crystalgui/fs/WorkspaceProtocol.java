@@ -1,5 +1,7 @@
 package com.crystalgui.fs;
 
+import com.crystalgui.fs.project.SourceRoots;
+
 /**
  * The method names and field keys the workspace speaks, in one place.
  *

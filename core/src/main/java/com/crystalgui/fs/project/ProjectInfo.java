@@ -1,4 +1,6 @@
-package com.crystalgui.fs;
+package com.crystalgui.fs.project;
+
+import com.crystalgui.fs.CgPath;
 
 /**
  * What a client is told about a project: an id and a name to show. <b>Never a directory.</b>

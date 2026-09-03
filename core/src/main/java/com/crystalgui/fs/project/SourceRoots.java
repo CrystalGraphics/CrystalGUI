@@ -1,5 +1,6 @@
-package com.crystalgui.fs;
+package com.crystalgui.fs.project;
 
+import com.crystalgui.fs.CgPath;
 import javax.annotation.Nullable;
 
 import java.util.List;

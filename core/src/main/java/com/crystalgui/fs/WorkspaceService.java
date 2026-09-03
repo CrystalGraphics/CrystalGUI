@@ -1,5 +1,9 @@
 package com.crystalgui.fs;
 
+import com.crystalgui.fs.project.WorkspaceProject;
+import com.crystalgui.fs.project.ProjectRegistry;
+import com.crystalgui.fs.project.ProjectInfo;
+import com.crystalgui.fs.project.Excludes;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -144,12 +148,12 @@ public final class WorkspaceService {
     public List<CgFileEntry> manifest(WorkspaceActor actor, CgPath directory) {
         authorise(actor, directory, WorkspaceOperation.READ);
         List<CgFileEntry> entries = files.list(directory);
-        List<String> excludes = projects.require(directory).excludes();
+        Excludes excludes = Excludes.of(projects.require(directory).excludes());
         if (excludes.isEmpty()) return entries;
 
         List<CgFileEntry> kept = new ArrayList<>(entries.size());
         for (CgFileEntry entry : entries) {
-            if (!isExcluded(entry.name(), excludes)) kept.add(entry);
+            if (!excludes.excludes(entry.name())) kept.add(entry);
         }
         return kept;
     }
@@ -374,27 +378,4 @@ public final class WorkspaceService {
      * because these are applied per directory entry rather than to a whole path. A full glob engine here
      * would be a lot of surface for {@code node_modules} and {@code .git}.</p>
      */
-    private static boolean isExcluded(String name, List<String> patterns) {
-        for (String pattern : patterns) {
-            if (matches(name, pattern, 0, 0)) return true;
-        }
-        return false;
-    }
-
-    private static boolean matches(String name, String pattern, int n, int p) {
-        while (p < pattern.length()) {
-            char c = pattern.charAt(p);
-            if (c == '*') {
-                for (int skip = n; skip <= name.length(); skip++) {
-                    if (matches(name, pattern, skip, p + 1)) return true;
-                }
-                return false;
-            }
-            if (n >= name.length()) return false;
-            if (c != '?' && c != name.charAt(n)) return false;
-            n++;
-            p++;
-        }
-        return n == name.length();
-    }
 }

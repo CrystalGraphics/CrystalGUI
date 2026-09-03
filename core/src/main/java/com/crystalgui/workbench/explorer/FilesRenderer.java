@@ -4,7 +4,7 @@ import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.ResourceContentProvider;
 import com.crystalgui.fs.ResourceRegistry;
-import com.crystalgui.fs.SourceRoots;
+import com.crystalgui.fs.project.SourceRoots;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.style.StyleGroup;

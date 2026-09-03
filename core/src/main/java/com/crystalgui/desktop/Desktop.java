@@ -16,7 +16,7 @@ import com.crystalgui.desktop.window.WindowCommands;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.desktop.window.WindowKeyboardMove;
 import com.crystalgui.desktop.window.WindowRegistry;
-import com.crystalgui.fs.ConfigStorage;
+import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;

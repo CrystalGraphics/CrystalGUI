@@ -13,7 +13,7 @@ import com.crystalgui.core.settings.Settings;
 import com.crystalgui.core.settings.SettingsCodec;
 import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.core.settings.SettingsModel;
-import com.crystalgui.fs.ConfigStorage;
+import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;

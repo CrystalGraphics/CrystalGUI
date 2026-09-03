@@ -19,7 +19,7 @@ import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.ResourceContentProvider;
 import com.crystalgui.fs.ResourceRegistry;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.FilePatternMap;
+import com.crystalgui.core.pattern.FilePatternMap;
 import com.crystalgui.fs.WorkspaceClient;
 import com.crystalgui.fs.WorkingCopies;
 import com.crystalgui.fs.WorkspaceFileService;
@@ -383,7 +383,7 @@ public class Workbench extends UIElement implements DataProvider {
             for (CgPath file : files) {
                 if (file == null) continue;
                 roots.computeIfAbsent(file.project(),
-                        id -> fileTree == null ? com.crystalgui.fs.SourceRoots.CONVENTION
+                        id -> fileTree == null ? com.crystalgui.fs.project.SourceRoots.CONVENTION
                                 : fileTree.source().sourceRootsOf(id));
             }
             projectRoots = roots;
@@ -791,7 +791,7 @@ public class Workbench extends UIElement implements DataProvider {
         // while the UI thread is mutating the tree's listing maps and the open-document map. @see #refreshProjectIndexInputs
         this.projectIndex = new ProjectIndex(
                 () -> crawledFiles,
-                id -> projectRoots.getOrDefault(id, com.crystalgui.fs.SourceRoots.CONVENTION),
+                id -> projectRoots.getOrDefault(id, com.crystalgui.fs.project.SourceRoots.CONVENTION),
                 // A LAMBDA, NEVER `bufferSnapshot::get`. A bound method reference captures the object the
                 // field points at WHEN THE REFERENCE IS MADE -- here the empty map, in this constructor --
                 // so every snapshot taken afterwards is invisible to it. It compiles, it reads as an

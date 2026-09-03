@@ -1,7 +1,7 @@
 package com.crystalgui.text.syntax;
 
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.fs.FilePatternMap;
+import com.crystalgui.core.pattern.FilePatternMap;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.lang.LanguageServices;

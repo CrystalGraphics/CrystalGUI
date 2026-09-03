@@ -7,7 +7,7 @@ import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.core.command.CommandRegistry;
-import com.crystalgui.fs.LocalConfigStorage;
+import com.crystalgui.core.storage.LocalConfigStorage;
 import com.crystalgui.language.run.view.RunPanels;
 import com.crystalgui.language.run.view.ScriptWorkbench;
 import com.crystalgui.style.sheet.StyleSheet;

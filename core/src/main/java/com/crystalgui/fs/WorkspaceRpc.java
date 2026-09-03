@@ -284,9 +284,12 @@ public final class WorkspaceRpc<T> {
 
         registry.register(WorkspaceProtocol.WATCH, (args, respond) -> guard(respond, () -> {
             CgPath path = path(args);
-            // AUTHORISED like any read. Watching a file you may not read would otherwise leak its
-            // existence and every subsequent change to it.
-            service.read(actor, path);
+            // AUTHORISED like any read, and it costs a STAT. Watching a file you may not read would leak
+            // its existence and every subsequent change to it, so the check stays -- but `service.read`
+            // reads the whole file to make it, so subscribing to a 40 MB log allocated 40 MB and threw
+            // every byte away. Phase 6.1 fixed exactly this in the watcher's own poll and left the
+            // subscription, which is the one path a client reaches deliberately.
+            service.stat(actor, path);
             watcher.watch(actor, path);
             // PRESENCE RIDES THE WATCH, because a watch is already exactly "this client has this file
             // open" -- it is sent on every read and cleared on every close. A second message saying the

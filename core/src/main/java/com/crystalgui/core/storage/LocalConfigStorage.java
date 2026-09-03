@@ -1,4 +1,4 @@
-package com.crystalgui.fs;
+package com.crystalgui.core.storage;
 
 import com.crystalgui.core.CrystalGuiCore;
 

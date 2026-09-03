@@ -6,8 +6,8 @@ import com.crystalgui.fs.CgFileError;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.SourceRoots;
-import com.crystalgui.fs.ProjectInfo;
+import com.crystalgui.fs.project.SourceRoots;
+import com.crystalgui.fs.project.ProjectInfo;
 import com.crystalgui.fs.WorkspaceClient;
 import com.crystalgui.core.search.SearchMatch;
 import com.crystalgui.core.search.SearchMatcher;
@@ -260,7 +260,7 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
 
     public java.util.List<String> sourceRootsOf(String projectId) {
         java.util.List<String> declared = projectSourceRoots.get(projectId);
-        return declared == null ? com.crystalgui.fs.SourceRoots.CONVENTION : declared;
+        return declared == null ? com.crystalgui.fs.project.SourceRoots.CONVENTION : declared;
     }
 
     /**

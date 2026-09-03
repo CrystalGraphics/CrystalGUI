@@ -212,6 +212,76 @@ public class LayeringTest {
         assertTrue("the headless side named the tree:\n" + String.join("\n", offences), offences.isEmpty());
     }
 
+    /**
+     * <b>The filesystem's own tiers</b> — {@code plan_fs_rewrite.md} D23, F0.7.
+     *
+     * <p>{@code fs} was five concerns in one directory (N35): a provider tier, a server workspace, a
+     * wire binding, a client and a pile of client-local config. Nothing stopped the server naming the
+     * client or either naming the UI's networking, and both happened —
+     * {@code WorkspaceClient}'s constructor took a {@code ClientUiSession}, so the filesystem depended
+     * on UI networking.</p>
+     *
+     * <p>Read bottom-up: the provider tier knows nothing above it; {@code fs.project} knows the
+     * provider; the server knows both; the protocol is shared; the client may name the protocol and
+     * nothing on the server. Empty packages pass vacuously, which is the plan working — they fill in
+     * at F2, F3 and F4.</p>
+     */
+    @Test
+    public void theFilesystemTiersDoNotReachUpward() throws IOException {
+        Path root = ClassReferences.mainClassesRoot(getClass());
+        List<String> tiers = List.of(
+                "com/crystalgui/fs/project/",
+                "com/crystalgui/fs/server/",
+                "com/crystalgui/fs/protocol/",
+                "com/crystalgui/fs/client/");
+        List<String> offences = new ArrayList<>();
+        for (int i = 0; i < tiers.size(); i++) {
+            offences.addAll(ClassReferences.offences(root, tiers.get(i),
+                    tiers.subList(i + 1, tiers.size())));
+        }
+        assertTrue("a filesystem tier reached upward:\n" + String.join("\n", offences),
+                offences.isEmpty());
+    }
+
+    /**
+     * <b>The filesystem may name the protocol layer of the wire and nothing above it.</b>
+     *
+     * <p>{@code net.mirror}, {@code net.window} and {@code net.projection} are the UI's; a file
+     * service that names one of them is a filesystem that cannot be served without a UI session, which
+     * is exactly what {@code WorkspaceClient} was. {@code net.protocol} and {@code net.wire} are the
+     * transport and are fair game — that is what they are for.</p>
+     */
+    @Test
+    public void theFilesystemNamesNoUiNetworking() throws IOException {
+        Path src = repoRoot().resolve("core/src/main/java/com/crystalgui/fs");
+        List<String> forbidden = List.of(
+                "import com.crystalgui.net.mirror.",
+                "import com.crystalgui.net.window.",
+                "import com.crystalgui.net.projection.",
+                "import com.crystalgui.net.ClientUiSession",
+                "import com.crystalgui.net.ServerUiSession");
+        List<String> offences = new ArrayList<>();
+        if (Files.isDirectory(src)) {
+            try (java.util.stream.Stream<Path> walk = Files.walk(src)) {
+                for (Path f : walk.toList()) {
+                    if (!f.toString().endsWith(".java")) continue;
+                    for (String line : Files.readAllLines(f)) {
+                        for (String bad : forbidden) {
+                            if (line.startsWith(bad)) offences.add(src.relativize(f) + ": " + line.trim());
+                        }
+                    }
+                }
+            }
+        }
+        // KNOWN, and going: WorkspaceClient is deleted at F4 and WorkspaceRpc at F3. Listed by name
+        // rather than by relaxing the rule, so the day either stops appearing here is the day this
+        // entry is deleted -- and a NEW file breaking the rule fails immediately.
+        List<String> expected = List.of("WorkspaceClient.java", "WorkspaceRpc.java");
+        offences.removeIf(offence -> expected.stream().anyMatch(offence::startsWith));
+        assertTrue("the filesystem named the UI's networking:\n" + String.join("\n", offences),
+                offences.isEmpty());
+    }
+
     /** The repository root, found by walking up to the settings file. */
     private static Path repoRoot() {
         for (Path p = ClassReferences.mainClassesRoot(LayeringTest.class); p != null; p = p.getParent()) {

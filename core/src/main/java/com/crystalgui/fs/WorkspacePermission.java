@@ -1,5 +1,7 @@
 package com.crystalgui.fs;
 
+import com.crystalgui.fs.project.WorkspaceProject;
+
 /**
  * The host mod's answer to "may this player do this, here?".
  *

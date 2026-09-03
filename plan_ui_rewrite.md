@@ -1,6 +1,6 @@
 # The UI rewrite — one plan over both audits
 
-**Status: M0 and M1 shipped 2026-08-29. M2 (the mirror) is next.** This knits `plan_ui_network_audit.md` (the wire,
+**Status: M0–M6 shipped (M6 on 2026-09-03). M7 is next, and is interleaved with `plan_fs_rewrite.md`'s F0–F7 into one flow — see M7 §7.A for the order.** This knits `plan_ui_network_audit.md` (the wire,
 sessions, contracts, presentation) and `plan_engine_core_audit.md` (the three-tree engine) into one
 ordered set of milestones. Each audit stays the reference for *why*; this document is the reference
 for *what, in which order, gated by what*. Where the two audits' step lists disagreed on order, this
@@ -704,7 +704,161 @@ chains, `Disposer` as a second ownership tree, `UiThread` as a marker.
 **Accepts:** every surviving behaviour test green; the invariants table pruned of every row that
 no longer describes anything (the count is the metric).
 
-### M7 — Networking completeness on the new engine · M · after: M4, M6
+### M7 — Networking completeness on the new engine · M · after: M4, M6 — **and interleaved with `plan_fs_rewrite.md` F0–F7 into one flow**
+
+> **Fleshed out 2026-09-03**, after M6 closed and the filesystem audit (`plan_fs_rewrite.md`) produced
+> its own milestones F0–F7. The two tracks cross at four points and every crossing puts the fs work
+> first (§7.A below), so M7 is broken into 7.0–7.4 and slotted between the F milestones rather than
+> run after them. **The table in §7.A is the order to implement in.** The paragraph M7 was first
+> written as is kept at the end.
+
+#### 7.A The one flow
+
+| # | Step | Track | Why here |
+|---|---|---|---|
+| 1 | **F0** Foundations and the immediate fixes | fs | `Reply`/`Stream` in `core.async`, the three defect fixes, four cheap server fixes, the packages |
+| 2 | **F1** The document model, headless | fs | Needs no wire; can run beside anything |
+| 3 | **F2** The fs protocol: typed messages, paged answers, operation ids | fs | Settles the paged-answer shape (`fs/list` in pages over `Stream`) |
+| 4 | **7.0** Row streams on the UI wire | M7 | Needs only M2's mirror and F0's `Stream`; written after F2 so `ui/rows` windows and `fs/list` pages are ONE paging idiom on the client, not two |
+| 5 | **F3** The fs server: `fs.server`, `WatchHub`, `WorkspaceBinding` | fs | Per-server `WorkspaceService` on a connection attachment — what `ServerScope.workspace()` (7.1) hands out |
+| 6 | **F4** The fs client: `Workspace` and its facades | fs | What `ClientScope.workspace()` (7.1) hands out |
+| 7 | **F5** The workbench: `EditorService`, one key, session VERSION 7 | fs | The one open lane and the `Resource`-keyed session record that 7.1's networked tab lands on |
+| 8 | **7.1** Workbench citizenship, and the workspace through the scope | M7 | A fourth `EditorInput` kind on F5's lane; restore by key through F5's record; `scope.workspace()` over F3/F4 |
+| 9 | **7.2** Client-local children | M7 | Independent of fs; after 7.1 so its example is a local control on a served tab |
+| 10 | **7.3** The remaining contracts; the provisional markers deleted | M7 | After 7.0 (the three collection widgets) and 7.2 (`ArrayControl`) |
+| 11 | **F6** Documents that are not text; the notes example | fs | No bearing on M7 |
+| 12 | **7.4** Inventories, logs, file lists; the two-process check | M7 | The proof: uses 7.0, 7.1 and F4 together |
+| 13 | **F7 + M8** Probes and record, as one close-out | both | F7's docs step is M8's |
+
+Built the other way round — 7.1 before F5 — the networked tab lands on the viewer lane and the
+`CgPath`-keyed session record, both of which F5 deletes, and is ported a second time. 7.0 before F2
+would mint a second paging shape. Those two constraints are the whole reason the tracks interleave.
+
+#### 7.0 — Row streams on the UI wire · M · after: M2, F0, F2
+
+**The mechanism the census has called "blocked on M7" since M1.** A list's contract is its rows, and
+rows have to be a stream: the server holds the whole collection and describes only the **window** a
+viewer is looking at; the client asks for `rows{from,to}` as it scrolls; rows arrive as ordinary
+described subtrees keyed by a stable row key, so a row may hold a real `Button` that reports like any
+other and an insert above the window shifts nothing (LiveView streams, RN `FlatList`, VS Code's tree
+data provider — the audit's §4.4).
+
+- **Server side.** `RowSource<T>`: `count()`, `rows(from, to)`, `keyOf(item)`, a change signal.
+  `ServerScope.stream(list, source, create, apply)` beside `projectEach` — the row template is
+  `create`, the per-run write is `apply`, as `Projections.each` already has them. The scope keeps
+  **one window per viewer** and realises the UNION of viewer windows plus overscan as the list's
+  described children; the mirror ships them as the inserts and removes they are. Rows are structure
+  and structure goes to every viewer, so two viewers scrolled apart cost the union and nothing more —
+  the one multi-viewer cost, bounded by viewers × window, and capped under `UiLimits`.
+- **Wire.** `ui/rows{nid, from, to}` as a request on the interactive lane, debounced through
+  `RatePolicy`. `COUNT` travels as state. A window whose `to` reaches `count` is **following**: the
+  server slides it as rows append, which is what a log wants and what makes "scroll to the bottom and
+  watch" cost nothing per line.
+- **Client side.** `ListView` gains a `RemoteRows` model — an `ObservableList` whose size is the served
+  count and whose `get(i)` answers the described row for `i` or a placeholder of `rowHeight` while the
+  window is in flight; every row carries its index as an attribute, so a row received for another
+  viewer's window is kept and not realised. `SELECTION` is by **key**, never index. Focus index stays
+  local.
+- **`TableView`**: columns (titles, widths, sort) as state, cells as row children, `SORT{column}` as an
+  event the row source answers. **`TreeView`**: expansion is document state for a served tree, so the
+  server holds it, `EXPAND{key}` is an event, and the row source is the flattened visible-row list
+  carrying depth and `hasChildren` — the client draws it with the indent renderer it already has.
+
+**Ships:** the Machine example's inventory as a streamed `TableView`, in game.
+**Deletes:** the `ListView`, `TableView` and `TreeView` markers in `WidgetCensus` tier 4.
+**Accepts:** `aTenThousandRowListShipsOnlyTheWindow` (count 10,000; described elements ≤ window +
+overscan; bytes bounded); `scrollingSlidesTheWindowAndReleasesRowsBehindIt`;
+`anInsertAboveTheWindowShiftsNoRow`; `selectionIsByKeyAndSurvivesAReorder`;
+`twoViewersScrolledApartCostTheUnionAndNothingMore`; `aFollowedTailReceivesAppendsWithoutAsking`;
+`aTreeExpandIsAServerEventAndTheRowsFollow`; `aRowButtonReportsLikeAnyOtherButton`.
+
+#### 7.1 — Workbench citizenship, and the workspace through the scope · M · after: 7.0, F3, F4, F5
+
+**K5 closed.** A server can open a panel *as an editor tab* or *as a tool window*, and the workbench's
+own dock, tear-out and session machinery applies to it — VS Code's `WebviewPanel`/`WebviewView`, the
+port the audit named.
+
+- **Presentation is a HINT on the open.** `ServerWindows.open(type, model, Presentation)` with
+  `WINDOW | EDITOR_TAB | TOOL_WINDOW(region)`, carried on `ui/openWindow` and read through
+  `ClientWindowContext.presentation()`. A host with no workbench mounts a window regardless; the
+  server said what it would like, the client says what it has.
+- **The mount routes.** The workbench installs a `WindowMount` that sends `EDITOR_TAB` to
+  `EditorService.open(EditorInput.networked(context))` — the fourth input kind on F5's one lane, after
+  file, library class and generated source — and `TOOL_WINDOW` to a `ViewContainer` view, and `WINDOW`
+  to the desktop as today. `contentReplaced` swaps the tab's content; `closedByServer` closes the tab;
+  the tab's close runs `mayClose` and reports `userClosed`; tearing the tab into a `DockWindow` moves
+  the frame and touches the session not at all.
+- **Restore by key.** A networked tab is a `DockPanelRef(typeId = the UiType id, {key, presentation})`
+  in the VERSION 7 record. On the next connection the workbench re-asks the server through M4's
+  `ClientWindows.requestOpen(type, {key})`; the tab shows F5's `LOADING` state until the window
+  arrives, and a refusal drops the tab. A ref whose type has no manifest entry is dropped at read.
+- **The workspace through the scope.** `ClientScope.workspace()` answers F4's `Workspace` and
+  `ServerScope.workspace()` answers F3's `WorkspaceService`, both from the connection attachment, the
+  viewer mapped to the actor. A panel that shows files reads them through the fs protocol and never
+  re-ships a listing through the mirror. This is the crossing `plan_ui_host.md` deferred as "a
+  client-side scope registry is additive later", and it is one method on each scope.
+
+**Ships:** the Machine example openable as an editor tab and as a tool window, restored by key on
+rejoin.
+**Deletes:** nothing; closes K5.
+**Accepts:** `aServerPanelOpensAsAnEditorTab`; `aServerPanelOpensAsAToolWindow`;
+`aHostWithNoWorkbenchMountsAWindowRegardless`; `tearingOutANetworkedTabKeepsItsSession`;
+`aNetworkedTabIsRestoredByKeyOnTheNextConnection`; `aRefusedRestoreDropsTheTab`;
+`aPanelListsFilesThroughItsScopeNotTheMirror`.
+
+#### 7.2 — Client-local children · S · after: 7.1
+
+`client(io)` runs over every build of the tree and its javadoc already says to write it as though
+nothing had been set up before. What it cannot do is *add* anything: a child a panel appends locally is
+in a described child list, so the next `insert` op lands one index off, and `Projections.each`'s
+"nothing else may add children to `into`" is a rule with no legal way to obey it.
+
+- `ClientScope.addLocal(parent, child)` is the one door: the child is owned by the panel instance, is
+  never a **described** child (`describedChildren()` is what the mirror reads and indexes by), is
+  re-added by `client(io)` on a re-describe like everything else there, and is invisible to the
+  integrity count, which already sees described elements only.
+- A local child follows served state through the served widget's own signal — a state delta runs the
+  ordinary setter, which fires the ordinary signal — so no binding API is added.
+
+**Ships:** a local copy-to-clipboard control on the log's served rows, needing no round trip.
+**Accepts:** `aLocalChildSurvivesAReDescribe`; `aLocalChildNeverShiftsADescribedIndex`;
+`aLocalChildIsNotCountedByTheIntegrityCheck`; `aLocalCopyButtonOnAServedRowNeedsNoRoundTrip`.
+
+#### 7.3 — The remaining contracts; the provisional markers deleted · S · after: 7.0, 7.2
+
+- `ArrayControl` gets its contract: a list of values typed by its descriptor, which is a plain state
+  slot now that a list has a wire form.
+- Every tier 1–3 reason in `WidgetCensus` is re-read against the new engine. The verdicts expected:
+  view state stays local (`Scroller`, `CanvasView`'s pan and zoom); derived stays local (`Configurator`
+  family, `SymbolIcon`, the window pictures); the shell stays local; `ProjectFileTree` stays local and
+  7.1's `scope.workspace()` is its honest wire form; `DockBannerBar` stays local because `notifyUser`
+  is already the server's notice. A reason that no longer holds is rewritten, not deleted.
+- Tier 4 — *blocked on a mechanism that has a name* — is deleted whole.
+
+**Deletes:** `WidgetCensus` tier 4 and the four markers in it.
+**Accepts:** the coverage test green with tier 4 gone; `anArrayControlRoundTrips`.
+
+#### 7.4 — Inventories, logs and file lists; the two-process check · S · after: 7.1, 7.2, F4
+
+The three things the M7 row always promised, in the Machine example: the inventory (a streamed
+`TableView` with a "take" button per row), a log (a streamed `ListView` following its tail), and a
+file list read through `io.workspace().files().list(...)` into a local list — shown side by side so
+the doc can say which shape is for what. Verified over a socket with `runClient -PcgJoin` and two
+clients scrolled apart, and on the loopback probe for the numbers.
+
+**Ships:** the three panels, in game, over a real socket.
+**Accepts:** the M7 row's own two — a 10,000-row list over loopback with bounded traffic; a networked
+panel docked, undocked and restored across a reconnect — plus
+`aLogThatGrowsWhileFollowedShipsOnlyTheNewRows`, measured with two viewers.
+
+#### What M7 does not do
+
+Per-viewer **structure** (rows are structure, so a window is per viewer and its rows are shared);
+a text filter on a row source (a `SORT` is one event the source answers; a filter is a search feature
+and waits for one); `TextEditor` or `GraphView` on the wire (documents are the fs plan's, and the
+two-formats objection in the census stands); the shell chrome; `mc1201` (D10); a display list.
+
+#### The original M7 specification
 
 Virtualised collections on the wire (`ListView`/`TreeView`/`TableView` rows as a stream with
 `rows{from,to}`), workbench citizenship (a `DockPanelDescriptor` kind mounting a networked root into a
@@ -717,9 +871,9 @@ window.
 **Accepts:** a 10,000-row list over loopback with bounded traffic; a networked panel docked, undocked,
 restored across a reconnect.
 
-### M8 — Hardening and docs · S · after: M7
+### M8 — Hardening and docs · S · after: M7, and F7 of `plan_fs_rewrite.md`
 
-Two-viewer fixtures for every server-side feature, `clientSmoke` (every contracted widget round-trips
+One close-out with F7: its two probes and its docs step land here. Two-viewer fixtures for every server-side feature, `clientSmoke` (every contracted widget round-trips
 over loopback), the networking primer and `CGUI_SERVER_AND_SERIALIZATION.md` rewritten to the new
 protocol, `AGENTS.md`'s invariants table reduced to what still holds, `plan_ui_host.md` closed out.
 
@@ -731,11 +885,13 @@ protocol, `AGENTS.md`'s invariants table reduced to what still holds, `plan_ui_h
 D1–D7 ──► M0 (S1, S2, seam) ──► M1 (contracts) ──► M2 (mirror) ──► M3 (events, authoring) ──► M4 (windows, sheets, limits)
                   │                                                                                     │
                   └──────────────────────────► M5 (engine core) ──► M6 (port) ──────────────────────────┴──► M7 ──► M8
+                                                                                                             ▲
+   plan_fs_rewrite.md:  F0 ──► F1 ──► F2 ──► [7.0] ──► F3 ──► F4 ──► F5 ──► [7.1] ──► [7.2] ──► [7.3] ──► F6 ──► [7.4] ──► F7+M8
 ```
 
-M1–M4 run on the **old** engine through the seam and ship live fixes early. M5 starts as soon as the
-spikes pass and can proceed in parallel with M2–M4 (different packages by D2). M6 is the single
-cutover; M7 needs both lines.
+M1–M4 ran on the **old** engine through the seam and shipped live fixes early. M5 ran in parallel with
+M2–M4 (different packages by D2). M6 was the single cutover. M7 needs both lines and is interleaved
+with the filesystem track: the bracketed steps are M7's sub-milestones, in the one order §7.A gives.
 
 ---
 
@@ -752,8 +908,8 @@ names it.
 | M3 | `UiEventKinds`, string-kind `on`, viewer-less `UiEventContext`, `bound()`, `layout(M)` |
 | M4 | global sheet application, `contentReplaced`, VERSION-only skew handling |
 | M6 | old `ui/` core, `TopLayer`, `mirrored`, the internal flag, `UIFrameTicker` interface, engine `importantPipeline` writes, `WindowChrome` flag juggling, promotion special cases, the second coordinate chain, `Disposer` as a tree, `UiThread` marker |
-| M7 | provisional `LocalOnly` markers |
-| M8 | invariants rows that describe nothing |
+| M7 | `WidgetCensus` tier 4 whole — the `ListView`, `TableView`, `TreeView` and `ArrayControl` markers (7.0, 7.3); K5 closed (7.1). The fs track's own deletions are ledgered per milestone in `plan_fs_rewrite.md` §9 |
+| M8 | invariants rows that describe nothing; `plan_ui_host.md` closed out; F7's docs step |
 
 ---
 
