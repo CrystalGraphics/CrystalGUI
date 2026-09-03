@@ -21,14 +21,14 @@ So the split is:
 
 ```
 SERVER                                          CLIENT
-build a UIElement tree  ──── description ────►  rebuild the same tree
+build a UINode tree  ──── description ────►  rebuild the same tree
 hold session state      ◄──── events ─────────  user clicks, types, drags
 call client methods     ◄───── RPC ──────────►  call server methods
 ```
 
 Two consequences shape everything below:
 
-1. **The tree must be describable without being renderable.** Hence codecs over `UIElement`, and hence
+1. **The tree must be describable without being renderable.** Hence codecs over `UINode`, and hence
    the rule that anything on a server path may not touch `CgIO`, fonts or GL.
 2. **Descriptions repeat.** The same GUI opens hundreds of times. Hence content-addressing: the open
    packet carries a *hash*, and the bytes only move if the client has never seen them.
@@ -83,7 +83,7 @@ encode to the same bytes twice, which is what makes hashing work at all (§4).
 `serialization/StateMap.java`
 
 A small typed key/value bag over any `DynamicOps`. Widgets read and write it through two protected
-hooks on `UIElement`:
+hooks on `UINode`:
 
 ```java
 @Override protected <T> void writeState(StateMap<T> out) {
@@ -101,14 +101,14 @@ map, which then gets dropped entirely. Every getter takes a fallback, so a field
 against an older sender without a version bump.
 
 Seven widgets implement these — `Button`, `Checkbox`, `Switch`, `Slider`, `TextField`, `UIText`,
-`Tab` — plus `UIElement` itself for the generic parts.
+`Tab` — plus `UINode` itself for the generic parts.
 
-## 3. Descriptions — `UIDescriptionCodec`
+## 3. Descriptions — `UINodeMirror`
 
-`serialization/UIDescriptionCodec.java`, `ui/ElementRegistry.java`
+`serialization/UINodeMirror.java`, `ui/UINodeRegistry.java`
 
-Encodes a whole `UIElement` subtree: tag, id, classes, flags, inline styles, per-widget state,
-children. The tag comes from **`ElementRegistry`**, which maps `"button" ↔ Button.class` plus a
+Encodes a whole `UINode` subtree: tag, id, classes, flags, inline styles, per-widget state,
+children. The tag comes from **`UINodeRegistry`**, which maps `"button" ↔ Button.class` plus a
 no-arg factory in both directions (`tagOf`, `tags()`, `bootstrapBuiltins()` — idempotent and
 auto-called by every lookup). A widget with no registered tag cannot be serialized at all.
 
@@ -151,11 +151,11 @@ however large the tree.
 
 ## 5. Network ids — allocated once, then owned
 
-`ui/dom/ElementTreeSource.java`
+`ui/dom/UINodeTreeSource.java`
 
 ```java
 int nid = ids.idOf(element);       // allocated on first sight, kept for the life of the source
-UIElement el = ids.byId(nid);      // a map lookup
+UINode el = ids.byId(nid);      // a map lookup
 ```
 
 An id lives in a table the tree source owns, keyed by element identity. **It survives a sibling
@@ -170,7 +170,7 @@ answer different questions:
 | **Pristine description** (`open()`) | none — both sides run the same document-order walk | Nothing sent is what makes a description **content-addressed**: two windows showing the same thing hash the same, so re-opening costs one small packet however large the tree |
 | **Live description** (a late viewer joining a reshaped window) | each element carries `nid` | After the first structural change a walk no longer reproduces the numbering the existing viewers hold, so a newcomer has to be told it — otherwise every id it derived would name a different element |
 
-`UIDescriptionCodec.encodeLive`/`decodeLive` are the second form. A live description hashes to
+`UINodeMirror.encodeLive`/`decodeLive` are the second form. A live description hashes to
 something no pristine one matches, which is correct rather than unfortunate: a reshaped window was
 never going to share another window's cache entry.
 

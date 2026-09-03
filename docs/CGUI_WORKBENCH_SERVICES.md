@@ -387,12 +387,12 @@ what the test suite caught when `ExplorerCommands` (which closes over a `Workben
 
 | Global today | Still per-window, because they capture an owner |
 |---|---|
-| `UndoCommands`, `GraphCommands`, `DockCommands`, `EditorCommands`, `ShaderGraphEditor`, `BlackboardPanel` | `ExplorerCommands` (`Workbench`), `CrystalEditorCommands` (`CrystalEditor`, `UIWindow`), `ChromeCommands` (`UIWindow`) |
+| `UndoCommands`, `GraphCommands`, `DockCommands`, `EditorCommands`, `ShaderGraphEditor`, `BlackboardPanel` | `ExplorerCommands` (`Workbench`), `CrystalEditorCommands` (`CrystalEditor`, `UIDocument`), `ChromeCommands` (`UIDocument`) |
 
 The three on the right migrate once there are data keys for a workbench, an editor and a window — the
 same move that turned `GraphCommands.graphFor` from an `instanceof` walk into a key.
 
-### A widget's commands arrive with the widget — two hooks on `UIElement`
+### A widget's commands arrive with the widget — two hooks on `UINode`
 
 ```java
 class GraphView extends CanvasView {
@@ -410,7 +410,7 @@ The split is load-bearing. A command is registered once and resolves its subject
 **binding on an element** is the only thing that scopes a chord to a widget, so it must be on each one.
 `F` frames a graph and `Mod+D` adds a caret in an editor precisely because those live on the elements.
 
-Both run from `UIElement`'s constructor, so **subclass fields do not exist yet** — the classic Java
+Both run from `UINode`'s constructor, so **subclass fields do not exist yet** — the classic Java
 hazard, deliberately embraced. Registration happens once per class, so a captured `this` would pin every
 later invocation to whichever instance was built first; the timing makes that hard to write by accident.
 
@@ -497,8 +497,8 @@ it from the context instead:
 | Was captured | Now |
 |---|---|
 | `ExplorerCommands(Workbench)` | `Workbench.WORKBENCH` |
-| `CrystalEditorCommands(CrystalEditor, UIWindow)` | `CrystalEditor.CRYSTAL_EDITOR` + `UiDataKeys.WINDOW` |
-| `ChromeCommands(UIWindow)` | `UiDataKeys.WINDOW` |
+| `CrystalEditorCommands(CrystalEditor, UIDocument)` | `CrystalEditor.CRYSTAL_EDITOR` + `UiDataKeys.WINDOW` |
+| `ChromeCommands(UIDocument)` | `UiDataKeys.WINDOW` |
 
 This is strictly better than capturing, not merely equivalent: with two windows open the palette now opens
 in the one you pressed the key in, and Save Layout saves the right one. The captured version could not
@@ -512,11 +512,11 @@ frame* behind a flag, for one reason — registration needed a window to reach a
 
 Two things fell out of that work.
 
-`UIElement.onWindowChanged(previous, current)` is the hook whose absence caused those polls. Anything an
+`UINode.onWindowChanged(previous, current)` is the hook whose absence caused those polls. Anything an
 element must do *once it has a window* goes here. Both arguments are given because detach is the half that
 leaks.
 
-`UIWindow.addDataProvider(...)` is IntelliJ's frame-level `DataProvider`, consulted by `DataContext`
+`UIDocument.addDataProvider(...)` is IntelliJ's frame-level `DataProvider`, consulted by `DataContext`
 **after** the element walk. It exists because the walk goes *outward*, so it only finds ancestors — and a
 `Workbench` is a descendant of the root, alongside everything else. With nothing focused, which is how a
 window looks the moment it opens, there is no workbench on the path at all. `Ctrl+P` and `F5` are precisely
@@ -595,7 +595,7 @@ at all. A field is discoverable by autocomplete and impossible to publish to fro
 | `onDidLoadListing` | `WorkspaceTreeSource` | `WorkbenchSession.tick`'s per-frame restore retry |
 | `onDidChangeDirty` | `OpenDocuments` | `encode()` on every open document, every frame |
 | `onDidChange(Runnable)` | `FileDocument` (SPI) | — the source the above is built from |
-| `onDidChangeFocus` | `UIInputHandler` | the Inspector's application-supplied subject — see below |
+| `onDidChangeFocus` | `Input` | the Inspector's application-supplied subject — see below |
 
 **`onDidChangeFocus` is the one that unlocked the Inspector.** `FocusEvent.Focus`/`Blur` are dispatched
 *at the element* and bubble, so they answer "did I gain focus"; they cannot answer "who holds focus now"
@@ -732,11 +732,11 @@ assertion or a single-label host wants.
 **Alignment is fixed at registration.** Moving an entry between ends means disposing the handle and
 registering a new one, which is VS Code's arrangement too — an accessor names a place as well as an entry.
 The view's removal pass therefore runs before its placement pass, or an element that changed ends would
-briefly be a child of both groups and `addChild` throws on a second parent.
+briefly be a child of both groups and `append` throws on a second parent.
 
 ### The view is `StatusBarView`, and it renders rather than computes
 
-`ui.elements.chrome.StatusBarView` — the model/view split is in the names, because two classes called
+`widget.chrome.StatusBarView` — the model/view split is in the names, because two classes called
 `StatusBar` in two packages compile and read as a mistake forever after. `Workbench` mounts one below its
 content, where the column layout alone puts it at the bottom.
 
@@ -744,7 +744,7 @@ content, where the column layout alone puts it at the bottom.
 |---|---|
 | It shows **only** what a writer keyed | Anything it computed itself would be a fact with no owner, and the keying would be pointless |
 | Slots are updated **in place**, never rebuilt | Status items are written from per-frame paths, so a rebuild per change discards and recreates the tree continuously — invisible in any screenshot. The engine's standing "never rebuild what is being clicked on" rule |
-| The removal pass runs **before** placement | An id that changed ends would otherwise be a child of both groups for an instant, and `addChild` throws on a second parent |
+| The removal pass runs **before** placement | An id that changed ends would otherwise be a child of both groups for an instant, and `append` throws on a second parent |
 | A spacer takes the slack, not `margin-left: auto` | Auto margins *share* free space between every auto margin in the row — the trap the activity bar's groups already cost a session |
 | It subscribes only while attached | `StatusBar` is static and outlives every view of it, so a view that never unsubscribed keeps itself and its elements alive for the rest of the process |
 | A slot's tooltip is attached **once** and re-texted | `Tooltip.attach` adds a hover listener pair per call and `detach` leaves them inert rather than removing them, so attach/detach cycling accumulates listeners — and the compile summary rewrites its tooltip on every recompile |
@@ -901,7 +901,7 @@ unambiguous — a derived resource always has an origin, a bare path never does.
 
 ## Panes and placement
 
-`com.crystalgui.ui.elements.dock` — `DockInput`, `DockPane`, `DockPaneProvider`, `DockPlacement`.
+`com.crystalgui.widget.dock` — `DockInput`, `DockPane`, `DockPaneProvider`, `DockPlacement`.
 
 ### `DockInput` — the runtime form of what a tab shows
 
@@ -962,7 +962,7 @@ Until placement is a value, "open this next to me" is not a request a widget can
 reaching through the dock and the layout to ask what the dock knows about itself.
 
 - **`groupOf` walks `getParent()`**, which returns the real parent regardless of how a child was added. A
-  panel's content is often an internal child of a composite, so skipping internal parents would answer
+  panel's content is often an shadow part of a composite, so skipping internal parents would answer
   null for exactly the widgets built properly.
 - **`resolve` returning null is ordinary**: `with()` may name an element outside any dock, `side()` names
   a split that does not exist yet. Opening reads null as "make one"; asking reads it as "nowhere".
@@ -1001,10 +1001,10 @@ overload and no way to ask.** That is why VS Code's is `openEditor(input, option
   panel *types* over one path, which is what the release guard checks for.
 - `open` returns the leaf it landed in, so a caller acts on it rather than searching for it again.
 
-## `UIElement.setOnlyChild`
+## `UINode.setOnlyChild`
 
 **"Show one of several things in this slot", done correctly.** Not
-`clearAllChildren().addChild(wanted)` — that skips internal children *by design*, and a composite widget
+`clearAllChildren().append(wanted)` — that skips shadow parts *by design*, and a composite widget
 routinely marks itself internal, so the obvious pair leaves the outgoing child in place and stacks the
 incoming one underneath. That was "two inspectors in one tab", and it read as a paint bug.
 
@@ -1017,7 +1017,7 @@ own statement about its parts, and it is right. The host was what assumed one ki
 
 The service layer under the two rails. Everything here is reached from `Workbench` —
 `toolWindowManager()`, `stripe(rail)`, `stripes()`, `dropOverlay()` — and nothing in it needs a
-`UIWindow`, which is why the geometry halves are testable headlessly.
+`UIDocument`, which is why the geometry halves are testable headlessly.
 
 ### Placement is `(region, side)`, and nothing else
 
@@ -1063,12 +1063,12 @@ target-phase only — hears nothing at all.
 
 ### Two widgets that came out of this, and are not workbench-specific
 
-- **`DragGhost`** (`ui.elements`) — the capsule under the cursor. `parkIn(host)` once, `follow(window,
-  icon, text)` per drag. It exists because `UIDragController.setGhost` takes any element by design, and
+- **`DragGhost`** (`widget`) — the capsule under the cursor. `parkIn(host)` once, `follow(window,
+  icon, text)` per drag. It exists because `Drag.setGhost` takes any element by design, and
   three rules are invisible in that signature: it must be in the tree before it can be promoted, it must
   be `absolute`/`none` **from Java at IMPORTANT at construction** (the first layout runs before any rule
   matches, and `UIText` latches its self-sizing there), and it must be registered per drag.
-- **`InsertionMarker`** (`ui.elements`) — the gap showing where a drop lands. `OVERLAY` floats over the
+- **`InsertionMarker`** (`widget`) — the gap showing where a drop lands. `OVERLAY` floats over the
   list; `IN_FLOW` opens a real gap and everything after it shifts. `DockGroup` uses the first because its
   caret is not a sibling of the tabs; `StripeView` uses the second. It owns the two rules every reorder
   needs: the first item whose **midpoint** is past the pointer, and an index range of `[0, size]` so the
@@ -1083,7 +1083,7 @@ frozen DOM would restore whatever widgets happened to exist when it was written,
 rebuilds its own from its model on each open.
 
 So a widget's own geometry had nowhere to live. `SessionState` is where — a bag of `writeState`
-payloads keyed by element id, held by the `UIWindow` and persisted by `WorkbenchSession` under a
+payloads keyed by element id, held by the `UIDocument` and persisted by `WorkbenchSession` under a
 `widgets` key.
 
 ```java
@@ -1101,14 +1101,14 @@ script rail and its transcript is a real preference, and without this it snapped
 > — and a way to name one — `setId`. A second, parallel mechanism made every panel re-implement
 > persistence for widgets that could already describe themselves, and it could only ever reach a
 > panel's **root**: a divider three levels down had to be hand-proxied out through the panel and back.
-> `SplitView` now answers for its own weights, which `UIDescriptionCodec` gets for free.
+> `SplitView` now answers for its own weights, which `UINodeMirror` gets for free.
 
 | Concern | Where it already lived |
 |---|---|
-| What a widget wants preserved | `UIElement.writeState` / `readState` |
-| Which widget it is | `UIElement.setId` |
-| When a widget appears | `UIWindow.registerElement` |
-| When it goes away | `UIWindow.unregisterElement` |
+| What a widget wants preserved | `UINode.writeState` / `readState` |
+| Which widget it is | `UINode.setId` |
+| When a widget appears | `UIDocument.registerElement` |
+| When it goes away | `UIDocument.unregisterElement` |
 
 The only new parts are the bag and one boolean.
 
@@ -1228,7 +1228,7 @@ A contributor declares *what* it can describe and *how to read it*. Everything e
 
 | Boilerplate | Who does it |
 |---|---|
-| Deciding what is being inspected | `Inspector`, from `UIInputHandler.onDidChangeFocus` |
+| Deciding what is being inspected | `Inspector`, from `Input.onDidChangeFocus` |
 | Ignoring focus that lands **inside the inspector** | `Inspector` — asking to see something must not change what is shown |
 | Latching, so losing focus does not blank the panel | `Inspector` |
 | Keeping the last subject when **nothing can describe** the new one | `Inspector` |
@@ -1397,8 +1397,8 @@ document.diagnostics().changeOne(services.id(), compiled.problems());
 `HeaderContributor` — a view offers controls; the container decides placement.
 
 ```java
-public class ProblemsPanel extends UIElement implements HeaderContributor {
-    @Override public UIElement headerContent() { return tabs; }   // asked ONCE, when mounted
+public class ProblemsPanel extends UINode implements HeaderContributor {
+    @Override public UINode headerContent() { return tabs; }   // asked ONCE, when mounted
 }
 ```
 
@@ -1414,7 +1414,7 @@ rather than built per call, or the container ends up holding a previous one.
 
 **A menu is a query, not a list.** `MenuId` names a place a menu is drawn; a command declares that it
 belongs there; a renderer asks the registry what is there *right now*. Nothing enumerates menu items —
-which is what lets `com.crystalgui.ui.elements.graph` own the entire Graph menu without the shell
+which is what lets `com.crystalgui.widget.graph` own the entire Graph menu without the shell
 importing it, and what makes `MainMenuCommands` 70 lines that declare two commands.
 
 ### Putting an item in a menu
@@ -1524,7 +1524,7 @@ release.
 ```java
 MenuBarView bar = new MenuBarView(CommandRegistry.global());
 MainMenuCommands.install(bar);      // the six standard titles, or call addMenu yourself
-workbench.addInternalChild(bar);    // above content; the workbench is a column
+workbench.appendStructural(bar);    // above content; the workbench is a column
 ```
 
 | | |
