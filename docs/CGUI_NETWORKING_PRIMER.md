@@ -61,7 +61,7 @@ below it.
       ┌──────────────────────────────────────────────────────────────┐
   8   │  ServerWindows / ClientWindows    ServerWindow, WindowMount    │  a window's LIFETIME
       ├──────────────────────────────────────────────────────────────┤
-  7   │  ServerUiSession / ClientUiSession   WorkspaceRpc / Client   │  what a message MEANS
+  7   │  ServerUiSession / ClientUiSession   WorkspaceBinding / Workspace  │  what a message MEANS
       │  RemoteCommands                       (the "tenants")        │
       ├──────────────────────────────────────────────────────────────┤
   6   │  UiWindowMux                    (only the UI needs this)     │  which WINDOW
@@ -327,10 +327,10 @@ and a large payload can be routed — or refused — without being parsed.
 answer.
 
 ```java
-router.onRequest("fs.read",       (payload, respond) -> respond.ok(readFile(payload)));
+router.onRequest("fs/read",       (payload, respond) -> respond.ok(readFile(payload)));
 router.onNotify ("ui/event",       payload -> dispatchToWidget(payload));
 
-router.request  ("fs.read", path, onOk, onError);
+router.request  ("fs/read", path, onOk, onError);
 router.notify   ("ui/stateDelta", delta);
 ```
 
@@ -406,7 +406,8 @@ line opens, everyone on the sheet gets wired into it.
 ```java
 // ONCE, at mod init -- sided at the call site, and a lambda:
 Protocols.server("workspace", connection ->
-        new WorkspaceRpc<>(service, actorFor(connection.peer())).installOn(connection::onRequest));
+        new WorkspaceBinding<>(service, hub, actorFor(connection.peer()), connection.peer(),
+                connection.ops()).installOn(connection));
 
 // PER CONNECTION, wherever a peer appears:
 ProtocolConnection<Object> connection =
@@ -423,10 +424,10 @@ subsystem actually wired".
 
 `ui/*`, `command/*`, `script/*` — LSP's `textDocument/hover` convention.
 
-> ⚠️ **An honest inconsistency.** The workspace uses **`fs.` with a dot** — `fs.read`, `fs.write`,
-> `fs.manifest` — not `workspace/`. The `Protocols` javadoc shows `workspace/read` in its example,
-> and no such method exists. It's cosmetic (nothing parses the separator), but if you're grepping
-> for the workspace vocabulary, grep `fs.`.
+> The workspace is **`fs/`** — `fs/read`, `fs/write`, `fs/list` — and reads the same way `ui/` does.
+> It used to be `fs.` with a dot, which was an honest inconsistency and is now gone; the `Protocols`
+> javadoc's `workspace/read` example names a method that has never existed and is the last trace of a
+> third spelling. Nothing parses the separator, so this was only ever a grepping problem.
 
 ---
 
@@ -583,14 +584,9 @@ of ids.** A contract is: *a name, a payload shape, a handler on one side, a call
 ### 1. Put the names in one file
 
 ```java
-public final class WorkspaceProtocol {
-    public static final String READ = "fs.read";
-
-    public static final String PATH          = "path";
-    public static final String CONTENT       = "content";
-    public static final String ETAG          = "etag";
-    public static final String IF_NONE_MATCH = "ifNoneMatch";
-    public static final String UNCHANGED     = "unchanged";
+public final class FsMethods {
+    public static final String READ = "fs/read";
+    public static final String WRITE = "fs/write";
 }
 ```
 
@@ -598,27 +594,43 @@ public final class WorkspaceProtocol {
 > halves each type `"etag"` by hand is one typo away from a silent mismatch that presents as a
 > *conflict loop* — which looks like a filesystem bug, not a networking one.
 
-### 2. Server side — register a handler
+### 2. Put each payload in one record, with a codec
 
 ```java
-registry.register(WorkspaceProtocol.READ, (args, respond) -> {
-    CgPath target = CgPath.parse(args.getString(WorkspaceProtocol.PATH, ""));
+public record ReadRequest(String path, String ifNoneMatch) { }
+
+public record ReadResponse(String etag, byte[] content, boolean unchanged,
+                           String transfer, long size) { }
+
+public static Codec<ReadRequest> readRequest() { … }
+```
+
+> **This is the step the workspace added and `ui/*` deliberately did not.** Keys written by hand on
+> both sides are the same typo risk one level down, and a record plus a codec makes a field written on
+> one side provably the field read on the other. `ui/*` stays untyped because it is an **open**
+> vocabulary a mod extends — a codec per mod message is a registration this stack exists to remove.
+
+### 3. Server side — register a handler
+
+```java
+registry.register(FsMethods.READ, (args, respond) -> {
+    ReadRequest ask = FsMessages.readRequest().decode(ops, args.encode());
     ...
-    respond.ok(new StateMap<T>(args.ops())
-            .putBytes(WorkspaceProtocol.CONTENT, content.content())
-            .putString(WorkspaceProtocol.ETAG,   content.etag()));
+    respond.ok(FsMessages.readResponse().encode(ops, answer));
 });
 ```
 
-### 3. Client side — call it
+### 4. Client side — call it, and get a `Reply`
 
 ```java
-StateMap<T> ask = new StateMap<>(ops).putString(WorkspaceProtocol.PATH, path.toString());
-
-call(WorkspaceProtocol.READ, ask,
-        result -> { /* the response's StateMap */ },
-        error  -> { /* a String code — see below */ });
+workspace.files().read(resource)
+        .then(content -> { … })
+        .onError(failure -> { … });     // a code and a detail, never a String alone
 ```
+
+> **`Reply<T>` is the one async shape**, and its continuation runs on the **frame thread** — which is
+> what lets a `then` touch the tree without a hop. A `Stream<T>` is its many-answers twin, for a paged
+> listing or a chunked read.
 
 That's the whole contract. **No fourth file to edit.**
 
@@ -638,14 +650,14 @@ dropped entirely.
 
 ---
 
-## 13. A real contract, both halves side by side — `fs.read`
+## 13. A real contract, both halves side by side — `fs/read`
 
 This one is worth reading in full because it shows every technique at once.
 
-### The server half (`WorkspaceRpc`)
+### The server half (`WorkspaceBinding`)
 
 ```java
-registry.register(WorkspaceProtocol.READ, (args, respond) -> guard(respond, () -> {
+registry.register(FsMethods.READ, (args, respond) -> guard(respond, () -> {
     CgPath target = path(args);
 
     // 1. STAT FIRST — enforces the cap before an allocation, and decides inline-vs-chunked
@@ -677,25 +689,19 @@ registry.register(WorkspaceProtocol.READ, (args, respond) -> guard(respond, () -
 }));
 ```
 
-### The client half (`WorkspaceClient`)
+### The client half (`FileOperations`)
 
 ```java
-public void read(CgPath path, Consumer<Document> onResult, Consumer<Failure> onError,
-                 Progress progress) {
-    StateMap<T> ask = args().putString(PATH, path.toString());
+public Reply<FileContent> read(Resource file) {
+    // THE CONDITION, from the etag this client already holds. Costs the server a stat and no read.
+    ReadRequest ask = new ReadRequest(file.toString(), etags.getOrDefault(file, ""));
 
-    byte[] cached = cachedContent.get(path);
-    String held   = etags.get(path);
-    if (cached != null && held != null) ask.putString(IF_NONE_MATCH, held);   // the condition
-
-    call(WorkspaceProtocol.READ, ask,
-        result -> {
-            String etag = result.getString(ETAG, "");
-            if (result.getBool(UNCHANGED, false)) { /* serve from cache */ }
-            else if (!result.getBool(CHUNKED, false)) { /* it came inline */ }
-            else { /* pull chunks with fs.readChunk */ }
-        },
-        onError);
+    return call(FsMethods.READ, FsMessages.readRequest(), ask, FsMessages.readResponse())
+            .map(answer -> {
+                if (answer.unchanged()) return cached(file);          // served from cache
+                if (answer.transfer().isEmpty()) return inline(answer);
+                return pull(answer.transfer(), answer.size());        // chunks, client-driven
+            });
 }
 ```
 
@@ -717,18 +723,22 @@ public void read(CgPath path, Consumer<Document> onResult, Consumer<Failure> onE
 
 ```java
 // server
-catch (CgFileSystemException e)      -> respond.fail(e.error().name());     // e.g. NOT_FOUND
-catch (WorkspaceConflictException e) -> respond.fail("CONFLICT")            // + the real etag
-catch (RuntimeException e)           -> respond.fail("UNKNOWN");
+catch (CgFileSystemException e)      -> respond.fail(FsError.of(e.error().name(), …));
+catch (WorkspaceConflictException e) -> respond.fail(FsError.conflict(actualEtag));
+catch (RuntimeException e)           -> respond.fail(FsError.of("UNKNOWN", …));
 ```
 
 So a client **branches on a value** rather than matching message text — and an unexpected exception
 is reported as `UNKNOWN` rather than leaking a server-side message that may name a directory.
 
+> **An `FsError` carries fields, not only a code**, and the conflict is why: a stale write is refused
+> with **the etag the file actually holds**, so the client can re-read, merge and offer the user a
+> choice rather than a dead end. A code alone would leave it with nothing to act on.
+
 ### Who you are is bound at construction, never sent
 
 ```java
-new WorkspaceRpc<>(service, actorFor(peer))
+new WorkspaceBinding<>(service, hub, actorFor(peer), peer, ops)
 ```
 
 > One connection is one player, so the actor is bound at bind time rather than travelling in each
@@ -739,21 +749,22 @@ new WorkspaceRpc<>(service, actorFor(peer))
 ## 14. The other direction — server pushing to a client
 
 ```java
-// server, every poll tick:
-rpc.pollAndNotify((method, args) -> connection.call(method, args, null, null), PlainOps.INSTANCE);
+// server, every tick — ONE hub for the whole server, not one watcher per peer:
+hub.tick();     // stats each watched path once, coalesces a save's several events into one change,
+                // pairs a delete and a create carrying one etag into a RENAME, and notifies each peer
 
 // client, once at bind:
-registrar.register(WorkspaceProtocol.CHANGED, (args, respond) -> {
-    cachedContent.remove(path);          // BEFORE the handler runs
-    if (onChanged != null) onChanged.accept(new FileChanged(path, kind, etag));
-    respond.ok(null);
+connection.onNotify(FsMethods.CHANGED, payload -> {
+    cache.forget(path);                  // BEFORE the handler runs
+    onChanged.emit(new FileChanged(path, kind, etag));
 });
 ```
 
-> ⚠️ **A wart worth knowing.** The interface is called `Notifier` and the method is `notify`, but it
-> is wired to `connection.call(...)` — which sends a **Request** (`q`), not a Notification (`n`). The
-> client dutifully answers `ok(null)`. So `fs.changed` costs a round trip's worth of envelopes for an
-> answer nobody reads. It works correctly; the naming just says something the wire doesn't.
+> **It is a notification now**, and it used to be a request. The interface was called `Notifier` and
+> its method `notify`, and it was wired to `connection.call(...)` — a **Request** (`q`), which the
+> client dutifully answered `ok(null)`. So every change cost a round trip's worth of envelopes for an
+> answer nobody read. It worked correctly and the naming said something the wire did not; `fs/changed`
+> is an `n` today. `PushIsANotificationTest` is the standing form of that.
 
 Note the ordering inside the handler: **the cache is dropped before the callback**, so a handler that
 re-reads the file isn't served the stale bytes.
@@ -771,13 +782,17 @@ Three subsystems ride a `ProtocolConnection`. They're peers of each other; none 
 | `ui/openWindow` | notification | S→C |
 | `ui/description` | **request** | C→S — answered with the tree |
 | `ui/stateDelta` | notification | S→C |
-| `ui/treeDelta` | notification | S→C |
+| `ui/treeOps` | notification | S→C — an ordered edit script: `insert` / `remove` / `move` |
 | `ui/closeWindow` | notification | S→C — "this window is finished" |
 | `ui/close` | notification | **C→S — "the user closed it"** |
+| `ui/requestClose` | **request** | S→C — "may I?", answered by the content |
+| `ui/requestOpen` | **request** | C→S — "give me a window of this type"; the answer is only *whether* |
 | `ui/focusWindow` | notification | S→C — "bring it forward" |
 | `ui/visibility` | notification | C→S — "it is / is not on screen" |
+| `ui/view` | notification | S→C — a command about the *window* rather than the tree (title, icon, notify) |
 | `ui/sheet` | **request** | C→S — answered with a stylesheet, by hash |
 | `ui/event` | notification | C→S |
+| `ui/rows` | **request** | C→S — "I am looking at rows `[from, to)`"; the answer is the **count** |
 
 > **`ui/close` is the newest of these by years, and its absence was not a missing feature.** Minecraft
 > has had the equivalent since alpha — `C0DPacketCloseWindow` → `processCloseWindow` →
@@ -864,28 +879,46 @@ used.
 
 | | |
 |---|---|
-| `NetworkIds` | Element ids are a **depth-first position**, computed on both sides, **never transmitted**. The description stays a pure description, and there's no id table to get out of step. The **count** is sent at open, because a client whose widget constructors differ would shift every id past the divergence — refused rather than misapplied. |
+| `UIElementTreeSource` | Element ids live in a table the source owns, allocated on first sight and **kept for the life of the source** — so an id survives a sibling insert, a reparent and a detach. An id that moves is not a name, and a message in flight names an element. |
+| `ServerTreeMirror` / `ClientTreeMirror` | The edit script, **generic in the node type** and naming no widget, no session and no transport. The server half *produces* payloads rather than sending them, which is what lets one window fan out to viewers with different visibility without this class knowing viewers exist. |
 | `ContentHash` | SHA-256 of a canonical encoding. Map keys sorted, type tags and counts written before each container, so two structurally different trees can't collide. This is what makes re-opening free. |
-| `UINodeMirror` | `{tag, id?, class[]?, style{}?, flags?, focus?, state{}?, children[]?}`. Skips shadow parts. **Throws on an unknown tag** — a styleless div where a slider should be is worse than a refusal. |
+| `UIElementMirror` | `{tag, id?, class[]?, style{}?, flags?, focus?, state{}?, children[]?}`. Children are `describedChildren()`, which a widget with structural light children overrides. **Throws on an unknown tag** — a styleless div where a slider should be is worse than a refusal. |
 | `SheetRef` | `(hash, id?)` — one shape covering four cases: client has the theme (nothing transfers), version skew (fetch), datapack-only theme (fetch), generated sheet (hash is the whole identity). |
-| `UiEventKinds` | The closed set: `activate`, `toggle`, `value`, `text`. |
+| `WidgetContract` | What a KIND of widget is: its state slots **in apply order**, the events it can report, and whether a description may carry children. One declaration, four readers — and there is deliberately **no kind vocabulary class**, because a closed set of four strings is a list a third party cannot add to. |
 
-## 16. The workspace — `fs.*`
+> **Two entries here used to say the opposite, and both are worth knowing.** Ids were *"a depth-first
+> position, computed on both sides, never transmitted"* — which made inserting an element renumber
+> everything after it, and is the defect the whole mirror came out of. And `UiEventKinds` was that
+> closed set; it went at M3 when events became typed constants a widget declares for itself.
 
-`WorkspaceProtocol` (names) · `WorkspaceRpc` (server) · `WorkspaceClient` (client).
+## 16. The workspace — `fs/*`
 
-`WorkspaceRpc.installOn` takes a `Registrar` — a functional interface satisfied by **both**
-`MessageRouter::onRequest` and `ServerUiSession::onCall`. So binding the workspace doesn't depend on
-which of them a host happens to hold, and a test can install onto a bare registry without standing up
-a session.
+`FsMethods` (names) · `FsMessages` (every payload, as a record with a codec) · `FsError` ·
+`WorkspaceBinding` (server) · `Workspace` (client).
 
-The vocabulary: `fs.projects`, `fs.capabilities`, `fs.manifest`, `fs.read`, `fs.readChunk`,
-`fs.write`, `fs.writeDelta`, `fs.create`, `fs.mkdir`, `fs.rename`, `fs.delete`, `fs.watch`,
-`fs.unwatch`, `fs.changed`, `fs.presence`, `fs.trashList`, `fs.restore`, `fs.purge`.
+`WorkspaceBinding.installOn` takes either a `ProtocolConnection` — which registers every method **and**
+attaches the binding, so `ServerScope.workspace()` can find it — or a bare `Registrar`, a functional
+interface satisfied by both `MessageRouter::onRequest` and `ServerUiSession::onCall`. So binding the
+workspace does not depend on which of them a host happens to hold, and a test can install onto a bare
+registry without standing up a session.
 
-> There is deliberately **no `fs.list` or `fs.stat`**: a manifest *is* a listing that carries the
-> etags, and a second method would be the same query answered twice by two code paths that could
-> drift.
+The vocabulary: `fs/hello`, `fs/projects`, `fs/capabilities`, `fs/list`, `fs/stat`, `fs/read`,
+`fs/readChunk`, `fs/write`, `fs/writeDelta`, `fs/create`, `fs/mkdir`, `fs/rename`, `fs/copy`,
+`fs/delete`, `fs/watch`, `fs/unwatch`, `fs/changed`, `fs/presence`, `fs/trashList`, `fs/restore`,
+`fs/purge`.
+
+> **Every payload is a record with a codec** (`FsMessages`), which is the difference from `ui/*` and is
+> deliberate: a file protocol is a fixed vocabulary two halves have to agree on field by field, so a
+> field written on one side is provably the field read on the other. `ui/*` is the opposite — an open
+> vocabulary a mod extends — and typing it would mean a codec per mod message.
+
+> **`fs/list` is paged**, answering `{entries, cursor}`: a listing of a large directory arrives in
+> pages rather than as one message that may not fit, which is what the transport's reassembly cap is
+> there to refuse.
+
+> The primer used to say there was deliberately **no `fs/list` or `fs/stat`** — that a manifest *is* a
+> listing carrying the etags, and a second method would be one query answered twice. The reasoning was
+> sound and the conclusion did not survive paging: `fs/list` IS that manifest, renamed, with a cursor.
 
 ## 17. Commands — `command/*`
 
@@ -977,9 +1010,10 @@ dedicated server, the game directory in single player, **because the integrated 
 > testable at all: a bug that only appears when the two halves are genuinely apart would otherwise
 > wait for a dedicated server to find it.
 
-**One `WorkspaceRpc` per connection**, because the actor is per player — sharing one would authorise
-every request as whoever connected first. It also holds the watcher, which is what makes "tell *this*
-client what changed" meaningful.
+**One `WorkspaceBinding` per connection**, because the actor is per player — sharing one would
+authorise every request as whoever connected first. It holds that peer's audit and its idempotency
+table, and its entry in the **one** `WatchHub`: the hub is per SERVER, so a path four peers are
+watching is stat-ed once a tick rather than four times.
 
 **A client connection must not host a workspace:**
 
@@ -1172,10 +1206,11 @@ ClientWindows.of(c).setMount(myWindowMount);
 
 | | |
 |---|---|
-| `com.crystalgui.example.machine` | All of this, runnable, ~600 lines. **Start here.** `./gradlew :core:runExample` |
+| `com.crystalgui.app.machine` | All of this, runnable. **Start here** — and `docs/CGUI_BUILDING_UIS.md` is its written half |
 | `docs/CGUI_SERVER_AND_SERIALIZATION.md` | The same ground as a reference: codecs, hashing, the headless contract |
 | `core/src/headlessTest/` | CrystalGraphics deliberately absent. If it loads here, it runs on a server |
 | `mc1710/…/CgUiSessionProbe` | The whole stack against a real MC connection, as a ten-point checklist |
+| `mc1710/…/CgUiTwoClientProbe` | Two clients on one dedicated server: a writer edits, a watcher reports what reached it. Everything the watcher, presence and the conflict path exist for is a claim about a SECOND client |
 | `plan_ui_host.md` | Why the layer above the sessions exists: the audit that produced it, and the seventeen findings |
 | `./gradlew :mc1710:serverSmoke` | Boots a dedicated server, asserts the stack came up, stops. ~48s |
 
