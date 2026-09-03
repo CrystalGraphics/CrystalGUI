@@ -2507,7 +2507,7 @@ deleted (M8's job, done here because there is nothing left to port).
 
 ---
 
-### 6.10 — The Node/Element seam · **M** · after: 6.9b (**gate open**)
+### 6.10 — The Node/Element seam · **M** · after: 6.9b · **SHIPPED 2026-09-03**
 
 **Why, measured.** `UINode` carries **154 public and protected members** across twenty-five sections
 of a 1,979-line file. The old `UIElement` it replaced carried 166. The class §0 introduced to be
@@ -2654,6 +2654,34 @@ members between two classes in one hierarchy, renames one, and fixes one defect 
 `ShadowRoot` no longer compiles against any attribute, class, part, style, geometry or event member.
 `UINode`'s public count is **under sixty**, and a new capability landing on it fails review with the
 table above as the reason.
+
+**What shipped, against what this section predicted.** The census was right where it was measured and
+wrong where it was estimated, which is the usual split. **56 on `UINode` and 121 on `UIElement`** — the
+base landed on its number exactly; the element is higher than 98 because `moveTo`, `removeSelf` and
+`composedSubtree` turned out to be Element's (they are operations on a node AS A CHILD, or on a tree a
+shadow root is transparent in) and because five covariant overrides were needed to keep 198 `append`
+chains reading as they did.
+
+Steps 3 and 5 merged: extracting the base while leaving `parent` typed as its own subclass would have
+been a base class a shadow root cannot be a child of, which is the one thing the split is about. The
+widening cost **63 call sites**, every one an ancestor walk, every one behaviour-preserving — a shadow
+root's `parent()` is already null, so those walks stopped there before and stop one step earlier now,
+and no predicate in any of them could match one.
+
+**Three things the compiler decided that the plan had not seen.**
+
+- The `shadowRoot` FIELD is on `UINode` while `attachShadow()` stays on `UIElement`. It reads like a
+  leak and is the split working: the composed tree is DEFINED in terms of shadow roots, so every walk
+  that reads the field is a node's. What a shadow root must not be able to do is HOST one.
+- `Focus.scopeOf` tested for a delegating shadow root and **that test could never have fired**, before
+  the split as well as after: the walk is over COMPOSED parents, where a shadow root is transparent —
+  a part's `composedParent()` is the host, never the root. Left out rather than repaired, because
+  repairing it changes behaviour and needs a milestone that can test it. **Open.**
+- Scoping a sheet TO a shadow root is a documented feature that `Styleable.getParent()` can no longer
+  serve, since that answers null at a shadow boundary on purpose. `StyleScope` is the seam, and it
+  states something worth having said outright: **the set of things a sheet can be scoped to is
+  strictly larger than the set of things that can be styled**, because a scope root is only ever
+  walked to and never matched.
 
 > **Under sixty rather than under fifty, and the difference is a separate cut.** Node/Element fixes
 > *type honesty* — which nodes may be asked what — and not size: `UIElement` keeps 98 of the 154. The
