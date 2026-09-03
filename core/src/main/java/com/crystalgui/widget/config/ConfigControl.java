@@ -1,5 +1,6 @@
 package com.crystalgui.widget.config;
 
+import java.util.Objects;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.core.signal.Signal;
@@ -195,11 +196,21 @@ public abstract class ConfigControl extends UIElement {
     public final void setValueObject(Object value) {
         boolean wasUpdating = updating;
         updating = true;
+        Object before = getValueObject();
         try {
             applyValue(value);
         } finally {
             updating = wasUpdating;
         }
+        // AND THE FAR SIDE IS TOLD. A control's value is contracted state, and a state change that
+        // marks nothing dirty never leaves the server: a panel setting a value after the window opened
+        // showed the OPENING value for ever, which is right on the first frame and wrong after it.
+        //
+        // GUARDED ON AN ACTUAL CHANGE, or a host that pushes its model into the controls every tick --
+        // which is the shape every server-side panel is written in -- sends a delta per tick carrying a
+        // value nobody moved. That is ProgressBar.setFraction's defect, and this is the one place the
+        // whole kit can avoid it.
+        if (!Objects.equals(before, getValueObject())) notifyStateChanged();
     }
 
     /** Writes {@code value} into the underlying widgets. Never emits. */
@@ -261,5 +272,31 @@ public abstract class ConfigControl extends UIElement {
      */
     public boolean selfLabelling() {
         return false;
+    }
+
+    /**
+     * <b>A control describes no children.</b> Its structure is derived, not content.
+     *
+     * <p>Every part below this element - a label, a field, a swatch, a row of channel sliders - is built
+     * from the {@code ConfigDescriptor} this control was made with, and the far side builds the same
+     * parts from the same descriptor in its own constructor. What travels is the VALUE.</p>
+     *
+     * <p>Without this the parts are described, so a decoded control has the ones its constructor made
+     * AND the ones it was told to adopt: two labels, two fields, every control doubled. Measured at
+     * decode time as 2n-1 elements for every control in the kit, and it took a coverage walk to see -
+     * a doubled control still renders, still reports, and looks like a layout problem.</p>
+     *
+     *
+     * <p>It is also what makes the control describable at all. A swatch's fill and a hue ring are
+     * drawables written from Java at INLINE origin, and {@code InlineStyleCodec} <b>refuses</b> a value
+     * with no wire form rather than dropping it - correctly, since a silently dropped style renders
+     * differently on the two sides with nothing to explain why. A {@code CgUiColorField} has no wire
+     * form and needs none: it is never described, because the part it is on is never described.</p>
+     * <p>The contract already says so and nothing was reading it: {@code acceptsDescribedChildren()} is
+     * false for every one of these, which is what {@code ClientSmokeTest} now holds them to.</p>
+     */
+    @Override
+    public List<UIElement> describedChildren() {
+        return List.of();
     }
 }

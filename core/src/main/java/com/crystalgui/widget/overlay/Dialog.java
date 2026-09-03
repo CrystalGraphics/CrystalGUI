@@ -14,6 +14,7 @@ import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
+import java.util.List;
 import com.crystalgui.ui.event.CloseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.service.Drag;
@@ -246,7 +247,12 @@ public class Dialog extends UIElement {
     /** A dialog owns its structure; put content in {@link #getContent()}. */
 
     public Dialog setTitle(String title) {
-        titleLabel.setText(title == null ? "" : title);
+        String next = title == null ? "" : title;
+        if (next.equals(titleLabel.getText())) return this;
+        titleLabel.setText(next);
+        // The title is contracted state, and the label is in this widget's own structure -- which the
+        // observer never hears about, because a structural part is not something a peer was told of.
+        notifyStateChanged();
         return this;
     }
 
@@ -696,6 +702,31 @@ public class Dialog extends UIElement {
 
     private boolean clampTickerRunning;
 
+
+    /**
+     * What a peer is told about: <b>the content</b>, never the title bar and the content box.
+     *
+     * <p>Those two are scaffolding this widget builds in its own constructor, and they are light
+     * children because a sheet reaches through them ({@code dialog .__title-bar__ .__close__} - a part
+     * under a part, which {@code ::part()} cannot spell), so this widget may not have a shadow tree to
+     * make them undescribed for free.</p>
+     *
+     * <p>Without the pair, a dialog could not be described and rebuilt at all: the far side builds its
+     * own title bar and content box in the constructor and is then told to adopt two more, which a
+     * dialog refuses - so decoding threw {@code takes no public children}, and every widget holding a
+     * dialog went with it. {@link Tab} and {@link com.crystalgui.widget.layout.TabView} have had this
+     * pair since M2; these two were missed because nothing served one until the coverage walk did.</p>
+     */
+    @Override
+    public List<UIElement> describedChildren() {
+        return withoutLocals(content.children());
+    }
+
+    /** A described child is a dialog's CONTENT, so it goes where content goes. */
+    @Override
+    public void adoptDescribedChild(UIElement child) {
+        content.append(child);
+    }
 
     /** A dialog owns its structure; content goes in {@link #getContent()}. */
     @Override

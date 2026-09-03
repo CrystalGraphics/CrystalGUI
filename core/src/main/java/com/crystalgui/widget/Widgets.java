@@ -209,9 +209,9 @@ public final class Widgets implements NodeKinds {
         // a kind a control reports `crystalgui:element`, so `numbercontrol { }` in a theme matches
         // nothing and every `element` rule reaches it instead.
         //
-        // NO FACTORY for the controls: each takes a ConfigDescriptor and there is no sensible
-        // no-argument form of one, so they are registered for their names alone. Nothing decodes
-        // into them, which is exactly what localOnly means.
+        // EACH TAKES A NO-ARGUMENT FORM over a NEUTRAL descriptor -- an unlabelled control of that
+        // kind, which is a real thing rather than a placeholder -- so a description CAN decode into
+        // one, which is what makes their contracts reachable from a server's own tree.
         UIElementRegistry.register(Configurator.NAME, Configurator::new, NodeContract.INERT);
         UIElementRegistry.register(ConfiguratorGroup.NAME, ConfiguratorGroup::new, NodeContract.INERT);
         UIElementRegistry.register(ConfiguratorPanel.NAME, ConfiguratorPanel::new, NodeContract.INERT);

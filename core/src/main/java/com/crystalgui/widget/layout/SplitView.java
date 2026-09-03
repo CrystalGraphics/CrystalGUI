@@ -316,6 +316,44 @@ public class SplitView extends UIElement {
      * <p>The guard is exact identity, not equality: two different elements with the same content are still
      * a real replacement.</p>
      */
+    /**
+     * What a peer is told about: <b>what is in the panes</b>, never the panes themselves.
+     *
+     * <p>A {@code __split-pane__} is a wrapper this widget makes so a theme can reach one, and the
+     * divider is its own. Describing them would have the far side rebuild its own panes in the
+     * constructor and then be told to adopt three more - which a split view refuses, so decoding threw
+     * {@code takes no public children} outright. The panes come back from the WEIGHTS, which are state;
+     * what has to travel is the content somebody put in them.</p>
+     *
+     * <p>One entry per pane, in pane order, so an index means the same thing on both sides. An empty
+     * pane contributes nothing, which is why {@link #adoptDescribedChild} fills the first empty one
+     * rather than counting.</p>
+     */
+    @Override
+    public List<UIElement> describedChildren() {
+        List<UIElement> described = new ArrayList<>();
+        for (int i = 0; i < paneCount(); i++) described.addAll(pane(i).children());
+        return withoutLocals(described);
+    }
+
+    /**
+     * A described child goes into the first pane that has nothing in it.
+     *
+     * <p>Never appended to this element, which refuses public children, and never into a pane by
+     * counting - a pane holds one thing, so "the first empty one" and "the next one" are the same
+     * answer and only the first survives a pane that was already filled.</p>
+     */
+    @Override
+    public void adoptDescribedChild(UIElement child) {
+        for (int i = 0; i < paneCount(); i++) {
+            if (pane(i).children().isEmpty()) {
+                pane(i).append(child);
+                return;
+            }
+        }
+        addPane().append(child);
+    }
+
     public SplitView paneContent(int index, UIElement content) {
         UIElement pane = pane(index);
         List<UIElement> existing = pane.children();

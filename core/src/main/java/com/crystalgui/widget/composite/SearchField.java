@@ -201,7 +201,11 @@ public class SearchField extends UIElement {
     }
 
     public SearchField setPlaceholder(String placeholder) {
+        if (getPlaceholder().equals(placeholder == null ? "" : placeholder)) return this;
         field.setPlaceholder(placeholder);
+        // The inner field's own notify marks the FIELD dirty, which reaches nobody: this composite's
+        // parts are its own and a peer was never told about them. The placeholder is contracted HERE.
+        notifyStateChanged();
         return this;
     }
 
