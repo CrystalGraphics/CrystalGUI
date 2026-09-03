@@ -592,7 +592,7 @@ public class Menu extends Popover {
         UIDocument window = document();
         if (window == null) return -1;
         UIElement focused = window.focus().focused();
-        for (UIElement el = focused; el != null; el = el.parent()) {
+        for (UIElement el = focused; el != null; el = el.parentElement()) {
             int index = itemList.indexOf(el);
             if (index >= 0) return index;
         }

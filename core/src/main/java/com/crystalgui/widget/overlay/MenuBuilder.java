@@ -160,7 +160,7 @@ public final class MenuBuilder {
 
     /** Whether {@code element} is any of {@code menus} or sits beneath one. */
     public static boolean isInsideAny(@Nullable UIElement element, List<Menu> menus) {
-        for (UIElement walk = element; walk != null; walk = walk.parent()) {
+        for (UIElement walk = element; walk != null; walk = walk.parentElement()) {
             if (menus.contains(walk)) return true;
         }
         return false;

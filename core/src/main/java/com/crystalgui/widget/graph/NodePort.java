@@ -460,7 +460,7 @@ public class NodePort extends UIElement {
     /** The node this port belongs to, or {@code null} if it is not on one. */
     @Nullable
     public GraphNode node() {
-        for (UIElement e = parent(); e != null; e = e.parent()) {
+        for (UIElement e = parentElement(); e != null; e = e.parentElement()) {
             if (e instanceof GraphNode node) return node;
         }
         return null;
@@ -468,7 +468,7 @@ public class NodePort extends UIElement {
 
     @Nullable
     GraphView graphView() {
-        for (UIElement e = parent(); e != null; e = e.parent()) {
+        for (UIElement e = parentElement(); e != null; e = e.parentElement()) {
             if (e instanceof GraphView view) return view;
         }
         return null;

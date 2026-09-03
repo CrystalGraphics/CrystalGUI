@@ -57,13 +57,14 @@ public final class NodeQueries {
      *                     since the document plays the part the root element does.
      */
     @Nullable
-    public static UIElement querySelector(UIElement scope, String selector, boolean includeScope) {
+    public static UIElement querySelector(UINode scope, String selector, boolean includeScope) {
         return first(scope, selector(selector), includeScope);
     }
 
     @Nullable
-    private static UIElement first(UIElement scope, Selector parsed, boolean includeScope) {
-        if (includeScope && parsed.matches(scope)) return scope;
+    private static UIElement first(UINode scope, Selector parsed, boolean includeScope) {
+        UIElement self = scope.asElement();
+        if (includeScope && self != null && parsed.matches(self)) return self;
         for (UIElement child : scope.children()) {
             UIElement found = first(child, parsed, true);
             if (found != null) return found;
@@ -72,14 +73,15 @@ public final class NodeQueries {
     }
 
     /** Every match in {@code scope}'s light subtree, in document order (depth-first pre-order). */
-    public static List<UIElement> querySelectorAll(UIElement scope, String selector, boolean includeScope) {
+    public static List<UIElement> querySelectorAll(UINode scope, String selector, boolean includeScope) {
         List<UIElement> out = new ArrayList<>();
         all(scope, selector(selector), includeScope, out);
         return out;
     }
 
-    private static void all(UIElement scope, Selector parsed, boolean includeScope, List<UIElement> out) {
-        if (includeScope && parsed.matches(scope)) out.add(scope);
+    private static void all(UINode scope, Selector parsed, boolean includeScope, List<UIElement> out) {
+        UIElement self = scope.asElement();
+        if (includeScope && self != null && parsed.matches(self)) out.add(self);
         for (UIElement child : scope.children()) all(child, parsed, true, out);
     }
 
@@ -90,8 +92,9 @@ public final class NodeQueries {
      * looked up — the same reason the old traversal does it this way.</p>
      */
     @Nullable
-    public static UIElement getElementById(UIElement scope, String id, boolean includeScope) {
-        if (includeScope && scope.id().equals(id)) return scope;
+    public static UIElement getElementById(UINode scope, String id, boolean includeScope) {
+        UIElement self = scope.asElement();
+        if (includeScope && self != null && self.id().equals(id)) return self;
         for (UIElement child : scope.children()) {
             UIElement found = getElementById(child, id, true);
             if (found != null) return found;
@@ -99,14 +102,15 @@ public final class NodeQueries {
         return null;
     }
 
-    public static List<UIElement> getElementsByClassName(UIElement scope, String className, boolean includeScope) {
+    public static List<UIElement> getElementsByClassName(UINode scope, String className, boolean includeScope) {
         List<UIElement> out = new ArrayList<>();
         byClass(scope, className, includeScope, out);
         return out;
     }
 
-    private static void byClass(UIElement scope, String className, boolean includeScope, List<UIElement> out) {
-        if (includeScope && scope.hasClass(className)) out.add(scope);
+    private static void byClass(UINode scope, String className, boolean includeScope, List<UIElement> out) {
+        UIElement self = scope.asElement();
+        if (includeScope && self != null && self.hasClass(className)) out.add(self);
         for (UIElement child : scope.children()) byClass(child, className, true, out);
     }
 }

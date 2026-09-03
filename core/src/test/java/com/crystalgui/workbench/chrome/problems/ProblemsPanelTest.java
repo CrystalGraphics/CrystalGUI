@@ -398,7 +398,7 @@ public class ProblemsPanelTest extends UiDocumentTestBase {
         panel.bindTo(markers);
         settle();
 
-        UIElement root = panel.parent();
+        UIElement root = panel.parentElement();
         assertNotNull(root);
 
         panel.removeSelf();

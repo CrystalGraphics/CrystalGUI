@@ -582,7 +582,7 @@ public class TextFieldTest extends UiDocumentTestBase {
         int[] submits = {0};
         int[] ancestorSaw = {0};
         field.onSubmit.connect(v -> submits[0]++);
-        field.parent().events.getGroup(com.crystalgui.ui.event.KeyboardEvent.Down.class)
+        field.parentElement().events.getGroup(com.crystalgui.ui.event.KeyboardEvent.Down.class)
                 .attachListener((el, e) -> ancestorSaw[0]++, false, true);
 
         type("hi");

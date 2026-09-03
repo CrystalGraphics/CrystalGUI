@@ -478,7 +478,7 @@ public final class CompletionPopup extends Popover {
             // start dragging the window. Filtering on the target is what SplitView's divider does.
             if (event.getTarget() != hint) return;
             UIDocument window = document();
-            UIElement host = parent();
+            UIElement host = parentElement();
             if (window == null || host == null) return;
 
             float startLeft = placedLeft;

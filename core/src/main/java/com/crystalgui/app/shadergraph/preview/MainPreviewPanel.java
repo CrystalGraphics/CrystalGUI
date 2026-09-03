@@ -108,7 +108,7 @@ public class MainPreviewPanel extends UIElement implements Disposable.Gl {
      * each. Anchoring to the far edge, the measured re-clamp, the drag guard and the zero-box guard were
      * all landed in both files by hand before this move.</p>
      */
-    private final CanvasOverlayMove move = CanvasOverlayMove.install(this, head, this::parent);
+    private final CanvasOverlayMove move = CanvasOverlayMove.install(this, head, this::parentElement);
 
     /** The one entry that is deliberately inert. @see #openMeshMenu */
     public static final String CUSTOM_MESH_LABEL = "Custom Mesh";

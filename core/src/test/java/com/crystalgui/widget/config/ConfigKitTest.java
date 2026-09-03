@@ -80,7 +80,7 @@ public class ConfigKitTest extends UiDocumentTestBase {
     /** True when {@code e} sits inside a {@code dialog}/{@code popover}/{@code menu} between itself and
      * {@code stopAt} — a popup a control can summon, not the row it lives in. */
     private static boolean isInsidePopup(UIElement e, UIElement stopAt) {
-        for (UIElement p = e.parent(); p != null && p != stopAt; p = p.parent()) {
+        for (UIElement p = e.parentElement(); p != null && p != stopAt; p = p.parentElement()) {
             String tag = p.tagName();
             if ("dialog".equals(tag) || "popover".equals(tag) || "menu".equals(tag)) return true;
         }

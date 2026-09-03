@@ -611,7 +611,7 @@ public class Desktop extends UIElement implements DataProvider {
     }
 
     private void focusMoved(@Nullable UIElement focused) {
-        for (UIElement walk = focused; walk != null; walk = walk.parent()) {
+        for (UIElement walk = focused; walk != null; walk = walk.parentElement()) {
             if (walk instanceof WindowFrame && ((WindowFrame) walk).desktop() == this) {
                 // ONLY A WINDOW THAT IS ON SCREEN. Focus landing inside a HIDDEN one is never the user
                 // working in it: a hidden window is DETACHED, so it cannot be clicked, cannot be tabbed

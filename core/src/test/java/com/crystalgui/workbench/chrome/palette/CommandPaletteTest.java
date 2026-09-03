@@ -90,7 +90,7 @@ public class CommandPaletteTest extends UiDocumentTestBase {
     }
 
     private static boolean hasScopeAbove(CommandContext context) {
-        for (UIElement element = UIElement.sourceOf(context); element != null; element = element.parent()) {
+        for (UIElement element = UIElement.sourceOf(context); element != null; element = element.parentElement()) {
             if (element instanceof Scope) return true;
         }
         return false;

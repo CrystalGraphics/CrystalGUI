@@ -754,7 +754,7 @@ public class ShaderGraphEditor extends UIElement implements FileDocument, Dispos
      * writes a non-empty one — which is exactly right for a tab that was never opened this session.</p>
      */
     private static String rectOf(UIElement panel) {
-        UIElement block = panel.parent();
+        UIElement block = panel.parentElement();
         if (block == null) return "";
         Box box = panel.box();
         Box blockBox = block.box();

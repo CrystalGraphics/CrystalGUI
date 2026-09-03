@@ -321,7 +321,7 @@ public class BlackboardPanel extends UIElement implements DataProvider {
         append(body);
 
         setDocumentName(documentName);
-        move = CanvasOverlayMove.install(this, head, this::parent);
+        move = CanvasOverlayMove.install(this, head, this::parentElement);
         add.onMouseDown.attachListener((element, event) -> {
             openTypeMenu();
             event.stopPropagation();

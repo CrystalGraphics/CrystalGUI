@@ -287,7 +287,7 @@ public class GraphNode extends UIElement {
      * stop propagation) puts the burden on whatever a caller happens to drop in.</p>
      */
     private boolean isInsideControls(@Nullable UIElement target) {
-        for (UIElement e = target; e != null && e != this; e = e.parent()) {
+        for (UIElement e = target; e != null && e != this; e = e.parentElement()) {
             if (e == controls) return true;
         }
         return false;
@@ -370,7 +370,7 @@ public class GraphNode extends UIElement {
 
     @Nullable
     private GraphView graphView() {
-        for (UIElement e = parent(); e != null; e = e.parent()) {
+        for (UIElement e = parentElement(); e != null; e = e.parentElement()) {
             if (e instanceof GraphView view) return view;
         }
         return null;

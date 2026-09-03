@@ -197,7 +197,7 @@ public class BlackboardPanelTest extends UiDocumentTestBase {
     @Test
     public void refreshingReplacesTheListRatherThanAppending() {
         mount();
-        UIElement list = board.pills().isEmpty() ? null : board.pills().get(0).parent();
+        UIElement list = board.pills().isEmpty() ? null : board.pills().get(0).parentElement();
 
         board.refresh();
         board.refresh();

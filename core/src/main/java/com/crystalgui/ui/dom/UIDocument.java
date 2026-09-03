@@ -310,7 +310,7 @@ public final class UIDocument extends UIElement {
      * a command palette passes null.</p>
      */
     public UIElement overlayHost(@Nullable UIElement near) {
-        for (UIElement node = near; node != null; node = node.parent()) {
+        for (UIElement node = near; node != null; node = node.parentElement()) {
             if (UIElementRegistry.contractFor(node.name()).acceptsDescribedChildren()) return node;
         }
         return this;

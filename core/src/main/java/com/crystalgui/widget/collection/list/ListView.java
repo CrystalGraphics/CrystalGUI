@@ -926,7 +926,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
      * element exactly, which worked only because its one caller had already resolved the row by hand.</p>
      */
     public int indexOfRowElement(@Nullable UIElement element) {
-        for (UIElement scope = element; scope != null; scope = scope.parent()) {
+        for (UIElement scope = element; scope != null; scope = scope.parentElement()) {
             for (var entry : realised.entrySet()) {
                 if (entry.getValue() == scope) return entry.getKey();
             }
@@ -1433,7 +1433,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
 
     /** Whether {@code element} is this list or sits underneath it. */
     private boolean containsInSubtree(UIElement element) {
-        for (UIElement scope = element; scope != null; scope = scope.parent()) {
+        for (UIElement scope = element; scope != null; scope = scope.parentElement()) {
             if (scope == this) return true;
         }
         return false;

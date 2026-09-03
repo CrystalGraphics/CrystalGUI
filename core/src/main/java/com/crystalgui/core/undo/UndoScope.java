@@ -41,7 +41,7 @@ public interface UndoScope {
     /** @see #nearest */
     @Nullable
     static UndoScope nearestScope(@Nullable UIElement from) {
-        for (UIElement element = from; element != null; element = element.parent()) {
+        for (UIElement element = from; element != null; element = element.parentElement()) {
             if (element instanceof UndoScope scope) return scope;
         }
         return null;

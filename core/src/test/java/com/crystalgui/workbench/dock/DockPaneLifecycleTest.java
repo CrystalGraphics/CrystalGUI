@@ -182,13 +182,13 @@ public class DockPaneLifecycleTest extends UiDocumentTestBase {
     @Test
     public void theViewMovesToTheActivePanelsHost() {
         Recording pane = pane();
-        UIElement firstHost = pane.view.parent();
+        UIElement firstHost = pane.view.parentElement();
         assertNotNull(firstHost);
 
         leaf.add(beta);
         activate(beta);
 
-        UIElement secondHost = pane.view.parent();
+        UIElement secondHost = pane.view.parentElement();
         assertNotNull(secondHost);
         assertFalse("the view did not move hosts", firstHost == secondHost);
         assertTrue("the old host should be empty", firstHost.children().isEmpty());

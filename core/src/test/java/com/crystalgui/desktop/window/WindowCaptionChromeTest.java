@@ -205,7 +205,7 @@ public class WindowCaptionChromeTest extends UiDocumentTestBase {
     }
 
     private static boolean isInside(UIElement element, UIElement ancestor) {
-        for (UIElement walk = element; walk != null; walk = walk.parent()) {
+        for (UIElement walk = element; walk != null; walk = walk.parentElement()) {
             if (walk == ancestor) return true;
         }
         return false;

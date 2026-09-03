@@ -704,7 +704,7 @@ public final class RunPanel extends UIElement {
             // CgSystemInput, a CrystalGraphics platform type core takes as compileOnly and does not pass
             // on, so naming it from here fails to compile on a supertype nobody meant to depend on.
             boolean hadFocus = inputField.isFocused();
-            UIElement parent = inputField.parent();
+            UIElement parent = inputField.parentElement();
             if (parent != null) detach(parent, inputField);
             if (hadFocus) document().focus().requestPointerFocus(view.element());
         }

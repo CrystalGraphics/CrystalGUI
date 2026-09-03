@@ -430,7 +430,7 @@ public class MenuBarView extends UIElement {
         // thing a command just closed -- a tab, a file row -- and a context resolved from a detached
         // subtree finds none of its ancestors, so every command silently greys again.
         if (element == null || element.document() == null) return false;
-        for (UIElement walk = element; walk != null; walk = walk.parent()) {
+        for (UIElement walk = element; walk != null; walk = walk.parentElement()) {
             if (walk == this || walk instanceof Menu) return false;
         }
         return true;

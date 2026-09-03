@@ -149,7 +149,7 @@ public final class CommandPalette {
     @Nullable
     private static UIElement rootOf(@Nullable UIElement source) {
         UIElement root = source;
-        while (root != null && root.parent() != null) root = root.parent();
+        while (root != null && root.parentElement() != null) root = root.parentElement();
         return root;
     }
 

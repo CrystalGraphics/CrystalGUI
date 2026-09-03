@@ -267,7 +267,7 @@ public class Tooltip extends UIElement {
      * instance, which no longer has anywhere to show. */
     public void detach() {
         hide();
-        UIElement parent = parent();
+        UIElement parent = parentElement();
         if (parent != null) parent.remove(this);
     }
 

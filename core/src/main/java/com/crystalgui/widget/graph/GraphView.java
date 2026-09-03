@@ -400,7 +400,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
      * type into — the exact conflict {@code NodePort} used to guard against back when this editor lived
      * inside the port. */
     private boolean isInsideNode(@Nullable UIElement target) {
-        for (UIElement element = target; element != null && element != this; element = element.parent()) {
+        for (UIElement element = target; element != null && element != this; element = element.parentElement()) {
             if (element instanceof GraphNode) return true;
             if (element.hasClass(NodePort.EDITOR_CLASS)) return true;
         }
@@ -1717,7 +1717,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
         // than by subtracting the root's own `x()` -- which is the root's offset in its own parent and
         // has nothing to do with this view's position.
         Box self = box();
-        Box rootCache = window.root().box();
+        Box rootCache = window.box();
         if (self == null || rootCache == null) return onScreen;
         Vector2f origin = Box.originIn(self, rootCache);
         return new Vector2f(onScreen.x() + origin.x(), onScreen.y() + origin.y());

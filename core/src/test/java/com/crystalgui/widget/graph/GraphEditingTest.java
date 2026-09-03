@@ -275,7 +275,7 @@ public class GraphEditingTest extends UiDocumentTestBase {
     }
 
     private static boolean isInside(UIElement hit, GraphNode node) {
-        for (UIElement e = hit; e != null; e = e.parent()) {
+        for (UIElement e = hit; e != null; e = e.parentElement()) {
             if (e == node) return true;
         }
         return false;

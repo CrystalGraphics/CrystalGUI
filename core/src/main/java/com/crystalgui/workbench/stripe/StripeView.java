@@ -937,7 +937,7 @@ public class StripeView extends UIElement {
         private boolean isPanelFocused() {
             UIDocument window = document();
             if (window == null) return false;
-            for (UIElement e = window.focus().focused(); e != null; e = e.parent()) {
+            for (UIElement e = window.focus().focused(); e != null; e = e.parentElement()) {
                 if (e instanceof ViewContainer container) return typeId.equals(container.containerId());
             }
             return false;

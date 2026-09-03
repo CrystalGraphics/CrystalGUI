@@ -104,7 +104,7 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
         // removeChild REFUSES an internal child and reports false, so asking the engine to remove the
         // GraphView is the observable form of "was this subtree stamped?" -- and it asks the engine
         // rather than a private flag this test would have to guess the name of.
-        UIElement pane = editor.graph().parent();
+        UIElement pane = editor.graph().parentElement();
         assertNotNull("the graph is not in the tree at all", pane);
         boolean removable = pane.remove(editor.graph());
         assertTrue("the GraphView is stamped internal -- removals under it are silently refused, "

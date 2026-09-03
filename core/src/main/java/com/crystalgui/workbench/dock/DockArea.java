@@ -177,7 +177,7 @@ public class DockArea extends UIElement {
      */
     @Nullable
     public DockGroup groupOf(@Nullable UIElement element) {
-        for (UIElement scope = element; scope != null; scope = scope.parent()) {
+        for (UIElement scope = element; scope != null; scope = scope.parentElement()) {
             if (scope instanceof DockGroup group && group.dockArea() == this) return group;
         }
         return null;

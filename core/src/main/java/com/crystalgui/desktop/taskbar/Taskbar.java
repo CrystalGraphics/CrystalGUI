@@ -261,7 +261,7 @@ public class Taskbar extends UIElement {
     /** The desktop this strip belongs to — always its parent, and null only while detached. */
     @Nullable
     Desktop desktop() {
-        for (UIElement element = parent(); element != null; element = element.parent()) {
+        for (UIElement element = parentElement(); element != null; element = element.parentElement()) {
             if (element instanceof Desktop) return (Desktop) element;
         }
         return null;
@@ -521,7 +521,7 @@ public class Taskbar extends UIElement {
      */
     @Nullable
     public static Taskbar of(@Nullable UIElement element) {
-        for (UIElement el = element; el != null; el = el.parent()) {
+        for (UIElement el = element; el != null; el = el.parentElement()) {
             if (el instanceof Taskbar) return (Taskbar) el;
         }
         return null;

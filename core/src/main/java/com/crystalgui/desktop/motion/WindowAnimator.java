@@ -372,7 +372,7 @@ public final class WindowAnimator {
     private UITransform toward(@Nullable UIElement target) {
         if (target == null) return null;
         Box to = target.box();
-        UIElement area = frame.parent();
+        UIElement area = frame.parentElement();
         Box space = area == null ? null : area.box();
         if (to == null || space == null) return null;
         // THE REMEMBERED BOX. @see WindowFrame#boxX()
