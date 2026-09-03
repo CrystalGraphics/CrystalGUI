@@ -838,6 +838,23 @@ rejoin.
 
 #### 7.2 — Client-local children · S · after: 7.1
 
+> **SHIPPED.** `UINode.markLocal()` plus `ClientScope.addLocal(parent, child)`; four tests in
+> `LocalChildTest`.
+>
+> The plan's three properties are met by two mechanisms rather than one. Being undescribed is the
+> filter in `describedChildren()`, which is what keeps a local child out of the encoding, the
+> numbering and the integrity count. **Not shifting a described index is separate, and is
+> structural**: `insertAt` keeps locals as the tail of the light list and refuses to put a described
+> child past them, so index N means the same thing on both sides by construction. Maintaining the two
+> lists in parallel instead is one subtraction that is right until somebody forgets it, and an insert
+> landing one place out is a wrong picture rather than a failure.
+>
+> One thing found while writing it: `client(io)` re-running over the SAME tree — which a re-delivered
+> `ui/openWindow` produces — would call `addLocal` again and double the viewer's controls, since the
+> hook's contract is to be written as though nothing had been set up before. `ClientWindows` drops
+> every local under the root before a re-bind.
+
+
 `client(io)` runs over every build of the tree and its javadoc already says to write it as though
 nothing had been set up before. What it cannot do is *add* anything: a child a panel appends locally is
 in a described child list, so the next `insert` op lands one index off, and `Projections.each`'s

@@ -354,7 +354,7 @@ public class TabView extends UIElement {
      */
     @Override
     public List<UIElement> describedChildren() {
-        return List.copyOf(tabs);
+        return withoutLocals(List.copyOf(tabs));
     }
 
     /**

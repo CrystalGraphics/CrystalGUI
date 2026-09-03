@@ -53,6 +53,9 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
     @Nullable
     UINode parent;
 
+    /** Added by the side LOOKING at this tree rather than the side that owns it. @see #markLocal() */
+    boolean local;
+
     /**
      * <b>{@code UIElement}, not {@code UINode}, and that is the narrower and truer type.</b>
      *
@@ -291,7 +294,64 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
      * what the old engine's {@code acceptsPublicChildren} did at this seam.</p>
      */
     public List<UIElement> describedChildren() {
-        return children();
+        return withoutLocals(children());
+    }
+
+    /**
+     * Whether this node was added by the side that is <b>looking</b> at the tree rather than the side
+     * that owns it. @see #markLocal()
+     */
+    public final boolean isLocal() {
+        return local;
+    }
+
+    /**
+     * <b>Marks this node as the viewer's own.</b> Set before it is added, never after.
+     *
+     * <p>A local node is an ordinary child in every way that shows — it lays out, it paints, it takes
+     * events — and is invisible to the mirror in every way that travels: it is never a
+     * {@linkplain #describedChildren() described child}, so it is never encoded, never numbered and
+     * never counted by the integrity check.</p>
+     *
+     * <p><b>It also may not shift a described index</b>, and that is structural rather than arithmetic:
+     * {@link #insertAt} puts every local child after every described one and refuses to insert a
+     * described child past them, so the far side's index N is this side's index N whatever a viewer has
+     * added. Maintaining the two lists in parallel instead would be one subtraction that is right until
+     * somebody forgets it, and an insert landing one place out is a silent wrong picture rather than a
+     * failure.</p>
+     *
+     * <p>{@code ClientScope.addLocal} is the door. Marking a node on a SERVER's tree is legal and means
+     * the same thing — it is simply never described — but there is nothing looking at that tree from
+     * inside, so it has no use there.</p>
+     */
+    public final void markLocal() {
+        if (parent != null) {
+            throw new IllegalStateException("<" + name + "> is already in a tree; mark it before adding it");
+        }
+        local = true;
+    }
+
+    /**
+     * {@code children} minus anything a viewer added — what a peer is told about.
+     *
+     * <p>An override of {@link #describedChildren()} that answers a list of its own has to run it
+     * through this, or a local child under that widget travels. The fast path is the ordinary one:
+     * nothing local, and the list is handed straight back.</p>
+     */
+    protected static List<UIElement> withoutLocals(List<UIElement> of) {
+        int first = -1;
+        for (int i = 0; i < of.size(); i++) {
+            if (of.get(i).local) {
+                first = i;
+                break;
+            }
+        }
+        if (first < 0) return of;
+        List<UIElement> described = new ArrayList<>(of.subList(0, first));
+        for (int i = first + 1; i < of.size(); i++) {
+            if (!of.get(i).local) described.add(of.get(i));
+        }
+        return Collections.unmodifiableList(described);
     }
 
     /** @see #describedChildren() */
@@ -374,7 +434,11 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
         refuseAsChild(child);
         Mutation m = beginMutation("inserting <" + child.name + ">");
         try {
-            int at = clampIndex(index, children.size());
+            // LOCALS LAST, ALWAYS. A described child may not land after one, or the far side's index N
+            // stops being this side's index N and every insert after a viewer added a control is one
+            // place out -- silently, since an index is an int and every one of them still resolves.
+            int limit = child.local ? children.size() : firstLocalIndex();
+            int at = clampIndex(index, limit);
             children.add(at, child);
             child.parent = this;
             child.attachedTo(this);
@@ -444,6 +508,18 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
             throw new UnsupportedOperationException("<" + name + "> takes no public children, so <"
                     + child.name + "> would never be composed. Use the widget's own accessors.");
         }
+    }
+
+    /**
+     * Where the local children start, or the end of the list when there are none.
+     *
+     * <p>A linear scan from the back, because locals are the tail by construction: a widget with none
+     * pays one comparison. @see #markLocal()</p>
+     */
+    private int firstLocalIndex() {
+        int at = children.size();
+        while (at > 0 && children.get(at - 1).local) at--;
+        return at;
     }
 
     static int clampIndex(int index, int size) {
