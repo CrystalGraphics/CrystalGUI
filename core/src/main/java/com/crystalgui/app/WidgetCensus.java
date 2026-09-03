@@ -2,7 +2,7 @@ package com.crystalgui.app;
 
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.widget.canvas.CanvasView;
-import com.crystalgui.widget.control.SymbolIcon;
+import com.crystalgui.widget.display.SymbolIcon;
 import com.crystalgui.widget.dnd.DragGhost;
 import com.crystalgui.widget.dnd.InsertionMarker;
 import com.crystalgui.widget.scroll.Scroller;
@@ -58,7 +58,6 @@ import com.crystalgui.workbench.stripe.StripeView;
 import com.crystalgui.workbench.toolwindow.ToolWindowFrame;
 import com.crystalgui.workbench.view.ViewContainer;
 import com.crystalgui.workbench.Workbench;
-import com.crystalgui.core.config.ConfigDescriptor;
 
 /**
  * <b>Every widget that deliberately does not travel, and why.</b> {@code plan_ui_rewrite.md} M1.

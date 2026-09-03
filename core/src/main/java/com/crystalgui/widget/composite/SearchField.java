@@ -1,4 +1,4 @@
-package com.crystalgui.widget.form;
+package com.crystalgui.widget.composite;
 
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.contract.RatePolicy;

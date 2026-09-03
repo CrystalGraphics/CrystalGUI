@@ -9,7 +9,7 @@ import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.render.texture.CgUiQuad;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.widget.form.ColorSelector;
+import com.crystalgui.widget.composite.ColorSelector;
 import com.crystalgui.widget.overlay.Dialog;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.widget.config.ValueControl;

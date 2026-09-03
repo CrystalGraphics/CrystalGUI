@@ -16,7 +16,7 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.ui.input.keymap.Keymap;
-import com.crystalgui.widget.control.SymbolIcon;
+import com.crystalgui.widget.display.SymbolIcon;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.widget.overlay.ContextMenu;

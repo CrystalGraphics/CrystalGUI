@@ -1,6 +1,5 @@
-package com.crystalgui.widget.form;
+package com.crystalgui.widget.composite;
 
-import com.crystalgui.widget.form.ColorSelector;
 import org.junit.Test;
 
 import static org.junit.Assert.*;

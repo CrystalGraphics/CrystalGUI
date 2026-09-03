@@ -8,7 +8,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
-import com.crystalgui.widget.control.ProgressBar;
+import com.crystalgui.widget.display.ProgressBar;
 import com.crystalgui.widget.control.Slider;
 import com.crystalgui.widget.control.Switch;
 import com.crystalgui.widget.text.UIText;

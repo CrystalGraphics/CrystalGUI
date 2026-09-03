@@ -12,7 +12,7 @@ import java.util.EnumMap;
 import java.util.Collections;
 import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.widget.form.SearchField;
+import com.crystalgui.widget.composite.SearchField;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.search.SearchMatch;

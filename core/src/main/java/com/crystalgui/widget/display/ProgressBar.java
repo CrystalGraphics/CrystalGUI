@@ -1,4 +1,4 @@
-package com.crystalgui.widget.control;
+package com.crystalgui.widget.display;
 
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.contract.WidgetContract;

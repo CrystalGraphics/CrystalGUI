@@ -8,7 +8,7 @@ import com.crystalgui.core.async.JobKey;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.widget.overlay.Popover;
-import com.crystalgui.widget.control.ProgressBar;
+import com.crystalgui.widget.display.ProgressBar;
 import com.crystalgui.widget.text.UIText;
 
 import dev.vfyjxf.taffy.style.AlignItems;

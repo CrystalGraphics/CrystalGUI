@@ -4,7 +4,7 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.widget.control.TextField;
-import com.crystalgui.widget.form.SearchField;
+import com.crystalgui.widget.composite.SearchField;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;

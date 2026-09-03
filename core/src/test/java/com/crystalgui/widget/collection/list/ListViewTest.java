@@ -11,6 +11,7 @@ import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.collection.list.SelectionMode;
 import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.widget.scroll.ScrollerView;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -389,7 +390,7 @@ public class ListViewTest extends UiDocumentTestBase {
         build(1_000);
         assertTrue("must be a scroll container at all", list.isScrollContainer());
         assertTrue("and must take the wheel, which only a ScrollerView does",
-                list instanceof com.crystalgui.widget.scroll.ScrollerView);
+                list instanceof ScrollerView);
     }
 
     /** A ListView is a widget somebody adds to a page, not a part of one. Marking it internal would hide

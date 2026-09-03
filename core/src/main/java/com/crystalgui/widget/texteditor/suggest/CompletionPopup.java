@@ -10,7 +10,7 @@ import com.crystalgui.text.lang.CompletionItem;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.service.Drag;
-import com.crystalgui.widget.control.SymbolIcon;
+import com.crystalgui.widget.display.SymbolIcon;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.overlay.Menu;

@@ -1,6 +1,5 @@
 package com.crystalgui.core.data;
 
-import com.crystalgui.ui.data.UiDataKeys;
 
 /**
  * What cut, copy and paste mean <em>here</em> — IntelliJ's {@code CutProvider}/{@code CopyProvider}/
@@ -30,7 +29,9 @@ import com.crystalgui.ui.data.UiDataKeys;
  * invisible: a provider that silently inherits "cannot paste" is indistinguishable from one that
  * considered paste and refused it.</p>
  *
- * @see UiDataKeys#CLIPBOARD
+ * <p>Reached through the key {@code ui.data.UiDataKeys.CLIPBOARD} — named in prose rather than
+ * linked, because a {@code @see} across this boundary is still an import, and the import is the
+ * whole reason this interface moved out of {@code ui}.</p>
  */
 public interface ClipboardActions {
 

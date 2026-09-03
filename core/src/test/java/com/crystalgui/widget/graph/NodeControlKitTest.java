@@ -262,9 +262,9 @@ public class NodeControlKitTest extends UiDocumentTestBase {
     }
 
     private static final List<Composite> COMPOSITES = List.of(
-            new Composite("ColorSelector", com.crystalgui.widget.form.ColorSelector::new,
-                    "." + com.crystalgui.widget.form.ColorSelector.CHANNEL_ROW_CLASS + " textfield",
-                    "." + com.crystalgui.widget.form.ColorSelector.CHANNEL_ROW_CLASS + " slider",
-                    "." + com.crystalgui.widget.form.ColorSelector.RING_CLASS,
-                    "." + com.crystalgui.widget.form.ColorSelector.SQUARE_CLASS));
+            new Composite("ColorSelector", com.crystalgui.widget.composite.ColorSelector::new,
+                    "." + com.crystalgui.widget.composite.ColorSelector.CHANNEL_ROW_CLASS + " textfield",
+                    "." + com.crystalgui.widget.composite.ColorSelector.CHANNEL_ROW_CLASS + " slider",
+                    "." + com.crystalgui.widget.composite.ColorSelector.RING_CLASS,
+                    "." + com.crystalgui.widget.composite.ColorSelector.SQUARE_CLASS));
 }

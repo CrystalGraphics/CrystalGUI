@@ -15,6 +15,8 @@ import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UINode;
 import java.util.List;
+
+import com.crystalgui.widget.scroll.ScrollerView;
 import org.junit.Test;
 
 /**
@@ -113,7 +115,7 @@ public class TextEditorBatchPortTest extends UiDocumentTestBase {
     public void theEditorAnswersForItsOwnKind() {
         assertEquals("texteditor", editor("hello").name().local());
         assertNotEquals("the editor inherited ScrollerView's tag",
-                new com.crystalgui.widget.scroll.ScrollerView().name(), editor.name());
+                new ScrollerView().name(), editor.name());
     }
 
     /** ...and the sheets reach it, which is the thing the tag exists for. */

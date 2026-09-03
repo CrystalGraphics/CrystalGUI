@@ -1,4 +1,4 @@
-package com.crystalgui.widget.canvas;
+package com.crystalgui.widget.dnd;
 
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIElement;

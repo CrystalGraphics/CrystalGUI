@@ -18,7 +18,7 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.AnchoredPlacement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.overlay.Menu;
-import com.crystalgui.widget.canvas.CanvasOverlayMove;
+import com.crystalgui.widget.dnd.CanvasOverlayMove;
 import com.crystalgui.widget.overlay.MenuItem;
 import com.crystalgui.widget.text.UIText;
 

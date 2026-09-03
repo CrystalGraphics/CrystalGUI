@@ -1,4 +1,4 @@
-package com.crystalgui.widget.form;
+package com.crystalgui.widget.composite;
 
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Signal;
