@@ -913,16 +913,27 @@ the binding at F4, for the reason above: the class the tests import is the one t
 
 ### F5 — The workbench
 
-1. **`EditorService`** in `workbench.editor`: `open(EditorInput, placement, options)` as the one lane
-   for project files, library classes and generated sources; a tab holds a `DocumentReference`; tab
-   title, icon, decoration and state from the document; the viewer lane and the ~1,100 lines leave
-   `Workbench`. *D1, N1.*
+1. **`EditorService`** in `workbench.editor`: `open(EditorInput)` as the one lane; a tab holds a
+   `DocumentReference` and exists immediately in `LOADING`; title, state and dirtiness read off the
+   document; failed tabs retry; hot exit restores. Sixteen tests, all of them workbench-level
+   behaviours nothing could assert before. *(Shipped.)* *D1, N1.*
+
+   > **The switch of `Workbench` ONTO it has not been made, and is the one step in this plan that
+   > cannot be verified from a test.** `Workbench.java` is 3,268 lines with ~1,100 of document and
+   > viewer plumbing, and **no test constructs one** (N36) — so the extraction has no net beneath it
+   > and its acceptance is a running client. The new lane is written and proven against the wire; what
+   > remains is repointing the workbench's call sites at it, which is mechanical, and watching the
+   > harness while it happens.
 2. **One key everywhere:** `DockPanelRef.resource`, `DockInput`, `WorkbenchSession` at `VERSION` 7
    with view state through `DocumentEditor`, `RecentFiles`; `Markers`, the language attachment and
    `RunSessions` keyed by document and subscribed to `onDidChangeResource`.
    `aRenamedOpenFileKeepsItsDiagnosticsItsServicesAndItsRunSession`; `DecorationsJoinByKeyTest`. *D1, D2, N3, N4.*
 3. **`ContentProviders`** replaces `ResourceRegistry`; `LibrarySources` and `ProjectSourceSymbols`
    register through the workspace; `TextDocumentStatus` replaces `TextFileDocument`'s statics. *N12, N33.*
+
+   > **Blocked on coordination, not on work.** Two of the four `ResourceRegistry` call sites are in
+   > `language/`, which another session is working in. Turning a static into an instance changes their
+   > compile, so this waits for that branch to land rather than racing it.
 4. **The explorer** subscribes to expanded folders and honours ignore rules in the crawl and Go to
    File; **`ProjectIndex`** reads through the document's rope when open and the workspace otherwise —
    `bufferSnapshot` goes. `theCrawlSkipsIgnoredFolders`; `theIndexReadsAnOpenDocumentsRope`. *N9, N34.*
@@ -936,8 +947,16 @@ the binding at F4, for the reason above: the class the tests import is the one t
    `DocumentViewState`, `DocumentType`, `ResourceRegistry`.
 
 *Done when* the first workbench-level suite is green: open, edit, save, external change under a clean
-buffer and under a dirty one, delete under an open tab, rename under an open tab, close-with-prompt —
-none of which can be written today (N36).
+buffer and under a dirty one, delete under an open tab, rename under an open tab — none of which could
+be written before (N36). **That suite is green** (`EditorServiceTest`, `WorkspaceDocumentsTest`), and
+"close-with-prompt" is not in it because hot exit removed the prompt: closing asks nothing and the work
+is offered back.
+
+*Not done:* repointing `Workbench` at the new lane, and the deletions that follow it — `OpenDocuments`,
+`FileDocument`, `TextFileDocument`, `DocumentViewState`, `DocumentType`, `WorkspaceClient`,
+`WorkspaceRpc`, `WorkspaceProtocol`, `WorkspaceWatcher`, `WorkspaceFileService`, `WorkingCopies`. Both
+halves of the wire are built and tested; the old pair stays until the workbench stops calling it, which
+is the step that needs a client on screen.
 
 ### F6 — Documents that are not text, and the example
 

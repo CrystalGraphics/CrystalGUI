@@ -169,7 +169,13 @@ public final class WorkspaceDocuments {
         watches.put(document.resource(), watch);
         watch.onChanged.connect(changes -> {
             for (FsMessages.FileChange change : changes) {
-                if (Resource.parse(change.path()).equals(document.resource())) applyChange(document, change);
+                // MATCHED ON EITHER END, for the reason Workspace.deliver records: a rename's `path` is
+                // where the file went, and this document is still sitting at where it came FROM.
+                if (Resource.parse(change.path()).equals(document.resource())
+                        || (!change.from().isEmpty()
+                        && Resource.parse(change.from()).equals(document.resource()))) {
+                    applyChange(document, change);
+                }
             }
         });
         document.onDidChangeState.connect(state -> onDidChangeState.emit(document, state));

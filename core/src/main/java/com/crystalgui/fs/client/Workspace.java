@@ -256,8 +256,14 @@ public final class Workspace implements Disposable {
         Map<Watch, List<FsMessages.FileChange>> grouped = new LinkedHashMap<>();
         for (FsMessages.FileChange change : notification.changes()) {
             Resource resource = Resource.parse(change.path());
+            // A RENAME CONCERNS BOTH ENDS. Its `path` is the DESTINATION, so a watch on the file that
+            // moved -- which is what an open tab holds -- matches neither the path nor anything under
+            // it, and the one event that exists to stop a tab being closed would have been filtered out
+            // before reaching it. The watcher on the folder it moved INTO is covered by `path`; the
+            // watcher on the file itself is covered only by `from`.
+            Resource origin = change.from().isEmpty() ? null : Resource.parse(change.from());
             for (Watch watch : watches.values()) {
-                if (watch.covers(resource)) {
+                if (watch.covers(resource) || (origin != null && watch.covers(origin))) {
                     grouped.computeIfAbsent(watch, key -> new ArrayList<>()).add(change);
                 }
             }
