@@ -1,5 +1,6 @@
 package com.crystalgui.app.shadergraph;
 
+import com.crystalgui.core.undo.Edit;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.style.sheet.StyleSheet;
@@ -11,8 +12,10 @@ import org.junit.Test;
 
 import java.nio.charset.StandardCharsets;
 
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 
 /**
  * Where somebody was looking at a graph is <b>theirs</b>, and does not go in the file.
@@ -29,6 +32,22 @@ import static org.junit.Assert.assertArrayEquals;
 public class ShaderGraphViewStateTest extends UiDocumentTestBase {
 
     private ShaderGraphEditor editor;
+
+    /** A step that changes nothing, so the bytes stay identical and only the version can tell. */
+    private static final class NoOpEdit implements Edit {
+        @Override
+        public void apply() {
+        }
+
+        @Override
+        public void undo() {
+        }
+
+        @Override
+        public String label() {
+            return "edit";
+        }
+    }
 
     private void build() {
         editor = new ShaderGraphEditor();
@@ -101,6 +120,59 @@ public class ShaderGraphViewStateTest extends UiDocumentTestBase {
         assertEquals(2.5f, other.graph().getZoom(), 0.001f);
         assertEquals(-400f, other.graph().getPanX(), 0.001f);
         assertEquals(175f, other.graph().getPanY(), 0.001f);
+    }
+
+    /**
+     * <b>Editing a graph does not serialise it</b> — dirtiness is {@code version() != savedVersion}.
+     *
+     * <p>The assertion is a step that changes <em>no bytes</em>, which is the case a byte comparison
+     * gets wrong: it re-encodes the whole graph and reports clean. That was the shape dirtiness had —
+     * {@code encode()} against the bytes last read, for every open document on every change, so a graph
+     * with an animated node serialised itself to JSON every frame to decide whether a tab needed an
+     * asterisk.</p>
+     */
+    @Test
+    public void aGraphEditDoesNotSerialiseTheGraph() {
+        build();
+        byte[] before = editor.encode();
+        int version = editor.version();
+
+        editor.graph().undoStack().push(new NoOpEdit());
+
+        assertEquals("the bytes are identical, which is why an encode-and-compare says clean",
+                new String(before, StandardCharsets.UTF_8),
+                new String(editor.encode(), StandardCharsets.UTF_8));
+        assertNotEquals("and the version still moved, which is what dirtiness is made of",
+                version, editor.version());
+    }
+
+    /** A graph offers no three-way merge: a line-based merge of a JSON graph produces a broken graph. */
+    @Test
+    public void aGraphConflictOffersNoMerge() {
+        build();
+        assertFalse("text is the one thing a three-way merge is actually for", editor.mergeable());
+    }
+
+    /**
+     * <b>Pan and zoom survive a session restore</b> — through the record {@code WorkbenchSession}
+     * writes for every open tab and reads back on the next launch.
+     */
+    @Test
+    public void aGraphsPanAndZoomSurviveASessionRestore() {
+        build();
+        editor.graph().setZoom(1.75f);
+        editor.graph().setPan(-42f, 88f);
+
+        StateMap<JsonElement> record = new StateMap<>(JsonOps.INSTANCE);
+        editor.writeViewState(record);
+        JsonElement persisted = record.encode();
+
+        ShaderGraphEditor restored = second(editor.encode());
+        restored.readViewState(new StateMap<>(JsonOps.INSTANCE, persisted));
+
+        assertEquals(1.75f, restored.graph().getZoom(), 0.001f);
+        assertEquals(-42f, restored.graph().getPanX(), 0.001f);
+        assertEquals(88f, restored.graph().getPanY(), 0.001f);
     }
 
     /**

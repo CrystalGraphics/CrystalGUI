@@ -3,32 +3,31 @@
 # leaving the rest alone; the generator preserves confirmations by name.
 #
 # CLASS	path	lines	destination	batch	how	status
-CLASS	net/window/ClientScope	92	net/window	6.8	move	in-place
-CLASS	net/window/ClientWindowContext	96	net/window	6.8	move	in-place
-CLASS	net/window/ClientWindows	592	net/window	6.8	move	in-place
+CLASS	net/window/ClientScope	92	net/window	6.8	copy	in-place
+CLASS	net/window/ClientWindowContext	96	net/window	6.8	copy	in-place
+CLASS	net/window/ClientWindows	592	net/window	6.8	copy	in-place
 CLASS	net/window/CloseReason	53	net/window	6.8	move	in-place
-CLASS	net/window/Networked	257	net/window	6.8	move	in-place
+CLASS	net/window/Networked	256	net/window	6.8	copy	in-place
 CLASS	net/window/OpenResolver	58	net/window	6.8	move	in-place
 CLASS	net/window/ScopedSheets	124	net/window	6.8	move	in-place
-CLASS	net/window/ServerScope	514	net/window	6.8	move	in-place
-CLASS	net/window/ServerWindow	265	net/window	6.8	move	in-place
-CLASS	net/window/ServerWindows	517	net/window	6.8	move	in-place
-CLASS	net/window/SheetSupply	231	net/window	6.8	move	in-place
-CLASS	net/window/UiType	345	net/window	6.8	move	in-place
-CLASS	net/window/ViewCommands	123	net/window	6.8	move	in-place
-CLASS	net/window/WindowMount	74	net/window	6.8	move	in-place
+CLASS	net/window/ServerScope	514	net/window	6.8	copy	in-place
+CLASS	net/window/ServerWindow	265	net/window	6.8	copy	in-place
+CLASS	net/window/ServerWindows	517	net/window	6.8	copy	in-place
+CLASS	net/window/SheetSupply	231	net/window	6.8	copy	in-place
+CLASS	net/window/UiType	344	net/window	6.8	copy	in-place
+CLASS	net/window/ViewCommands	123	net/window	6.8	copy	in-place
+CLASS	net/window/WindowMount	74	net/window	6.8	copy	in-place
 CLASS	net/window/WindowProtocol	57	net/window	6.8	move	in-place
-CLASS	ui/text/HighlightRegistry	117	ui/text	stays	move	in-place
-CLASS	ui/text/TextRange	44	ui/text	stays	move	in-place
+CLASS	ui/text/HighlightRegistry	119	ui/text	stays	move	in-place
 CLASS	language/run/view/MappingCommands	174	language/run/view	6.7	move	in-place
 CLASS	language/run/view/RunConsoleView	646	language/run/view	6.7	move	in-place
 CLASS	language/run/view/RunDecorations	124	language/run/view	6.7	move	in-place
-CLASS	language/run/view/RunIndicators	114	language/run/view	6.7	move	in-place
-CLASS	language/run/view/RunPanel	1076	language/run/view	6.7	move	in-place
-CLASS	language/run/view/RunPanels	254	language/run/view	6.7	move	in-place
-CLASS	language/run/view/RunRail	353	language/run/view	6.7	move	in-place
+CLASS	language/run/view/RunIndicators	114	language/run/view	6.7	copy	in-place
+CLASS	language/run/view/RunPanel	1074	language/run/view	6.7	copy	in-place
+CLASS	language/run/view/RunPanels	261	language/run/view	6.7	move	in-place
+CLASS	language/run/view/RunRail	353	language/run/view	6.7	copy	in-place
 CLASS	language/run/view/ScriptWorkbench	567	language/run/view	6.7	move	in-place
-CLASS	language/run/view/TailFollow	127	language/run/view	6.7	move	in-place
+CLASS	language/run/view/TailFollow	127	language/run/view	6.7	copy	in-place
 #
 # PART	owner	name	kind	uses	source	why
 PART	(unowned)	corner	A	7	proposed	leaf in every rule
@@ -78,6 +77,9 @@ PART	ArrayControl	remove	B	0	confirmed	leaf in every rule
 PART	AssetControl	asset	B	3	confirmed	a rule selects through it (2)
 PART	AssetControl	browse	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	AssetControl	field	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	BinaryFileView	binary-file	B	1	confirmed	leaf in every rule
+PART	BinaryFileView	binary-file-detail	B	1	confirmed	leaf in every rule
+PART	BinaryFileView	binary-file-name	B	1	confirmed	leaf in every rule
 PART	BlackboardPanel	active	C	4	confirmed	state adjective
 PART	BlackboardPanel	add	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	BlackboardPanel	blackboard	B	25	confirmed	a rule selects through it (22)
@@ -631,8 +633,8 @@ PART	TreeSearch	searching	C	0	confirmed	state adjective
 PART	TreeView	collapsed	C	4	confirmed	state adjective
 PART	TreeView	expanded	C	0	confirmed	state adjective
 PART	TreeView	leaf	C	0	confirmed	state adjective
-PART	UINode	user-sized-height	B	1	proposed	a rule selects through it (1)
-PART	UINode	user-sized-width	B	2	proposed	a rule selects through it (1)
+PART	UIElement	user-sized-height	B	1	proposed	a rule selects through it (1)
+PART	UIElement	user-sized-width	B	2	proposed	a rule selects through it (1)
 PART	UIText	syntax	C	54	confirmed	leaf in every rule
 PART	VectorControl	axis	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	VectorControl	vector	B	4	confirmed	a rule selects through it (3)
