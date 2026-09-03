@@ -260,7 +260,16 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
     /** Emitted when the set of realised lines changes — i.e. on a scroll that moves the window. */
     public final Signal.Action onWindowChanged = new Signal.Action();
 
-    private final TextBuffer buffer;
+    /**
+     * <b>Not final</b> — see {@link #setBuffer}. This editor is a VIEW, and which document it is a view
+     * of is a property of the view rather than of its construction.
+     */
+    private TextBuffer buffer;
+
+    /** This editor's subscriptions to whichever buffer it is currently showing. */
+    private com.crystalgui.core.signal.Connection bufferChanged;
+    private com.crystalgui.core.signal.Connection bufferSelectionsRestored;
+    private com.crystalgui.core.signal.Connection bufferDiagnostics;
 
     /**
      * Model rows projected onto visual rows.
@@ -792,7 +801,30 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         // like -- a band of text at the top of the editor and blank below it, growing as you scroll.
         setContentScrollExempt(true);
 
-        buffer.onChanged.connect(change -> {
+        subscribeToBuffer();
+
+        // The one place the caret settles. A session must end on a plain arrow-key move, which changes no
+        // text and would therefore never reach a buffer listener.
+        onSelectionChanged.connect(suggest::caretMoved);
+
+        previousLineCount = buffer.lineCount();
+        projections.rebuild(buffer.document());
+
+        installInput();
+    }
+
+    // ── Document ────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Wires this view to whichever buffer it is showing.
+     *
+     * <p>Extracted from the constructor verbatim so {@link #setBuffer} can run it again. Every
+     * connection is kept, because re-binding has to drop the previous ones — a view still listening to
+     * the document it used to show reprojects, re-measures and re-tokenises on every keystroke somebody
+     * makes in another tab.</p>
+     */
+    private void subscribeToBuffer() {
+        bufferChanged = buffer.onChanged.connect(change -> {
             long changed = FrameProfile.enter("buffer.onChanged");
             // The tokenizer hears about the edit BEFORE the next query, so an incremental one can update
             // what it holds. Applying the edit is cheap and must be synchronous; the expensive reparse is
@@ -890,7 +922,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         // hands. Every edit records where the carets were, and undo and redo hand them back here --
         // after `onChanged` above, so this is the last word rather than something the clamp overwrites.
         // Reported from the harness as "undo/redo don't put the caret back".
-        buffer.onSelectionsRestored.connect(restored -> {
+        bufferSelectionsRestored = buffer.onSelectionsRestored.connect(restored -> {
             if (restored.isEmpty()) return;
             selections.setAll(restored, 0);
             selections.clampTo(buffer.length());
@@ -900,18 +932,55 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
 
         // EVERY producer's problems get tracked ranges, not only the engine's. See retrackDiagnostics.
         diagnostics().onChanged.connect(problems::retrack);
-
-        // The one place the caret settles. A session must end on a plain arrow-key move, which changes no
-        // text and would therefore never reach a buffer listener.
-        onSelectionChanged.connect(suggest::caretMoved);
-
-        previousLineCount = buffer.lineCount();
-        projections.rebuild(buffer.document());
-
-        installInput();
+        bufferDiagnostics = diagnostics().onChanged.connect(problems::retrack);
     }
 
-    // ── Document ────────────────────────────────────────────────────────────────────────────────
+    /**
+     * <b>Shows a different document</b> — VS Code's {@code editor.setModel}.
+     *
+     * <p>The editor was constructed around one buffer it built itself and could never be pointed at
+     * another, which is why the workbench's document store held a {@code TextEditor} per file rather
+     * than a document per file: the widget WAS the document. Two split panes onto one file were then two
+     * buffers, two undo stacks and two parse trees over the same bytes, and neither knew about the
+     * other.</p>
+     *
+     * <p><b>The model is not this editor's to dispose.</b> Swapping away from a buffer drops the
+     * subscriptions and nothing else — the document may be open in another pane, in the Problems panel,
+     * or in an index. Its lifetime is a {@code DocumentReference}'s, and that is later than any view's
+     * and never earlier.</p>
+     *
+     * <p>View state is reset, because it describes the document being left: a caret at offset 4000 in a
+     * file with 300 characters is not a caret, and a fold at row 90 of a document with twelve rows
+     * hides nothing that is there.</p>
+     */
+    public TextEditor setBuffer(TextBuffer next) {
+        if (next == null || next == buffer) return this;
+        if (bufferChanged != null) bufferChanged.disconnect();
+        if (bufferSelectionsRestored != null) bufferSelectionsRestored.disconnect();
+        if (bufferDiagnostics != null) bufferDiagnostics.disconnect();
+
+        buffer = next;
+        subscribeToBuffer();
+
+        // VIEW STATE, reset because it describes the document being LEFT. A caret at offset 4000 in a
+        // file of 300 characters is not a caret, and a fold at row 90 of a twelve-row document hides
+        // nothing that is there. `measuredRows` is keyed by row index, so every entry in it now
+        // describes somebody else's text -- the same reasoning invalidateMeasuredRows already records
+        // for a line-count change, in its strongest form.
+        selections.set(new Selection(0, 0));
+        setScrollOffsets(0f, 0f);
+        setCollapsedRows();
+        forgetWidestLine();
+        measuredRows.clear();
+        markHighlightsDirty();
+        previousLineCount = buffer.lineCount();
+        projections.rebuild(buffer.document());
+        folds.markDirty();
+        invalidateWindow();
+        afterSelectionChange();
+        return this;
+    }
+
 
     /**
      * This editor's history — its buffer's.

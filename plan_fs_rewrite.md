@@ -777,9 +777,12 @@ Every step is one commit's worth, names what it removes, and ends in the test th
 3. **`Reply<T>` and `Stream<T>` in `core.async`**, with `JobScheduler.Job implements Reply`.
    `ReplyTest`: continuations run on the frame thread, `both`/`all`, cancel reports `CANCELLED`, a job
    is a reply. *D15.*
-4. **`ProjectRegistry.all()` cached on a provider revision;** `WorkspaceService` passes the resolved
-   project to `LocalFileSystem` rather than re-asking. Test counting `ProjectProvider.projects()` calls
-   across one read: 3 today, at most 1. *N20.*
+4. **`ProjectRegistry.all()` cached on a provider revision.** *(Shipped. The step also said to pass the
+   resolved project into `LocalFileSystem` rather than re-asking; once the cache carries an id index that
+   buys nothing measurable and costs a change to the `CgFileSystem` signature, so it was not done.
+   `ProjectProvider.revision()` is the hook, and its default — a constant, right for any mod that
+   registers its projects once — is what makes it a hook nobody has to remember.)* Test counting
+   `ProjectProvider.projects()` calls across one read: 3 today, 1 after. *N20.*
 5. **One `Excludes` matcher** in `fs.project`, used by the manifest and the watcher; the host opens the
    watcher with the project's rules. Test `theWatcherAndTheManifestAgreeOnEveryPattern`. *N23.*
 6. **`fs.watch` authorises with `stat`.** `WatcherDoesNotReadFilesTest` extended to the subscription. *N21.*
@@ -808,8 +811,13 @@ public surface has changed.
 5. **`DocumentKind`, `DocumentKinds`, `DocumentEditor`, `EditorInput`.** Registration refuses a kind
    with no model; resolution is name, then extension, then glob through `FilePatternMap`; the `text(…)`
    shorthand. *A10.*
-6. **`TextEditor.setBuffer`** binds a view; `disposeLanguage` goes. `document` moves below `widget`
-   in `LayeringTest`. *D4.*
+6. **`TextEditor.setBuffer`** binds a view: the buffer stops being final, its three subscriptions are
+   dropped and re-taken, and the view state is reset because it describes the document being left.
+   *(Shipped.)* *D4.*
+   **Deferred to F5, and they cannot move earlier**: `disposeLanguage` goes when `TextFileDocument`
+   does, and `document` moves below `widget` in `LayeringTest` when the three classes that name a widget
+   — `FileDocument`, `TextFileDocument`, `DocumentType` — are deleted. Until then the new types are
+   asserted not to name one, which is the property that matters and is checkable now.
 
 *Done when* the model suite passes headless and nothing in `workbench` names the new types.
 
@@ -943,9 +951,11 @@ none of which can be written today (N36).
 
 ## 11. Risks
 
-- **`Reply` versus `Job`.** Two promise-shaped types is the fourth convention with a nicer name. One
-  interface, both implement it; the risk is `Job`'s lane and key semantics leaking into a reply that has
-  neither. Write `Reply` first (F0.3) and see whether `Job` extends it cleanly.
+- ~~**`Reply` versus `Job`.**~~ **Settled at F0.3.** A `Job` cannot be a `Reply` and should not be: it
+  is a *description*, and nothing runs until `submit()`, so a type that was both would have a `then`
+  that sometimes registers against work nobody has started. The lane, the key and the debounce stay on
+  the builder and `submit()` answers the pending result. Wiring it found that a job which threw called
+  its success handler with a null result, which is why nothing could have depended on that.
 - **A rope on a worker.** D9 assumes an off-thread reader may hold a `Rope` snapshot. `Rope` is
   persistent; `TextBuffer` is not thread-safe. The rule is "hand out the rope, never the buffer", and it
   needs a test that reads a rope on a worker while the frame thread edits.

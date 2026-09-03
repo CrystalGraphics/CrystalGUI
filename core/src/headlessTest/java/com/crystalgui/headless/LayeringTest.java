@@ -282,6 +282,41 @@ public class LayeringTest {
                 offences.isEmpty());
     }
 
+    /**
+     * <b>The document MODEL names no widget</b> — {@code plan_fs_rewrite.md} D4, A6.
+     *
+     * <p>The document layer sits above {@code widget} today because {@code FileDocument.view()} answers
+     * a node and {@code TextFileDocument} wraps a {@code TextEditor}. That is what left the one headless
+     * document model the engine has ({@code TextBuffer}) sitting a package below, unused as one, and it
+     * is why a document could not be opened, analysed or saved without a window.</p>
+     *
+     * <p>The layer cannot move until those three classes are deleted at F5. What can be asserted now is
+     * the property the move exists for, over the types that replace them: a model, a document, a kind and
+     * an editor input name {@code ui.dom} at most, and never a widget. {@code DocumentEditor} is the one
+     * exception and names {@code UIElement} rather than any widget — a view is an element, and which
+     * widget it is made of is the editor's business.</p>
+     */
+    @Test
+    public void theDocumentModelNamesNoWidget() throws IOException {
+        Path src = repoRoot().resolve("core/src/main/java/com/crystalgui/document");
+        List<String> headless = List.of(
+                "DocumentModel.java", "AbstractDocumentModel.java", "TextDocumentModel.java",
+                "BytesDocumentModel.java", "Document.java", "DocumentReference.java",
+                "Documents.java", "DocumentState.java", "DocumentKind.java", "DocumentKinds.java",
+                "EditorInput.java");
+        List<String> offences = new ArrayList<>();
+        for (String name : headless) {
+            Path file = src.resolve(name);
+            if (!Files.isRegularFile(file)) continue;
+            for (String line : Files.readAllLines(file)) {
+                if (line.startsWith("import com.crystalgui.widget.")) {
+                    offences.add(name + ": " + line.trim());
+                }
+            }
+        }
+        assertTrue("the document model named a widget:" + offences, offences.isEmpty());
+    }
+
     /** The repository root, found by walking up to the settings file. */
     private static Path repoRoot() {
         for (Path p = ClassReferences.mainClassesRoot(LayeringTest.class); p != null; p = p.getParent()) {

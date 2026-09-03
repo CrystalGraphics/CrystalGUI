@@ -115,14 +115,54 @@ public final class TextBuffer {
         return lineEnding.applyTo(document.toString());
     }
 
+    private TextEncoding encoding = TextEncoding.UTF_8;
+
+    /** The charset and byte-order mark this document arrived with — what a save writes back. */
+    public TextEncoding encoding() {
+        return encoding;
+    }
+
+    public TextBuffer setEncoding(TextEncoding value) {
+        this.encoding = value == null ? TextEncoding.UTF_8 : value;
+        return this;
+    }
+
+    /**
+     * <b>The whole file, as bytes</b> — the ending restored, the charset applied, the mark written back.
+     *
+     * <p>The one method a save calls, and the reason the two facts above are held rather than
+     * re-derived: the buffer is normalised to LF and decoded past its mark the moment it loads, so by
+     * the time anything asks there is nothing left in the text to detect. Both were lost on every save
+     * before this existed — see {@link #textWithOriginalLineEndings}, which had no callers at all.</p>
+     */
+    public byte[] encodeBytes() {
+        return encoding.encode(textWithOriginalLineEndings());
+    }
+
+    /**
+     * Loads from bytes, taking the ending, the charset and the mark from them.
+     *
+     * <p>{@link #load(CharSequence)}'s counterpart for a caller that has a file rather than a String,
+     * which is every caller that reads one. Fenced against the history exactly as the others are.</p>
+     */
+    public void loadBytes(byte[] bytes) {
+        load(prepare(bytes));
+    }
+
     /**
      * A document's text with everything that can be computed from it alone already computed.
      *
      * @param document   the rope, built
      * @param normalised the text with every ending collapsed to {@code \n}
      * @param ending     what the file came with, so a save writes it back
+     * @param encoding   the charset and byte-order mark it came with, for the same reason
      */
-    public record Prepared(Rope document, String normalised, LineEnding ending) {
+    public record Prepared(Rope document, String normalised, LineEnding ending, TextEncoding encoding) {
+
+        /** Text of unknown provenance: UTF-8, no mark. What a caller with a String rather than bytes has. */
+        public Prepared(Rope document, String normalised, LineEnding ending) {
+            this(document, normalised, ending, TextEncoding.UTF_8);
+        }
     }
 
     /**
@@ -143,7 +183,23 @@ public final class TextBuffer {
         String incoming = text == null ? "" : text.toString();
         LineEnding ending = LineEnding.detect(incoming);
         String normalised = LineEnding.normalise(incoming);
-        return new Prepared(Rope.of(normalised), normalised, ending);
+        return new Prepared(Rope.of(normalised), normalised, ending, TextEncoding.UTF_8);
+    }
+
+    /**
+     * The same, <b>from the bytes</b> — which is the only place the charset and the mark can be seen.
+     *
+     * <p>Decoding with {@code new String(bytes, UTF_8)} one layer up is what lost them: a UTF-8 file
+     * with a byte-order mark opened with a stray {@code U+FEFF} as its first character, and saving wrote
+     * that back as content rather than as a mark. Whoever holds the bytes is the only one who can tell
+     * the difference, and this is that moment.</p>
+     */
+    public static Prepared prepare(byte[] bytes) {
+        TextEncoding encoding = TextEncoding.sniff(bytes);
+        String incoming = encoding.decode(bytes);
+        LineEnding ending = LineEnding.detect(incoming);
+        String normalised = LineEnding.normalise(incoming);
+        return new Prepared(Rope.of(normalised), normalised, ending, encoding);
     }
 
     /**
@@ -157,6 +213,7 @@ public final class TextBuffer {
      */
     public void load(Prepared prepared) {
         this.lineEnding = prepared.ending();
+        this.encoding = prepared.encoding();
         ChangeSet change = ChangeSet.replace(document.length(), 0, document.length(),
                 prepared.normalised());
         if (!change.isEmpty()) {
