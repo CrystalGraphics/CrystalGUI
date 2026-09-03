@@ -391,8 +391,13 @@ public class TextField extends UIElement implements Measurable {
     }
 
     public TextField setPlaceholder(String placeholder) {
-        this.placeholder = placeholder == null ? "" : placeholder;
+        String next = placeholder == null ? "" : placeholder;
+        if (next.equals(this.placeholder)) return this;
+        this.placeholder = next;
         onStyleChanged();
+        // Contracted state. Without this a server setting a placeholder after the window opened wrote
+        // it into its own copy and nowhere else -- and an empty placeholder looks like a design choice.
+        notifyStateChanged();
         return this;
     }
 
@@ -417,8 +422,11 @@ public class TextField extends UIElement implements Measurable {
     }
 
     public TextField setUpdateMode(UpdateMode updateMode) {
-        this.updateMode = updateMode == null ? UpdateMode.ON_COMMIT : updateMode;
+        UpdateMode next = updateMode == null ? UpdateMode.ON_COMMIT : updateMode;
+        if (next == this.updateMode) return this;
+        this.updateMode = next;
         if (this.updateMode == UpdateMode.IMMEDIATE) publishIfValid();
+        notifyStateChanged();
         return this;
     }
 
@@ -487,9 +495,14 @@ public class TextField extends UIElement implements Measurable {
 
     /** Also installs this mode's own keystroke filter and format pattern — see {@link Mode}. */
     public TextField setMode(Mode mode) {
-        this.mode = mode == null ? Mode.STRING : mode;
+        Mode next = mode == null ? Mode.STRING : mode;
+        if (next == this.mode) return this;
+        this.mode = next;
         applyModeConstraints();
         revalidate();
+        // BEFORE the text, on the far side: the contract declares mode first, so a field arriving with
+        // a new mode parses its text with that one rather than the old.
+        notifyStateChanged();
         return this;
     }
 

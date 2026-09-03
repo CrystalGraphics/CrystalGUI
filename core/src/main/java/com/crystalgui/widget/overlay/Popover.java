@@ -228,7 +228,12 @@ public class Popover extends UIElement {
     }
 
     public Popover setMode(Mode mode) {
-        this.mode = mode == null ? Mode.AUTO : mode;
+        Mode next = mode == null ? Mode.AUTO : mode;
+        if (next == this.mode) return this;
+        this.mode = next;
+        // Contracted state: whether this dismisses on a click outside is the server's to decide, and a
+        // change made after the window opened reached nobody.
+        notifyStateChanged();
         return this;
     }
 

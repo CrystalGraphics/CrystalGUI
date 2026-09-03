@@ -175,6 +175,9 @@ public class MenuItem extends Button {
     }
 
     public MenuItem setAccelerator(@Nullable String text) {
+        // Contracted state, and the label it is drawn in is this widget's own structure -- which the
+        // observer never hears about, so nothing else can mark this item dirty.
+        if (!getAccelerator().equals(text == null ? "" : text)) notifyStateChanged();
         if (text == null || text.isEmpty()) {
             if (accelerator != null) {
                 accelerator.setText("");
@@ -233,6 +236,9 @@ public class MenuItem extends Button {
         this.selected = value;
         onStyleChanged();
         invalidateStyleMatch();
+        // invalidateStyleMatch is the CASCADE's business and says nothing to a peer. Which of a
+        // dropdown's options is ticked is contracted state and has to travel on its own.
+        notifyStateChanged();
         return this;
     }
 

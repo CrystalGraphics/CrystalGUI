@@ -443,8 +443,13 @@ public class ColorSelector extends UIElement {
     }
 
     public ColorSelector setColor(int argb) {
+        if (argb == color.get()) return this;
         decompose(argb);
         color.set(argb);
+        // Contracted state. Every part that shows it is this widget's own structure, which the observer
+        // never hears about -- so nothing else in the tree can mark this dirty, and a server moving the
+        // colour after the window opened moved it only in its own copy.
+        notifyStateChanged();
         return this;
     }
 
@@ -461,8 +466,12 @@ public class ColorSelector extends UIElement {
      * before/after comparison — and does not turn the reset swatch into a redo of its own write.</p>
      */
     public ColorSelector setInitialColor(int argb) {
+        boolean moved = this.originalColor != argb;
         this.originalColor = argb;
         setColor(argb);
+        // The ORIGINAL as well as the colour, and separately: setColor above is a no-op when the two
+        // already agree, which is exactly the re-open case the refresh below exists for.
+        if (moved) notifyStateChanged();
         // Explicit, because the repaint normally rides on color.changed and Property.set suppresses an
         // equal value. Re-opening the picker on the colour it already held would otherwise leave the
         // left swatch showing the PREVIOUS session's original — the one case where nothing changing is
@@ -481,6 +490,7 @@ public class ColorSelector extends UIElement {
         this.mode = value;
         modeChooser.select(value.label());
         refresh();
+        notifyStateChanged();
         return this;
     }
 
@@ -780,4 +790,30 @@ public class ColorSelector extends UIElement {
         }
     }
 
+
+    /**
+     * <b>A colour selector describes no children.</b> Its structure is derived, not content.
+     *
+     * <p>Every part below this element - a label, a field, a swatch, a row of channel sliders - is built
+     * from the {@code ConfigDescriptor} this control was made with, and the far side builds the same
+     * parts from the same descriptor in its own constructor. What travels is the VALUE.</p>
+     *
+     * <p>Without this the parts are described, so a decoded control has the ones its constructor made
+     * AND the ones it was told to adopt: two labels, two fields, every control doubled. Measured at
+     * decode time as 2n-1 elements for every control in the kit, and it took a coverage walk to see -
+     * a doubled control still renders, still reports, and looks like a layout problem.</p>
+     *
+     *
+     * <p>It is also what makes the control describable at all. A swatch's fill and a hue ring are
+     * drawables written from Java at INLINE origin, and {@code InlineStyleCodec} <b>refuses</b> a value
+     * with no wire form rather than dropping it - correctly, since a silently dropped style renders
+     * differently on the two sides with nothing to explain why. A {@code CgUiColorField} has no wire
+     * form and needs none: it is never described, because the part it is on is never described.</p>
+     * <p>The contract already says so and nothing was reading it: {@code acceptsDescribedChildren()} is
+     * false for every one of these, which is what {@code ClientSmokeTest} now holds them to.</p>
+     */
+    @Override
+    public List<UIElement> describedChildren() {
+        return List.of();
+    }
 }
