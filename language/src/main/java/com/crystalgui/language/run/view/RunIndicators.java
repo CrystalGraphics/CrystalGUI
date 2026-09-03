@@ -32,7 +32,7 @@ import javax.annotation.Nullable;
  * <h3>Both writes cross a thread, and neither may cross it directly</h3>
  *
  * <p>{@link RunSessions#onDidChange} fires from wherever the transition happened — a one-shot's own
- * thread, or the game thread inside a tick handler. Both things updated here are {@code UINode} state:
+ * thread, or the game thread inside a tick handler. Both things updated here are {@code UIElement} state:
  * the badge attaches an internal child, and invalidating decorations repaints tree rows. So the signal
  * only <b>schedules</b>, and the work runs in {@link JobScheduler#drain()}, which {@code UIDocument} calls
  * once a frame on the UI thread.</p>
