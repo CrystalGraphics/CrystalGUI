@@ -17,7 +17,6 @@ import com.crystalgui.ui.service.Animation;
 import com.crystalgui.ui.UITransform;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.event.MouseEvent;
-import com.crystalgui.ui.input.UIDragController;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 import lombok.Getter;
 import org.joml.Vector2f;
@@ -665,7 +664,7 @@ public class CanvasView extends UINode  {
         return input != null && input.isKeyDown(CgKeyCodes.KEY_SPACE);
     }
 
-    /** Takes the RAW pointer position — {@code UIDragController} converts to local space itself. */
+    /** Takes the RAW pointer position — {@code Drag} converts to local space itself. */
     private void beginPan(float rawX, float rawY, int panButton) {
         UIDocument window = document();
         if (window == null) return;

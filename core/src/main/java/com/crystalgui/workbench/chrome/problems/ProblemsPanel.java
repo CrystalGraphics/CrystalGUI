@@ -27,7 +27,7 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.input.FocusPolicy;
-import com.crystalgui.ui.input.UIInputHandler;
+import com.crystalgui.ui.service.Input;
 import com.crystalgui.ui.service.AnchoredPlacement;
 import com.crystalgui.widget.collection.tree.TreeRenderer;
 import com.crystalgui.widget.collection.tree.TreeSearch;
@@ -832,7 +832,7 @@ public class ProblemsPanel extends UINode implements DataProvider {
             // The keyboard guard is not optional: Space and Enter on a focused element synthesise the same
             // MouseEvent.Down a real click would, so without it Enter would activate twice.
             row.onMouseDown.attachListener((element, event) -> {
-                if (event.getDetail() == UIInputHandler.KEYBOARD_DETAIL) return;
+                if (event.getDetail() == Input.KEYBOARD_DETAIL) return;
                 if (event.getDetail() < 2) return;
                 ProblemNode node = rowItems.get(row);
                 if (node == null || node.isFile() || tree == null) return;

@@ -8,7 +8,6 @@ import java.util.function.UnaryOperator;
 import javax.annotation.Nullable;
 
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.UIElement;
 
 /**
  * One piece of a widget's <b>authored</b> state, declared once as a {@code static final} on the widget

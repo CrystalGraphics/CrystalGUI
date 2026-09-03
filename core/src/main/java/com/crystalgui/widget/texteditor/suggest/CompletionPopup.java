@@ -23,7 +23,6 @@ import com.crystalgui.widget.collection.list.ListRenderer;
 import com.crystalgui.widget.collection.list.ListView;
 import com.crystalgui.core.collection.list.SelectionMode;
 import com.crystalgui.ui.event.MouseEvent;
-import com.crystalgui.ui.input.UIDragController;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.text.TextRange;
 import com.crystalgui.widget.texteditor.TextEditor;

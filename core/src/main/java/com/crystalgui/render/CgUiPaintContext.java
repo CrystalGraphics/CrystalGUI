@@ -33,7 +33,6 @@ import com.crystalgui.render.texture.svg.SvgDocument;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.sheet.StyleRule;
 import com.crystalgui.style.sheet.StyleSheet;
-import com.crystalgui.ui.UIWindow;
 import lombok.Getter;
 import lombok.Setter;
 import org.joml.Matrix4f;
@@ -81,6 +80,19 @@ import java.util.Set;
  * there is no recording phase and nothing to flush. This is intentional for now, not merely unoptimized. </p>
  */
 public final class CgUiPaintContext {
+
+    /**
+     * The {@code uiScale} glyphs are warmed at.
+     *
+     * <p>Was {@code UIWindow.DEFAULT_UI_SCALE}, and the reason that constant existed is unchanged: a
+     * warm aims at the size text is actually drawn at ({@code font-size * uiScale}), so one aimed at
+     * the wrong size is SILENTLY useless -- the glyphs generate, cache, and are never looked up.</p>
+     *
+     * <p>It lives here now because the new engine has no single default to borrow: {@code BoxTree}
+     * starts at 1 and the host sets what it wants, which on Minecraft is 2. So this is the scale the
+     * WARM is for, stated where the warm is, rather than a second copy of somebody else's default.</p>
+     */
+    private static final float WARM_UI_SCALE = 2f;
     /** {@code namespace:path} resolved through {@link CgIO}'s waterfall (filesystem override →
      * MC resource manager → classpath) — works identically in-game and in the harness/tests,
      * unlike the hardcoded absolute Windows path this replaced ({@code C:\WINDOWS\Fonts\arial.ttf},
@@ -134,7 +146,7 @@ public final class CgUiPaintContext {
         // AND THE TWO ASSET CACHES, both off the render thread. Neither needs GL, which is what makes
         // them a removal rather than a move -- see each method.
         preloadIcons();
-        warmGlyphs(UIWindow.DEFAULT_UI_SCALE);
+        warmGlyphs(WARM_UI_SCALE);
 
         // AND ONE EMPTY FRAME, which is the larger half. Compiling the shaders left the first real
         // beginFrame at 252 ms against 285 -- so most of that cost was never the GLSL: it is the quad

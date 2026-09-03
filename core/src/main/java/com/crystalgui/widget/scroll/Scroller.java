@@ -398,7 +398,7 @@ public class Scroller extends UINode {
         return Math.max(1f, span);
     }
 
-    /** Takes the RAW pointer position — {@code UIDragController} converts to local space itself. */
+    /** Takes the RAW pointer position — {@code Drag} converts to local space itself. */
     private void beginDrag(float rawMouseX, float rawMouseY) {
         var window = document();
         if (window == null) return;

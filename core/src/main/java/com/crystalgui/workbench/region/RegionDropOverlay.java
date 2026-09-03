@@ -10,7 +10,6 @@ import com.crystalgui.workbench.Workbench;
 import com.crystalgui.workbench.region.DockRegion;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.event.DragEvent;
-import com.crystalgui.ui.tree.UITreeTraversal;
 
 import com.crystalgui.workbench.stripe.StripeRail;
 import com.crystalgui.workbench.stripe.StripeView;

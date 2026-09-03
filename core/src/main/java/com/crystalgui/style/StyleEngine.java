@@ -26,7 +26,7 @@ import java.util.function.Supplier;
 /**
  * One instance per {@link UIWindow}. Owns the registered stylesheets, the dirty-rematch queue
  * (selector re-matching on id/class/pseudo-class change), and — via {@link TransitionEngine} — the
- * active state-transition driver. Driven once per frame from {@link UIWindow#paintFrame()}, before
+ * active state-transition driver. Driven once per frame from {@code UIDocument.frame}, before
  * layout.
  */
 public final class StyleEngine {
@@ -285,7 +285,7 @@ public final class StyleEngine {
         // BLAMED WHILE PROFILING. A count says three hundred elements were re-matched; only the caller
         // says why, and "why" is the whole question when nothing on screen is moving. @see FrameProfile
         if (FrameProfile.ENABLED && dirtyMatch.add(element)) {
-            FrameProfile.blame("markDirty", "com.crystalgui.style", "com.crystalgui.ui.UIElement");
+            FrameProfile.blame("markDirty", "com.crystalgui.style", "com.crystalgui.ui.dom.UINode");
             return;
         }
         dirtyMatch.add(element);
@@ -305,7 +305,7 @@ public final class StyleEngine {
         transitionEngine.onElementDetached(element);
     }
 
-    /** Called from {@link UIWindow#paintFrame()}, before layout is recomputed — and again afterwards for
+    /** Called from {@code UIDocument.frame}, before layout is recomputed — and again afterwards for
      * as long as {@link #hasPendingMatches()} reports work that layout itself created. */
     public void calculateStyle(float deltaSeconds) {
         // THE TWO HALVES REPORTED APART. They cost differently and for unrelated reasons -- the drain is

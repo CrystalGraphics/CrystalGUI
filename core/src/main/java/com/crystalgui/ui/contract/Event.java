@@ -8,7 +8,6 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.UIElement;
 
 /**
  * One interaction a widget can report, declared once as a {@code static final} on the widget class.

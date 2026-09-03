@@ -93,7 +93,7 @@ public class DataContextTest {
     @Test
     public void everyElementAnswersElement() {
         UIElement leaf = chain(new UIElement(), new UIElement());
-        assertSame(leaf, DataContext.from(leaf).get(UiDataKeys.ELEMENT));
+        assertSame(leaf, DataContext.from(leaf).get(UIElement.ELEMENT));
     }
 
     /**

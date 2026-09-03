@@ -6,7 +6,6 @@ import java.util.Map;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.ui.UIElement;
 
 /**
  * Every widget's answer to "what do you carry, and can you be described at all". {@code M1}.
@@ -135,15 +134,15 @@ public final class WidgetContracts {
      * up the exact class.</p>
      */
     @SuppressWarnings("unchecked")
-    public static <T> void writeState(UIElement widget, com.crystalgui.serialization.StateMap<T> out) {
-        WidgetContract<UIElement> contract = (WidgetContract<UIElement>) CONTRACTS.get(widget.getClass());
+    public static <W, T> void writeState(W widget, com.crystalgui.serialization.StateMap<T> out) {
+        WidgetContract<W> contract = (WidgetContract<W>) CONTRACTS.get(widget.getClass());
         if (contract != null) contract.write(widget, out);
     }
 
     /** Applies {@code widget}'s contracted state, or nothing if it has no contract. */
     @SuppressWarnings("unchecked")
-    public static <T> void readState(UIElement widget, com.crystalgui.serialization.StateMap<T> in) {
-        WidgetContract<UIElement> contract = (WidgetContract<UIElement>) CONTRACTS.get(widget.getClass());
+    public static <W, T> void readState(W widget, com.crystalgui.serialization.StateMap<T> in) {
+        WidgetContract<W> contract = (WidgetContract<W>) CONTRACTS.get(widget.getClass());
         if (contract != null) contract.read(widget, in);
     }
 

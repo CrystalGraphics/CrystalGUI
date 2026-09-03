@@ -3,7 +3,6 @@ package com.crystalgui.ui;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.settings.Settings;
 import com.crystalgui.core.undo.UndoStack;
-import com.crystalgui.ui.elements.chrome.MenuBarView;
 
 import java.util.List;
 
@@ -22,15 +21,6 @@ public final class UiDataKeys {
 
     private UiDataKeys() {
     }
-
-    /**
-     * The element the walk started at — the focused one.
-     *
-     * <p>Answered by {@code UIElement} itself, so it is never null in a non-empty context. Mostly for a
-     * command that needs somewhere to anchor a popup rather than a subject to act on.</p>
-     */
-    public static final DataKey<UIElement> ELEMENT =
-            DataKey.create("element", UIElement.class);
 
     /**
      * What is selected here, whatever "here" is.
@@ -80,11 +70,7 @@ public final class UiDataKeys {
     public static final DataKey<ClipboardActions> CLIPBOARD =
             DataKey.create("clipboard", ClipboardActions.class);
 
-    public static final DataKey<MenuBarView> MENU_BAR =
-            DataKey.create("menuBar", MenuBarView.class);
 
-    public static final DataKey<UIWindow> WINDOW =
-            DataKey.create("window", UIWindow.class);
 
     /**
      * The store a <b>preference</b> is written to — the outermost scope this application resolves

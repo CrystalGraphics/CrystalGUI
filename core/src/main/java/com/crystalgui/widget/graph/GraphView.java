@@ -36,8 +36,7 @@ import com.crystalgui.core.data.DataKey;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
-import com.crystalgui.ui.input.UIDragController;
-import com.crystalgui.ui.input.UIInputHandler;
+import com.crystalgui.ui.service.Input;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 import org.joml.Vector2f;
@@ -357,7 +356,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
             // marquee ends through the real pointer-up path, which a synthesized Up never reaches.
             //
             // A marquee means "the pointer went down HERE", which is not something a key can mean.
-            if (event.getDetail() == UIInputHandler.KEYBOARD_DETAIL) return;
+            if (event.getDetail() == Input.KEYBOARD_DETAIL) return;
             // A press that reached the graph itself landed on empty canvas: a node claims its own press
             // in the capture phase, and a port claims one before that. So this is the marquee's press —
             // unless a wire is under it, which is the only thing here that is drawn but not an element.

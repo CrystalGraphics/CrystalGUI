@@ -16,8 +16,6 @@ import com.crystalgui.widget.layout.Tab;
 import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
-import com.crystalgui.ui.input.UIDragController;
-import com.crystalgui.ui.tree.UITreeTraversal;
 
 import com.crystalgui.workbench.dock.drag.DockDragPayload;
 import com.crystalgui.workbench.dock.drag.DockDropZone;

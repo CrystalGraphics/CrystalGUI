@@ -197,7 +197,7 @@ public final class ExplorerCommands {
         registry.register(Command.of(PREFERENCES, "Preferences…")
                 .binding("Alt+Shift+S")
                 .run(context -> {
-                    UIWindow window = context.data().get(UiDataKeys.WINDOW);
+                    UIWindow window = context.data().get(UIElement.WINDOW);
                     if (window == null) return;
                     // THE STORE THE APPLICATION SAYS IT LISTENS ON -- asked, not derived.
                     //

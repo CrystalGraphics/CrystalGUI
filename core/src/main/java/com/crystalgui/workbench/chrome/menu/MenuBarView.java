@@ -1,5 +1,6 @@
 package com.crystalgui.workbench.chrome.menu;
 
+
 import com.crystalgui.workbench.chrome.notification.NotificationBalloons;
 import com.crystalgui.workbench.chrome.status.StatusBarView;
 import com.crystalgui.ui.dom.Name;

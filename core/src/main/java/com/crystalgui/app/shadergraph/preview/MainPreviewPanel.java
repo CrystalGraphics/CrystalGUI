@@ -22,7 +22,6 @@ import com.crystalgui.widget.overlay.Menu;
 import com.crystalgui.widget.canvas.CanvasOverlayMove;
 import com.crystalgui.widget.overlay.MenuItem;
 import com.crystalgui.widget.text.UIText;
-import com.crystalgui.ui.input.UIDragController;
 
 import javax.annotation.Nullable;
 

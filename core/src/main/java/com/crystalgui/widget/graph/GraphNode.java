@@ -16,7 +16,6 @@ import com.crystalgui.widget.text.UIText;
 import com.crystalgui.widget.canvas.WorldRect;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
-import com.crystalgui.ui.input.UIDragController;
 import lombok.Getter;
 
 import javax.annotation.Nullable;
