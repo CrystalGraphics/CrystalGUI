@@ -32,7 +32,7 @@ import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.widget.control.Button;
-import com.crystalgui.widget.control.ProgressBar;
+import com.crystalgui.widget.display.ProgressBar;
 import com.crystalgui.widget.control.Switch;
 
 /**

@@ -7,7 +7,7 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Animation;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.widget.control.ProgressBar;
+import com.crystalgui.widget.display.ProgressBar;
 import com.crystalgui.widget.text.UIText;
 
 import dev.vfyjxf.taffy.style.AlignItems;

@@ -18,7 +18,7 @@ import com.crystalgui.widget.text.UIText;
 import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.widget.collection.tree.TreeRenderer;
 import com.crystalgui.core.collection.tree.TreeRow;
-import com.crystalgui.widget.form.SearchField;
+import com.crystalgui.widget.composite.SearchField;
 import com.crystalgui.widget.collection.tree.TreeView;
 import com.crystalgui.core.search.SearchMatch;
 import com.crystalgui.core.search.SearchMatcher;

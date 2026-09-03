@@ -9,6 +9,8 @@ import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.ScrollBehavior;
 import com.crystalgui.style.sheet.StyleSheet;
+import com.crystalgui.widget.scroll.Scroller;
+import com.crystalgui.widget.scroll.ScrollerView;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import org.junit.Before;
 import org.junit.Test;

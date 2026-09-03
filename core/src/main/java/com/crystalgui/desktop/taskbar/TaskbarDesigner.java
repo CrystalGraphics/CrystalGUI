@@ -21,7 +21,7 @@ import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.scroll.ScrollerView;
-import com.crystalgui.widget.form.ColorSelector;
+import com.crystalgui.widget.composite.ColorSelector;
 import com.crystalgui.widget.control.Slider;
 import com.crystalgui.widget.text.UIText;
 import dev.vfyjxf.taffy.style.TaffyDimension;

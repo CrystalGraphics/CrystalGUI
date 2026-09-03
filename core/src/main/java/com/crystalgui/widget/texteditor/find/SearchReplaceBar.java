@@ -19,7 +19,7 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.control.Button;
-import com.crystalgui.widget.form.SearchField;
+import com.crystalgui.widget.composite.SearchField;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.widget.text.UIText;

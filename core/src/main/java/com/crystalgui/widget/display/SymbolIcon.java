@@ -1,4 +1,4 @@
-package com.crystalgui.widget.control;
+package com.crystalgui.widget.display;
 
 import com.crystalgui.fs.SourceRoots;
 import com.crystalgui.text.lang.SymbolKind;

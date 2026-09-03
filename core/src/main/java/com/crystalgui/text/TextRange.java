@@ -1,17 +1,16 @@
 package com.crystalgui.text;
 
-import com.crystalgui.ui.text.HighlightRegistry;
 
 import javax.annotation.Nullable;
 
 /**
- * A half-open {@code [start, end)} character range within a {@link com.crystalgui.ui.elements.UIText} —
- * the unit registered with {@link HighlightRegistry}.
+ * A half-open {@code [start, end)} character range within a run of text — the unit registered with
+ * {@code HighlightRegistry}.
  *
  * <p>The web's equivalent is a DOM {@code Range}, and the difference is deliberate: a DOM Range carries
  * its own container node, which is what lets {@code CSS.highlights} be a single global registry. Ours is
- * a pair of indices with no node, so the registry lives on the element instead — see
- * {@link HighlightRegistry}. Calling it {@code Range} outright would have been closer to the web and
+ * a pair of indices with no node, so the registry lives on the element instead
+ * ({@code ui.text.HighlightRegistry}). Calling it {@code Range} outright would have been closer to the web and
  * worse to read, since in a UI toolkit that name suggests a slider's bounds at least as strongly.</p>
  */
 public record TextRange(int start, int end) {

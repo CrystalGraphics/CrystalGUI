@@ -14,7 +14,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
-import com.crystalgui.widget.control.ProgressBar;
+import com.crystalgui.widget.display.ProgressBar;
 import com.crystalgui.widget.control.Slider;
 import com.crystalgui.widget.control.Switch;
 import com.crystalgui.widget.control.TextField;

@@ -10,7 +10,7 @@ import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.widget.control.SymbolIcon;
+import com.crystalgui.widget.display.SymbolIcon;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.widget.text.UIText;

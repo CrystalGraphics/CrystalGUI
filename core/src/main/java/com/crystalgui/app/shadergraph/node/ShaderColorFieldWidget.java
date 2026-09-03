@@ -2,7 +2,7 @@ package com.crystalgui.app.shadergraph.node;
 
 import com.crystalgui.graph.NodeField;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.widget.form.ColorSelector;
+import com.crystalgui.widget.composite.ColorSelector;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.widget.config.control.ColorControl;
 import com.crystalgui.widget.graph.GraphNode;

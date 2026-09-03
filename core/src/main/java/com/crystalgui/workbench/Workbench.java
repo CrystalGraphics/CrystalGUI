@@ -40,7 +40,7 @@ import com.crystalgui.workbench.chrome.status.StatusBarView;
 import com.crystalgui.workbench.decoration.FileDecoration;
 import com.crystalgui.workbench.decoration.FileDecorationProvider;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.widget.control.SymbolIcon;
+import com.crystalgui.widget.display.SymbolIcon;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.text.diff.ThreeWayMerge;
 import com.crystalgui.widget.control.Button;

@@ -81,7 +81,19 @@ public class LayeringTest {
      */
     private static final List<String> WIDGET_TIERS = List.of(
             "com/crystalgui/widget/control/",
+            // DISPLAY IS A BOTTOM TIER and was two files inside `control`. A ProgressBar and a
+            // SymbolIcon take no input at all, which is the whole of what `control` means -- and the
+            // tier is not a guess: between them they import `ui` and `style` and NOT ONE widget.
+            "com/crystalgui/widget/display/",
             "com/crystalgui/widget/text/",
+            // SCROLL IS A SIBLING OF LAYOUT AND CANNOT BE A CHILD OF IT. Nesting it as
+            // `widget/layout/scroll` was tried and this list cannot express it: `matches` is a prefix
+            // test, so every reference Scroller makes TO ITSELF matches the rule
+            // `com/crystalgui/widget/layout/` -- and scroll sits BELOW layout, so the package failed
+            // against its own parent. Loosening the match to let a sub-package off would silently
+            // permit scroll -> layout, which is the one edge the ordering exists to forbid. The
+            // dependencies agree with the flat shape: `widget/text/MarkupView` uses a ScrollerView,
+            // and layout/scroll imported nothing from layout at all.
             "com/crystalgui/widget/scroll/",
             "com/crystalgui/widget/overlay/",
             "com/crystalgui/widget/layout/",
@@ -90,7 +102,7 @@ public class LayeringTest {
             "com/crystalgui/widget/collection/list/",
             "com/crystalgui/widget/collection/tree/",
             "com/crystalgui/widget/collection/table/",
-            "com/crystalgui/widget/form/",
+            "com/crystalgui/widget/composite/",
             // THE CONFIG KIT IS ITS OWN THING, not a corner of `form`. `form` holds controls a caller
             // places by hand -- ColorSelector, SearchField; `config` is the descriptor-driven form
             // GENERATOR over them, and `config/control` its thirteen field editors. Above tier 5, so
@@ -125,8 +137,8 @@ public class LayeringTest {
             "com/crystalgui/widget/texteditor/lang/");
 
     /** Which tiers may name which: an index into {@link #WIDGET_TIERS}, and everything at or below it. */
-    private static final int WIDGET_BOTTOM_TIER = 2; // control, text, scroll
-    private static final int WIDGET_MIDDLE_TIER = 5; // + overlay, layout, dnd
+    private static final int WIDGET_BOTTOM_TIER = 3; // control, display, text, scroll
+    private static final int WIDGET_MIDDLE_TIER = 6; // + overlay, layout, dnd
 
     @Test
     public void aLayerNamesNothingAboveIt() throws IOException {
@@ -152,6 +164,60 @@ public class LayeringTest {
             offences.addAll(ClassReferences.offences(root, WIDGET_TIERS.get(i), above));
         }
         assertTrue("a widget tier reached above its own:\n" + String.join("\n", offences), offences.isEmpty());
+    }
+
+    /**
+     * <b>The headless side names no UI</b> — and this one is asserted on IMPORTS, not on the constant
+     * pool, which is the opposite of every other assertion in this file and deliberate.
+     *
+     * <p>{@code text/} is the document model and {@code style/} is the cascade, written against
+     * {@code Styleable} so a cascade bug is fixed once. Neither has any business naming the tree. Both
+     * were true when this was written and both had been false within the previous week — which is the
+     * argument for the test rather than the convention.</p>
+     *
+     * <h3>Why imports and not bytecode</h3>
+     *
+     * <p>Because the defect this exists to catch <b>is</b> the import. Twice in one afternoon a class
+     * was moved DOWN out of {@code ui} to remove an inverted dependency, and arrived carrying a
+     * {@code @link} or {@code @see} back to what it had left — {@code text.TextRange} at
+     * {@code ui.text.HighlightRegistry}, {@code core.data.ClipboardActions} at
+     * {@code ui.data.UiDataKeys}. A javadoc reference compiles to nothing, so a constant-pool scan
+     * sees an empty class and passes; the source still says the two layers know about each other, and
+     * the next person to need a real reference finds the import already sitting there. Moving a class
+     * to fix an edge and leaving the link that recreates it is a shape, not an accident.</p>
+     *
+     * <p>{@code core/} is deliberately NOT on this list. It names {@code ui} six times and every one is
+     * decided — {@code CommandRegistry} holds a {@code Keymap}, {@code UndoScope} walks a
+     * {@code UIElement}, the clipboard commands resolve through {@code UiDataKeys} — which is
+     * {@code plan_m6.md} D12, not drift.</p>
+     */
+    @Test
+    public void theHeadlessSideNamesNoUi() throws IOException {
+        Path src = repoRoot().resolve("core/src/main/java/com/crystalgui");
+        List<String> offences = new ArrayList<>();
+        for (String pkg : List.of("text", "style", "fs", "serialization")) {
+            Path dir = src.resolve(pkg);
+            if (!Files.isDirectory(dir)) continue;
+            try (java.util.stream.Stream<Path> walk = Files.walk(dir)) {
+                for (Path f : walk.toList()) {
+                    if (!f.toString().endsWith(".java")) continue;
+                    for (String line : Files.readAllLines(f)) {
+                        if (line.startsWith("import com.crystalgui.ui.")) {
+                            offences.add(src.relativize(f) + ": " + line.trim());
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue("the headless side named the tree:\n" + String.join("\n", offences), offences.isEmpty());
+    }
+
+    /** The repository root, found by walking up to the settings file. */
+    private static Path repoRoot() {
+        for (Path p = ClassReferences.mainClassesRoot(LayeringTest.class); p != null; p = p.getParent()) {
+            if (Files.isRegularFile(p.resolve("settings.gradle.kts"))) return p;
+        }
+        throw new IllegalStateException("cannot find the repository root");
     }
 
     /**

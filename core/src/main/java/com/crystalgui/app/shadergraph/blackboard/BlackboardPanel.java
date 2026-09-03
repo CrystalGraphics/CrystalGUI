@@ -25,7 +25,7 @@ import com.crystalgui.widget.overlay.Menu;
 import com.crystalgui.widget.scroll.ScrollerView;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.service.AnchoredPlacement;
-import com.crystalgui.widget.canvas.CanvasOverlayMove;
+import com.crystalgui.widget.dnd.CanvasOverlayMove;
 import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.style.StyleGroup;

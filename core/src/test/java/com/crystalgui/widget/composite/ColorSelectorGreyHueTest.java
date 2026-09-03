@@ -1,4 +1,4 @@
-package com.crystalgui.widget.form;
+package com.crystalgui.widget.composite;
 
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.data.ReadOnlyVec2f;
