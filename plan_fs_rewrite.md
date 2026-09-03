@@ -1,5 +1,10 @@
 # The filesystem, resource and document model — audit and rewrite plan
 
+**Status: COMPLETE. F0–F7 shipped, 2026-09-04**, interleaved with `plan_ui_rewrite.md`'s M7 into the
+one flow that plan's §7.A gives. Two things are deliberately outstanding and are a person's to run
+rather than a milestone's: `-PcgEditorProbe` on an integrated server and `-PcgTwoClientProbe` on two
+clients joined to one `runServer` (F7).
+
 **Audited 2026-09-03** against the tree at `97e31a51` (M6 closed); **restructured 2026-09-03** after
 the decisions below were taken. Every claim was checked against the code on that day; where a line is
 named it was read, not remembered.
