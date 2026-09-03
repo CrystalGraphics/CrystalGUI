@@ -83,6 +83,7 @@ import com.crystalgui.workbench.explorer.WorkspaceTreeSource;
 import com.crystalgui.workbench.region.DockRegion;
 import com.crystalgui.workbench.region.RegionDropOverlay;
 import com.crystalgui.workbench.region.RegionSide;
+import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.workbench.dock.panel.DockPanelRegistry;
 import com.crystalgui.widget.texteditor.TextEditor;
 import com.crystalgui.workbench.decoration.DiagnosticDecorations;
@@ -1002,6 +1003,11 @@ public class Workbench extends UIElement implements DataProvider {
             // countdown below is a backstop for the case this signal never comes -- closing a tab that
             // was not the active one leaves the active panel where it was and announces nothing.
             focusActiveEditorAfterClose();
+        // ANYTHING ASKED FOR BEFORE IT COULD BE SHOWN. The one-shot hook in connected() covers the frame
+        // the workbench joins a window; nothing covered a panel asked for AFTER that and before its
+        // region existed -- which is what a server opening a tool window does. Free when the set is
+        // empty, which is every frame but the few that matter. @see ToolWindowManager#retryPendingShows
+        if (toolWindowManager != null) toolWindowManager.retryPendingShows();
             revealActiveFile();
             rebindProblems();
             bindStatusToActiveTab();
@@ -1194,6 +1200,37 @@ public class Workbench extends UIElement implements DataProvider {
 
     public DockPanelRegistry<UIElement> panels() {
         return registry;
+    }
+
+    /** @see #windowMount */
+    @Nullable
+    private NetworkedPanels networkedPanels;
+
+    /**
+     * <b>Where a server's windows land on this workbench</b> — a tab, a rail, or the desktop.
+     *
+     * <pre>{@code
+     * ClientWindows.of(connection).setMount(workbench.windowMount(desktopMount));
+     * }</pre>
+     *
+     * <p>Install it as the client's one {@link WindowMount}. It honours the
+     * placement each server names and hands everything else — including anything it does not recognise
+     * — to {@code desktop}, so a window always opens somewhere. A host with no workbench installs its
+     * desktop mount directly and every window opens there, which is the hint working rather than
+     * failing.</p>
+     *
+     * <p>One per workbench, built on first ask: the manifest of what has been seen is what a restore
+     * reads, and a second instance would restore a layout it had no descriptors for.</p>
+     */
+    public NetworkedPanels windowMount(@Nullable WindowMount desktop) {
+        if (networkedPanels == null) networkedPanels = new NetworkedPanels(this, desktop);
+        return networkedPanels;
+    }
+
+    /** The networked panels on this workbench, or null before anything asked for a mount. */
+    @Nullable
+    public NetworkedPanels networkedPanels() {
+        return networkedPanels;
     }
 
     public ProjectFileTree fileTree() {
@@ -2068,7 +2105,11 @@ public class Workbench extends UIElement implements DataProvider {
      * saved and was refused. @see Workspace.Presence#whoIsEditing</p>
      */
     @Nullable
-    private String othersEditing(CgPath target) {
+    private String othersEditing(@Nullable CgPath target) {
+        // NOT A FILE, so nobody is editing it. A dock panel need not be about a path at all -- a
+        // networked panel a server opened as a tab is the first one that is not, and this threw out of
+        // the active-panel signal, which runs inside the click that activated the tab.
+        if (target == null) return null;
         List<String> others = workspace.presence().whoIsEditing(Resource.of(target));
         if (others.isEmpty()) return null;
         if (others.size() == 1) return others.get(0);

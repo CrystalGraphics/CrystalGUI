@@ -248,6 +248,13 @@ public final class ServerUiSession<N extends Styleable, T> {
     private int elementCount;
     private boolean open = false;
 
+    /** @see #connection() */
+    @Nullable
+    private ProtocolConnection<T> owner;
+
+    /** Where the server would like this window to appear. @see UiMethods#PRESENTATION */
+    private String presentation = "";
+
     /** False when a {@link ProtocolConnection} drains and expires for us. @see #tick() */
     private final boolean ownsConnection;
 
@@ -293,7 +300,22 @@ public final class ServerUiSession<N extends Styleable, T> {
         this.nodes = nodes;
         this.mirror = new ServerTreeMirror<>(ids, nodes, this.ops);
         this.ownsConnection = false;
+        // THE WIRE THIS WINDOW WAS OPENED ON, kept because a scope needs it: `io.workspace()` answers
+        // the filesystem bound to this connection, and a session with several viewers still has exactly
+        // one owner. Viewers come and go; the owner is what the window is FOR.
+        this.owner = connection;
         addViewer(connection.router(), connection.peer(), UiWindowMux.of(connection));
+    }
+
+    /**
+     * The connection this window was opened on, or {@code null} for a session that owns its own.
+     *
+     * <p>Not "a viewer" — a window may have several. This is the one the server opened it for, and the
+     * one whose per-connection attachments (its workspace binding, its window host) belong to it.</p>
+     */
+    @Nullable
+    public ProtocolConnection<T> connection() {
+        return owner;
     }
 
     // ── C1: fan-out ─────────────────────────────────────────────────────────
@@ -444,6 +466,16 @@ public final class ServerUiSession<N extends Styleable, T> {
     }
 
     /**
+     * Where the server would like this window to appear — {@code Presentation.encode()}.
+     *
+     * <p>A hint the client is free to ignore. @see UiMethods#PRESENTATION</p>
+     */
+    public ServerUiSession<N, T> setPresentation(@Nullable String presentation) {
+        this.presentation = presentation == null ? "" : presentation;
+        return this;
+    }
+
+    /**
      * The wire format — <b>always the connection's own</b>.
      *
      * <p>Exposed so a handler builds its payloads in the same representation everything else on this
@@ -525,6 +557,9 @@ public final class ServerUiSession<N extends Styleable, T> {
         // OMITTED rather than written empty when absent: "" is a legal key and would be indistinguishable
         // from "this window has none", which is the difference between deduping and not.
         if (key != null) out.putString(UiMethods.KEY, key);
+        // OMITTED when unset, so an older server sends none and a client reads the desktop default --
+        // which is what every window did before a placement could be named.
+        if (!presentation.isEmpty()) out.putString(UiMethods.PRESENTATION, presentation);
         if (uiClass != null) out.putString(UiMethods.UI_CLASS, uiClass);
         List<T> encodedSheets = new ArrayList<>(sheets.size());
         for (SheetRef ref : sheets) encodedSheets.add(SheetRef.CODEC.encode(ops, ref));

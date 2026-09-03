@@ -5,6 +5,7 @@ import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.protocol.Call;
 import com.crystalgui.serialization.DynamicOps;
@@ -76,6 +77,26 @@ public final class ClientScope {
     }
 
     /** The window this panel is mounted in — title, key, sheets, {@code userClosed}. */
+    /**
+     * <b>The workspace on this connection</b> — the same filesystem the editor reads.
+     *
+     * <pre>{@code
+     * io.workspace().files().list(CgPath.ofProject("mymod.proj"))
+     *         .then(entries -> …);
+     * }</pre>
+     *
+     * <p>A panel that shows files reads them through the fs protocol, never through the mirror. Shipping
+     * a listing as described elements makes a directory of ten thousand files into ten thousand
+     * elements, re-sent whenever anything in it changes — and the workspace already has watches,
+     * etags, chunked reads and a permission model that a hand-rolled listing does not.</p>
+     *
+     * <p>Connection-scoped, not window-scoped: two panels on one client share one workspace, one cache
+     * and one set of watches.</p>
+     */
+    public Workspace workspace() {
+        return Workspace.of(window.connection());
+    }
+
     public ClientWindowContext window() {
         return window;
     }

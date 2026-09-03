@@ -169,6 +169,22 @@ public final class WorkbenchSession {
      * arrangement -- see the version block above -- which is far too much to pay for one optional field.</p>
      */
     private static final String KEY_WIDGETS = "widgets";
+
+    /**
+     * The networked panel types this workbench has seen — {@link NetworkedPanels#manifest()}.
+     *
+     * <p>Read <b>before</b> the dock, and that ordering is the whole reason it exists. A networked
+     * panel's descriptor is registered on first sight of a window of that type, so on the next launch
+     * nothing has registered one — and {@code DockLayoutCodec.decode} drops a ref whose type the
+     * registry does not know. Without this, a networked tab was saved perfectly and silently vanished.</p>
+     *
+     * <p><b>No version bump</b>, for the reason {@link #KEY_WIDGETS} gives: the key is purely additive,
+     * and a record written before it decodes to "this workbench had none".</p>
+     */
+    private static final String KEY_NETWORKED = "networked";
+
+    private static final String KEY_TYPE = "type";
+    private static final String KEY_PRESENTATION = "presentation";
     private static final String KEY_ID = "id";
     private static final String KEY_PATH = "path";
     private static final String KEY_VIEW = "view";
@@ -317,6 +333,16 @@ public final class WorkbenchSession {
             entry.putString(KEY_ID, id);
             entry.putRaw(KEY_VIEW, widgetState.entries().get(id));
         });
+
+        // BEFORE the layout is read back, though it is written wherever it fits: see #KEY_NETWORKED.
+        NetworkedPanels networked = workbench.networkedPanels();
+        if (networked != null) {
+            out.putList(KEY_NETWORKED, networked.manifest(), (entry, panel) -> {
+                entry.putString(KEY_TYPE, panel.typeId());
+                entry.putString(KEY_TITLE, panel.title());
+                entry.putString(KEY_PRESENTATION, panel.presentation());
+            });
+        }
 
         CgPath active = workbench.activeFilePath();
         if (active != null) out.putString(KEY_ACTIVE, active.toString());
@@ -569,6 +595,10 @@ public final class WorkbenchSession {
             return false;
         }
 
+        // BEFORE THE DOCK, and it has to be: decoding the layout asks the registry for a descriptor per
+        // ref, and a networked panel has none until this runs. @see #KEY_NETWORKED
+        restoreNetworkedManifest(in);
+
         JsonElement dock = in.getRaw(KEY_DOCK);
         if (dock == null) return false;
         DockLayout layout = DockLayoutCodec.decode(dock, JsonOps.INSTANCE, workbench.panels());
@@ -648,6 +678,29 @@ public final class WorkbenchSession {
      * see {@link SessionState}, which explains why anything applied once at startup misses most of what
      * it is for.</p>
      */
+    /**
+     * Re-registers the networked panel types a previous session saw, before anything decodes a ref.
+     *
+     * <p>An entry missing its type is skipped rather than refused: a manifest is a convenience for the
+     * dock, and one bad row should cost that row's tab and nothing else. @see #KEY_NETWORKED</p>
+     */
+    private void restoreNetworkedManifest(StateMap<JsonElement> in) {
+        JsonElement listed = in.getRaw(KEY_NETWORKED);
+        if (listed == null || !listed.isJsonArray()) return;
+        List<NetworkedPanels.Entry> entries = new ArrayList<>();
+        for (JsonElement element : listed.getAsJsonArray()) {
+            StateMap<JsonElement> entry = new StateMap<>(JsonOps.INSTANCE, element);
+            String type = entry.getString(KEY_TYPE, "");
+            if (type.isEmpty()) continue;
+            entries.add(new NetworkedPanels.Entry(type,
+                    entry.getString(KEY_TITLE, type), entry.getString(KEY_PRESENTATION, "tab")));
+        }
+        if (entries.isEmpty()) return;
+        // BUILDS THE MOUNT if nothing has, which is the ordinary case on a fresh launch: the manifest is
+        // read long before a connection exists to install one against.
+        workbench.windowMount(null).restoreManifest(entries);
+    }
+
     private void restoreWidgetState(StateMap<JsonElement> in) {
         Map<String, JsonElement> entries = new LinkedHashMap<>();
         JsonElement widgets = in.getRaw(KEY_WIDGETS);

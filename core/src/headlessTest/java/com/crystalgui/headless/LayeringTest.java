@@ -276,11 +276,9 @@ public class LayeringTest {
                 }
             }
         }
-        // KNOWN, and going: WorkspaceClient is deleted at F4 and WorkspaceRpc at F3. Listed by name
-        // rather than by relaxing the rule, so the day either stops appearing here is the day this
-        // entry is deleted -- and a NEW file breaking the rule fails immediately.
-        List<String> expected = List.of("WorkspaceClient.java", "WorkspaceRpc.java");
-        offences.removeIf(offence -> expected.stream().anyMatch(offence::startsWith));
+        // NO EXEMPTIONS. WorkspaceClient and WorkspaceRpc were listed here by name while F3 and F4 were
+        // deleting them -- the day either stopped appearing was the day its entry went, which is what an
+        // exemption listed by name buys over a relaxed rule.
         assertTrue("the filesystem named the UI's networking:\n" + String.join("\n", offences),
                 offences.isEmpty());
     }

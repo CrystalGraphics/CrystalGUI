@@ -8,7 +8,10 @@ import java.util.function.Consumer;
 import javax.annotation.Nullable;
 
 import com.crystalgui.net.RowWindows;
+import com.crystalgui.fs.server.ServerWorkspace;
+import com.crystalgui.fs.server.WorkspaceBinding;
 import com.crystalgui.net.ServerUiSession;
+import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.SheetRef;
 import com.crystalgui.net.protocol.Call;
 import com.crystalgui.serialization.DynamicOps;
@@ -456,6 +459,28 @@ public final class ServerScope {
      */
     public String qualify(String method) {
         return prefix.isEmpty() ? method : prefix + method;
+    }
+
+    /**
+     * <b>The workspace this window was opened on</b>, as the actor it was opened for.
+     *
+     * <pre>{@code
+     * for (CgFileEntry entry : io.workspace().list(CgPath.ofProject("mymod.proj"))) …
+     * }</pre>
+     *
+     * <p>The actor is already decided, so a panel cannot read as somebody it is not — {@link
+     * ServerWorkspace} exists for exactly that reason. The mirror image of {@link
+     * ClientScope#workspace()}, which is what the panel's own client half reads through.</p>
+     *
+     * <p>Null when this connection carries no workspace, which is an ordinary state: a server that
+     * serves UI and no files binds none. A panel that needs one should say so rather than assume.</p>
+     */
+    @Nullable
+    public ServerWorkspace workspace() {
+        ProtocolConnection<Object> connection = session.connection();
+        if (connection == null || !connection.hasAttachment(WorkspaceBinding.class)) return null;
+        WorkspaceBinding<?> binding = connection.attachment(WorkspaceBinding.class, wire -> null);
+        return binding == null ? null : binding.workspace();
     }
 
     // ── Theming ─────────────────────────────────────────────────────────────

@@ -130,7 +130,16 @@ public final class ToolWindowManager {
         toolWindows.put(placementOf(typeId).withWeight(weight).withSideWeight(sideWeight));
     }
 
-    /** Windowed tool windows asked for before there was a window to open them into. @see #showInFrame */
+    /**
+     * Tool windows asked for before there was anywhere to put them.
+     *
+     * <p>Both presentations, and it has to be both. A WINDOWED one has no {@code UIDocument} to open
+     * into on the frame a session restores; a DOCKED one has no {@link RegionHost} to show in until the
+     * workbench has joined a window and its regions have been built, which is a frame later still. The
+     * docked branch recorded nothing and returned false, so a panel asked for on the frame the workbench
+     * was attached simply never opened — invisible for as long as everything that shows a tool window
+     * did so from a user gesture, and reached the moment a <b>server</b> could ask for one.</p>
+     */
     private final java.util.Set<String> pendingWindowedShows = new java.util.LinkedHashSet<>();
 
     /**
@@ -239,10 +248,17 @@ public final class ToolWindowManager {
         if (type.isWindowed()) return showInFrame(typeId, type);
         DockRegion region = regionOf(typeId);
         RegionHost host = regions.host(region);
-        if (host == null) return false;
+        if (host == null) {
+            // NO REGION YET, which is an ordinary state rather than a refusal: the regions are built when
+            // the workbench joins a window, and a restore -- or a server -- can ask before that.
+            // Remembered and replayed, exactly as the windowed branch below does. @see #retryPendingShows
+            pendingWindowedShows.add(typeId);
+            return false;
+        }
 
         ViewContainer container = containers.computeIfAbsent(typeId, this::buildContainer);
         if (container == null) return false;
+        pendingWindowedShows.remove(typeId);
 
         // INTO ITS OWN HALF. A region holds two, so showing one no longer displaces the other -- which is
         // the whole of "Problems bottom-left, Services bottom-right, both at once".

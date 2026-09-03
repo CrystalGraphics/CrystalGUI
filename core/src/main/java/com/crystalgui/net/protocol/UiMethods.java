@@ -169,6 +169,14 @@ public final class UiMethods {
     /** {@code ui/openWindow}: the window's uniqueness and persistence key, or absent. */
     public static final String KEY = "key";
 
+    /**
+     * {@code ui/openWindow}: <b>where the server would like it to appear</b> — a hint, not an order.
+     *
+     * <p>Absent from a server that names none, which a client reads as a desktop window. @see
+     * com.crystalgui.net.window.Presentation</p>
+     */
+    public static final String PRESENTATION = "presentation";
+
     /** The window id, on every {@code ui/*} payload. @see UiMethods */
     /**
      * The panel's class name, on {@code ui/openWindow} — what lets the client initialise the class
