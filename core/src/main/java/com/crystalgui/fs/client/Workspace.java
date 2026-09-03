@@ -1,6 +1,9 @@
 package com.crystalgui.fs.client;
 
 import com.crystalgui.core.async.Reply;
+import com.crystalgui.core.async.UiBudget;
+import com.crystalgui.text.TextPoint;
+import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.storage.ConfigStorage;
@@ -153,10 +156,97 @@ public final class Workspace implements Disposable {
         return () -> providers.remove(scheme, provider);
     }
 
-    /** What provides this resource, or null when the server does. */
+    /**
+     * What provides this resource, or null when the server does.
+     *
+     * <p>Answers a <b>timed view</b> of the provider, because this is the one door every reader goes
+     * through and the cost is behind the callee's signature: {@code symbolOf(Resource)} reads exactly
+     * like a property getter and was measured at a 761ms compile the first time it was asked about a
+     * class, from a tab presentation the dock re-reads on every strip rebuild. Instrumenting callers
+     * would mean remembering to, in every widget that ever asks a provider anything. @see UiBudget</p>
+     */
     @Nullable
     public ContentProvider providerFor(Resource resource) {
-        return resource == null ? null : providers.get(resource.scheme());
+        if (resource == null) return null;
+        ContentProvider provider = providers.get(resource.scheme());
+        // ONE WRAPPER PER PROVIDER, kept: a fresh one per call would allocate on a path the dock takes
+        // per tab per rebuild, and would make two answers about one scheme unequal.
+        return provider == null ? null : timed.computeIfAbsent(provider, Timed::new);
+    }
+
+    private final Map<ContentProvider, ContentProvider> timed = new LinkedHashMap<>();
+
+    /**
+     * Times a provider's <b>synchronous</b> answers against the frame budget.
+     *
+     * <p>Only the synchronous ones. {@code read} and {@code locate} answer a {@link Reply} — the work is
+     * off the frame thread by construction, so timing the call measures the submit and reports nothing
+     * worth hearing. What is left is what a tab presentation and a tree row bind ask while painting.</p>
+     */
+    private static final class Timed implements ContentProvider {
+
+        private final ContentProvider delegate;
+
+        Timed(ContentProvider delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public Reply<byte[]> read(Resource resource) {
+            return delegate.read(resource);
+        }
+
+        @Override
+        public Reply<TextPoint> locate(Resource resource, String member) {
+            return delegate.locate(resource, member);
+        }
+
+        @Override
+        public Reply<String> write(Resource resource, byte[] content) {
+            return delegate.write(resource, content);
+        }
+
+        @Override
+        public Disposable onDidResolveSymbol(Consumer<Resource> listener) {
+            return delegate.onDidResolveSymbol(listener);
+        }
+
+        @Override
+        @Nullable
+        public SymbolInfo symbolOf(Resource resource) {
+            long started = UiBudget.begin();
+            try {
+                return delegate.symbolOf(resource);
+            } finally {
+                UiBudget.end(started, "symbolOf " + resource);
+            }
+        }
+
+        @Override
+        @Nullable
+        public String displayName(Resource resource) {
+            long started = UiBudget.begin();
+            try {
+                return delegate.displayName(resource);
+            } finally {
+                UiBudget.end(started, "displayName " + resource);
+            }
+        }
+
+        @Override
+        public String languageFileName(Resource resource) {
+            long started = UiBudget.begin();
+            try {
+                return delegate.languageFileName(resource);
+            } finally {
+                UiBudget.end(started, "languageFileName " + resource);
+            }
+        }
+
+        @Override
+        public boolean isReadOnly(Resource resource) {
+            return delegate.isReadOnly(resource);
+        }
     }
 
     /** Every registered provider, for a caller that must subscribe to all of them. */
