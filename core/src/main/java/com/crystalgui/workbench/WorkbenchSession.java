@@ -5,7 +5,7 @@ import com.crystalgui.desktop.Desktop;
 import com.crystalgui.document.DocumentViewState;
 import com.crystalgui.document.FileDocument;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.ConfigStorage;
+import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.workbench.dock.layout.DockLeaf;

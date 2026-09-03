@@ -5,18 +5,25 @@ import com.crystalgui.fs.CgFileEntry;
 import com.crystalgui.fs.CgFileSystem;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.InMemoryFileSystem;
-import com.crystalgui.fs.ProjectRegistry;
+import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.WorkspaceActor;
 import com.crystalgui.fs.WorkspacePermission;
-import com.crystalgui.fs.WorkspaceProject;
+import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.WorkspaceService;
+import com.crystalgui.fs.WorkspaceProtocol;
+import com.crystalgui.fs.WorkspaceRpc;
 import com.crystalgui.fs.WorkspaceWatcher;
+import com.crystalgui.net.protocol.Call;
+import com.crystalgui.serialization.PlainOps;
+import com.crystalgui.serialization.StateMap;
 
 import org.junit.Before;
 import org.junit.Test;
 
 import java.nio.file.Paths;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
@@ -135,6 +142,36 @@ public class WatcherDoesNotReadFilesTest {
         for (int i = 0; i < 50; i++) watcher.poll(WorkspaceActor.LOCAL);
 
         assertEquals("fifty polls must not read the file once", before, files.reads);
+    }
+
+    /**
+     * <b>And neither does SUBSCRIBING over the wire</b> — {@code plan_fs_rewrite.md} F0.6, N21.
+     *
+     * <p>6.1 fixed the poll and left the {@code fs.watch} handler, which authorised with
+     * {@code service.read} — so the one path a client reaches deliberately still loaded the whole file
+     * to prove it was allowed to look at it. Opening a 40 MB log allocated 40 MB and discarded it.
+     * The authorisation is unchanged; it costs a stat.</p>
+     */
+    @Test
+    public void subscribingOverTheWireCostsAStatAndNotARead() {
+        int beforeReads = files.reads;
+        int beforeStats = files.stats;
+
+        WorkspaceRpc<Object> rpc = new WorkspaceRpc<>(service, WorkspaceActor.LOCAL);
+        Map<String, Call.Handler<Object>> handlers = new HashMap<>();
+        rpc.installOn(handlers::put);
+
+        StateMap<Object> args = new StateMap<>(PlainOps.INSTANCE);
+        args.putString(WorkspaceProtocol.PATH, BIG.toString());
+        boolean[] answered = {false};
+        handlers.get(WorkspaceProtocol.WATCH).invoke(args, new Call.Responder<Object>() {
+            @Override public void ok(StateMap<Object> value) { answered[0] = true; }
+            @Override public void fail(String error) { throw new AssertionError("watch refused: " + error); }
+        });
+
+        assertTrue("the subscription was accepted", answered[0]);
+        assertEquals("subscribing must not read the file", beforeReads, files.reads);
+        assertTrue("and must still have authorised it", files.stats > beforeStats);
     }
 
     /** It still reports a change, which is the thing it exists to do. */

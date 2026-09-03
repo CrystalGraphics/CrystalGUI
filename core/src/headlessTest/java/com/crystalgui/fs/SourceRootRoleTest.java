@@ -1,5 +1,6 @@
 package com.crystalgui.fs;
 
+import com.crystalgui.fs.project.SourceRoots;
 import org.junit.Test;
 
 import java.util.List;

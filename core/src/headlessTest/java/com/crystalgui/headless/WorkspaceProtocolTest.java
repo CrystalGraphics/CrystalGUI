@@ -2,10 +2,10 @@ package com.crystalgui.headless;
 
 import com.crystalgui.fs.CgFileError;
 import com.crystalgui.fs.InMemoryFileSystem;
-import com.crystalgui.fs.ProjectRegistry;
+import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.WorkspaceActor;
 import com.crystalgui.fs.WorkspacePermission;
-import com.crystalgui.fs.WorkspaceProject;
+import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.WorkspaceProtocol;
 import com.crystalgui.fs.WorkspaceRpc;
 import com.crystalgui.fs.WorkspaceService;

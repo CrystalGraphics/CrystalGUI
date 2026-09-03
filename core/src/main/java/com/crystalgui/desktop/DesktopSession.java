@@ -2,7 +2,7 @@ package com.crystalgui.desktop;
 
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.window.WindowFrame;
-import com.crystalgui.fs.ConfigStorage;
+import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.StateMap;
 import com.google.gson.GsonBuilder;

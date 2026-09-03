@@ -1,5 +1,7 @@
 package com.crystalgui.fs;
 
+import com.crystalgui.fs.project.WorkspaceProject;
+import com.crystalgui.fs.project.Excludes;
 import com.crystalgui.core.CrystalGuiCore;
 
 import java.io.IOException;
@@ -59,7 +61,7 @@ public final class NioFileEventSource implements CgFileEventSource {
 
     private final String project;
     private final Path root;
-    private final List<String> excludes;
+    private final Excludes excludes;
     private final WatchService service;
 
     /** Every directory currently registered, so an event can be turned back into a {@link CgPath}. */
@@ -67,7 +69,7 @@ public final class NioFileEventSource implements CgFileEventSource {
 
     private boolean closed;
 
-    private NioFileEventSource(String project, Path root, List<String> excludes, WatchService service) {
+    private NioFileEventSource(String project, Path root, Excludes excludes, WatchService service) {
         this.project = project;
         this.root = root;
         this.excludes = excludes;
@@ -88,7 +90,8 @@ public final class NioFileEventSource implements CgFileEventSource {
         try {
             WatchService service = root.getFileSystem().newWatchService();
             NioFileEventSource source =
-                    new NioFileEventSource(project, root.toAbsolutePath().normalize(), excludes, service);
+                    new NioFileEventSource(project, root.toAbsolutePath().normalize(),
+                            Excludes.of(excludes), service);
             source.registerTree(source.root);
             CrystalGuiCore.LOGGER.info("[cgui-fs] watching {} ({} director{})",
                     root, source.registered.size(), source.registered.size() == 1 ? "y" : "ies");
@@ -228,26 +231,16 @@ public final class NioFileEventSource implements CgFileEventSource {
     }
 
     /**
-     * The same list the manifest already honours.
+     * The same rule the manifest honours, because it is now literally the same object.
      *
-     * <p>Matched on the directory or file NAME, matching {@code WorkspaceService}'s own exclusion, so a
-     * project excluding {@code node_modules} excludes it here too and by the same rule. Divergence
-     * between the two would mean a file that never appears in a listing and still reports changes.</p>
+     * <p>This javadoc used to claim that already, and the method below it matched a <b>leading star
+     * only</b> while {@code WorkspaceService} matched {@code *} and {@code ?} anywhere. So a project
+     * excluding {@code build/*.class} filtered its listings and watched every one of those files, and a
+     * client was told about changes to files it could not see. {@link Excludes} is the one matcher.</p>
      */
     private boolean isExcluded(Path file) {
         if (excludes.isEmpty()) return false;
         Path name = file.getFileName();
-        if (name == null) return false;
-        String simple = name.toString();
-        for (String pattern : excludes) {
-            if (matches(simple, pattern)) return true;
-        }
-        return false;
-    }
-
-    /** {@code *.tmp} and a bare name, which is everything {@code WorkspaceProject.excludes()} carries. */
-    private static boolean matches(String name, String pattern) {
-        if (pattern.startsWith("*")) return name.endsWith(pattern.substring(1));
-        return name.equals(pattern);
+        return name != null && excludes.excludes(name.toString());
     }
 }

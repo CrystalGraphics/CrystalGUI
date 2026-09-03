@@ -3,8 +3,9 @@ package com.crystalgui.headless;
 import com.crystalgui.fs.CgFileError;
 import com.crystalgui.fs.CgFileSystemException;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.ProjectRegistry;
-import com.crystalgui.fs.WorkspaceProject;
+import com.crystalgui.fs.project.ProjectProvider;
+import com.crystalgui.fs.project.ProjectRegistry;
+import com.crystalgui.fs.project.WorkspaceProject;
 import org.junit.Test;
 
 import java.nio.file.Path;
@@ -61,15 +62,82 @@ public class ProjectRegistryTest {
         }
     }
 
-    /** Enumeration is live, so a project created at runtime appears without an invalidation call. */
+    /**
+     * A project created at runtime appears as soon as its provider says its set moved.
+     *
+     * <p>This used to assert enumeration was live <em>unconditionally</em>, which is what
+     * {@code all()} rebuilding on every call bought — and what it cost is in
+     * {@code plan_fs_rewrite.md} N20: one file read rebuilt the registry three times, and the watcher's
+     * poll twice per file per peer per half second. The bargain is now explicit
+     * ({@link ProjectProvider#revision()}), and both halves of it are asserted: this, and
+     * {@link #aProviderThatDoesNotReportAChangeIsNotAskedAgain} below.</p>
+     */
     @Test
-    public void enumerationIsLive() {
+    public void aProviderThatReportsAChangeIsRebuilt() {
         List<WorkspaceProject> backing = new java.util.ArrayList<>();
-        ProjectRegistry registry = new ProjectRegistry().register(() -> backing);
+        long[] revision = {0};
+        ProjectRegistry registry = new ProjectRegistry().register(new ProjectProvider() {
+            @Override public List<WorkspaceProject> projects() { return backing; }
+            @Override public long revision() { return revision[0]; }
+        });
 
         assertTrue(registry.all().isEmpty());
         backing.add(project("late.arrival", "/tmp/late"));
+        revision[0]++;
+
         assertEquals(1, registry.all().size());
+        assertTrue(registry.find("late.arrival").isPresent());
+    }
+
+    /**
+     * <b>The counter-control, and the point of the whole step.</b> A provider with a fixed set is asked
+     * for its projects <em>once</em>, however many times the registry is read.
+     */
+    @Test
+    public void aProviderThatDoesNotReportAChangeIsNotAskedAgain() {
+        int[] asked = {0};
+        ProjectRegistry registry = new ProjectRegistry().register(() -> {
+            asked[0]++;
+            return List.of(project("fixed", "/tmp/fixed"));
+        });
+
+        registry.all();
+        assertEquals(1, asked[0]);
+
+        // What one file read costs today: authorise, resolve, and the listing's excludes lookup.
+        registry.all();
+        registry.find("fixed");
+        registry.require(CgPath.parse("fixed:some/file.txt"));
+        registry.infos();
+
+        assertEquals("a fixed set is read once per process, not once per question", 1, asked[0]);
+    }
+
+    /** {@code invalidate()} is the host's escape hatch, for a provider that cannot report its own moves. */
+    @Test
+    public void invalidateForcesARebuild() {
+        int[] asked = {0};
+        ProjectRegistry registry = new ProjectRegistry().register(() -> {
+            asked[0]++;
+            return List.of(project("fixed", "/tmp/fixed"));
+        });
+
+        registry.all();
+        registry.invalidate();
+        registry.all();
+
+        assertEquals(2, asked[0]);
+    }
+
+    /** Registering a second provider is itself a change; nothing has to report it. */
+    @Test
+    public void registeringAProviderRebuildsWithoutAnyRevisionBeingBumped() {
+        ProjectRegistry registry = new ProjectRegistry().register(() -> List.of(project("a", "/tmp/a")));
+        assertEquals(1, registry.all().size());
+
+        registry.register(() -> List.of(project("b", "/tmp/b")));
+
+        assertEquals(2, registry.all().size());
     }
 
     /**
@@ -123,7 +191,7 @@ public class ProjectRegistryTest {
 
     @Test
     public void unregisterRemovesAProvider() {
-        com.crystalgui.fs.ProjectProvider provider = () -> List.of(project("x.y", "/tmp/x"));
+        com.crystalgui.fs.project.ProjectProvider provider = () -> List.of(project("x.y", "/tmp/x"));
         ProjectRegistry registry = new ProjectRegistry().register(provider);
         assertEquals(1, registry.all().size());
         assertTrue(registry.unregister(provider));

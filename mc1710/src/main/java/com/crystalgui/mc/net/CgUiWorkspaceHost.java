@@ -3,11 +3,12 @@ package com.crystalgui.mc.net;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.LocalFileSystem;
-import com.crystalgui.fs.ProjectRegistry;
+import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.WorkspaceActor;
 import com.crystalgui.fs.WorkspaceOperation;
 import com.crystalgui.fs.WorkspacePermission;
-import com.crystalgui.fs.WorkspaceProject;
+import com.crystalgui.fs.project.ProjectInfo;
+import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.WorkspaceRpc;
 import com.crystalgui.fs.CgFileEvent;
 import com.crystalgui.fs.NioFileEventSource;
@@ -64,6 +65,18 @@ public final class CgUiWorkspaceHost {
     /** Matches {@code Mc1710Workspace.PROJECT_ID}; the id is the client's handle on the project. */
     public static final String PROJECT_ID = "minecraft.workspace";
 
+    /**
+     * What this host's workspace never lists and never watches.
+     *
+     * <p>Version-control metadata and build output: large, uninteresting, and on Linux the reason a
+     * watcher runs out of inotify handles. Stated here rather than in {@code Excludes} because it is a
+     * property of THIS deployment's workspace directory — a mod pointing a project somewhere else says
+     * what its own project excludes. It was {@code emptyList()} at the watcher, so a workspace with a
+     * build directory watched every class file in it.</p>
+     */
+    private static final List<String> DEFAULT_EXCLUDES =
+            Arrays.asList(".git", ".gradle", "build", "out", "node_modules", "*.class");
+
     /** Seconds between watcher polls, per connection. */
     private static final float POLL_SECONDS = 0.5f;
 
@@ -119,8 +132,13 @@ public final class CgUiWorkspaceHost {
 
         Path root = server.getFile("crystalgui/workspace").toPath();
         seed(root);
-        ProjectRegistry registry = new ProjectRegistry().register(() -> Collections.singletonList(
-                new WorkspaceProject(PROJECT_ID, "Workspace", root)));
+        // The project's own excludes, stated ONCE and honoured by the listing, the watcher and anything
+        // else that asks. They were `emptyList()` at the watcher below, which is why a workspace with a
+        // build directory watched every class file in it -- see Excludes.
+        WorkspaceProject project = new WorkspaceProject(
+                new ProjectInfo(PROJECT_ID, "Workspace"), root, DEFAULT_EXCLUDES);
+        ProjectRegistry registry = new ProjectRegistry()
+                .register(() -> Collections.singletonList(project));
         service = new WorkspaceService(registry, new LocalFileSystem(registry), new OperatorsMayWrite());
         CrystalGuiCore.LOGGER.info("[cgui-fs] serving {}", root);
 
@@ -128,7 +146,7 @@ public final class CgUiWorkspaceHost {
         // Linux caps them per USER, so N players sharing a workspace must not mean N watchers on one
         // directory. Never throws -- a workspace that cannot be watched still works, half a second
         // behind, and refusing to serve it would be a far worse answer.
-        service.attachEvents(NioFileEventSource.open(PROJECT_ID, root, Collections.<String>emptyList()));
+        service.attachEvents(NioFileEventSource.open(PROJECT_ID, root, project.excludes()));
         return service;
     }
 

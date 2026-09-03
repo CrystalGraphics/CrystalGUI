@@ -1,6 +1,6 @@
 package com.crystalgui.widget.display;
 
-import com.crystalgui.fs.SourceRoots;
+import com.crystalgui.fs.project.SourceRoots;
 import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.text.lang.SymbolModifier;
 import com.crystalgui.ui.dom.Attribute;

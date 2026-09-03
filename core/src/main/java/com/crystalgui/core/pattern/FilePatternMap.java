@@ -1,4 +1,4 @@
-package com.crystalgui.fs;
+package com.crystalgui.core.pattern;
 
 import java.util.LinkedHashMap;
 import java.util.List;

@@ -114,7 +114,11 @@ public record TextFileDocument(TextEditor editor, Resource resource)
         // other encoding would be reporting a setting that does not exist.
         add(new StatusBarEntry("File encoding", "UTF-8", "File encoding", null,
                 StatusBarEntry.Kind.STANDARD), ENCODING_STATUS, ENCODING_PRIORITY);
-        LineEnding ending = LineEnding.detect(editor.getText());
+        // ASKED OF THE BUFFER, never detected from the text. The buffer is normalised to LF the moment it
+        // loads, so detecting on the way out reports LF for every file in the workspace -- including the
+        // CRLF one this readout exists to tell you about. The ending the file arrived with is a fact the
+        // buffer remembers; there is nothing left in the text to detect.
+        LineEnding ending = editor.buffer().lineEnding();
         add(new StatusBarEntry("Line separator", ending.name(),
                 "Line separator: " + describe(ending), null,
                 StatusBarEntry.Kind.STANDARD), EOL_STATUS, EOL_PRIORITY);
@@ -156,9 +160,23 @@ public record TextFileDocument(TextEditor editor, Resource resource)
         return editor;
     }
 
+    /**
+     * The document, written back <b>in the ending it arrived with</b>.
+     *
+     * <h3>This was {@code editor.getText()}, and both halves of that were wrong</h3>
+     *
+     * <p>The buffer is always LF internally — every offset in the engine counts a break as one unit — and
+     * {@code TextBuffer.textWithOriginalLineEndings()} has existed to put the original back since the
+     * buffer did. <b>Nothing called it.</b> So a CRLF file saved as LF, silently converting every line of
+     * somebody's file the first time they touched it.</p>
+     *
+     * <p>And the second half is worse, because it needs no save at all: dirtiness is this method's output
+     * compared against the bytes read from disk, so a CRLF file was <b>dirty the moment it opened</b> —
+     * asterisk on the tab, a prompt on close, and an offer to save a file nobody had edited.</p>
+     */
     @Override
     public byte[] encode() {
-        return editor.getText().getBytes(StandardCharsets.UTF_8);
+        return editor.buffer().textWithOriginalLineEndings().getBytes(StandardCharsets.UTF_8);
     }
 
     /**

@@ -1,5 +1,6 @@
-package com.crystalgui.fs;
+package com.crystalgui.fs.project;
 
+import com.crystalgui.fs.CgPath;
 import java.nio.file.Path;
 import java.util.List;
 

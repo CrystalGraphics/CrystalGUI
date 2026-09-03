@@ -1,7 +1,7 @@
 package com.crystalgui.workbench.search;
 
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.SourceRoots;
+import com.crystalgui.fs.project.SourceRoots;
 import com.crystalgui.text.lang.ProjectSources;
 
 import javax.annotation.Nullable;

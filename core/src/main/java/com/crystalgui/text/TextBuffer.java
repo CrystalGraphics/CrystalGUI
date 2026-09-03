@@ -115,7 +115,6 @@ public final class TextBuffer {
         return lineEnding.applyTo(document.toString());
     }
 
-    /** Replaces the whole document, re-detecting the line ending — i.e. loading a file. */
     /**
      * A document's text with everything that can be computed from it alone already computed.
      *
@@ -153,21 +152,46 @@ public final class TextBuffer {
      * <p>Equivalent by construction: a full-document replace applies to exactly {@code Rope.of(normalised)},
      * so handing that rope in rather than recomputing it changes the cost and not the result. Both halves
      * come from one {@code prepare} call, so the rope and the change that describes it cannot disagree.</p>
+     *
+     * <p><b>A load is FENCED against the history</b> — see {@link #load(CharSequence)}.</p>
      */
     public void load(Prepared prepared) {
         this.lineEnding = prepared.ending();
         ChangeSet change = ChangeSet.replace(document.length(), 0, document.length(),
                 prepared.normalised());
         if (!change.isEmpty()) {
-            ChangeSet inverse = change.invert(document);
             // THE PREPARED ROPE, instead of change.apply(document) -- the one line this exists for.
             document = prepared.document();
-            history.push(new ChangeSetEdit(this, change, inverse, null));
             applied(change);
         }
-        breakUndoCoalescing();
+        history.clear();
     }
 
+    /**
+     * Replaces the whole document, re-detecting the line ending — i.e. loading a file.
+     *
+     * <h3>A load is not an edit, and must push no undo entry</h3>
+     *
+     * <p>It did, for as long as this method existed, because it was written as
+     * {@code replace(0, length(), text)} and every {@code replace} records. So <b>Ctrl+Z after an
+     * external reload restored the stale text</b>: the file on disk said one thing, the buffer another,
+     * and the undo stack offered to put the second one back as though the user had typed it.
+     * {@code FileDocument.adopt}'s own contract has said loading must never push a step since it was
+     * written; nothing enforced it.</p>
+     *
+     * <p>The document still MOVES — the version bumps, the decorations adjust, {@link #onChanged} fires —
+     * because every one of those is about the text having changed, which it has. Only the history is
+     * fenced.</p>
+     *
+     * <p><b>And the fence is a CLEAR, not merely a skipped push</b>, which is the half that is easy to
+     * get wrong. An entry recorded before a load holds an inverse taken against the document the load
+     * has just replaced, so applying it afterwards deletes a range of whatever is there now: undoing a
+     * six-character insertion into a file the server has since rewritten removes the first six
+     * characters of the server's text. Not stale — corrupt, and silently, because a {@code ChangeSet}
+     * applies happily to any document long enough to hold it. Both references clear here too:
+     * {@code ITextModel.setValue} resets Monaco's stack and IntelliJ's {@code reloadFromDisk} drops the
+     * document's history.</p>
+     */
     public void load(CharSequence text) {
         String incoming = text == null ? "" : text.toString();
         long timed = FrameProfile.begin();
@@ -177,9 +201,13 @@ public final class TextBuffer {
         String normalised = LineEnding.normalise(incoming);
         FrameProfile.step(timed, "buf.normalise");
         timed = FrameProfile.begin();
-        replace(0, length(), normalised);
+        ChangeSet change = ChangeSet.replace(document.length(), 0, document.length(), normalised);
+        if (!change.isEmpty()) {
+            document = change.apply(document);
+            applied(change);
+        }
         FrameProfile.step(timed, "buf.replace");
-        breakUndoCoalescing();
+        history.clear();
     }
 
     // ── Reading ─────────────────────────────────────────────────────────────────────────────────
