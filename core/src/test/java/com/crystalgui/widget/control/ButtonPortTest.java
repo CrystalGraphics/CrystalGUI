@@ -12,8 +12,8 @@ import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.Attribute;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UINodeRegistry;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.ui.input.FocusPolicy;
 import java.util.ArrayList;
 import java.util.List;
@@ -77,8 +77,8 @@ public class ButtonPortTest extends UiDocumentTestBase {
         Button b = button("Save");
         frame();
 
-        UINode label = composed(b).stream()
-                .filter(n -> "label".equals(n.get(Attribute.PART))).findFirst().orElseThrow();
+        UIElement label = composed(b).stream()
+                                     .filter(n -> "label".equals(n.get(Attribute.PART))).findFirst().orElseThrow();
 
         // ua/widgets.css: `button::part(label) { overflow: hidden; ... }` -- the twin of the old
         // `button text` rule, which reaches the label by TAG and therefore cannot see into a shadow.
@@ -154,8 +154,8 @@ public class ButtonPortTest extends UiDocumentTestBase {
     @Test
     public void theIconSlotsArePartsAndReplaceRatherThanAccumulate() {
         Button b = button("Save");
-        UINode first = new UINode();
-        UINode second = new UINode();
+        UIElement first = new UIElement();
+        UIElement second = new UIElement();
 
         b.setPreIcon(first);
         assertEquals("pre-icon", first.get(Attribute.PART));
@@ -180,11 +180,11 @@ public class ButtonPortTest extends UiDocumentTestBase {
      */
     @Test
     public void theKindIsRegisteredWithItsContract() {
-        assertTrue(UINodeRegistry.isRegistered(Button.NAME));
-        assertTrue("the factory builds one", UINodeRegistry.create(Button.NAME) instanceof Button);
+        assertTrue(UIElementRegistry.isRegistered(Button.NAME));
+        assertTrue("the factory builds one", UIElementRegistry.create(Button.NAME) instanceof Button);
         assertEquals("button", Button.NAME.local());
         assertSame("and the contract registered is the widget's own",
-                Button.CONTRACT, UINodeRegistry.contractFor(Button.NAME));
+                Button.CONTRACT, UIElementRegistry.contractFor(Button.NAME));
         assertSame(Button.CONTRACT, WidgetContracts.of(Button.class));
     }
 

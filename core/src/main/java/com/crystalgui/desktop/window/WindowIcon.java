@@ -7,7 +7,7 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.ShadowRoot;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.text.UIText;
 import org.jetbrains.annotations.Nullable;
 
@@ -54,9 +54,9 @@ import java.util.Objects;
  *
  * <p><b>Built entirely in the constructor</b> — the monogram exists from the start and is shown or
  * hidden — because adding a child later inserts a Taffy node into a parent that may be mid-registration,
- * the crash {@code UINode.taffyChildIndex} is named after.</p>
+ * the crash {@code UIElement.taffyChildIndex} is named after.</p>
  */
-public class WindowIcon extends UINode {
+public class WindowIcon extends UIElement {
 
     public static final Name NAME = Name.of("windowicon");
 

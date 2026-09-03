@@ -1,8 +1,6 @@
 package com.crystalgui.widget.texteditor.lang;
 
-import com.crystalgui.workbench.chrome.problems.ProblemsPanel;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.testsupport.UiDocumentTestBase;
@@ -86,7 +84,7 @@ public class GoToDefinitionTest extends UiDocumentTestBase {
         });
         editor.onDefinitionChosen.connect(announced::add);
         editor.layout(l -> l.width(400).height(200));
-        UINode root = new UINode().layout(l -> l.width(400).height(200));
+        UIElement root = new UIElement().layout(l -> l.width(400).height(200));
         root.append(editor);
         document.append(root);
         for (int i = 0; i < 4; i++) frame();

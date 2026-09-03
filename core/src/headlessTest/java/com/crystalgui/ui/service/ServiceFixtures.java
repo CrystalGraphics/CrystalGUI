@@ -4,7 +4,7 @@ import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.style.LayoutGroup;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.UIEvent;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 import java.util.function.Consumer;
@@ -18,13 +18,13 @@ final class ServiceFixtures {
     private ServiceFixtures() {
     }
 
-    static UINode at(String id, float x, float y, float width, float height) {
-        UINode node = new UINode().setId(id);
+    static UIElement at(String id, float x, float y, float width, float height) {
+        UIElement node = new UIElement().setId(id);
         layout(node, l -> l.positionType(TaffyPosition.ABSOLUTE).left(x).top(y).width(width).height(height));
         return node;
     }
 
-    static void layout(UINode node, Consumer<LayoutGroup> style) {
+    static void layout(UIElement node, Consumer<LayoutGroup> style) {
         StyleGroup.inlinePipeline(node.getStyle().getLayoutGroup(), style);
     }
 
@@ -70,12 +70,12 @@ final class ServiceFixtures {
     }
 
     /** Attaches a listener for one concrete event class, at the TARGET only — what a widget does. */
-    static <T extends UIEvent> void onTarget(UINode node, Class<T> type, UIEvent.Listener<UINode, T> listener) {
+    static <T extends UIEvent> void onTarget(UIElement node, Class<T> type, UIEvent.Listener<UIElement, T> listener) {
         node.events.getGroup(type).attachListener(listener, false, false);
     }
 
     /** Attaches a listener for one concrete event class, in every phase. */
-    static <T extends UIEvent> void on(UINode node, Class<T> type, UIEvent.Listener<UINode, T> listener) {
+    static <T extends UIEvent> void on(UIElement node, Class<T> type, UIEvent.Listener<UIElement, T> listener) {
         node.events.getGroup(type).attachListener(listener, true, true);
     }
 

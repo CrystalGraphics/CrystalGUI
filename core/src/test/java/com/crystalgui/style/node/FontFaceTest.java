@@ -1,8 +1,6 @@
 package com.crystalgui.style.node;
 
-import com.crystalgui.style.property.StyleValue;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.text.FontStyle;
 import com.crystalgui.style.property.visual.text.FontWeight;
@@ -36,7 +34,7 @@ public class FontFaceTest extends UiDocumentTestBase {
 
 
     private UIText build(String content, java.util.function.Consumer<UIText> configure) {
-        UINode root = new UINode().layout(l -> l.width(400).height(400));
+        UIElement root = new UIElement().layout(l -> l.width(400).height(400));
         UIText text = new UIText(content);
         configure.accept(text);
         root.append(text);
@@ -154,11 +152,11 @@ public class FontFaceTest extends UiDocumentTestBase {
      */
     @Test
     public void weightInheritsThroughAWrapperEvenThoughFontSizeCannot() {
-        UINode wrapper = new UINode();
+        UIElement wrapper = new UIElement();
         UIText label = new UIText("hi");
         wrapper.append(label);
 
-        UINode root = new UINode().layout(l -> l.width(400).height(400));
+        UIElement root = new UIElement().layout(l -> l.width(400).height(400));
         root.append(wrapper);
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);

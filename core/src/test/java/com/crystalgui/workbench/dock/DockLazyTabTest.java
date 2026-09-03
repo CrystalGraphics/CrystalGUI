@@ -1,15 +1,8 @@
 package com.crystalgui.workbench.dock;
 
-import com.crystalgui.text.lang.LanguageServices;
-import com.crystalgui.widget.layout.TabView;
-import com.crystalgui.widget.texteditor.TextEditor;
-import com.crystalgui.workbench.Workbench;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.workbench.dock.DockArea;
-import com.crystalgui.workbench.dock.DockGroup;
 import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
 import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
@@ -63,10 +56,10 @@ public class DockLazyTabTest extends UiDocumentTestBase {
 
     @Before
     public void setUp() {
-        DockPanelRegistry<UINode> registry = new DockPanelRegistry<>();
+        DockPanelRegistry<UIElement> registry = new DockPanelRegistry<>();
         registry.register(new DockPanelDescriptor(TYPE, TYPE), ref -> {
             built.add(ref.state(DockPanelRef.PATH, "?"));
-            return new UINode();
+            return new UIElement();
         });
 
         // THREE PANELS, ONE LEAF -- which is a restored session, and the shape the eager build was
@@ -77,8 +70,8 @@ public class DockLazyTabTest extends UiDocumentTestBase {
         leaf.activate(alpha);
 
         area = new DockArea(registry, DockLayout.of(leaf));
-        UINode root = new UINode().layout(l -> l.width(600).height(400)
-                .flexDirection(FlexDirection.COLUMN));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400)
+                                                      .flexDirection(FlexDirection.COLUMN));
         root.append(area);
         area.layout(l -> l.width(600).height(400));
 
@@ -146,7 +139,7 @@ public class DockLazyTabTest extends UiDocumentTestBase {
      */
     @Test
     public void comingBackReusesTheSameContent() {
-        UINode first = group().tabFor(alpha).content().children().get(0);
+        UIElement first = group().tabFor(alpha).content().children().get(0);
 
         leaf.activate(beta);
         area.syncGroups();

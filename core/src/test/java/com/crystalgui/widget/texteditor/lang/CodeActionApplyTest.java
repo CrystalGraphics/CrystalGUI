@@ -1,7 +1,6 @@
 package com.crystalgui.widget.texteditor.lang;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
@@ -38,7 +37,7 @@ public class CodeActionApplyTest extends UiDocumentTestBase {
     public void setUp() {
         editor = new TextEditor("alpha\nbravo\ncharlie\n");
         editor.layout(l -> l.width(400).height(200));
-        UINode root = new UINode().layout(l -> l.width(400).height(200));
+        UIElement root = new UIElement().layout(l -> l.width(400).height(200));
         root.append(editor);
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);

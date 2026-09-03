@@ -5,7 +5,7 @@ import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Checkbox;
 import com.crystalgui.widget.control.Slider;
@@ -36,7 +36,7 @@ public class SessionSoakTest {
 
     private static final int ROUNDS = 250;
 
-    private UINode root;
+    private UIElement root;
     private Slider slider;
     private Checkbox checkbox;
     private UIText label;
@@ -44,12 +44,12 @@ public class SessionSoakTest {
 
     private InMemoryTransport<Object> serverLink;
     private InMemoryTransport<Object> clientLink;
-    private ServerUiSession<UINode, Object> server;
-    private ClientUiSession<UINode, Object> client;
+    private ServerUiSession<UIElement, Object> server;
+    private ClientUiSession<UIElement, Object> client;
 
     @Before
     public void setUp() {
-        root = new UINode();
+        root = new UIElement();
         label = new UIText("round 0");
         button = new Button("Press me");
         checkbox = new Checkbox("Enabled");
@@ -76,7 +76,7 @@ public class SessionSoakTest {
         }
     }
 
-    private <E extends UINode> E clientChild(int index, Class<E> type) {
+    private <E extends UIElement> E clientChild(int index, Class<E> type) {
         return type.cast(client.root().children().get(index));
     }
 

@@ -8,7 +8,7 @@ import static org.junit.Assert.assertEquals;
 
 import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.event.PropagationPhase;
 import java.util.ArrayList;
@@ -37,8 +37,8 @@ public class StopPropagationTest {
     @Test
     public void stopPropagationEndsTheWalkAndNotTheNodesOwnListeners() {
         UIDocument document = new UIDocument();
-        UINode parent = at("parent", 0, 0, 200, 200);
-        UINode child = at("child", 10, 10, 100, 100);
+        UIElement parent = at("parent", 0, 0, 200, 200);
+        UIElement child = at("child", 10, 10, 100, 100);
         parent.append(child);
         document.append(parent);
         frame(document);
@@ -61,8 +61,8 @@ public class StopPropagationTest {
     @Test
     public void stopImmediatePropagationIsWhatEndsThem() {
         UIDocument document = new UIDocument();
-        UINode parent = at("parent", 0, 0, 200, 200);
-        UINode child = at("child", 10, 10, 100, 100);
+        UIElement parent = at("parent", 0, 0, 200, 200);
+        UIElement child = at("child", 10, 10, 100, 100);
         parent.append(child);
         document.append(parent);
         frame(document);
@@ -85,7 +85,7 @@ public class StopPropagationTest {
     public void theOldDispatcherConflatesThem() {
         // The counter-assertion, driven through the OLD emit path on the same shared group: without
         // it, "the new one is right" is a claim about one implementation rather than a difference.
-        UINode node = at("node", 0, 0, 100, 100);
+        UIElement node = at("node", 0, 0, 100, 100);
         List<String> log = new ArrayList<>();
         on(node, MouseEvent.Down.class, (n, e) -> {
             log.add("first");
@@ -103,8 +103,8 @@ public class StopPropagationTest {
     @Test
     public void aCapturingAncestorCanStopAnEventBeforeItsTarget() {
         UIDocument document = new UIDocument();
-        UINode parent = at("parent", 0, 0, 200, 200);
-        UINode child = at("child", 10, 10, 100, 100);
+        UIElement parent = at("parent", 0, 0, 200, 200);
+        UIElement child = at("child", 10, 10, 100, 100);
         parent.append(child);
         document.append(parent);
         frame(document);

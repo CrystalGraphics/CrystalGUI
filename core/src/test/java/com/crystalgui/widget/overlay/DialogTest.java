@@ -1,8 +1,7 @@
 package com.crystalgui.widget.overlay;
 
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.style.StyleGroup;
@@ -12,7 +11,6 @@ import com.crystalgui.style.property.visual.text.TextOverflow;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.widget.control.Button;
-import com.crystalgui.widget.overlay.Dialog;
 import com.crystalgui.ui.service.Input;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import org.junit.Before;
@@ -34,7 +32,7 @@ import static org.junit.Assert.*;
 public class DialogTest extends UiDocumentTestBase {
 
     private Input input;
-    private UINode root;
+    private UIElement root;
     private Dialog dialog;
 
     /**
@@ -46,7 +44,7 @@ public class DialogTest extends UiDocumentTestBase {
      */
     @Before
     public void build() {
-        root = new UINode().layout(l -> l.width(400).height(300));
+        root = new UIElement().layout(l -> l.width(400).height(300));
         dialog = new Dialog("Panel");
         dialog.layout(l -> l.width(120).height(80));
         dialog.getTitleBar().layout(l -> l.height(16));
@@ -191,7 +189,7 @@ public class DialogTest extends UiDocumentTestBase {
         dialog.show();
         settle();
 
-        UINode close = dialog.getCloseButton();
+        UIElement close = dialog.getCloseButton();
         float cx = close.box().x() + 2f;
         float cy = close.box().y() + 2f;
         press(cx, cy);
@@ -219,7 +217,7 @@ public class DialogTest extends UiDocumentTestBase {
     @Test
     public void aDialogRefusesPublicChildren() {
         assertFalse(dialog.acceptsPublicChildren());
-        assertThrows(RuntimeException.class, () -> dialog.append(new UINode()));
+        assertThrows(RuntimeException.class, () -> dialog.append(new UIElement()));
     }
 
     // ── Moving: the designed half ───────────────────────────────────────────
@@ -410,7 +408,7 @@ public class DialogTest extends UiDocumentTestBase {
      * a CSS assertion here quietly tests nothing and passes.
      */
     private Dialog withUserAgentSheet(String title) {
-        root = new UINode().layout(l -> l.width(400).height(300));
+        root = new UIElement().layout(l -> l.width(400).height(300));
         dialog = new Dialog(title);
         dialog.layout(l -> l.width(120).height(80));
         root.append(dialog);

@@ -1,7 +1,8 @@
 package com.crystalgui.net.window;
 
-import com.crystalgui.net.mirror.UINodeMirror;
-import com.crystalgui.ui.dom.UINodeTreeSource;
+import com.crystalgui.net.mirror.UIElementMirror;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UIElementTreeSource;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -16,7 +17,6 @@ import com.crystalgui.net.UiLimits;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.dom.UINode;
 
 /**
  * Every window one peer is being shown — <b>the server host, and the whole server side of showing a
@@ -105,7 +105,7 @@ public final class ServerWindows {
     private static final Map<String, Openable<?, ?>> OPENABLE = new LinkedHashMap<>();
 
     /** A declared type and the authority that decides each request for it. */
-    private record Openable<P extends UINode & Networked<M>, M>(UiType<P, M> type,
+    private record Openable<P extends UIElement & Networked<M>, M>(UiType<P, M> type,
                                                                    OpenResolver<M> resolver) {
     }
 
@@ -131,7 +131,7 @@ public final class ServerWindows {
      * <p>Idempotent per type — re-declaring replaces the resolver, so a reload can re-register without
      * a duplicate refusal.</p>
      */
-    public static <P extends UINode & Networked<M>, M> void openable(UiType<P, M> type,
+    public static <P extends UIElement & Networked<M>, M> void openable(UiType<P, M> type,
                                                                         OpenResolver<M> resolver) {
         OPENABLE.put(type.id(), new Openable<>(type, resolver));
     }
@@ -176,7 +176,7 @@ public final class ServerWindows {
     }
 
     @SuppressWarnings("unchecked")
-    private <P extends UINode & Networked<M>, M> boolean grant(Openable<P, M> declared,
+    private <P extends UIElement & Networked<M>, M> boolean grant(Openable<P, M> declared,
                                                                   StateMap<Object> in) {
         // Never null, so a resolver need not check: a client that sends nothing sends an empty map.
         Object raw = in.getRaw("args");
@@ -239,7 +239,7 @@ public final class ServerWindows {
      * @throws IllegalStateException if the key is held by a window of a different type, which is a
      *                               wiring mistake rather than something to resolve silently
      */
-    public <P extends UINode & Networked<M>, M> ServerWindow<P> open(UiType<P, M> type, @Nullable M model) {
+    public <P extends UIElement & Networked<M>, M> ServerWindow<P> open(UiType<P, M> type, @Nullable M model) {
         if (type == null) throw new IllegalArgumentException("type is null");
 
         P panel = type.build(model);
@@ -254,7 +254,7 @@ public final class ServerWindows {
                 // BRING IT FORWARD rather than rebuild. A re-sent ui/openWindow would also work and
                 // would throw away exactly the state the window was retained for. The panel built
                 // above is discarded, unopened.
-                ServerUiSession<UINode, Object> open = existing.session;
+                ServerUiSession<UIElement, Object> open = existing.session;
                 if (open != null) open.notify(UiMethods.FOCUS_WINDOW, null);
                 @SuppressWarnings("unchecked")   // same UiType instance → same P, by construction
                 ServerWindow<P> same = (ServerWindow<P>) existing;
@@ -282,7 +282,7 @@ public final class ServerWindows {
                     + "UiLimits.MAX_WINDOWS_PER_CONNECTION");
         }
         int id = nextWindowId++;
-        ServerUiSession<UINode, Object> session = new ServerUiSession<>(id, new UINodeTreeSource(panel), new UINodeMirror<>(connection.ops()), connection)
+        ServerUiSession<UIElement, Object> session = new ServerUiSession<>(id, new UIElementTreeSource(panel), new UIElementMirror<>(connection.ops()), connection)
                 .setType(type.id())
                 .setTitle(title)
                 .setKey(key)
@@ -422,7 +422,7 @@ public final class ServerWindows {
                  * mirror() in tick() structurally could not be -- a minimised window went on walking its
                  * whole model sixty times a second to write values no one could see.
                  */
-                ServerUiSession<UINode, Object> watching = window.session;
+                ServerUiSession<UIElement, Object> watching = window.session;
                 if (watching != null && watching.anyViewerVisible()) window.runProjections();
             } catch (RuntimeException failed) {
                 // One window's broken tick must not stop every other window on this connection --
@@ -431,7 +431,7 @@ public final class ServerWindows {
                 CrystalGuiCore.LOGGER.error("<{}>.tick failed: {}",
                         window.typeId(), failed.getMessage(), failed);
             }
-            ServerUiSession<UINode, Object> session = window.session;
+            ServerUiSession<UIElement, Object> session = window.session;
             // REQUIRED, and it is the one thing only the session can do: it holds this tick's dirty
             // set, so nothing else knows the set exists. A host that stopped calling it would keep
             // perfectly live windows that answer calls and never send another state update.
@@ -473,7 +473,7 @@ public final class ServerWindows {
         window.live = false;
         if (!closing) windows.remove(window.windowId);
 
-        ServerUiSession<UINode, Object> session = window.session;
+        ServerUiSession<UIElement, Object> session = window.session;
         if (session != null) {
             if (reason == CloseReason.CONNECTION_LOST) {
                 session.abandon(detail);

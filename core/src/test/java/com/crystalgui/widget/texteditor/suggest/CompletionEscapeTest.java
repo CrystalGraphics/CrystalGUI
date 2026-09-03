@@ -1,9 +1,7 @@
 package com.crystalgui.widget.texteditor.suggest;
 
-import com.crystalgui.widget.layout.Tab;
-import com.crystalgui.widget.texteditor.TextEditor;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.text.TextBuffer;
@@ -12,10 +10,7 @@ import com.crystalgui.text.lang.CompletionList;
 import com.crystalgui.text.lang.CompletionProvider;
 import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.text.lang.Versioned;
-import com.crystalgui.widget.texteditor.suggest.CompletionPopup;
-import com.crystalgui.widget.texteditor.suggest.CompletionSession;
 
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.List;
@@ -62,7 +57,7 @@ public class CompletionEscapeTest extends UiDocumentTestBase {
 
     /** A document with a live list open in it. */
     private Object[] openList(List<CompletionItem> items) {
-        UINode root = new UINode().layout(l -> l.width(400).height(600));
+        UIElement root = new UIElement().layout(l -> l.width(400).height(600));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
 
@@ -182,7 +177,7 @@ public class CompletionEscapeTest extends UiDocumentTestBase {
         UIDocument document = (UIDocument) open[0];
         CompletionPopup popup = (CompletionPopup) open[1];
         CompletionSession session = (CompletionSession) open[2];
-        UINode root = (UINode) open[3];
+        UIElement root = (UIElement) open[3];
 
         document.dismiss().lightDismiss(popup);
         assertFalse("clicking the list closed the list", session.isClosed());

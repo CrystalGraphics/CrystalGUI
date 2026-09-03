@@ -2,6 +2,7 @@ package com.crystalgui.widget.graph;
 
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.graph.port.PortType;
 import com.crystalgraphics.platform.CgPlatform;
@@ -10,7 +11,6 @@ import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.graph.PortDirection;
 import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.widget.canvas.WorldRect;
@@ -61,7 +61,7 @@ import java.util.List;
  * selector — {@code graphnode.__collapsed__ nodeport:blank { display: none; }} — because
  * {@link NodePort#isBlank()} already publishes connection state to the cascade.</p>
  */
-public class GraphNode extends UINode {
+public class GraphNode extends UIElement {
 
     /**
      * This widget's kind.
@@ -113,14 +113,14 @@ public class GraphNode extends UINode {
      * target and must not revert mid-gesture. */
     public static final String MOVING_CLASS = "__moving__";
 
-    private final UINode titleBar = new UINode();
+    private final UIElement titleBar = new UIElement();
     private final UIText title;
-    private final UINode collapseToggle = new UINode();
-    private final UINode ports = new UINode();
-    private final UINode inputs = new UINode();
-    private final UINode outputs = new UINode();
-    private final UINode controls = new UINode();
-    private final UINode preview = new UINode();
+    private final UIElement collapseToggle = new UIElement();
+    private final UIElement ports = new UIElement();
+    private final UIElement inputs = new UIElement();
+    private final UIElement outputs = new UIElement();
+    private final UIElement controls = new UIElement();
+    private final UIElement preview = new UIElement();
 
     private final List<NodePort> inputPorts = new ArrayList<>();
     private final List<NodePort> outputPorts = new ArrayList<>();
@@ -139,7 +139,7 @@ public class GraphNode extends UINode {
     /** @see #preview() */
     private boolean hasPreview;
 
-    /** @see #addControl(UINode) */
+    /** @see #addControl(UIElement) */
     private boolean hasControls;
 
     private boolean selected;
@@ -230,7 +230,7 @@ public class GraphNode extends UINode {
 
         this.events.getGroup(MouseEvent.Down.class).attachListener((el, event) -> {
             if (!isEnabled() || event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
-            if (isInsideControls(((UINode) event.getTarget()))) return;
+            if (isInsideControls(((UIElement) event.getTarget()))) return;
 
             GraphView view = graphView();
             if (view != null) {
@@ -286,8 +286,8 @@ public class GraphNode extends UINode {
      * node out from under the menu. Cheap to test for, and the alternative (asking every control to
      * stop propagation) puts the burden on whatever a caller happens to drop in.</p>
      */
-    private boolean isInsideControls(@Nullable UINode target) {
-        for (UINode e = target; e != null && e != this; e = e.parent()) {
+    private boolean isInsideControls(@Nullable UIElement target) {
+        for (UIElement e = target; e != null && e != this; e = e.parent()) {
             if (e == controls) return true;
         }
         return false;
@@ -370,7 +370,7 @@ public class GraphNode extends UINode {
 
     @Nullable
     private GraphView graphView() {
-        for (UINode e = parent(); e != null; e = e.parent()) {
+        for (UIElement e = parent(); e != null; e = e.parent()) {
             if (e instanceof GraphView view) return view;
         }
         return null;
@@ -488,9 +488,9 @@ public class GraphNode extends UINode {
      * A widget with no port — Unity's "Controls". The label sits left, the widget right, matching the
      * {@code Space [ World v ]} row in the reference.
      */
-    public GraphNode addControl(String labelText, UINode widget) {
+    public GraphNode addControl(String labelText, UIElement widget) {
         ensureControlsAttached();
-        UINode row = new UINode();
+        UIElement row = new UIElement();
         row.addClass(CONTROL_ROW_CLASS);
         // A widget may decline the label, and the decision belongs to the WIDGET rather than to this
         // method or its caller: only the control knows whether it describes itself. A colour swatch
@@ -509,7 +509,7 @@ public class GraphNode extends UINode {
     }
 
     /** A widget occupying the whole control row, for something that needs no label. */
-    public GraphNode addControl(UINode widget) {
+    public GraphNode addControl(UIElement widget) {
         ensureControlsAttached();
         controls.append(widget);
         return this;
@@ -532,7 +532,7 @@ public class GraphNode extends UINode {
      * other background in this engine. Shipping the slot without a pipeline behind it is the honest
      * half, rather than inventing a preview system the compiler would replace.</p>
      */
-    public UINode preview() {
+    public UIElement preview() {
         if (!hasPreview) {
             hasPreview = true;
             append(preview);
@@ -545,7 +545,7 @@ public class GraphNode extends UINode {
         return hasPreview;
     }
 
-    public UINode titleBar() {
+    public UIElement titleBar() {
         return titleBar;
     }
 
@@ -621,7 +621,7 @@ public class GraphNode extends UINode {
         return ports.isEmpty() || (collapsed && allBlank(ports));
     }
 
-    private void setEmptyOnCollapse(UINode column, List<NodePort> ports) {
+    private void setEmptyOnCollapse(UIElement column, List<NodePort> ports) {
         boolean empty = collapsed && allBlank(ports);
         if (empty) column.addClass(EMPTY_WHEN_COLLAPSED_CLASS);
         else column.removeClass(EMPTY_WHEN_COLLAPSED_CLASS);

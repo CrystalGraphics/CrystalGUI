@@ -1,7 +1,7 @@
 package com.crystalgui.workbench.view;
 
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -29,10 +29,10 @@ import java.util.function.Supplier;
 public final class ViewContainerRegistry {
 
     /** One view inside a container: a stable id, what its tab says, and how to build it. */
-    public record ViewEntry(String viewId, String title, Supplier<UINode> factory) {
-        public UINode build() {
-            UINode built = factory.get();
-            return built == null ? new UINode() : built;
+    public record ViewEntry(String viewId, String title, Supplier<UIElement> factory) {
+        public UIElement build() {
+            UIElement built = factory.get();
+            return built == null ? new UIElement() : built;
         }
     }
 
@@ -72,7 +72,7 @@ public final class ViewContainerRegistry {
 
     /** @see #addView */
     public ViewContainerRegistry addView(String containerId, String viewId, String title,
-                                         Supplier<UINode> factory) {
+                                         Supplier<UIElement> factory) {
         return addView(containerId, new ViewEntry(viewId, title, factory));
     }
 
@@ -80,7 +80,7 @@ public final class ViewContainerRegistry {
      * The views of {@code containerId}, or a single view built by {@code fallback} when none were
      * registered — see the class note on why that default is what makes this incremental.
      */
-    public List<ViewEntry> viewsOf(String containerId, String title, Supplier<UINode> fallback) {
+    public List<ViewEntry> viewsOf(String containerId, String title, Supplier<UIElement> fallback) {
         List<ViewEntry> registered = views.get(containerId);
         if (registered != null && !registered.isEmpty()) return List.copyOf(registered);
         return List.of(new ViewEntry(containerId, title, fallback));

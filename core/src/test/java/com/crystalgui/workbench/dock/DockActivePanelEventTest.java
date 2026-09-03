@@ -1,12 +1,8 @@
 package com.crystalgui.workbench.dock;
 
-import com.crystalgui.widget.config.inspector.Inspector;
-import com.crystalgui.workbench.Workbench;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.workbench.dock.DockArea;
 import com.crystalgui.workbench.dock.drag.DockDropZone;
 import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
@@ -37,6 +33,7 @@ import static org.junit.Assert.assertTrue;
  */
 public class DockActivePanelEventTest extends UiDocumentTestBase {
 
+
     private DockArea area;
     private DockLayout layout;
 
@@ -45,10 +42,10 @@ public class DockActivePanelEventTest extends UiDocumentTestBase {
 
     private final List<DockPanelRef> announced = new ArrayList<>();
 
-    private DockPanelRegistry<UINode> registry() {
-        DockPanelRegistry<UINode> registry = new DockPanelRegistry<>();
+    private DockPanelRegistry<UIElement> registry() {
+        DockPanelRegistry<UIElement> registry = new DockPanelRegistry<>();
         for (String id : new String[]{"alpha", "beta", "gamma"}) {
-            registry.register(new DockPanelDescriptor(id, id), ref -> new UINode());
+            registry.register(new DockPanelDescriptor(id, id), ref -> new UIElement());
         }
         return registry;
     }
@@ -63,16 +60,18 @@ public class DockActivePanelEventTest extends UiDocumentTestBase {
         area = new DockArea(registry(), layout);
         area.onDidChangeActivePanel.connect(announced::add);
 
-        UINode root = new UINode().layout(l -> l.width(600).height(400)
-                .flexDirection(FlexDirection.COLUMN));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400)
+                                                      .flexDirection(FlexDirection.COLUMN));
         root.append(area);
         area.layout(l -> l.width(600).height(400));
 
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheetRegistry.of("crystalgui:ore"));
+
         frame();
         frame();   // the ticker registers on the first layout, so the rebuild lands on the second
     }
+
 
 
     /** The build itself is a change: something became active where nothing was. */

@@ -1,7 +1,6 @@
 package com.crystalgui.widget.texteditor.doc;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.style.sheet.StyleSheet;
@@ -15,10 +14,8 @@ import com.crystalgui.text.lang.SymbolModifier;
 import com.crystalgui.text.lang.TypeRef;
 import com.crystalgui.text.syntax.SyntaxToken;
 import com.crystalgui.widget.text.UIText;
-import com.crystalgui.widget.texteditor.doc.DocumentationPopup;
 import com.crystalgui.ui.text.TextRange;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 
@@ -53,7 +50,7 @@ public class DocumentationPopupTest extends UiDocumentTestBase {
     @Before
     public void openAPopup() {
         popup = new DocumentationPopup();
-        UINode root = new UINode().layout(l -> l.width(600).height(400));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400));
         document.append(root);
         // THE USER-AGENT SHEET IS NOT INSTALLED FOR YOU, and without it this class could not have caught
         // the bug below: with no rules at all, an element matches nothing whether it is attached or not,
@@ -368,7 +365,7 @@ public class DocumentationPopupTest extends UiDocumentTestBase {
     }
 
     private boolean ownerIconHasKind(String kind) {
-        UINode icon = deepOrNull(popup, "." + DocumentationPopup.OWNER_ICON_CLASS);
+        UIElement icon = deepOrNull(popup, "." + DocumentationPopup.OWNER_ICON_CLASS);
         return icon != null && icon.hasClass("completion-kind-" + kind);
     }
 
@@ -558,7 +555,7 @@ public class DocumentationPopupTest extends UiDocumentTestBase {
     /** The measured height of the problem/intention row — zero when it is not being drawn. */
     private float problemRowHeight() {
         float tallest = 0f;
-        for (UINode each : deepAll(popup, "." + DocumentationPopup.PROBLEM_CLASS)) {
+        for (UIElement each : deepAll(popup, "." + DocumentationPopup.PROBLEM_CLASS)) {
             tallest = Math.max(tallest, heightOf(each));
         }
         return tallest;
@@ -599,7 +596,7 @@ public class DocumentationPopupTest extends UiDocumentTestBase {
 
     /** Whether any text in the popup contains this word. */
     private boolean popupMentions(String word) {
-        for (UINode each : deepAll(popup, "text")) {
+        for (UIElement each : deepAll(popup, "text")) {
             if (each instanceof UIText && ((UIText) each).getText().contains(word)) return true;
         }
         return false;
@@ -625,9 +622,9 @@ public class DocumentationPopupTest extends UiDocumentTestBase {
 
         // What a drag does: write the width at INLINE, and record that the reader took the axis.
         StyleGroup.inlinePipeline(popup.getStyle().getLayoutGroup(), l -> l.width(180f));
-        // Through UINode, which DECLARES it: a package-private member is not inherited across
+        // Through UIElement, which DECLARES it: a package-private member is not inherited across
         // packages, so it is not a member of DocumentationPopup at all.
-        ((UINode) popup).markUserSized(true, false);
+        ((UIElement) popup).markUserSized(true, false);
         for (int i = 0; i < 3; i++) frame();
 
         assertEquals("the popup would not go below its own opening width",

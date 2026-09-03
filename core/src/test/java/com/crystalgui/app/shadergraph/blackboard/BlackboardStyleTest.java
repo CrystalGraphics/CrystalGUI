@@ -2,13 +2,10 @@ package com.crystalgui.app.shadergraph.blackboard;
 
 import com.crystalgui.app.shadergraph.ShaderGraphEditor;
 import com.crystalgui.app.shadergraph.preview.MainPreviewPanel;
-import com.crystalgui.style.property.visual.border.LengthPercent;
-import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -33,7 +30,7 @@ public class BlackboardStyleTest extends UiDocumentTestBase {
                 com.crystalgraphics.shadergraph.CgShaderNodeRegistry.builtins(),
                 new com.crystalgraphics.shadergraph.CgMasterNode());
 
-        UINode root = new UINode().layout(l -> l.width(900).height(700));
+        UIElement root = new UIElement().layout(l -> l.width(900).height(700));
         root.append(board);
         root.append(preview);
 
@@ -48,16 +45,16 @@ public class BlackboardStyleTest extends UiDocumentTestBase {
         for (int pass = 0; pass < 8; pass++) frame();
     }
 
-    private static float w(UINode e) {
+    private static float w(UIElement e) {
         return e.box().width();
     }
 
-    private static float h(UINode e) {
+    private static float h(UIElement e) {
         return e.box().height();
     }
 
-    private static UINode childWithClass(UINode parent, String css) {
-        for (UINode child : parent.children()) {
+    private static UIElement childWithClass(UIElement parent, String css) {
+        for (UIElement child : parent.children()) {
             if (child.hasClass(css)) return child;
         }
         return null;
@@ -82,11 +79,11 @@ public class BlackboardStyleTest extends UiDocumentTestBase {
         ShaderGraphEditor editor = new ShaderGraphEditor().addStarterGraph();
         BlackboardPanel board = editor.blackboard();
 
-        UINode body = childWithClass(board, BlackboardPanel.BODY_CLASS);
+        UIElement body = childWithClass(board, BlackboardPanel.BODY_CLASS);
         assertNotNull("the board must have a body", body);
 
         int placeholders = 0;
-        for (UINode child : body.children()) {
+        for (UIElement child : body.children()) {
             if (child.hasClass("__empty__")) placeholders++;
         }
         assertEquals("one placeholder, not one per refresh", 1, placeholders);
@@ -98,7 +95,7 @@ public class BlackboardStyleTest extends UiDocumentTestBase {
      * <p>{@code OUTLINE_WIDTH} is a {@code LengthPercent}, not a number — reading it as one silently
      * yields zero for every element and makes this test pass or fail for the wrong reason.</p>
      */
-    private static float outlineWidthOf(UINode element) {
+    private static float outlineWidthOf(UIElement element) {
         com.crystalgui.style.property.visual.border.LengthPercent width =
                 element.getStyle().getComputed(
                         com.crystalgui.style.property.StylePropertyRegistry.OUTLINE_WIDTH);
@@ -106,13 +103,13 @@ public class BlackboardStyleTest extends UiDocumentTestBase {
     }
 
     /** Top-left corner radius in pixels — one corner is enough to tell applied from dropped. */
-    private static float radiusOf(UINode element) {
+    private static float radiusOf(UIElement element) {
         com.crystalgui.style.property.visual.border.LengthPercent r = element.getStyle().getComputed(
                 com.crystalgui.style.property.visual.border.BorderRadiusProperties.TOP_LEFT_X);
         return r == null ? 0f : r.value;
     }
 
-    private static org.joml.Vector2f screenCentreOf(UINode element) {
+    private static org.joml.Vector2f screenCentreOf(UIElement element) {
         var cache = element.box();
         return com.crystalgui.core.data.Transform2D.apply(cache.localToWorld(),
                 cache.width() / 2f, cache.height() / 2f);
@@ -139,10 +136,10 @@ public class BlackboardStyleTest extends UiDocumentTestBase {
     @Test
     public void theListShowsNoScrollbars() {
         mount();
-        UINode body = childWithClass(board, BlackboardPanel.BODY_CLASS);
+        UIElement body = childWithClass(board, BlackboardPanel.BODY_CLASS);
         assertNotNull("the board must have a body", body);
 
-        for (UINode child : body.children()) {
+        for (UIElement child : body.children()) {
             boolean bar = child.hasClass("__v-scroller__") || child.hasClass("__h-scroller__")
                     || child.hasClass("__corner__");
             if (!bar) continue;

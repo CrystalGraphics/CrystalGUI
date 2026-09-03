@@ -3,7 +3,7 @@ package com.crystalgui.widget.config;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.scroll.ScrollerView;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -75,7 +75,7 @@ public class ConfiguratorPanel extends ScrollerView {
 
     /** As {@link #add}, into a group's content rather than the panel root. */
     @Nullable
-    public Configurator addTo(UINode parent, ConfigDescriptor descriptor, @Nullable Object value) {
+    public Configurator addTo(UIElement parent, ConfigDescriptor descriptor, @Nullable Object value) {
         ConfigControl control = ConfigControls.create(descriptor, value);
         if (control == null) return null;
         Configurator row = new Configurator(descriptor, control);
@@ -99,7 +99,7 @@ public class ConfiguratorPanel extends ScrollerView {
         return this;
     }
 
-    private void buildInto(UINode parent, ConfigDescriptor descriptor,
+    private void buildInto(UIElement parent, ConfigDescriptor descriptor,
                            Function<String, Object> values) {
         if (descriptor.kind() == ConfigDescriptor.Kind.GROUP) {
             ConfiguratorGroup group = new ConfiguratorGroup(descriptor.label());
@@ -120,7 +120,7 @@ public class ConfiguratorPanel extends ScrollerView {
      * whether it is edited on the node or in the panel, and it still wants this panel's row rhythm,
      * label column and change signal.</p>
      */
-    public Configurator addRow(UINode parent, String label, String id, ConfigControl control) {
+    public Configurator addRow(UIElement parent, String label, String id, ConfigControl control) {
         Configurator row = new Configurator(label, control);
         controls.put(id, control);
         control.changed.connect(value -> changed.emit(id, value));
@@ -148,7 +148,7 @@ public class ConfiguratorPanel extends ScrollerView {
      * sweeping those out would leave the panel unable to scroll and unable to get them back.</p>
      */
     public void clearRows() {
-        for (UINode child : new ArrayList<>(children())) {
+        for (UIElement child : new ArrayList<>(children())) {
             if (child instanceof Configurator || child instanceof ConfiguratorGroup) {
                 remove(child);
             }

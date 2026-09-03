@@ -117,7 +117,7 @@ public interface Styleable {
      * a modal is open over this node's scope.
      *
      * <p>Here rather than only on a node because the two engines' sessions both refuse a report from an
-     * inert element, and {@code Styleable} is the seam they share. @see com.crystalgui.ui.dom.UINode</p>
+     * inert element, and {@code Styleable} is the seam they share. @see com.crystalgui.ui.dom.UIElement</p>
      */
     boolean isInertAttribute();
 

@@ -3,16 +3,13 @@ package com.crystalgui.desktop.window;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import com.crystalgui.render.texture.geometry.Size;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.scroll.ScrollerView;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 /**
@@ -56,7 +53,7 @@ public class WindowInitialPlacementTest extends UiDocumentTestBase {
         // detaches and `close()` destroys only once the flight ends, so the assertion reads the state
         // BEFORE the gesture took effect and the numbers it does get are mid-flight fractions.
         Desktop.setAnimationsEnabled(false);
-        UINode root = new UINode().layout(l -> l.width(800).height(600));
+        UIElement root = new UIElement().layout(l -> l.width(800).height(600));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
     }
@@ -67,11 +64,11 @@ public class WindowInitialPlacementTest extends UiDocumentTestBase {
 
     private WindowFrame open(float contentWidth, float contentHeight) {
         WindowFrame frame = new WindowFrame("W");
-        frame.setContent(new UINode().layout(l -> l.width(contentWidth).height(contentHeight)));
+        frame.setContent(new UIElement().layout(l -> l.width(contentWidth).height(contentHeight)));
         return Desktop.of(document).addWindow(frame);
     }
 
-    private UINode workArea() {
+    private UIElement workArea() {
         return Desktop.of(document).windowLayer();
     }
 
@@ -147,7 +144,7 @@ public class WindowInitialPlacementTest extends UiDocumentTestBase {
      */
     @Test
     public void contentGrowingPastTheWorkAreaScrollsInsideTheWindow() {
-        UINode body = new UINode().layout(l -> l.width(300).height(400));
+        UIElement body = new UIElement().layout(l -> l.width(300).height(400));
         WindowFrame frame = new WindowFrame("W");
         frame.setContent(body);
         Desktop.of(document).addWindow(frame);

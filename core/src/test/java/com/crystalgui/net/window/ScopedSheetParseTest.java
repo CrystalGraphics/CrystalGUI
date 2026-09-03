@@ -9,7 +9,8 @@ import com.crystalgui.style.Styleable;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
+
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.Test;
@@ -30,8 +31,8 @@ public class ScopedSheetParseTest extends UiDocumentTestBase {
     /** The rule the whole scoping question turns on: {@code .machine-panel { width: 560px }}. */
     private static final float PANEL_WIDTH = 560f;
 
-    private static UINode panel() {
-        UINode node = new UINode();
+    private static UIElement panel() {
+        UIElement node = new UIElement();
         node.addClass(MachineStyles.PANEL_CLASS);
         return node;
     }
@@ -56,8 +57,8 @@ public class ScopedSheetParseTest extends UiDocumentTestBase {
         UIDocument document = new UIDocument();
         document.styles().addStylesheet(StyleSheet.DEFAULT);
 
-        UINode inScope = panel();
-        UINode stranger = panel();
+        UIElement inScope = panel();
+        UIElement stranger = panel();
         document.append(inScope);
         document.append(stranger);
 
@@ -84,7 +85,7 @@ public class ScopedSheetParseTest extends UiDocumentTestBase {
     public void malformedCssLeavesThePanelPlain() {
         UIDocument document = new UIDocument();
         document.styles().addStylesheet(StyleSheet.DEFAULT);
-        UINode root = panel();
+        UIElement root = panel();
         document.append(root);
 
         ScopedSheets sheets = new ScopedSheets(new ScopedSheets.Host() {
@@ -117,8 +118,8 @@ public class ScopedSheetParseTest extends UiDocumentTestBase {
         UIDocument document = new UIDocument();
         document.styles().addStylesheet(StyleSheet.DEFAULT);
 
-        UINode first = panel();
-        UINode second = panel();
+        UIElement first = panel();
+        UIElement second = panel();
         document.append(first);
         document.append(second);
 

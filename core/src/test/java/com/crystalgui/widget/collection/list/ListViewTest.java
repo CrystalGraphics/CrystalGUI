@@ -1,18 +1,14 @@
 package com.crystalgui.widget.collection.list;
 
 import com.crystalgui.ui.dom.Attribute;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.service.Input;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.core.collection.list.FixedHeightStrategy;
-import com.crystalgui.widget.collection.list.ListRenderer;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
-import com.crystalgui.widget.collection.list.ListView;
 import com.crystalgui.core.collection.list.SelectionMode;
 import com.crystalgui.ui.input.FocusPolicy;
 import org.junit.Test;
@@ -48,21 +44,21 @@ public class ListViewTest extends UiDocumentTestBase {
         list.layout(l -> l.width(100).height(100));
         list.setRenderer(new ListRenderer<String>() {
             @Override
-            public UINode createTemplate() {
+            public UIElement createTemplate() {
                 templatesCreated++;
-                UINode row = new UINode();
+                UIElement row = new UIElement();
                 row.setFocusPolicy(FocusPolicy.FOCUSABLE);
                 return row;
             }
 
             @Override
-            public void bind(String item, int index, UINode template) {
+            public void bind(String item, int index, UIElement template) {
                 bindCalls++;
                 template.setId(item);
             }
         });
 
-        UINode root = new UINode().layout(l -> l.width(100).height(100));
+        UIElement root = new UIElement().layout(l -> l.width(100).height(100));
         root.append(list);
         document.append(root);
         settle();
@@ -218,7 +214,7 @@ public class ListViewTest extends UiDocumentTestBase {
 
     /** What the renderer last wrote into the row at {@code index} — the display, not the model. */
     private String boundTextOf(int index) {
-        UINode row = list.realisedRows().get(index);
+        UIElement row = list.realisedRows().get(index);
         assertNotNull("row " + index + " is not realised", row);
         return row.id();
     }
@@ -267,7 +263,7 @@ public class ListViewTest extends UiDocumentTestBase {
         list.setFocusedIndex(3);
         settle();
 
-        UINode rowThree = list.realisedRows().get(3);
+        UIElement rowThree = list.realisedRows().get(3);
         assertNotNull(rowThree);
         assertSame("focus starts on row 3's element",
                 rowThree, document.focus().focused());
@@ -279,7 +275,7 @@ public class ListViewTest extends UiDocumentTestBase {
         list.scrollTo(list.scrollLeft(), 0f);
         settle();
 
-        UINode rowThreeAgain = list.realisedRows().get(3);
+        UIElement rowThreeAgain = list.realisedRows().get(3);
         assertNotNull(rowThreeAgain);
         assertSame("and focus is back on row 3, whichever element now represents it",
                 rowThreeAgain, document.focus().focused());
@@ -307,7 +303,7 @@ public class ListViewTest extends UiDocumentTestBase {
         build(10_000);
         list.setFocusedIndex(3);
         settle();
-        UINode rowThree = list.realisedRows().get(3);
+        UIElement rowThree = list.realisedRows().get(3);
         assertSame(rowThree, document.focus().focused());
 
         // The focused element goes away for a reason that has nothing to do with this list -- which is what
@@ -334,7 +330,7 @@ public class ListViewTest extends UiDocumentTestBase {
     @Test
     public void focusArrivingOnARowIsTrackedByIndex() {
         build(10_000);
-        UINode rowFive = list.realisedRows().get(5);
+        UIElement rowFive = list.realisedRows().get(5);
         assertNotNull(rowFive);
 
         document.focus().requestFocus(rowFive);
@@ -359,7 +355,7 @@ public class ListViewTest extends UiDocumentTestBase {
         list.scrollTo(list.scrollLeft(), 9_000f);
         settle();
 
-        UINode focused = document.focus().focused();
+        UIElement focused = document.focus().focused();
         for (var entry : list.realisedRows().entrySet()) {
             assertNotSame("row " + entry.getKey() + " inherited a recycled element's focus",
                     entry.getValue(), focused);
@@ -373,7 +369,7 @@ public class ListViewTest extends UiDocumentTestBase {
         build(10);
         assertFalse(list.acceptsPublicChildren());
         try {
-            list.append(new UINode());
+            list.append(new UIElement());
             fail("a public child would be recycled out of existence");
         } catch (RuntimeException expected) {
             // exactly as Button, TabView and Switch behave
@@ -385,7 +381,7 @@ public class ListViewTest extends UiDocumentTestBase {
      *
      * <p>Setting {@code overflow} does not do it: a bare element is programmatic-scroll only however its
      * overflow is set, and taking the wheel is what makes something a scroll <em>view</em>. The first
-     * version of this widget set {@code overflow: scroll} on a plain {@code UINode} and could not be
+     * version of this widget set {@code overflow: scroll} on a plain {@code UIElement} and could not be
      * scrolled by hand at all — every test passed, because they all scrolled it from code.</p>
      */
     @Test
@@ -434,8 +430,8 @@ public class ListViewTest extends UiDocumentTestBase {
     // ── Selection ───────────────────────────────────────────────────────────
 
     private void key(int keyCode, int modifiers) {
-        UINode focused = document.focus().focused();
-        UINode target = focused != null ? focused : list;
+        UIElement focused = document.focus().focused();
+        UIElement target = focused != null ? focused : list;
         document.input().send(target,
                 new com.crystalgui.ui.event.KeyboardEvent.Down(target, keyCode, (char) 0, false, modifiers, 0L));
         settle();
@@ -443,7 +439,7 @@ public class ListViewTest extends UiDocumentTestBase {
 
     /** A real press and release at a row's centre, through the input handler. */
     private void clickRow(int index) {
-        UINode row = list.realisedRows().get(index);
+        UIElement row = list.realisedRows().get(index);
         var cache = row.box();
         // The box's OWN space, whose origin `localToWorld` already starts from. Adding the
         // parent-relative offset counts it twice: row 4's centre came out over row 8.
@@ -816,7 +812,7 @@ public class ListViewTest extends UiDocumentTestBase {
      * <b>The horizontal range comes from the realised rows, and it only ever grows.</b>
      *
      * <p>Both halves are the design, and each fails in a way that looks like something else. Deriving the
-     * range from the children the way {@code UINode} does reports the rows, which are written to the
+     * range from the children the way {@code UIElement} does reports the rows, which are written to the
      * viewport's width — so the range is always exactly the viewport, the bar never appears, and a
      * truncated name has no way to be reached. That is the bug this was added for.</p>
      *
@@ -836,21 +832,21 @@ public class ListViewTest extends UiDocumentTestBase {
         wide.layout(l -> l.width(100).height(100));
         wide.setRenderer(new ListRenderer<String>() {
             @Override
-            public UINode createTemplate() {
-                UINode row = new UINode();
-                row.append(new UINode());
+            public UIElement createTemplate() {
+                UIElement row = new UIElement();
+                row.append(new UIElement());
                 return row;
             }
 
             @Override
-            public void bind(String item, int index, UINode template) {
+            public void bind(String item, int index, UIElement template) {
                 // ONE long row, at the very top, so scrolling away from it leaves it unrealised.
                 float width = index == 0 ? 400f : 40f;
                 template.children().get(0).layout(l -> l.width(width).height(10f));
             }
         });
 
-        UINode root = new UINode().layout(l -> l.width(100).height(100));
+        UIElement root = new UIElement().layout(l -> l.width(100).height(100));
         root.append(wide);
         document.append(root);
         for (int i = 0; i < 6; i++) frame();
@@ -894,21 +890,21 @@ public class ListViewTest extends UiDocumentTestBase {
         list.layout(l -> l.width(100).height(100));
         list.setRenderer(new ListRenderer<String>() {
             @Override
-            public UINode createTemplate() {
-                return new UINode();
+            public UIElement createTemplate() {
+                return new UIElement();
             }
 
             @Override
-            public void bind(String item, int index, UINode template) {
+            public void bind(String item, int index, UIElement template) {
                 if (list.isRecyclingRow()) seenDuringBind[0] = true;
             }
 
             @Override
-            public void unbind(UINode template) {
+            public void unbind(UIElement template) {
                 if (list.isRecyclingRow()) seenDuringUnbind[0] = true;
             }
         });
-        UINode root = new UINode().layout(l -> l.width(100).height(100));
+        UIElement root = new UIElement().layout(l -> l.width(100).height(100));
         root.append(list);
         document.append(root);
         settle();

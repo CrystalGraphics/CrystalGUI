@@ -7,7 +7,7 @@ import javax.annotation.Nullable;
 import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.SheetRef;
 import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 
 /**
  * Everything a {@link WindowMount} is told about one window — <b>the platform seam</b>. A panel is
@@ -20,7 +20,7 @@ import com.crystalgui.ui.dom.UINode;
 public interface ClientWindowContext {
 
     /** The rebuilt tree. A <b>new object</b> after a re-describe — never cache it across one. */
-    UINode root();
+    UIElement root();
 
     /** What kind of window this is, or {@code ""} from a server that named none. */
     String type();
@@ -45,7 +45,7 @@ public interface ClientWindowContext {
     boolean useUserAgentSheet();
 
     /** This window's session — for {@code call}, {@code onCall}, {@code notify}, {@code onNotify}. */
-    ClientUiSession<UINode, Object> session();
+    ClientUiSession<UIElement, Object> session();
 
     /** The wire everything on this client shares. For connection-scoped things, never window ones. */
     ProtocolConnection<Object> connection();

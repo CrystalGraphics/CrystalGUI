@@ -4,7 +4,7 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.core.async.ActiveJob;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Animation;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.control.ProgressBar;
@@ -35,7 +35,7 @@ import java.util.List;
  * of {@code advanceFrame} with nothing about progress anywhere in the trace. The scheduler's snapshot is
  * immutable and taken on this thread, so there is nothing to race.</p>
  */
-public class ProgressStatusItem extends UINode {
+public class ProgressStatusItem extends UIElement {
 
     public static final Name NAME = Name.of("progressstatusitem");
 
@@ -47,7 +47,7 @@ public class ProgressStatusItem extends UINode {
     private final UIText label = new UIText("");
     private final ProgressBar bar = new ProgressBar();
     private final UIText count = new UIText("");
-    private final UINode cancel = new UINode();
+    private final UIElement cancel = new UIElement();
 
     private final ProcessesPopover popover = new ProcessesPopover();
 

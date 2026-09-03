@@ -1,5 +1,6 @@
 package com.crystalgui.widget.config.control;
 
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.config.ConfigControlContracts;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -7,7 +8,6 @@ import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.core.config.ConfigDescriptor;
@@ -137,7 +137,7 @@ public class NumberControl extends ValueControl<Double> {
      * conversion samples the handle's own transform rather than asking anything about canvases, so it
      * holds for {@code uiScale}, a zoom, or any other transform in the chain.</p>
      */
-    public NumberControl scrubWith(UINode handle) {
+    public NumberControl scrubWith(UIElement handle) {
         handle.addClass(SCRUB_HANDLE_CLASS);
         // The handle is usually a label, and a label is usually scenery with hit-testing off. It cannot
         // be both: a gesture needs the press.
@@ -262,7 +262,7 @@ public class NumberControl extends ValueControl<Double> {
      * back. Falls back to 1 for a degenerate transform (a zero scale, or a handle not yet laid out),
      * which makes the scrub feel wrong rather than divide by zero.</p>
      */
-    private static float measurePixelsPerUnit(UINode handle) {
+    private static float measurePixelsPerUnit(UIElement handle) {
         final float probe = 100f;
         Vector2f origin = handle.toLocal(0f, 0f);
         // Read before the second call: screenToLocal may hand back a shared vector.

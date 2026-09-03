@@ -6,7 +6,8 @@ import static org.junit.Assert.assertTrue;
 
 import com.crystalgui.style.easing.Easing;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
+
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.Test;
@@ -129,7 +130,7 @@ public class AnimationTest {
     @Test
     public void aHookIsDroppedWhenItsOwnerLeavesTheTree() {
         UIDocument document = new UIDocument();
-        UINode node = ServiceFixtures.at("node", 0, 0, 100, 100);
+        UIElement node = ServiceFixtures.at("node", 0, 0, 100, 100);
         document.append(node);
         List<String> log = new ArrayList<>();
         document.animation().every(node, delta -> {
@@ -150,7 +151,7 @@ public class AnimationTest {
     @Test
     public void aHookThatReturnsFalseStops() {
         UIDocument document = new UIDocument();
-        UINode node = ServiceFixtures.at("node", 0, 0, 100, 100);
+        UIElement node = ServiceFixtures.at("node", 0, 0, 100, 100);
         document.append(node);
         List<String> log = new ArrayList<>();
         document.animation().every(node, delta -> {

@@ -15,14 +15,14 @@ import javax.annotation.Nullable;
  * and moving content between two windows becomes moving a node between two slots, with no flag to
  * remember and put back.</p>
  */
-public class UISlot extends UINode {
+public class UISlot extends UIElement {
 
     /** Where a host's light children appear inside its shadow tree. */
     public static final Name NAME = Name.of("slot");
 
     private String slotName;
-    private final List<UINode> assigned = new ArrayList<>();
-    private final List<UINode> assignedView = Collections.unmodifiableList(assigned);
+    private final List<UIElement> assigned = new ArrayList<>();
+    private final List<UIElement> assignedView = Collections.unmodifiableList(assigned);
 
     /** The default slot. */
     public UISlot() {
@@ -48,7 +48,7 @@ public class UISlot extends UINode {
     }
 
     /** The light children of the host assigned here, in the host's order; empty when showing fallback. */
-    public final List<UINode> assignedNodes() {
+    public final List<UIElement> assignedNodes() {
         ShadowRoot root = containingShadowRoot();
         if (root != null) root.ensureAssigned();
         return assignedView;
@@ -56,8 +56,8 @@ public class UISlot extends UINode {
 
     /** Assigned nodes, or this slot's own children as fallback. */
     @Override
-    public List<UINode> composedChildren() {
-        List<UINode> nodes = assignedNodes();
+    public List<UIElement> composedChildren() {
+        List<UIElement> nodes = assignedNodes();
         return nodes.isEmpty() ? children() : nodes;
     }
 
@@ -69,11 +69,11 @@ public class UISlot extends UINode {
         assigned.clear();
     }
 
-    void assign(UINode node) {
+    void assign(UIElement node) {
         assigned.add(node);
     }
 
-    List<UINode> assignedSnapshot() {
+    List<UIElement> assignedSnapshot() {
         return new ArrayList<>(assigned);
     }
 
@@ -84,7 +84,7 @@ public class UISlot extends UINode {
 
     /** The slot {@code node} is assigned to, or null — a static so a caller need not know the host. */
     @Nullable
-    public static UISlot of(UINode node) {
+    public static UISlot of(UIElement node) {
         return node.assignedSlot();
     }
 }

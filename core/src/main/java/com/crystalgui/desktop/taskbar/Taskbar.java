@@ -12,8 +12,7 @@ import com.crystalgui.desktop.window.WindowRegistry;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.command.CommandRegistry;
@@ -22,7 +21,6 @@ import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgraphics.platform.input.CgMouseCodes;
-import dev.vfyjxf.taffy.style.TaffyDisplay;
 
 import javax.annotation.Nullable;
 
@@ -61,7 +59,7 @@ import java.util.Map;
  * the element that is being clicked, which is the trap that froze the table header. Entries are kept per
  * window and updated in place; only a window that has genuinely gone loses one.</p>
  */
-public class Taskbar extends UINode {
+public class Taskbar extends UIElement {
 
     /** The cascade identity `ua/desktop.css` names. @see com.crystalgui.ui.dom.Name */
     public static final Name NAME = Name.of("taskbar");
@@ -112,9 +110,9 @@ public class Taskbar extends UINode {
      */
     public static final String GLOW_CLASS = "__glow__";
 
-    private final UINode entries;
+    private final UIElement entries;
     /** The glow, kept so the designer can retone it. @see #GLOW_CLASS */
-    private final UINode glow;
+    private final UIElement glow;
 
     /**
      * An entry collapsing out of the row — it is no longer in {@link #entryOf} and is not a target.
@@ -166,19 +164,19 @@ public class Taskbar extends UINode {
         super(NAME);
         // THE HAIRLINE FIRST, so it paints under the entries rather than over them. Absolute, so the row
         // below still centres its island as if the edge were not there.
-        UINode edge = new UINode();
+        UIElement edge = new UIElement();
         edge.addClass(EDGE_CLASS);
         edge.setHitTest(false);
         append(edge);
 
         // THE GLOW, after the hairline and before the entries: it paints over the glass and under the
         // buttons, and being absolute it takes no part in centring the row. @see #GLOW_CLASS
-        glow = new UINode();
+        glow = new UIElement();
         glow.addClass(GLOW_CLASS);
         glow.setHitTest(false);
         append(glow);
 
-        entries = new UINode();
+        entries = new UIElement();
         entries.addClass(ENTRIES_CLASS);
         append(entries);
 
@@ -193,7 +191,7 @@ public class Taskbar extends UINode {
         // BOTH CHILDREN BEFORE ATTACH. Adding one later means inserting a Taffy node into a parent
         // whose children are mid-registration -- `Index (is 1) should be < child_count (0)` -- which is
         // exactly what building the previews lazily from createEntry did, since refresh() runs from
-        // onWindowChanged. @see UINode#taffyChildIndex
+        // onWindowChanged. @see UIElement#taffyChildIndex
         previews = new TaskbarPreviews(this);
     }
 
@@ -205,7 +203,7 @@ public class Taskbar extends UINode {
      * gradient. Package-private: a theme retones this through {@code --taskbar-glow}, and the element
      * itself is only reachable because the designer writes at IMPORTANT origin while it runs.
      */
-    UINode glow() {
+    UIElement glow() {
         return glow;
     }
 
@@ -263,7 +261,7 @@ public class Taskbar extends UINode {
     /** The desktop this strip belongs to — always its parent, and null only while detached. */
     @Nullable
     Desktop desktop() {
-        for (UINode element = parent(); element != null; element = element.parent()) {
+        for (UIElement element = parent(); element != null; element = element.parent()) {
             if (element instanceof Desktop) return (Desktop) element;
         }
         return null;
@@ -340,11 +338,11 @@ public class Taskbar extends UINode {
             // `live`, so without this the next live entry is addressed into the slot the collapsing one
             // still occupies and shunts it to the end of the row: the row snaps shut in one frame and the
             // dying button slides sideways, which is the opposite of what the animation is for.
-            List<UINode> row = entries.children();
+            List<UIElement> row = entries.children();
             while (index < row.size() && row.get(index).hasClass(EXITING_CLASS)) index++;
             // A MOVE, and `insertAt` is what makes it one: it reparents through `moveTo`, so a mirroring
             // peer sees a single `moved` rather than a remove followed by an insert -- which would
-            // destroy the row and everything in it. @see UINode#insertAt
+            // destroy the row and everything in it. @see UIElement#insertAt
             if (entries.indexOf(entry) != index) entries.insertAt(index, entry);
             index++;
 
@@ -367,7 +365,7 @@ public class Taskbar extends UINode {
      * the only spelling of "costs nothing" that actually is.</p>
      */
     private void applyBadge(Button entry, @Nullable String badge) {
-        UINode slot = entry.getPostIcon();
+        UIElement slot = entry.getPostIcon();
         if (badge == null) {
             if (slot != null) slot.setDisplayed(false);
             return;
@@ -393,13 +391,13 @@ public class Taskbar extends UINode {
     private void applyProgress(Button entry, float progress) {
         boolean busy = progress >= 0f;
         setClass(entry, BUSY_CLASS, busy);
-        UINode fill = entry.getUnderlay();
+        UIElement fill = entry.getUnderlay();
         if (!busy) {
             if (fill != null) fill.setDisplayed(false);
             return;
         }
         if (fill == null) {
-            fill = new UINode();
+            fill = new UIElement();
             fill.addClass(PROGRESS_CLASS);
             // A BUTTON REFUSES PUBLIC CHILDREN, like every composite -- so this goes in the widget's own
             // slot rather than being parented onto it. setUnderlay is what makes an absolutely
@@ -474,7 +472,7 @@ public class Taskbar extends UINode {
      * about itself, not a child added from inside a parent's own attach.</p>
      */
     private void applyIcon(Button entry, @Nullable String iconName) {
-        UINode slot = entry.getPreIcon();
+        UIElement slot = entry.getPreIcon();
         WindowIcon tile;
         if (slot instanceof WindowIcon existing) {
             tile = existing;
@@ -486,7 +484,7 @@ public class Taskbar extends UINode {
         tile.show(iconName, entry.getText());
     }
 
-    private static void setClass(UINode element, String cls, boolean on) {
+    private static void setClass(UIElement element, String cls, boolean on) {
         if (on) element.addClass(cls);
         else element.removeClass(cls);
     }
@@ -522,8 +520,8 @@ public class Taskbar extends UINode {
      * it on the way out.</p>
      */
     @Nullable
-    public static Taskbar of(@Nullable UINode element) {
-        for (UINode el = element; el != null; el = el.parent()) {
+    public static Taskbar of(@Nullable UIElement element) {
+        for (UIElement el = element; el != null; el = el.parent()) {
             if (el instanceof Taskbar) return (Taskbar) el;
         }
         return null;
@@ -536,7 +534,7 @@ public class Taskbar extends UINode {
     }
 
     /** The island the entries sit in. */
-    public UINode entries() {
+    public UIElement entries() {
         return entries;
     }
 
@@ -575,7 +573,7 @@ public class Taskbar extends UINode {
             // children are mid-registration. Absolute in the sheet, so the row of icon and label is laid
             // out as if it were not there; centred by `left: 50%` plus a translate, which is layout-free
             // and needs no auto-margin support from Taffy.
-            UINode indicator = new UINode();
+            UIElement indicator = new UIElement();
             indicator.addClass(INDICATOR_CLASS);
             indicator.set(Attribute.PART, INDICATOR_PART);
             indicator.setHitTest(false);

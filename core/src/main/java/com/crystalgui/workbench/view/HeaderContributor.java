@@ -1,6 +1,6 @@
 package com.crystalgui.workbench.view;
 
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 
 /**
  * A view that puts its own controls in its container's header — IntelliJ's tool window title actions.
@@ -26,5 +26,5 @@ public interface HeaderContributor {
      * view owns rather than one built per call. A view that rebuilt it would find the container holding
      * the previous one.</p>
      */
-    UINode headerContent();
+    UIElement headerContent();
 }

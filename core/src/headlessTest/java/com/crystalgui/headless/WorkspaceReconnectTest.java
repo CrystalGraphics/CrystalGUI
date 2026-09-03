@@ -13,7 +13,7 @@ import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -60,8 +60,8 @@ public class WorkspaceReconnectTest {
 
     /** Everything that dies with one connection, so a reconnect is one call. */
     private static final class Wire {
-        ServerUiSession<UINode, Object> server;
-        ClientUiSession<UINode, Object> session;
+        ServerUiSession<UIElement, Object> server;
+        ClientUiSession<UIElement, Object> session;
         WorkspaceRpc<Object> rpc;
         InMemoryTransport<Object> a;
         InMemoryTransport<Object> b;
@@ -92,7 +92,7 @@ public class WorkspaceReconnectTest {
         InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
         fresh.a = pair[0];
         fresh.b = pair[1];
-        fresh.server = Sessions.serve(1, new UINode(), fresh.a);
+        fresh.server = Sessions.serve(1, new UIElement(), fresh.a);
         fresh.rpc = new WorkspaceRpc<>(service, WorkspaceActor.LOCAL);
         fresh.rpc.installOn(fresh.server::onCall);
         fresh.server.open();

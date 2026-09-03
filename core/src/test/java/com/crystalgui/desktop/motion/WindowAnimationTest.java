@@ -1,9 +1,7 @@
 package com.crystalgui.desktop.motion;
 
-import com.crystalgui.ui.service.Animation;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.UITransform;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.core.window.WindowPolicy;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.style.property.StylePropertyRegistry;
@@ -75,7 +73,7 @@ public class WindowAnimationTest extends UiDocumentTestBase {
     @Before
     public void enableAnimations() {
         Desktop.setAnimationsEnabled(true);
-        UINode root = new UINode().layout(l -> l.width(400).height(300));
+        UIElement root = new UIElement().layout(l -> l.width(400).height(300));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
         frame();

@@ -14,7 +14,7 @@ import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -48,8 +48,8 @@ import static org.junit.Assert.fail;
 public class WorkspaceMutationTest {
 
     private InMemoryFileSystem files;
-    private ClientUiSession<UINode, Object> session;
-    private ServerUiSession<UINode, Object> server;
+    private ClientUiSession<UIElement, Object> session;
+    private ServerUiSession<UIElement, Object> server;
     private InMemoryTransport<Object> a;
     private InMemoryTransport<Object> b;
     private WorkspaceClient<Object> client;
@@ -69,7 +69,7 @@ public class WorkspaceMutationTest {
         InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
         a = pair[0];
         b = pair[1];
-        server = Sessions.serve(1, new UINode(), a);
+        server = Sessions.serve(1, new UIElement(), a);
         new WorkspaceRpc<Object>(service, WorkspaceActor.LOCAL).installOn(server::onCall);
         server.open();
 

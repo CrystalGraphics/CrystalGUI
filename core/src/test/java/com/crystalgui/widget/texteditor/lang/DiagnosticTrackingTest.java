@@ -1,8 +1,6 @@
 package com.crystalgui.widget.texteditor.lang;
 
-import com.crystalgui.text.diagnostic.DiagnosticSet;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
@@ -42,7 +40,7 @@ public class DiagnosticTrackingTest extends UiDocumentTestBase {
         editor.layout(l -> l.width(320).height(200));
         editor.generalStyle(g -> g.fontSize(8f).lineHeight(1.25f));
 
-        UINode root = new UINode().layout(l -> l.width(320).height(240));
+        UIElement root = new UIElement().layout(l -> l.width(320).height(240));
         root.append(editor);
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);

@@ -2,7 +2,7 @@ package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.texteditor.TextEditor;
 import com.crystalgui.widget.texteditor.lang.EditorLanguageFeatures;
 import dev.vfyjxf.taffy.style.TaffyPosition;
@@ -39,7 +39,7 @@ public final class QuickFixBulbPart extends EditorViewPart {
 
     static final String BULB_CLASS = "__quick-fix-bulb__";
 
-    private UINode bulb;
+    private UIElement bulb;
 
     public QuickFixBulbPart(TextEditor editor) {
         super(editor);
@@ -165,9 +165,9 @@ public final class QuickFixBulbPart extends EditorViewPart {
         if (bulb != null) bulb.setDisplayed(false);
     }
 
-    private UINode bulbElement() {
+    private UIElement bulbElement() {
         if (bulb == null) {
-            bulb = new UINode();
+            bulb = new UIElement();
             bulb.addClass(BULB_CLASS);
             // THE CARET'S ROW IS READ AT PRESS TIME, never captured: this element outlives every caret
             // position it is ever shown for, so a listener holding the row it was built for would open

@@ -1,14 +1,13 @@
 package com.crystalgui.widget.graph;
 
-import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.graph.port.PortType;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.graph.PortDirection;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.event.DragEvent;
@@ -47,7 +46,7 @@ import javax.annotation.Nullable;
  * theme changes a padding — and each of those is a thing a user does routinely. The same lesson as
  * {@code resizeOriginLeft()} reading the live Taffy inset rather than a field.</p>
  */
-public class NodePort extends UINode {
+public class NodePort extends UIElement {
 
     /**
      * This widget's kind.
@@ -93,7 +92,7 @@ public class NodePort extends UINode {
     @Getter
     private final PortType type;
 
-    private final UINode dot = new UINode();
+    private final UIElement dot = new UIElement();
     private final UIText label;
 
     /**
@@ -109,7 +108,7 @@ public class NodePort extends UINode {
      */
     @Nullable
     @Getter
-    private UINode defaultEditor;
+    private UIElement defaultEditor;
 
     /**
      * Fires whenever {@link #setDefaultEditor} actually changes which control is stored — never on the
@@ -143,7 +142,7 @@ public class NodePort extends UINode {
      *
      * <p>Outputs are refused: a value flows <em>out</em> of one, so there is nothing to type.</p>
      */
-    public NodePort setDefaultEditor(@Nullable UINode editor) {
+    public NodePort setDefaultEditor(@Nullable UIElement editor) {
         if (!direction.isInput()) return this;
         if (defaultEditor == editor) return this;
         defaultEditor = editor;
@@ -204,7 +203,7 @@ public class NodePort extends UINode {
         // outside the type-classed subtree; here the outer ring is DOT_CLASS's own border (still what
         // typeColor() reads), so only the core needs a child at all — the "gap" is just DOT_CLASS's own
         // background showing between its border and this core.
-        UINode core = new UINode();
+        UIElement core = new UIElement();
         core.addClass(DOT_CORE_CLASS);
         core.setHitTest(false);
         dot.append(core);
@@ -372,7 +371,7 @@ public class NodePort extends UINode {
     /**
      * Whether a wire is attached.
      *
-     * <p>Was {@code isConnected()}, which {@link UINode} now declares as {@code final} and uses for
+     * <p>Was {@code isConnected()}, which {@link UIElement} now declares as {@code final} and uses for
      * something else entirely — whether the node is in a document. Two meanings of "connected" one
      * method apart is exactly the collision worth renaming out of: a port that is in the tree and has
      * no wire would have answered both true and false to the same word.</p>
@@ -408,8 +407,8 @@ public class NodePort extends UINode {
     }
 
     /** The dot's centre, in the plane's coordinate space — i.e. the same space a paint call inside the
-     * canvas uses, and the space {@link UINode#toLocal} reports in. Read live; never cached. */
-    public Vector2f dotCenterIn(@Nullable UINode space) {
+     * canvas uses, and the space {@link UIElement#toLocal} reports in. Read live; never cached. */
+    public Vector2f dotCenterIn(@Nullable UIElement space) {
         return Box.centreIn(dot.box(), space == null ? null : space.box());
     }
 
@@ -461,7 +460,7 @@ public class NodePort extends UINode {
     /** The node this port belongs to, or {@code null} if it is not on one. */
     @Nullable
     public GraphNode node() {
-        for (UINode e = parent(); e != null; e = e.parent()) {
+        for (UIElement e = parent(); e != null; e = e.parent()) {
             if (e instanceof GraphNode node) return node;
         }
         return null;
@@ -469,7 +468,7 @@ public class NodePort extends UINode {
 
     @Nullable
     GraphView graphView() {
-        for (UINode e = parent(); e != null; e = e.parent()) {
+        for (UIElement e = parent(); e != null; e = e.parent()) {
             if (e instanceof GraphView view) return view;
         }
         return null;

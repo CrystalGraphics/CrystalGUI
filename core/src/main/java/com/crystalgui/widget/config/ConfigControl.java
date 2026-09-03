@@ -4,11 +4,10 @@ import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
 
 import com.crystalgui.core.config.ConfigDescriptor;
-import javax.annotation.Nullable;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
@@ -48,7 +47,7 @@ import com.crystalgui.widget.overlay.Tooltip;
  * that is an {@code Edit}, which is also what keeps a read-only inspector from silently recording
  * history.</p>
  */
-public abstract class ConfigControl extends UINode {
+public abstract class ConfigControl extends UIElement {
 
     /** Marks every control in the kit, whatever its kind — the hook a host or theme sizes them by. */
     public static final String CONTROL_CLASS = "__config-control__";

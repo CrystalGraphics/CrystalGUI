@@ -2,8 +2,7 @@ package com.crystalgui.workbench.view;
 
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.desktop.window.WindowChrome;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.widget.control.Button;
@@ -33,7 +32,7 @@ import java.util.List;
  * rather than inconsistent — the strip is what lets you choose, so with nothing to choose between it is
  * chrome for its own sake.</p>
  */
-public class ViewContainer extends UINode implements WindowChrome {
+public class ViewContainer extends UIElement implements WindowChrome {
     /** A group of views sharing a region. Named by the sheets. */
     public static final Name NAME = Name.of("viewcontainer");
 
@@ -80,9 +79,9 @@ public class ViewContainer extends UINode implements WindowChrome {
     public static final String CONTENT_CLASS = "__view-content__";
 
     private final String containerId;
-    private final UINode header = new UINode();
+    private final UIElement header = new UIElement();
     private final UIText title = new UIText("");
-    private final UINode content = new UINode();
+    private final UIElement content = new UIElement();
     private final TabView tabs = new TabView();
     private final Button hide;
 
@@ -153,7 +152,7 @@ public class ViewContainer extends UINode implements WindowChrome {
         return containerId;
     }
 
-    public UINode content() {
+    public UIElement content() {
         return content;
     }
 
@@ -174,7 +173,7 @@ public class ViewContainer extends UINode implements WindowChrome {
         if (views.isEmpty()) return;
 
         if (views.size() == 1) {
-            UINode only = views.get(0).build();
+            UIElement only = views.get(0).build();
             content.setOnlyChild(only);
             // ITS CONTROLS GO ON THE TITLE LINE — IntelliJ's tool window title actions. @see
             // HeaderContributor. Only for a lone view: with two sharing a container the header names the
@@ -201,7 +200,7 @@ public class ViewContainer extends UINode implements WindowChrome {
 
     /** The mounted view's header controls, if it offered any. @see HeaderContributor */
     @javax.annotation.Nullable
-    private UINode contributed;
+    private UIElement contributed;
 
     /**
      * Its header, offered to a window's caption when this container is put in one.
@@ -219,7 +218,7 @@ public class ViewContainer extends UINode implements WindowChrome {
      * while the container is in a region — a region is not a caption.</p>
      */
     @Override
-    public UINode captionChrome() {
+    public UIElement captionChrome() {
         return header;
     }
 

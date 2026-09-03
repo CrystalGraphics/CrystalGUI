@@ -1,22 +1,14 @@
 package com.crystalgui.widget.overlay;
 
-import com.crystalgui.style.property.layout.LayoutProperties;
-import com.crystalgui.style.StyleOrigin;
-import com.crystalgui.workbench.chrome.status.ProcessesPopover;
+import com.crystalgui.ui.dom.*;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.WidgetContracts;
-import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.ShadowRoot;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UISlot;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.AnchoredPlacement;
-import com.crystalgui.ui.service.Animation;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 import java.util.ArrayList;
 import java.util.List;
@@ -38,7 +30,7 @@ import lombok.Setter;
  * meaning for an element that does not want all of it. Widget-shaped behaviour lives in widget classes in
  * this engine; {@code Tooltip} and {@code Dialog} set that precedent. What genuinely has to be
  * element-level to work — the invoker link that light dismiss consults — <em>is</em> on
- * {@code UINode}.</p>
+ * {@code UIElement}.</p>
  *
  * <h3>{@code AUTO} vs {@code MANUAL}</h3>
  * <p>Straight from the spec, and the distinction is which of the two dismissal mechanisms applies:</p>
@@ -54,7 +46,7 @@ import lombok.Setter;
  * both closes the chain from the top down. That falls out of {@link com.crystalgui.ui.service.Dismiss#lightDismiss} finding the
  * target's innermost popover ancestor — see there for why the invoker counts as part of the popover.</p>
  */
-public class Popover extends UINode {
+public class Popover extends UIElement {
 
     public static final Name NAME = Name.of("popover");
 
@@ -131,7 +123,7 @@ public class Popover extends UINode {
 
     /** Set when anchored to an element; null when anchored to a bare point (a context menu). */
     @Nullable
-    private UINode anchor;
+    private UIElement anchor;
     private float pointX, pointY;
     private boolean anchoredToPoint;
 
@@ -146,7 +138,7 @@ public class Popover extends UINode {
     /** Focus to hand back on close — the same restore {@code Dialog} does, for the same reason: a menu
      * that swallows your place in the page is worse than one that never took focus. */
     @Nullable
-    private UINode focusBeforeOpen;
+    private UIElement focusBeforeOpen;
 
     private boolean placementTickerRunning;
 
@@ -181,7 +173,7 @@ public class Popover extends UINode {
     private static final float UNPLACED = -1e5f;
 
     /** When this was last shown, on {@code UIDocument}'s monotonic show sequence — see
-     * {@link com.crystalgui.ui.service.Dismiss#lightDismiss(UINode, int)}. */
+     * {@link com.crystalgui.ui.service.Dismiss#lightDismiss(UIElement, int)}. */
     @Getter
     private int lastShownSeq;
 
@@ -244,7 +236,7 @@ public class Popover extends UINode {
 
     /** Opens anchored to an element — a dropdown under its button. {@code invoker} is what the user
      * pressed, and is excluded from light dismiss so the press that opens it cannot also close it. */
-    public Popover showFor(UINode anchor, @Nullable UINode invoker) {
+    public Popover showFor(UIElement anchor, @Nullable UIElement invoker) {
         this.anchor = anchor;
         // Self-attaching, so no caller has to remember. This is what makes Menu.addSubmenu's
         // "the caller parents the child" contract stop being a trap -- a submenu is always shown FOR its
@@ -266,9 +258,9 @@ public class Popover extends UINode {
      * makes that whole surface unable to dismiss the menu, so left-clicking the very area you right-clicked
      * does nothing. (Observed exactly that way.) Nothing is lost by passing {@code null}: a popover opened
      * during a press is already protected from that press by
-     * {@link com.crystalgui.ui.service.Dismiss#lightDismiss(UINode, int)}.</p>
+     * {@link com.crystalgui.ui.service.Dismiss#lightDismiss(UIElement, int)}.</p>
      */
-    public Popover showAt(float rootX, float rootY, @Nullable UINode invoker) {
+    public Popover showAt(float rootX, float rootY, @Nullable UIElement invoker) {
         this.pointX = rootX;
         this.pointY = rootY;
         this.anchoredToPoint = true;
@@ -291,7 +283,7 @@ public class Popover extends UINode {
      * the nearest ancestor that accepts children, so the popover lands beside the thing it belongs to and
      * inherits its cascade — which is where a caller doing this by hand should have put it anyway.</p>
      */
-    private void attachIfNeeded(@Nullable UINode near) {
+    private void attachIfNeeded(@Nullable UIElement near) {
         if (getParent() != null || near == null) return;
         UIDocument window = near.document();
         if (window == null) return;
@@ -373,7 +365,7 @@ public class Popover extends UINode {
      * @param near where the popup belongs, usually the element that was clicked. Null falls back to the
      *             root, which is correct for a window-level popup like the command palette
      */
-    public static UINode hostFor(UIDocument window, @Nullable UINode near) {
+    public static UIElement hostFor(UIDocument window, @Nullable UIElement near) {
         return window.overlayHost(near);
     }
 
@@ -437,7 +429,7 @@ public class Popover extends UINode {
      */
     @Nullable
     public Popover parentPopover() {
-        for (UINode el = popoverInvoker(); el != null; el = el.parent()) {
+        for (UIElement el = popoverInvoker(); el != null; el = el.parent()) {
             if (el instanceof Popover popover && popover != this && popover.isOpen()) return popover;
         }
         return null;
@@ -489,7 +481,7 @@ public class Popover extends UINode {
             // a descendant's computed style before the next open re-adds the class and re-matches them
             // all. A picker with a full result list is 345 elements, and re-matching them on the way out
             // cost 443 rematches and 566 layout nodes on the frame that dismisses it.
-            // @see UINode#removeClassWithoutRematchingSubtree
+            // @see UIElement#removeClassWithoutRematchingSubtree
             // No subtree-sparing variant on this engine, and none is needed: a class change marks
             // THIS node and its own exposed parts, never a subtree, so the cost the old method
             // existed to dodge is not there to dodge.

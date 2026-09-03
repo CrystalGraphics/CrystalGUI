@@ -7,7 +7,7 @@ import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.ui.UITransform;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import dev.vfyjxf.taffy.geometry.FloatSize;
 import dev.vfyjxf.taffy.geometry.TaffySize;
 import dev.vfyjxf.taffy.style.AvailableSpace;
@@ -57,7 +57,7 @@ import org.joml.Matrix4f;
  *
  * <h3>Mirrors</h3>
  *
- * <p>{@link #mirror(UINode, Box)} lays a subtree out a second time under another host — what a
+ * <p>{@link #mirror(UIElement, Box)} lays a subtree out a second time under another host — what a
  * taskbar thumbnail is. The old engine drew a subtree twice and corrupted hit-testing unless the
  * pass said it was a copy, because every element reconciled ONE cached matrix against whatever pose
  * it was last drawn with. A mirror has boxes of its own, so each copy has its own matrices and its
@@ -69,7 +69,7 @@ public final class BoxTree {
     private final TaffyTree taffy = new TaffyTree();
 
     /** The node's own box, for every node that has one. */
-    private final Map<UINode, Box> boxes = new IdentityHashMap<>();
+    private final Map<UIElement, Box> boxes = new IdentityHashMap<>();
     private final List<Mirror> mirrors = new ArrayList<>();
     private @Nullable Box root;
 
@@ -83,11 +83,11 @@ public final class BoxTree {
 
     /** A subtree laid out again under another host. */
     private static final class Mirror {
-        final UINode subtree;
+        final UIElement subtree;
         final Box root;
-        final Map<UINode, Box> realm = new IdentityHashMap<>();
+        final Map<UIElement, Box> realm = new IdentityHashMap<>();
 
-        Mirror(UINode subtree, Box root) {
+        Mirror(UIElement subtree, Box root) {
             this.subtree = subtree;
             this.root = root;
             realm.put(subtree, root);
@@ -108,7 +108,7 @@ public final class BoxTree {
     }
 
     /** The node's own box, or null when it has none — off the tree, or {@code display: none}. */
-    public @Nullable Box boxOf(UINode node) {
+    public @Nullable Box boxOf(UIElement node) {
         return boxes.get(node);
     }
 
@@ -197,7 +197,7 @@ public final class BoxTree {
      * move the original too, so a caller that wants the copy elsewhere hosts it under a box that is
      * elsewhere, or sets a transform on the returned box).
      */
-    public Box mirror(UINode subtree, Box host) {
+    public Box mirror(UIElement subtree, Box host) {
         if (host.tree != this) throw new IllegalArgumentException("host belongs to another box tree");
         Box mirrorRoot = new Box(this, subtree, true);
         mirrorRoot.mirrorRoot = true;
@@ -325,7 +325,7 @@ public final class BoxTree {
         for (Mirror mirror : mirrors) {
             live.add(mirror.root);
             inOrder.add(mirror.root);
-            for (UINode child : mirror.subtree.composedChildren()) {
+            for (UIElement child : mirror.subtree.composedChildren()) {
                 syncNode(child, mirror.root, mirror.realm, true, live, inOrder);
             }
         }
@@ -359,7 +359,7 @@ public final class BoxTree {
                 }
             }
             int sequence = 0;
-            for (UINode node : document.promotedNodes()) {
+            for (UIElement node : document.promotedNodes()) {
                 Box box = boxes.get(node);
                 if (box == null || box == topLayer) continue;
                 box.hostOverride = topLayer;
@@ -388,7 +388,7 @@ public final class BoxTree {
         }
     }
 
-    private @Nullable Box syncNode(UINode node, @Nullable Box naturalHost, Map<UINode, Box> realm,
+    private @Nullable Box syncNode(UIElement node, @Nullable Box naturalHost, Map<UIElement, Box> realm,
                                    boolean mirror, Set<Box> live, List<Box> inOrder) {
         // No box, and none below it -- reaped with everything else not walked to. A FROZEN subtree is
         // the same answer for a different reason: it is still in the tree and is not live, so it lays
@@ -413,7 +413,7 @@ public final class BoxTree {
         box.naturalHost = naturalHost;
         live.add(box);
         inOrder.add(box);
-        for (UINode child : node.composedChildren()) syncNode(child, box, realm, mirror, live, inOrder);
+        for (UIElement child : node.composedChildren()) syncNode(child, box, realm, mirror, live, inOrder);
         return box;
     }
 

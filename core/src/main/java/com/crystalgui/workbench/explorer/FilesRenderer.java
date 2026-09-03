@@ -1,6 +1,5 @@
 package com.crystalgui.workbench.explorer;
 
-import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.ResourceContentProvider;
@@ -10,7 +9,7 @@ import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.lang.SymbolInfo;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.SymbolIcon;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.overlay.Tooltip;
@@ -53,7 +52,7 @@ final class FilesRenderer implements TreeRenderer<CgPath> {
      * index is one insertion away from silently writing the badge into the label, and the indices would
      * live at the call site where nothing explains them.</p>
      */
-    private final Map<UINode, ProjectFileTree.RowParts> slots = new HashMap<>();
+    private final Map<UIElement, ProjectFileTree.RowParts> slots = new HashMap<>();
 
     FilesRenderer(ProjectFileTree tree) {
         this.tree = tree;
@@ -61,15 +60,15 @@ final class FilesRenderer implements TreeRenderer<CgPath> {
 
 
     @Override
-    public UINode createTemplate() {
-        UINode row = new UINode();
+    public UIElement createTemplate() {
+        UIElement row = new UIElement();
         row.addClass(ProjectFileTree.ROW_CLASS);
 
         // FOUR SLOTS, BUILT ONCE HERE. Not in bind(): an element created during bind lands after the
         // layout pass that frame, which is how the command palette's key chips shipped squashed and
         // how the editor's gutter arrows ended up toggling whichever row their slot was first used
         // for. A recycled row keeps its slots and bind() only ever writes into them.
-        UINode twisty = new UINode();
+        UIElement twisty = new UIElement();
         twisty.addClass(ProjectFileTree.TWISTY_CLASS);
         // A SYMBOL ICON, because a `.java` row is a DECLARATION and the rest are not.
         //
@@ -181,7 +180,7 @@ final class FilesRenderer implements TreeRenderer<CgPath> {
     }
 
     @Override
-    public void bind(CgPath item, TreeRow<CgPath> row, int index, UINode template) {
+    public void bind(CgPath item, TreeRow<CgPath> row, int index, UIElement template) {
         tree.rowItems().put(template, item);
         ProjectFileTree.RowParts parts = slots.get(template);
         if (parts == null) return;
@@ -290,10 +289,10 @@ final class FilesRenderer implements TreeRenderer<CgPath> {
     }
 
     /** One tooltip per template, attached once. @see #createTemplate */
-    private final Map<UINode, Tooltip> tips = new HashMap<>();
+    private final Map<UIElement, Tooltip> tips = new HashMap<>();
 
     @Override
-    public void unbind(UINode template) {
+    public void unbind(UIElement template) {
         tree.rowItems().remove(template);
     }
 }

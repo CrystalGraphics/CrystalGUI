@@ -2,7 +2,7 @@ package com.crystalgui.desktop.motion;
 
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.easing.Easing;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 
 import java.util.function.BooleanSupplier;
 
@@ -40,7 +40,7 @@ import java.util.function.BooleanSupplier;
  */
 public final class WindowGeometryAnimation implements WindowMotion {
 
-    private final UINode target;
+    private final UIElement target;
 
     /** Whether the thing being animated is still worth writing to. @see WindowAnimation */
     private final BooleanSupplier alive;
@@ -80,11 +80,11 @@ public final class WindowGeometryAnimation implements WindowMotion {
     private final Runnable onDone;
     private boolean over;
 
-    public WindowGeometryAnimation(UINode target, BooleanSupplier alive,
-                            float fromLeft, float fromTop, float fromWidth, float fromHeight,
-                            float toLeft, float toTop, float toWidth, float toHeight,
-                            boolean animatePosition, boolean animateSize,
-                            long durationNanos, Easing easing, Runnable onDone) {
+    public WindowGeometryAnimation(UIElement target, BooleanSupplier alive,
+                                   float fromLeft, float fromTop, float fromWidth, float fromHeight,
+                                   float toLeft, float toTop, float toWidth, float toHeight,
+                                   boolean animatePosition, boolean animateSize,
+                                   long durationNanos, Easing easing, Runnable onDone) {
         this.target = target;
         this.alive = alive;
         this.fromLeft = fromLeft;

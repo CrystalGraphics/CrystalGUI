@@ -10,7 +10,7 @@ import com.crystalgui.text.lang.CodeActionProvider;
 import com.crystalgui.text.lang.DeclarationSite;
 import com.crystalgui.text.lang.Resolver;
 import com.crystalgui.text.lang.SymbolInfo;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.overlay.Menu;
 import com.crystalgui.widget.overlay.MenuItem;
@@ -414,7 +414,7 @@ public final class EditorLanguageFeatures {
      * <p>Anchored where the pointer is rather than at the problem's text, because the text is by
      * definition somewhere else: the whole value of the stripe is that it marks problems off screen.</p>
      */
-    public void showProblemPopupAt(Diagnostic problem, UINode anchor) {
+    public void showProblemPopupAt(Diagnostic problem, UIElement anchor) {
         UIDocument window = editor.document();
         if (window == null || problem == null || anchor == null) return;
         ensureDocPopup();

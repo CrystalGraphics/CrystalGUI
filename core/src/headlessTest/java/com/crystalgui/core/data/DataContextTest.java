@@ -1,6 +1,6 @@
 package com.crystalgui.core.data;
 
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.UiDataKeys;
 
 import org.junit.Test;
@@ -17,18 +17,18 @@ import static org.junit.Assert.assertTrue;
 /**
  * How a command finds what it is acting on.
  *
- * <p>Headless: the walk is over {@code UINode} parentage and touches no window, no style engine and
+ * <p>Headless: the walk is over {@code UIElement} parentage and touches no window, no style engine and
  * no GL — which is what makes it testable at all, and is the same argument {@code DockLayout} makes
  * about being pure data.</p>
  */
 public class DataContextTest {
     /**
-     * A node that can answer a {@link DataKey}. {@code UINode} has no {@code getData} to override --
+     * A node that can answer a {@link DataKey}. {@code UIElement} has no {@code getData} to override --
      * the outward walk tests each step for a {@link DataProvider} instead -- so a fixture that wants
      * to answer implements the interface. Subclassed anonymously below, which is what these tests
      * used to do straight off the old element.
      */
-    private static class ProviderNode extends UINode implements DataProvider {
+    private static class ProviderNode extends UIElement implements DataProvider {
         @Override
         public Object getData(DataKey<?> key) {
             return null;
@@ -40,7 +40,7 @@ public class DataContextTest {
     private static final DataKey<String> OTHER = DataKey.create("test.other", String.class);
 
     /** An element that answers {@link #SUBJECT} with a fixed string. */
-    private static final class Answering extends UINode implements DataProvider {
+    private static final class Answering extends UIElement implements DataProvider {
         private final String answer;
 
         Answering(String answer) {
@@ -54,7 +54,7 @@ public class DataContextTest {
         }
     }
 
-    private static UINode chain(UINode... outerToInner) {
+    private static UIElement chain(UIElement... outerToInner) {
         for (int i = 0; i + 1 < outerToInner.length; i++) {
             outerToInner[i].append(outerToInner[i + 1]);
         }
@@ -68,21 +68,21 @@ public class DataContextTest {
      */
     @Test
     public void theFirstAnswerFromTheInsideOutWins() {
-        UINode inner = chain(new Answering("outer"), new Answering("inner"));
+        UIElement inner = chain(new Answering("outer"), new Answering("inner"));
         assertEquals("inner", DataContext.from(inner).get(SUBJECT));
     }
 
     /** A non-answering element between two answerers must not stop the walk. */
     @Test
     public void thewalkPassesThroughElementsThatKnowNothing() {
-        UINode leaf = chain(new Answering("outer"), new UINode(), new UINode());
+        UIElement leaf = chain(new Answering("outer"), new UIElement(), new UIElement());
         assertEquals("outer", DataContext.from(leaf).get(SUBJECT));
     }
 
     /** Nothing anywhere knows: null, not an exception. */
     @Test
     public void anUnansweredKeyIsNull() {
-        UINode leaf = chain(new UINode(), new UINode());
+        UIElement leaf = chain(new UIElement(), new UIElement());
         assertNull(DataContext.from(leaf).get(SUBJECT));
         assertFalse(DataContext.from(leaf).has(SUBJECT));
     }
@@ -105,7 +105,7 @@ public class DataContextTest {
     /** Every element answers ELEMENT, so a walk always terminates with something. */
     @Test
     public void everyElementAnswersElement() {
-        UINode leaf = chain(new UINode(), new UINode());
+        UIElement leaf = chain(new UIElement(), new UIElement());
     }
 
     /**
@@ -120,7 +120,7 @@ public class DataContextTest {
         // lands on inside a composite is one of its parts, so a walk that could not get out of one
         // would lose the subject for precisely the widgets built properly.
         Answering host = new Answering("host");
-        UINode part = new UINode();
+        UIElement part = new UIElement();
         host.attachShadow().append(part);
         assertEquals("a shadow part could not reach its host", "host",
                 DataContext.from(part).get(SUBJECT));
@@ -138,14 +138,14 @@ public class DataContextTest {
     /** A wrong-typed answer is dropped, not thrown on — one bad provider must not break the walk. */
     @Test
     public void aWrongTypedAnswerIsIgnored() {
-        class Liar extends UINode implements DataProvider {
+        class Liar extends UIElement implements DataProvider {
             @Override
             public Object getData(DataKey<?> key) {
                 return key == SUBJECT ? Integer.valueOf(42) : null;   // not a String
             }
         }
-        UINode liar = new Liar();
-        UINode leaf = chain(new Answering("good"), liar);
+        UIElement liar = new Liar();
+        UIElement leaf = chain(new Answering("good"), liar);
         assertEquals("a wrong-typed inner answer shadowed a good outer one",
                 "good", DataContext.from(leaf).get(SUBJECT));
     }
@@ -154,7 +154,7 @@ public class DataContextTest {
     @Test
     public void answersAreCachedWithinOnePass() {
         int[] asked = {0};
-        UINode counting = new ProviderNode() {
+        UIElement counting = new ProviderNode() {
             @Override
             public Object getData(DataKey<?> key) {
                 if (key == SUBJECT) {
@@ -171,7 +171,7 @@ public class DataContextTest {
         assertEquals("the walk repeated for a key already answered", 1, asked[0]);
 
         int[] missed = {0};
-        UINode missing = new ProviderNode() {
+        UIElement missing = new ProviderNode() {
             @Override
             public Object getData(DataKey<?> key) {
                 if (key == OTHER) missed[0]++;
@@ -201,7 +201,7 @@ public class DataContextTest {
     /** A list-typed key round-trips, which is what SELECTION relies on. */
     @Test
     public void aListValuedKeyWorks() {
-        UINode selecting = new ProviderNode() {
+        UIElement selecting = new ProviderNode() {
             @Override
             public Object getData(DataKey<?> key) {
                 if (key == UiDataKeys.SELECTION) return List.of("a", "b");

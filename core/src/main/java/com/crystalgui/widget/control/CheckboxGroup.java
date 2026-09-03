@@ -16,7 +16,7 @@ import javax.annotation.Nullable;
  * is a pattern this codebase does not otherwise have, and inventing one for a radio group would mean
  * every consumer accepting a container where it wanted a layout of its own.</p>
  *
- * <p>Deliberately not ported to a {@code UINode}: it has no box, paints nothing, and describing it
+ * <p>Deliberately not ported to a {@code UIElement}: it has no box, paints nothing, and describing it
  * would put a node on the wire that exists only to hold a rule about two others.</p>
  */
 public final class CheckboxGroup {

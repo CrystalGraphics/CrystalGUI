@@ -1,7 +1,7 @@
 package com.crystalgui.app.shadergraph.node;
 
 import com.crystalgui.graph.NodeField;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.form.ColorSelector;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.widget.config.control.ColorControl;
@@ -56,7 +56,7 @@ public final class ShaderColorFieldWidget {
         });
     }
 
-    private static UINode build(NodeField field, String value, java.util.function.Consumer<String> onChange) {
+    private static UIElement build(NodeField field, String value, java.util.function.Consumer<String> onChange) {
         ConfigDescriptor descriptor = ConfigDescriptor.color(field.id(), field.label());
         ColorControl control = new ColorControl(descriptor, parseVec4(field.resolve(value)));
         // See the class javadoc: full width is this call site's decision, not the control's default.

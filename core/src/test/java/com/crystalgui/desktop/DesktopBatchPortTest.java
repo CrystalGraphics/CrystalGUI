@@ -1,6 +1,7 @@
 package com.crystalgui.desktop;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.input.keymap.KeyStroke;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -21,13 +22,11 @@ import com.crystalgui.desktop.window.WindowRegistry;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.UITransform;
-import com.crystalgui.ui.dom.UINode;
 import org.joml.Vector2f;
 import com.crystalgui.widget.dnd.Resizer;
 import com.crystalgui.widget.overlay.Dialog;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 /**
@@ -223,7 +222,7 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
         // strip's centred row, which is nowhere near its position on screen: that difference is exactly
         // what `WindowAnimator.toward` gets wrong if it subtracts two boxes' offsets, and it is what
         // sent every wire in the graph to one short segment at 6.4.
-        UINode entry = d.taskbar().entryFor(frame);
+        UIElement entry = d.taskbar().entryFor(frame);
         assertNotNull("no taskbar entry to measure against", entry);
         Box entryBox = entry.box();
         assertNotNull(entryBox);
@@ -263,7 +262,7 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
     public void aWindowHasItsEightResizeHandles() {
         WindowFrame frame = open("One");
         int handles = 0;
-        for (UINode child : frame.children()) {
+        for (UIElement child : frame.children()) {
             if (child.hasClass(Resizer.RESIZER_CLASS)) handles++;
         }
         assertEquals("a window did not get all eight handles", 8, handles);
@@ -286,7 +285,7 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
 
         Box box = frame.box();
         assertNotNull(box);
-        UINode edge = hit(box.worldX() + 1f, box.worldY() + box.height() / 2f);
+        UIElement edge = hit(box.worldX() + 1f, box.worldY() + box.height() / 2f);
         assertNotNull("nothing at all is on the window's left edge", edge);
         assertTrue("the window's left edge is not a resize handle: " + edge.classes(),
                 edge.hasClass(Resizer.RESIZER_CLASS));
@@ -329,7 +328,7 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
         // Asserting on it would pass against a window that is completely dead.
         move(x, y);
         frame();
-        UINode blocked = document.input().hoverTarget();
+        UIElement blocked = document.input().hoverTarget();
         assertFalse("the window's own content is reachable while its modal is open",
                 blocked != null && !partOf(blocked, dialog));
 
@@ -339,7 +338,7 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
 
         move(x, y);
         frame();
-        UINode after = document.input().hoverTarget();
+        UIElement after = document.input().hoverTarget();
         assertNotNull("the window is unreachable after its modal closed", after);
         assertFalse("a closed dialog is still blocking the window: " + after.classes(),
                 partOf(after, dialog));
@@ -409,14 +408,14 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
 
         move(centreX(other), centreY(other));
         frame();
-        UINode reachable = document.input().hoverTarget();
+        UIElement reachable = document.input().hoverTarget();
         assertNotNull("the OTHER window is unreachable while a modal is open elsewhere", reachable);
         assertNull("the other window is being blamed on a modal it does not contain",
                 document.focus().blockingModal(reachable));
 
         move(centreX(blocked), centreY(blocked));
         frame();
-        UINode owner = document.input().hoverTarget();
+        UIElement owner = document.input().hoverTarget();
         assertFalse("the modal does not block its own window",
                 owner != null && !partOf(owner, dialog));
     }
@@ -493,7 +492,7 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
     public void aMirrorIsLaidOutAtItsHostOriginAndNotItsSources() {
         WindowFrame source = open("Source");
         source.moveTo(120, 90).resizeTo(200, 150);
-        UINode host = new UINode();
+        UIElement host = new UIElement();
         host.layout(l -> l.width(80f).height(60f));
         desktop().append(host);
         frame();
@@ -595,7 +594,7 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
      */
     @Test
     public void aPromotedElementsPercentagesAreOfTheScreen() {
-        UINode overlay = new UINode();
+        UIElement overlay = new UIElement();
         overlay.layout(l -> l.widthPercent(100f).heightPercent(100f));
         desktop().append(overlay);
         document.promote(overlay);
@@ -625,16 +624,16 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
 
         Box box = frame.box();
         assertNotNull(box);
-        UINode under = hit(box.worldX() + box.width() / 2f, box.worldY() + box.height() / 2f);
+        UIElement under = hit(box.worldX() + box.width() / 2f, box.worldY() + box.height() / 2f);
         assertNotNull("nothing at all is under the pointer", under);
         assertNotSame("the top layer swallowed a press meant for the window beneath it",
                 document.topLayerNode(), under);
     }
 
     /** Whether {@code node} is the dialog, inside it, or the backdrop it owns. */
-    private static boolean partOf(UINode node, Dialog dialog) {
+    private static boolean partOf(UIElement node, Dialog dialog) {
         if (node.hasClass(Dialog.BACKDROP_CLASS)) return true;
-        for (UINode walk = node; walk != null; walk = walk.parent()) {
+        for (UIElement walk = node; walk != null; walk = walk.parent()) {
             if (walk == dialog) return true;
         }
         return false;
@@ -704,7 +703,7 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
 
         Taskbar taskbar = d.taskbar();
         assertNotNull(taskbar);
-        UINode entry = taskbar.entryFor(first);
+        UIElement entry = taskbar.entryFor(first);
         assertNotNull("no entry for the background window", entry);
         // THE ENTRY, not the desktop, is what a jump list resolves through: a taskbar entry is NOT
         // inside the window it stands for, so without its own answer the walk reaches the desktop and
@@ -771,7 +770,7 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
         float wasWorldX = self.worldX();
         float wasWorldY = self.worldY();
 
-        UINode host = sized("host", 120f, 90f);
+        UIElement host = sized("host", 120f, 90f);
         document.append(host);
         frame();
         Box hostBox = host.box();
@@ -856,7 +855,7 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
         WindowFrame front = open("Front");
         assertSame("the newest window is active", front, desktop().activeWindow());
 
-        UINode button = findByClass(back, WindowFrame.MINIMIZE_CLASS);
+        UIElement button = findByClass(back, WindowFrame.MINIMIZE_CLASS);
         assertNotNull("the frame has a minimise control", button);
         Box box = button.box();
         press(box.worldX() + box.width() / 2f, box.worldY() + box.height() / 2f);
@@ -868,13 +867,13 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
         assertSame("and the foreground keeps the keyboard", front, desktop().activeWindow());
     }
 
-    private static UINode findByClass(UINode at, String cls) {
+    private static UIElement findByClass(UIElement at, String cls) {
         if (at.classes().contains(cls)) return at;
-        for (UINode child : at.children()) {
-            UINode hit = findByClass(child, cls);
+        for (UIElement child : at.children()) {
+            UIElement hit = findByClass(child, cls);
             if (hit != null) return hit;
         }
-        UINode shadow = at.shadowRoot();
+        UIElement shadow = at.shadowRoot();
         return shadow == null ? null : findByClass(shadow, cls);
     }
 }

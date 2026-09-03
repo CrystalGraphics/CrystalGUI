@@ -1,7 +1,5 @@
 package com.crystalgui.ui.dom;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.sheet.StyleSheet;
 
@@ -74,11 +72,11 @@ public class CrossSheetOrderTest extends UiDocumentTestBase {
     }
 
     private float resolveWidth(StyleSheet... sheets) {
-        UINode target = new UINode();
+        UIElement target = new UIElement();
         target.setId("it");
         target.addClass("target");
 
-        UINode root = new UINode().layout(l -> l.width(400).height(300));
+        UIElement root = new UIElement().layout(l -> l.width(400).height(300));
         root.append(target);
 
         document.append(root);

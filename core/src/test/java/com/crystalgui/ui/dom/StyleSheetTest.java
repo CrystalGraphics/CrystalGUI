@@ -1,15 +1,11 @@
 package com.crystalgui.ui.dom;
 
-import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgui.render.texture.CgUiSprite;
-import com.crystalgui.style.TaffyBridge;
 import com.crystalgui.style.sheet.StyleRule;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.border.LengthPercent;
-import com.crystalgui.ui.dom.UINode;
 import dev.vfyjxf.taffy.style.BoxSizing;
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 import org.junit.Test;
@@ -64,7 +60,7 @@ public class StyleSheetTest extends UiDocumentTestBase {
     public void bucketIndexReturnsCandidatesAcrossAllElementClasses() {
         var sheet = StyleSheet.parse(".foo { z-index: 1; } .bar { z-index: 2; } #id-only { z-index: 3; } * { z-index: 4; }");
 
-        UINode el = new UINode();
+        UIElement el = new UIElement();
         el.addClass("foo");
         el.addClass("bar");
 

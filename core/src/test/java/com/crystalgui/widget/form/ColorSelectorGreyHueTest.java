@@ -1,12 +1,9 @@
 package com.crystalgui.widget.form;
 
-import com.crystalgui.core.property.Property;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.widget.form.ColorSelector;
 import com.crystalgui.ui.event.MouseEvent;
 import org.junit.Test;
 
@@ -27,21 +24,23 @@ import static org.junit.Assert.*;
  */
 public class ColorSelectorGreyHueTest extends UiDocumentTestBase {
 
+
     private ColorSelector picker;
 
     private void open(int initial) {
-        UINode root = new UINode();
+        UIElement root = new UIElement();
         document.append(root);
         // The ring's size and the handle's percentage insets both live in the user-agent sheet, and it is
         // not installed for you — without it every box is 0 and the handle can never move anywhere.
         document.styleEngine().addStylesheet(com.crystalgui.style.sheet.StyleSheet.DEFAULT);
+
         picker = new ColorSelector();
         root.append(picker);
         picker.setInitialColor(initial);
         frame();
     }
 
-    private UINode part(String cssClass) {
+    private UIElement part(String cssClass) {
         return deepAll(picker, "." + cssClass).get(0);
     }
 
@@ -52,7 +51,7 @@ public class ColorSelectorGreyHueTest extends UiDocumentTestBase {
      * press does, so routing is a different test's business.</p>
      */
     private void pressRingAt(float hue) {
-        UINode ring = part(ColorSelector.RING_CLASS);
+        UIElement ring = part(ColorSelector.RING_CLASS);
         var cache = ring.box();
         // Local space includes the element's own layout position — see ColorSelector.withinX.
         float[] offset = ColorSelector.offsetForHue(hue, 0.43f);

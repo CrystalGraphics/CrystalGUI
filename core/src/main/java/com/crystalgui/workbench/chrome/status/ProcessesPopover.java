@@ -1,12 +1,12 @@
 package com.crystalgui.workbench.chrome.status;
 
 import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.AnchoredPlacement;
 import com.crystalgui.core.async.ActiveJob;
 import com.crystalgui.core.async.JobKey;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.overlay.Popover;
 import com.crystalgui.widget.control.ProgressBar;
 import com.crystalgui.widget.text.UIText;
@@ -51,7 +51,7 @@ public class ProcessesPopover extends Popover {
     /** The dismiss link at the foot — IntelliJ's {@code Hide processes (N)}. */
     public static final String HIDE_CLASS = "__hide__";
 
-    private final UINode rows = new UINode();
+    private final UIElement rows = new UIElement();
     private final Map<JobKey, Row> byKey = new LinkedHashMap<>();
 
     public ProcessesPopover() {
@@ -124,11 +124,11 @@ public class ProcessesPopover extends Popover {
 
     /** One job. Built once, updated in place. */
     private static final class Row {
-        private final UINode element = new UINode();
+        private final UIElement element = new UIElement();
         private final UIText label = new UIText("");
         private final UIText detail = new UIText("");
         private final ProgressBar bar = new ProgressBar();
-        private final UINode cancel = new UINode();
+        private final UIElement cancel = new UIElement();
 
         private String shownLabel = "";
         private String shownDetail = "";
@@ -144,14 +144,14 @@ public class ProcessesPopover extends Popover {
             detail.addClass(DETAIL_CLASS);
             cancel.addClass(CANCEL_CLASS);
 
-            UINode top = new UINode();
+            UIElement top = new UIElement();
             StyleGroup.defaultPipeline(top.getStyle().getLayoutGroup(),
                     l -> l.flexDirection(FlexDirection.ROW).alignItems(AlignItems.CENTER));
             top.append(label);
             element.append(top);
             element.append(detail);
 
-            UINode bottom = new UINode();
+            UIElement bottom = new UIElement();
             StyleGroup.defaultPipeline(bottom.getStyle().getLayoutGroup(),
                     l -> l.flexDirection(FlexDirection.ROW).alignItems(AlignItems.CENTER));
             bottom.append(bar);

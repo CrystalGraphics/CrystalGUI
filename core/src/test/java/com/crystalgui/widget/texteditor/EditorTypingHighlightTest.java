@@ -1,6 +1,6 @@
 package com.crystalgui.widget.texteditor;
 
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -10,7 +10,6 @@ import com.crystalgui.text.Rope;
 import com.crystalgui.text.syntax.SyntaxToken;
 import com.crystalgui.text.syntax.SyntaxTokenizer;
 import com.crystalgui.widget.text.UIText;
-import com.crystalgui.widget.texteditor.TextEditor;
 import com.crystalgui.ui.text.TextRange;
 
 import static org.junit.Assert.assertEquals;
@@ -100,7 +99,7 @@ public class EditorTypingHighlightTest extends EditorTestBase {
     private List<TextRange> highlightedOn(int row) {
         List<TextRange> out = new ArrayList<>();
         String wanted = editor.buffer().document().line(row);
-        for (UINode line : linesOf()) {
+        for (UIElement line : linesOf()) {
             UIText text = (UIText) line.children().get(0);
             if (!text.getText().equals(wanted)) continue;
             for (String name : text.highlights().names()) out.addAll(text.highlights().get(name));

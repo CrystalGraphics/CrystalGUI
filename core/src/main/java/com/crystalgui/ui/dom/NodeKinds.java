@@ -1,7 +1,7 @@
 package com.crystalgui.ui.dom;
 
 /**
- * <b>A layer's kinds, declared to the registry</b> — how {@link UINodeRegistry} learns what exists
+ * <b>A layer's kinds, declared to the registry</b> — how {@link UIElementRegistry} learns what exists
  * without anything having touched the classes.
  *
  * <h3>The defect this exists for, which the old engine had already fixed once</h3>
@@ -34,7 +34,7 @@ package com.crystalgui.ui.dom;
  * <pre>{@code
  * public final class Widgets implements NodeKinds {
  *     @Override public void register() {
- *         UINodeRegistry.register(Button.NAME, Button::new, Button.CONTRACT);
+ *         UIElementRegistry.register(Button.NAME, Button::new, Button.CONTRACT);
  *     }
  * }
  * }</pre>
@@ -50,7 +50,7 @@ public interface NodeKinds {
 
     /**
      * Registers this layer's kinds. Called at most once per process, from
-     * {@link UINodeRegistry}'s bootstrap.
+     * {@link UIElementRegistry}'s bootstrap.
      *
      * <p>Do the registrations and nothing else: this runs from inside whatever first asked the
      * registry a question, which may be a decode on a network thread. Building anything, touching

@@ -1,9 +1,9 @@
 package com.crystalgui.headless;
 
-import com.crystalgui.net.mirror.UINodeMirror;
+import com.crystalgui.net.mirror.UIElementMirror;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Checkbox;
 import com.crystalgui.widget.control.Slider;
@@ -30,11 +30,11 @@ import static org.junit.Assert.*;
 public class WidgetStateRoundTripTest {
 
     /** Mutate → write → read into a fresh instance → assert. The shape every case below uses. */
-    private <E extends UINode> E roundTrip(Supplier<E> factory, Consumer<E> mutate) {
+    private <E extends UIElement> E roundTrip(Supplier<E> factory, Consumer<E> mutate) {
         E original = factory.get();
         mutate.accept(original);
 
-        UINodeMirror<JsonElement> mirror = new UINodeMirror<>(JsonOps.INSTANCE);
+        UIElementMirror<JsonElement> mirror = new UIElementMirror<>(JsonOps.INSTANCE);
         JsonElement written = mirror.encodeState(original);
 
         E restored = factory.get();
@@ -105,7 +105,7 @@ public class WidgetStateRoundTripTest {
     /** A default-valued widget should carry nothing, so the common node stays small on the wire. */
     @Test
     public void anUnmodifiedWidgetWritesNoState() {
-        UINodeMirror<JsonElement> mirror = new UINodeMirror<>(JsonOps.INSTANCE);
+        UIElementMirror<JsonElement> mirror = new UIElementMirror<>(JsonOps.INSTANCE);
         assertEquals("a default Checkbox should serialize to nothing at all",
                 0, mirror.encodeState(new Checkbox()).getAsJsonObject().size());
         assertEquals(0, mirror.encodeState(new UIText("")).getAsJsonObject().size());
@@ -116,7 +116,7 @@ public class WidgetStateRoundTripTest {
     public void readingAnEmptyStateLeavesDefaultsIntact() {
         Slider slider = new Slider();
         slider.setRange(0f, 10f).setValue(7f);
-        new UINodeMirror<>(JsonOps.INSTANCE)
+        new UIElementMirror<>(JsonOps.INSTANCE)
                 .applyState(new StateMap<JsonElement>(JsonOps.INSTANCE).encode(), slider);
         // Absent keys fall back to the documented defaults rather than throwing.
         assertEquals(0f, slider.getValue(), 0.001f);
@@ -126,6 +126,6 @@ public class WidgetStateRoundTripTest {
     @Test
     public void aPlainElementHasNoState() {
         assertNull("a plain node carries no state at all, which the mirror spells as null",
-                new UINodeMirror<>(JsonOps.INSTANCE).encodeState(new UINode()));
+                new UIElementMirror<>(JsonOps.INSTANCE).encodeState(new UIElement()));
     }
 }

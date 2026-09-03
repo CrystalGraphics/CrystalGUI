@@ -4,7 +4,7 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.property.StylePropertyRegistry;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.canvas.WorldRect;
 import org.joml.Vector2f;
 
@@ -35,7 +35,7 @@ import java.util.List;
  * between two different types is drawn as a gradient between them, which costs nothing (the instance
  * record already carries two colours) and makes a promotion visible as exactly what it is.</p>
  */
-public class NodeWireLayer extends UINode {
+public class NodeWireLayer extends UIElement {
 
     /**
      * This layer's kind.
@@ -50,7 +50,7 @@ public class NodeWireLayer extends UINode {
     /**
      * An unattached layer: no view, so nothing to draw and nothing to pick.
      *
-     * <p>What {@code UINodeRegistry} builds. A wire layer belongs to a {@link GraphView} and is made
+     * <p>What {@code UIElementRegistry} builds. A wire layer belongs to a {@link GraphView} and is made
      * by one; this is the inert form every other registered-but-{@code INERT} widget also has, and
      * the two guards it needs are on {@link #pick} and {@link #paintContent}.</p>
      */

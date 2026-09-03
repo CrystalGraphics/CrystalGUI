@@ -1,9 +1,6 @@
 package com.crystalgui.ui.service;
 
-import com.crystalgui.core.command.Command;
-import com.crystalgui.widget.layout.Tab;
-import com.crystalgui.widget.texteditor.TextEditor;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.input.keymap.Keymap;
 import com.crystalgui.desktop.DesktopCommands;
@@ -42,7 +39,7 @@ public class ShippedKeymapDefaultsTest extends UiDocumentTestBase {
      * {@code TextEditor}, which would drag a document and a font stack in for nothing.
      */
     private static Keymap freshKeymap() {
-        return new UINode().keymap();
+        return new UIElement().keymap();
     }
 
     @Test

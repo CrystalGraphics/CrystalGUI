@@ -1,17 +1,13 @@
 package com.crystalgui.workbench.chrome.palette;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.workbench.chrome.palette.QuickPick;
 import com.crystalgui.core.collection.pick.QuickPickEntry;
 import com.crystalgui.core.collection.pick.QuickPickItem;
 import com.crystalgui.core.collection.pick.QuickPickSource;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -30,11 +26,11 @@ import static org.junit.Assert.assertTrue;
  */
 public class QuickPickQueryRetentionTest extends UiDocumentTestBase {
 
-    private UINode root;
+    private UIElement root;
 
     @Before
     public void setUp() {
-        root = new UINode().layout(l -> l.width(900).height(700));
+        root = new UIElement().layout(l -> l.width(900).height(700));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
     }

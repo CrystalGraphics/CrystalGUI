@@ -4,13 +4,12 @@ import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.taskbar.Taskbar;
 import com.crystalgui.desktop.window.WindowFrame;
-import com.crystalgui.desktop.window.WindowSnapshot;
 import com.crystalgui.style.easing.ProgressFunctions;
 import com.crystalgui.style.easing.Easing;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.UIElement;
 import org.joml.Vector2f;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.UITransform;
 import com.crystalgui.ui.dom.UIDocument;
 
@@ -329,7 +328,7 @@ public final class WindowAnimator {
     @Nullable
 
     private UITransform towardTaskbar() {
-        UINode entry = taskbarEntry();
+        UIElement entry = taskbarEntry();
         UITransform viaEntry = entry == null ? null : toward(entry);
         // FALLS THROUGH, rather than returning whatever `toward` answered. An entry can EXIST and still
         // have no box -- the strip hidden, or the button laid out on a later frame than the press -- and
@@ -370,10 +369,10 @@ public final class WindowAnimator {
      * {@link WindowAnimation} pins for the animation's whole life.</p>
      */
     @Nullable
-    private UITransform toward(@Nullable UINode target) {
+    private UITransform toward(@Nullable UIElement target) {
         if (target == null) return null;
         Box to = target.box();
-        UINode area = frame.parent();
+        UIElement area = frame.parent();
         Box space = area == null ? null : area.box();
         if (to == null || space == null) return null;
         // THE REMEMBERED BOX. @see WindowFrame#boxX()
@@ -408,13 +407,13 @@ public final class WindowAnimator {
      * no reason.</p>
      */
     @Nullable
-    private UINode taskbarEntry() {
+    private UIElement taskbarEntry() {
         Desktop desktop = frame.desktop();
         if (desktop == null) return null;
         Taskbar taskbar = desktop.taskbar();
         if (taskbar == null) return null;
         for (WindowFrame walk = frame; walk != null; walk = walk.ownerWindow()) {
-            UINode entry = taskbar.entryFor(walk);
+            UIElement entry = taskbar.entryFor(walk);
             if (entry != null) return entry;
         }
         return null;

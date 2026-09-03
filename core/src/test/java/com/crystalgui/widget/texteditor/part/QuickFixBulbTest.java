@@ -1,7 +1,6 @@
 package com.crystalgui.widget.texteditor.part;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.text.TextPoint;
@@ -14,7 +13,6 @@ import com.crystalgui.text.lang.Versioned;
 import com.crystalgui.widget.texteditor.TextEditor;
 
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.List;
@@ -42,7 +40,7 @@ public class QuickFixBulbTest extends UiDocumentTestBase {
         editor = new TextEditor("alpha\nbravo\ncharlie\ndelta\n");
         editor.layout(l -> l.width(400).height(200));
         editor.generalStyle(g -> g.fontSize(8f).lineHeight(1.25f));
-        UINode root = new UINode().layout(l -> l.width(400).height(200));
+        UIElement root = new UIElement().layout(l -> l.width(400).height(200));
         root.append(editor);
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
@@ -55,21 +53,21 @@ public class QuickFixBulbTest extends UiDocumentTestBase {
     }
 
     /** The bulb element, or null when it has never been created. */
-    private UINode bulb() {
+    private UIElement bulb() {
         return find(editor);
     }
 
-    private static UINode find(UINode element) {
+    private static UIElement find(UIElement element) {
         if (element.hasClass(BULB_CLASS)) return element;
-        for (UINode child : element.children()) {
-            UINode found = find(child);
+        for (UIElement child : element.children()) {
+            UIElement found = find(child);
             if (found != null) return found;
         }
         return null;
     }
 
     private boolean bulbVisible() {
-        UINode found = bulb();
+        UIElement found = bulb();
         return found != null && heightOf(found) > 0f;
     }
 
@@ -114,20 +112,20 @@ public class QuickFixBulbTest extends UiDocumentTestBase {
     public void theBulbSitsOnTheRowItIsAbout() {
         problemOnRow(2);
         putCaretOn(2);
-        UINode found = bulb();
+        UIElement found = bulb();
         assertNotNull("no bulb was created", found);
 
-        UINode squiggle = findClass(editor, "__squiggle__");
+        UIElement squiggle = findClass(editor, "__squiggle__");
         assertNotNull("no squiggle to compare against", squiggle);
         float line = editor.lineHeight();
         assertEquals("the bulb is not on the same row as the problem it marks",
                 squiggle.box().y(), found.box().y(), line);
     }
 
-    private static UINode findClass(UINode element, String className) {
+    private static UIElement findClass(UIElement element, String className) {
         if (element.hasClass(className) && heightOf(element) > 0f) return element;
-        for (UINode child : element.children()) {
-            UINode found = findClass(child, className);
+        for (UIElement child : element.children()) {
+            UIElement found = findClass(child, className);
             if (found != null) return found;
         }
         return null;

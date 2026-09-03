@@ -3,7 +3,7 @@ package com.crystalgui.net.window;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.net.ViewCommand;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.TreeSource;
 import com.crystalgui.widget.overlay.Dialog;
@@ -36,8 +36,8 @@ final class ViewCommands {
     /**
      * @param window the host's handle, for the commands that are about the window rather than the tree
      */
-    static void apply(String command, StateMap<Object> in, TreeSource<UINode> ids,
-                      UINode root, @Nullable WindowMount.MountedWindow window) {
+    static void apply(String command, StateMap<Object> in, TreeSource<UIElement> ids,
+                      UIElement root, @Nullable WindowMount.MountedWindow window) {
         try {
             switch (command) {
                 case ViewCommand.FOCUS:
@@ -84,9 +84,9 @@ final class ViewCommands {
         }
     }
 
-    private static void onElement(StateMap<Object> in, TreeSource<UINode> ids,
-                                  java.util.function.Consumer<UINode> body) {
-        UINode target = ids.byId(in.getInt(ViewCommand.NID, -1));
+    private static void onElement(StateMap<Object> in, TreeSource<UIElement> ids,
+                                  java.util.function.Consumer<UIElement> body) {
+        UIElement target = ids.byId(in.getInt(ViewCommand.NID, -1));
         // A command about an element that has since gone is not an error. The tree moves and messages
         // take time; this is the ordinary end of that race.
         if (target != null) body.accept(target);
@@ -99,15 +99,15 @@ final class ViewCommands {
      * arriving from a server is the clearest instance of that there is. The pointer-focus path
      * ({@code requestPointerFocus}) is for a click and would be a lie here.</p>
      */
-    private static void focus(UINode element) {
+    private static void focus(UIElement element) {
         UIDocument window = element.document();
         if (window != null) window.focus().requestFocus(element);
     }
 
-    private static void openMenu(StateMap<Object> in, TreeSource<UINode> ids) {
-        UINode target = ids.byId(in.getInt(ViewCommand.NID, -1));
+    private static void openMenu(StateMap<Object> in, TreeSource<UIElement> ids) {
+        UIElement target = ids.byId(in.getInt(ViewCommand.NID, -1));
         if (!(target instanceof Popover)) return;
-        UINode anchor = ids.byId(in.getInt(ViewCommand.ANCHOR, -1));
+        UIElement anchor = ids.byId(in.getInt(ViewCommand.ANCHOR, -1));
         // An anchor is REQUIRED, not optional: a popover exists relative to something, and one opened
         // at no position would land wherever the layout happened to leave it. A server that means "in
         // the middle of the window" can anchor to the root.
@@ -115,8 +115,8 @@ final class ViewCommands {
         ((Popover) target).showFor(anchor, null);
     }
 
-    private static void tooltip(StateMap<Object> in, TreeSource<UINode> ids, String text) {
-        UINode target = ids.byId(in.getInt(ViewCommand.NID, -1));
+    private static void tooltip(StateMap<Object> in, TreeSource<UIElement> ids, String text) {
+        UIElement target = ids.byId(in.getInt(ViewCommand.NID, -1));
         if (target == null || text.isEmpty()) return;
         Tooltip.attach(target, text);
     }

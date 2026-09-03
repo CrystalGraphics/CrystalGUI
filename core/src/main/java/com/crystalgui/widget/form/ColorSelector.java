@@ -13,7 +13,7 @@ import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.control.Slider;
 import com.crystalgui.widget.control.TextField;
@@ -51,7 +51,7 @@ import java.util.function.BiConsumer;
  * maximum", so the G track restains as R is dragged. It is what makes the sliders readable as a picker
  * rather than as four unrelated bars, and it falls out of rebuilding them from the model.</p>
  */
-public class ColorSelector extends UINode {
+public class ColorSelector extends UIElement {
 
     public static final Name NAME = Name.of("colorselector");
 
@@ -175,19 +175,19 @@ public class ColorSelector extends UINode {
     private Mode mode = Mode.RGB_255;
 
 
-    private final UINode left = new UINode();
-    private final UINode wheel = new UINode();
-    private final UINode ring = new UINode();
-    private final UINode square = new UINode();
-    private final UINode ringHandle = new UINode();
-    private final UINode squareHandle = new UINode();
-    private final UINode side = new UINode();
-    private final UINode channels = new UINode();
+    private final UIElement left = new UIElement();
+    private final UIElement wheel = new UIElement();
+    private final UIElement ring = new UIElement();
+    private final UIElement square = new UIElement();
+    private final UIElement ringHandle = new UIElement();
+    private final UIElement squareHandle = new UIElement();
+    private final UIElement side = new UIElement();
+    private final UIElement channels = new UIElement();
     private final Dropdown modeChooser = new Dropdown("Mode");
     private final TextField hexField = new TextField();
-    private final UINode swatches = new UINode();
-    private final UINode originalSwatch = new UINode();
-    private final UINode newSwatch = new UINode();
+    private final UIElement swatches = new UIElement();
+    private final UIElement originalSwatch = new UIElement();
+    private final UIElement newSwatch = new UIElement();
 
     /**
      * What the picker was opened on — the value the left swatch shows and restores.
@@ -320,7 +320,7 @@ public class ColorSelector extends UINode {
     }
 
     /** Press-and-drag on a surface, reported in that surface's own local coordinates. */
-    private void dragSurface(UINode surface, BiConsumer<Float, Float> onPoint) {
+    private void dragSurface(UIElement surface, BiConsumer<Float, Float> onPoint) {
         // Target phase only (both flags false): a press on the SQUARE must not also reach the ring
         // underneath it, or one click would set the hue and the saturation at once.
         surface.onMouseDown.attachListener((el, event) -> {
@@ -412,7 +412,7 @@ public class ColorSelector extends UINode {
     }
 
     private void buildHexRow() {
-        UINode row = new UINode();
+        UIElement row = new UIElement();
         row.addClass(HEX_ROW_CLASS);
         UIText label = new UIText("Hexadecimal");
         label.setHitTest(false);
@@ -564,7 +564,7 @@ public class ColorSelector extends UINode {
      * {@code border-*-radius} pair on {@code CgUiRoundedRect}-backed swatches elsewhere in this sheet
      * gets for free. This one can't get it for free: see {@code setCornerRadius}'s own doc.</p>
      */
-    private static void paintSwatch(UINode swatch, int argb, boolean roundLeft) {
+    private static void paintSwatch(UIElement swatch, int argb, boolean roundLeft) {
         CgUiColorField field = new CgUiColorField()
                 .setMode(CgUiColorField.Mode.GRADIENT)
                 .setGradient(argb, argb);
@@ -608,7 +608,7 @@ public class ColorSelector extends UINode {
      */
     private final class ChannelRow {
         private final int index;
-        private final UINode root = new UINode();
+        private final UIElement root = new UIElement();
         private final UIText label = new UIText("");
         private final Slider slider = new Slider();
         private final TextField field = new TextField();

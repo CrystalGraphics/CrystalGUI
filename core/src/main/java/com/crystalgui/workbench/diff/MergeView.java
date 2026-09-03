@@ -7,12 +7,10 @@ import com.crystalgui.text.diff.LinesDiff;
 import com.crystalgui.text.diff.ThreeWayMerge;
 import com.crystalgui.text.diff.ThreeWayMerge.Region;
 import com.crystalgui.text.diff.ThreeWayMerge.Kind;
-import com.crystalgui.text.diff.ThreeWayMerge.Region;
 import com.crystalgui.text.diff.RegionState;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.service.Animation;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.layout.SplitView;
@@ -49,7 +47,7 @@ import javax.annotation.Nullable;
  * great deal more machinery than a first merger needs. {@link Region#acceptCustom} is the seam it would use
  * when that arrives; the engine already carries it.</p>
  */
-public final class MergeView extends UINode  {
+public final class MergeView extends UIElement {
     /** Three revisions, and the result. */
     public static final Name NAME = Name.of("mergeview");
 
@@ -98,14 +96,14 @@ public final class MergeView extends UINode  {
         // .__merge__ would match nothing while .__merge__ .__merge-pane__ kept working -- a view with no
         // geometry and correctly styled children. addInternalChild below is the correct half of the pair.
 
-        UINode toolbar = new UINode();
+        UIElement toolbar = new UIElement();
         toolbar.addClass(TOOLBAR_CLASS);
         append(toolbar);
 
         status.addClass(STATUS_CLASS);
         toolbar.append(status);
 
-        UINode actions = new UINode();
+        UIElement actions = new UIElement();
         actions.addClass(ACTIONS_CLASS);
         toolbar.append(actions);
 
@@ -192,8 +190,8 @@ public final class MergeView extends UINode  {
 
     private boolean ticking;
 
-    private UINode pane(String title, TextEditor editor) {
-        UINode pane = new UINode();
+    private UIElement pane(String title, TextEditor editor) {
+        UIElement pane = new UIElement();
         pane.addClass(PANE_CLASS);
 
         UIText label = new UIText(title);
@@ -204,7 +202,7 @@ public final class MergeView extends UINode  {
         return pane;
     }
 
-    private static Button action(UINode row, String label, String tooltip) {
+    private static Button action(UIElement row, String label, String tooltip) {
         Button button = new Button(label);
         Tooltip.attach(button, tooltip);
         row.append(button);

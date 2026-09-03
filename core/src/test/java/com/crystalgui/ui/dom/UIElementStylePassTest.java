@@ -25,7 +25,7 @@ import org.junit.Test;
  * inherits from {@code :root}, a bad selector that costs one rule, and a computed style that never
  * answers null and never moves under a reader.</p>
  */
-public class UINodeStylePassTest extends UiDocumentTestBase {
+public class UIElementStylePassTest extends UiDocumentTestBase {
 
     private static UIDocument document(String css) {
         UIDocument document = new UIDocument();
@@ -33,13 +33,13 @@ public class UINodeStylePassTest extends UiDocumentTestBase {
         return document;
     }
 
-    private static UINode node(String id, String... classes) {
-        UINode node = new UINode().setId(id);
+    private static UIElement node(String id, String... classes) {
+        UIElement node = new UIElement().setId(id);
         for (String c : classes) node.addClass(c);
         return node;
     }
 
-    private static float opacity(UINode node) {
+    private static float opacity(UIElement node) {
         return node.computedStyle().get(StylePropertyRegistry.OPACITY);
     }
 
@@ -48,9 +48,9 @@ public class UINodeStylePassTest extends UiDocumentTestBase {
     @Test
     public void aRuleReachesANodeByTypeIdAndClass() {
         UIDocument document = document("element { opacity: 0.5 } #by-id { opacity: 0.25 } .by-class { opacity: 0.75 }");
-        UINode plain = node("");
-        UINode byId = node("by-id");
-        UINode byClass = node("", "by-class");
+        UIElement plain = node("");
+        UIElement byId = node("by-id");
+        UIElement byClass = node("", "by-class");
         document.append(plain).append(byId).append(byClass);
         document.calculateStyle(0f);
 
@@ -62,7 +62,7 @@ public class UINodeStylePassTest extends UiDocumentTestBase {
     @Test
     public void originSpecificityAndOrderAreTheCascade() {
         UIDocument document = document(".a { opacity: 0.2 } .a { opacity: 0.3 } #x { opacity: 0.4 }");
-        UINode node = node("x", "a");
+        UIElement node = node("x", "a");
         document.append(node);
         document.calculateStyle(0f);
         assertEquals("an id beats a class", 0.4f, opacity(node), 0.001f);
@@ -70,7 +70,7 @@ public class UINodeStylePassTest extends UiDocumentTestBase {
         StyleGroup.inlinePipeline(node.getStyle().getGeneralGroup(), g -> g.opacity(0.9f));
         assertEquals("inline beats the sheet", 0.9f, opacity(node), 0.001f);
 
-        UINode later = node("", "a");
+        UIElement later = node("", "a");
         document.append(later);
         document.calculateStyle(0f);
         assertEquals("of two equal rules the later wins", 0.3f, opacity(later), 0.001f);
@@ -79,7 +79,7 @@ public class UINodeStylePassTest extends UiDocumentTestBase {
     @Test
     public void aChangedClassIsRematchedOnTheNextPass() {
         UIDocument document = document(".lit { opacity: 0.25 }");
-        UINode node = node("");
+        UIElement node = node("");
         document.append(node);
         document.calculateStyle(0f);
         assertEquals(1f, opacity(node), 0.001f);
@@ -99,8 +99,8 @@ public class UINodeStylePassTest extends UiDocumentTestBase {
     @Test
     public void anInheritedValueReachesIntoAShadowTreeAndARuleDoesNot() {
         UIDocument document = document("element { color: #FF0000; opacity: 0.5 }");
-        UINode host = node("host");
-        UINode part = node("part");
+        UIElement host = node("host");
+        UIElement part = node("part");
         host.attachShadow().append(part);
         document.append(host);
         document.calculateStyle(0f);
@@ -114,11 +114,11 @@ public class UINodeStylePassTest extends UiDocumentTestBase {
     @Test
     public void aSheetScopedToAShadowRootReachesItsPartsAndNothingOutside() {
         UIDocument document = document(null);
-        UINode host = node("host");
+        UIElement host = node("host");
         ShadowRoot shadow = host.attachShadow();
-        UINode part = node("part", "inner");
+        UIElement part = node("part", "inner");
         shadow.append(part);
-        UINode stranger = node("stranger", "inner");
+        UIElement stranger = node("stranger", "inner");
         document.append(host).append(stranger);
         document.styles().addStylesheet(StyleSheet.parse(".inner { opacity: 0.25 }"), shadow);
         document.calculateStyle(0f);
@@ -130,9 +130,9 @@ public class UINodeStylePassTest extends UiDocumentTestBase {
     @Test
     public void aPartIsReachedThroughItsHostByName() {
         UIDocument document = document("element::part(label) { opacity: 0.25 } .label { opacity: 0.5 }");
-        UINode host = node("host");
-        UINode label = node("", "label").set(Attribute.PART, "label");
-        UINode other = node("", "label");
+        UIElement host = node("host");
+        UIElement label = node("", "label").set(Attribute.PART, "label");
+        UIElement other = node("", "label");
         host.attachShadow().append(label).append(other);
         document.append(host);
         document.calculateStyle(0f);
@@ -146,9 +146,9 @@ public class UINodeStylePassTest extends UiDocumentTestBase {
     @Test
     public void scopeProximityRanksBetweenSpecificityAndOrder() {
         UIDocument document = document(null);
-        UINode outer = node("outer");
-        UINode inner = node("inner");
-        UINode target = node("t", "x");
+        UIElement outer = node("outer");
+        UIElement inner = node("inner");
+        UIElement target = node("t", "x");
         inner.append(target);
         outer.append(inner);
         document.append(outer);
@@ -166,9 +166,9 @@ public class UINodeStylePassTest extends UiDocumentTestBase {
     @Test
     public void aScopedSheetStopsAtItsRoot() {
         UIDocument document = document(null);
-        UINode scope = node("scope");
-        UINode inside = node("", "x");
-        UINode outside = node("", "x");
+        UIElement scope = node("scope");
+        UIElement inside = node("", "x");
+        UIElement outside = node("", "x");
         scope.append(inside);
         document.append(scope).append(outside);
         document.styles().addStylesheet(StyleSheet.parse(".x { opacity: 0.25 }"), scope);
@@ -184,8 +184,8 @@ public class UINodeStylePassTest extends UiDocumentTestBase {
     @Test
     public void fontSizeInheritsFromRootAndEmResolvesAgainstIt() {
         UIDocument document = document(":root { font-size: 20 } :root.large { font-size: 30 } .wide { width: 2em }");
-        UINode child = node("child");
-        UINode wide = node("wide", "wide");
+        UIElement child = node("child");
+        UIElement wide = node("wide", "wide");
         document.append(child).append(wide);
         document.calculateStyle(0f);
 
@@ -209,8 +209,8 @@ public class UINodeStylePassTest extends UiDocumentTestBase {
 
         UIDocument document = new UIDocument();
         document.styles().addStylesheet(sheet);
-        UINode a = node("", "a");
-        UINode c = node("", "c");
+        UIElement a = node("", "a");
+        UIElement c = node("", "c");
         document.append(a).append(c);
         document.calculateStyle(0f);
         assertEquals(0.25f, opacity(a), 0.001f);
@@ -222,7 +222,7 @@ public class UINodeStylePassTest extends UiDocumentTestBase {
     @Test
     public void computedStyleAnswersEveryPropertyAndDoesNotMove() {
         UIDocument document = document(".dim { opacity: 0.5 }");
-        UINode node = node("");
+        UIElement node = node("");
         document.append(node);
         document.calculateStyle(0f);
 
@@ -243,8 +243,8 @@ public class UINodeStylePassTest extends UiDocumentTestBase {
     @Test
     public void aParentsChangeIsSeenBelowWithoutAnythingWalkingDown() {
         UIDocument document = document(".red { color: #FF0000 }");
-        UINode parent = node("p");
-        UINode child = node("c");
+        UIElement parent = node("p");
+        UIElement child = node("c");
         parent.append(child);
         document.append(parent);
         document.calculateStyle(0f);
@@ -273,8 +273,8 @@ public class UINodeStylePassTest extends UiDocumentTestBase {
     @Test
     public void aHostsOwnChangeRematchesItsShadowParts() {
         UIDocument document = document("#h.on::part(inner) { opacity: 0.25 }");
-        UINode host = node("h");
-        UINode part = node("");
+        UIElement host = node("h");
+        UIElement part = node("");
         part.set(Attribute.PART, "inner");
         host.attachShadow().append(part);
         document.append(host);
@@ -311,9 +311,9 @@ public class UINodeStylePassTest extends UiDocumentTestBase {
     @Test
     public void anAncestorsChangeRematchesItsLightDescendants() {
         UIDocument document = document(".host.on .row { opacity: 0.25 }");
-        UINode host = new UINode().addClass("host");
-        UINode content = new UINode();
-        UINode row = new UINode().addClass("row");
+        UIElement host = new UIElement().addClass("host");
+        UIElement content = new UIElement();
+        UIElement row = new UIElement().addClass("row");
         content.append(row);
         host.append(content);
         document.append(host);
@@ -348,8 +348,8 @@ public class UINodeStylePassTest extends UiDocumentTestBase {
     @Test
     public void anUnexposedShadowNodeIsNotReachableFromOutside() {
         UIDocument document = document("#h.on::part(inner) { opacity: 0.25 }");
-        UINode host = node("h");
-        UINode hidden = node("");
+        UIElement host = node("h");
+        UIElement hidden = node("");
         host.attachShadow().append(hidden);
         document.append(host);
         document.calculateStyle(0f);

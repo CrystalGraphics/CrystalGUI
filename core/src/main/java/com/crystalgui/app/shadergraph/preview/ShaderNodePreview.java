@@ -6,7 +6,7 @@ import com.crystalgraphics.shadergraph.CgPreviewGeometry;
 import com.crystalgraphics.shadergraph.CgPreviewRenderer;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 
 /**
  * Paints one node's rendered thumbnail into its {@code __preview__} slot.
@@ -24,7 +24,7 @@ import com.crystalgui.ui.dom.UINode;
  * place an FBO becomes a UI quad, is better than flipping the projection and having every future preview
  * shader author wonder why their maths is inverted.</p>
  */
-public class ShaderNodePreview extends UINode {
+public class ShaderNodePreview extends UIElement {
 
     private final CgPreviewRenderer renderer;
     private final String nodeId;

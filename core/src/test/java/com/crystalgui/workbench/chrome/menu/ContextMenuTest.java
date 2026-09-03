@@ -1,7 +1,6 @@
 package com.crystalgui.workbench.chrome.menu;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
@@ -11,7 +10,6 @@ import com.crystalgui.widget.overlay.Menu;
 import com.crystalgui.widget.overlay.MenuItem;
 import com.crystalgui.widget.overlay.ContextMenu;
 import org.junit.Before;
-import org.junit.Ignore;
 import com.crystalgui.widget.control.Button;
 import org.junit.Test;
 
@@ -22,7 +20,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-import com.crystalgui.widget.text.UIText;
 
 /**
  * {@link ContextMenu} — a right-click menu built from commands rather than lambdas.
@@ -33,7 +30,7 @@ import com.crystalgui.widget.text.UIText;
  */
 public class ContextMenuTest extends UiDocumentTestBase {
 
-    private UINode root;
+    private UIElement root;
     private CommandRegistry registry;
     private final List<String> ran = new ArrayList<>();
 
@@ -50,7 +47,7 @@ public class ContextMenuTest extends UiDocumentTestBase {
                 .run(c -> ran.add("file.delete"))
                 .enabledWhen(c -> canDelete));
 
-        root = new UINode().layout(l -> l.width(400).height(300));
+        root = new UIElement().layout(l -> l.width(400).height(300));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
         root.keymap().bind("Mod+N", "file.new");
@@ -121,7 +118,7 @@ public class ContextMenuTest extends UiDocumentTestBase {
     }
 
     private static boolean hasAccelerator(MenuItem item) {
-        for (UINode child : item.children()) {
+        for (UIElement child : item.children()) {
             if (child.hasClass(MenuItem.ACCELERATOR_CLASS)) return true;
         }
         // The accelerator is a post-icon, so it may be an internal child rather than a public one.
@@ -169,7 +166,7 @@ public class ContextMenuTest extends UiDocumentTestBase {
 
     private static int countSeparators(Menu menu) {
         int count = 0;
-        for (UINode child : menu.itemsContainer().children()) {
+        for (UIElement child : menu.itemsContainer().children()) {
             if (!(child instanceof MenuItem)) count++;
         }
         return count;
@@ -219,7 +216,7 @@ public class ContextMenuTest extends UiDocumentTestBase {
 
         // And the arrow is still hard right, which is what the auto margin buys -- a fix that merely
         // un-centred the label by dropping the rule would leave the arrow tucked against the text.
-        UINode arrow = deepOrNull(parent, "." + MenuItem.SUBMENU_ARROW_CLASS);
+        UIElement arrow = deepOrNull(parent, "." + MenuItem.SUBMENU_ARROW_CLASS);
         assertNotNull("the submenu row has no arrow", arrow);
         float rowRight = parent.box().width();
         float arrowRight = arrow.box().x() + arrow.box().width();
@@ -234,7 +231,7 @@ public class ContextMenuTest extends UiDocumentTestBase {
         // `children()` holds none of its structure at all -- the walk found nothing and every row
         // reported "no label". The accelerator carve-out below goes with it: the part name already
         // says which text is the label, so there is nothing to exclude.
-        UINode label = deepOrNull(item, "." + Button.LABEL_PART);
+        UIElement label = deepOrNull(item, "." + Button.LABEL_PART);
         if (label == null) throw new AssertionError("no label found on " + item.getText());
         return label.box().worldX();
     }
@@ -335,7 +332,7 @@ public class ContextMenuTest extends UiDocumentTestBase {
 
     private static int separatorCount(Menu menu) {
         int found = 0;
-        for (UINode child : menu.itemsContainer().children()) {
+        for (UIElement child : menu.itemsContainer().children()) {
             if (!(child instanceof MenuItem)) found++;
         }
         return found;

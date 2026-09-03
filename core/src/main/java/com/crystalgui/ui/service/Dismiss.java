@@ -1,7 +1,8 @@
 package com.crystalgui.ui.service;
 
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -35,7 +36,7 @@ import javax.annotation.Nullable;
  * <h3>The service names no widget</h3>
  *
  * <p>{@code Popover}, {@code Dialog} and {@code WindowFrame} are M6 and this is 6.0, so what a node
- * DOES when asked to close is {@link UINode#requestClose()} — a hook, exactly as the old engine had
+ * DOES when asked to close is {@link UIElement#requestClose()} — a hook, exactly as the old engine had
  * it, because the web's {@code CloseWatcher} is a general primitive rather than a dialog feature.</p>
  */
 public final class Dismiss {
@@ -43,14 +44,14 @@ public final class Dismiss {
     private final UIDocument document;
 
     /** Escape's stack, bottom-most first. */
-    private final List<UINode> closeWatchers = new ArrayList<>();
+    private final List<UIElement> closeWatchers = new ArrayList<>();
     /** Light dismiss's stack, bottom-most first. */
-    private final List<UINode> autoPopovers = new ArrayList<>();
+    private final List<UIElement> autoPopovers = new ArrayList<>();
 
     /**
      * Bumped by every show, INCLUDING a re-show of something already open.
      *
-     * @see #lightDismiss(UINode, int)
+     * @see #lightDismiss(UIElement, int)
      */
     private int showSeq;
 
@@ -66,18 +67,18 @@ public final class Dismiss {
      * <p>Idempotent, and re-registering RAISES — which is what reopening a popup should do, and what
      * makes "show me again" one call rather than a remove/add dance the caller has to get right.</p>
      */
-    public void pushCloseWatcher(UINode node) {
+    public void pushCloseWatcher(UIElement node) {
         Objects.requireNonNull(node, "node");
         closeWatchers.remove(node);
         closeWatchers.add(node);
     }
 
-    public void popCloseWatcher(UINode node) {
+    public void popCloseWatcher(UIElement node) {
         closeWatchers.remove(node);
     }
 
     /** The stack, bottom-most first. Read-only. */
-    public List<UINode> closeWatchers() {
+    public List<UIElement> closeWatchers() {
         return Collections.unmodifiableList(closeWatchers);
     }
 
@@ -88,9 +89,9 @@ public final class Dismiss {
      *                    asked first; null asks only the document's own.
      */
     @Nullable
-    public UINode topCloseWatcher(@Nullable UINode activeScope) {
+    public UIElement topCloseWatcher(@Nullable UIElement activeScope) {
         if (activeScope != null) {
-            UINode scoped = topWatcherIn(activeScope);
+            UIElement scoped = topWatcherIn(activeScope);
             if (scoped != null) return scoped;
         }
         return topWatcherIn(null);
@@ -106,15 +107,15 @@ public final class Dismiss {
      * Escape then closed nothing at all, with the whole cascade present and correct.</p>
      */
     @Nullable
-    private UINode topWatcherIn(@Nullable UINode scope) {
+    private UIElement topWatcherIn(@Nullable UIElement scope) {
         Focus focus = document.focus();
-        UINode wanted = scope == null ? document : scope;
+        UIElement wanted = scope == null ? document : scope;
         for (int i = closeWatchers.size() - 1; i >= 0; i--) {
-            UINode watcher = closeWatchers.get(i);
+            UIElement watcher = closeWatchers.get(i);
             // A watcher's scope is the one CONTAINING it, never itself: a dialog is a scope, and
             // asking `scopeOf(dialog)` would answer the dialog -- so a dialog's own Escape would
             // never be found from the window it is in. Same shape as the modality bug 5.5 found.
-            UINode enclosing = focus.scopeOf(watcher.parent() == null ? watcher : watcher.parent());
+            UIElement enclosing = focus.scopeOf(watcher.parent() == null ? watcher : watcher.parent());
             if (enclosing == wanted) return watcher;
         }
         return null;
@@ -125,25 +126,25 @@ public final class Dismiss {
      *
      * @param activeScope @see #topCloseWatcher
      */
-    public boolean escape(@Nullable UINode activeScope) {
-        UINode watcher = topCloseWatcher(activeScope);
+    public boolean escape(@Nullable UIElement activeScope) {
+        UIElement watcher = topCloseWatcher(activeScope);
         return watcher != null && watcher.requestClose();
     }
 
     // ── Light dismiss: a press outside ───────────────────────────────────────
 
     /** Open auto popovers, bottom-most first. Read-only. */
-    public List<UINode> autoPopovers() {
+    public List<UIElement> autoPopovers() {
         return Collections.unmodifiableList(autoPopovers);
     }
 
-    public void pushAutoPopover(UINode node) {
+    public void pushAutoPopover(UIElement node) {
         Objects.requireNonNull(node, "node");
         autoPopovers.remove(node);
         autoPopovers.add(node);
     }
 
-    public void popAutoPopover(UINode node) {
+    public void popAutoPopover(UIElement node) {
         autoPopovers.remove(node);
     }
 
@@ -170,7 +171,7 @@ public final class Dismiss {
      * <p><b>Run this AFTER the press has been dispatched</b>, never before: dismissing first tears
      * down the tree under an undelivered event. Browsers both dismiss and activate.</p>
      */
-    public void lightDismiss(@Nullable UINode target) {
+    public void lightDismiss(@Nullable UIElement target) {
         lightDismiss(target, Integer.MAX_VALUE);
     }
 
@@ -189,33 +190,33 @@ public final class Dismiss {
      * so a membership test dismisses it — right-clicking elsewhere would close the menu instead of
      * moving it. "Was this shown during the press" answers both with one rule.</p>
      */
-    public void lightDismiss(@Nullable UINode target, int shownBefore) {
+    public void lightDismiss(@Nullable UIElement target, int shownBefore) {
         if (autoPopovers.isEmpty()) return;
-        UINode ancestor = innermostPopoverAncestor(target);
+        UIElement ancestor = innermostPopoverAncestor(target);
         // Copy and walk downwards: closing mutates the live list, and requestClose() runs listener
         // code that may open or close further popovers.
-        List<UINode> doomed = new ArrayList<>();
+        List<UIElement> doomed = new ArrayList<>();
         for (int i = autoPopovers.size() - 1; i >= 0; i--) {
-            UINode popover = autoPopovers.get(i);
+            UIElement popover = autoPopovers.get(i);
             if (popover == ancestor) break;
             if (shownAt.getOrDefault(popover, 0) > shownBefore) continue;
             doomed.add(popover);
         }
-        for (UINode popover : doomed) popover.requestClose();
+        for (UIElement popover : doomed) popover.requestClose();
     }
 
-    /** When each open popover was last shown. @see #lightDismiss(UINode, int) */
-    private final Map<UINode, Integer> shownAt = new IdentityHashMap<>();
+    /** When each open popover was last shown. @see #lightDismiss(UIElement, int) */
+    private final Map<UIElement, Integer> shownAt = new IdentityHashMap<>();
 
     /** Records that {@code popover} was shown now, and returns the sequence it was shown at. */
-    public int recordShown(UINode popover) {
+    public int recordShown(UIElement popover) {
         int seq = nextShowSeq();
         shownAt.put(popover, seq);
         return seq;
     }
 
     /** Forgets a popover that has closed. */
-    public void forget(UINode node) {
+    public void forget(UIElement node) {
         closeWatchers.remove(node);
         autoPopovers.remove(node);
         shownAt.remove(node);
@@ -230,11 +231,11 @@ public final class Dismiss {
      * trying.</p>
      */
     @Nullable
-    private UINode innermostPopoverAncestor(@Nullable UINode target) {
-        for (UINode node = target; node != null; node = node.composedParent()) {
+    private UIElement innermostPopoverAncestor(@Nullable UIElement target) {
+        for (UIElement node = target; node != null; node = node.composedParent()) {
             if (autoPopovers.contains(node)) return node;
             for (int i = autoPopovers.size() - 1; i >= 0; i--) {
-                UINode popover = autoPopovers.get(i);
+                UIElement popover = autoPopovers.get(i);
                 if (popover.popoverInvoker() == node) return popover;
             }
         }

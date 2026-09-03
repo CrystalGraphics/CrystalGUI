@@ -1,10 +1,6 @@
 package com.crystalgui.workbench.toolwindow;
 
-import com.crystalgui.core.notify.Notifications;
-import com.crystalgui.widget.config.inspector.Inspector;
-import com.crystalgui.workbench.Workbench;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
@@ -13,9 +9,6 @@ import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
 import com.crystalgui.workbench.dock.panel.DockPanelRegistry;
 import com.crystalgui.workbench.region.DockRegion;
-import com.crystalgui.workbench.toolwindow.ToolWindowFrame;
-import com.crystalgui.workbench.toolwindow.ToolWindowManager;
-import com.crystalgui.workbench.toolwindow.ToolWindowType;
 import com.crystalgui.workbench.region.WorkbenchRegions;
 
 import org.junit.Before;
@@ -59,13 +52,13 @@ public class ToolWindowIsNotACitizenTest extends UiDocumentTestBase {
 
     @Before
     public void setUpWorkbench() {
-        WorkbenchRegions regions = new WorkbenchRegions(new UINode());
-        DockPanelRegistry<UINode> registry = new DockPanelRegistry<>();
+        WorkbenchRegions regions = new WorkbenchRegions(new UIElement());
+        DockPanelRegistry<UIElement> registry = new DockPanelRegistry<>();
         registry.register(DockPanelDescriptor.container(INSPECTOR, "Inspector", DockRegion.AUXILIARY),
-                ref -> new UINode());
+                ref -> new UIElement());
         manager = new ToolWindowManager(regions, registry);
 
-        UINode root = new UINode().layout(l -> l.width(800).height(600));
+        UIElement root = new UIElement().layout(l -> l.width(800).height(600));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
 

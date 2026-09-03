@@ -1,6 +1,7 @@
 package com.crystalgui.app.shadergraph.blackboard;
 
 import com.crystalgui.core.data.DataProvider;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.app.shadergraph.ShaderPropertyForm;
@@ -19,8 +20,6 @@ import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.graph.GraphIds;
 import com.crystalgui.graph.GraphProperty;
 import com.crystalgui.graph.PropertyEdits;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.service.Animation;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.overlay.Menu;
 import com.crystalgui.widget.scroll.ScrollerView;
@@ -36,7 +35,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import com.crystalgui.ui.input.keymap.Keymap;
 
 /**
  * The Blackboard — every property the graph declares, as a floating panel over the canvas.
@@ -63,7 +61,7 @@ import com.crystalgui.ui.input.keymap.Keymap;
  * {@link #onPropertySelected} and the inspector listens; each source clears the other. Two sources, one
  * subject, and neither has to know what the other can hold.</p>
  */
-public class BlackboardPanel extends UINode implements DataProvider {
+public class BlackboardPanel extends UIElement implements DataProvider {
 
     public static final String PANEL_CLASS = "__blackboard__";
     public static final String HEAD_CLASS = "__head__";
@@ -171,11 +169,11 @@ public class BlackboardPanel extends UINode implements DataProvider {
     @Nullable
     private final UndoStack undo;
 
-    private final UINode head = new UINode();
-    private final UINode titles = new UINode();
+    private final UIElement head = new UIElement();
+    private final UIElement titles = new UIElement();
     private final UIText title = new UIText("");
     private final UIText subtitle = new UIText("Shader Graphs");
-    private final UINode add = new UINode();
+    private final UIElement add = new UIElement();
     /**
      * The list, and a real {@link ScrollerView}.
      *
@@ -231,7 +229,7 @@ public class BlackboardPanel extends UINode implements DataProvider {
     private final List<String> pendingCategories = new ArrayList<>();
 
     /** One row of the list — a pill for a property, or a category heading. @see #rows */
-    private record Row(UINode element, @Nullable String propertyId, String category) {
+    private record Row(UIElement element, @Nullable String propertyId, String category) {
     }
 
     /** Where a drop lands: a position in the <b>document</b>, and the category it joins. */
@@ -247,7 +245,7 @@ public class BlackboardPanel extends UINode implements DataProvider {
      * so a pointer resting near a boundary alternates between two indices and the line flickers between
      * two gaps. An overlay cannot move what it is measuring.</p>
      */
-    private final UINode dropLine = new UINode();
+    private final UIElement dropLine = new UIElement();
 
     /** Where {@link #dropLine} currently says the drop lands, or -1 while it is hidden. */
     private int dropIndex = -1;
@@ -337,7 +335,7 @@ public class BlackboardPanel extends UINode implements DataProvider {
         // closes the rename. Clicking into the box you are typing in shut it, which reads as the field
         // refusing to be clicked rather than as a focus fight two elements apart.
         onMouseDown.attachListener((element, event) -> {
-            UINode target = ((UINode) event.getTarget());
+            UIElement target = ((UIElement) event.getTarget());
             if (target != null && target.consumesTextInput()) return;
             focusSelf();
         }, false, true);
@@ -546,7 +544,7 @@ public class BlackboardPanel extends UINode implements DataProvider {
         // which is the only thing that can be, since a widget cannot stop its host promoting it.
         // ENDED BEFORE DETACHED, and that order is the whole of a nasty crash.
         //
-        // UINode.onRemoved drops the window's input references -- which BLURS a focused field -- and
+        // UIElement.onRemoved drops the window's input references -- which BLURS a focused field -- and
         // then iterates its own children. A blur handler that removes the editor mutates that list in
         // between, so the forEach on the next line walks a modified list and throws
         // ConcurrentModificationException. Pressing F2 and hitting Enter was enough to hit it.
@@ -790,7 +788,7 @@ public class BlackboardPanel extends UINode implements DataProvider {
      */
     int dropIndexAt(float screenX, float screenY) {
         for (int i = 0; i < rows.size(); i++) {
-            UINode row = rows.get(i).element();
+            UIElement row = rows.get(i).element();
             // ABOVE THIS ROW'S MIDPOINT MEANS "BEFORE IT", so the first row that passes is the slot.
             //
             // A BARE HALF-HEIGHT, because `toLocal` puts the row's OWN origin at zero (M6.1) -- and
@@ -1234,7 +1232,7 @@ public class BlackboardPanel extends UINode implements DataProvider {
     @Override
     public Object getData(DataKey<?> key) {
         if (key == BLACKBOARD) return this;
-        // NO super: a UINode is not a DataProvider, and the outward walk through `commandParent()`
+        // NO super: a UIElement is not a DataProvider, and the outward walk through `commandParent()`
         // is what reaches the next one. Null is how this one says it has nothing.
         return null;
     }

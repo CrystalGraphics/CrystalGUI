@@ -1,6 +1,6 @@
 package com.crystalgui.desktop.window;
 
-import com.crystalgui.widget.dnd.Resizer;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.ui.input.ButtonState;
 import com.crystalgraphics.platform.input.CgMouseCodes;
@@ -8,13 +8,10 @@ import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.service.Input;
 
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -67,7 +64,7 @@ public class JointResizeTest extends UiDocumentTestBase {
         CommandRegistry.global().resetForTesting();
         WindowCommands.resetForTesting();
 
-        UINode root = new UINode().layout(l -> l.width(800).height(600));
+        UIElement root = new UIElement().layout(l -> l.width(800).height(600));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
         desktop = Desktop.of(document);
@@ -347,7 +344,7 @@ public class JointResizeTest extends UiDocumentTestBase {
      *
      * <p>The one thing driving {@link Desktop#jointResize} directly cannot see: every test above would
      * pass with nothing at all connected to {@code Resizer}. It needs the handle because that is the
-     * seam — {@code onUserResize} was added to {@code UINode} for this, and a hook nobody calls looks
+     * seam — {@code onUserResize} was added to {@code UIElement} for this, and a hook nobody calls looks
      * exactly like a hook that works.</p>
      */
     @Test
@@ -356,7 +353,7 @@ public class JointResizeTest extends UiDocumentTestBase {
         WindowFrame right = snapped("R", SnapZones.Zone.RIGHT);
         float before = right.left();
 
-        UINode grabber = deepOrNull(left, ".__resizer-right__");
+        UIElement grabber = deepOrNull(left, ".__resizer-right__");
         assertNotNull("the document has no right-edge resize handle", grabber);
 
         Input input = document.input();

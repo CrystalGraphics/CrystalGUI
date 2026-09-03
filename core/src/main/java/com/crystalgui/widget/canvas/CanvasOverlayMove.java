@@ -1,9 +1,9 @@
 package com.crystalgui.widget.canvas;
 
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.dom.UIDocument;
 
 import javax.annotation.Nullable;
@@ -38,7 +38,7 @@ import javax.annotation.Nullable;
 public final class CanvasOverlayMove {
 
     /** The panel being moved — used only for geometry, never mutated except through the style pipeline. */
-    private final UINode panel;
+    private final UIElement panel;
 
     private final ContainingBlock block;
 
@@ -66,17 +66,17 @@ public final class CanvasOverlayMove {
     /**
      * How to find the box a panel is positioned inside.
      *
-     * <p>An interface because {@code UINode.resizeContainingBlock()} is {@code protected}, so only the
+     * <p>An interface because {@code UIElement.resizeContainingBlock()} is {@code protected}, so only the
      * panel itself can answer — which is correct: whether an element is out of flow, and against what, is
      * its own business rather than a helper's guess.</p>
      */
     @FunctionalInterface
     public interface ContainingBlock {
         @Nullable
-        UINode get();
+        UIElement get();
     }
 
-    private CanvasOverlayMove(UINode panel, ContainingBlock block) {
+    private CanvasOverlayMove(UIElement panel, ContainingBlock block) {
         this.panel = panel;
         this.block = block;
     }
@@ -87,7 +87,7 @@ public final class CanvasOverlayMove {
      * @param handle what starts a move — a title bar, typically. It must be hit-testable, and anything
      *               inside it that should not start a move must take the press itself
      */
-    public static CanvasOverlayMove install(UINode panel, UINode handle, ContainingBlock block) {
+    public static CanvasOverlayMove install(UIElement panel, UIElement handle, ContainingBlock block) {
         CanvasOverlayMove move = new CanvasOverlayMove(panel, block);
         handle.onMouseDown.attachListener((element, event) -> {
             float rawX = event.getPosition().x(), rawY = event.getPosition().y();
@@ -96,7 +96,7 @@ public final class CanvasOverlayMove {
             if (!handle.containsSurfacePoint(rawX, rawY)) return;
 
             UIDocument window = panel.document();
-            UINode container = block.get();
+            UIElement container = block.get();
             if (window == null || container == null) return;
 
             Box panelBox = panel.box();
@@ -129,7 +129,7 @@ public final class CanvasOverlayMove {
      * recorded.</p>
      */
     public void placeAt(float wantedLeft, float wantedTop) {
-        UINode container = block.get();
+        UIElement container = block.get();
         if (container == null) return;
 
         // NEITHER BOX MAY BE ZERO says the note below, and a null box is the same statement -- the
@@ -213,7 +213,7 @@ public final class CanvasOverlayMove {
         UIDocument window = panel.document();
         if (window != null && window.input().mode(Drag.class) != null) return;
         // The arguments are IGNORED, and kept only so the call site reads unchanged.
-        UINode container = block.get();
+        UIElement container = block.get();
         if (container == null) return;
         Box panelBox = panel.box();
         Box containerBox = container.box();

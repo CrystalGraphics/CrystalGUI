@@ -4,10 +4,9 @@ import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.MouseEvent;
-import com.crystalgui.widget.overlay.Menu;
-import com.crystalgui.widget.overlay.MenuBuilder;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
@@ -139,7 +138,7 @@ public final class ContextMenu {
      * even when focus is somewhere else entirely, which is the single most common way a context menu is
      * used and the one a focus-derived context gets wrong.</p>
      */
-    public Menu build(CommandRegistry registry, UINode source) {
+    public Menu build(CommandRegistry registry, UIElement source) {
         Menu menu = new Menu();
         boolean pendingSeparator = false;
         boolean anyItem = false;
@@ -189,8 +188,8 @@ public final class ContextMenu {
      * @param builder called per press with the element actually under the pointer, so a menu can be built
      *                for <em>that row</em> rather than for the container
      */
-    public static UINode attach(UINode on, CommandRegistry registry,
-                                   Function<UINode, ContextMenu> builder) {
+    public static UIElement attach(UIElement on, CommandRegistry registry,
+                                   Function<UIElement, ContextMenu> builder) {
         // ONE LIVE MENU PER ATTACHMENT SITE, and this is a correctness requirement rather than tidiness.
         //
         // Building a fresh Menu per press and leaving the last one in the tree crashed Taffy outright:
@@ -212,7 +211,7 @@ public final class ContextMenu {
             if (event.getButtonId() != CgMouseCodes.RIGHT_BUTTON) return;
             UIDocument window = on.document();
             if (window == null) return;
-            UINode target = ((UINode) event.getTarget()) == null ? on : ((UINode) event.getTarget());
+            UIElement target = ((UIElement) event.getTarget()) == null ? on : ((UIElement) event.getTarget());
             // A press landing ON THE OPEN MENU is not a request for a menu about the menu. Without this,
             // the second right-click resolved its target inside the popup that discard() was about to
             // detach -- so both the command context and the host were computed from an element no longer

@@ -77,7 +77,7 @@ public class StyleProperty<VALUE> {
     // (`onResizeModeChanged`, `invalidateFocusableChain`, `TaffyBridge::set*`). The mechanism WAS the
     // old cascade's bridge into Taffy, which is why nothing replaced it: `BoxStyle` reads
     // `ComputedStyle` directly, and the two changes that still need a hook go through
-    // `UINode.computedChanged`.
+    // `UIElement.computedChanged`.
     //
     // Worth a note rather than a silent deletion because this sits in the SHARED `style/` package --
     // one of the few places where "shared" and "survives" came apart.

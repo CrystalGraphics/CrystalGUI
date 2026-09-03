@@ -1,11 +1,9 @@
 package com.crystalgui.widget.layout;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.widget.layout.SplitView;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import org.junit.Test;
 
@@ -34,16 +32,16 @@ public class NestedSplitDividerTest extends UiDocumentTestBase {
     private List<SplitView> buildNested(boolean withTheme) {
         SplitView inner = new SplitView();
         inner.setOrientation(SplitView.Orientation.HORIZONTAL);
-        inner.first().append(new UINode());
-        inner.second().append(new UINode());
+        inner.first().append(new UIElement());
+        inner.second().append(new UIElement());
 
         SplitView outer = new SplitView();
         outer.setOrientation(SplitView.Orientation.VERTICAL);
         outer.first().append(inner);
-        outer.second().append(new UINode());
+        outer.second().append(new UIElement());
 
-        UINode root = new UINode().layout(l -> l.width(800).height(600)
-                .flexDirection(FlexDirection.COLUMN));
+        UIElement root = new UIElement().layout(l -> l.width(800).height(600)
+                                                      .flexDirection(FlexDirection.COLUMN));
         root.append(outer);
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
@@ -57,13 +55,13 @@ public class NestedSplitDividerTest extends UiDocumentTestBase {
         return splits;
     }
 
-    private static void collect(UINode element, List<SplitView> out) {
+    private static void collect(UIElement element, List<SplitView> out) {
         if (element instanceof SplitView split) out.add(split);
-        for (UINode child : element.children()) collect(child, out);
+        for (UIElement child : element.children()) collect(child, out);
     }
 
-    private static UINode dividerOf(SplitView split) {
-        for (UINode child : split.children()) {
+    private static UIElement dividerOf(SplitView split) {
+        for (UIElement child : split.children()) {
             if (child.hasClass(SplitView.DIVIDER_CLASS)) return child;
         }
         return null;
@@ -71,7 +69,7 @@ public class NestedSplitDividerTest extends UiDocumentTestBase {
 
     private void assertEveryDividerIsGrabbable(boolean withTheme) {
         for (SplitView split : buildNested(withTheme)) {
-            UINode divider = dividerOf(split);
+            UIElement divider = dividerOf(split);
             assertNotNull("a split with no divider at all", divider);
             var box = divider.box();
             // BOTH axes. The failure was a divider with the right thickness on one axis and zero on the

@@ -2,15 +2,12 @@ package com.crystalgui.widget.overlay;
 
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.contract.WidgetContract;
-import com.crystalgui.ui.contract.StateTypes;
-import com.crystalgui.ui.contract.State;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.ui.dom.*;
 import com.crystalgui.ui.service.AnchoredPlacement;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.service.Animation;
-import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import lombok.Getter;
@@ -21,9 +18,7 @@ import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import com.crystalgui.ui.dom.Attribute;
-import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UISlot;
+
 import dev.vfyjxf.taffy.style.FlexDirection;
 import com.crystalgui.style.StyleGroup;
 
@@ -61,7 +56,7 @@ public class Menu extends Popover {
     /**
      * A menu's items are described CHILDREN, not state -- each is a {@code MenuItem} with a contract of
      * its own. Its own mode is a {@code Popover} concern and is not inherited, because
-     * {@link WidgetContracts#of(com.crystalgui.ui.UINode)} is an exact-class lookup.
+     * {@link WidgetContracts#of(com.crystalgui.ui.UIElement)} is an exact-class lookup.
      */
     public static final WidgetContract<Menu> CONTRACT = WidgetContracts.register(
             WidgetContract.of(Menu.class, "menu")
@@ -108,7 +103,7 @@ public class Menu extends Popover {
      */
     public static final float DEFAULT_SUBMENU_DELAY = 0.4f;
 
-    private final UINode items;
+    private final UIElement items;
     private final List<MenuItem> itemList = new ArrayList<>();
 
     @Getter
@@ -123,7 +118,7 @@ public class Menu extends Popover {
 
     public Menu() {
         super(NAME);
-        this.items = new UINode();
+        this.items = new UIElement();
         
         this.items.set(Attribute.PART, ITEMS_PART);
         // THE ITEMS ARE CONTENT, NOT PARTS, so they go in a SLOT and stay light children.
@@ -226,8 +221,8 @@ public class Menu extends Popover {
      * <p>It is also {@code setHitTest(false)}, so the row cannot take hover or swallow a press aimed at
      * the item beneath it — a 1px strip that eats clicks is very hard to attribute to anything.</p>
      */
-    public UINode addSeparator() {
-        UINode separator = new UINode();
+    public UIElement addSeparator() {
+        UIElement separator = new UIElement();
         // THE CLASS AS WELL AS THE PART, because this is a LIGHT child: `append` puts it in the menu's
         // SLOT, and a `part` attribute names something only inside a shadow root. So `menu::part(separator)`
         // reached nothing, `menu .__separator__` had no class to match, and every separator in every menu
@@ -253,9 +248,9 @@ public class Menu extends Popover {
      * @return whether a separator was removed
      */
     public boolean removeLastSeparator() {
-        List<UINode> children = children();
+        List<UIElement> children = children();
         if (children.isEmpty()) return false;
-        UINode last = children.get(children.size() - 1);
+        UIElement last = children.get(children.size() - 1);
         if (!last.hasClass(SEPARATOR_PART)) return false;
         remove(last);
         return true;
@@ -346,7 +341,7 @@ public class Menu extends Popover {
         // theme loaded — same reasoning the plain-text glyph this replaced was after, without a font
         // standing in for a triangle it does not actually contain. A theme that wants something else
         // still overrides via setPostIcon and __submenu-arrow__.
-        UINode arrow = new UINode();
+        UIElement arrow = new UIElement();
         arrow.addClass(MenuItem.SUBMENU_ARROW_CLASS);
         arrow.setHitTest(false);
         item.setPostIcon(arrow);
@@ -447,7 +442,7 @@ public class Menu extends Popover {
         for (MenuItem item : new ArrayList<>(itemList)) removeItem(item);
         // Separators are not in itemList, so the loop above cannot reach them. Rebuilding a menu without
         // this leaves the old rules stacked up with no items between them.
-        for (UINode child : new ArrayList<>(children())) {
+        for (UIElement child : new ArrayList<>(children())) {
             if (child.hasClass(SEPARATOR_PART)) remove(child);
         }
     }
@@ -462,7 +457,7 @@ public class Menu extends Popover {
     }
 
     /** The row container, for styling. */
-    public UINode itemsContainer() {
+    public UIElement itemsContainer() {
         return items;
     }
 
@@ -596,8 +591,8 @@ public class Menu extends Popover {
     private int focusedIndex() {
         UIDocument window = document();
         if (window == null) return -1;
-        UINode focused = window.focus().focused();
-        for (UINode el = focused; el != null; el = el.parent()) {
+        UIElement focused = window.focus().focused();
+        for (UIElement el = focused; el != null; el = el.parent()) {
             int index = itemList.indexOf(el);
             if (index >= 0) return index;
         }

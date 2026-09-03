@@ -1,6 +1,6 @@
 package com.crystalgui.workbench.chrome;
 
-import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.workbench.chrome.menu.MenuBarView;
 import com.crystalgui.workbench.chrome.notification.NotificationsView;
 import com.crystalgui.workbench.chrome.palette.QuickPick;
@@ -16,7 +16,6 @@ import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.data.CommandTarget;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.overlay.Menu;
@@ -96,9 +95,9 @@ public class ChromeBatchPortTest extends UiDocumentTestBase {
         assertSame("the fixture never focused the content, so this can prove nothing",
                 content, document.focus().focused());
 
-        UINode title = bar.children().stream()
-                .filter(c -> c.hasClass(MenuBarView.TITLE_CLASS))
-                .findFirst().orElse(null);
+        UIElement title = bar.children().stream()
+                             .filter(c -> c.hasClass(MenuBarView.TITLE_CLASS))
+                             .findFirst().orElse(null);
         assertNotNull("the bar built no title", title);
         Box titleBox = boxOf(title);
         assertNotNull("the title has no box", titleBox);
@@ -203,8 +202,8 @@ public class ChromeBatchPortTest extends UiDocumentTestBase {
         StatusBarView status = new StatusBarView();
         Breadcrumbs crumbs = new Breadcrumbs();
 
-        List<UINode> panels = List.of(problems, notifications, navigator, status, crumbs);
-        for (UINode panel : panels) {
+        List<UIElement> panels = List.of(problems, notifications, navigator, status, crumbs);
+        for (UIElement panel : panels) {
             layout(panel, l -> l.width(400f).height(200f));
             document.append(panel);
         }
@@ -214,16 +213,16 @@ public class ChromeBatchPortTest extends UiDocumentTestBase {
         frame();
 
         List<String> offenders = new ArrayList<>();
-        for (UINode panel : new ArrayList<>(List.of(pick))) {
+        for (UIElement panel : new ArrayList<>(List.of(pick))) {
             checkBox(offenders, panel);
         }
-        for (UINode panel : panels) {
+        for (UIElement panel : panels) {
             checkBox(offenders, panel);
         }
         assertTrue(String.join("\n", offenders), offenders.isEmpty());
     }
 
-    private void checkBox(List<String> offenders, UINode node) {
+    private void checkBox(List<String> offenders, UIElement node) {
         Box box = boxOf(node);
         if (box == null) offenders.add(node.getClass().getSimpleName() + ": no box");
         else if (!(box.width() > 0f) || !(box.height() > 0f)) {
@@ -270,7 +269,7 @@ public class ChromeBatchPortTest extends UiDocumentTestBase {
         boolean everPlaced = false;
         for (int i = 0; i < 4; i++) {
             frame();
-            for (UINode node : composed(document)) {
+            for (UIElement node : composed(document)) {
                 if (!(node instanceof Menu shown) || !shown.isOpen()) continue;
                 Box box = boxOf(shown);
                 if (box == null) continue;

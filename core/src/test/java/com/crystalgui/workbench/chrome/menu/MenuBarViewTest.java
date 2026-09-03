@@ -1,13 +1,6 @@
 package com.crystalgui.workbench.chrome.menu;
 
-import com.crystalgui.core.command.MenuContributor;
-import com.crystalgui.core.undo.Edit;
-import com.crystalgui.ui.service.Focus;
-import com.crystalgui.widget.control.Button;
-import com.crystalgui.widget.layout.Tab;
-import com.crystalgui.widget.overlay.ContextMenu;
-import com.crystalgui.widget.overlay.Popover;
-import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuEntry;
@@ -19,13 +12,11 @@ import com.crystalgui.widget.overlay.MenuItem;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgMouseCodes;
-import com.crystalgui.workbench.chrome.menu.MenuBarView;
 import com.crystalgui.widget.overlay.MenuBuilder;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.core.data.ReadOnlyVec2f;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -37,7 +28,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import com.crystalgui.ui.dom.Attribute;
-import com.crystalgui.ui.dom.UINode;
 
 /**
  * {@link MenuBarView} and {@link MenuBuilder}.
@@ -59,7 +49,7 @@ public class MenuBarViewTest extends UiDocumentTestBase {
 
     private static int counter;
 
-    private UINode root;
+    private UIElement root;
     private CommandRegistry registry;
     private MenuBarView bar;
     private MenuId fileMenu;
@@ -83,7 +73,7 @@ public class MenuBarViewTest extends UiDocumentTestBase {
         registry.register(Command.of("e.undo", "Undo").menu(editMenu, "1_undo", 10)
                 .run(c -> ran.add("e.undo")));
 
-        root = new UINode().layout(l -> l.width(600).height(400));
+        root = new UIElement().layout(l -> l.width(600).height(400));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
 
@@ -107,21 +97,21 @@ public class MenuBarViewTest extends UiDocumentTestBase {
      * first — indexing straight into the children silently pressed the burger and every affordance test
      * failed at once.</p>
      */
-    private UINode titleAt(int index) {
-        List<UINode> found = new ArrayList<>();
-        for (UINode child : bar.children()) {
+    private UIElement titleAt(int index) {
+        List<UIElement> found = new ArrayList<>();
+        for (UIElement child : bar.children()) {
             if (child.hasClass(MenuBarView.TITLE_CLASS)) found.add(child);
         }
         return found.get(index);
     }
 
     /** Through the real three-phase dispatch, not by calling the listener — the route is the point. */
-    private void press(UINode element) {
+    private void press(UIElement element) {
         document.input().send(element,
                 new MouseEvent.Down(element, ORIGIN, 0, 1));
     }
 
-    private void hover(UINode element) {
+    private void hover(UIElement element) {
         document.input().send(element, new MouseEvent.Enter(element, ORIGIN));
     }
 
@@ -282,14 +272,14 @@ public class MenuBarViewTest extends UiDocumentTestBase {
      */
     @Test
     public void aMenuResolvesAgainstWhatWasFocusedBeforeThePress() {
-        UINode subject = new UINode().layout(l -> l.width(100).height(100));
+        UIElement subject = new UIElement().layout(l -> l.width(100).height(100));
         subject.setFocusPolicy(FocusPolicy.CLICK);
         root.append(subject);
         frame();
 
-        List<UINode> sources = new ArrayList<>();
+        List<UIElement> sources = new ArrayList<>();
         registry.register(Command.of("f.probe", "Probe").menu(fileMenu, "1_new", 99)
-                .enabledWhen(c -> { sources.add(UINode.sourceOf(c)); return true; })
+                .enabledWhen(c -> { sources.add(UIElement.sourceOf(c)); return true; })
                 .run(c -> { }));
 
         document.focus().requestFocus(subject);
@@ -302,7 +292,7 @@ public class MenuBarViewTest extends UiDocumentTestBase {
 
     @Test
     public void aRowOfTheOpenMenuNeverBecomesTheRememberedFocus() {
-        UINode subject = new UINode().layout(l -> l.width(100).height(100));
+        UIElement subject = new UIElement().layout(l -> l.width(100).height(100));
         subject.setFocusPolicy(FocusPolicy.CLICK);
         root.append(subject);
         frame();
@@ -311,9 +301,9 @@ public class MenuBarViewTest extends UiDocumentTestBase {
         rawPress(titleAt(0));      // a menu takes focus for its own rows the moment it opens
         bar.close();
 
-        List<UINode> sources = new ArrayList<>();
+        List<UIElement> sources = new ArrayList<>();
         registry.register(Command.of("f.probe2", "Probe").menu(fileMenu, "1_new", 99)
-                .enabledWhen(c -> { sources.add(UINode.sourceOf(c)); return true; })
+                .enabledWhen(c -> { sources.add(UIElement.sourceOf(c)); return true; })
                 .run(c -> { }));
         rawPress(titleAt(0));
 
@@ -327,7 +317,7 @@ public class MenuBarViewTest extends UiDocumentTestBase {
      * <p>A frame first: {@code consumeMouseEvent} early-returns until one has been presented, and the
      * press resolves its target from the hover cache, which a frame is what settles.</p>
      */
-    private void rawPress(UINode target) {
+    private void rawPress(UIElement target) {
         frame();
         var cache = target.box();
         // THE BOX'S OWN SPACE STARTS AT ZERO. `localToWorld` maps this box's local origin to the
@@ -345,8 +335,8 @@ public class MenuBarViewTest extends UiDocumentTestBase {
 
 
     private void arrow(int keyCode) {
-        UINode focused = document.focus().focused();
-        UINode target = focused != null ? focused : root;
+        UIElement focused = document.focus().focused();
+        UIElement target = focused != null ? focused : root;
         document.input().send(target,
                 new com.crystalgui.ui.event.KeyboardEvent.Down(target, keyCode, '\0', false, 0, 0L));
     }
@@ -356,9 +346,9 @@ public class MenuBarViewTest extends UiDocumentTestBase {
         return findMenu(document);
     }
 
-    private static Menu findMenu(UINode element) {
+    private static Menu findMenu(UIElement element) {
         if (element instanceof Menu menu) return menu;
-        for (UINode child : element.children()) {
+        for (UIElement child : element.children()) {
             Menu found = findMenu(child);
             if (found != null) return found;
         }
@@ -366,7 +356,7 @@ public class MenuBarViewTest extends UiDocumentTestBase {
     }
 
     /** A release whose press landed somewhere else — the drag half of press-drag-release. */
-    private void releaseOver(UINode target) {
+    private void releaseOver(UIElement target) {
         frame();
         var cache = target.box();
         org.joml.Vector2f centre = com.crystalgui.core.data.Transform2D.apply(cache.localToWorld(),
@@ -543,15 +533,15 @@ public class MenuBarViewTest extends UiDocumentTestBase {
         // class called "separator" -- nothing does, so it counted zero and the sibling test asserting
         // "no separator here" passed for free. And a menu's rows are composed through a slot, so the
         // separators are not direct children of the items container either.
-        for (UINode child : deepAll(menu, "." + Menu.SEPARATOR_PART)) {
+        for (UIElement child : deepAll(menu, "." + Menu.SEPARATOR_PART)) {
             if (Menu.SEPARATOR_PART.equals(child.get(Attribute.PART))) count++;
         }
         return count;
     }
 
-    private static int countMenus(UINode element) {
+    private static int countMenus(UIElement element) {
         int count = element instanceof Menu ? 1 : 0;
-        for (UINode child : element.children()) count += countMenus(child);
+        for (UIElement child : element.children()) count += countMenus(child);
         return count;
     }
 }

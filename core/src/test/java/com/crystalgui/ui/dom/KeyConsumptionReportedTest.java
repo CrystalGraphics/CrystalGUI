@@ -1,7 +1,5 @@
 package com.crystalgui.ui.dom;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.testsupport.UiDocumentTestBase;
@@ -31,12 +29,12 @@ import static org.junit.Assert.assertTrue;
  */
 public class KeyConsumptionReportedTest extends UiDocumentTestBase {
 
-    private UINode root;
-    private UINode focusable;
+    private UIElement root;
+    private UIElement focusable;
 
     private void setUp() {
-        root = new UINode().layout(l -> l.width(200).height(200));
-        focusable = new UINode().layout(l -> l.width(50).height(50));
+        root = new UIElement().layout(l -> l.width(200).height(200));
+        focusable = new UIElement().layout(l -> l.width(50).height(50));
         focusable.setFocusPolicy(FocusPolicy.FOCUSABLE);
         root.append(focusable);
         document.append(root);

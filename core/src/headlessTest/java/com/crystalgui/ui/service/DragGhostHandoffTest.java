@@ -8,7 +8,7 @@ import static org.junit.Assert.assertSame;
 
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import org.junit.Test;
 
 /**
@@ -27,8 +27,8 @@ public class DragGhostHandoffTest {
     @Test
     public void aGhostOfferedBeforeTheDragIsClaimedByIt() {
         UIDocument document = new UIDocument();
-        UINode source = new UINode();
-        UINode ghost = new UINode();
+        UIElement source = new UIElement();
+        UIElement ghost = new UIElement();
         document.append(source);
         document.append(ghost);
 
@@ -53,7 +53,7 @@ public class DragGhostHandoffTest {
         assertTrue("the ghost was never displayed", ghost.isDisplayed());
         assertTrue("the ghost was never promoted to the top layer", document.isPromoted(ghost));
         // WHETHER IT ACTUALLY DRAWS IS ASSERTED ELSEWHERE, over a real DragGhost -- see
-        // DragGhostShowsTest. A bare UINode is hidden only by the `hidden` attribute, so asserting a
+        // DragGhostShowsTest. A bare UIElement is hidden only by the `hidden` attribute, so asserting a
         // box here would pass against the bug that mattered: a DragGhost also hides itself in the
         // CASCADE, and clearing the attribute says nothing about that.
 
@@ -74,8 +74,8 @@ public class DragGhostHandoffTest {
     @Test
     public void anUnclaimedOfferDoesNotSurviveThePress() {
         UIDocument document = new UIDocument();
-        UINode source = new UINode();
-        UINode ghost = new UINode();
+        UIElement source = new UIElement();
+        UIElement ghost = new UIElement();
         document.append(source);
         document.append(ghost);
         document.frame(0.016f, 100f, 100f);

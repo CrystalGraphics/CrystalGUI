@@ -1,9 +1,8 @@
 package com.crystalgui.widget.dnd;
 
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.style.TaffyPosition;
@@ -83,7 +82,7 @@ import com.crystalgui.ui.box.Box;
  * rule this codebase has paid for three times, most recently on a table header that could not be clicked
  * again after a sort. The marker floats over the list instead and nothing in the list moves.</p>
  */
-public class InsertionMarker extends UINode {
+public class InsertionMarker extends UIElement {
 
     public static final Name NAME = Name.of("insertionmarker");
 
@@ -144,11 +143,11 @@ public class InsertionMarker extends UINode {
      * of the group and the gap has to become a sibling of the tabs two levels below it.</p>
      */
     @Nullable
-    private UINode flowParent;
+    private UIElement flowParent;
 
     /** The item hidden for the duration of a drag. @see #withdraw */
     @Nullable
-    private UINode withdrawn;
+    private UIElement withdrawn;
 
     /** Its size when it was withdrawn — along the axis, and across it. @see #withdraw */
     private float withdrawnExtent;
@@ -186,7 +185,7 @@ public class InsertionMarker extends UINode {
      * <p>For {@link Mode#IN_FLOW} this is the container the gap opens <em>inside</em>, so it has to be
      * the items' own parent — the gap is a sibling of the things it makes room between.</p>
      */
-    public InsertionMarker parkIn(UINode host) {
+    public InsertionMarker parkIn(UIElement host) {
         if (host == null) return this;
         this.flowParent = host;
         if (parent() == host) return this;
@@ -211,7 +210,7 @@ public class InsertionMarker extends UINode {
      * the items are all different widths, so a gap borrowed from a neighbour states the space the tab
      * will take and is wrong by the difference between two filenames.</p>
      */
-    public InsertionMarker withdraw(UINode host, List<? extends UINode> items, UINode source) {
+    public InsertionMarker withdraw(UIElement host, List<? extends UIElement> items, UIElement source) {
         if (source == null || source == withdrawn) return this;
         restore();
         withdrawn = source;
@@ -244,7 +243,7 @@ public class InsertionMarker extends UINode {
      * being restored is one nobody can see.</p>
      */
     public InsertionMarker restore() {
-        UINode source = withdrawn;
+        UIElement source = withdrawn;
         withdrawn = null;
         withdrawnExtent = 0f;
         withdrawnThickness = 0f;
@@ -258,7 +257,7 @@ public class InsertionMarker extends UINode {
 
     /** The item currently taken out of the list, or {@code null}. @see #withdraw */
     @Nullable
-    public UINode withdrawn() {
+    public UIElement withdrawn() {
         return withdrawn;
     }
 
@@ -273,7 +272,7 @@ public class InsertionMarker extends UINode {
      * <p>Pure geometry, so it can be asked without showing anything. {@code items} must be siblings laid
      * out along {@link #axis}; the marker's own host supplies the coordinate space.</p>
      */
-    public int indexFor(UINode host, List<? extends UINode> items, float screenX, float screenY) {
+    public int indexFor(UIElement host, List<? extends UIElement> items, float screenX, float screenY) {
         if (host == null || items == null || items.isEmpty()) return 0;
         var local = host.toLocal(screenX, screenY);
         float along = axis == Axis.HORIZONTAL ? local.x : local.y;
@@ -284,7 +283,7 @@ public class InsertionMarker extends UINode {
         // it a list whose second entry is drawn last and it returns early on that one, and the answer stops
         // moving however far down you drag. The caller's list is sorted by a model field, which agrees with
         // the layout right up until something is mid-move -- which is exactly when this is being asked.
-        for (UINode item : ordered(items)) {
+        for (UIElement item : ordered(items)) {
             if (along < start(item) + extent(item) / 2f) return items.indexOf(item);
         }
         return items.size();
@@ -299,8 +298,8 @@ public class InsertionMarker extends UINode {
      * gap in place: the midpoint walk read screen order while the re-parent read list order, so "past the
      * last item" resolved to a sibling index in the middle of the run and the gap never reached the end.</p>
      */
-    private List<? extends UINode> ordered(List<? extends UINode> items) {
-        List<UINode> sorted = new ArrayList<>(items);
+    private List<? extends UIElement> ordered(List<? extends UIElement> items) {
+        List<UIElement> sorted = new ArrayList<>(items);
         // WITHOUT THE ONE BEING CARRIED, for every caller at once. It is hidden for the duration of the
         // drag so it has no box, and a zero-extent entry makes every midpoint test after it answer
         // against a cell that is not there. It is also simply not part of the list being inserted into.
@@ -309,18 +308,18 @@ public class InsertionMarker extends UINode {
         return sorted;
     }
 
-    private float start(UINode item) {
+    private float start(UIElement item) {
         var cache = item.box();
         return axis == Axis.HORIZONTAL ? cache.x() : cache.y();
     }
 
-    private float extent(UINode item) {
+    private float extent(UIElement item) {
         var cache = item.box();
         return axis == Axis.HORIZONTAL ? cache.width() : cache.height();
     }
 
     /** The item's size ACROSS the axis — a tab's height, a stripe button's width. */
-    private float thickness(UINode item) {
+    private float thickness(UIElement item) {
         var cache = item.box();
         return axis == Axis.HORIZONTAL ? cache.height() : cache.width();
     }
@@ -331,14 +330,14 @@ public class InsertionMarker extends UINode {
      * <p>Hides itself for an empty list rather than drawing a caret in a void — there is nothing to insert
      * relative to, and a bar floating in an empty rail reads as a rendering fault.</p>
      */
-    public int showFor(UINode host, List<? extends UINode> items, float screenX, float screenY) {
+    public int showFor(UIElement host, List<? extends UIElement> items, float screenX, float screenY) {
         int at = indexFor(host, items, screenX, screenY);
         showAt(host, items, at);
         return at;
     }
 
     /** Draws the slot at the boundary {@code at} would insert at. @see #showFor */
-    public void showAt(UINode host, List<? extends UINode> items, int at) {
+    public void showAt(UIElement host, List<? extends UIElement> items, int at) {
         if (host == null || items == null || items.isEmpty()) {
             hide();
             return;
@@ -352,13 +351,13 @@ public class InsertionMarker extends UINode {
 
         // PLACED AGAINST A VISIBLE NEIGHBOUR. `items` still contains the withdrawn one -- callers pass
         // their real list and this class does the removing -- and it has no box to measure or sit beside.
-        List<? extends UINode> visible = ordered(items);
+        List<? extends UIElement> visible = ordered(items);
         if (visible.isEmpty()) {
             hide();
             return;
         }
         int before = 0;
-        for (UINode item : visible) {
+        for (UIElement item : visible) {
             if (items.indexOf(item) < index) before++;
         }
         boolean append = before >= visible.size();
@@ -425,7 +424,7 @@ public class InsertionMarker extends UINode {
      * nothing. The size is the neighbour's, as in the overlay case — a gap the width of the thing that
      * would fill it.</p>
      */
-    private void showInFlow(UINode host, List<? extends UINode> items, int at) {
+    private void showInFlow(UIElement host, List<? extends UIElement> items, int at) {
         float thickness = withdrawnThickness;
         float extent = withdrawnExtent;
         if (withdrawn == null) {
@@ -440,7 +439,7 @@ public class InsertionMarker extends UINode {
 
         // THE PARKED CONTAINER, not the coordinate host -- see flowParent. A tab strip asks the group
         // about geometry and needs the gap to become a sibling of the tabs, two levels down from it.
-        UINode slot = flowParent != null ? flowParent : host;
+        UIElement slot = flowParent != null ? flowParent : host;
         if (at != index || parent() != slot) {
             // REMOVED FIRST, then the target index is read. Sibling indices shift when this leaves the
             // list, so computing the destination while still in it puts the gap one place off -- and only

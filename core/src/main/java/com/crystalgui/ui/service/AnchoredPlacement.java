@@ -3,7 +3,8 @@ package com.crystalgui.ui.service;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
+
 import javax.annotation.Nullable;
 import org.joml.Vector2f;
 import com.crystalgui.core.data.Transform2D;
@@ -84,7 +85,7 @@ public final class AnchoredPlacement {
      * has been laid out — a stale anchor is the normal state of a popup that has been hidden, not an
      * error.</p>
      */
-    public static void place(UINode popup, @Nullable UINode anchor, Side preferred, float gap) {
+    public static void place(UIElement popup, @Nullable UIElement anchor, Side preferred, float gap) {
         UIDocument document = popup.document();
         if (anchor == null || document == null || anchor.document() != document) return;
         Rect rect = anchorRectInRoot(anchor, document);
@@ -97,12 +98,12 @@ public final class AnchoredPlacement {
      * <p>How a context menu is positioned, and the same primitive rather than a second one: the web
      * anchors a right-click menu to the pointer with exactly this degenerate rect.</p>
      */
-    public static void placeAtPoint(UINode popup, float rootX, float rootY, Side preferred, float gap) {
+    public static void placeAtPoint(UIElement popup, float rootX, float rootY, Side preferred, float gap) {
         placeInRect(popup, new Rect(rootX, rootY, 0f, 0f), preferred, gap);
     }
 
     /** Places {@code popup} against an explicit rect. The other two entry points funnel into this. */
-    public static void placeInRect(UINode popup, Rect anchor, Side preferred, float gap) {
+    public static void placeInRect(UIElement popup, Rect anchor, Side preferred, float gap) {
         UIDocument document = popup.document();
         if (document == null) return;
         Box self = popup.box();
@@ -184,7 +185,7 @@ public final class AnchoredPlacement {
      * <p>See the class javadoc for why this reads the world matrix rather than the layout rect.</p>
      */
     @Nullable
-    public static Rect anchorRectInRoot(UINode anchor, UIDocument document) {
+    public static Rect anchorRectInRoot(UIElement anchor, UIDocument document) {
         Box box = anchor.box();
         Box root = document.box();
         if (box == null || root == null) return null;

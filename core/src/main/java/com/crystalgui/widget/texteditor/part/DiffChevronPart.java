@@ -1,10 +1,9 @@
 package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.texteditor.diff.DiffDecorations;
 import com.crystalgui.widget.texteditor.TextEditor;
-import com.crystalgui.widget.texteditor.diff.DiffDecorations;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
 import java.util.ArrayList;
@@ -35,7 +34,7 @@ import java.util.List;
  */
 public final class DiffChevronPart extends EditorViewPart {
 
-    private final List<UINode> chevrons = new ArrayList<>();
+    private final List<UIElement> chevrons = new ArrayList<>();
     /** Which difference each pooled chevron currently stands for, parallel to {@link #chevrons}. */
     private final List<Integer> bandOf = new ArrayList<>();
 
@@ -63,7 +62,7 @@ public final class DiffChevronPart extends EditorViewPart {
         int viewLine = editor.projections().firstViewLineOfRow(row);
         if (viewLine < firstViewLine || viewLine > lastViewLine) return false;
 
-        UINode chevron = chevronAt(slot);
+        UIElement chevron = chevronAt(slot);
         bandOf.set(slot, index);
         DecorationPool.show(chevron);
 
@@ -96,9 +95,9 @@ public final class DiffChevronPart extends EditorViewPart {
         return true;
     }
 
-    private UINode chevronAt(int slot) {
+    private UIElement chevronAt(int slot) {
         while (chevrons.size() <= slot) {
-            UINode chevron = new UINode();
+            UIElement chevron = new UIElement();
             chevron.addClass(TextEditor.DIFF_CHEVRON_CLASS);
             // SCROLL-EXEMPT, like the gutter and the fold column it sits between. It is a child of the
             // EDITOR, which scrolls its own children, while its y comes from screenTopOfViewLine -- which

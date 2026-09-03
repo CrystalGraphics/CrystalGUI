@@ -10,11 +10,12 @@ import com.crystalgui.core.data.DataProvider;
 
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
-import java.util.Arrays;
+
 import java.nio.charset.StandardCharsets;
 
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.document.FileDocument;
+import com.crystalgui.ui.dom.UIElement;
 import com.google.gson.JsonParser;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.graph.GraphDocument;
@@ -44,7 +45,6 @@ import com.crystalgui.text.syntax.Language;
 import com.crystalgui.text.syntax.KeywordTokenizer;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.texteditor.TextEditor;
 import com.crystalgui.widget.graph.GraphCommands;
@@ -99,7 +99,7 @@ import javax.annotation.Nullable;
  * that. Doing it from {@link #connected()} makes it the widget's own business, the same way
  * {@code ListView} starts its ticker: by the time layout has run, the element is attached by definition.</p>
  */
-public class ShaderGraphEditor extends UINode implements FileDocument, Disposable.Gl, DataProvider {
+public class ShaderGraphEditor extends UIElement implements FileDocument, Disposable.Gl, DataProvider {
     /** A whole shader graph editor. Named by the sheets. */
     public static final Name NAME = Name.of("shadergrapheditor");
 
@@ -192,7 +192,7 @@ public class ShaderGraphEditor extends UINode implements FileDocument, Disposabl
 
     /** Marked internal exactly ONCE, while empty -- see the constructor for what stamping a populated
      * subtree cost. */
-    private final UINode content = new UINode();
+    private final UIElement content = new UIElement();
     private final NodeTypeRegistry library;
 
     private final ShaderGraphPreviews previews;
@@ -753,8 +753,8 @@ public class ShaderGraphEditor extends UINode implements FileDocument, Disposabl
      * describes the clamp. Refusing leaves the last good rect in the settings — {@link #captureView} only
      * writes a non-empty one — which is exactly right for a tab that was never opened this session.</p>
      */
-    private static String rectOf(UINode panel) {
-        UINode block = panel.parent();
+    private static String rectOf(UIElement panel) {
+        UIElement block = panel.parent();
         if (block == null) return "";
         Box box = panel.box();
         Box blockBox = block.box();
@@ -768,7 +768,7 @@ public class ShaderGraphEditor extends UINode implements FileDocument, Disposabl
     }
 
     /** @see #rectOf */
-    private static boolean applyRect(UINode panel, @Nullable String raw) {
+    private static boolean applyRect(UIElement panel, @Nullable String raw) {
         if (raw == null || raw.isEmpty()) return false;
         String[] parts = raw.split(",");
         if (parts.length != 4) return false;
@@ -1180,7 +1180,7 @@ public class ShaderGraphEditor extends UINode implements FileDocument, Disposabl
      * shader graph editor is one graph file, so implementing this directly is the honest shape.</p>
      */
     @Override
-    public UINode view() {
+    public UIElement view() {
         return this;
     }
 

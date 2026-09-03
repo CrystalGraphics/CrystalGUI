@@ -1,10 +1,9 @@
 package com.crystalgui.workbench.explorer;
 
-import com.crystalgui.core.collection.tree.FilteredTreeSource;
 import com.crystalgui.core.search.SearchQuery;
 import com.crystalgui.core.search.SearchMatch;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.collection.tree.TreeSearch;
 
 import javax.annotation.Nullable;
@@ -134,7 +133,7 @@ final class ExplorerFind implements TreeSearch.Model<CgPath> {
     }
 
     /** Called from {@link FilesRenderer} during {@code bind}. @see TreeSearch#markRow */
-    void applyMarks(UINode row, ProjectFileTree.RowParts parts, CgPath item, boolean expandable) {
+    void applyMarks(UIElement row, ProjectFileTree.RowParts parts, CgPath item, boolean expandable) {
         search().markRow(row, parts.label(), parts.badge(), item, expandable);
     }
 }

@@ -1,11 +1,9 @@
 package com.crystalgui.widget.scroll;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.style.sheet.StyleSheet;
-import com.crystalgui.widget.scroll.ScrollerView;
 import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import com.crystalgui.testsupport.UiDocumentTestBase;
@@ -29,6 +27,7 @@ public class ScrollIntoViewTest extends UiDocumentTestBase {
     private static final float ROW_H = 40f;
     private static final int ROWS = 6;               // 240px of content in a 100px box
 
+
     private ScrollerView view;
 
     @Before
@@ -41,30 +40,32 @@ public class ScrollIntoViewTest extends UiDocumentTestBase {
         view = new ScrollerView();
         view.layout(l -> l.width(120).height(VIEWPORT).flexDirection(FlexDirection.COLUMN));
         for (int i = 0; i < ROWS; i++) {
-            UINode row = new UINode().layout(l -> l.width(120).height(ROW_H));
+            UIElement row = new UIElement().layout(l -> l.width(120).height(ROW_H));
             row.setFocusPolicy(FocusPolicy.FOCUSABLE);
             view.append(row);
         }
 
-        UINode root = new UINode().layout(l -> l.width(400).height(300));
+        UIElement root = new UIElement().layout(l -> l.width(400).height(300));
         root.append(view);
 
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
+
         frame();
         view.refreshScrollers();
         frame();
     }
 
 
-    private UINode row(int index) {
+
+    private UIElement row(int index) {
         return view.children().stream()
                 .filter(c -> !c.isScrollExempt())
                 .toList().get(index);
     }
 
     /** Whether a row is fully inside the viewport, in the container's scroll space. */
-    private boolean isFullyVisible(UINode element) {
+    private boolean isFullyVisible(UIElement element) {
         float relTop = element.box().y() - view.box().y();
         float relBottom = relTop + element.box().height();
         return relTop >= view.scrollTop() - 0.5f
@@ -75,7 +76,7 @@ public class ScrollIntoViewTest extends UiDocumentTestBase {
 
     @Test
     public void scrollsAnOffScreenElementIntoView() {
-        UINode last = row(ROWS - 1);
+        UIElement last = row(ROWS - 1);
         assertFalse("precondition: the last row should start off-screen", isFullyVisible(last));
 
         last.box().scrollIntoView();
@@ -85,7 +86,7 @@ public class ScrollIntoViewTest extends UiDocumentTestBase {
     /** Minimum distance: an element just below the fold comes flush to the bottom, not centred. */
     @Test
     public void scrollsTheMinimumDistance() {
-        UINode third = row(2);   // occupies 80..120 in a 0..100 viewport
+        UIElement third = row(2);   // occupies 80..120 in a 0..100 viewport
         third.box().scrollIntoView();
 
         assertEquals("should scroll just far enough to expose the row's bottom edge",
@@ -115,7 +116,7 @@ public class ScrollIntoViewTest extends UiDocumentTestBase {
     /** Programmatic focus reveals its target — the headline behaviour. */
     @Test
     public void programmaticFocusScrollsTheTargetIntoView() {
-        UINode last = row(ROWS - 1);
+        UIElement last = row(ROWS - 1);
         assertFalse(isFullyVisible(last));
 
         document.focus().requestFocus(last);
@@ -128,7 +129,7 @@ public class ScrollIntoViewTest extends UiDocumentTestBase {
      * exactly what this must not do. */
     @Test
     public void focusScrollIsInstantNotEased() {
-        UINode last = row(ROWS - 1);
+        UIElement last = row(ROWS - 1);
         document.focus().requestFocus(last);
 
         assertEquals("the scroll must already be at its destination, not easing toward it",
@@ -151,7 +152,7 @@ public class ScrollIntoViewTest extends UiDocumentTestBase {
             frame();
         }
 
-        UINode focused = document.focus().focused();
+        UIElement focused = document.focus().focused();
         assertNotNull(focused);
         assertTrue("tabbing below the fold must scroll the new target into view",
                 isFullyVisible(focused));
@@ -162,7 +163,7 @@ public class ScrollIntoViewTest extends UiDocumentTestBase {
     @Test
     public void clickingDoesNotScroll() {
         view.box().setScroll(0f, 0f);
-        UINode first = row(0);
+        UIElement first = row(0);
         first.setFocusPolicy(FocusPolicy.CLICK);
         frame();
 
@@ -183,7 +184,7 @@ public class ScrollIntoViewTest extends UiDocumentTestBase {
     /** Focusing something unfocusable is a no-op, so callers needn't check first. */
     @Test
     public void requestingFocusOnAnUnfocusableElementDoesNothing() {
-        UINode plain = row(1);
+        UIElement plain = row(1);
         plain.setFocusPolicy(FocusPolicy.NONE);
         view.box().setScroll(0f, 0f);
 

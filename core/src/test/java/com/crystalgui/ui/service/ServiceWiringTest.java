@@ -7,7 +7,7 @@ import static org.junit.Assert.assertTrue;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import org.junit.Test;
 
 /**
@@ -40,12 +40,12 @@ public class ServiceWiringTest extends UiDocumentTestBase {
     /**
      * A node that is promoted, focused and holds a close watcher.
      *
-     * <p>{@code requestClose} is OVERRIDDEN, because {@link UINode}'s answers {@code false} — "I did
+     * <p>{@code requestClose} is OVERRIDDEN, because {@link UIElement}'s answers {@code false} — "I did
      * not handle this" — and a cascade that is working is indistinguishable from one that is not when
      * every watcher in it declines.</p>
      */
-    private UINode livePopup() {
-        UINode popup = new UINode() {
+    private UIElement livePopup() {
+        UIElement popup = new UIElement() {
             @Override
             public boolean requestClose() {
                 closeRequested = true;
@@ -77,7 +77,7 @@ public class ServiceWiringTest extends UiDocumentTestBase {
      */
     @Test
     public void aPressOutsideAnAutoPopoverLightDismissesIt() {
-        UINode popup = livePopup();
+        UIElement popup = livePopup();
         assertTrue(document.dismiss().autoPopovers().contains(popup));
 
         press(400f, 400f);
@@ -110,7 +110,7 @@ public class ServiceWiringTest extends UiDocumentTestBase {
      */
     @Test
     public void escapeReachesTheCloseWatcherCascade() {
-        UINode popup = livePopup();
+        UIElement popup = livePopup();
         assertSame(popup, document.dismiss().topCloseWatcher(null));
 
         boolean consumed = keyPress(CgKeyCodes.KEY_ESCAPE);
@@ -133,7 +133,7 @@ public class ServiceWiringTest extends UiDocumentTestBase {
      */
     @Test
     public void aDetachTellsEveryService() {
-        UINode popup = livePopup();
+        UIElement popup = livePopup();
         press(50f, 20f);
         frame();
 
@@ -153,7 +153,7 @@ public class ServiceWiringTest extends UiDocumentTestBase {
     /** A node that leaves mid-press is not still the press target. */
     @Test
     public void aDetachDropsThePressTarget() {
-        UINode popup = livePopup();
+        UIElement popup = livePopup();
         press(50f, 20f);
 
         document.remove(popup);
@@ -168,7 +168,7 @@ public class ServiceWiringTest extends UiDocumentTestBase {
     /** A pointer capture held by a departing node is released, or every later event routes at it. */
     @Test
     public void aDetachReleasesAPointerCapture() {
-        UINode popup = livePopup();
+        UIElement popup = livePopup();
         // A capture is only taken while a button is down -- it is the mechanism that makes a DRAG
         // route at its source, so there is nothing to capture between gestures.
         press(50f, 20f);

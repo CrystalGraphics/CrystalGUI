@@ -1,6 +1,6 @@
 package com.crystalgui.widget.config.inspector;
 
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.config.ConfigControl;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.widget.config.Configurator;
@@ -39,7 +39,7 @@ public final class InspectorForm {
 
     /** Where rows land — the panel itself, or a group inside it. Null means the panel's own body. */
     @Nullable
-    private final UINode parent;
+    private final UIElement parent;
 
     /**
      * How many rows have been written through this form and every group opened from it.
@@ -54,7 +54,7 @@ public final class InspectorForm {
         this(panel, null, new int[1]);
     }
 
-    private InspectorForm(ConfiguratorPanel panel, @Nullable UINode parent, int[] written) {
+    private InspectorForm(ConfiguratorPanel panel, @Nullable UIElement parent, int[] written) {
         this.panel = panel;
         this.parent = parent;
         this.written = written;

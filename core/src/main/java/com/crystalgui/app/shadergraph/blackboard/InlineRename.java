@@ -2,7 +2,7 @@ package com.crystalgui.app.shadergraph.blackboard;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.ui.event.FocusEvent;
@@ -46,7 +46,7 @@ import java.util.function.Consumer;
  */
 public final class InlineRename {
 
-    private final UINode host;
+    private final UIElement host;
     private final String editorClass;
     private final String renamingClass;
 
@@ -73,7 +73,7 @@ public final class InlineRename {
     /** What the label reads now. Held locally so the blur that follows Enter cannot re-report it. */
     private String shown;
 
-    public InlineRename(UINode host, String editorClass, String renamingClass,
+    public InlineRename(UIElement host, String editorClass, String renamingClass,
                         String initialName, Consumer<String> showName, Runnable restyle) {
         this.host = host;
         this.editorClass = editorClass;

@@ -1,9 +1,6 @@
 package com.crystalgui.widget.collection.tree;
 
-import com.crystalgui.workbench.Workbench;
-import com.crystalgui.workbench.chrome.preferences.Preferences;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.widget.control.TextField;
@@ -14,10 +11,7 @@ import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.core.collection.tree.FilteredTreeSource;
 import com.crystalgui.core.collection.tree.TreeDataSource;
-import com.crystalgui.widget.collection.tree.TreeRenderer;
 import com.crystalgui.core.collection.tree.TreeRow;
-import com.crystalgui.widget.collection.tree.TreeSearch;
-import com.crystalgui.widget.collection.tree.TreeView;
 
 import org.junit.Before;
 import org.junit.Ignore;
@@ -74,8 +68,8 @@ public class TreeSearchInstallTest extends UiDocumentTestBase {
         // THE MINIMUM A CONSUMER WRITES. No call to markRow anywhere.
         tree.setRenderer(new TreeRenderer<String>() {
             @Override
-            public UINode createTemplate() {
-                UINode row = new UINode();
+            public UIElement createTemplate() {
+                UIElement row = new UIElement();
                 UIText label = new UIText("");
                 row.append(label);
                 labels.add(label);
@@ -83,12 +77,12 @@ public class TreeSearchInstallTest extends UiDocumentTestBase {
             }
 
             @Override
-            public void bind(String item, TreeRow<String> row, int index, UINode template) {
+            public void bind(String item, TreeRow<String> row, int index, UIElement template) {
                 ((UIText) template.children().get(0)).setText(item);
             }
         });
 
-        UINode host = new UINode().layout(l -> l.width(240).height(220));
+        UIElement host = new UIElement().layout(l -> l.width(240).height(220));
         host.append(tree);
         document.append(host);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
@@ -175,16 +169,16 @@ public class TreeSearchInstallTest extends UiDocumentTestBase {
         nestedTree.layout(l -> l.width(240).height(200));
         nestedTree.setItemHeight(20f);
         nestedTree.setRenderer(new TreeRenderer<String>() {
-            @Override public UINode createTemplate() {
-                UINode row = new UINode();
+            @Override public UIElement createTemplate() {
+                UIElement row = new UIElement();
                 row.append(new UIText(""));
                 return row;
             }
-            @Override public void bind(String item, TreeRow<String> row, int index, UINode template) {
+            @Override public void bind(String item, TreeRow<String> row, int index, UIElement template) {
                 ((UIText) template.children().get(0)).setText(item);
             }
         });
-        UINode nestedHost = new UINode().layout(l -> l.width(240).height(220));
+        UIElement nestedHost = new UIElement().layout(l -> l.width(240).height(220));
         nestedHost.append(nestedTree);
         document.append(nestedHost);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
@@ -281,7 +275,7 @@ public class TreeSearchInstallTest extends UiDocumentTestBase {
 
 
     /** The row element currently showing {@code text}, or null. */
-    private UINode rowShowing(TreeSearch<String> search, String text) {
+    private UIElement rowShowing(TreeSearch<String> search, String text) {
         for (var entry : search.tree().realisedRows().entrySet()) {
             TreeRow<String> row = search.tree().rowAt(entry.getKey());
             if (row != null && text.equals(row.item())) return entry.getValue();
@@ -305,7 +299,7 @@ public class TreeSearchInstallTest extends UiDocumentTestBase {
         settle();
 
         // Editor matched, so its whole subtree comes along -- Folding matches nothing itself.
-        UINode folding = rowShowing(nested, "Folding");
+        UIElement folding = rowShowing(nested, "Folding");
         assertNotNull("the matching node did not bring its subtree, so this asserts nothing", folding);
         assertFalse("a filtered tree dimmed a row it had chosen to keep",
                 folding.hasClass(TreeSearch.DIMMED_CLASS));
@@ -320,7 +314,7 @@ public class TreeSearchInstallTest extends UiDocumentTestBase {
         nested.setQuery("General");
         settle();
 
-        UINode folding = rowShowing(nested, "Folding");
+        UIElement folding = rowShowing(nested, "Folding");
         assertNotNull(folding);
         assertTrue("Highlight mode stopped dimming non-matches",
                 folding.hasClass(TreeSearch.DIMMED_CLASS));
@@ -343,7 +337,7 @@ public class TreeSearchInstallTest extends UiDocumentTestBase {
         nested.setQuery("General");
         settle();
 
-        UINode general = rowShowing(nested, "General");
+        UIElement general = rowShowing(nested, "General");
         assertNotNull("the match is not on screen, so this asserts nothing", general);
         assertFalse("a filtered tree recoloured a row it had already chosen to keep",
                 general.hasClass(TreeSearch.MATCH_CLASS));
@@ -360,7 +354,7 @@ public class TreeSearchInstallTest extends UiDocumentTestBase {
         nested.setQuery("General");
         settle();
 
-        UINode general = rowShowing(nested, "General");
+        UIElement general = rowShowing(nested, "General");
         assertNotNull(general);
         assertTrue("Highlight mode stopped marking the match",
                 general.hasClass(TreeSearch.MATCH_CLASS));
@@ -368,9 +362,9 @@ public class TreeSearchInstallTest extends UiDocumentTestBase {
 
     /** The band on the label of the row showing {@code text}, or -1. */
     private int bandOnIn(TreeSearch<String> search, String text) {
-        UINode row = rowShowing(search, text);
+        UIElement row = rowShowing(search, text);
         if (row == null) return -1;
-        for (UINode child : row.children()) {
+        for (UIElement child : row.children()) {
             if (child instanceof UIText label) return label.highlightBandCount();
         }
         return -1;
@@ -398,7 +392,7 @@ public class TreeSearchInstallTest extends UiDocumentTestBase {
         settle();
         assertSame(field, document.focus().focused());
 
-        UINode clearButton = search.box().querySelector("." + SearchField.CLEAR_PART);
+        UIElement clearButton = search.box().querySelector("." + SearchField.CLEAR_PART);
         assertNotNull("no clear button, so this asserts nothing", clearButton);
         frame();
         // The CENTRE, and a frame around it: a press is accumulated and dispatched by the frame pair, and

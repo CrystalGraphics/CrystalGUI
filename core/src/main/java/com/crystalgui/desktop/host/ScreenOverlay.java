@@ -5,7 +5,8 @@ import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.ui.box.Box;
 import javax.annotation.Nullable;
-import com.crystalgui.ui.dom.UINode;
+
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 
 /**
@@ -108,7 +109,7 @@ public final class ScreenOverlay {
                 // somebody else has the keyboard. "Looks focused, is cold" is the exact state
                 // WindowFrame.restoreFocus exists to prevent one level down. The window remembers where
                 // its focus was, so clicking back in restores it.
-                UINode focused = window.focus().focused();
+                UIElement focused = window.focus().focused();
                 if (focused != null) window.focus().blurIfFocused(focused);
                 // A MENU IS DISMISSED BY A PRESS ANYWHERE, including one that is not ours. Otherwise a
                 // dropdown opened in a pinned window survives a click on the chat box and floats there
@@ -145,14 +146,14 @@ public final class ScreenOverlay {
      * game.</p>
      */
     @Nullable
-    public UINode overlayHitTest(float xPx, float yPx) {
+    public UIElement overlayHitTest(float xPx, float yPx) {
         Box hitBox = window.boxes().hitTest(xPx, yPx, box -> window.focus().isInert(box.node()));
         if (hitBox == null) return null;
-        UINode hit = hitBox.node();
+        UIElement hit = hitBox.node();
 
         // Promoted into the top layer -- a dialog, a menu, a tooltip, the switcher. The promoted node
         // ITSELF is a legitimate hit, so this matches at depth zero.
-        for (UINode walk = hit; walk != null; walk = walk.parent()) {
+        for (UIElement walk = hit; walk != null; walk = walk.parent()) {
             if (window.isPromoted(walk)) return hit;
         }
 
@@ -167,8 +168,8 @@ public final class ScreenOverlay {
         // it excludes the taskbar for free -- which is desktop chrome this presentation does not paint,
         // so a click at the bottom of the screen belongs to the game.
         Desktop desktop = Desktop.ifPresent(window);
-        UINode layer = desktop == null ? null : desktop.windowLayer();
-        for (UINode walk = hit; walk != null; walk = walk.parent()) {
+        UIElement layer = desktop == null ? null : desktop.windowLayer();
+        for (UIElement walk = hit; walk != null; walk = walk.parent()) {
             if (walk instanceof WindowFrame) return hit;
             if (walk == layer) return null;
         }

@@ -29,14 +29,13 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.easing.Easing;
 import com.crystalgui.style.easing.ProgressFunctions;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.input.keymap.KeyChord;
 import com.crystalgui.ui.input.keymap.Keymap;
 import dev.vfyjxf.taffy.style.FlexDirection;
-import dev.vfyjxf.taffy.style.TaffyPosition;
 
 import javax.annotation.Nullable;
 
@@ -107,7 +106,7 @@ import java.util.List;
  * happens on a click, which is precisely when a widget must never rebuild the elements it is being
  * clicked on. {@code sortedChildren} already keeps paint order and hit-testing agreeing by z.</p>
  */
-public class Desktop extends UINode implements DataProvider {
+public class Desktop extends UIElement implements DataProvider {
 
     /** The cascade identity `ua/desktop.css` names. @see com.crystalgui.ui.dom.Name */
     public static final Name NAME = Name.of("desktop");
@@ -181,7 +180,7 @@ public class Desktop extends UINode implements DataProvider {
     @Nullable
     public static Desktop ifPresent(@Nullable UIDocument document) {
         if (document == null) return null;
-        for (UINode child : document.children()) {
+        for (UIElement child : document.children()) {
             if (child instanceof Desktop desktop) return desktop;
         }
         // ...and a SUSPENDED one, which is not a child of anything. Only a suspended desktop is
@@ -319,7 +318,7 @@ public class Desktop extends UINode implements DataProvider {
         setClass(this, LIVE_CLASS, isLive());
     }
 
-    private static void setClass(UINode node, String className, boolean on) {
+    private static void setClass(UIElement node, String className, boolean on) {
         if (on) node.addClass(className);
         else node.removeClass(className);
     }
@@ -611,8 +610,8 @@ public class Desktop extends UINode implements DataProvider {
         return key == WindowFrame.WINDOW_FRAME ? activeWindow : null;
     }
 
-    private void focusMoved(@Nullable UINode focused) {
-        for (UINode walk = focused; walk != null; walk = walk.parent()) {
+    private void focusMoved(@Nullable UIElement focused) {
+        for (UIElement walk = focused; walk != null; walk = walk.parent()) {
             if (walk instanceof WindowFrame && ((WindowFrame) walk).desktop() == this) {
                 // ONLY A WINDOW THAT IS ON SCREEN. Focus landing inside a HIDDEN one is never the user
                 // working in it: a hidden window is DETACHED, so it cannot be clicked, cannot be tabbed
@@ -1142,7 +1141,7 @@ public class Desktop extends UINode implements DataProvider {
      * <p>Built once and hidden, never per drag, so it costs a display-skip when nothing is being
      * dragged. Its Z is assigned per show: see {@link #stackPreviewUnder}.</p>
      */
-    private final UINode snapPreview = new UINode();
+    private final UIElement snapPreview = new UIElement();
 
     /** Whether the preview is on screen or on its way off. @see #showSnapPreview */
     private boolean snapShowing;
@@ -1510,7 +1509,7 @@ public class Desktop extends UINode implements DataProvider {
     }
 
     /** The window layer — the work area's box, and the containing block every frame is placed in. */
-    public UINode windowLayer() {
+    public UIElement windowLayer() {
         return windows;
     }
 
@@ -1610,7 +1609,7 @@ public class Desktop extends UINode implements DataProvider {
      * list provably the layer's children rather than a cache that could drift from them, so nothing
      * downstream ever has to re-filter. {@code Desktop.addWindow} is the sanctioned way in.</p>
      */
-    private final class WindowLayer extends UINode {
+    private final class WindowLayer extends UIElement {
 
         private final List<WindowFrame> frames = new ArrayList<>();
 
@@ -1629,7 +1628,7 @@ public class Desktop extends UINode implements DataProvider {
          * <p>It is still an ordinary child for layout and paint order, so a preview at stack order 0
          * sits below every window that has ever been raised — which is every open window.</p>
          */
-        void hostDecoration(UINode decoration) {
+        void hostDecoration(UIElement decoration) {
             if (decoration.parent() == this) return;
             hosted = decoration;
             append(decoration);
@@ -1646,10 +1645,10 @@ public class Desktop extends UINode implements DataProvider {
          * only the compositor knows the private door.</p>
          */
         @Nullable
-        private UINode hosted;
+        private UIElement hosted;
 
         @Override
-        public UINode insertAt(int index, UINode child) {
+        public UIElement insertAt(int index, UIElement child) {
             if (!(child instanceof WindowFrame) && child != hosted) {
                 throw new UnsupportedOperationException(
                         "The desktop's window layer holds WindowFrames — use Desktop.addWindow(frame)");
@@ -1665,7 +1664,7 @@ public class Desktop extends UINode implements DataProvider {
         }
 
         @Override
-        public boolean remove(UINode child) {
+        public boolean remove(UIElement child) {
             boolean removed = super.remove(child);
             if (removed && child == hosted) hosted = null;
             if (removed && !(child instanceof WindowFrame)) return true;

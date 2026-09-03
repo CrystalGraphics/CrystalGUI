@@ -11,7 +11,7 @@ import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.WorkspaceFileService;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.widget.overlay.InputDialog;
@@ -334,7 +334,7 @@ public final class ExplorerCommands {
 
     /** Everything selected — what the commands that act on several things ask for. */
     private static List<CgPath> targets(CommandContext context) {
-        for (UINode element = UINode.sourceOf(context); element != null; element = element.parent()) {
+        for (UIElement element = UIElement.sourceOf(context); element != null; element = element.parent()) {
             if (element instanceof ProjectFileTree tree) return tree.selectedPaths();
         }
         return List.of();
@@ -413,7 +413,7 @@ public final class ExplorerCommands {
 
     @Nullable
     private static CgPath target(CommandContext context) {
-        for (UINode element = UINode.sourceOf(context); element != null; element = element.parent()) {
+        for (UIElement element = UIElement.sourceOf(context); element != null; element = element.parent()) {
             if (element instanceof ProjectFileTree tree) return tree.selectedPath();
         }
         return null;
@@ -488,7 +488,7 @@ public final class ExplorerCommands {
             tree.beginNew(parent, folder, name -> createEntry(workbench, parent.resolve(name), folder));
             return;
         }
-        InputDialog.ask(UINode.sourceOf(context), folder ? "New Folder" : "New File", "Name", "", name ->
+        InputDialog.ask(UIElement.sourceOf(context), folder ? "New Folder" : "New File", "Name", "", name ->
                 createEntry(workbench, parent.resolve(name), folder));
     }
 
@@ -528,7 +528,7 @@ public final class ExplorerCommands {
             tree.beginRename(path, name -> workbench.files().move(path, parent.resolve(name), false));
             return;
         }
-        InputDialog.ask(UINode.sourceOf(context), "Rename", "New name", path.name(), name -> {
+        InputDialog.ask(UIElement.sourceOf(context), "Rename", "New name", path.name(), name -> {
             if (name.equals(path.name())) return;
             workbench.files().move(path, parent.resolve(name), false);
         });
@@ -553,7 +553,7 @@ public final class ExplorerCommands {
             return;
         }
 
-        InputDialog.confirm(UINode.sourceOf(context), "Delete",
+        InputDialog.confirm(UIElement.sourceOf(context), "Delete",
                 directory ? "Delete '" + path.name() + "' and everything in it?"
                         : "Delete '" + path.name() + "'?",
                 () -> workbench.files().delete(path, directory));

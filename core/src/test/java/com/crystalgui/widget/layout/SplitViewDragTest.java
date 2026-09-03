@@ -1,11 +1,9 @@
 package com.crystalgui.widget.layout;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
-import com.crystalgui.widget.layout.SplitView;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import org.junit.Test;
@@ -39,8 +37,8 @@ public class SplitViewDragTest extends UiDocumentTestBase {
         split = new SplitView();
         split.setOrientation(orientation);
 
-        UINode root = new UINode().layout(l -> l.width(400).height(300)
-                .flexDirection(FlexDirection.COLUMN));
+        UIElement root = new UIElement().layout(l -> l.width(400).height(300)
+                                                      .flexDirection(FlexDirection.COLUMN));
         root.append(split);
 
         document.append(root);
@@ -258,7 +256,7 @@ public class SplitViewDragTest extends UiDocumentTestBase {
     @Test
     public void aPaneContentsCssMinWidthBoundsTheDivider() {
         setUp(2f, SplitView.Orientation.HORIZONTAL);
-        split.first().append(new UINode().layout(l -> l.minWidth(150).heightPercent(100f)));
+        split.first().append(new UIElement().layout(l -> l.minWidth(150).heightPercent(100f)));
         frame();
 
         int[] c = dividerCentrePhys(2f);
@@ -287,7 +285,7 @@ public class SplitViewDragTest extends UiDocumentTestBase {
     @Test
     public void oversizedPaneContentDoesNotJamTheSplit() {
         setUp(2f, SplitView.Orientation.HORIZONTAL);
-        split.first().append(new UINode().layout(l -> l.width(2000).height(50)));
+        split.first().append(new UIElement().layout(l -> l.width(2000).height(50)));
         frame();
 
         split.setPercentage(10f);

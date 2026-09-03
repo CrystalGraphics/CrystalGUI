@@ -1,5 +1,6 @@
 package com.crystalgui.widget.config.control;
 
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.config.ConfigControlContracts;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
@@ -7,7 +8,6 @@ import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.render.texture.CgUiQuad;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.form.ColorSelector;
 import com.crystalgui.widget.overlay.Dialog;
@@ -71,9 +71,9 @@ public class ColorControl extends ValueControl<Integer> {
 
     private static final int DEFAULT_COLOR = 0xFF000000;
 
-    private final UINode swatch = new UINode();
-    private final UINode colorBar = new UINode();
-    private final UINode alphaFill = new UINode();
+    private final UIElement swatch = new UIElement();
+    private final UIElement colorBar = new UIElement();
+    private final UIElement alphaFill = new UIElement();
     private final Dialog dialog = new Dialog("Color");
     private final ColorSelector picker = new ColorSelector();
 
@@ -82,7 +82,7 @@ public class ColorControl extends ValueControl<Integer> {
         addClass("__color__");
         swatch.addClass(SWATCH_CLASS);
         colorBar.addClass(COLOR_BAR_CLASS);
-        UINode alphaBar = new UINode();
+        UIElement alphaBar = new UIElement();
         alphaBar.addClass(ALPHA_BAR_CLASS);
         alphaFill.addClass(ALPHA_FILL_CLASS);
         alphaBar.append(alphaFill);
@@ -148,7 +148,7 @@ public class ColorControl extends ValueControl<Integer> {
     }
 
     /** The swatch, for a host that needs to reach the widget directly. */
-    public UINode swatch() {
+    public UIElement swatch() {
         return swatch;
     }
 

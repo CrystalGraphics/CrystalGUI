@@ -1,15 +1,12 @@
 package com.crystalgui.widget.texteditor.part;
 
-import com.crystalgui.text.Rope;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.widget.texteditor.TextEditor;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -36,7 +33,7 @@ public class SquigglesTest extends UiDocumentTestBase {
         editor.layout(l -> l.width(300).height(160));
         editor.generalStyle(g -> g.fontSize(8f).lineHeight(1.25f));
 
-        UINode root = new UINode().layout(l -> l.width(300).height(200));
+        UIElement root = new UIElement().layout(l -> l.width(300).height(200));
         root.append(editor);
         document.append(root);
         // The user-agent sheet, deliberately: every squiggle rule lives in default.css, and without it
@@ -53,18 +50,18 @@ public class SquigglesTest extends UiDocumentTestBase {
 
     /** Every laid-out squiggle band, by severity class. Read from the tree rather than from the model,
      * so this cannot agree with the code it is checking for the wrong reason. */
-    private List<UINode> bands(String severityClass) {
-        List<UINode> found = new ArrayList<>();
+    private List<UIElement> bands(String severityClass) {
+        List<UIElement> found = new ArrayList<>();
         collect(editor, severityClass, found);
         return found;
     }
 
-    private static void collect(UINode element, String severityClass, List<UINode> out) {
+    private static void collect(UIElement element, String severityClass, List<UIElement> out) {
         if (element.hasClass("__squiggle__") && element.hasClass(severityClass)
                 && heightOf(element) > 0f) {
             out.add(element);
         }
-        for (UINode child : element.children()) collect(child, severityClass, out);
+        for (UIElement child : element.children()) collect(child, severityClass, out);
     }
 
     // ── Basics ──────────────────────────────────────────────────────────────────────────────────
@@ -149,7 +146,7 @@ public class SquigglesTest extends UiDocumentTestBase {
                 new TextPoint(1, 2), new TextPoint(1, 2), "expected ';'")));
         settle();
 
-        List<UINode> found = bands("__squiggle-error__");
+        List<UIElement> found = bands("__squiggle-error__");
         assertEquals(1, found.size());
         assertTrue("a zero-width band is invisible", found.get(0).box().width() >= 1f);
     }
@@ -163,7 +160,7 @@ public class SquigglesTest extends UiDocumentTestBase {
                 Diagnostic.onRow(1, DiagnosticSeverity.ERROR, "whole row")));
         settle();
 
-        List<UINode> found = bands("__squiggle-error__");
+        List<UIElement> found = bands("__squiggle-error__");
         assertEquals(1, found.size());
         float width = found.get(0).box().width();
         assertTrue("width " + width + " is not a plausible four-character row", width > 0f && width < 300f);
@@ -178,7 +175,7 @@ public class SquigglesTest extends UiDocumentTestBase {
         editor.diagnostics().setAll(List.of(Diagnostic.error(
                 new TextPoint(1, 0), new TextPoint(1, 4), "the same row, spelled out")));
         settle();
-        List<UINode> explicit = bands("__squiggle-error__");
+        List<UIElement> explicit = bands("__squiggle-error__");
         assertEquals(1, explicit.size());
         assertEquals("a whole-row diagnostic does not cover the row an explicit range covers",
                 explicit.get(0).box().width(), width, 0.01f);
@@ -216,7 +213,7 @@ public class SquigglesTest extends UiDocumentTestBase {
         editor.diagnostics().setAll(List.of(
                 Diagnostic.onRow(1, DiagnosticSeverity.ERROR, "a blank row")));
         settle();
-        List<UINode> found = bands("__squiggle-error__");
+        List<UIElement> found = bands("__squiggle-error__");
         assertEquals("trimming collapsed the range and the mark vanished", 1, found.size());
         assertTrue(found.get(0).box().width() >= 1f);
     }

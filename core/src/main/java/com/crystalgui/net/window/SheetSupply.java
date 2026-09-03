@@ -1,6 +1,6 @@
 package com.crystalgui.net.window;
 
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -132,7 +132,7 @@ public final class SheetSupply {
      * <p>Package-private: a host does not call this, {@link ClientWindows} does, once per mount and
      * again on a re-describe.</p>
      */
-    void resolve(ClientUiSession<UINode, Object> session, List<SheetRef> refs, ClientWindowContext window) {
+    void resolve(ClientUiSession<UIElement, Object> session, List<SheetRef> refs, ClientWindowContext window) {
         if (refs.size() > UiLimits.MAX_SHEETS_PER_WINDOW) {
             // The EXCESS is dropped rather than the window: a plain window is a usable one, and a
             // server naming seventeen sheets is not describing a UI anybody can see the difference in.

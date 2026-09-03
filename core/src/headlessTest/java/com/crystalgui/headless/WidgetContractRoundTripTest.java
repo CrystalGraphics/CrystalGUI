@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -43,7 +43,7 @@ import org.junit.Test;
 public class WidgetContractRoundTripTest {
 
     /** Writes {@code from} through its contract and applies it to {@code to}. */
-    private static <W extends UINode> W roundTrip(WidgetContract<W> contract, W from, W to) {
+    private static <W extends UIElement> W roundTrip(WidgetContract<W> contract, W from, W to) {
         StateMap<Object> wire = new StateMap<>(PlainOps.INSTANCE);
         contract.write(from, wire);
         contract.read(to, new StateMap<>(PlainOps.INSTANCE, wire.encode()));

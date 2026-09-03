@@ -12,7 +12,7 @@ import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.WorkspaceClient;
 import com.crystalgui.ui.ClipboardActions;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.UiDataKeys;
 import com.crystalgui.ui.input.keymap.Keymap;
@@ -90,7 +90,7 @@ import java.util.function.Supplier;
  * to whichever part happens to write them. And the public surface stays: {@code ExplorerCommands} asks
  * the <em>panel</em> to rename, not the panel's editing part.</p>
  */
-public class ProjectFileTree extends UINode implements UndoScope, DataProvider {
+public class ProjectFileTree extends UIElement implements UndoScope, DataProvider {
     /** The file panel. Named by the sheets. */
     public static final Name NAME = Name.of("projectfiletree");
 
@@ -184,7 +184,7 @@ public class ProjectFileTree extends UINode implements UndoScope, DataProvider {
     private final TreeView<CgPath> tree;
 
     /** Marked internal exactly ONCE, while empty -- see the constructor. */
-    private final UINode content = new UINode();
+    private final UIElement content = new UIElement();
 
     /**
      * Which item each pooled row currently shows.
@@ -194,7 +194,7 @@ public class ProjectFileTree extends UINode implements UndoScope, DataProvider {
      * displayed, and keep working right up until somebody scrolled. The same rule the editor's fold arrows
      * carry.</p>
      */
-    private final Map<UINode, CgPath> rowItems = new HashMap<>();
+    private final Map<UIElement, CgPath> rowItems = new HashMap<>();
 
     private boolean ticking;
     private boolean projectsRequested;
@@ -553,8 +553,8 @@ public class ProjectFileTree extends UINode implements UndoScope, DataProvider {
 
     /** Walks up from whatever was hit to the row element the tree knows about. */
     @Nullable
-    UINode rowElementFor(@Nullable UINode hit) {
-        for (UINode element = hit; element != null; element = element.parent()) {
+    UIElement rowElementFor(@Nullable UIElement hit) {
+        for (UIElement element = hit; element != null; element = element.parent()) {
             if (element.hasClass(ROW_CLASS)) return element;
         }
         return null;
@@ -605,8 +605,8 @@ public class ProjectFileTree extends UINode implements UndoScope, DataProvider {
      */
     /** Package-private, so the parts beside this class can write into a row without reaching for
      * children by index. @see ExplorerEditing */
-    public record RowParts(UINode twisty, SymbolIcon icon, UIText label, UIText badge,
-                    TextField editor) {
+    public record RowParts(UIElement twisty, SymbolIcon icon, UIText label, UIText badge,
+                           TextField editor) {
     }
 
     /**
@@ -617,11 +617,11 @@ public class ProjectFileTree extends UINode implements UndoScope, DataProvider {
      * — which looks like a random colour rather than a stale class, because nothing is obviously wrong.</p>
      */
     /**
-     * Delegates to {@link UINode#swapPrefixedClass}, which is where this moved once the editor tab
+     * Delegates to {@link UIElement#swapPrefixedClass}, which is where this moved once the editor tab
      * strip needed the same thing — the trap it guards is not specific to recycled rows, and two copies
      * of it would be two chances to get the "swap, never add" half wrong.
      */
-    static void swapPrefixedClass(UINode element, String prefix, String next) {
+    static void swapPrefixedClass(UIElement element, String prefix, String next) {
         element.swapPrefixedClass(prefix, next);
     }
 
@@ -713,7 +713,7 @@ public class ProjectFileTree extends UINode implements UndoScope, DataProvider {
     }
 
     /** The element the parts add their own chrome to. */
-    UINode contentBox() {
+    UIElement contentBox() {
         return content;
     }
 
@@ -759,7 +759,7 @@ public class ProjectFileTree extends UINode implements UndoScope, DataProvider {
 
     /** What a part needs to reach back for: the item a realised row is showing. */
     @Nullable
-    CgPath itemForRow(UINode row) {
+    CgPath itemForRow(UIElement row) {
         return rowItems.get(row);
     }
 
@@ -779,7 +779,7 @@ public class ProjectFileTree extends UINode implements UndoScope, DataProvider {
 
     /** Every realised row and the item it is showing. Written by {@link FilesRenderer}, read by the
      * parts that have to answer "what is this row about" — the drag, the context menu, the editor. */
-    Map<UINode, CgPath> rowItems() {
+    Map<UIElement, CgPath> rowItems() {
         return rowItems;
     }
 

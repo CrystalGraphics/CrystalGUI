@@ -7,11 +7,8 @@ import com.crystalgui.core.notify.NotificationEvent;
 import com.crystalgui.core.notify.NotificationGroups;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.core.signal.ConnectionGroup;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.service.Animation;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
-
-import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -54,7 +51,7 @@ import java.util.List;
  * would cut the animation off mid-way. Stated in both places rather than read from the cascade, because a
  * removal that depended on parsing a duration would fail silently when the theme changed it.</p>
  */
-public class NotificationBalloons extends UINode  {
+public class NotificationBalloons extends UIElement {
 
     public static final Name NAME = Name.of("notificationballoons");
 

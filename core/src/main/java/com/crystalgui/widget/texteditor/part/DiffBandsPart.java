@@ -1,10 +1,9 @@
 package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.texteditor.diff.DiffDecorations;
 import com.crystalgui.widget.texteditor.TextEditor;
-import com.crystalgui.widget.texteditor.diff.DiffDecorations;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
 /**
@@ -107,8 +106,8 @@ public final class DiffBandsPart extends EditorViewPart {
                 right - left, editor.lineHeight());
     }
 
-    private static void place(UINode element, DiffDecorations.Kind kind, boolean thin,
-            float left, float top, float width, float height) {
+    private static void place(UIElement element, DiffDecorations.Kind kind, boolean thin,
+                              float left, float top, float width, float height) {
         // SWAPPED, NOT ADDED. These elements are pooled, so a band that was ADDED last pass and is CHANGED
         // this one would otherwise carry both classes and the cascade would resolve whichever rule happens
         // to win -- which reads as a random colour rather than as a stale class.

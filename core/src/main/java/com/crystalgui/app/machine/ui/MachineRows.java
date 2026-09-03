@@ -1,6 +1,6 @@
 package com.crystalgui.app.machine.ui;
 
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.text.UIText;
 
 /**
@@ -26,11 +26,11 @@ final class MachineRows {
      * box is the standing idiom for keeping a column of labels aligned; every harness scene in the
      * repository does the same thing for the same reason.</p>
      */
-    static UINode row(String caption, UINode control) {
-        UINode row = new UINode();
+    static UIElement row(String caption, UIElement control) {
+        UIElement row = new UIElement();
         row.addClass(MachineStyles.ROW_CLASS);
 
-        UINode slot = new UINode().layout(l -> l.width(90));
+        UIElement slot = new UIElement().layout(l -> l.width(90));
         UIText text = new UIText(caption);
         text.addClass(MachineStyles.LABEL_CLASS);
         slot.append(text);
@@ -48,8 +48,8 @@ final class MachineRows {
      * badge above the server's sentence and no amount of care at the writers could have prevented
      * it.</p>
      */
-    static UINode authored(String badgeClass, String side, UIText line) {
-        UINode row = new UINode();
+    static UIElement authored(String badgeClass, String side, UIText line) {
+        UIElement row = new UIElement();
         row.addClass(MachineStyles.ROW_CLASS);
 
         UIText badge = new UIText(side);

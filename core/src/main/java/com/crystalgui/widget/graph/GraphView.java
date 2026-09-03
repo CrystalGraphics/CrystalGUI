@@ -29,7 +29,7 @@ import com.crystalgui.core.undo.UndoScope;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.UiDataKeys;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataKey;
@@ -103,7 +103,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
     /**
      * Every graph gets its commands, with nothing installing them.
      *
-     * <p>The engine calls this once for this class — see {@link UINode#registerCommands}. Before, a
+     * <p>The engine calls this once for this class — see {@link UIElement#registerCommands}. Before, a
      * host had to call {@code GraphCommands.install(window)} and a graph dropped into a scene that
      * forgot had no Delete, no Select All and no framing, silently.</p>
      */
@@ -214,7 +214,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
             return new java.util.ArrayList<Object>(getSelection().nodes());
         }
         Object undo = undoScopeData(key);
-        // NO super: a UINode is not a DataProvider, and the walk outward through
+        // NO super: a UIElement is not a DataProvider, and the walk outward through
         // `commandParent()` is what reaches the next one. Answering null is how this one says
         // it has nothing, which is what lets an outer provider be found at all.
         return undo;
@@ -302,7 +302,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
     public final Signal.Action onConnectionsChanged = new Signal.Action();
 
     /** The rubber band. A child of the VIEWPORT, not the plane — see {@link #marqueeElement()}. */
-    private final UINode marquee = new UINode();
+    private final UIElement marquee = new UIElement();
 
     /** The wire under the pointer, or null. Drives the hover thickening — a wire cannot carry {@code
      * :hover} itself, having no element. */
@@ -360,7 +360,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
             // A press that reached the graph itself landed on empty canvas: a node claims its own press
             // in the capture phase, and a port claims one before that. So this is the marquee's press —
             // unless a wire is under it, which is the only thing here that is drawn but not an element.
-            if (isBackgroundGestureExempt(((UINode) event.getTarget()))) return;
+            if (isBackgroundGestureExempt(((UIElement) event.getTarget()))) return;
             // A press inside a NODE is never the canvas's, even when the node did not claim it.
             //
             // GraphNode stops propagation only for presses it turns into a move-drag; a press on its
@@ -373,7 +373,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
             // Asking about the target rather than relying on every node to stop propagation is the
             // robust half: a widget that legitimately wants a press to pass through should not have to
             // know that letting it through starts a rubber band three levels up.
-            if (isInsideNode(((UINode) event.getTarget()))) return;
+            if (isInsideNode(((UIElement) event.getTarget()))) return;
             if (beginMarqueeOrPickWire(event.getPosition().x(), event.getPosition().y())) {
                 event.stopPropagation();
             }
@@ -384,7 +384,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
         // pointer position has to be re-tested against the curves each time it moves.
         this.events.getGroup(MouseEvent.Move.class).attachListener((el, event) -> {
             GraphConnection was = hoveredWire;
-            hoveredWire = isBackgroundGestureExempt(((UINode) event.getTarget()))
+            hoveredWire = isBackgroundGestureExempt(((UIElement) event.getTarget()))
                     ? null
                     : wireAt(event.getPosition().x(), event.getPosition().y());
             // Nothing to invalidate — the layer repaints every frame and reads this directly. Kept as a
@@ -399,8 +399,8 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
      * on one fell through as "empty canvas" and started a marquee under whatever the user was trying to
      * type into — the exact conflict {@code NodePort} used to guard against back when this editor lived
      * inside the port. */
-    private boolean isInsideNode(@Nullable UINode target) {
-        for (UINode element = target; element != null && element != this; element = element.parent()) {
+    private boolean isInsideNode(@Nullable UIElement target) {
+        for (UIElement element = target; element != null && element != this; element = element.parent()) {
             if (element instanceof GraphNode) return true;
             if (element.hasClass(NodePort.EDITOR_CLASS)) return true;
         }
@@ -418,7 +418,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
     public static final String MARQUEE_CLASS = "__marquee__";
 
     /** The rubber-band element, for a theme or a test. */
-    public UINode marqueeElement() {
+    public UIElement marqueeElement() {
         return marquee;
     }
 
@@ -584,7 +584,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
      * case for most ports on most nodes, checked once via a map lookup rather than by every node walking
      * its own ports' state.</p>
      */
-    void paintPortEditorStub(CgUiPaintContext ctx, NodePort port, UINode space) {
+    void paintPortEditorStub(CgUiPaintContext ctx, NodePort port, UIElement space) {
         PortDefaultEditor editor = portEditors.get(port);
         if (editor != null && editor.isMounted()) editor.paintStub(ctx, space);
     }
@@ -618,7 +618,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
      * every later feature (save, duplicate, a server sending a graph) depends on.</p>
      */
     @Override
-    public GraphView addNode(UINode node, float worldX, float worldY) {
+    public GraphView addNode(UIElement node, float worldX, float worldY) {
         if (node instanceof GraphNode graphNode) {
             attachNode(graphNode, dataFor(graphNode, worldX, worldY));
             return this;
@@ -628,7 +628,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
     }
 
     @Override
-    public GraphView moveNode(UINode node, float worldX, float worldY) {
+    public GraphView moveNode(UIElement node, float worldX, float worldY) {
         super.moveNode(node, worldX, worldY);
         // Position is document data — a reload has to give a moved node back where it was left.
         if (node instanceof GraphNode graphNode && graphNode.getNodeId() != null) {
@@ -1104,7 +1104,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
     /** Every node currently on the plane, in insertion order. */
     public List<GraphNode> nodes() {
         List<GraphNode> found = new ArrayList<>();
-        for (UINode child : content().children()) {
+        for (UIElement child : content().children()) {
             if (child instanceof GraphNode node) found.add(node);
         }
         return found;

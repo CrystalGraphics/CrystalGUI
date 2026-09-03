@@ -1,9 +1,6 @@
 package com.crystalgui.workbench.dock;
 
-import com.crystalgui.widget.layout.TabView;
-import com.crystalgui.workbench.dock.drag.DockDropZones;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
@@ -11,9 +8,7 @@ import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.widget.dnd.InsertionMarker;
 import com.crystalgui.widget.layout.SplitView;
 import com.crystalgui.widget.layout.Tab;
-import com.crystalgui.workbench.dock.DockArea;
 import com.crystalgui.workbench.dock.drag.DockDropZone;
-import com.crystalgui.workbench.dock.DockGroup;
 import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
 import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
@@ -51,10 +46,10 @@ public class DockAreaTest extends UiDocumentTestBase {
     private final DockPanelRef alpha = new DockPanelRef("alpha");
     private final DockPanelRef beta = new DockPanelRef("beta");
 
-    private DockPanelRegistry<UINode> registry() {
-        DockPanelRegistry<UINode> registry = new DockPanelRegistry<>();
+    private DockPanelRegistry<UIElement> registry() {
+        DockPanelRegistry<UIElement> registry = new DockPanelRegistry<>();
         for (String id : new String[]{"alpha", "beta", "gamma", "delta", "console"}) {
-            registry.register(new DockPanelDescriptor(id, id), ref -> new UINode());
+            registry.register(new DockPanelDescriptor(id, id), ref -> new UIElement());
         }
         return registry;
     }
@@ -66,8 +61,8 @@ public class DockAreaTest extends UiDocumentTestBase {
         layout.drop(left, DockDropZone.SPLIT_RIGHT, new DockLeaf(beta));
 
         area = new DockArea(registry(), layout);
-        UINode root = new UINode().layout(l -> l.width(600).height(400)
-                .flexDirection(FlexDirection.COLUMN));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400)
+                                                      .flexDirection(FlexDirection.COLUMN));
         root.append(area);
         area.layout(l -> l.width(600).height(400));
 
@@ -101,7 +96,7 @@ public class DockAreaTest extends UiDocumentTestBase {
      * small number and every drop landed near the origin. The world position already carries the
      * scale, so only the FRACTION of the box takes it.</p>
      */
-    private int[] at(UINode element, float fx, float fy) {
+    private int[] at(UIElement element, float fx, float fy) {
         var box = element.box();
         return new int[]{
                 Math.round(box.worldX() + box.width() * fx * uiScale()),
@@ -110,7 +105,7 @@ public class DockAreaTest extends UiDocumentTestBase {
     }
 
     /** Surface centre of an element. */
-    private int[] centre(UINode element) {
+    private int[] centre(UIElement element) {
         return at(element, 0.5f, 0.5f);
     }
 
@@ -157,7 +152,7 @@ public class DockAreaTest extends UiDocumentTestBase {
     public void aBranchBecomesASplitViewOfGroups() {
         setUpTwoGroups();
 
-        UINode built = area.builtRoot();
+        UIElement built = area.builtRoot();
         assertTrue("a branch of two is a SplitView", built instanceof SplitView);
         SplitView split = (SplitView) built;
         assertEquals(2, split.paneCount());
@@ -175,14 +170,14 @@ public class DockAreaTest extends UiDocumentTestBase {
         layout.drop(top, DockDropZone.SPLIT_DOWN, new DockLeaf(beta));
 
         area = new DockArea(registry(), layout);
-        UINode root = new UINode().layout(l -> l.width(600).height(400));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400));
         root.append(area);
         area.layout(l -> l.width(600).height(400));
         document.append(root);
         frame();
         frame();
 
-        UINode built = area.builtRoot();
+        UIElement built = area.builtRoot();
         assertTrue(built instanceof SplitView);
         assertEquals(SplitView.Orientation.VERTICAL, ((SplitView) built).getOrientation());
     }
@@ -198,14 +193,14 @@ public class DockAreaTest extends UiDocumentTestBase {
     public void panelContentSurvivesARebuild() {
         setUpTwoGroups();
         DockGroup group = area.groupFor(layout.leafContaining(alpha));
-        UINode contentBefore = group.tabFor(alpha).content().children().get(0);
+        UIElement contentBefore = group.tabFor(alpha).content().children().get(0);
 
         area.requestRebuild();
         frame();
         frame();
 
-        UINode contentAfter = area.groupFor(layout.leafContaining(alpha))
-                .tabFor(alpha).content().children().get(0);
+        UIElement contentAfter = area.groupFor(layout.leafContaining(alpha))
+                                     .tabFor(alpha).content().children().get(0);
         assertSame("the very same element, not an equal one", contentBefore, contentAfter);
     }
 
@@ -220,7 +215,7 @@ public class DockAreaTest extends UiDocumentTestBase {
     @Test
     public void aRebuildIsDeferredToTheNextFrame() {
         setUpTwoGroups();
-        UINode before = area.builtRoot();
+        UIElement before = area.builtRoot();
 
         layout.drop(layout.leaves().get(0), DockDropZone.SPLIT_DOWN, new DockLeaf(new DockPanelRef("gamma")));
         area.requestRebuild();
@@ -298,8 +293,8 @@ public class DockAreaTest extends UiDocumentTestBase {
         layout = DockLayout.of(only);
 
         area = new DockArea(registry(), layout);
-        UINode root = new UINode().layout(l -> l.width(600).height(400)
-                .flexDirection(FlexDirection.COLUMN));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400)
+                                                      .flexDirection(FlexDirection.COLUMN));
         root.append(area);
         area.layout(l -> l.width(600).height(400));
         document.append(root);
@@ -445,8 +440,8 @@ public class DockAreaTest extends UiDocumentTestBase {
         layout.drop(pair, DockDropZone.SPLIT_RIGHT, new DockLeaf(gamma));
 
         area = new DockArea(registry(), layout);
-        UINode root = new UINode().layout(l -> l.width(600).height(400)
-                .flexDirection(FlexDirection.COLUMN));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400)
+                                                      .flexDirection(FlexDirection.COLUMN));
         root.append(area);
         area.layout(l -> l.width(600).height(400));
         document.append(root);
@@ -467,9 +462,9 @@ public class DockAreaTest extends UiDocumentTestBase {
         return out;
     }
 
-    private static void collectGroups(UINode element, List<DockGroup> out) {
+    private static void collectGroups(UIElement element, List<DockGroup> out) {
         if (element instanceof DockGroup group) out.add(group);
-        for (UINode child : element.children()) collectGroups(child, out);
+        for (UIElement child : element.children()) collectGroups(child, out);
     }
 
     /**
@@ -488,8 +483,8 @@ public class DockAreaTest extends UiDocumentTestBase {
         layout.drop(centre, DockDropZone.SPLIT_DOWN, new DockLeaf(new DockPanelRef("console")));
 
         area = new DockArea(registry(), layout);
-        UINode root = new UINode().layout(l -> l.width(900).height(600)
-                .flexDirection(FlexDirection.COLUMN));
+        UIElement root = new UIElement().layout(l -> l.width(900).height(600)
+                                                      .flexDirection(FlexDirection.COLUMN));
         root.append(area);
         area.layout(l -> l.width(900).height(600));
         document.append(root);
@@ -519,18 +514,18 @@ public class DockAreaTest extends UiDocumentTestBase {
     }
 
     /** Per group: what its tab list says, versus how many Tab elements are actually under it. */
-    private static void reportStrayTabs(UINode element, StringBuilder out) {
+    private static void reportStrayTabs(UIElement element, StringBuilder out) {
         if (element instanceof DockGroup group) {
             out.append(" | group(").append(group.leaf().panelCount()).append(" panels) list=")
                .append(group.tabView().getTabCount())
                .append(" elements=").append(countTabElements(group));
         }
-        for (UINode child : element.children()) reportStrayTabs(child, out);
+        for (UIElement child : element.children()) reportStrayTabs(child, out);
     }
 
-    private static int countTabElements(UINode element) {
+    private static int countTabElements(UIElement element) {
         int count = element instanceof Tab ? 1 : 0;
-        for (UINode child : element.children()) count += countTabElements(child);
+        for (UIElement child : element.children()) count += countTabElements(child);
         return count;
     }
 
@@ -595,8 +590,8 @@ public class DockAreaTest extends UiDocumentTestBase {
         c.size(3f);
 
         area = new DockArea(registry(), layout);
-        UINode root = new UINode().layout(l -> l.width(600).height(400)
-                .flexDirection(FlexDirection.COLUMN));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400)
+                                                      .flexDirection(FlexDirection.COLUMN));
         root.append(area);
         area.layout(l -> l.width(600).height(400));
         document.append(root);
@@ -720,19 +715,19 @@ public class DockAreaTest extends UiDocumentTestBase {
         }
     }
 
-    private static void collectTabs(UINode element, List<Tab> all, List<Tab> selected) {
+    private static void collectTabs(UIElement element, List<Tab> all, List<Tab> selected) {
         if (element instanceof Tab tab) {
             all.add(tab);
             if (tab.isChecked()) selected.add(tab);
         }
-        for (UINode child : element.children()) collectTabs(child, all, selected);
+        for (UIElement child : element.children()) collectTabs(child, all, selected);
     }
 
     // ── The dragged tab leaves the strip (W9) ───────────────────────────────────────────────────
 
     /** The insertion gap in a group's tab rail, whether or not it is currently showing. */
-    private UINode gapIn(DockGroup group) {
-        for (UINode child : group.tabView().rail().children()) {
+    private UIElement gapIn(DockGroup group) {
+        for (UIElement child : group.tabView().rail().children()) {
             if (child.hasClass(InsertionMarker.MARKER_CLASS)) return child;
         }
         return null;
@@ -745,7 +740,7 @@ public class DockAreaTest extends UiDocumentTestBase {
      * written — the initial value is not a candidate — so a tab that has never been touched reports
      * neither {@code FLEX} nor {@code NONE}. Only "is it hidden" is a question every state can answer.</p>
      */
-    private boolean isHidden(UINode element) {
+    private boolean isHidden(UIElement element) {
         assertNotNull(element);
         return element.getStyle().getComputed(LayoutProperties.DISPLAY) == TaffyDisplay.NONE;
     }
@@ -774,7 +769,7 @@ public class DockAreaTest extends UiDocumentTestBase {
         frame();
 
         assertTrue("out of the strip for the duration", isHidden(tab));
-        UINode gap = gapIn(group);
+        UIElement gap = gapIn(group);
         assertNotNull("the gap is a sibling of the tabs, in the rail", gap);
         assertFalse("and it is open", isHidden(gap));
 

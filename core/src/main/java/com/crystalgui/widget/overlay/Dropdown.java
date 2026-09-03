@@ -9,7 +9,7 @@ import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import lombok.Getter;
 
 import java.util.ArrayList;
@@ -145,7 +145,7 @@ public class Dropdown extends Button {
         // space-between }` in default.css has had nothing to space against until now, so a dropdown
         // and a text field differed only by face colour. `overlay: shape("chevron-down")` in CSS draws
         // it — this constructor only claims the slot.
-        UINode chevron = new UINode();
+        UIElement chevron = new UIElement();
         setPostIcon(chevron);
 
         // Toggle rather than open: pressing the button of an open dropdown should shut it. Light dismiss

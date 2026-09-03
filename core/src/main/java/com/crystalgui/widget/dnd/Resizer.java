@@ -7,7 +7,7 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Resize;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.service.Drag;
 import dev.vfyjxf.taffy.style.TaffyDimension;
@@ -44,7 +44,7 @@ import javax.annotation.Nullable;
  * <p>Position and appearance are left entirely to the sheet via the per-handle classes — no pixel
  * values here, per the usual rule.</p>
  */
-public final class Resizer extends UINode {
+public final class Resizer extends UIElement {
 
     public static final Name NAME = Name.of("resizer");
 
@@ -56,7 +56,7 @@ public final class Resizer extends UINode {
      *
      * <p>{@code dx}/{@code dy} are −1, 0 or +1: the sign says which edge follows the pointer, and a
      * <b>negative</b> one means the opposite edge stays put — so the element has to move as well as
-     * resize. That is the entire reason {@link UINode#applyResizeOrigin} exists.</p>
+     * resize. That is the entire reason {@link UIElement#applyResizeOrigin} exists.</p>
      */
     public enum Handle {
         TOP(0, -1), BOTTOM(0, 1), LEFT(-1, 0), RIGHT(1, 0),
@@ -104,11 +104,11 @@ public final class Resizer extends UINode {
     /**
      * Appends the handle set {@code target} can use, and returns it.
      *
-     * <p>The five leading handles are omitted outright when {@link UINode#canMoveResizeOrigin} is
+     * <p>The five leading handles are omitted outright when {@link UIElement#canMoveResizeOrigin} is
      * false, which leaves bottom, right and the corner — CSS's own default grabber. Everything else is
      * decided per drag from the live {@code resize} value, so a sheet can still narrow the set.</p>
      */
-    public static List<Resizer> install(UINode target, Resize mode) {
+    public static List<Resizer> install(UIElement target, Resize mode) {
         List<Resizer> handles = new ArrayList<>(Handle.values().length);
         boolean leading = target.canMoveResizeOrigin();
         for (Handle handle : Handle.values()) {
@@ -130,7 +130,7 @@ public final class Resizer extends UINode {
 
 
     private final Handle handle;
-    private final @Nullable UINode target;
+    private final @Nullable UIElement target;
 
     /**
      * Box at the moment the drag began.
@@ -153,7 +153,7 @@ public final class Resizer extends UINode {
         this(Handle.BOTTOM_RIGHT, null);
     }
 
-    private Resizer(Handle handle, @Nullable UINode target) {
+    private Resizer(Handle handle, @Nullable UIElement target) {
         super(NAME);
         this.handle = handle;
         this.target = target;
@@ -180,7 +180,7 @@ public final class Resizer extends UINode {
 
     private void beginResize(MouseEvent.Down event) {
         if (target == null) return;
-        UINode node = target;
+        UIElement node = target;
         Box box = node.box();
         if (box == null || node.document() == null) return;
 
@@ -197,7 +197,7 @@ public final class Resizer extends UINode {
 
     private void applyResize(float deltaX, float deltaY) {
         if (target == null) return;
-        UINode node = target;
+        UIElement node = target;
         Resize mode = node.computedStyle().get(StylePropertyRegistry.RESIZE);
         if (mode == null || !handle.appliesTo(mode)) return;
 
@@ -221,7 +221,7 @@ public final class Resizer extends UINode {
         // Then keep the box inside its containing block -- for out-of-flow elements only, which is the
         // same set that has leading handles at all. Moving was already clamped this way and sizing was
         // not, so a panel parked in the bottom-right corner could be resized straight out through it.
-        UINode container = target.canMoveResizeOrigin() ? target.resizeContainingBlock() : null;
+        UIElement container = target.canMoveResizeOrigin() ? target.resizeContainingBlock() : null;
         Box available = container == null ? null : container.box();
         if (available != null) {
             // A trailing edge is bounded by the far side of the container. A leading edge is bounded by
@@ -246,7 +246,7 @@ public final class Resizer extends UINode {
 
         // AND SAY SO. Everything else that writes geometry from code writes at a higher origin than
         // this INLINE one, so a widget that sizes itself would overwrite the drag every frame and the
-        // handle would appear dead on that axis. @see UINode#markUserSized
+        // handle would appear dead on that axis. @see UIElement#markUserSized
         target.markUserSized(handle.dx != 0, handle.dy != 0);
 
         // The origin follows the size that was ACHIEVED, never the pointer. That is what pins the
@@ -269,7 +269,7 @@ public final class Resizer extends UINode {
      * containing block, and {@code auto} is not a bound at all. Both are left to Taffy — the point is
      * not to constrain the box but to <em>predict</em> the size it will settle at.</p>
      */
-    private static float clampToStyleRange(UINode node, float desired, boolean horizontal) {
+    private static float clampToStyleRange(UIElement node, float desired, boolean horizontal) {
         TaffyDimension min = node.computedStyle().get(
                 horizontal ? LayoutProperties.MIN_WIDTH : LayoutProperties.MIN_HEIGHT);
         TaffyDimension max = node.computedStyle().get(
@@ -299,7 +299,7 @@ public final class Resizer extends UINode {
     }
 
     /** Idempotent, because a computed value is re-resolved on every match this node takes part in. */
-    private static void apply(UINode node, Resize mode) {
+    private static void apply(UIElement node, Resize mode) {
         // THE SET, not merely whether there is one. Comparing presence was enough while every
         // resizable node got the same three handles; now that the mode decides which exist, a change
         // from `both` to `horizontal` leaves the count non-zero and would have been skipped -- the
@@ -313,12 +313,12 @@ public final class Resizer extends UINode {
             }
         }
         EnumSet<Handle> have = EnumSet.noneOf(Handle.class);
-        for (UINode child : node.children()) {
+        for (UIElement child : node.children()) {
             if (child instanceof Resizer resizer) have.add(resizer.handle);
         }
         if (want.equals(have)) return;
 
-        for (UINode child : new ArrayList<>(node.children())) {
+        for (UIElement child : new ArrayList<>(node.children())) {
             if (child instanceof Resizer) node.remove(child);
         }
         if (!want.isEmpty()) install(node, mode);

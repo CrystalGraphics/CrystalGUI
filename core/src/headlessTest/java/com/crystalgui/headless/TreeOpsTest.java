@@ -7,8 +7,8 @@ import com.crystalgui.net.protocol.Envelope;
 import com.crystalgui.net.protocol.EnvelopeCodec;
 import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.ui.dom.UINodeRegistry;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Slider;
 import com.crystalgui.widget.text.UIText;
@@ -33,16 +33,16 @@ import static org.junit.Assert.assertTrue;
  */
 public class TreeOpsTest {
 
-    private UINode root;
+    private UIElement root;
     private InMemoryTransport<Object> serverLink;
     private InMemoryTransport<Object> clientLink;
-    private ServerUiSession<UINode, Object> server;
-    private ClientUiSession<UINode, Object> client;
+    private ServerUiSession<UIElement, Object> server;
+    private ClientUiSession<UIElement, Object> client;
 
     @Before
     public void setUp() {
-        UINodeRegistry.bootstrap();
-        root = new UINode();
+        UIElementRegistry.bootstrap();
+        root = new UIElement();
         root.append(new UIText("first"));
         root.append(new Button("Press me"));
 
@@ -124,7 +124,7 @@ public class TreeOpsTest {
         slider.setValue(6f);
         settle();
 
-        UINode mirrored = client.root().children().get(3);
+        UIElement mirrored = client.root().children().get(3);
         assertTrue("the slider must still be the slider", mirrored instanceof Slider);
         assertEquals("and the update must have landed on it", 6f, ((Slider) mirrored).getValue(), 0.001f);
         assertEquals("inserted", ((UIText) client.root().children().get(0)).getText());
@@ -136,15 +136,15 @@ public class TreeOpsTest {
         server.open();
         settle();
 
-        UINode panel = new UINode();
+        UIElement panel = new UIElement();
         panel.append(new UIText("inside"));
-        UINode nested = new UINode();
+        UIElement nested = new UIElement();
         nested.append(new Button("deep"));
         panel.append(nested);
         root.append(panel);
         settle();
 
-        UINode arrived = client.root().children().get(2);
+        UIElement arrived = client.root().children().get(2);
         assertEquals(2, arrived.children().size());
         assertEquals("inside", ((UIText) arrived.children().get(0)).getText());
         assertEquals("deep",
@@ -164,7 +164,7 @@ public class TreeOpsTest {
         settle();
         serverLink.clearSent();
 
-        UINode panel = new UINode();
+        UIElement panel = new UIElement();
         panel.append(new UIText("a"));
         panel.append(new UIText("b"));
         root.append(panel);
@@ -188,7 +188,7 @@ public class TreeOpsTest {
         root.insertAt(0, new UIText("shifts everything"));
         settle();
 
-        UINode mirrored = client.root().children().get(2);
+        UIElement mirrored = client.root().children().get(2);
         assertTrue(mirrored instanceof Button);
         ((Button) mirrored).onPressed.emit();
         settle();

@@ -8,14 +8,13 @@ import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
 import javax.annotation.Nullable;
 import java.util.List;
-import java.util.ArrayList;
+
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Overflow;
-import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 
@@ -26,7 +25,7 @@ import dev.vfyjxf.taffy.style.TaffyDisplay;
  * slots, and Space/Enter activation — a tab is a button that happens to latch.</p>
  *
  * <h3>Selection is a pseudo-class, not a marker class</h3>
- * <p>{@link #isChecked()} is overridden, and {@code UINode.isChecked} is already bound to
+ * <p>{@link #isChecked()} is overridden, and {@code UIElement.isChecked} is already bound to
  * {@code PseudoClasses.CHECKED}, so {@code tab:checked { … }} works with no engine change and no
  * add/remove class bookkeeping. (LDLib2 hand-manages a {@code __tab_selected__} class *and*
  * hard-codes a texture swap in Java that bypasses its stylesheet entirely; its add/remove spellings
@@ -88,7 +87,7 @@ public class Tab extends Button {
     /** The close button. {@code tab::part(close)} in a sheet. */
     public static final String CLOSE_PART = "close";
 
-    private final UINode pane;
+    private final UIElement pane;
     private boolean selected = false;
 
     /** The close button, or null when this tab is not closable. @see #setClosable */
@@ -113,7 +112,7 @@ public class Tab extends Button {
     public Tab(String label) {
         super(NAME, label);
 
-        this.pane = new UINode();
+        this.pane = new UIElement();
         this.pane.addClass(PANE_CLASS);
         // Clips, for the reason SplitView's panes do: a pane is a bounded region, and `overflow:
         // hidden` also feeds Taffy and zeroes the automatic min-size, so an oversized child can't
@@ -154,16 +153,16 @@ public class Tab extends Button {
      * described tab would arrive labelled and empty.</p>
      */
     @Override
-    public List<UINode> describedChildren() {
+    public List<UIElement> describedChildren() {
         return content().children();
     }
 
     @Override
-    public void adoptDescribedChild(UINode child) {
+    public void adoptDescribedChild(UIElement child) {
         content().append(child);
     }
 
-    public UINode content() {
+    public UIElement content() {
         return pane;
     }
 

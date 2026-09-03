@@ -13,7 +13,7 @@ import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -39,8 +39,8 @@ public class WorkspaceChangeNotificationTest {
     private static final CgPath OTHER = CgPath.parse("mymod.proj:other.txt");
 
     private InMemoryFileSystem files;
-    private ServerUiSession<UINode, Object> server;
-    private ClientUiSession<UINode, Object> session;
+    private ServerUiSession<UIElement, Object> server;
+    private ClientUiSession<UIElement, Object> session;
     private WorkspaceClient<Object> client;
     private WorkspaceRpc<Object> rpc;
     private InMemoryTransport<Object> a;
@@ -60,7 +60,7 @@ public class WorkspaceChangeNotificationTest {
         InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
         a = pair[0];
         b = pair[1];
-        server = Sessions.serve(1, new UINode(), a);
+        server = Sessions.serve(1, new UIElement(), a);
         rpc = new WorkspaceRpc<>(service, WorkspaceActor.LOCAL);
         rpc.installOn(server::onCall);
         server.open();
@@ -201,8 +201,8 @@ public class WorkspaceChangeNotificationTest {
                 new WorkspaceService(registry, files, WorkspacePermission.DENY_ALL);
 
         InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
-        ServerUiSession<UINode, Object> s2 =
-                Sessions.serve(2, new UINode(), pair[0]);
+        ServerUiSession<UIElement, Object> s2 =
+                Sessions.serve(2, new UIElement(), pair[0]);
         WorkspaceRpc<Object> rpc2 = new WorkspaceRpc<>(denied, WorkspaceActor.LOCAL);
         rpc2.installOn(s2::onCall);
         s2.open();

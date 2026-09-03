@@ -1,6 +1,6 @@
 package com.crystalgui.widget.config;
 
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.text.UIText;
 
 import com.crystalgui.core.config.ConfigDescriptor;
@@ -30,7 +30,7 @@ import com.crystalgui.widget.config.control.InfoControl;
  * control knows whether it says what it is by being what it is. A colour swatch does; a number does
  * not.</p>
  */
-public class Configurator extends UINode {
+public class Configurator extends UIElement {
 
     public static final Name NAME = Name.of("configurator");
 
@@ -39,7 +39,7 @@ public class Configurator extends UINode {
     public static final String INLINE_CLASS = "__inline__";
 
     private final UIText label;
-    private final UINode inline = new UINode();
+    private final UIElement inline = new UIElement();
     private final ConfigControl control;
 
     /**
@@ -85,7 +85,7 @@ public class Configurator extends UINode {
         return label.parent() == null ? null : label;
     }
 
-    public UINode inline() {
+    public UIElement inline() {
         return inline;
     }
 }

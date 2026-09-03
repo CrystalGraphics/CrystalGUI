@@ -1,10 +1,6 @@
 package com.crystalgui.widget.graph;
 
-import com.crystalgui.app.shadergraph.ShaderGraphEditor;
-import com.crystalgui.render.texture.geometry.Position;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UINodeRegistry;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.graph.EdgeData;
 import com.crystalgui.graph.GraphCodecs;
 import com.crystalgui.graph.GraphDocument;
@@ -17,10 +13,6 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.graph.port.BasicPortType;
-import com.crystalgui.widget.graph.GraphNode;
-import com.crystalgui.widget.graph.GraphView;
-import com.crystalgui.widget.graph.NodePort;
-import com.crystalgui.widget.graph.NodeWidgetFactory;
 import com.crystalgui.graph.port.PortType;
 import org.junit.Before;
 import org.junit.Test;
@@ -50,7 +42,7 @@ public class GraphDocumentViewTest extends UiDocumentTestBase {
         graph = new GraphView();
         graph.layout(l -> l.width(400).height(320));
 
-        UINode root = new UINode().layout(l -> l.width(440).height(360));
+        UIElement root = new UIElement().layout(l -> l.width(440).height(360));
         root.append(graph);
 
         document.append(root);
@@ -284,7 +276,7 @@ public class GraphDocumentViewTest extends UiDocumentTestBase {
      *
      * <p>The reason the document stores ports per node rather than looking them up from the type: a
      * missing plugin must give a grey box that round-trips, not an emptied graph. Deliberately unlike
-     * {@code UINodeRegistry}, which throws on an unknown tag — that is right for a UI description,
+     * {@code UIElementRegistry}, which throws on an unknown tag — that is right for a UI description,
      * where both sides should be running identical code, and wrong for a file someone opened.</p>
      */
     @Test

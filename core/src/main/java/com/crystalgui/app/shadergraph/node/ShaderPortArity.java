@@ -5,7 +5,7 @@ import com.crystalgui.graph.EdgeData;
 import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.graph.NodeData;
 import com.crystalgui.graph.NodeField;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.graph.node.NodeFieldBinder;
 import com.crystalgui.widget.graph.GraphNode;
 import com.crystalgui.widget.graph.GraphView;
@@ -189,7 +189,7 @@ public final class ShaderPortArity {
 
         // The literal is passed as the PRESET rather than left to the document: a widget infers its
         // shape from the value it is handed, so a stored scalar would build two boxes for a vec3.
-        UINode rebuilt = NodeFieldBinder.buildControl(field, view.getDocument(), nodeId,
+        UIElement rebuilt = NodeFieldBinder.buildControl(field, view.getDocument(), nodeId,
                 view.undoStack(), onChange, field.defaultValue());
         if (rebuilt != null) port.setDefaultEditor(rebuilt);
     }

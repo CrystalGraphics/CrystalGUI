@@ -2,7 +2,7 @@ package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.view.IndentLevels;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
@@ -117,7 +117,7 @@ public final class IndentGuidesPart extends EditorViewPart {
                 // Past the right edge there is nothing to guide, and the elements are better spent on
                 // rows that are visible.
                 if (left > editor.textViewportWidth()) break;
-                UINode guide = pool.next();
+                UIElement guide = pool.next();
                 // Pooled, so the class has to be re-decided every frame rather than set once: this
                 // element described a different row and level a moment ago. addClass/removeClass no-op on
                 // an unchanged set, so a frame where nothing moved writes nothing.

@@ -1,9 +1,8 @@
 package com.crystalgui.widget.text;
 
 import com.crystalgui.style.selector.Selector;
-import com.crystalgui.ui.dom.UINodeRegistry;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.ui.dom.UINode;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -12,19 +11,19 @@ public class SelectorTest extends UiDocumentTestBase {
 
     @Test
     public void universalMatchesAnything() {
-        assertTrue(Selector.parse("*").matches(new UINode()));
+        assertTrue(Selector.parse("*").matches(new UIElement()));
     }
 
     @Test
     public void idSelectorMatchesOnlyExactId() {
-        UINode el = new UINode().setId("main");
+        UIElement el = new UIElement().setId("main");
         assertTrue(Selector.parse("#main").matches(el));
         assertFalse(Selector.parse("#other").matches(el));
     }
 
     @Test
     public void classSelectorRequiresAllClassesPresent() {
-        UINode el = new UINode();
+        UIElement el = new UIElement();
         el.addClass("foo").addClass("bar");
 
         assertTrue(Selector.parse(".foo").matches(el));
@@ -33,7 +32,7 @@ public class SelectorTest extends UiDocumentTestBase {
     }
 
     /**
-     * The plain div's type selector is {@code element}, from {@link com.crystalgui.ui.UINodeRegistry}.
+     * The plain div's type selector is {@code element}, from {@link com.crystalgui.ui.UIElementRegistry}.
      *
      * <p>It used to be {@code uielement} — the lowercased Java class name — because {@code tagName()}
      * derived from the class rather than the registry. That leaked an implementation detail into the
@@ -42,7 +41,7 @@ public class SelectorTest extends UiDocumentTestBase {
      */
     @Test
     public void typeSelectorMatchesTheRegisteredTagName() {
-        UINode el = new UINode();
+        UIElement el = new UIElement();
         assertTrue(Selector.parse("element").matches(el));
         assertFalse("the Java class name must no longer be a selectable tag",
                 Selector.parse("uielement").matches(el));
@@ -51,7 +50,7 @@ public class SelectorTest extends UiDocumentTestBase {
 
     @Test
     public void pseudoClassDelegatesToRealElementState() {
-        UINode el = new UINode();
+        UIElement el = new UIElement();
         assertFalse(Selector.parse(":hover").matches(el));
 
         el.setHovered(true);
@@ -68,7 +67,7 @@ public class SelectorTest extends UiDocumentTestBase {
 
     @Test
     public void compoundSelectorRequiresAllPartsToMatch() {
-        UINode el = new UINode().setId("submit");
+        UIElement el = new UIElement().setId("submit");
         el.addClass("primary");
         el.setEnabled(false);
 
@@ -79,10 +78,10 @@ public class SelectorTest extends UiDocumentTestBase {
 
     @Test
     public void descendantCombinatorMatchesAnyAncestorDepth() {
-        UINode root = new UINode();
+        UIElement root = new UIElement();
         root.addClass("panel");
-        UINode mid = new UINode();
-        UINode leaf = new UINode();
+        UIElement mid = new UIElement();
+        UIElement leaf = new UIElement();
         leaf.addClass("button");
 
         root.append(mid);
@@ -93,12 +92,12 @@ public class SelectorTest extends UiDocumentTestBase {
 
     @Test
     public void childCombinatorRequiresImmediateParent() {
-        UINode root = new UINode();
+        UIElement root = new UIElement();
         root.addClass("panel");
-        UINode mid = new UINode();
-        UINode grandchildButton = new UINode();
+        UIElement mid = new UIElement();
+        UIElement grandchildButton = new UIElement();
         grandchildButton.addClass("button");
-        UINode directChildButton = new UINode();
+        UIElement directChildButton = new UIElement();
         directChildButton.addClass("button");
 
         root.append(mid);

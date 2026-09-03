@@ -5,7 +5,7 @@ import com.crystalgui.text.view.RenderWhitespace;
 import com.crystalgui.text.view.WhitespaceMarkers;
 import com.crystalgui.text.wrap.LineProjection;
 import com.crystalgui.text.wrap.ProjectedLines;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.TaffyPosition;
@@ -74,7 +74,7 @@ public final class WhitespacePart extends EditorViewPart {
                 LineProjection.ViewPosition at =
                         projection.toViewPosition(column, LineProjection.Affinity.RIGHT);
                 final float left = pad + editor.xOfView(viewLine, at.column());
-                UINode mark = pool.next();
+                UIElement mark = pool.next();
                 UIText label = (UIText) mark.children().get(0);
                 label.setText(String.valueOf(marker));
                 // The font is pushed only while it is actually settling, not per marker per frame. There

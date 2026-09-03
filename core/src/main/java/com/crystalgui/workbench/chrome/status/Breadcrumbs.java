@@ -4,7 +4,7 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.text.UIText;
 
 import javax.annotation.Nullable;
@@ -26,7 +26,7 @@ import java.util.List;
  * so the first frame draws them collapsed. Reusing slots removes the ordering question rather than trying
  * to out-run it.</p>
  */
-public class Breadcrumbs extends UINode {
+public class Breadcrumbs extends UIElement {
 
     public static final Name NAME = Name.of("breadcrumbs");
 
@@ -61,9 +61,9 @@ public class Breadcrumbs extends UINode {
         }
     }
 
-    private final List<UINode> icons = new ArrayList<>();
+    private final List<UIElement> icons = new ArrayList<>();
     private final List<UIText> segments = new ArrayList<>();
-    private final List<UINode> separators = new ArrayList<>();
+    private final List<UIElement> separators = new ArrayList<>();
     private List<String> trail = new ArrayList<>();
 
     public Breadcrumbs() {
@@ -75,7 +75,7 @@ public class Breadcrumbs extends UINode {
                 // having the codepoint -- the bundled MinecraftRegular.otf has no U+2026 and UIText
                 // carries a whole fallback path because of it. `shape("chevron-right")` is what the
                 // configurator's own arrows already use, and it scales and colours from the sheet.
-                UINode separator = new UINode();
+                UIElement separator = new UIElement();
                 separator.addClass(SEPARATOR_CLASS);
                 separator.setHitTest(false);
                 separators.add(separator);
@@ -84,7 +84,7 @@ public class Breadcrumbs extends UINode {
             // BUILT HERE, never in setTrail. An element created during an update lands after that
             // frame's layout pass -- the trap the palette's key chips and the editor's gutter arrows each
             // shipped once. A slot that is sometimes empty is cheaper than one that is sometimes late.
-            UINode icon = new UINode();
+            UIElement icon = new UIElement();
             icon.addClass(ICON_CLASS);
             icon.setHitTest(false);      // the press belongs to the segment beside it
             icons.add(icon);
@@ -124,7 +124,7 @@ public class Breadcrumbs extends UINode {
 
         for (int i = 0; i < MAX_SEGMENTS; i++) {
             UIText segment = segments.get(i);
-            UINode icon = icons.get(i);
+            UIElement icon = icons.get(i);
             boolean visible = i < shown.size();
             segment.setDisplayed(visible);
             if (!visible) {

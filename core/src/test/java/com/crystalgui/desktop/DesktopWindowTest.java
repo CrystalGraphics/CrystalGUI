@@ -1,15 +1,9 @@
 package com.crystalgui.desktop;
 
-import com.crystalgui.widget.canvas.CanvasOverlayMove;
-import com.crystalgui.widget.overlay.Dialog;
-import com.crystalgui.widget.text.UIText;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.window.WindowFrame;
-import org.junit.Ignore;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -41,14 +35,14 @@ public class DesktopWindowTest extends UiDocumentTestBase {
         Desktop.setAnimationsEnabled(false);
     }
 
-    private UINode root;
+    private UIElement root;
 
     /** Logical 400x300 — {@code init} takes real pixels and the default {@code uiScale} is 2. */
     private void build() {
         // THE SURFACE, not a wrapper. The compositor belongs to the document, so it fills the
         // viewport -- sizing a node inside the document says nothing about how big the desktop is.
         viewport(400f, 300f);
-        root = new UINode().layout(l -> l.width(400).height(300));
+        root = new UIElement().layout(l -> l.width(400).height(300));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
         settle();
@@ -155,7 +149,7 @@ public class DesktopWindowTest extends UiDocumentTestBase {
     public void theWindowLayerRefusesAnythingThatIsNotAWindow() {
         build();
         try {
-            Desktop.of(document).windowLayer().append(new UINode());
+            Desktop.of(document).windowLayer().append(new UIElement());
             fail("the document layer must refuse a non-document");
         } catch (UnsupportedOperationException expected) {
             assertTrue(expected.getMessage().contains("WindowFrame"));
@@ -257,7 +251,7 @@ public class DesktopWindowTest extends UiDocumentTestBase {
         assertTrue("the cascade must have placed both", first.isPlaced() && second.isPlaced());
         float step = captionOf(first);
         assertTrue("a caption has to have been measured for the step to mean anything", step > 0f);
-        UINode area = Desktop.of(document).windowLayer();
+        UIElement area = Desktop.of(document).windowLayer();
         assertEquals((area.box().width() - 120f) / 2f, first.left(), 0.01f);
         assertEquals((area.box().height() - 100f) / 2f, first.top(), 0.01f);
         assertEquals(first.left() + step, second.left(), 0.01f);

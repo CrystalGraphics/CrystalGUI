@@ -4,8 +4,8 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.UIElement;
 import org.joml.Vector2f;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.ui.dom.UIDocument;
 
@@ -36,7 +36,7 @@ import javax.annotation.Nullable;
  * caption. It cost a bug in each direction, because reading "local" as "relative to the source"
  * invited adding the origin back, which is what {@link #snapZoneAt} once did.</p>
  *
- * <p>{@code UINode.toLocal} puts the box's own origin at zero, which is what the name always said and
+ * <p>{@code UIElement.toLocal} puts the box's own origin at zero, which is what the name always said and
  * what nearly every caller wants — a caret index, a slider fraction, a drag delta. The consequence
  * here is that the ARITHMETIC INVERTS: an offset along the caption needs no subtraction, and reaching
  * the work area's space needs the caption's position ADDED. Every site below was re-derived rather
@@ -55,7 +55,7 @@ final class WindowMove {
     private final WindowFrame frame;
 
     /** The drag handle, which is also the drag SOURCE every callback coordinate is converted against. */
-    private final UINode bar;
+    private final UIElement bar;
 
     /** Where the window was when the current drag began. @see #beginMove */
     private float dragStartLeft, dragStartTop;
@@ -115,7 +115,7 @@ final class WindowMove {
             // button on a title bar. The engine's own note on startDrag records the same hazard from
             // the middle-button side.
             if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
-            if (captionPressIsAControl(((UINode) event.getTarget()))) return;
+            if (captionPressIsAControl(((UIElement) event.getTarget()))) return;
             // ON THE BAR, and this guard belongs HERE rather than inside beginMove.
             //
             // A synthesized activation press (Space/Enter on a focused element) carries the cursor's
@@ -169,8 +169,8 @@ final class WindowMove {
      * <p>Walked up to the bar and no further, so the FRAME's own focusability — it is
      * {@code CLICK_NOT_TABBABLE}, deliberately — cannot answer yes for every press in it.</p>
      */
-    private boolean captionPressIsAControl(@Nullable UINode target) {
-        for (UINode walk = target; walk != null && walk != bar; walk = walk.parent()) {
+    private boolean captionPressIsAControl(@Nullable UIElement target) {
+        for (UIElement walk = target; walk != null && walk != bar; walk = walk.parent()) {
             if (walk.focusPolicy().isFocusable()) return true;
         }
         return false;
@@ -292,7 +292,7 @@ final class WindowMove {
      * shipped: the zone a drag reported was displaced by however far along the desktop the window
      * happened to be.</p>
      *
-     * <p>M6.1 moved that origin. {@code Drag} converts with {@code UINode.toLocal}, which puts the
+     * <p>M6.1 moved that origin. {@code Drag} converts with {@code UIElement.toLocal}, which puts the
      * source's own origin at zero — so the pointer is now an offset within the CAPTION, and reaching
      * the work area's space means adding the caption's position rather than subtracting the area's.
      * Keeping the old arithmetic reintroduces the original bug from the other side. A comment that
@@ -409,7 +409,7 @@ final class WindowMove {
      * exactly what the middle case answers.</p>
      */
     private void anchorUnderPointer(float pointerX, float pointerY) {
-        UINode area = frame.workArea();
+        UIElement area = frame.workArea();
         Box areaBox = area == null ? null : area.box();
         Box barBox = bar.box();
         Box self = frame.box();

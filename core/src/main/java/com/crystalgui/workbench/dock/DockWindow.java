@@ -4,7 +4,7 @@ import com.crystalgui.core.window.WindowPolicy;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.ui.service.Focus;
@@ -72,7 +72,7 @@ public class DockWindow extends WindowFrame {
 
     private final DockArea area;
 
-    public DockWindow(DockPanelRegistry<UINode> registry, DockLayout layout, String title) {
+    public DockWindow(DockPanelRegistry<UIElement> registry, DockLayout layout, String title) {
         super(title);
         addClass(DOCK_WINDOW_CLASS);
         // DESTROY, not hide: a torn-out window's content is documents that live in OpenDocuments, and
@@ -125,11 +125,11 @@ public class DockWindow extends WindowFrame {
      * frame is {@code CLICK_NOT_TABBABLE} rather than {@code NONE}.</p>
      */
     @Override
-    protected UINode focusDelegate() {
+    protected UIElement focusDelegate() {
         DockGroup group = area.activeGroup();
         Tab tab = group == null ? null : group.tabView().getSelectedTab();
         UIDocument document = document();
-        UINode inside = tab == null || document == null
+        UIElement inside = tab == null || document == null
                 ? null : document.focus().firstFocusableIn(tab.content());
         return inside != null ? inside : super.focusDelegate();
     }
@@ -164,7 +164,7 @@ public class DockWindow extends WindowFrame {
         if (window == null) return;
         Focus focus = window.focus();
         if (focus.focused() != area) return;
-        UINode wanted = focusDelegate();
+        UIElement wanted = focusDelegate();
         if (wanted != null && wanted != area) focus.requestPointerFocus(wanted);
     }
 

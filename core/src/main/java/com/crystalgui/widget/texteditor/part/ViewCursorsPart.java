@@ -4,7 +4,7 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.Selection;
 import com.crystalgui.text.wrap.LineProjection;
 import com.crystalgui.text.wrap.ProjectedLines;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
@@ -67,7 +67,7 @@ public final class ViewCursorsPart extends EditorViewPart {
         if (wanted == shown) return;
         shown = wanted;
         final float opacity = wanted ? 1f : 0f;
-        for (UINode caret : carets.all()) {
+        for (UIElement caret : carets.all()) {
             StyleGroup.inlinePipeline(caret.getStyle().getGeneralGroup(), g -> g.opacity(opacity));
         }
     }
@@ -77,7 +77,7 @@ public final class ViewCursorsPart extends EditorViewPart {
         blinkClock = 0f;
         if (shown) return;
         shown = true;
-        for (UINode caret : carets.all()) {
+        for (UIElement caret : carets.all()) {
             StyleGroup.inlinePipeline(caret.getStyle().getGeneralGroup(), g -> g.opacity(1f));
         }
     }
@@ -129,7 +129,7 @@ public final class ViewCursorsPart extends EditorViewPart {
         final float caretTop = editor.getCaretStyle() == TextEditor.CaretStyle.UNDERLINE
                 ? top + ink - caretHeight : top;
 
-        UINode caret = carets.next();
+        UIElement caret = carets.next();
         StyleGroup.inlinePipeline(caret.getStyle().getLayoutGroup(),
                 l -> l.positionType(TaffyPosition.ABSOLUTE)
                         .left(left).top(caretTop).width(caretWidth).height(caretHeight));

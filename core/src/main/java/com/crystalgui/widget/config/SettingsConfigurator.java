@@ -7,7 +7,7 @@ import com.crystalgui.core.settings.Settings;
 import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.core.settings.SettingsRegistry;
 import com.crystalgui.core.undo.UndoStack;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
@@ -67,7 +67,7 @@ public final class SettingsConfigurator {
      * @return the row, or null when the setting's kind has no registered control
      */
     @Nullable
-    public static Configurator addRow(ConfiguratorPanel panel, UINode parent,
+    public static Configurator addRow(ConfiguratorPanel panel, UIElement parent,
                                       Settings settings, SettingsLayer layer, Setting<?> setting,
                                       @Nullable UndoStack undo) {
         ConfigDescriptor descriptor = describe(setting);

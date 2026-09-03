@@ -7,7 +7,7 @@ import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.ui.UITransform;
 import com.crystalgui.ui.dom.Attribute;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import dev.vfyjxf.taffy.geometry.FloatRect;
 import dev.vfyjxf.taffy.tree.NodeId;
 import java.util.ArrayList;
@@ -41,7 +41,7 @@ import org.joml.Vector4f;
 public final class Box {
 
     final BoxTree tree;
-    final UINode node;
+    final UIElement node;
     final boolean mirror;
     final TaffyBridge bridge;
     NodeId taffyId;
@@ -74,7 +74,7 @@ public final class Box {
     final Matrix4f localToWorld = new Matrix4f();
     final Matrix4f worldToLocal = new Matrix4f();
 
-    Box(BoxTree tree, UINode node, boolean mirror) {
+    Box(BoxTree tree, UIElement node, boolean mirror) {
         this.tree = tree;
         this.node = node;
         this.mirror = mirror;
@@ -83,7 +83,7 @@ public final class Box {
 
     // ── Identity ─────────────────────────────────────────────────────────────
 
-    public UINode node() {
+    public UIElement node() {
         return node;
     }
 
@@ -277,7 +277,7 @@ public final class Box {
         // ONLY A SCROLL CONTAINER HAS A SCROLL POSITION. `visible` and `clip` do not establish one,
         // so a write to either is a no-op rather than a clamped move -- and the clamp alone does not
         // say so, because a `visible` box whose content overflows has a positive maxScroll and would
-        // scroll perfectly happily. Here rather than in `UINode.scrollTo`, because a thumb drag calls
+        // scroll perfectly happily. Here rather than in `UIElement.scrollTo`, because a thumb drag calls
         // the box directly and would otherwise slip past the check.
         if (!isScrollContainer()) return;
         left = clamp(left, 0f, maxScrollLeft());
@@ -292,7 +292,7 @@ public final class Box {
     /**
      * How wide the content is — laid out, or whatever the node says instead.
      *
-     * <p>{@link UINode#scrollExtent} is what makes a VIRTUALISED view work: a list realises a dozen
+     * <p>{@link UIElement#scrollExtent} is what makes a VIRTUALISED view work: a list realises a dozen
      * rows of ten thousand, so its laid-out content is the dozen and its scroll extent is the model.
      * Asking the node rather than reading the box is the difference between a scrollbar thumb sized
      * for what is on screen and one sized for the document.</p>

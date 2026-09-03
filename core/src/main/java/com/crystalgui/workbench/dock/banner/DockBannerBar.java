@@ -2,7 +2,7 @@ package com.crystalgui.workbench.dock.banner;
 
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.text.UIText;
 
@@ -19,7 +19,7 @@ import com.crystalgui.widget.text.UIText;
  * {@code __error__} and {@code default.css} decides what each looks like, so a theme can restyle all
  * three without touching this.</p>
  */
-public class DockBannerBar extends UINode {
+public class DockBannerBar extends UIElement {
     /** The strip a {@link DockBannerProvider} produces. */
     public static final Name NAME = Name.of("dockbannerbar");
 

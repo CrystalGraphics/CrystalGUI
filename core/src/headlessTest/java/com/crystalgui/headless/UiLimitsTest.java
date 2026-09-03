@@ -14,8 +14,8 @@ import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.dom.UINodeRegistry;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.control.Button;
 import org.junit.After;
 import org.junit.Before;
@@ -34,17 +34,17 @@ public class UiLimitsTest {
     private InMemoryTransport<Object>[] link;
     private ProtocolConnection<Object> serverEnd;
     private ProtocolConnection<Object> clientEnd;
-    private ServerUiSession<UINode, Object> server;
-    private ClientUiSession<UINode, Object> client;
-    private UINode root;
+    private ServerUiSession<UIElement, Object> server;
+    private ClientUiSession<UIElement, Object> client;
+    private UIElement root;
     private Button button;
     private int presses;
 
     @Before
     public void setUp() {
         Protocols.resetForTesting();
-        UINodeRegistry.bootstrap();
-        root = new UINode();
+        UIElementRegistry.bootstrap();
+        root = new UIElement();
         button = new Button("Press");
         root.append(button);
 

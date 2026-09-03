@@ -1,18 +1,15 @@
 package com.crystalgui.workbench.chrome.notification;
 
-import com.crystalgui.workbench.chrome.status.StatusBarView;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.NotificationEvent;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.core.signal.ConnectionGroup;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.scroll.ScrollerView;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.input.FocusPolicy;
-
-import javax.annotation.Nullable;
 
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -46,7 +43,7 @@ import java.util.Map;
  * both simpler and honest about what it is. (VS Code does virtualise its centre, because its history is
  * unbounded.)</p>
  */
-public class NotificationsView extends UINode {
+public class NotificationsView extends UIElement {
 
     public static final Name NAME = Name.of("notificationsview");
 
@@ -78,7 +75,7 @@ public class NotificationsView extends UINode {
     /** Severity, as a class the sheet colours — never a colour written from here. */
     public static final String SEVERITY_PREFIX = "severity-";
 
-    private final UINode head = new UINode();
+    private final UIElement head = new UIElement();
     private final UIText title = new UIText("Timeline");
     private final UIText clearAll = new UIText("Clear all");
     private final ScrollerView list = new ScrollerView();

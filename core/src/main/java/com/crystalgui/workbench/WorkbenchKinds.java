@@ -4,8 +4,8 @@ import com.crystalgui.core.notify.Notification;
 import com.crystalgui.text.diff.ThreeWayMerge;
 import com.crystalgui.ui.dom.NodeContract;
 import com.crystalgui.ui.dom.NodeKinds;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UINodeRegistry;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.workbench.diff.DiffView;
 import com.crystalgui.workbench.diff.MergeView;
 import com.crystalgui.workbench.dock.DockArea;
@@ -19,7 +19,6 @@ import com.crystalgui.workbench.explorer.ProjectFileTree;
 import com.crystalgui.workbench.region.DockRegion;
 import com.crystalgui.workbench.region.RegionDropOverlay;
 import com.crystalgui.workbench.region.RegionHost;
-import com.crystalgui.workbench.stripe.StripeRail;
 import com.crystalgui.workbench.stripe.StripeView;
 import com.crystalgui.workbench.toolwindow.ToolWindowFrame;
 import com.crystalgui.workbench.view.ViewContainer;
@@ -55,18 +54,18 @@ public final class WorkbenchKinds implements NodeKinds {
         // Nothing describes a dock over a wire today, so the arguments a real one needs are passed as
         // null or empty rather than invented. A decoded one is inert, which is what a description of a
         // dock would mean anyway.
-        UINodeRegistry.registerTag(DockArea.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(DockArea.NAME, NodeContract.INERT);
         // A REAL area and leaf, because the constructor syncs its tab strip from the leaf's panels.
         // `null, null` was the obvious spelling and the walk caught it in one run -- which is the
         // difference between a registration that exists and one that works.
-        UINodeRegistry.register(DockGroup.NAME,
+        UIElementRegistry.register(DockGroup.NAME,
                 () -> new DockGroup(emptyArea(), new DockLeaf()), NodeContract.INERT);
-        UINodeRegistry.registerTag(DockWindow.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(DockWindow.NAME, NodeContract.INERT);
         // A banner bar is built from a Notification and never decoded; registered so the tag exists,
         // since `ua/workbench.css` styles it. An EMPTY notification rather than null, because unlike
         // the three above it reads its argument in the constructor -- which the coverage walk found
         // by building every registered kind, and is the whole reason that walk builds them.
-        UINodeRegistry.register(DockBannerBar.NAME,
+        UIElementRegistry.register(DockBannerBar.NAME,
                 () -> new DockBannerBar(Notification.info("")), NodeContract.INERT);
 
         // THE SHELL AND ITS PARTS. Same argument as the dock's above: none of these has a
@@ -79,29 +78,29 @@ public final class WorkbenchKinds implements NodeKinds {
         // Nothing describes a workbench over a wire, so the arguments a live one needs are passed as
         // null or empty rather than invented; a decoded one is inert, which is what a description of
         // a workbench would mean anyway.
-        UINodeRegistry.registerTag(Workbench.NAME, NodeContract.INERT);
-        UINodeRegistry.registerTag(ProjectFileTree.NAME, NodeContract.INERT);
-        UINodeRegistry.register(ViewContainer.NAME,
+        UIElementRegistry.registerTag(Workbench.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(ProjectFileTree.NAME, NodeContract.INERT);
+        UIElementRegistry.register(ViewContainer.NAME,
                 () -> new ViewContainer("", ""), NodeContract.INERT);
-        UINodeRegistry.register(RegionHost.NAME,
+        UIElementRegistry.register(RegionHost.NAME,
                 () -> new RegionHost(DockRegion.SIDEBAR), NodeContract.INERT);
-        UINodeRegistry.registerTag(RegionDropOverlay.NAME, NodeContract.INERT);
-        UINodeRegistry.registerTag(StripeView.NAME, NodeContract.INERT);
-        UINodeRegistry.register(DiffView.NAME,
+        UIElementRegistry.registerTag(RegionDropOverlay.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(StripeView.NAME, NodeContract.INERT);
+        UIElementRegistry.register(DiffView.NAME,
                 () -> new DiffView("", "", "", ""), NodeContract.INERT);
         // A REAL merge, because the constructor reads it. `null` was the obvious spelling and the
         // coverage walk caught it in one run, which is the difference between a registration that
         // exists and one that works -- the same lesson DockGroup's `null, null` taught two stages ago.
-        UINodeRegistry.register(MergeView.NAME,
+        UIElementRegistry.register(MergeView.NAME,
                 () -> new MergeView(ThreeWayMerge.of("", "", "")), NodeContract.INERT);
         // A tool window's frame: built per show and destroyed per hide, never decoded. Registered so
         // the TAG exists -- and it has one of its own rather than answering `window`, because a Name
         // is bound to a factory. `WindowFrame.WINDOW_CLASS` is what carries a window's look to it.
-        UINodeRegistry.registerTag(ToolWindowFrame.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(ToolWindowFrame.NAME, NodeContract.INERT);
     }
 
     /** One empty dock, for the registrations above. */
     private static DockArea emptyArea() {
-        return new DockArea(new DockPanelRegistry<UINode>(), DockLayout.of(new DockLeaf()));
+        return new DockArea(new DockPanelRegistry<UIElement>(), DockLayout.of(new DockLeaf()));
     }
 }

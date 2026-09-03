@@ -5,18 +5,15 @@ import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.core.data.ReadOnlyVec2f;
-import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.service.AnchoredPlacement;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.ShadowRoot;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.service.Animation;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
-import org.joml.Vector2f;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -25,7 +22,7 @@ import java.util.Objects;
 import com.crystalgui.ui.service.Drag;
 
 /**
- * A tooltip — an element promoted into the {@linkplain UINode#document().isPromoted(this) top layer} and kept
+ * A tooltip — an element promoted into the {@linkplain UIElement#document().isPromoted(this) top layer} and kept
  * anchored to another element.
  *
  * <h3>Why this needs the top layer at all</h3>
@@ -51,7 +48,7 @@ import com.crystalgui.ui.service.Drag;
  * cascade decide the spacing, per this codebase's rule that widgets write structure, stylesheets
  * write geometry.</p>
  */
-public class Tooltip extends UINode {
+public class Tooltip extends UIElement {
 
     public static final Name NAME = Name.of("tooltip");
 
@@ -127,12 +124,12 @@ public class Tooltip extends UINode {
     private Region activeRegion;
 
     @Nullable
-    private UINode anchor;
+    private UIElement anchor;
     private boolean placementTickerRunning;
 
     /** The anchor a wait is running for, or null when none is. @see #showAfterDelay */
     @Nullable
-    private UINode pendingAnchor;
+    private UIElement pendingAnchor;
 
     /** Seconds left on that wait. Only meaningful while {@link #pendingAnchor} is set. */
     private float pendingDelay;
@@ -211,9 +208,9 @@ public class Tooltip extends UINode {
     /**
      * Attaches a hover tooltip to {@code anchor} and returns it.
      *
-     * <p>This lives here rather than as {@code UINode.setTooltip} on purpose. {@link UINode} is
+     * <p>This lives here rather than as {@code UIElement.setTooltip} on purpose. {@link UIElement} is
      * the core DOM node that every widget is built on; a tooltip is a widget. Putting the wiring on
-     * {@code UINode} inverted that — core would import {@code ui.elements} — and it grew the class
+     * {@code UIElement} inverted that — core would import {@code ui.elements} — and it grew the class
      * every element in the tree pays for by a field and three methods, for a feature most elements
      * never use. Here, the cost is borne only by trees that actually have a tooltip.</p>
      *
@@ -235,11 +232,11 @@ public class Tooltip extends UINode {
      * walking an anchor's children can no longer answer "does this have a tooltip". This can.</p>
      */
     @Nullable
-    public UINode anchor() {
+    public UIElement anchor() {
         return anchor;
     }
 
-    public static Tooltip attach(UINode anchor, String text) {
+    public static Tooltip attach(UIElement anchor, String text) {
         Objects.requireNonNull(anchor, "anchor");
         Tooltip tooltip = new Tooltip(text);
         // NOT A CHILD OF THE ANCHOR, which is what the old engine did and what this engine cannot.
@@ -258,7 +255,7 @@ public class Tooltip extends UINode {
         tooltip.joinDocumentOf(anchor);
 
         // Listeners are attached exactly once, here, against a tooltip that is created in the same
-        // breath. The earlier UINode.setTooltip could be called repeatedly — and a
+        // breath. The earlier UIElement.setTooltip could be called repeatedly — and a
         // set(text)/set(null)/set(text) cycle silently attached a second pair every time.
         anchor.onMouseEnter.attachListener((el, event) -> tooltip.showAfterDelay(anchor), false, false);
         anchor.onMouseLeave.attachListener((el, event) -> tooltip.hide(), false, false);
@@ -270,7 +267,7 @@ public class Tooltip extends UINode {
      * instance, which no longer has anywhere to show. */
     public void detach() {
         hide();
-        UINode parent = parent();
+        UIElement parent = parent();
         if (parent != null) parent.remove(this);
     }
 
@@ -327,7 +324,7 @@ public class Tooltip extends UINode {
      * placement itself is: a region can be reflowed out from under a stationary pointer, and a listener
      * would only notice the next time the mouse moved.</p>
      */
-    public Tooltip addRegion(UINode region, @Nullable String text) {
+    public Tooltip addRegion(UIElement region, @Nullable String text) {
         Objects.requireNonNull(region, "region");
         // REPLACED, NEVER STACKED, and empty REMOVES.
         //
@@ -370,7 +367,7 @@ public class Tooltip extends UINode {
      * a person wants is the most specific thing they are pointing at, which is the same rule hit-testing
      * and {@code :hover} already follow. Order of registration is not that.</p>
      *
-     * <p>Geometry only: {@link UINode#containsScreenPoint} is a rounded-box containment test and does
+     * <p>Geometry only: {@link UIElement#containsScreenPoint} is a rounded-box containment test and does
      * not consult {@code hitTest}, which is precisely why an unhittable part can still have a region.</p>
      */
     private void resolveRegion() {
@@ -382,7 +379,7 @@ public class Tooltip extends UINode {
         Region deepest = null;
         int deepestDepth = -1;
         for (Region region : regions) {
-            UINode element = region.element;
+            UIElement element = region.element;
             // A region whose element has left the tree cannot contain anything -- and asking would read a
             // stale transform rather than answering false.
             if (element.document() != window) continue;
@@ -401,10 +398,10 @@ public class Tooltip extends UINode {
 
     /** A sub-area of the anchor with wording of its own. @see #addRegion */
     private static final class Region {
-        private final UINode element;
+        private final UIElement element;
         private final String text;
 
-        private Region(UINode element, String text) {
+        private Region(UIElement element, String text) {
             this.element = element;
             this.text = text;
         }
@@ -413,7 +410,7 @@ public class Tooltip extends UINode {
     /** A tooltip owns its label; it has no public content slot. */
 
     @Nullable
-    public UINode getAnchor() {
+    public UIElement getAnchor() {
         return anchor;
     }
 
@@ -423,7 +420,7 @@ public class Tooltip extends UINode {
      * Promotes this tooltip and anchors it to {@code anchor}. Idempotent — calling it again while
      * already shown just re-anchors and raises.
      */
-    public Tooltip showFor(UINode anchor) {
+    public Tooltip showFor(UIElement anchor) {
         if (anchor == null || anchor.document() == null) return this;
         if (dragIsLive(anchor)) return hide();
         joinDocumentOf(anchor);
@@ -473,7 +470,7 @@ public class Tooltip extends UINode {
      * <p>A delay of zero — the property's initial value, so anything the user-agent sheet does not reach
      * — shows immediately, which is exactly what every caller got before this existed.</p>
      */
-    public Tooltip showAfterDelay(UINode anchor) {
+    public Tooltip showAfterDelay(UIElement anchor) {
         if (anchor == null || anchor.document() == null) return this;
         if (dragIsLive(anchor)) return hide();
 
@@ -531,7 +528,7 @@ public class Tooltip extends UINode {
         host.calculateStyle(0f);
     }
 
-    private void joinDocumentOf(UINode anchor) {
+    private void joinDocumentOf(UIElement anchor) {
         if (parent() != null) return;
         UIDocument host = anchor.document();
         if (host != null) host.append(this);
@@ -575,7 +572,7 @@ public class Tooltip extends UINode {
      * {@link #tickPlacement} — a drag can begin while one is already up, which neither entry point
      * would ever be called again for.</p>
      */
-    private static boolean dragIsLive(UINode anchor) {
+    private static boolean dragIsLive(UIElement anchor) {
         if (anchor == null) return false;
         UIDocument window = anchor.document();
         return window != null && window.input().mode(Drag.class) != null;
@@ -635,7 +632,7 @@ public class Tooltip extends UINode {
         // Re-read every frame rather than latched at show time, for the same reason the placement is:
         // the pointer moves from label to icon without ever leaving the anchor, and the ticker calls
         // resolveRegion() immediately before this.
-        UINode against = activeRegion == null ? anchor : activeRegion.element;
+        UIElement against = activeRegion == null ? anchor : activeRegion.element;
         AnchoredPlacement.place(this, against, side, gap);
     }
 
@@ -649,7 +646,7 @@ public class Tooltip extends UINode {
      */
     private boolean tickDelay(float deltaSeconds) {
         {
-            UINode target = pendingAnchor;
+            UIElement target = pendingAnchor;
             // Same rule as the placement ticker: an anchor that has gone sends no leave, and a wait
             // that fired against one would put a tip over whatever took its place.
             if (target == null || !target.isConnected()) {

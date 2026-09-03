@@ -1,7 +1,7 @@
 package com.crystalgui.widget.layout;
 
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -33,7 +33,7 @@ import javax.annotation.Nullable;
  *
  * @param <K> whatever names a page. A path, an id, an enum constant
  */
-public class PageStack<K> extends UINode {
+public class PageStack<K> extends UIElement {
 
     public static final Name NAME = Name.of("pagestack");
 
@@ -42,12 +42,12 @@ public class PageStack<K> extends UINode {
     /** Shown when a key has no page — see {@link #setPlaceholder}. */
     public static final String PLACEHOLDER_CLASS = "__page-placeholder__";
 
-    private final Map<K, UINode> pages = new LinkedHashMap<>();
+    private final Map<K, UIElement> pages = new LinkedHashMap<>();
 
-    private Function<K, UINode> factory = key -> null;
+    private Function<K, UIElement> factory = key -> null;
 
     @Nullable
-    private UINode placeholder;
+    private UIElement placeholder;
 
     @Nullable
     private K current;
@@ -63,13 +63,13 @@ public class PageStack<K> extends UINode {
      * declared directly on it, for instance. The placeholder is shown instead, so the node is still worth
      * clicking rather than a dead end.</p>
      */
-    public PageStack<K> setPageFactory(Function<K, UINode> factory) {
+    public PageStack<K> setPageFactory(Function<K, UIElement> factory) {
         this.factory = factory == null ? key -> null : factory;
         return this;
     }
 
     /** What to show for a key with no page. Replaces any previous placeholder. */
-    public PageStack<K> setPlaceholder(@Nullable UINode replacement) {
+    public PageStack<K> setPlaceholder(@Nullable UIElement replacement) {
         if (placeholder != null) remove(placeholder);
         placeholder = replacement;
         if (placeholder != null) {
@@ -86,14 +86,14 @@ public class PageStack<K> extends UINode {
      * @return the page now shown, or null when the key has none
      */
     @Nullable
-    public UINode show(@Nullable K key) {
+    public UIElement show(@Nullable K key) {
         current = key;
-        UINode shown = key == null ? null : pageFor(key);
+        UIElement shown = key == null ? null : pageFor(key);
 
-        for (Map.Entry<K, UINode> entry : pages.entrySet()) {
+        for (Map.Entry<K, UIElement> entry : pages.entrySet()) {
             // NULL IS A CACHED ANSWER, not a missing one -- a key whose factory said "no page of my own"
             // is remembered so it is not asked again, and there is nothing to show or hide for it.
-            UINode page = entry.getValue();
+            UIElement page = entry.getValue();
             if (page != null) page.setDisplayed(page == shown);
         }
         if (placeholder != null) placeholder.setDisplayed(shown == null && key != null);
@@ -101,9 +101,9 @@ public class PageStack<K> extends UINode {
     }
 
     @Nullable
-    private UINode pageFor(K key) {
+    private UIElement pageFor(K key) {
         if (pages.containsKey(key)) return pages.get(key);
-        UINode built = factory.apply(key);
+        UIElement built = factory.apply(key);
         if (built != null) {
             built.addClass(PAGE_CLASS);
             // ADDED BEFORE it is shown, so the first layout pass that runs after this sees it -- an
@@ -124,13 +124,13 @@ public class PageStack<K> extends UINode {
 
     /** The page for a key if one has been built, without building one. */
     @Nullable
-    public UINode built(K key) {
+    public UIElement built(K key) {
         return pages.get(key);
     }
 
     public List<K> builtKeys() {
         List<K> keys = new ArrayList<>();
-        for (Map.Entry<K, UINode> entry : pages.entrySet()) {
+        for (Map.Entry<K, UIElement> entry : pages.entrySet()) {
             if (entry.getValue() != null) keys.add(entry.getKey());
         }
         return keys;
@@ -138,7 +138,7 @@ public class PageStack<K> extends UINode {
 
     /** Drops every built page — for a stack whose subject changed entirely. */
     public void clearPages() {
-        for (UINode page : pages.values()) {
+        for (UIElement page : pages.values()) {
             if (page != null) remove(page);
         }
         pages.clear();

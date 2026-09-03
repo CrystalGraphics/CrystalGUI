@@ -4,8 +4,7 @@ import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -32,14 +31,14 @@ public class ListenerNullValueTest extends UiDocumentTestBase {
 
     private static final String CLIPPED = "clipme";
 
-    private UINode element;
+    private UIElement element;
 
     @Before
     public void setUp() {
-        UINode root = new UINode().layout(l -> l.width(400).height(300));
+        UIElement root = new UIElement().layout(l -> l.width(400).height(300));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.parse("." + CLIPPED + " { overflow: clip; }"));
-        element = new UINode();
+        element = new UIElement();
         root.append(element);
         settle();
     }

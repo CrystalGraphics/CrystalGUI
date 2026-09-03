@@ -9,7 +9,7 @@ import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.config.ConfigControlContracts;
 import com.crystalgui.widget.config.ValueControl;
 import com.crystalgui.widget.control.Button;
@@ -99,7 +99,7 @@ public class MaskControl extends ValueControl<Set<String>> {
         addClass("__mask__");
         toggle = new Button("");
         toggle.addClass(TOGGLE_CLASS);
-        UINode chevron = new UINode();
+        UIElement chevron = new UIElement();
         chevron.addClass(CHEVRON_CLASS);
         toggle.setPostIcon(chevron);
         toggle.attachListener(() -> {

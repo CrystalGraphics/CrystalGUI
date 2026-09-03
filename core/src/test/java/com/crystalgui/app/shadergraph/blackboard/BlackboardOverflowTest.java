@@ -5,8 +5,7 @@ import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.graph.GraphProperty;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.text.UIText;
 import org.junit.Test;
 
@@ -49,7 +48,7 @@ public class BlackboardOverflowTest extends UiDocumentTestBase {
     private void mount(int panelWidth) {
         graphDocument = new GraphDocument();
         board = new BlackboardPanel(graphDocument, "test", new UndoStack());
-        UINode root = new UINode().layout(l -> l.width(600).height(400));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400));
         root.append(board);
         document.append(root);
         // Without the user-agent sheet nothing here has geometry, and every assertion below would pass or
@@ -69,14 +68,14 @@ public class BlackboardOverflowTest extends UiDocumentTestBase {
         settle();
     }
 
-    private UINode body() {
+    private UIElement body() {
         return descendantWith(board, BlackboardPanel.BODY_CLASS);
     }
 
-    private static UINode descendantWith(UINode in, String cssClass) {
-        for (UINode child : in.children()) {
+    private static UIElement descendantWith(UIElement in, String cssClass) {
+        for (UIElement child : in.children()) {
             if (child.hasClass(cssClass)) return child;
-            UINode deeper = descendantWith(child, cssClass);
+            UIElement deeper = descendantWith(child, cssClass);
             if (deeper != null) return deeper;
         }
         return null;
@@ -95,7 +94,7 @@ public class BlackboardOverflowTest extends UiDocumentTestBase {
         mount(NARROW);
         declare("bebeeeeeeeeeeeeeeeeee");
 
-        UINode body = body();
+        UIElement body = body();
         assertTrue("nothing overflowed, so this asserts nothing; scrollWidth=" + body.box().scrollWidth()
                         + " client=" + body.box().clientWidth(),
                 body.box().scrollWidth() > body.box().clientWidth());
@@ -124,7 +123,7 @@ public class BlackboardOverflowTest extends UiDocumentTestBase {
         declare("bebeeeeeeeeeeeeeeeeee");
 
         PropertyPill pill = board.pills().get(0);
-        UINode type = descendantWith(pill, PropertyPill.TYPE_CLASS);
+        UIElement type = descendantWith(pill, PropertyPill.TYPE_CLASS);
         assertNotNull("no type column on the row", type);
 
         float typeRight = type.box().x() + type.box().width();
@@ -161,7 +160,7 @@ public class BlackboardOverflowTest extends UiDocumentTestBase {
         declare("Uv");
 
         PropertyPill pill = board.pills().get(0);
-        UINode type = descendantWith(pill, PropertyPill.TYPE_CLASS);
+        UIElement type = descendantWith(pill, PropertyPill.TYPE_CLASS);
         float typeRight = type.box().x() + type.box().width();
         float rowRight = pill.box().x() + pill.box().width();
         // Inside the row's own right padding (6px), and nowhere near the capsule it follows.

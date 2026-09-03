@@ -1,19 +1,16 @@
 package com.crystalgui.desktop.taskbar;
 
 import com.crystalgui.desktop.window.WindowFrame;
-import com.crystalgui.widget.text.UIText;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.service.AnchoredPlacement;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.ui.service.Input;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -62,7 +59,7 @@ public class PreviewPicturelessTest extends UiDocumentTestBase {
     @Before
     public void build() {
         Desktop.setAnimationsEnabled(true);
-        UINode root = new UINode().layout(l -> l.width(600).height(400));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
         input = document.input();
@@ -124,7 +121,7 @@ public class PreviewPicturelessTest extends UiDocumentTestBase {
     }
 
     private WindowPreview panel() {
-        for (UINode child : desktop.taskbar().children()) {
+        for (UIElement child : desktop.taskbar().children()) {
             if (child instanceof WindowPreview p) return p;
         }
         throw new AssertionError("the taskbar has no preview panel");
@@ -166,14 +163,14 @@ public class PreviewPicturelessTest extends UiDocumentTestBase {
         var thumb = p.thumbnailBox();
         assertTrue("the placeholder card has a size", thumb.width() > 0f && thumb.height() > 0f);
         assertTrue("the card is landscape", thumb.width() > thumb.height());
-        UINode header = deepOrNull(p, ".__preview-header__");
+        UIElement header = deepOrNull(p, ".__preview-header__");
         assertNotNull(header);
         assertEquals("the header is matched to the card", thumb.width(), header.box().width(), 0.5f);
         assertTrue("centred over its entry", offCentreBy(hidden) < 3f);
 
         // THE CLOSE SHOWS ONLY WITH THE POINTER ON THE PANEL, so it has to be hovered before it can be
         // measured at all -- asserted on a hidden button, the check below is vacuously true.
-        UINode close = deepOrNull(p, ".__preview-close__");
+        UIElement close = deepOrNull(p, ".__preview-close__");
         assertNotNull(close);
         // ...and a hidden node has NO box here, which is the same answer the comment above describes.
         assertEquals("the close is hidden while only the entry is hovered", 0f, widthOf(close), 0.01f);

@@ -2,6 +2,7 @@ package com.crystalgui.widget.graph.node;
 
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.signal.Signal;
@@ -10,7 +11,6 @@ import com.crystalgui.graph.NodeType;
 import com.crystalgui.graph.NodeTypeRegistry;
 import com.crystalgui.graph.TypeCompatibility;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.overlay.Popover;
 import com.crystalgui.widget.control.TextField;
@@ -31,8 +31,6 @@ import dev.vfyjxf.taffy.style.TaffyDisplay;
 import lombok.Getter;
 
 import javax.annotation.Nullable;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * The create-node menu: a search box over a node library, optionally filtered by a wire you are holding.
@@ -121,7 +119,7 @@ public class NodeCreationMenu extends Popover {
     public static final int DEFAULT_AUTO_EXPAND_THRESHOLD = 12;
 
     private final NodeTypeRegistry library;
-    private final UINode titleBar = new UINode();
+    private final UIElement titleBar = new UIElement();
     private final UIText titleLabel = new UIText("Create Node");
     private final SearchField search = new SearchField();
     private final TreeView<NodeMenuTree.Node> tree;
@@ -247,7 +245,7 @@ public class NodeCreationMenu extends Popover {
     }
 
     /** The draggable header, for a theme or a test. */
-    public UINode titleBar() {
+    public UIElement titleBar() {
         return titleBar;
     }
 
@@ -260,14 +258,14 @@ public class NodeCreationMenu extends Popover {
     // ── Opening ─────────────────────────────────────────────────────────────
 
     /** Everything in the library — Space, or a right-click on empty canvas. */
-    public NodeCreationMenu openAll(float rootX, float rootY, @Nullable UINode invoker) {
+    public NodeCreationMenu openAll(float rootX, float rootY, @Nullable UIElement invoker) {
         this.filterTypeId = null;
         return open(rootX, rootY, invoker);
     }
 
     /** Filtered to what could <b>receive</b> a wire dragged from an output of {@code sourceTypeId}. */
     public NodeCreationMenu openForOutput(String sourceTypeId, TypeCompatibility rule,
-                                          float rootX, float rootY, @Nullable UINode invoker) {
+                                          float rootX, float rootY, @Nullable UIElement invoker) {
         this.filterTypeId = sourceTypeId;
         this.filterFromOutput = true;
         this.compatibility = rule;
@@ -276,14 +274,14 @@ public class NodeCreationMenu extends Popover {
 
     /** Filtered to what could <b>feed</b> a wire dragged from an input of {@code targetTypeId}. */
     public NodeCreationMenu openForInput(String targetTypeId, TypeCompatibility rule,
-                                         float rootX, float rootY, @Nullable UINode invoker) {
+                                         float rootX, float rootY, @Nullable UIElement invoker) {
         this.filterTypeId = targetTypeId;
         this.filterFromOutput = false;
         this.compatibility = rule;
         return open(rootX, rootY, invoker);
     }
 
-    private NodeCreationMenu open(float rootX, float rootY, @Nullable UINode invoker) {
+    private NodeCreationMenu open(float rootX, float rootY, @Nullable UIElement invoker) {
         search.setText("");
         tree.collapseAll();
         // Back to the top. The menu is a Popover, so it is the SAME element every time — hiding it does
@@ -450,7 +448,7 @@ public class NodeCreationMenu extends Popover {
     private final class EntryRenderer implements TreeRenderer<NodeMenuTree.Node> {
 
         @Override
-        public UINode createTemplate() {
+        public UIElement createTemplate() {
             EntryRow row = new EntryRow();
             // Listeners belong in the template, never in bind — an element is recycled across rows, so a
             // listener attached per bind would accumulate one per row it ever displayed. It therefore
@@ -475,7 +473,7 @@ public class NodeCreationMenu extends Popover {
         }
 
         @Override
-        public void bind(NodeMenuTree.Node item, TreeRow<NodeMenuTree.Node> row, int index, UINode template) {
+        public void bind(NodeMenuTree.Node item, TreeRow<NodeMenuTree.Node> row, int index, UIElement template) {
             EntryRow entry = (EntryRow) template;
             template.removeClass(CATEGORY_CLASS);
             if (item.isCategory()) template.addClass(CATEGORY_CLASS);
@@ -534,17 +532,17 @@ public class NodeCreationMenu extends Popover {
     /** A typed template, so {@link EntryRenderer#bind} reaches its parts by name. Indexing into
      * {@code getChildren()} would work today and break silently the first time a theme or a later feature
      * inserted anything. */
-    private static final class EntryRow extends UINode {
+    private static final class EntryRow extends UIElement {
 
         /** Deepest category this can draw. Three covers every shipped path ({@code procedural/shape/…});
          * anything deeper collapses into the last segment rather than being dropped. */
         static final int MAX_CATEGORY_SEGMENTS = 3;
 
-        private final UINode twisty = new UINode();
+        private final UIElement twisty = new UIElement();
         private final UIText label = new UIText("");
-        private final UINode category = new UINode();
+        private final UIElement category = new UIElement();
         private final UIText[] categorySegments = new UIText[MAX_CATEGORY_SEGMENTS];
-        private final UINode[] categorySeparators = new UINode[MAX_CATEGORY_SEGMENTS - 1];
+        private final UIElement[] categorySeparators = new UIElement[MAX_CATEGORY_SEGMENTS - 1];
 
         EntryRow() {
             addClass(ENTRY_CLASS);
@@ -560,7 +558,7 @@ public class NodeCreationMenu extends Popover {
             category.setHitTest(false);
             for (int i = 0; i < MAX_CATEGORY_SEGMENTS; i++) {
                 if (i > 0) {
-                    UINode separator = new UINode();
+                    UIElement separator = new UIElement();
                     separator.addClass(CATEGORY_SEPARATOR_CLASS);
                     separator.setHitTest(false);
                     categorySeparators[i - 1] = separator;
@@ -596,7 +594,7 @@ public class NodeCreationMenu extends Popover {
             show(category, shown > 0);
         }
 
-        private static void show(UINode element, boolean visible) {
+        private static void show(UIElement element, boolean visible) {
             StyleGroup.inlinePipeline(element.getStyle().getLayoutGroup(),
                     l -> l.display(visible ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
         }
@@ -648,10 +646,10 @@ public class NodeCreationMenu extends Popover {
 
     /** The realised row elements, top to bottom. A window over {@link #visibleEntries()}, and only
      * meaningful once the menu has been laid out. */
-    public List<UINode> entries() {
-        List<UINode> rows = new ArrayList<>();
+    public List<UIElement> entries() {
+        List<UIElement> rows = new ArrayList<>();
         for (int index = 0; index < tree.getModel().size(); index++) {
-            UINode row = tree.realisedRows().get(index);
+            UIElement row = tree.realisedRows().get(index);
             if (row != null) rows.add(row);
         }
         return rows;

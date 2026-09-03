@@ -10,8 +10,8 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.AnchoredPlacement;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.service.Drag;
@@ -32,7 +32,6 @@ import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
 import com.crystalgui.workbench.dock.panel.DockPanelRegistry;
 import com.crystalgui.workbench.region.DockRegion;
 import com.crystalgui.workbench.region.RegionSide;
-import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.service.Input;
@@ -88,7 +87,7 @@ import java.util.Map;
  * <p>Overflow into a {@code …} menu, reordering within a group, right-click hide, and {@code Alt+1..9}. All
  * are real parts of both originals and none changes the shape above.</p>
  */
-public class StripeView extends UINode {
+public class StripeView extends UIElement {
     /** One rail of tool-window buttons. */
     public static final Name NAME = Name.of("stripeview");
 
@@ -183,10 +182,10 @@ public class StripeView extends UINode {
     private final Map<String, ItemButton> buttons = new LinkedHashMap<>();
 
     /** The stretch that pushes the bottom group to the foot of the rail. @see #SPACER_CLASS */
-    private final UINode spacer = new UINode();
+    private final UIElement spacer = new UIElement();
 
     /** The rule between the anchor's two halves. @see #SEPARATOR_CLASS */
-    private final UINode separator = new UINode();
+    private final UIElement separator = new UIElement();
 
     /** The gap a drag opens where the button would land. @see InsertionMarker */
     private final InsertionMarker insertion =
@@ -317,7 +316,7 @@ public class StripeView extends UINode {
         UIDocument window = document();
         if (window == null) return;
         ReadOnlyVec2f pointer = window.input().pointer();
-        UINode space = window.focus().scopeOf(this);
+        UIElement space = window.focus().scopeOf(this);
         if (space == null) space = window;
         Vector2f local = space.toLocal(pointer.x(), pointer.y());
         workbench.toolWindowManager().floatPanel(typeId, local.x(), local.y());
@@ -368,7 +367,7 @@ public class StripeView extends UINode {
      * first, which is the failure mode of every "replace a poll with an event" change; it is the one this
      * landing actually hit, and it is why the order here is written down.</p>
      */
-    public void listenToPanels(DockPanelRegistry<UINode> registry, CommandRegistry commands) {
+    public void listenToPanels(DockPanelRegistry<UIElement> registry, CommandRegistry commands) {
         this.commands = commands;
         // HERE, not in the constructor. The rail is a FIELD INITIALISER on Workbench, so it is built
         // before the constructor body assigns the tool-window manager -- reaching for it there is a
@@ -522,7 +521,7 @@ public class StripeView extends UINode {
      * wrong — see {@link #requestSync()} for why this must never run inside the gesture that caused it.</p>
      */
     private void reorder() {
-        List<UINode> wanted = new ArrayList<>(buttons.size() + 1);
+        List<UIElement> wanted = new ArrayList<>(buttons.size() + 1);
         // THE TOP GROUP IS TWO SLOTS, contiguous and in that order -- an anchor's two halves share one
         // stripe. Ordering the whole group by `order` instead interleaves them, so the halves stop being
         // runs and there is nowhere for a separator to go.
@@ -538,7 +537,7 @@ public class StripeView extends UINode {
 
         int previous = -1;
         boolean correct = true;
-        for (UINode element : wanted) {
+        for (UIElement element : wanted) {
             int index = element.parent() == null ? -1 : element.parent().indexOf(element);
             if (index < 0 || index <= previous) {
                 correct = false;
@@ -550,7 +549,7 @@ public class StripeView extends UINode {
         // would sit wherever it was appended. Taken out first, put back only if `wanted` names it.
         if (!wanted.contains(separator)) remove(separator);
         if (correct) return;
-        for (UINode element : wanted) {
+        for (UIElement element : wanted) {
             remove(element);
             append(element);
         }
@@ -568,7 +567,7 @@ public class StripeView extends UINode {
      * has to start somewhere real, and "press the Problems button" is not expressible without it.</p>
      */
     @Nullable
-    public UINode buttonFor(String typeId) {
+    public UIElement buttonFor(String typeId) {
         return buttons.get(typeId);
     }
 
@@ -799,7 +798,7 @@ public class StripeView extends UINode {
      *
      * <h3>Derived, never stored</h3>
      *
-     * <p>{@code UINode.isChecked()} is bound to the {@code :checked} pseudo-class, so overriding it is
+     * <p>{@code UIElement.isChecked()} is bound to the {@code :checked} pseudo-class, so overriding it is
      * the whole implementation — the same one line that makes {@code tab:checked} work. Deriving rather
      * than storing matters here more than usual: a panel can close for reasons the rail never sees (its own
      * header's ✕, a session restore, a container moved to the other rail), and a stored flag would be wrong
@@ -938,7 +937,7 @@ public class StripeView extends UINode {
         private boolean isPanelFocused() {
             UIDocument window = document();
             if (window == null) return false;
-            for (UINode e = window.focus().focused(); e != null; e = e.parent()) {
+            for (UIElement e = window.focus().focused(); e != null; e = e.parent()) {
                 if (e instanceof ViewContainer container) return typeId.equals(container.containerId());
             }
             return false;
@@ -980,7 +979,7 @@ public class StripeView extends UINode {
         if (iconName == null) return null;
         CgUiSvg glyph = CgUiSvg.ofIcon(iconName);
         if (glyph == null) return null;
-        UINode slot = new UINode();
+        UIElement slot = new UIElement();
         // Unhittable, so the press lands on the button rather than on its own icon -- click-focus targets
         // the exact element hit, never the nearest focusable ancestor.
         slot.setHitTest(false);

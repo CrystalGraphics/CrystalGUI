@@ -7,8 +7,7 @@ import com.crystalgui.text.diff.LineDiff;
 import com.crystalgui.text.diff.LinesDiff;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.service.Animation;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.layout.SplitView;
@@ -38,7 +37,7 @@ import javax.annotation.Nullable;
  * of those and gains nothing but dead controls from carrying them. What they genuinely share —
  * {@code DiffDecorations}, the differ, and the alignment arithmetic — is shared as those pieces.</p>
  */
-public final class DiffView extends UINode  {
+public final class DiffView extends UIElement {
     /** Two revisions, side by side. */
     public static final Name NAME = Name.of("diffview");
 
@@ -73,14 +72,14 @@ public final class DiffView extends UINode  {
         this.left = LineDiff.lines(leftText);
         addClass(CLASS);
 
-        UINode toolbar = new UINode();
+        UIElement toolbar = new UIElement();
         toolbar.addClass(TOOLBAR_CLASS);
         append(toolbar);
 
         status.addClass(STATUS_CLASS);
         toolbar.append(status);
 
-        UINode actions = new UINode();
+        UIElement actions = new UIElement();
         actions.addClass(ACTIONS_CLASS);
         toolbar.append(actions);
         previous = action(actions, "↑", "Previous difference");
@@ -134,8 +133,8 @@ public final class DiffView extends UINode  {
 
     private boolean ticking;
 
-    private UINode pane(String title, TextEditor editor) {
-        UINode pane = new UINode();
+    private UIElement pane(String title, TextEditor editor) {
+        UIElement pane = new UIElement();
         pane.addClass(PANE_CLASS);
         UIText label = new UIText(title);
         label.addClass(PANE_TITLE_CLASS);
@@ -145,7 +144,7 @@ public final class DiffView extends UINode  {
         return pane;
     }
 
-    private static Button action(UINode row, String label, String tooltip) {
+    private static Button action(UIElement row, String label, String tooltip) {
         Button button = new Button(label);
         Tooltip.attach(button, tooltip);
         row.append(button);

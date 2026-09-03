@@ -1,13 +1,11 @@
 package com.crystalgui.widget.overlay;
 
-import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.State;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.input.FocusPolicy;
 import lombok.Getter;
 
@@ -117,7 +115,7 @@ public class MenuItem extends Button {
         super(NAME, label);
         setFocusPolicy(FocusPolicy.CLICK_NOT_TABBABLE);
 
-        UINode mark = new UINode();
+        UIElement mark = new UIElement();
         mark.addClass(MARK_CLASS);
         mark.setHitTest(false);
         setPreIcon(mark);
@@ -141,7 +139,7 @@ public class MenuItem extends Button {
     /** The menu this row belongs to, or null while it is unparented. */
     @Nullable
     private Menu owningMenu() {
-        for (UINode element = parent(); element != null; element = element.parent()) {
+        for (UIElement element = parent(); element != null; element = element.parent()) {
             if (element instanceof Menu menu) return menu;
         }
         return null;

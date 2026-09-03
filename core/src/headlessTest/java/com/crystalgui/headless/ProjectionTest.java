@@ -1,5 +1,6 @@
 package com.crystalgui.headless;
 
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.layout.SplitView;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -7,7 +8,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.control.ProgressBar;
 import com.crystalgui.widget.control.Slider;
 import com.crystalgui.widget.control.Switch;
@@ -15,7 +15,6 @@ import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.projection.AutoProjection;
 import com.crystalgui.ui.projection.Projections;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import org.junit.Test;
 
@@ -141,7 +140,7 @@ public class ProjectionTest {
 
     private record Row(int id, String text) { }
 
-    private static Projections rows(List<Row> items, UINode into) {
+    private static Projections rows(List<Row> items, UIElement into) {
         return Projections.create().each(() -> items, into, Row::id,
                 item -> new UIText(item.text()),
                 (element, item) -> ((UIText) element).setText(item.text()));
@@ -150,12 +149,12 @@ public class ProjectionTest {
     @Test
     public void anInsertKeepsEveryOtherRowsInstance() {
         List<Row> items = new ArrayList<>(List.of(new Row(1, "one"), new Row(2, "two")));
-        UINode list = new UINode();
+        UIElement list = new UIElement();
         Projections projections = rows(items, list);
         projections.run();
 
-        UINode firstBefore = list.children().get(0);
-        UINode secondBefore = list.children().get(1);
+        UIElement firstBefore = list.children().get(0);
+        UIElement secondBefore = list.children().get(1);
 
         items.add(1, new Row(3, "inserted"));
         projections.run();
@@ -171,10 +170,10 @@ public class ProjectionTest {
     @Test
     public void aRemoveTakesOnlyTheRowItNames() {
         List<Row> items = new ArrayList<>(List.of(new Row(1, "one"), new Row(2, "two")));
-        UINode list = new UINode();
+        UIElement list = new UIElement();
         Projections projections = rows(items, list);
         projections.run();
-        UINode secondBefore = list.children().get(1);
+        UIElement secondBefore = list.children().get(1);
 
         items.remove(0);
         projections.run();
@@ -187,11 +186,11 @@ public class ProjectionTest {
     @Test
     public void aReorderMovesRatherThanRebuilds() {
         List<Row> items = new ArrayList<>(List.of(new Row(1, "one"), new Row(2, "two")));
-        UINode list = new UINode();
+        UIElement list = new UIElement();
         Projections projections = rows(items, list);
         projections.run();
-        UINode one = list.children().get(0);
-        UINode two = list.children().get(1);
+        UIElement one = list.children().get(0);
+        UIElement two = list.children().get(1);
 
         items.clear();
         items.add(new Row(2, "two"));
@@ -205,7 +204,7 @@ public class ProjectionTest {
     @Test
     public void anUnchangedListDoesNothing() {
         List<Row> items = new ArrayList<>(List.of(new Row(1, "one")));
-        UINode list = new UINode();
+        UIElement list = new UIElement();
         Projections projections = rows(items, list);
         projections.run();
         assertEquals("a settled list must not churn its children every tick", 0, projections.run());
@@ -213,7 +212,7 @@ public class ProjectionTest {
 
     @Test
     public void aNullListIsEmptyRatherThanAFailure() {
-        UINode list = new UINode();
+        UIElement list = new UIElement();
         Projections projections = Projections.create().each(() -> null, list, Object::toString,
                 item -> new UIText(""), (element, item) -> { });
         projections.run();
@@ -231,7 +230,7 @@ public class ProjectionTest {
     @Test
     public void duplicateKeysAreRefused() {
         List<Row> items = new ArrayList<>(List.of(new Row(1, "one"), new Row(1, "again")));
-        UINode list = new UINode();
+        UIElement list = new UIElement();
         Projections projections = rows(items, list);
 
         // Refused, and -- per the no-throw rule -- it does not take the frame with it.
@@ -254,7 +253,7 @@ public class ProjectionTest {
     @Test
     public void anUnchangedRowIsNotRewrittenWhenTheModelReSnapshots() {
         List<Row> items = new ArrayList<>(List.of(new Row(1, "one")));
-        UINode list = new UINode();
+        UIElement list = new UIElement();
         int[] applies = { 0 };
         Projections projections = Projections.create().each(() -> items, list, Row::id,
                 item -> new UIText(item.text()),
@@ -282,7 +281,7 @@ public class ProjectionTest {
     public void theSameInstanceIsReAppliedBecauseItMayHaveMutated() {
         Row shared = new Row(1, "one");
         List<Row> items = new ArrayList<>(List.of(shared));
-        UINode list = new UINode();
+        UIElement list = new UIElement();
         int[] applies = { 0 };
         Projections projections = Projections.create().each(() -> items, list, Row::id,
                 item -> new UIText(item.text()),
@@ -299,7 +298,7 @@ public class ProjectionTest {
     @Test
     public void closingDropsEverythingItHeld() {
         List<Row> items = new ArrayList<>(List.of(new Row(1, "one")));
-        UINode list = new UINode();
+        UIElement list = new UIElement();
         Projections projections = rows(items, list);
         projections.run();
         assertEquals(1, projections.size());

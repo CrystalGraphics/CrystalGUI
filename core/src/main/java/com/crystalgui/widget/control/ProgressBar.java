@@ -4,12 +4,11 @@ import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.State;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.ShadowRoot;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 
 import dev.vfyjxf.taffy.style.AlignItems;
 import dev.vfyjxf.taffy.style.FlexDirection;
@@ -38,7 +37,7 @@ import dev.vfyjxf.taffy.style.FlexDirection;
  * itself — the moment the bar becomes determinate or leaves the tree. A permanently-registered ticker on
  * a widget that is usually determinate is a frame cost paid by every screen that shows one.</p>
  */
-public class ProgressBar extends UINode {
+public class ProgressBar extends UIElement {
 
     public static final Name NAME = Name.of("progressbar");
 
@@ -70,7 +69,7 @@ public class ProgressBar extends UINode {
     private static final float SWEEP_RATE = 0.9f;
 
     private final ShadowRoot shadow;
-    private final UINode fill;
+    private final UIElement fill;
 
     private float fraction = -1f;
 
@@ -86,7 +85,7 @@ public class ProgressBar extends UINode {
                 l -> l.flexDirection(FlexDirection.ROW).alignItems(AlignItems.STRETCH));
 
         this.shadow = attachShadow();
-        this.fill = new UINode();
+        this.fill = new UIElement();
         this.fill.set(Attribute.PART, FILL_PART);
         this.fill.setHitTest(false);
         shadow.append(this.fill);
@@ -170,7 +169,7 @@ public class ProgressBar extends UINode {
     }
 
     /** The fill, so a caller can put a class on it. Not for sizing — that is this class's one number. */
-    public UINode fill() {
+    public UIElement fill() {
         return fill;
     }
 

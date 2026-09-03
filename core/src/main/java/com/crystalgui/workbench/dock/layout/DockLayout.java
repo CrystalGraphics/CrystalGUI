@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * The layout tree, and every structural operation on it.
  *
- * <p><b>Pure data — there is no {@code UINode} anywhere in this package's headless half.</b> The whole
+ * <p><b>Pure data — there is no {@code UIElement} anywhere in this package's headless half.</b> The whole
  * of {@code text/cursor} earned its correctness this way: extracting the logic out of the widget made it
  * reachable without a {@code UIDocument}, fonts or a style engine, and exposed a real bug within minutes.
  * Split, join, collapse and serialise are exactly that kind of logic, so {@link DockArea} is a renderer

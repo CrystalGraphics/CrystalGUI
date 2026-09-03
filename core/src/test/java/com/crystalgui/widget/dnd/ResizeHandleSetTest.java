@@ -1,9 +1,8 @@
 package com.crystalgui.widget.dnd;
 
-import com.crystalgui.style.property.visual.Resize;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.Widgets;
 import java.util.EnumSet;
 import org.junit.Before;
@@ -26,12 +25,12 @@ import static org.junit.Assert.*;
  */
 public class ResizeHandleSetTest extends UiDocumentTestBase {
 
-    private UINode box;
+    private UIElement box;
 
     @Before
     public void setUp() {
         new Widgets().register();
-        box = new UINode().layout(l -> l.width(100).height(60));
+        box = new UIElement().layout(l -> l.width(100).height(60));
         document.append(box);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
     }
@@ -40,7 +39,7 @@ public class ResizeHandleSetTest extends UiDocumentTestBase {
         document.styleEngine().addStylesheet(StyleSheet.parse(css));
         frame();
         EnumSet<Resizer.Handle> found = EnumSet.noneOf(Resizer.Handle.class);
-        for (UINode child : box.children()) {
+        for (UIElement child : box.children()) {
             if (child instanceof Resizer resizer) found.add(resizer.handle());
         }
         return found;
@@ -85,14 +84,14 @@ public class ResizeHandleSetTest extends UiDocumentTestBase {
     @Test
     public void theCornerGripExistsInEveryResizableMode() {
         for (String mode : new String[]{"both", "horizontal", "vertical"}) {
-            UINode subject = new UINode().layout(l -> l.width(100).height(60));
+            UIElement subject = new UIElement().layout(l -> l.width(100).height(60));
             subject.setId("g" + mode);
             document.append(subject);
             document.styleEngine().addStylesheet(StyleSheet.parse("#g" + mode + " { resize: " + mode + "; }"));
             frame();
 
             boolean corner = false;
-            for (UINode child : subject.children()) {
+            for (UIElement child : subject.children()) {
                 if (child instanceof Resizer r && r.handle() == Resizer.Handle.BOTTOM_RIGHT) corner = true;
             }
             assertTrue("resize: " + mode + " must keep the one handle the sheet draws", corner);

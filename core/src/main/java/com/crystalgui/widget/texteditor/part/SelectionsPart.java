@@ -3,7 +3,6 @@ package com.crystalgui.widget.texteditor.part;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.Selection;
 import com.crystalgui.text.wrap.LineProjection;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 

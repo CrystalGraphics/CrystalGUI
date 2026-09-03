@@ -6,11 +6,8 @@ import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuEntry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.command.MenuSection;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.widget.overlay.ContextMenu;
-import com.crystalgui.widget.overlay.Menu;
-import com.crystalgui.widget.overlay.MenuItem;
 import com.crystalgui.ui.input.keymap.KeyChord;
 import com.crystalgui.ui.input.keymap.Keymap;
 
@@ -55,7 +52,7 @@ public final class MenuBuilder {
      * @param source what every command resolves against: its enablement, its handler, and the keymap
      *               lookup for its accelerator
      */
-    public static Menu build(MenuId id, CommandRegistry registry, UINode source) {
+    public static Menu build(MenuId id, CommandRegistry registry, UIElement source) {
         Menu menu = new Menu();
         appendSections(menu, id, registry, source);
         return menu;
@@ -69,7 +66,7 @@ public final class MenuBuilder {
      *
      * @return whether anything was added
      */
-    public static boolean appendSections(Menu menu, MenuId id, CommandRegistry registry, UINode source) {
+    public static boolean appendSections(Menu menu, MenuId id, CommandRegistry registry, UIElement source) {
         CommandContext context = CommandContext.of(source);
 
         // RESOLVED FIRST, EMITTED SECOND, and the two-pass shape is what makes the separator rule true by
@@ -99,7 +96,7 @@ public final class MenuBuilder {
     /** How to add {@code entry}, or null if it would add nothing. */
     @Nullable
     private static Runnable emitterFor(Menu menu, MenuEntry entry, CommandRegistry registry,
-                                       UINode source) {
+                                       UIElement source) {
         if (entry instanceof MenuEntry.Submenu nested) {
             Menu built = build(nested.menu(), registry, source);
             // A submenu with NOTHING contributed to it is dropped -- not one whose rows are merely
@@ -133,10 +130,10 @@ public final class MenuBuilder {
      *
      * @return the chain, to be handed to {@link #discard} when it is finished with
      */
-    public static List<Menu> present(Menu root, UINode site, UIDocument window) {
+    public static List<Menu> present(Menu root, UIElement site, UIDocument window) {
         List<Menu> chain = new ArrayList<>();
         collect(root, chain);
-        UINode host = window.overlayHost(site);
+        UIElement host = window.overlayHost(site);
         for (Menu menu : chain) host.append(menu);
         return chain;
     }
@@ -162,8 +159,8 @@ public final class MenuBuilder {
     }
 
     /** Whether {@code element} is any of {@code menus} or sits beneath one. */
-    public static boolean isInsideAny(@Nullable UINode element, List<Menu> menus) {
-        for (UINode walk = element; walk != null; walk = walk.parent()) {
+    public static boolean isInsideAny(@Nullable UIElement element, List<Menu> menus) {
+        for (UIElement walk = element; walk != null; walk = walk.parent()) {
             if (menus.contains(walk)) return true;
         }
         return false;
@@ -185,7 +182,7 @@ public final class MenuBuilder {
      * and which way it points, and the accelerator. That is what keeps the menu, the palette and the
      * keyboard three views of one list rather than three lists.</p>
      */
-    public static MenuItem row(Menu menu, CommandRegistry registry, UINode source,
+    public static MenuItem row(Menu menu, CommandRegistry registry, UIElement source,
                                String commandId, @Nullable String labelOverride) {
         Command command = registry.get(commandId);
         CommandContext context = CommandContext.of(source);
@@ -195,7 +192,7 @@ public final class MenuBuilder {
         return row(menu, registry, source, commandId, labelOverride, enabled, checkable, checked, command);
     }
 
-    private static MenuItem row(Menu menu, CommandRegistry registry, UINode source,
+    private static MenuItem row(Menu menu, CommandRegistry registry, UIElement source,
                                 String commandId, @Nullable String labelOverride, boolean enabled,
                                 boolean checkable, boolean checked, @Nullable Command resolved) {
         // A command that is not registered still gets a row, disabled. Silently dropping it would make a

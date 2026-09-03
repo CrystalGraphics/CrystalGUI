@@ -15,11 +15,8 @@ import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
 import com.crystalgui.workbench.dock.panel.DockPanelKind;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import com.crystalgui.workbench.region.DockRegion;
-import com.crystalgui.workbench.region.RegionSide;
-import com.crystalgui.workbench.dock.layout.DockPath;
 import com.crystalgui.ui.dom.SessionState;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLayoutCodec;
 

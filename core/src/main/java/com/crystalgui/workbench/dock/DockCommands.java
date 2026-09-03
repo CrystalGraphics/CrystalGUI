@@ -4,9 +4,7 @@ import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.input.keymap.Keymap;
+import com.crystalgui.ui.dom.UIElement;
 
 import com.crystalgui.workbench.dock.drag.DockDropZone;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
@@ -201,7 +199,7 @@ public final class DockCommands {
 
     @Nullable
     private static DockArea areaFor(CommandContext context) {
-        for (UINode element = UINode.sourceOf(context); element != null; element = element.parent()) {
+        for (UIElement element = UIElement.sourceOf(context); element != null; element = element.parent()) {
             if (element instanceof DockArea area) return area;
         }
         return null;

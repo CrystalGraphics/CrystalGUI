@@ -1,12 +1,8 @@
 package com.crystalgui.widget.overlay;
 
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.style.StyleGroup;
-import com.crystalgui.style.StyleOrigin;
-import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.widget.overlay.Popover;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.text.UIText;
 
@@ -48,7 +44,7 @@ public final class InputDialog {
      * emptied prompt reports nothing rather than an empty string, because every caller would otherwise
      * have to re-check it and one of them would forget.</p>
      */
-    public static void ask(@Nullable UINode from, String title, String label, String initial,
+    public static void ask(@Nullable UIElement from, String title, String label, String initial,
                            Consumer<String> onAccept) {
         UIDocument window = from == null ? null : from.document();
         if (window == null) return;
@@ -79,7 +75,7 @@ public final class InputDialog {
      * <p>Enter confirms and Escape cancels, same as the name prompt — so the destructive answer sits
      * behind a deliberate key rather than a button that happens to be under the pointer.</p>
      */
-    public static void confirm(@Nullable UINode from, String title, String message,
+    public static void confirm(@Nullable UIElement from, String title, String message,
                                Runnable onConfirm) {
         UIDocument window = from == null ? null : from.document();
         if (window == null) return;
@@ -102,7 +98,7 @@ public final class InputDialog {
     }
 
     /** The shared shell: one caption, promoted and light-dismissable. */
-    private static Popover prompt(UIDocument window, @Nullable UINode from, String title) {
+    private static Popover prompt(UIDocument window, @Nullable UIElement from, String title) {
         Popover popup = new Popover();
         popup.addClass(PROMPT_CLASS);
 
@@ -134,7 +130,7 @@ public final class InputDialog {
      * rather than being pushed onto something detached, which is worse than useless — hit testing and
      * hover both go looking for it.</p>
      */
-    private static void restoreFocusOnClose(UIDocument window, Popover popup, @Nullable UINode from) {
+    private static void restoreFocusOnClose(UIDocument window, Popover popup, @Nullable UIElement from) {
         if (from == null) return;
         popup.onClosed.connect(() -> {
             if (from.document() != window || !window.focus().focusable(from)) return;

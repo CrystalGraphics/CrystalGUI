@@ -1,8 +1,8 @@
 package com.crystalgui.widget.graph.node;
 
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.graph.GraphNode;
 import com.crystalgui.graph.NodeField;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.config.ConfigControl;
 import com.crystalgui.widget.config.ConfigControls;
 import com.crystalgui.core.config.ConfigDescriptor;
@@ -53,7 +53,7 @@ public final class NodeFieldWidgets {
          * @param value   the current stored value, already resolved against the field's default
          * @param onChange call with the new value when the user commits a change
          */
-        UINode create(NodeField field, String value, Consumer<String> onChange);
+        UIElement create(NodeField field, String value, Consumer<String> onChange);
     }
 
     private static final Map<NodeField.Kind, Factory> FACTORIES = new EnumMap<>(NodeField.Kind.class);
@@ -97,7 +97,7 @@ public final class NodeFieldWidgets {
      */
     public interface Applier {
         /** @param value the current stored value, already resolved against the field's default */
-        void apply(UINode control, NodeField field, String value);
+        void apply(UIElement control, NodeField field, String value);
     }
 
     /**
@@ -109,14 +109,14 @@ public final class NodeFieldWidgets {
     }
 
     /** Writes {@code value} into {@code control}, if its kind knows how. Silent — never emits a change. */
-    public static void applyValue(NodeField field, UINode control, String value) {
+    public static void applyValue(NodeField field, UIElement control, String value) {
         Applier applier = APPLIERS.get(field.kind());
         if (applier != null) applier.apply(control, field, value);
     }
 
     /** The control for a field, or null when its kind has no registered widget. */
     @Nullable
-    public static UINode create(NodeField field, String value, Consumer<String> onChange) {
+    public static UIElement create(NodeField field, String value, Consumer<String> onChange) {
         Factory factory = FACTORIES.get(field.kind());
         return factory == null ? null : factory.create(field, value, onChange);
     }
@@ -134,30 +134,30 @@ public final class NodeFieldWidgets {
     }
 
     /** {@code setValueObject} is silent by contract, which is what keeps this from echoing back out. */
-    private static void set(UINode control, Object value) {
+    private static void set(UIElement control, Object value) {
         if (control instanceof ConfigControl config) config.setValueObject(value);
     }
 
-    private static UINode select(NodeField field, String value, Consumer<String> onChange) {
+    private static UIElement select(NodeField field, String value, Consumer<String> onChange) {
         ConfigDescriptor descriptor = ConfigDescriptor.select(field.id(), field.label(), field.options());
         ConfigControl control = ConfigControls.create(descriptor, field.resolve(value));
         return wrap(control, v -> onChange.accept((String) v));
     }
 
-    private static UINode bool(NodeField field, String value, Consumer<String> onChange) {
+    private static UIElement bool(NodeField field, String value, Consumer<String> onChange) {
         ConfigDescriptor descriptor = ConfigDescriptor.bool(field.id(), field.label());
         boolean initial = Boolean.parseBoolean(field.resolve(value));
         ConfigControl control = ConfigControls.create(descriptor, initial);
         return wrap(control, v -> onChange.accept(String.valueOf((Boolean) v)));
     }
 
-    private static UINode text(NodeField field, String value, Consumer<String> onChange) {
+    private static UIElement text(NodeField field, String value, Consumer<String> onChange) {
         ConfigDescriptor descriptor = ConfigDescriptor.text(field.id(), field.label());
         ConfigControl control = ConfigControls.create(descriptor, field.resolve(value));
         return wrap(control, v -> onChange.accept((String) v));
     }
 
-    private static UINode number(NodeField field, String value, Consumer<String> onChange) {
+    private static UIElement number(NodeField field, String value, Consumer<String> onChange) {
         ConfigDescriptor descriptor = ConfigDescriptor.number(field.id(), field.label());
         double initial = parseDouble(field.resolve(value));
         ConfigControl control = ConfigControls.create(descriptor, initial);
@@ -175,7 +175,7 @@ public final class NodeFieldWidgets {
      * self-labelling control re-deciding "am I in a node or a panel?", which is exactly the kind of
      * per-host special case P6.1.8 exists to remove.</p>
      */
-    private static UINode wrap(ConfigControl control, Consumer<Object> onChange) {
+    private static UIElement wrap(ConfigControl control, Consumer<Object> onChange) {
         if (control.selfLabelling()) control.addClass(GraphNode.FULL_WIDTH_CLASS);
         control.changed.connect(onChange::accept);
         return control;

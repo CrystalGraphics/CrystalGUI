@@ -1,9 +1,6 @@
 package com.crystalgui.style.node;
 
-import com.crystalgui.style.HighlightStyle;
-import com.crystalgui.style.property.StylePropertyRegistry;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.style.property.visual.text.TextOverflow;
 import com.crystalgui.style.property.visual.text.WhiteSpace;
 import com.crystalgui.style.sheet.StyleSheet;
@@ -34,10 +31,10 @@ public class HighlightTest extends UiDocumentTestBase {
 
     private static final String SENTENCE = "the quick brown fox";
 
-    private UINode root;
+    private UIElement root;
 
     private UIText build(String content, String css) {
-        root = new UINode().layout(l -> l.width(400).height(400));
+        root = new UIElement().layout(l -> l.width(400).height(400));
         UIText text = new UIText(content);
         root.append(text);
         document.append(root);
@@ -117,8 +114,8 @@ public class HighlightTest extends UiDocumentTestBase {
     /** Descendant combinators still work: the pseudo-element only ever sits on the rightmost compound. */
     @Test
     public void ancestorsStillConstrainTheMatch() {
-        root = new UINode().layout(l -> l.width(400).height(400));
-        UINode scoped = new UINode();
+        root = new UIElement().layout(l -> l.width(400).height(400));
+        UIElement scoped = new UIElement();
         scoped.addClass("code");
         UIText inside = new UIText(SENTENCE);
         UIText outside = new UIText(SENTENCE);

@@ -1,10 +1,9 @@
 package com.crystalgui.headless;
 
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINodeRegistry;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.style.sheet.DeclarationParser;
-import com.crystalgui.ui.dom.UINodeRegistry;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Checkbox;
 import com.crystalgui.widget.control.Slider;
@@ -36,12 +35,12 @@ public class HeadlessTreeSmokeTest {
 
     @Test
     public void everyBuiltinWidgetConstructsWithoutGraphics() {
-        UINodeRegistry.bootstrap();
-        for (Name kind : UINodeRegistry.names()) {
+        UIElementRegistry.bootstrap();
+        for (Name kind : UIElementRegistry.names()) {
             // A cascade-only kind is registered so a sheet can name it and has no factory at all --
             // nothing describes one over a wire, so there is nothing here to smoke-test.
-            if (!UINodeRegistry.isBuildable(kind)) continue;
-            UINode element = UINodeRegistry.create(kind);
+            if (!UIElementRegistry.isBuildable(kind)) continue;
+            UIElement element = UIElementRegistry.create(kind);
             assertNotNull(kind + " failed to construct", element);
             assertEquals("the kind must survive construction", kind, element.name());
         }
@@ -86,7 +85,7 @@ public class HeadlessTreeSmokeTest {
      */
     @Test
     public void coordinateTransformsWorkWithoutGraphics() {
-        UINode element = new UINode();
+        UIElement element = new UIElement();
         var local = element.toLocal(120f, 80f);
         assertNotNull(local);
         assertFalse(element.containsSurfacePoint(120f, 80f)); // no layout ⇒ zero-sized ⇒ no hit
@@ -95,7 +94,7 @@ public class HeadlessTreeSmokeTest {
     /** Tree surgery, identity and queries — the operations a server session actually performs. */
     @Test
     public void treeMutationAndQueriesWorkWithoutGraphics() {
-        UINode root = new UINode();
+        UIElement root = new UIElement();
         root.setId("root");
 
         Checkbox checkbox = new Checkbox("agree");
@@ -132,7 +131,7 @@ public class HeadlessTreeSmokeTest {
         assertSame(second, tabs.getSelectedTab());
 
         SplitView split = new SplitView();
-        split.first(new UINode());
+        split.first(new UIElement());
         split.setPercentage(30f);
         assertEquals(30f, split.getPercentage(), 0.001f);
     }

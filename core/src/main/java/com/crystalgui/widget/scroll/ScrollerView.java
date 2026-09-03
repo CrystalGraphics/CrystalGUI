@@ -1,5 +1,6 @@
 package com.crystalgui.widget.scroll;
 
+import com.crystalgui.ui.dom.*;
 import dev.vfyjxf.taffy.style.AlignContent;
 import dev.vfyjxf.taffy.style.AlignItems;
 import com.crystalgraphics.platform.input.CgModifiers;
@@ -7,11 +8,7 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.Overflow;
-import com.crystalgui.ui.dom.Attribute;
-import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.ShadowRoot;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UISlot;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.MouseEvent;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.style.TaffyPosition;
@@ -48,7 +45,7 @@ import javax.annotation.Nullable;
  * wrapper wrapping a viewContainer, plus two five-node scrollers — 13 nodes and five levels before your
  * content. This has a slot and three parts.</p>
  */
-public class ScrollerView extends UINode {
+public class ScrollerView extends UIElement {
 
     // The scroll extents live on the BOX now -- they are geometry, and geometry is not the node's.
     // Wrapped here rather than spelled at each of the dozen call sites, and answering 0 with no box,
@@ -92,7 +89,7 @@ public class ScrollerView extends UINode {
         return document() != null && document().animation().isAnimating();
     }
 
-    /** {@link UINode#scrollTo} plus the target this view nudges from. */
+    /** {@link UIElement#scrollTo} plus the target this view nudges from. */
     private void scrollAimingAt(float left, float top) {
         // CLAMP THE TARGET, not only the position it produces. A target past maxScroll is somewhere
         // the view can never arrive, so `getTargetScrollTop()` answers with a number the scroll then
@@ -145,7 +142,7 @@ public class ScrollerView extends UINode {
     private final UISlot viewport;
     private final Scroller verticalScroller;
     private final Scroller horizontalScroller;
-    private final UINode corner;
+    private final UIElement corner;
 
     /** Guards the two-way sync between scroll offset and bar value from feeding back on itself. */
     private boolean syncing = false;
@@ -204,7 +201,7 @@ public class ScrollerView extends UINode {
 
         // Fills the gap the two bars leave for each other, so it isn't a hole showing the content
         // through. Same pinning/exemption as a bar; sized from their thicknesses in reserveCorner.
-        this.corner = new UINode();
+        this.corner = new UIElement();
         this.corner.set(Attribute.PART, CORNER_PART);
         StyleGroup.defaultPipeline(corner.getStyle().getLayoutGroup(),
                 l -> l.positionType(TaffyPosition.ABSOLUTE).right(0).bottom(0));
@@ -236,7 +233,7 @@ public class ScrollerView extends UINode {
         horizontalScroller.onScrollIntent.connect(
                 f -> scrollAimingAt(getTargetScrollLeft() + f * scrollWidth(), scrollTop()));
 
-        // The wheel is handled HERE, not by the engine. A bare UINode is programmatic-only however
+        // The wheel is handled HERE, not by the engine. A bare UIElement is programmatic-only however
         // its overflow is set; opting in is what makes something a scroll *view*. Relative to the
         // target so notches spun in quick succession accumulate instead of each restarting the ease.
         // A BUBBLE listener, not attachDefaultListener: the wheel's target is whichever row is under
@@ -419,7 +416,7 @@ public class ScrollerView extends UINode {
     }
 
     /** The square between the two bars, exposed for styling. */
-    public UINode corner() {
+    public UIElement corner() {
         return corner;
     }
 

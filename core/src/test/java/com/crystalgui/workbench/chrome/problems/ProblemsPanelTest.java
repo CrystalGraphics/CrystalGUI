@@ -1,12 +1,6 @@
 package com.crystalgui.workbench.chrome.problems;
 
-import com.crystalgui.ui.service.Focus;
-import com.crystalgui.widget.collection.list.ListRenderer;
-import com.crystalgui.widget.collection.list.ListView;
-import com.crystalgui.widget.collection.tree.TreeView;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.core.collection.tree.TreeRow;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.search.SearchQuery;
 import com.crystalgui.widget.collection.tree.TreeSearch;
 import com.crystalgui.testsupport.TestPlatformService;
@@ -25,10 +19,8 @@ import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.diagnostic.Markers;
 import com.crystalgui.text.diagnostic.ProblemNode;
 import com.crystalgui.ui.input.FocusPolicy;
-import com.crystalgui.workbench.chrome.problems.ProblemsPanel;
 
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -59,7 +51,7 @@ public class ProblemsPanelTest extends UiDocumentTestBase {
         markers = new Markers();
         panel = new ProblemsPanel();
         panel.layout(l -> l.width(360).height(240));
-        UINode root = new UINode().layout(l -> l.width(360).height(240));
+        UIElement root = new UIElement().layout(l -> l.width(360).height(240));
         root.append(panel);
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
@@ -257,12 +249,12 @@ public class ProblemsPanelTest extends UiDocumentTestBase {
         panel.bindTo(markers);
         settle();
 
-        UINode row = panel.tree().getElementsByClassName(ProblemsPanel.ROW_CLASS).get(0);
-        UINode twisty = deepOrNull(row, "." + ProblemsPanel.TWISTY_CLASS);
+        UIElement row = panel.tree().getElementsByClassName(ProblemsPanel.ROW_CLASS).get(0);
+        UIElement twisty = deepOrNull(row, "." + ProblemsPanel.TWISTY_CLASS);
         assertNotNull("a file heading with no chevron cannot be folded by anyone", twisty);
         assertTrue("the chevron must keep the pointer to fold on one click", twisty.isHitTest());
 
-        UINode label = deepOrNull(row, "." + ProblemsPanel.MESSAGE_CLASS);
+        UIElement label = deepOrNull(row, "." + ProblemsPanel.MESSAGE_CLASS);
         assertNotNull(label);
         assertFalse("a slot that eats the press stops the row ever being chosen",
                 label.isHitTest());
@@ -281,7 +273,7 @@ public class ProblemsPanelTest extends UiDocumentTestBase {
         settle();
 
         collapseEverything();
-        UINode heading = panel.tree().realisedRows().get(0);
+        UIElement heading = panel.tree().realisedRows().get(0);
         assertNotNull("no row is realised, so this asserts nothing", heading);
         assertTrue("a collapsed file must say so",
                 heading.hasClass(com.crystalgui.widget.collection.tree.TreeView.COLLAPSED_CLASS));
@@ -406,7 +398,7 @@ public class ProblemsPanelTest extends UiDocumentTestBase {
         panel.bindTo(markers);
         settle();
 
-        UINode root = panel.parent();
+        UIElement root = panel.parent();
         assertNotNull(root);
 
         panel.removeSelf();
@@ -518,7 +510,7 @@ public class ProblemsPanelTest extends UiDocumentTestBase {
         panel.setActiveResource(shader);
         settle();
 
-        UINode empty = deepOrNull(panel, "." + ProblemsPanel.EMPTY_CLASS);
+        UIElement empty = deepOrNull(panel, "." + ProblemsPanel.EMPTY_CLASS);
         assertNotNull(empty);
         String inFileScope = ((com.crystalgui.widget.text.UIText) empty).getText();
         assertTrue("a clean FILE read as a clean workspace: " + inFileScope,
@@ -555,7 +547,7 @@ public class ProblemsPanelTest extends UiDocumentTestBase {
         panel.bindTo(markers);
         settle();
 
-        UINode empty = deepOrNull(panel, "." + ProblemsPanel.EMPTY_CLASS);
+        UIElement empty = deepOrNull(panel, "." + ProblemsPanel.EMPTY_CLASS);
         assertNotNull(empty);
 
         panel.setTextFilter("nothing matches this");
@@ -804,7 +796,7 @@ public class ProblemsPanelTest extends UiDocumentTestBase {
 
         // Somewhere else in the document entirely -- standing in for the editor tab or the rail button the
         // user was last in. Focusable on click, which is what every such control is.
-        UINode elsewhere = new UINode().layout(l -> l.width(10).height(10));
+        UIElement elsewhere = new UIElement().layout(l -> l.width(10).height(10));
         elsewhere.setFocusPolicy(FocusPolicy.CLICK);
         panel.parent().append(elsewhere);
         settle();
@@ -814,9 +806,9 @@ public class ProblemsPanelTest extends UiDocumentTestBase {
 
         // Through the realised row rather than querySelector: rows are internal children, which public
         // traversal skips by design.
-        UINode headingRow = panel.tree().realisedRows().get(0);
+        UIElement headingRow = panel.tree().realisedRows().get(0);
         assertNotNull("the heading row is not realised, so this asserts nothing", headingRow);
-        UINode twisty = deepOrNull(headingRow, "." + ProblemsPanel.TWISTY_CLASS);
+        UIElement twisty = deepOrNull(headingRow, "." + ProblemsPanel.TWISTY_CLASS);
         assertNotNull("no chevron, so this asserts nothing", twisty);
         press(twisty);
 
@@ -859,7 +851,7 @@ public class ProblemsPanelTest extends UiDocumentTestBase {
         settle();
         assertEquals("the heading plus its two problems", 3, panel.tree().visibleRows().size());
 
-        UINode lastRow = panel.tree().realisedRows().get(2);
+        UIElement lastRow = panel.tree().realisedRows().get(2);
         assertNotNull(lastRow);
         document.focus().requestFocus(lastRow);
         settle();
@@ -902,7 +894,7 @@ public class ProblemsPanelTest extends UiDocumentTestBase {
         panel.bindTo(markers);
         settle();
 
-        UINode twisty = panel.tree().realisedRows().get(0).querySelector("." + ProblemsPanel.TWISTY_CLASS);
+        UIElement twisty = panel.tree().realisedRows().get(0).querySelector("." + ProblemsPanel.TWISTY_CLASS);
         assertNotNull("no chevron, so this asserts nothing", twisty);
         press(twisty);
         settle();
@@ -945,7 +937,7 @@ public class ProblemsPanelTest extends UiDocumentTestBase {
         List<ProblemNode> chosen = new ArrayList<>();
         panel.onProblemChosen.connect(chosen::add);
 
-        UINode problemRow = panel.tree().realisedRows().get(1);
+        UIElement problemRow = panel.tree().realisedRows().get(1);
         assertNotNull("row 1 should be the first problem under the heading", problemRow);
         assertFalse("row 1 is a heading, so this asserts the wrong thing",
                 panel.tree().rowAt(1).item().isFile());
@@ -1041,7 +1033,7 @@ public class ProblemsPanelTest extends UiDocumentTestBase {
     }
 
     /** A secondary-button press, through the same accumulate-and-dispatch route as a real one. */
-    private void rightPress(UINode target) {
+    private void rightPress(UIElement target) {
         frame();
         int cx = (int) (target.box().worldX() + target.box().width() / 2f * uiScale());
         int cy = (int) (target.box().worldY() + target.box().height() / 2f * uiScale());
@@ -1080,7 +1072,7 @@ public class ProblemsPanelTest extends UiDocumentTestBase {
     }
 
     /** A press through the real route — accumulated and dispatched by the frame pair, as input is. */
-    private void press(UINode target) {
+    private void press(UIElement target) {
         frame();
         int cx = (int) (target.box().worldX() + target.box().width() / 2f * uiScale());
         int cy = (int) (target.box().worldY() + target.box().height() / 2f * uiScale());

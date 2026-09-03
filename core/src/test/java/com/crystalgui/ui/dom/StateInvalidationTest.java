@@ -1,7 +1,5 @@
 package com.crystalgui.ui.dom;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
@@ -36,25 +34,25 @@ public class StateInvalidationTest extends UiDocumentTestBase {
             + ".__mark__ { background-color: #00FF00; }\n"
             + ".__plain__ { background-color: #0000FF; }\n";
 
-    private UINode panel;
-    private UINode mark;
-    private UINode plain;
+    private UIElement panel;
+    private UIElement mark;
+    private UIElement plain;
 
     private void build() {
-        panel = new UINode().addClass("__panel__");
-        mark = new UINode().addClass("__mark__");
-        plain = new UINode().addClass("__plain__");
+        panel = new UIElement().addClass("__panel__");
+        mark = new UIElement().addClass("__mark__");
+        plain = new UIElement().addClass("__plain__");
         panel.append(mark);
         panel.append(plain);
 
-        UINode root = new UINode().layout(l -> l.width(200).height(200));
+        UIElement root = new UIElement().layout(l -> l.width(200).height(200));
         root.append(panel);
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.parse(SHEET));
         frame();
     }
 
-    private int colourOf(UINode element) {
+    private int colourOf(UIElement element) {
         Integer value = element.getStyle().getComputed(StylePropertyRegistry.BACKGROUND_COLOR);
         return value == null ? 0 : value;
     }

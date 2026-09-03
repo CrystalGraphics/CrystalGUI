@@ -5,7 +5,7 @@ import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.RatePolicy;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.widget.config.ValueControl;
 
@@ -64,11 +64,11 @@ public class MatrixControl extends ValueControl<double[]> {
         this.arity = Math.max(1, descriptor.arity());
         addClass("__matrix__");
         for (int row = 0; row < arity; row++) {
-            UINode rowEl = new UINode();
+            UIElement rowEl = new UIElement();
             rowEl.addClass(ROW_CLASS);
             for (int col = 0; col < arity; col++) {
                 final int index = row * arity + col;
-                UINode cell = new UINode();
+                UIElement cell = new UIElement();
                 cell.addClass(CELL_CLASS);
 
                 NumberControl number = new NumberControl(

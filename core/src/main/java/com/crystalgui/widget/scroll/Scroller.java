@@ -6,7 +6,7 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.ShadowRoot;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.MouseEvent;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import com.crystalgraphics.platform.CgPlatform;
@@ -42,7 +42,7 @@ import com.crystalgui.ui.service.Drag;
  * <p>Standalone on purpose: a scrollbar is useful without a scroll container behind it (a future
  * TextArea needs exactly this), which is why it isn't buried inside {@code ScrollerView}.</p>
  */
-public class Scroller extends UINode {
+public class Scroller extends UIElement {
 
     public static final Name NAME = Name.of("scroller");
 
@@ -81,10 +81,10 @@ public class Scroller extends UINode {
      */
     public final Signal.Value<Float> onScrollIntent = new Signal.Value<>();
 
-    private final UINode head;
-    private final UINode track;
-    private final UINode thumb;
-    private final UINode tail;
+    private final UIElement head;
+    private final UIElement track;
+    private final UIElement thumb;
+    private final UIElement tail;
 
     /**
      * How far one button press moves the value, as a fraction of the whole range.
@@ -116,7 +116,7 @@ public class Scroller extends UINode {
         this.shadow = attachShadow();
         this.head = newPart(HEAD_PART);
         this.track = newPart(TRACK_PART);
-        this.thumb = new UINode();
+        this.thumb = new UIElement();
         this.thumb.set(Attribute.PART, THUMB_PART);
         // Inside the TRACK, not beside it -- its position is a percentage of the groove. A part is a
         // part wherever in the shadow tree it lives; `part` is a name, not a place.
@@ -168,25 +168,25 @@ public class Scroller extends UINode {
         }, false, true);
     }
 
-    private UINode newPart(String partName) {
-        UINode part = new UINode();
+    private UIElement newPart(String partName) {
+        UIElement part = new UIElement();
         part.set(Attribute.PART, partName);
         shadow.append(part);
         return part;
     }
 
     /** The step-back button. Hidden unless a theme shows it; wired either way. */
-    public UINode head() {
+    public UIElement head() {
         return head;
     }
 
     /** The step-forward button. */
-    public UINode tail() {
+    public UIElement tail() {
         return tail;
     }
 
     /** The groove the thumb travels in. */
-    public UINode track() {
+    public UIElement track() {
         return track;
     }
 
@@ -202,7 +202,7 @@ public class Scroller extends UINode {
 
     /** The bar owns a fixed structure; there is no content to host. */
 
-    public UINode thumb() {
+    public UIElement thumb() {
         return thumb;
     }
 

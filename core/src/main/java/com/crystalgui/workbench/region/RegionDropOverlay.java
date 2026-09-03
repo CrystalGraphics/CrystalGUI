@@ -5,9 +5,8 @@ import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.workbench.Workbench;
-import com.crystalgui.workbench.region.DockRegion;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.event.DragEvent;
 
@@ -48,7 +47,7 @@ import javax.annotation.Nullable;
  * box, so the frame it comes back has no measurement to place it from; keeping the box alive and fading it
  * means the rectangle is correct on the frame it appears rather than on the one after.</p>
  */
-public class RegionDropOverlay extends UINode {
+public class RegionDropOverlay extends UIElement {
     /** The overlay that lights where a drop would land. */
     public static final Name NAME = Name.of("regiondropoverlay");
 
@@ -60,7 +59,7 @@ public class RegionDropOverlay extends UINode {
     public static final String PREVIEW_CLASS = "__region-drop-preview__";
 
     private final Workbench workbench;
-    private final UINode preview = new UINode();
+    private final UIElement preview = new UIElement();
 
     /** The slot the pointer last resolved to, so a drop uses what the highlight promised. */
     @Nullable
@@ -131,7 +130,7 @@ public class RegionDropOverlay extends UINode {
      * <p>Separate from the constructor because the listeners are about the <em>host's</em> events, and the
      * overlay is built as a field before there is a host to attach to.</p>
      */
-    public void listenOn(UINode host) {
+    public void listenOn(UIElement host) {
         host.events.getGroup(DragEvent.Over.class).attachListener((element, event) -> {
             if (!(event.getPayload() instanceof StripeView.StripeDrag dragged)) return;
             RegionDropZones.Target resolved = resolve(host, event.getPosition());
@@ -204,7 +203,7 @@ public class RegionDropOverlay extends UINode {
 
     /** Which slot a pointer at this screen point means, in the host's local space. */
     @Nullable
-    private RegionDropZones.Target resolve(UINode host, ReadOnlyVec2f position) {
+    private RegionDropZones.Target resolve(UIElement host, ReadOnlyVec2f position) {
         Vector2f local = host.toLocal(position.x(), position.y());
         Box box = host.box();
         if (box == null) return null;
@@ -235,7 +234,7 @@ public class RegionDropOverlay extends UINode {
      * belongs: it is the class that knows a band must exist even when the region does not, and splitting
      * the decision across two files is how they end up disagreeing about a closed sidebar.</p>
      */
-    private float leftBand(UINode host) {
+    private float leftBand(UIElement host) {
         RegionHost region = visible(DockRegion.SIDEBAR);
         if (region == null) return 0f;
         Box hostBox = host.box();
@@ -247,7 +246,7 @@ public class RegionDropOverlay extends UINode {
     }
 
     /** @see #leftBand */
-    private float rightBand(UINode host) {
+    private float rightBand(UIElement host) {
         RegionHost region = visible(DockRegion.AUXILIARY);
         if (region == null) return 0f;
         Box hostBox = host.box();
@@ -259,7 +258,7 @@ public class RegionDropOverlay extends UINode {
     }
 
     /** @see #leftBand */
-    private float bottomBand(UINode host) {
+    private float bottomBand(UIElement host) {
         RegionHost region = visible(DockRegion.PANEL);
         if (region == null) return 0f;
         Box hostBox = host.box();
@@ -286,12 +285,12 @@ public class RegionDropOverlay extends UINode {
         ViewContainer container = workbench.toolWindowManager().containerOf(typeId);
         UIDocument window = document();
         if (container == null || window == null) return;
-        UINode focusable = window.focus().firstFocusableIn(container);
+        UIElement focusable = window.focus().firstFocusableIn(container);
         if (focusable != null) window.focus().requestPointerFocus(focusable);
     }
 
     /** Lights the rectangle {@code slot} would occupy, or clears it when there is none. */
-    private void show(UINode host, @Nullable RegionDropZones.Target slot) {
+    private void show(UIElement host, @Nullable RegionDropZones.Target slot) {
         this.target = slot;
         if (slot == null) {
             hide();
@@ -313,7 +312,7 @@ public class RegionDropOverlay extends UINode {
      * left stripe, and the band deliberately does not, because hovering the rail has to target the region
      * behind it. Two rectangles, two jobs.</p>
      */
-    private float[] regionRect(UINode host, DockRegion region) {
+    private float[] regionRect(UIElement host, DockRegion region) {
         Box hostBox = host.box();
         if (hostBox == null) return new float[]{0f, 0f, 0f, 0f};
         RegionHost open = visible(region);

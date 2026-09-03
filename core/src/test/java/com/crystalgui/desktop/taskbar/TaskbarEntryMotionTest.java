@@ -7,8 +7,7 @@ import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
 
 import org.junit.After;
 import org.junit.Before;
@@ -62,7 +61,7 @@ public class TaskbarEntryMotionTest extends UiDocumentTestBase {
     @Before
     public void setUpDesktop() {
         Desktop.setAnimationsEnabled(false);
-        UINode root = new UINode().layout(l -> l.width(800).height(600));
+        UIElement root = new UIElement().layout(l -> l.width(800).height(600));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
         first = new WindowFrame("First");
@@ -96,7 +95,7 @@ public class TaskbarEntryMotionTest extends UiDocumentTestBase {
     }
 
     /** The cap the ramp writes; null is the sheet's own sizing, i.e. no motion has touched it. */
-    private Object capOf(UINode entry) {
+    private Object capOf(UIElement entry) {
         return entry.getStyle().getComputed(LayoutProperties.MAX_WIDTH);
     }
 
@@ -119,7 +118,7 @@ public class TaskbarEntryMotionTest extends UiDocumentTestBase {
     @Test
     public void aCollapsingEntryIsNoLongerATarget() {
         Desktop.setAnimationsEnabled(true);
-        UINode entry = taskbar().entryFor(second);
+        UIElement entry = taskbar().entryFor(second);
 
         second.destroy();
         settle();
@@ -150,7 +149,7 @@ public class TaskbarEntryMotionTest extends UiDocumentTestBase {
         Desktop.of(document).addWindow(third);
         settle();
 
-        UINode entry = taskbar().entryFor(third);
+        UIElement entry = taskbar().entryFor(third);
         assertNotNull("the entry is built immediately; only its width is animated", entry);
         assertNotNull("an arriving entry ramps a max-width cap", capOf(entry));
         // A sliver of a button is not something anyone can aim at. Handed back by finish().
@@ -165,7 +164,7 @@ public class TaskbarEntryMotionTest extends UiDocumentTestBase {
      */
     @Test
     public void aCapAloneLeavesThePaddingBehind() {
-        UINode entry = taskbar().entryFor(second);
+        UIElement entry = taskbar().entryFor(second);
         StyleGroup.inlinePipeline(entry.getStyle().getLayoutGroup(), l -> l.maxWidth(0f));
         settle();
 
@@ -194,7 +193,7 @@ public class TaskbarEntryMotionTest extends UiDocumentTestBase {
         settle();
         assertFalse("precondition: the arrival is still running", taskbar().entryFor(third).isHitTest());
 
-        UINode entry = taskbar().entryFor(third);
+        UIElement entry = taskbar().entryFor(third);
         third.destroy();
         settle();
 
@@ -215,7 +214,7 @@ public class TaskbarEntryMotionTest extends UiDocumentTestBase {
         Desktop.of(document).addWindow(third);
         settle();
 
-        UINode entry = taskbar().entryFor(third);
+        UIElement entry = taskbar().entryFor(third);
         assertNotNull(entry);
         assertNull("nothing may cap an entry when animations are off", capOf(entry));
         assertTrue("an entry that never animated must be clickable immediately", entry.isHitTest());

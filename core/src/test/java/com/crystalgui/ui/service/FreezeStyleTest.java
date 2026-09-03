@@ -7,7 +7,7 @@ import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import org.junit.Test;
 
 /**
@@ -23,7 +23,7 @@ public class FreezeStyleTest extends UiDocumentTestBase {
     public void aFrozenSubtreeMatchesNoSelectorAndCatchesUpOnTheWayBack() {
         UIDocument document = new UIDocument();
         document.styles().addStylesheet(StyleSheet.parse(".lit { opacity: 0.25 }"));
-        UINode panel = new UINode().setId("panel");
+        UIElement panel = new UIElement().setId("panel");
         StyleGroup.inlinePipeline(panel.getStyle().getLayoutGroup(), l -> l.width(200f).height(200f));
         document.append(panel);
         document.update(800f, 600f);

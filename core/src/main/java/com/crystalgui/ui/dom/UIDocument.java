@@ -51,7 +51,7 @@ import lombok.Getter;
  * the mirror is being told about a change that is still being made, and a second change under it
  * would put the edit script out of order.</p>
  */
-public final class UIDocument extends UINode {
+public final class UIDocument extends UIElement {
 
     /**
      * Widget state that outlives its widget, or null when the host is not persisting any.
@@ -89,7 +89,7 @@ public final class UIDocument extends UINode {
     @Nullable
     private volatile Thread frameThread;
 
-    private final Map<String, UINode> byId = new HashMap<>();
+    private final Map<String, UIElement> byId = new HashMap<>();
 
     /** The cascade over this tree. Sheets are installed here, for the whole tree or for a subtree. */
     private final StyleEngine styles = new StyleEngine(this::allNodes);
@@ -123,7 +123,7 @@ public final class UIDocument extends UINode {
         // also how the widget layer tells the engine to build a resize handle -- and a UI assembled in
         // process decodes nothing, so a registry that only bootstrapped on decode left that
         // unregistered for exactly the trees nobody sends over a wire. Idempotent.
-        UINodeRegistry.bootstrap();
+        UIElementRegistry.bootstrap();
     }
 
     // ── The frame thread ─────────────────────────────────────────────────────
@@ -183,10 +183,10 @@ public final class UIDocument extends UINode {
     public static final Name TOP_LAYER = Name.of("top-layer");
 
     @Nullable
-    private UINode topLayerNode;
+    private UIElement topLayerNode;
 
     /** Nodes promoted to the top layer, in the order they were promoted. */
-    private final LinkedHashSet<UINode> promoted = new LinkedHashSet<>();
+    private final LinkedHashSet<UIElement> promoted = new LinkedHashSet<>();
 
     /**
      * Promotes {@code node} into the top layer — or RAISES it if already promoted.
@@ -204,7 +204,7 @@ public final class UIDocument extends UINode {
      * removes and re-appends, which is the spec's own add algorithm — so "raise this popup" is one
      * idempotent call rather than a remove/add dance every caller has to get right.</p>
      */
-    public void promote(UINode node) {
+    public void promote(UIElement node) {
         Objects.requireNonNull(node, "node");
         if (node == this) throw new IllegalArgumentException("the document cannot be promoted");
         topLayerNode();
@@ -214,29 +214,29 @@ public final class UIDocument extends UINode {
     }
 
     /** Takes {@code node} out of the top layer, restoring ordinary layout, paint and hit-testing. */
-    public void demote(UINode node) {
+    public void demote(UIElement node) {
         if (promoted.remove(node)) fireStructureChanged();
     }
 
-    public boolean isPromoted(UINode node) {
+    public boolean isPromoted(UIElement node) {
         return promoted.contains(node);
     }
 
     /** What is promoted, bottom-most first. The box tree's, on every sync. */
-    public Collection<UINode> promotedNodes() {
+    public Collection<UIElement> promotedNodes() {
         return Collections.unmodifiableCollection(promoted);
     }
 
     /** The layer's node if one has been built, never building it. The box tree's, per sync. */
     @Nullable
-    public UINode topLayerNodeIfPresent() {
+    public UIElement topLayerNodeIfPresent() {
         return topLayerNode;
     }
 
     /** The layer's node, built on first use. The box tree resolves its box. */
-    public UINode topLayerNode() {
+    public UIElement topLayerNode() {
         if (topLayerNode == null) {
-            topLayerNode = new UINode(TOP_LAYER);
+            topLayerNode = new UIElement(TOP_LAYER);
             // THE SIZE OF THE VIEWPORT, because a promoted element's percentages resolve against
             // whatever HOSTS it -- and on this engine that is this node rather than the root.
             //
@@ -309,15 +309,15 @@ public final class UIDocument extends UINode {
      * away when that panel does) — which is why a context menu passes the thing that was clicked and
      * a command palette passes null.</p>
      */
-    public UINode overlayHost(@Nullable UINode near) {
-        for (UINode node = near; node != null; node = node.parent()) {
-            if (UINodeRegistry.contractFor(node.name()).acceptsDescribedChildren()) return node;
+    public UIElement overlayHost(@Nullable UIElement near) {
+        for (UIElement node = near; node != null; node = node.parent()) {
+            if (UIElementRegistry.contractFor(node.name()).acceptsDescribedChildren()) return node;
         }
         return this;
     }
 
     /** Parents an overlay somewhere legal and returns it. Use this rather than a bare append. */
-    public <T extends UINode> T addOverlay(T overlay, @Nullable UINode near) {
+    public <T extends UIElement> T addOverlay(T overlay, @Nullable UIElement near) {
         if (overlay.parent() == null) overlayHost(near).append(overlay);
         return overlay;
     }
@@ -487,16 +487,16 @@ public final class UIDocument extends UINode {
     }
 
     /** Every connected node, light and shadow — what a sheet change has to re-match. */
-    public List<UINode> allNodes() {
-        List<UINode> out = new ArrayList<>();
+    public List<UIElement> allNodes() {
+        List<UIElement> out = new ArrayList<>();
         collect(this, out);
         return out;
     }
 
-    private static void collect(UINode at, List<UINode> into) {
+    private static void collect(UIElement at, List<UIElement> into) {
         if (at.isFrozen()) return;   // frozen is not live: it matches nothing
         into.add(at);
-        for (UINode child : at.children()) collect(child, into);
+        for (UIElement child : at.children()) collect(child, into);
         ShadowRoot shadow = at.shadowRoot();
         if (shadow != null) collect(shadow, into);
     }
@@ -506,7 +506,7 @@ public final class UIDocument extends UINode {
     /**
      * The connected node with this id, or null. The first to claim an id keeps it.
      *
-     * <p>Overrides {@link UINode#getElementById} with the INDEX rather than the walk — every node
+     * <p>Overrides {@link UIElement#getElementById} with the INDEX rather than the walk — every node
      * that joins registers its id here, so this is O(1) where a subtree query is O(n), and a document
      * is where the question is nearly always asked. It also reaches nodes inside shadow trees, which
      * the light-tree walk deliberately does not: the index is the engine's own bookkeeping rather
@@ -514,15 +514,15 @@ public final class UIDocument extends UINode {
      */
     @Override
     @Nullable
-    public UINode getElementById(String id) {
+    public UIElement getElementById(String id) {
         return byId.get(id);
     }
 
-    void index(UINode node) {
+    void index(UIElement node) {
         if (!node.id().isEmpty()) byId.putIfAbsent(node.id(), node);
     }
 
-    void unindex(UINode node) {
+    void unindex(UIElement node) {
         if (!node.id().isEmpty() && byId.get(node.id()) == node) byId.remove(node.id());
     }
 

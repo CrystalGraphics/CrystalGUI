@@ -1,6 +1,6 @@
 package com.crystalgui.workbench.dock.drag;
 
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 
 import com.crystalgui.workbench.dock.DockArea;
 import com.crystalgui.workbench.dock.DockGroup;
@@ -42,7 +42,7 @@ public sealed interface DockPlacement {
      * <p>The one both references make trivial and this engine made an application's problem. A widget
      * knows itself; it should not have to know the layout to say "beside this".</p>
      */
-    static DockPlacement with(UINode element) {
+    static DockPlacement with(UIElement element) {
         return new With(Objects.requireNonNull(element, "element"));
     }
 
@@ -79,7 +79,7 @@ public sealed interface DockPlacement {
     public record Side(DockDropZone zone) implements DockPlacement {
     }
 
-    public record With(UINode element) implements DockPlacement {
+    public record With(UIElement element) implements DockPlacement {
     }
 
     public record Leaf(DockLeaf leaf) implements DockPlacement {

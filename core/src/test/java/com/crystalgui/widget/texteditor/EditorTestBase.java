@@ -1,21 +1,12 @@
 package com.crystalgui.widget.texteditor;
 
-import com.crystalgui.core.async.JobScheduler;
-import com.crystalgui.style.sheet.StyleSheet;
-import com.crystalgui.style.theme.UiThemeManager;
-import com.crystalgui.ui.event.MouseEvent;
-import com.crystalgui.ui.input.keymap.KeymapResolver;
-import com.crystalgui.widget.texteditor.find.EditorFind;
-import com.crystalgui.widget.texteditor.fold.EditorFolding;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.platform.service.CgInputService;
 import com.crystalgui.testsupport.TestPlatformService;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.widget.text.UIText;
-import com.crystalgui.widget.texteditor.TextEditor;
 import com.crystalgui.ui.service.Input;
 import org.junit.Before;
 
@@ -100,7 +91,7 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
         editor.layout(l -> l.width(300).height(120));
         editor.generalStyle(g -> g.fontSize(8f).lineHeight(1.25f));
 
-        UINode root = new UINode().layout(l -> l.width(300).height(200));
+        UIElement root = new UIElement().layout(l -> l.width(300).height(200));
         root.append(editor);
         document.append(root);
         // THE USER-AGENT SHEET, applied on purpose. It is never injected automatically, and without it
@@ -184,17 +175,17 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
     }
 
     protected Object lineFontFamily() {
-        for (UINode child : allDescendants()) {
+        for (UIElement child : allDescendants()) {
             if (!child.hasClass(TextEditor.LINE_CLASS)) continue;
             return child.children().get(0).getStyle().getGeneralGroup().fontFamily();
         }
         throw new AssertionError("no line realised");
     }
 
-    protected java.util.Map<Integer, UINode> realisedRowsOf(TextEditor target) {
-        java.util.Map<Integer, UINode> rows = new java.util.LinkedHashMap<>();
+    protected java.util.Map<Integer, UIElement> realisedRowsOf(TextEditor target) {
+        java.util.Map<Integer, UIElement> rows = new java.util.LinkedHashMap<>();
         int index = 0;
-        for (UINode child : target.children()) {
+        for (UIElement child : target.children()) {
             if (child.hasClass(TextEditor.LINE_CLASS)) rows.put(index++, child);
         }
         return rows;
@@ -203,7 +194,7 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
     /** Whether the realised line showing {@code row} carries any range under {@code name}. */
     protected boolean lineHasHighlight(int row, String name) {
         String wanted = editor.buffer().line(row);
-        for (UINode child : allDescendants()) {
+        for (UIElement child : allDescendants()) {
             if (!child.hasClass(TextEditor.LINE_CLASS)) continue;
             UIText text = (UIText) child.children().get(0);
             if (!text.getText().equals(wanted)) continue;
@@ -212,8 +203,8 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
         return false;
     }
 
-    protected void collectNumbers(UINode root, java.util.List<String> out) {
-        for (UINode child : root.children()) {
+    protected void collectNumbers(UIElement root, java.util.List<String> out) {
+        for (UIElement child : root.children()) {
             if (child.hasClass(TextEditor.LINE_NUMBER_CLASS)) {
                 UIText label = (UIText) child.children().get(0);
                 if (heightOf(child) > 0f) out.add(label.getText());
@@ -248,9 +239,9 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
      * pool happens to hold — which is what {@code assertRowsAlign} was comparing a gutter number against.
      * The production code never had this question: it reads its {@code realisedLines} map.</p>
      */
-    protected java.util.List<UINode> linesOf() {
-        java.util.List<UINode> out = new java.util.ArrayList<>();
-        for (UINode line : allWithClass(TextEditor.LINE_CLASS)) {
+    protected java.util.List<UIElement> linesOf() {
+        java.util.List<UIElement> out = new java.util.ArrayList<>();
+        for (UIElement line : allWithClass(TextEditor.LINE_CLASS)) {
             // A POOLED LINE HAS NO BOX, which is this engine's own way of saying "not laid out" -- a
             // hidden node gets none at all, where the old one gave a zero-sized box and the display
             // property had to be read off the Taffy bridge to tell the two apart. Asking for the box
@@ -277,14 +268,14 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
      * hand.</p>
      */
     /** Every descendant of the editor, in tree order. */
-    protected java.util.List<UINode> allDescendants() {
-        java.util.List<UINode> out = new java.util.ArrayList<>();
+    protected java.util.List<UIElement> allDescendants() {
+        java.util.List<UIElement> out = new java.util.ArrayList<>();
         collectAll(editor, out);
         return out;
     }
 
-    protected static void collectAll(UINode from, java.util.List<UINode> out) {
-        for (UINode child : from.children()) {
+    protected static void collectAll(UIElement from, java.util.List<UIElement> out) {
+        for (UIElement child : from.children()) {
             out.add(child);
             collectAll(child, out);
         }
@@ -298,20 +289,20 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
      * {@code __scroll-layer__} now — see {@code TextEditor#linesLayer()} — so a walk over direct
      * children answers zero for all of them while every one is on screen.</p>
      */
-    protected static java.util.List<UINode> descendantsOf(UINode from) {
-        java.util.List<UINode> out = new java.util.ArrayList<>();
+    protected static java.util.List<UIElement> descendantsOf(UIElement from) {
+        java.util.List<UIElement> out = new java.util.ArrayList<>();
         collectAll(from, out);
         return out;
     }
 
-    protected java.util.List<UINode> allWithClass(String name) {
-        java.util.List<UINode> out = new java.util.ArrayList<>();
+    protected java.util.List<UIElement> allWithClass(String name) {
+        java.util.List<UIElement> out = new java.util.ArrayList<>();
         collectWithClass(editor, name, out);
         return out;
     }
 
-    protected static void collectWithClass(UINode from, String name, java.util.List<UINode> out) {
-        for (UINode child : from.children()) {
+    protected static void collectWithClass(UIElement from, String name, java.util.List<UIElement> out) {
+        for (UIElement child : from.children()) {
             if (child.hasClass(name)) out.add(child);
             collectWithClass(child, name, out);
         }
@@ -376,14 +367,14 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
         settle();
     }
 
-    protected UINode childWithClass(String name) {
-        java.util.List<UINode> found = allWithClass(name);
+    protected UIElement childWithClass(String name) {
+        java.util.List<UIElement> found = allWithClass(name);
         if (found.isEmpty()) throw new AssertionError("no child with class " + name);
         return found.get(0);
     }
 
     protected boolean caretVisible() {
-        for (UINode child : allDescendants()) {
+        for (UIElement child : allDescendants()) {
             if (child.hasClass(TextEditor.CARET_CLASS)) {
                 return child.getStyle().getGeneralGroup().opacity() > 0.5f;
             }
@@ -411,7 +402,7 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
                 general.fontFamily(), Math.round(general.fontSize()));
         float limit = editor.box().clientWidth();
 
-        for (UINode line : linesOf()) {
+        for (UIElement line : linesOf()) {
             String text = ((UIText) line.children().get(0)).getText();
             if (text.isEmpty()) continue;
             float width = com.crystalgraphics.api.text.CgTextLayout.of(text, family).build().totalWidth();
@@ -424,7 +415,7 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
 
     protected int countOf(String className) {
         int n = 0;
-        for (UINode child : allWithClass(className)) {
+        for (UIElement child : allWithClass(className)) {
             // hide() collapses an unused pooled element to zero height, so a laid-out height is what
             // separates "drawn this frame" from "pooled and idle".
             if (contentBoxHeightOf(child) > 0f) n++;
@@ -438,7 +429,7 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
         assertTrue("needle must exist", offset >= 0);
         editor.setCaret(offset);
         showEditor();
-        UINode caret = childWithClass(TextEditor.CARET_CLASS);
+        UIElement caret = childWithClass(TextEditor.CARET_CLASS);
         // SCALED SCREEN COORDINATES. MouseEvent positions are what consumeMouseEvent produces, which is
         // layout * uiScale -- see pressAt. Passing editor-relative layout coordinates lands the press on
         // whatever row that happens to be, which is how this helper first "proved" the wrong thing.
@@ -462,7 +453,7 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
     /** The rendered text of each realised line, in order. */
     protected java.util.List<String> renderedLines() {
         java.util.List<String> out = new java.util.ArrayList<>();
-        for (UINode line : linesOf()) {
+        for (UIElement line : linesOf()) {
             out.add(((UIText) line.children().get(0)).getText());
         }
         return out;
@@ -480,8 +471,8 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
      * lands a screenful from its number; one never repositioned stays put while the number moves.
      */
     protected void assertRowsAlign(String when) {
-        UINode number = childWithClass(TextEditor.LINE_NUMBER_CLASS);
-        UINode line = linesOf().get(0);
+        UIElement number = childWithClass(TextEditor.LINE_NUMBER_CLASS);
+        UIElement line = linesOf().get(0);
         assertEquals(when + ": the text and its gutter number must sit on the same row",
                 number.box().y(), line.box().y(), editor.lineHeight());
     }
@@ -511,7 +502,7 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
 
     protected int activeGuideCount() {
         int n = 0;
-        for (UINode guide : allWithClass(TextEditor.INDENT_GUIDE_CLASS)) {
+        for (UIElement guide : allWithClass(TextEditor.INDENT_GUIDE_CLASS)) {
             if (guide.box().contentBoxHeight() <= 0f) continue;
             if (guide.hasClass(TextEditor.ACTIVE_GUIDE_CLASS)) n++;
         }
@@ -527,7 +518,7 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
         }
         int wanted = row;
         int seen = 0;
-        for (UINode line : linesOf()) {
+        for (UIElement line : linesOf()) {
             if (seen++ != wanted) continue;
             return ((UIText) line.children().get(0)).highlights().names();
         }
@@ -550,9 +541,9 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
     }
 
     /** Arrows whose box is non-zero, i.e. the ones actually on screen. */
-    protected java.util.List<UINode> visibleFoldArrows() {
-        java.util.List<UINode> shown = new java.util.ArrayList<>();
-        for (UINode arrow : allWithClass(TextEditor.FOLD_CLASS)) {
+    protected java.util.List<UIElement> visibleFoldArrows() {
+        java.util.List<UIElement> shown = new java.util.ArrayList<>();
+        for (UIElement arrow : allWithClass(TextEditor.FOLD_CLASS)) {
             if (contentBoxHeightOf(arrow) > 0f) shown.add(arrow);
         }
         return shown;
@@ -585,7 +576,7 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
      * of all {@code uiScale} — so a probe built from the cached box lands somewhere else entirely and
      * reports a perfectly reachable control as unreachable.</p>
      */
-    protected float[] screenCentreOf(UINode element) {
+    protected float[] screenCentreOf(UIElement element) {
         // SEARCHED, not computed. The layout box, the world matrix and the screen differ by uiScale and by
         // every transform in between, and getting that arithmetic subtly wrong is exactly how a reachable
         // control gets reported as unreachable -- which is the bug this helper exists to detect, so the
@@ -603,7 +594,7 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
         editor.setFontSize(fontSize);
         showEditor();
         showEditor();
-        UINode chip = childWithClass(TextEditor.FOLD_PLACEHOLDER_CLASS);
+        UIElement chip = childWithClass(TextEditor.FOLD_PLACEHOLDER_CLASS);
         assertNotNull("a chip at " + fontSize + "px", chip);
         return new float[] { chip.box().width(), chip.box().height() };
     }
@@ -631,17 +622,17 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
      * <p>Reading the layout position alone still <em>looks</em> right at the top of a document, which is
      * where most fixtures start, so this is worth going through rather than open-coding.</p>
      */
-    protected float drawnY(UINode inLayer) {
+    protected float drawnY(UIElement inLayer) {
         return inLayer.box().y() - editor.scrollTop();
     }
 
     /** The horizontal half of {@link #drawnY}. */
-    protected float drawnX(UINode inLayer) {
+    protected float drawnX(UIElement inLayer) {
         return inLayer.box().x() - editor.scrollLeft();
     }
 
     protected float caretScreenY() {
-        UINode caret = childWithClass(TextEditor.CARET_CLASS);
+        UIElement caret = childWithClass(TextEditor.CARET_CLASS);
         assertNotNull("the caret is on screen", caret);
         return drawnY(caret);
     }

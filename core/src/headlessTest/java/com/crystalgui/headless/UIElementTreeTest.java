@@ -10,7 +10,7 @@ import static org.junit.Assert.fail;
 
 import com.crystalgui.core.async.UiThread;
 import com.crystalgui.ui.dom.*;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,20 +25,20 @@ import org.junit.Test;
  * roots, lifecycle order and timing, the two refusals (a mutation from inside an observer
  * notification, a mutation from the wrong thread), and the id index.</p>
  */
-public class UINodeTreeTest {
+public class UIElementTreeTest {
 
     @After
     public void restoreThreadEnforcement() {
         UiThread.setEnforcing(true);
     }
 
-    private static UINode named(String id) {
-        return new UINode().setId(id);
+    private static UIElement named(String id) {
+        return new UIElement().setId(id);
     }
 
-    private static List<String> ids(Iterable<UINode> nodes) {
+    private static List<String> ids(Iterable<UIElement> nodes) {
         List<String> out = new ArrayList<>();
-        for (UINode node : nodes) out.add(node.id().isEmpty() ? node.name().local() : node.id());
+        for (UIElement node : nodes) out.add(node.id().isEmpty() ? node.name().local() : node.id());
         return out;
     }
 
@@ -46,9 +46,9 @@ public class UINodeTreeTest {
 
     @Test
     public void lightChildrenAreWhatAuthorsSee() {
-        UINode root = named("root");
-        UINode a = named("a");
-        UINode b = named("b");
+        UIElement root = named("root");
+        UIElement a = named("a");
+        UIElement b = named("b");
         root.append(a).append(b);
         root.insertAt(1, named("mid"));
         assertEquals(List.of("a", "mid", "b"), ids(root.children()));
@@ -61,8 +61,8 @@ public class UINodeTreeTest {
 
     @Test
     public void aNodeCannotContainItself() {
-        UINode root = named("root");
-        UINode child = named("child");
+        UIElement root = named("root");
+        UIElement child = named("child");
         root.append(child);
         try {
             child.append(root);
@@ -74,7 +74,7 @@ public class UINodeTreeTest {
 
     @Test
     public void anAttributeEqualToItsInitialIsNotStored() {
-        UINode node = new UINode();
+        UIElement node = new UIElement();
         assertTrue("the initial answers before anything is set", node.get(Attribute.ENABLED));
         assertFalse(node.has(Attribute.ENABLED));
         node.set(Attribute.ENABLED, false);
@@ -86,8 +86,8 @@ public class UINodeTreeTest {
     @Test
     public void theIdIndexFollowsTheTree() {
         UIDocument document = new UIDocument();
-        UINode branch = named("branch");
-        UINode leaf = named("leaf");
+        UIElement branch = named("branch");
+        UIElement leaf = named("leaf");
         branch.append(leaf);
         document.append(branch);
         assertSame(leaf, document.getElementById("leaf"));
@@ -104,9 +104,9 @@ public class UINodeTreeTest {
 
     @Test
     public void aShadowTreeIsNotALightChild() {
-        UINode host = named("host");
+        UIElement host = named("host");
         ShadowRoot shadow = host.attachShadow();
-        UINode part = named("part");
+        UIElement part = named("part");
         shadow.append(part);
         assertTrue("shadow content is not a light child", host.children().isEmpty());
         assertNull("a shadow root has no parent; the way up is its host", shadow.parent());
@@ -124,14 +124,14 @@ public class UINodeTreeTest {
 
     @Test
     public void lightChildrenAppearWhereASlotTakesThem() {
-        UINode host = named("host");
+        UIElement host = named("host");
         ShadowRoot shadow = host.attachShadow();
-        UINode frame = named("frame");
+        UIElement frame = named("frame");
         UISlot slot = new UISlot();
         frame.append(slot);
         shadow.append(frame);
-        UINode a = named("a");
-        UINode b = named("b");
+        UIElement a = named("a");
+        UIElement b = named("b");
         host.append(a).append(b);
 
         assertEquals(List.of(a, b), slot.assignedNodes());
@@ -144,13 +144,13 @@ public class UINodeTreeTest {
 
     @Test
     public void namedSlotsTakeTheChildrenThatAskForThem() {
-        UINode host = named("host");
+        UIElement host = named("host");
         ShadowRoot shadow = host.attachShadow();
         UISlot icon = new UISlot("icon");
         UISlot body = new UISlot();
         shadow.append(icon).append(body);
-        UINode glyph = named("glyph").set(Attribute.SLOT, "icon");
-        UINode text = named("text");
+        UIElement glyph = named("glyph").set(Attribute.SLOT, "icon");
+        UIElement text = named("text");
         host.append(glyph).append(text);
 
         assertEquals(List.of(glyph), icon.assignedNodes());
@@ -165,9 +165,9 @@ public class UINodeTreeTest {
 
     @Test
     public void anUnslottedChildIsNotInTheComposedTree() {
-        UINode host = named("host");
+        UIElement host = named("host");
         host.attachShadow().append(named("part"));
-        UINode orphan = named("orphan");
+        UIElement orphan = named("orphan");
         host.append(orphan);
         assertNull(orphan.assignedSlot());
         assertNull("nowhere to appear, so it is not rendered", orphan.composedParent());
@@ -176,14 +176,14 @@ public class UINodeTreeTest {
 
     @Test
     public void fallbackShowsUntilSomethingIsAssigned() {
-        UINode host = named("host");
+        UIElement host = named("host");
         UISlot slot = new UISlot();
-        UINode fallback = named("fallback");
+        UIElement fallback = named("fallback");
         slot.append(fallback);
         host.attachShadow().append(slot);
         assertEquals(List.of(fallback), slot.composedChildren());
 
-        UINode content = named("content");
+        UIElement content = named("content");
         host.append(content);
         assertEquals(List.of(content), slot.composedChildren());
         host.remove(content);
@@ -193,12 +193,12 @@ public class UINodeTreeTest {
     @Test
     public void composedDescendantsWalkLightAndShadowThroughSlots() {
         UIDocument document = new UIDocument();
-        UINode host = named("host");
-        UINode wrapper = named("wrapper");
+        UIElement host = named("host");
+        UIElement wrapper = named("wrapper");
         UISlot slot = new UISlot();
         wrapper.append(slot);
         host.attachShadow().append(wrapper);
-        UINode leaf = named("leaf");
+        UIElement leaf = named("leaf");
         host.append(leaf);
         document.append(host);
         assertEquals(List.of("document", "host", "wrapper", "slot", "leaf"), ids(document.composedSubtree()));
@@ -217,7 +217,7 @@ public class UINodeTreeTest {
     @Test
     public void slotChangeRunsAfterTheMutationThatCausedIt() {
         UIDocument document = new UIDocument();
-        UINode host = named("host");
+        UIElement host = named("host");
         RecordingSlot slot = new RecordingSlot();
         host.attachShadow().append(slot);
         document.append(host);
@@ -233,23 +233,23 @@ public class UINodeTreeTest {
     @Test
     public void retargetingCrossesEveryBoundaryTheObserverIsOutsideOf() {
         UIDocument document = new UIDocument();
-        UINode host = named("host");
-        UINode part = named("part");
+        UIElement host = named("host");
+        UIElement part = named("part");
         host.attachShadow().append(part);
-        UINode inner = named("inner");
+        UIElement inner = named("inner");
         part.attachShadow().append(inner);
         document.append(host);
 
-        assertSame("from the document, everything inside is the host", host, UINode.retarget(inner, document));
+        assertSame("from the document, everything inside is the host", host, UIElement.retarget(inner, document));
         assertSame("from inside the host's tree, the part is visible but not the part's insides",
-                part, UINode.retarget(inner, part));
-        assertSame("from inside the part's tree, the target is itself", inner, UINode.retarget(inner, inner));
-        assertSame("a light node retargets to itself", host, UINode.retarget(host, document));
+                part, UIElement.retarget(inner, part));
+        assertSame("from inside the part's tree, the target is itself", inner, UIElement.retarget(inner, inner));
+        assertSame("a light node retargets to itself", host, UIElement.retarget(host, document));
     }
 
     // ── Lifecycle ────────────────────────────────────────────────────────────
 
-    private static final class Recording extends UINode {
+    private static final class Recording extends UIElement {
         static final List<String> log = new ArrayList<>();
         private final String tag;
 
@@ -287,7 +287,7 @@ public class UINodeTreeTest {
         assertEquals(List.of("disconnected leaf", "disconnected branch"), Recording.log);
     }
 
-    private static final class BuildsOnConnect extends UINode {
+    private static final class BuildsOnConnect extends UIElement {
         @Override
         protected void connected() {
             append(named("built"));
@@ -307,19 +307,19 @@ public class UINodeTreeTest {
     @Test
     public void aMutationFromInsideAnObserverNotificationIsRefused() {
         UIDocument document = new UIDocument();
-        UINodeTreeSource source = new UINodeTreeSource(document);
+        UIElementTreeSource source = new UIElementTreeSource(document);
         AtomicReference<Throwable> caught = new AtomicReference<>();
-        source.observe(new TreeObserver.Adapter<UINode>() {
+        source.observe(new TreeObserver.Adapter<UIElement>() {
             @Override
-            public void inserted(UINode node, UINode parent, int index) {
+            public void inserted(UIElement node, UIElement parent, int index) {
                 try {
-                    parent.append(new UINode());
+                    parent.append(new UIElement());
                 } catch (RuntimeException refused) {
                     caught.set(refused);
                 }
             }
         });
-        document.append(new UINode());
+        document.append(new UIElement());
         assertNotNull("the observer is being told about a change still being made", caught.get());
         assertTrue(caught.get() instanceof IllegalStateException);
         assertEquals("and the refused insert left nothing behind", 1, document.children().size());
@@ -331,7 +331,7 @@ public class UINodeTreeTest {
         AtomicReference<Throwable> caught = new AtomicReference<>();
         Thread other = new Thread(() -> {
             try {
-                document.append(new UINode());
+                document.append(new UIElement());
             } catch (RuntimeException refused) {
                 caught.set(refused);
             }
@@ -341,7 +341,7 @@ public class UINodeTreeTest {
         assertNotNull("the frame thread owns the tree", caught.get());
         assertTrue(caught.get().getMessage(), caught.get().getMessage().contains("frames"));
         assertTrue("nothing was inserted", document.children().isEmpty());
-        document.append(new UINode());   // the owner is still free to
+        document.append(new UIElement());   // the owner is still free to
     }
 
     // ── The light tree as the observer sees it ───────────────────────────────
@@ -349,16 +349,16 @@ public class UINodeTreeTest {
     @Test
     public void movingAcrossAShadowBoundaryIsARemovalOrAnInsertionToTheLightTree() {
         UIDocument document = new UIDocument();
-        UINode host = named("host");
+        UIElement host = named("host");
         ShadowRoot shadow = host.attachShadow();
-        UINode content = named("content");
+        UIElement content = named("content");
         host.append(content);
         document.append(host);
         List<String> lines = new ArrayList<>();
-        new UINodeTreeSource(document).observe(new TreeObserver.Adapter<UINode>() {
-            @Override public void inserted(UINode n, UINode p, int i) { lines.add("inserted " + n.id()); }
-            @Override public void removed(UINode n, UINode p) { lines.add("removed " + n.id()); }
-            @Override public void moved(UINode n, UINode p, int i) { lines.add("moved " + n.id()); }
+        new UIElementTreeSource(document).observe(new TreeObserver.Adapter<UIElement>() {
+            @Override public void inserted(UIElement n, UIElement p, int i) { lines.add("inserted " + n.id()); }
+            @Override public void removed(UIElement n, UIElement p) { lines.add("removed " + n.id()); }
+            @Override public void moved(UIElement n, UIElement p, int i) { lines.add("moved " + n.id()); }
         });
 
         content.moveTo(shadow, 0);
@@ -399,19 +399,19 @@ public class UINodeTreeTest {
      *
      * <p>Pins the move off {@code Name}'s own constants: the four were a second place to look up what
      * a kind is called, and only one of the two could be extended by a widget outside this module.
-     * Asserting the registry answers {@code UINode.NAME} is what makes the constant load-bearing
+     * Asserting the registry answers {@code UIElement.NAME} is what makes the constant load-bearing
      * rather than decorative.</p>
      */
     @Test
     public void aKindsNameIsDeclaredOnItsOwnClass() {
-        assertEquals("crystalgui:element", UINode.NAME.toString());
+        assertEquals("crystalgui:element", UIElement.NAME.toString());
         assertEquals("crystalgui:document", UIDocument.NAME.toString());
         assertEquals("crystalgui:slot", UISlot.NAME.toString());
         assertEquals("crystalgui:shadow-root", ShadowRoot.NAME.toString());
 
-        assertTrue(UINodeRegistry.create(UINode.NAME) instanceof UINode);
-        assertTrue(UINodeRegistry.create(UISlot.NAME) instanceof UISlot);
+        assertTrue(UIElementRegistry.create(UIElement.NAME) instanceof UIElement);
+        assertTrue(UIElementRegistry.create(UISlot.NAME) instanceof UISlot);
         assertTrue("a shadow root is never described, so nothing builds one from a name",
-                !UINodeRegistry.isRegistered(ShadowRoot.NAME));
+                !UIElementRegistry.isRegistered(ShadowRoot.NAME));
     }
 }

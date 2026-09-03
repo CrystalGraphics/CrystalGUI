@@ -1,7 +1,6 @@
 package com.crystalgui.widget.control;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgraphics.platform.service.CgInputService;
 import com.crystalgraphics.platform.input.CgSystemInput;
@@ -9,8 +8,6 @@ import com.crystalgui.testsupport.TestPlatformService;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.property.Property;
-import com.crystalgui.widget.control.Button;
-import com.crystalgui.widget.control.TextField;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -30,6 +27,7 @@ import static org.junit.Assert.*;
  * arithmetic, which is where the surrogate-pair and validation bugs actually live.</p>
  */
 public class TextFieldTest extends UiDocumentTestBase {
+
 
     private TextField field;
     private int modifiers = 0;
@@ -55,7 +53,7 @@ public class TextFieldTest extends UiDocumentTestBase {
         // Sized so the wheel tests can actually hit-test it. Everything else here is index
         // arithmetic and doesn't care.
         field.layout(l -> l.width(200).height(20));
-        UINode root = new UINode().layout(l -> l.width(300).height(100));
+        UIElement root = new UIElement().layout(l -> l.width(300).height(100));
         root.append(field);
         document.append(root);
         // A frame must have completed before any key is accepted: consumeKeyboardEvent bails while
@@ -63,6 +61,7 @@ public class TextFieldTest extends UiDocumentTestBase {
         frame();
         document.focus().requestFocus(field);
     }
+
 
 
     /**

@@ -48,7 +48,7 @@ public class StylePropertyRegistry {
     // (`invalidateFocusableChain`, `onPositionModeChanged`, `invalidatePoseCachesRecursively`,
     // `onResizeModeChanged`, `taffyBridge.set*`). The new engine needs none of them: `BoxStyle` reads
     // `ComputedStyle` on every sync, and the two cases that still need telling -- a `font-size` that
-    // moves an `em`, and `resize` growing handles -- go through `UINode.computedChanged`.
+    // moves an `em`, and `resize` growing handles -- go through `UIElement.computedChanged`.
 
     private static final Map<String, StyleProperty<?>> PROPERTIES_BY_NAME = new ConcurrentHashMap<>();
     private static volatile AtomicReferenceArray<StyleProperty<?>> PROPERTIES_BY_ID = new AtomicReferenceArray<>(256);

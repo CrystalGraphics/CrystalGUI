@@ -3,8 +3,8 @@ package com.crystalgui.desktop.window;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.desktop.taskbar.Taskbar;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.AnchoredPlacement;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.box.Box;
 import org.joml.Vector2f;
 import com.crystalgui.ui.dom.UIDocument;
@@ -121,7 +121,7 @@ public final class SystemMenu {
      * the entry (which flips it above the strip for free), then centred on the next frame, which is the
      * same two-step the hover previews use for the identical placement.</p>
      */
-    public static void showJumpList(WindowFrame frame, UINode anchor) {
+    public static void showJumpList(WindowFrame frame, UIElement anchor) {
         // THE ANCHOR'S WINDOW, NEVER THE FRAME'S -- and this route is the one place the difference is
         // fatal. HIDE IS DETACH: a minimised window is out of the tree entirely, so `frame` answers null
         // here for exactly the windows a jump list exists to reach, and the method returned having done
@@ -232,7 +232,7 @@ public final class SystemMenu {
      * child list that has quietly emptied. {@code ContextMenu.attach} records the same hazard, with the
      * crash it produces.</p>
      */
-    private static Menu open(WindowFrame frame, UINode source, UIDocument window) {
+    private static Menu open(WindowFrame frame, UIElement source, UIDocument window) {
         discardFor(frame);
         Menu menu = MenuBuilder.build(MenuId.WINDOW_SYSTEM, CommandRegistry.global(), source);
         LIVE.put(frame, MenuBuilder.present(menu, source, window));

@@ -1,12 +1,9 @@
 package com.crystalgui.widget.overlay;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.widget.control.Button;
-import com.crystalgui.widget.overlay.Dialog;
-import com.crystalgui.widget.overlay.DialogManager;
 import com.crystalgui.ui.service.Input;
 import org.junit.Before;
 import org.junit.Test;
@@ -23,19 +20,22 @@ import static org.junit.Assert.*;
  */
 public class DialogManagerTest extends UiDocumentTestBase {
 
+
     private Input input;
-    private UINode root, stage;
+    private UIElement root, stage;
     private DialogManager manager;
     private Dialog a, b, c;
 
     @Before
     public void build() {
-        root = new UINode().layout(l -> l.width(400).height(300));
-        stage = new UINode().layout(l -> l.width(400).height(300));
+        root = new UIElement().layout(l -> l.width(400).height(300));
+        stage = new UIElement().layout(l -> l.width(400).height(300));
         root.append(stage);
 
         document.append(root);
-        document.boxes().setUiScale(2f); // uiScale 2
+
+        document.boxes().setUiScale(2f);
+ // uiScale 2
         settle();
         input = document.input();
         input.beginFrame();
@@ -67,7 +67,7 @@ public class DialogManagerTest extends UiDocumentTestBase {
         return d.box().x() - stage.box().x();
     }
 
-    private void pressInside(UINode e) {
+    private void pressInside(UIElement e) {
         float x = e.box().x() + 3f;
         float y = e.box().y() + 3f;
         input.consumeMouseEvent(new CgSystemInput.Mouse.Event(

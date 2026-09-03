@@ -1,7 +1,7 @@
 package com.crystalgui.widget.texteditor.part;
 
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
@@ -28,10 +28,10 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
  */
 public final class CurrentLinePart extends EditorViewPart {
 
-    private final UINode band;
-    private final UINode gutterBand;
+    private final UIElement band;
+    private final UIElement gutterBand;
 
-    public CurrentLinePart(TextEditor editor, UINode band, UINode gutterBand) {
+    public CurrentLinePart(TextEditor editor, UIElement band, UIElement gutterBand) {
         super(editor);
         this.band = band;
         this.gutterBand = gutterBand;

@@ -1,12 +1,7 @@
 package com.crystalgui.workbench.region;
 
-import com.crystalgui.workbench.toolwindow.ToolWindowManager;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.workbench.region.DockRegion;
-import com.crystalgui.workbench.region.RegionSide;
-import com.crystalgui.workbench.region.WorkbenchRegions;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -44,11 +39,11 @@ public class WorkbenchRegionWeightTest extends UiDocumentTestBase {
 
     @Before
     public void setUpRegions() {
-        regions = new WorkbenchRegions(new UINode());
-        regions.host(DockRegion.SIDEBAR).show(RegionSide.PRIMARY, "explorer", new UINode());
+        regions = new WorkbenchRegions(new UIElement());
+        regions.host(DockRegion.SIDEBAR).show(RegionSide.PRIMARY, "explorer", new UIElement());
         regions.sync();
 
-        UINode root = new UINode().layout(l -> l.width(AXIS).height(600));
+        UIElement root = new UIElement().layout(l -> l.width(AXIS).height(600));
         root.append(regions.root());
         document.append(root);
         settle();
@@ -67,7 +62,7 @@ public class WorkbenchRegionWeightTest extends UiDocumentTestBase {
 
     /** What a stripe button does, via ToolWindowManager: fill the host, then re-sync the frame. */
     private void show(DockRegion region, String typeId) {
-        regions.host(region).show(RegionSide.PRIMARY, typeId, new UINode());
+        regions.host(region).show(RegionSide.PRIMARY, typeId, new UIElement());
         regions.sync();
     }
 

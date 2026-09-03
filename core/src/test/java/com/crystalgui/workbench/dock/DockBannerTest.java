@@ -1,15 +1,11 @@
 package com.crystalgui.workbench.dock;
 
-import com.crystalgui.workbench.dock.banner.DockBannerProvider;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.workbench.dock.DockArea;
 import com.crystalgui.workbench.dock.banner.DockBannerBar;
 import com.crystalgui.workbench.dock.banner.DockBanners;
-import com.crystalgui.workbench.dock.DockGroup;
 import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
 import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
@@ -37,20 +33,20 @@ public class DockBannerTest extends UiDocumentTestBase {
 
     private DockArea area;
     private DockLeaf leaf;
-    private UINode built;
+    private UIElement built;
 
     @Before
     public void setUp() {
         DockBanners.resetForTesting();
 
-        built = new UINode();
-        DockPanelRegistry<UINode> registry = new DockPanelRegistry<>();
+        built = new UIElement();
+        DockPanelRegistry<UIElement> registry = new DockPanelRegistry<>();
         registry.register(new DockPanelDescriptor("alpha", "Alpha"), ref -> built);
 
         leaf = new DockLeaf(alpha);
         area = new DockArea(registry, DockLayout.of(leaf));
 
-        UINode root = new UINode().layout(l -> l.width(600).height(400));
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400));
         root.append(area);
         area.layout(l -> l.width(600).height(400));
 
@@ -63,7 +59,7 @@ public class DockBannerTest extends UiDocumentTestBase {
         DockBanners.resetForTesting();
     }
 
-    private UINode tabContent() {
+    private UIElement tabContent() {
         DockGroup group = area.groupFor(leaf);
         assertNotNull(group);
         assertNotNull(group.tabFor(alpha));
@@ -90,7 +86,7 @@ public class DockBannerTest extends UiDocumentTestBase {
         DockBanners.register(panel -> Notification.warning("this file is generated"));
         frame();
 
-        UINode wrapper = tabContent();
+        UIElement wrapper = tabContent();
         assertFalse("the content should now be wrapped", wrapper == built);
         assertTrue("the banner must come first", wrapper.children().get(0) instanceof DockBannerBar);
         assertSame("and the panel's own content after it", built, wrapper.children().get(1));

@@ -1,8 +1,7 @@
 package com.crystalgui.workbench.chrome.menu;
 
 
-import com.crystalgui.workbench.chrome.notification.NotificationBalloons;
-import com.crystalgui.workbench.chrome.status.StatusBarView;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.core.data.DataKey;
@@ -14,8 +13,6 @@ import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.service.Animation;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.overlay.Menu;
 import com.crystalgui.widget.overlay.MenuBuilder;
@@ -67,7 +64,7 @@ import java.util.List;
  * underlined <b>only while Alt is held</b>, drawn through the CSS Custom Highlight API rather than by
  * splitting the label into three elements. {@code ::highlight(mnemonic)} in {@code default.css}.</p>
  */
-public class MenuBarView extends UINode  {
+public class MenuBarView extends UIElement {
 
     public static final Name NAME = Name.of("menubarview");
 
@@ -242,7 +239,7 @@ public class MenuBarView extends UINode  {
     /** On the bar itself while collapsed, so a theme can restyle the whole row at once. */
     public static final String COLLAPSED_CLASS = "__collapsed__";
 
-    private final UINode burger = new UINode();
+    private final UIElement burger = new UIElement();
 
     private boolean collapsed;
 
@@ -259,7 +256,7 @@ public class MenuBarView extends UINode  {
         // renders as tofu -- the trap UIText records for U+2026 and ViewContainer for its close mark --
         // and three styled boxes need no renderer change while staying entirely themeable.
         for (int i = 0; i < 3; i++) {
-            UINode stripe = new UINode();
+            UIElement stripe = new UIElement();
             stripe.addClass(BURGER_BAR_CLASS);
             stripe.setHitTest(false);
             burger.append(stripe);
@@ -420,20 +417,20 @@ public class MenuBarView extends UINode  {
      * {@link Menu} is rejected, because a menu takes focus for its own rows the moment it opens and would
      * otherwise overwrite the very answer this exists to keep.</p>
      */
-    private UINode contextSource(UIDocument window) {
-        UINode focused = window.focus().focused();
+    private UIElement contextSource(UIDocument window) {
+        UIElement focused = window.focus().focused();
         if (isUsableSource(focused)) return focused;
         if (isUsableSource(lastFocused)) return lastFocused;
         return this;
     }
 
     /** Whether {@code element} can stand for "what the user was working in". */
-    private boolean isUsableSource(@Nullable UINode element) {
+    private boolean isUsableSource(@Nullable UIElement element) {
         // DETACHED IS UNUSABLE, and this is not defensive coding: the remembered element is routinely the
         // thing a command just closed -- a tab, a file row -- and a context resolved from a detached
         // subtree finds none of its ancestors, so every command silently greys again.
         if (element == null || element.document() == null) return false;
-        for (UINode walk = element; walk != null; walk = walk.parent()) {
+        for (UIElement walk = element; walk != null; walk = walk.parent()) {
             if (walk == this || walk instanceof Menu) return false;
         }
         return true;
@@ -441,7 +438,7 @@ public class MenuBarView extends UINode  {
 
     /** The last thing focused that was neither this bar nor a row of one of its menus. */
     @Nullable
-    private UINode lastFocused;
+    private UIElement lastFocused;
 
     @Nullable
     private Title titleFor(MenuId id) {
@@ -490,7 +487,7 @@ public class MenuBarView extends UINode  {
         current.events.getGroup(FocusEvent.Focus.class)
                 .attachListener((element, event) -> {
                     if (document() != current) return;
-                    UINode target = ((UINode) event.getTarget());
+                    UIElement target = ((UIElement) event.getTarget());
                     if (isUsableSource(target)) lastFocused = target;
                 }, true, false);
         // LEFT/RIGHT ACROSS THE BAR, in the BUBBLE phase -- the opposite of the two above, and the
@@ -534,7 +531,7 @@ public class MenuBarView extends UINode  {
         // instead of toggling Preserve Case, and no per-field workaround can fix it because this listener
         // sees the key first. The same predicate `allowWhileTyping` already uses.
         UIDocument window = document();
-        UINode focused = window == null ? null : window.focus().focused();
+        UIElement focused = window == null ? null : window.focus().focused();
         if (focused != null && focused.consumesTextInput()) return;
         char typed = Character.toUpperCase(event.getCharacter());
         for (Title title : titles) {
@@ -568,7 +565,7 @@ public class MenuBarView extends UINode  {
     // ── The titles ──────────────────────────────────────────────────────────────────────────────
 
     /** One top-level entry. Not a {@code Button} — see the class note on press-to-open. */
-    private final class Title extends UINode {
+    private final class Title extends UIElement {
 
         private final MenuId id;
         private final UIText text = new UIText("");

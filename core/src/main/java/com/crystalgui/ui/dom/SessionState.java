@@ -17,7 +17,7 @@ import java.util.Set;
  *
  * <p>The first version was a {@code PanelViewState} interface a tool window implemented, and that was
  * the wrong shape: the engine <em>already</em> has a way for a widget to say what it wants preserved
- * and a way to name one ({@link UINode#setId}). A second, parallel mechanism meant every panel
+ * and a way to name one ({@link UIElement#setId}). A second, parallel mechanism meant every panel
  * re-implemented persistence for widgets that could already describe themselves, and it could only
  * ever reach a panel's <b>root</b> — a divider three levels down had to be proxied out by hand.</p>
  *
@@ -68,8 +68,8 @@ public final class SessionState<T> {
      * <p>A refusal is swallowed by the caller rather than here, because a widget that cannot read a
      * stale payload must not be a widget that cannot be added to a document.</p>
      */
-    public void applyTo(@Nullable UINode node) {
-        WidgetContract<UINode> contract = contractOf(node);
+    public void applyTo(@Nullable UIElement node) {
+        WidgetContract<UIElement> contract = contractOf(node);
         if (contract == null) return;
         String id = node.id();
         if (id.isEmpty() || applied.contains(id)) return;
@@ -86,18 +86,18 @@ public final class SessionState<T> {
      * The walk is the COMPOSED tree — a widget's parts are exactly where a divider lives, and on this
      * engine a part is inside a shadow root rather than flagged as internal.</p>
      */
-    public void capture(@Nullable UINode root) {
+    public void capture(@Nullable UIElement root) {
         if (root == null) return;
         collect(root);
     }
 
-    private void collect(UINode node) {
+    private void collect(UIElement node) {
         captureFrom(node);
         ShadowRoot shadow = node.shadowRoot();
         if (shadow != null) {
-            for (UINode child : shadow.children()) collect(child);
+            for (UIElement child : shadow.children()) collect(child);
         }
-        for (UINode child : node.children()) collect(child);
+        for (UIElement child : node.children()) collect(child);
     }
 
     /**
@@ -111,8 +111,8 @@ public final class SessionState<T> {
      * <p>Capturing on the way out rather than only at save time also means the value stored is the one
      * the widget had while it was alive, which is the only moment it can be read at all.</p>
      */
-    public void captureFrom(@Nullable UINode node) {
-        WidgetContract<UINode> contract = contractOf(node);
+    public void captureFrom(@Nullable UIElement node) {
+        WidgetContract<UIElement> contract = contractOf(node);
         if (contract == null) return;
         String id = node.id();
         if (id.isEmpty()) return;
@@ -130,10 +130,10 @@ public final class SessionState<T> {
      */
     @Nullable
     @SuppressWarnings("unchecked")
-    private static WidgetContract<UINode> contractOf(@Nullable UINode node) {
+    private static WidgetContract<UIElement> contractOf(@Nullable UIElement node) {
         if (node == null || !node.get(Attribute.SESSION_PERSISTENT)) return null;
-        NodeContract contract = UINodeRegistry.contractFor(node.name());
+        NodeContract contract = UIElementRegistry.contractFor(node.name());
         if (!(contract instanceof WidgetContract<?> widget) || !contract.carriesState()) return null;
-        return (WidgetContract<UINode>) widget;
+        return (WidgetContract<UIElement>) widget;
     }
 }

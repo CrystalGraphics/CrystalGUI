@@ -8,7 +8,7 @@ import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.wrap.LineProjection;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Attribute;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
@@ -80,7 +80,7 @@ public final class ErrorStripePart extends EditorViewPart {
      */
     private static final float DEFAULT_MARK_PERCENT = 1.2f;
 
-    private final List<UINode> marks = new ArrayList<>();
+    private final List<UIElement> marks = new ArrayList<>();
 
     /**
      * What each pooled slot is currently marking, parallel to {@link #marks}.
@@ -148,7 +148,7 @@ public final class ErrorStripePart extends EditorViewPart {
      * <p>Nearest rather than first, because marks crowd together in a file with many problems and the one
      * whose centre is closest is unambiguously the one being aimed at.</p>
      */
-    private boolean goToNearestMark(UINode track, float screenX, float screenY) {
+    private boolean goToNearestMark(UIElement track, float screenX, float screenY) {
         var local = track.toLocal(screenX, screenY);
         Box grooveBox = track.box();
         if (grooveBox == null) return false;
@@ -203,7 +203,7 @@ public final class ErrorStripePart extends EditorViewPart {
         int viewLine = editor.viewLineOf(offset, LineProjection.Affinity.RIGHT);
         if (viewLine < 0) return index;
 
-        UINode mark = markAt(index);
+        UIElement mark = markAt(index);
         marked.set(index, diagnostic);
         Placed placed = shown.get(index);
         index++;
@@ -236,7 +236,7 @@ public final class ErrorStripePart extends EditorViewPart {
 
     /** Set AND cleared, all three — marks are pooled, and one that showed an error before would otherwise
      * carry two severity classes and take whichever the cascade happened to prefer. */
-    private static void applySeverity(UINode mark, DiagnosticSeverity severity) {
+    private static void applySeverity(UIElement mark, DiagnosticSeverity severity) {
         mark.removeClass(ERROR_CLASS);
         mark.removeClass(WARNING_CLASS);
         mark.removeClass(INFORMATION_CLASS);
@@ -257,9 +257,9 @@ public final class ErrorStripePart extends EditorViewPart {
         });
     }
 
-    private UINode markAt(int index) {
+    private UIElement markAt(int index) {
         while (marks.size() <= index) {
-            UINode mark = new UINode();
+            UIElement mark = new UIElement();
             mark.addClass(STRIPE_CLASS);
             // AND A PART NAME, because the class alone reaches nothing here. These marks are appended
             // into the scrollbar's TRACK, which lives in the Scroller's shadow tree -- so a

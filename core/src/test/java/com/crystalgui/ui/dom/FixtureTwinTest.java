@@ -22,7 +22,7 @@ public class FixtureTwinTest extends UiDocumentTestBase {
     /** Build, lay out, read a settled box — the shape of every geometry test in the suite. */
     @Test
     public void buildingAndReadingGeometry() {
-        UINode panel = at("panel", 10f, 20f, 100f, 50f);
+        UIElement panel = at("panel", 10f, 20f, 100f, 50f);
         document.append(panel);
         layoutOnly();
 
@@ -40,7 +40,7 @@ public class FixtureTwinTest extends UiDocumentTestBase {
      */
     @Test
     public void hitTestingNeedsNoPaint() {
-        UINode panel = at("panel", 10f, 20f, 100f, 50f);
+        UIElement panel = at("panel", 10f, 20f, 100f, 50f);
         document.append(panel);
         layoutOnly();
 
@@ -60,7 +60,7 @@ public class FixtureTwinTest extends UiDocumentTestBase {
      */
     @Test
     public void aPressIsDeliveredThroughTheSinkAtAPoint() {
-        UINode button = at("button", 0f, 0f, 100f, 40f);
+        UIElement button = at("button", 0f, 0f, 100f, 40f);
         document.append(button);
         layoutOnly();
         frame();
@@ -76,7 +76,7 @@ public class FixtureTwinTest extends UiDocumentTestBase {
     /** A key press reports whether anything consumed it, which is what a host acts on. */
     @Test
     public void aKeyPressReportsConsumption() {
-        UINode field = at("field", 0f, 0f, 100f, 20f);
+        UIElement field = at("field", 0f, 0f, 100f, 20f);
         document.append(field);
         layoutOnly();
         frame();
@@ -87,8 +87,8 @@ public class FixtureTwinTest extends UiDocumentTestBase {
     /** The composed view crosses shadow boundaries; the class query does not. */
     @Test
     public void composedCrossesShadowAndTheQueryDoesNot() {
-        UINode host = new UINode().setId("host");
-        UINode part = new UINode().setId("part");
+        UIElement host = new UIElement().setId("host");
+        UIElement part = new UIElement().setId("part");
         part.addClass("marked");
         host.attachShadow().append(part);
         document.append(host);

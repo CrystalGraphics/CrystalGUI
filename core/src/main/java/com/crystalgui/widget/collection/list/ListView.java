@@ -4,7 +4,7 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
-import com.crystalgui.workbench.chrome.palette.QuickPick;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.collection.list.FixedHeightStrategy;
 import com.crystalgui.core.collection.list.ItemSizeStrategy;
 import com.crystalgui.core.collection.list.SelectionMode;
@@ -18,7 +18,6 @@ import com.crystalgui.ui.ClipboardActions;
 import com.crystalgui.ui.UiDataKeys;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.service.Input;
@@ -66,8 +65,8 @@ import lombok.Getter;
  * ListView<String> list = new ListView<>(model);          // an ObservableList<String>
  * list.setItemHeight(14f);
  * list.setRenderer(new ListRenderer<String>() {
- *     public UINode createTemplate() { ... }           // once — structure and listeners
- *     public void bind(String item, int i, UINode t) { ... }   // per row — data only
+ *     public UIElement createTemplate() { ... }           // once — structure and listeners
+ *     public void bind(String item, int i, UIElement t) { ... }   // per row — data only
  * });
  * }</pre>
  *
@@ -116,11 +115,11 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
 
     /** Realised rows by model index. Not a list: the window is a moving range, and keying by index is
      * what makes "is this row already realised?" a lookup rather than a scan. */
-    private final Map<Integer, UINode> realised = new HashMap<>();
+    private final Map<Integer, UIElement> realised = new HashMap<>();
 
     /** Recycled elements waiting to be re-bound. Templates, in the renderer's sense — structure intact,
      * data stale. */
-    private final Deque<UINode> pool = new ArrayDeque<>();
+    private final Deque<UIElement> pool = new ArrayDeque<>();
 
     private int firstRealised = -1, lastRealised = -1;
 
@@ -341,7 +340,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
         // the label's true extent even while the row itself is clamped narrower. Anything a row pins to
         // its trailing edge must be setScrollExempt, or it sits at the row's right edge by construction
         // and this measures the row instead of its content, forever.
-        for (UINode row : realised.values()) {
+        for (UIElement row : realised.values()) {
             Box rowBox = row.box();
             if (rowBox != null) widest = Math.max(widest, rowBox.scrollWidth());
         }
@@ -351,7 +350,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
     }
 
     private void applyRowWidths() {
-        for (UINode row : realised.values()) applyRowWidth(row);
+        for (UIElement row : realised.values()) applyRowWidth(row);
     }
 
     /**
@@ -361,7 +360,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
      * {@code realise} only runs for a row the window did not already hold, so rows already on screen
      * would keep the width they were born with and the fills would end in a ragged edge.</p>
      */
-    private void applyRowWidth(UINode row) {
+    private void applyRowWidth(UIElement row) {
         StyleGroup.inlinePipeline(row.getStyle().getLayoutGroup(), l -> {
             if (horizontalScrolling) l.width(scrollExtent(true));
             else l.widthPercent(100f);
@@ -418,7 +417,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
         // elements to a list instead makes the index map genuinely empty, so every lookup answers "not
         // realised" on its own -- which is the truth. They stay children and stay displayed, so the frame
         // still paints what it painted before; they simply stop being addressable.
-        for (UINode row : realised.values()) awaitingRecycle.add(row);
+        for (UIElement row : realised.values()) awaitingRecycle.add(row);
         realised.clear();
         firstRealised = -1;
         lastRealised = -1;
@@ -434,7 +433,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
      *
      * <p>Deliberately a list rather than a map: the point is that they have no index.</p>
      */
-    private final List<UINode> awaitingRecycle = new ArrayList<>();
+    private final List<UIElement> awaitingRecycle = new ArrayList<>();
 
     /**
      * Releases the model subscription on the way out.
@@ -558,7 +557,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
         // Held until now so the old rows stayed on screen -- recycling at invalidation time hid every row
         // the instant the model changed, and the frame that had already ticked painted empty.
         if (!awaitingRecycle.isEmpty()) {
-            for (UINode row : awaitingRecycle) recycle(row);
+            for (UIElement row : awaitingRecycle) recycle(row);
             awaitingRecycle.clear();
         }
 
@@ -629,8 +628,8 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
         return 0f;
     }
 
-    private UINode realise(int index) {
-        UINode row = pool.pollFirst();
+    private UIElement realise(int index) {
+        UIElement row = pool.pollFirst();
         if (row == null) {
             row = renderer.createTemplate();
             row.addClass(ROW_CLASS);
@@ -650,14 +649,14 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
             // one Tab press to skip rather than fifty.
             row.setFocusPolicy(FocusPolicy.CLICK_NOT_TABBABLE);
 
-            // `indexOfRowElement`, NOT `indexOf`. The row's MODEL index is the question; `UINode`
+            // `indexOfRowElement`, NOT `indexOf`. The row's MODEL index is the question; `UIElement`
             // inherits an `indexOf(child)` that answers a child's position in the parent's child
             // list, and it compiles, and it is a plausible small integer -- so focus, press and
             // release all silently acted on the wrong row. The old engine had no such method, so
             // the name resolved to this list's own; renaming it during the port handed the call to
             // the inherited one with nothing to report. Found by a focus test whose index drifted
             // from 3 to 7 while the focused element showed item 5.
-            final UINode tracked = row;
+            final UIElement tracked = row;
             tracked.onFocus.attachListener((el, event) -> {
                 int index2 = indexOfRowElement(tracked);
                 if (index2 < 0) return;
@@ -926,8 +925,8 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
      * the icon or a badge the renderer put there. This lived on {@code TreeView} and matched the row
      * element exactly, which worked only because its one caller had already resolved the row by hand.</p>
      */
-    public int indexOfRowElement(@Nullable UINode element) {
-        for (UINode scope = element; scope != null; scope = scope.parent()) {
+    public int indexOfRowElement(@Nullable UIElement element) {
+        for (UIElement scope = element; scope != null; scope = scope.parent()) {
             for (var entry : realised.entrySet()) {
                 if (entry.getValue() == scope) return entry.getKey();
             }
@@ -1102,7 +1101,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
         if (clipboardDelegate != null) clipboardDelegate.paste();
     }
 
-    private void applySelectionClass(UINode row, int index) {
+    private void applySelectionClass(UIElement row, int index) {
         if (selected.contains(index)) row.addClass(SELECTED_CLASS);
         else row.removeClass(SELECTED_CLASS);
     }
@@ -1195,8 +1194,8 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
 
     /** The model index a realised row currently represents, or -1. Linear over the window, which is a
      * dozen entries — a second map would have to be kept in step for no measurable gain. */
-    private int rowIndexOf(UINode row) {
-        for (Map.Entry<Integer, UINode> entry : realised.entrySet()) {
+    private int rowIndexOf(UIElement row) {
+        for (Map.Entry<Integer, UIElement> entry : realised.entrySet()) {
             if (entry.getValue() == row) return entry.getKey();
         }
         return -1;
@@ -1224,7 +1223,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
     /** @see #isRecyclingRow */
     private boolean recycling;
 
-    private void recycle(UINode row) {
+    private void recycle(UIElement row) {
         // Blur BEFORE pooling, and this is the fix for the worst symptom this widget had: focus rode the
         // recycled element into the pool and out again, so scrolling away from a focused row left the
         // focus ring jumping onto whatever unrelated item inherited that element next. The element is not
@@ -1256,7 +1255,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
     }
 
     private void recycleAll() {
-        for (UINode row : realised.values()) recycle(row);
+        for (UIElement row : realised.values()) recycle(row);
         realised.clear();
         firstRealised = -1;
         lastRealised = -1;
@@ -1264,7 +1263,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
 
     /** Realised rows, by model index — for tests and for anything that needs "the element for item N, if
      * it exists right now". */
-    public Map<Integer, UINode> realisedRows() {
+    public Map<Integer, UIElement> realisedRows() {
         return Collections.unmodifiableMap(realised);
     }
 
@@ -1317,7 +1316,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
      */
     private void syncFocusedClass() {
         var window = document();
-        UINode focused = window == null ? null : window.focus().focused();
+        UIElement focused = window == null ? null : window.focus().focused();
         boolean inside = focused != null && containsInSubtree(focused);
         // addClass/removeClass no-op on an unchanged set, so a settled frame writes nothing.
         if (inside) addClass(FOCUSED_CLASS);
@@ -1359,7 +1358,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
      */
     private void restoreFocusIfRealised(boolean mayFillAVacancy) {
         if (focusedIndex < 0) return;
-        UINode row = realised.get(focusedIndex);
+        UIElement row = realised.get(focusedIndex);
         var window = document();
         if (row == null || window == null) return;
 
@@ -1373,7 +1372,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
         // pointed at by aria-activedescendant. Every keystroke re-queried the source, which called
         // setFocusedIndex, which landed focus on a row: the palette opened unfocused and then unfocused
         // itself again on every letter typed.
-        UINode focused = window.focus().focused();
+        UIElement focused = window.focus().focused();
         // AND NOBODY HOLDING FOCUS IS NOT THIS LIST HOLDING IT.
         //
         // The guard below reads "focus is elsewhere, leave it there", and it was one case short in exactly
@@ -1433,8 +1432,8 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
     }
 
     /** Whether {@code element} is this list or sits underneath it. */
-    private boolean containsInSubtree(UINode element) {
-        for (UINode scope = element; scope != null; scope = scope.parent()) {
+    private boolean containsInSubtree(UIElement element) {
+        for (UIElement scope = element; scope != null; scope = scope.parent()) {
             if (scope == this) return true;
         }
         return false;
@@ -1521,7 +1520,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
      * other side: nothing a caller put here, and nothing to send.</p>
      */
     @Override
-    public java.util.List<UINode> describedChildren() {
+    public java.util.List<UIElement> describedChildren() {
         return java.util.List.of();
     }
 }

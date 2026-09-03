@@ -9,6 +9,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import com.crystalgui.ui.dom.UIElement;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -30,7 +31,6 @@ import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.ProgressBar;
 import com.crystalgui.widget.control.Switch;
@@ -150,7 +150,7 @@ public class MachineExampleTest {
                 }
 
                 @Override
-                public void contentReplaced(UINode newRoot) {
+                public void contentReplaced(UIElement newRoot) {
                 }
             };
         }
@@ -162,7 +162,7 @@ public class MachineExampleTest {
     public void theClientRebuildsTheServersTree() {
         Loopback net = new Loopback().open();
 
-        UINode root = net.client;
+        UIElement root = net.client;
         assertNotNull("the client never received a window", root);
 
         // Element COUNT, not a spot check. The two sides derive network ids from a document-order
@@ -402,7 +402,7 @@ public class MachineExampleTest {
      * <p>Nothing on the client registered {@code EnginePanel}: {@code MachinePanel.TYPE}'s own
      * declaration walks its fields and registers the tag of every nested panel it finds, which is what
      * lets a description saying {@code <enginepanel>} decode into the class. Without that the tree
-     * would still rebuild — as a {@link UINode} — and every field on it would be null.</p>
+     * would still rebuild — as a {@link UIElement} — and every field on it would be null.</p>
      */
     @Test
     public void theClientRebuildsTheNestedPanelToo() {
@@ -625,9 +625,9 @@ public class MachineExampleTest {
         }
     }
 
-    private static int countElements(UINode element) {
+    private static int countElements(UIElement element) {
         int total = 1;
-        for (UINode child : element.children()) total += countElements(child);
+        for (UIElement child : element.children()) total += countElements(child);
         return total;
     }
 }

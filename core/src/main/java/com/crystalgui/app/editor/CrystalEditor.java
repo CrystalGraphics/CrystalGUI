@@ -2,14 +2,11 @@ package com.crystalgui.app.editor;
 
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.dispose.Disposable;
-import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.NotificationEvent;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.core.notify.StatusBar;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.WorkspaceClient;
 import com.crystalgui.app.shadergraph.ShaderGraphContribution;
 import com.crystalgui.core.settings.Settings;
@@ -20,26 +17,19 @@ import com.crystalgui.fs.ConfigStorage;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.workbench.WorkbenchSession;
 import com.crystalgui.workbench.WorkbenchSettings;
 import com.crystalgui.widget.config.inspector.Inspector;
 import com.crystalgui.widget.config.inspector.InspectorRegistry;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.UiDataKeys;
 import com.crystalgui.desktop.window.WindowChrome;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.workbench.chrome.menu.ChromeCommands;
-import com.crystalgui.workbench.dock.DockCommands;
-import com.crystalgui.workbench.dock.drag.DockDropZone;
 import com.crystalgui.workbench.dock.DockGroup;
 import com.crystalgui.workbench.dock.layout.DockLayout;
-import com.crystalgui.workbench.dock.layout.DockLeaf;
 import com.crystalgui.workbench.dock.layout.DockLayoutCodec;
 import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
-import com.crystalgui.workbench.dock.drag.DockPlacement;
-import com.crystalgui.workbench.dock.panel.DockInput;
-import com.crystalgui.workbench.dock.panel.DockOpenOptions;
-import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import com.crystalgui.workbench.region.DockRegion;
 import com.crystalgui.document.FileDocument;
 import com.crystalgui.workbench.Workbench;
@@ -47,10 +37,6 @@ import com.crystalgui.ui.input.FocusPolicy;
 
 import javax.annotation.Nullable;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.command.CommandRegistry;
 
@@ -78,7 +64,7 @@ import com.crystalgui.core.command.CommandRegistry;
  * palette with its accelerator, and can be greyed when it does not apply — none of which a
  * {@code switch} on a scan code can offer. See {@link CrystalEditorCommands}.</p>
  */
-public class CrystalEditor extends UINode implements Disposable, WindowChrome, DataProvider {
+public class CrystalEditor extends UIElement implements Disposable, WindowChrome, DataProvider {
     /** The application shell. `ua/workbench.css` names the tag. */
     public static final Name NAME = Name.of("crystaleditor");
 
@@ -111,7 +97,7 @@ public class CrystalEditor extends UINode implements Disposable, WindowChrome, D
 
     /** Marked internal exactly ONCE, while empty. {@code markAsInternal()} RECURSES, and stamping a
      * populated subtree makes {@code removeChild} silently refuse everything below it. */
-    private final UINode content = new UINode();
+    private final UIElement content = new UIElement();
 
     /**
      * The one inspector — general, and pointed at whatever is selected.
@@ -323,7 +309,7 @@ public class CrystalEditor extends UINode implements Disposable, WindowChrome, D
      */
     @Override
     @Nullable
-    public UINode captionChrome() {
+    public UIElement captionChrome() {
         return workbench().menuBar();
     }
 
@@ -377,7 +363,7 @@ public class CrystalEditor extends UINode implements Disposable, WindowChrome, D
     //
     // Every command set in the application now arrives with the element that owns it -- DockArea the
     // dock's, GraphView the graph's, TextEditor the editor's, Workbench the explorer's, and this class
-    // its own -- each through UINode.registerCommands, once per class. Their chords are either
+    // its own -- each through UIElement.registerCommands, once per class. Their chords are either
     // declared on the commands (application-wide) or bound in bindKeys on the element that scopes them.
     // Constructing the editor is what wires it; there is nothing for a host to remember.
 

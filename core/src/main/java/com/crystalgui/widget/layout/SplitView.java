@@ -17,7 +17,7 @@ import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
@@ -84,7 +84,7 @@ import java.util.List;
  * weights are written at {@code IMPORTANT} origin with no transition declared, and a theme should
  * not add one.</p>
  */
-public class SplitView extends UINode {
+public class SplitView extends UIElement {
 
     public static final Name NAME = Name.of("splitview");
 
@@ -179,20 +179,20 @@ public class SplitView extends UINode {
 
     /** One pane: its element, its share, and what it refuses to shrink past. */
     private static final class Pane {
-        final UINode element;
+        final UIElement element;
         float weight;
         float minPx;
         float maxPx = Float.MAX_VALUE;
         boolean snap;
 
-        Pane(UINode element, float weight) {
+        Pane(UIElement element, float weight) {
             this.element = element;
             this.weight = weight;
         }
     }
 
     private final List<Pane> panes = new ArrayList<>();
-    private final List<UINode> dividers = new ArrayList<>();
+    private final List<UIElement> dividers = new ArrayList<>();
 
     private Orientation orientation = Orientation.HORIZONTAL;
     private float minPercentage = 5f;
@@ -221,7 +221,7 @@ public class SplitView extends UINode {
             // Resolved from the event, never captured: dividers are inserted and removed as panes come
             // and go, so an index closed over at construction would move the wrong one the moment the
             // layout changed. Same rule the pooled gutter arrows already document.
-            int index = dividers.indexOf(((UINode) event.getTarget()));
+            int index = dividers.indexOf(((UIElement) event.getTarget()));
             if (index < 0) return;
             beginDrag(index, event.getPosition().x(), event.getPosition().y());
         }, false, true);
@@ -245,8 +245,8 @@ public class SplitView extends UINode {
         }, false, false);
     }
 
-    private UINode newPart(String cssClass) {
-        UINode part = new UINode();
+    private UIElement newPart(String cssClass) {
+        UIElement part = new UIElement();
         part.addClass(cssClass);
         return part;
     }
@@ -260,7 +260,7 @@ public class SplitView extends UINode {
         return panes.size();
     }
 
-    public UINode pane(int index) {
+    public UIElement pane(int index) {
         return panes.get(index).element;
     }
 
@@ -268,32 +268,32 @@ public class SplitView extends UINode {
         return dividers.size();
     }
 
-    public UINode divider(int index) {
+    public UIElement divider(int index) {
         return dividers.get(index);
     }
 
     /** The leading pane — left when horizontal, top when vertical. Accepts children normally. */
-    public UINode first() {
+    public UIElement first() {
         return pane(0);
     }
 
     /** The second pane — right when horizontal, bottom when vertical. Accepts children normally. */
-    public UINode second() {
+    public UIElement second() {
         return pane(1);
     }
 
     /** The first divider, exposed for styling/focus; it holds no content. */
-    public UINode divider() {
+    public UIElement divider() {
         return divider(0);
     }
 
     /** Replaces the leading pane's content with {@code content} (LDLib2's {@code first(...)}). */
-    public SplitView first(UINode content) {
+    public SplitView first(UIElement content) {
         return paneContent(0, content);
     }
 
     /** Replaces the second pane's content with {@code content} (LDLib2's {@code second(...)}). */
-    public SplitView second(UINode content) {
+    public SplitView second(UIElement content) {
         return paneContent(1, content);
     }
 
@@ -316,9 +316,9 @@ public class SplitView extends UINode {
      * <p>The guard is exact identity, not equality: two different elements with the same content are still
      * a real replacement.</p>
      */
-    public SplitView paneContent(int index, UINode content) {
-        UINode pane = pane(index);
-        List<UINode> existing = pane.children();
+    public SplitView paneContent(int index, UIElement content) {
+        UIElement pane = pane(index);
+        List<UIElement> existing = pane.children();
         if (existing.size() == 1 && existing.get(0) == content) return this;
         pane.removeAll();
         pane.append(content);
@@ -332,12 +332,12 @@ public class SplitView extends UINode {
      * for a sibling insert, and for the same reason: every other pane keeps the proportion the user gave
      * it.</p>
      */
-    public UINode addPane() {
+    public UIElement addPane() {
         return insertPane(panes.size());
     }
 
     /** Inserts a pane at {@code index}, splitting the weight of whichever pane it displaces. */
-    public UINode insertPane(int index) {
+    public UIElement insertPane(int index) {
         int at = Math.max(0, Math.min(panes.size(), index));
         float weight;
         if (panes.isEmpty()) {
@@ -347,7 +347,7 @@ public class SplitView extends UINode {
             weight = donor.weight / 2f;
             donor.weight -= weight;
         }
-        UINode element = addPaneInternal(at, weight);
+        UIElement element = addPaneInternal(at, weight);
         configurePane(element);
         applySplit();
         return element;
@@ -378,12 +378,12 @@ public class SplitView extends UINode {
         return true;
     }
 
-    private UINode addPaneInternal(float weight) {
+    private UIElement addPaneInternal(float weight) {
         return addPaneInternal(panes.size(), weight);
     }
 
-    private UINode addPaneInternal(int index, float weight) {
-        UINode element = newPart(PANE_CLASS);
+    private UIElement addPaneInternal(int index, float weight) {
+        UIElement element = newPart(PANE_CLASS);
         panes.add(index, new Pane(element, weight));
 
         if (panes.size() == 1) {
@@ -391,7 +391,7 @@ public class SplitView extends UINode {
         } else {
             // Internal children are [pane, divider, pane, divider, …], so a pane at logical index i sits
             // at child index 2i and the divider that precedes it at 2i-1.
-            UINode newDivider = newPart(DIVIDER_CLASS);
+            UIElement newDivider = newPart(DIVIDER_CLASS);
             // The divider is the focus target, not the root — arrow keys should move the split whether
             // or not the panes' own content is focusable.
             newDivider.setFocusPolicy(FocusPolicy.FOCUSABLE);
@@ -421,14 +421,14 @@ public class SplitView extends UINode {
      */
     private void renamePaneClasses() {
         for (int i = 0; i < panes.size(); i++) {
-            UINode element = panes.get(i).element;
+            UIElement element = panes.get(i).element;
             setClass(element, PANE_CLASS, true);
             setClass(element, FIRST_CLASS, i == 0);
             setClass(element, SECOND_CLASS, i == 1);
         }
     }
 
-    private static void setClass(UINode element, String cssClass, boolean present) {
+    private static void setClass(UIElement element, String cssClass, boolean present) {
         if (present == element.hasClass(cssClass)) return;
         if (present) {
             element.addClass(cssClass);
@@ -468,7 +468,7 @@ public class SplitView extends UINode {
      *
      * <p>All at DEFAULT origin, so a stylesheet can still override any of it.</p>
      */
-    private void configurePane(UINode pane) {
+    private void configurePane(UIElement pane) {
         StyleGroup.defaultPipeline(pane.getStyle().getGeneralGroup(), g -> g.overflow(Overflow.HIDDEN));
         StyleGroup.defaultPipeline(pane.getStyle().getLayoutGroup(), l -> {
             l.flexBasis(0);
@@ -712,7 +712,7 @@ public class SplitView extends UINode {
         if (own != null) folded = own;
         // FOLDED, not "the wrapper otherwise the content": a pane has to satisfy both at once, so the
         // binding minimum is the larger and the binding maximum the smaller.
-        for (UINode child : pane.element.children()) {
+        for (UIElement child : pane.element.children()) {
             Float value = resolveLimit(child, property, pairPx);
             if (value == null) continue;
             folded = minimum ? Math.max(folded, value) : Math.min(folded, value);
@@ -722,7 +722,7 @@ public class SplitView extends UINode {
 
     /** One element's limit in pixels, or null when it declares none this class can resolve. */
     @Nullable
-    private static Float resolveLimit(UINode element, StyleProperty<TaffyDimension> property,
+    private static Float resolveLimit(UIElement element, StyleProperty<TaffyDimension> property,
                                       float pairPx) {
         TaffyDimension dimension = element.getStyle().getLayoutGroup().getValueSave(property);
         if (dimension == null) return null;
@@ -808,7 +808,7 @@ public class SplitView extends UINode {
         if (layout == null) return 1f;
         float content = isVertical() ? layout.contentBoxHeight() : layout.contentBoxWidth();
         float dividerSize = 0f;
-        for (UINode divider : dividers) {
+        for (UIElement divider : dividers) {
             Box dividerBox = divider.box();
             if (dividerBox == null) continue;
             dividerSize += isVertical() ? dividerBox.height() : dividerBox.width();
@@ -819,7 +819,7 @@ public class SplitView extends UINode {
     private int focusedDividerIndex() {
         var window = document();
         if (window == null) return dividers.isEmpty() ? -1 : 0;
-        UINode focused = window.focus().focused();
+        UIElement focused = window.focus().focused();
         int index = dividers.indexOf(focused);
         if (index >= 0) return index;
         return dividers.isEmpty() ? -1 : 0;

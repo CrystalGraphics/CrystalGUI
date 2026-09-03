@@ -7,7 +7,7 @@ import static org.junit.Assert.assertNull;
 
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.dnd.DragGhost;
 import org.junit.Test;
@@ -15,7 +15,7 @@ import org.junit.Test;
 /**
  * A real {@link DragGhost} gets a box while its drag runs — which is the only thing "on screen" means.
  *
- * <p><b>Driven with a real ghost on purpose.</b> The same test over a plain {@code UINode} passes
+ * <p><b>Driven with a real ghost on purpose.</b> The same test over a plain {@code UIElement} passes
  * against the bug: a bare node is hidden only by the {@code hidden} attribute, so showing it is
  * showing it. A {@code DragGhost} hides itself at construction as well, and the two halves used to
  * disagree — it hid with a cascade {@code display: none} and was shown by clearing the attribute, so
@@ -33,7 +33,7 @@ public class DragGhostShowsTest extends UiDocumentTestBase {
         // absent -- which is how a first pass measured the ghost at its content size and read it as a
         // rule that would not match.
         withDefaultStyles();
-        UINode source = new UINode();
+        UIElement source = new UIElement();
         document.append(source);
         DragGhost ghost = new DragGhost();
         document.append(ghost);

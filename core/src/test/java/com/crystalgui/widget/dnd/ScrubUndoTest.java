@@ -1,7 +1,6 @@
 package com.crystalgui.widget.dnd;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.core.undo.Edit;
@@ -58,7 +57,7 @@ public class ScrubUndoTest extends UiDocumentTestBase {
 
         undo = new UndoStack().setClock(clock::get);
 
-        UINode control = NodeFieldBinder.buildControl(field, graphDocument, nodeId, undo, null);
+        UIElement control = NodeFieldBinder.buildControl(field, graphDocument, nodeId, undo, null);
         assertTrue("this fixture depends on a NUMBER field building a NumberControl",
                 control instanceof NumberControl);
         NumberControl number = (NumberControl) control;
@@ -67,7 +66,7 @@ public class ScrubUndoTest extends UiDocumentTestBase {
         label.layout(l -> l.width(LABEL).height(LABEL));
         number.scrubWith(label);
 
-        UINode root = new UINode().layout(l -> l.width(400).height(400));
+        UIElement root = new UIElement().layout(l -> l.width(400).height(400));
         root.append(label);
         root.append(number);
 

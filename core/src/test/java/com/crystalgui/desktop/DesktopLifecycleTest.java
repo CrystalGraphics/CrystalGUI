@@ -1,9 +1,7 @@
 package com.crystalgui.desktop;
 
-import com.crystalgui.ui.service.Animation;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.Attribute;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.core.window.WindowPolicy;
@@ -11,10 +9,8 @@ import com.crystalgui.core.window.WindowState;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.widget.control.Button;
-import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.ui.service.Input;
-import org.junit.Ignore;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -51,12 +47,12 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
         Desktop.setAnimationsEnabled(false);
     }
 
-    private UINode root;
+    private UIElement root;
     private Desktop desktop;
     private Input input;
 
     private void build() {
-        root = new UINode().layout(l -> l.width(400).height(300));
+        root = new UIElement().layout(l -> l.width(400).height(300));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
         desktop = Desktop.of(document);

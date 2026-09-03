@@ -1,11 +1,9 @@
 package com.crystalgui.widget.layout;
 
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.widget.layout.SplitView;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import org.junit.Test;
 
@@ -32,8 +30,8 @@ public class SplitViewNAryTest extends UiDocumentTestBase {
         split = new SplitView();
         split.setOrientation(orientation);
 
-        UINode root = new UINode().layout(l -> l.width(400).height(300)
-                .flexDirection(FlexDirection.COLUMN));
+        UIElement root = new UIElement().layout(l -> l.width(400).height(300)
+                                                      .flexDirection(FlexDirection.COLUMN));
         root.append(split);
 
         document.append(root);
@@ -135,9 +133,9 @@ public class SplitViewNAryTest extends UiDocumentTestBase {
     @Test
     public void paneClassesTrackPositionAfterAnInsert() {
         setUp(SplitView.Orientation.HORIZONTAL);
-        UINode wasFirst = split.pane(0);
+        UIElement wasFirst = split.pane(0);
 
-        UINode inserted = split.insertPane(0);
+        UIElement inserted = split.insertPane(0);
         frame();
 
         assertSame(inserted, split.pane(0));

@@ -5,16 +5,13 @@ import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.contract.WidgetContract;
-import com.crystalgui.ui.dom.UINodeTreeSource;
-import com.crystalgui.ui.dom.TreeSource;
+import com.crystalgui.ui.dom.*;
+
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import com.crystalgui.serialization.DynamicOps;
-import com.crystalgui.ui.dom.Attribute;
-import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UINode;
-import com.crystalgui.ui.dom.UINodeRegistry;
+import com.crystalgui.ui.dom.UIElement;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -25,7 +22,7 @@ import java.util.function.ToIntFunction;
 import javax.annotation.Nullable;
 
 /**
- * {@link NodeMirror} over the new engine's {@link UINode} tree — the second engine's whole networking
+ * {@link NodeMirror} over the new engine's {@link UIElement} tree — the second engine's whole networking
  * half, beside {@link ElementNodeMirror}'s for the first.
  *
  * <p>A node is described as its {@link Name}, its id, its classes, every attribute something set that
@@ -39,7 +36,7 @@ import javax.annotation.Nullable;
  *
  * @param <T> the serialization form
  */
-public final class UINodeMirror<T> implements NodeMirror<UINode, T> {
+public final class UIElementMirror<T> implements NodeMirror<UIElement, T> {
 
     private static final String NAME = "n";
     private static final String ID = "i";
@@ -52,23 +49,23 @@ public final class UINodeMirror<T> implements NodeMirror<UINode, T> {
 
     private final DynamicOps<T> ops;
 
-    public UINodeMirror(DynamicOps<T> ops) {
+    public UIElementMirror(DynamicOps<T> ops) {
         this.ops = ops;
     }
 
     // ── Descriptions ─────────────────────────────────────────────────────────
 
     @Override
-    public T describe(UINode node) {
+    public T describe(UIElement node) {
         return write(node, null);
     }
 
     @Override
-    public T describeLive(UINode node, ToIntFunction<UINode> idOf) {
+    public T describeLive(UIElement node, ToIntFunction<UIElement> idOf) {
         return write(node, idOf);
     }
 
-    private T write(UINode node, @Nullable ToIntFunction<UINode> idOf) {
+    private T write(UIElement node, @Nullable ToIntFunction<UIElement> idOf) {
         Map<T, T> fields = new LinkedHashMap<>();
         fields.put(key(NAME), ops.createString(node.name().toString()));
         if (!node.id().isEmpty()) fields.put(key(ID), ops.createString(node.id()));
@@ -83,30 +80,30 @@ public final class UINodeMirror<T> implements NodeMirror<UINode, T> {
         T state = encodeState(node);
         if (state != null && !ops.getMapValue(state).isEmpty()) fields.put(key(STATE), state);
         if (idOf != null) fields.put(key(NID), ops.createNumber(idOf.applyAsInt(node)));
-        List<UINode> described = node.describedChildren();
+        List<UIElement> described = node.describedChildren();
         if (!described.isEmpty()) {
             List<T> children = new ArrayList<>(described.size());
-            for (UINode child : described) children.add(write(child, idOf));
+            for (UIElement child : described) children.add(write(child, idOf));
             fields.put(key(CHILDREN), ops.createList(children));
         }
         return ops.createMap(fields);
     }
 
     @Override
-    public UINode decode(T described) {
+    public UIElement decode(T described) {
         return read(described, null);
     }
 
     @Override
-    public UINode decodeLive(T described, ObjIntConsumer<UINode> idSink) {
+    public UIElement decodeLive(T described, ObjIntConsumer<UIElement> idSink) {
         return read(described, idSink);
     }
 
-    private UINode read(T described, @Nullable ObjIntConsumer<UINode> idSink) {
+    private UIElement read(T described, @Nullable ObjIntConsumer<UIElement> idSink) {
         Map<T, T> fields = ops.getMapValue(described);
         T name = fields.get(key(NAME));
         if (name == null) throw new IllegalArgumentException("A described node names its kind");
-        UINode node = UINodeRegistry.create(Name.parse(ops.getStringValue(name)));
+        UIElement node = UIElementRegistry.create(Name.parse(ops.getStringValue(name)));
         applyIdentity(fields, node);
         T style = fields.get(key(STYLE));
         if (style != null) applyInlineStyle(style, node);
@@ -142,8 +139,8 @@ public final class UINodeMirror<T> implements NodeMirror<UINode, T> {
      */
     @Override
     @Nullable
-    public T encodeState(UINode node) {
-        WidgetContract<UINode> contract = WidgetContracts.of(node);
+    public T encodeState(UIElement node) {
+        WidgetContract<UIElement> contract = WidgetContracts.of(node);
         if (contract == null || !contract.carriesState()) return null;
         StateMap<T> state = new StateMap<>(ops);
         contract.write(node, state);
@@ -151,8 +148,8 @@ public final class UINodeMirror<T> implements NodeMirror<UINode, T> {
     }
 
     @Override
-    public void applyState(T value, UINode node) {
-        WidgetContract<UINode> contract = WidgetContracts.of(node);
+    public void applyState(T value, UIElement node) {
+        WidgetContract<UIElement> contract = WidgetContracts.of(node);
         if (contract == null || !contract.carriesState()) return;
         // DECLARATION ORDER IS APPLY ORDER, and four widgets depend on it -- a Slider takes its range
         // before its value, or the value is clamped against the range it is replacing. The contract
@@ -164,7 +161,7 @@ public final class UINodeMirror<T> implements NodeMirror<UINode, T> {
 
     @Override
     @Nullable
-    public T encodeAttributes(UINode node) {
+    public T encodeAttributes(UIElement node) {
         Map<T, T> fields = new LinkedHashMap<>();
         fields.put(key(ID), ops.createString(node.id()));
         fields.put(key(CLASSES), ops.createString(String.join(" ", node.classes())));
@@ -174,12 +171,12 @@ public final class UINodeMirror<T> implements NodeMirror<UINode, T> {
     }
 
     @Override
-    public void applyAttributes(T value, UINode node) {
+    public void applyAttributes(T value, UIElement node) {
         applyIdentity(ops.getMapValue(value), node);
     }
 
     @Nullable
-    private T attributesOf(UINode node) {
+    private T attributesOf(UIElement node) {
         Map<T, T> out = null;
         for (Attribute<?> key : node.setAttributes()) {
             if (!key.isCarried()) continue;
@@ -190,12 +187,12 @@ public final class UINodeMirror<T> implements NodeMirror<UINode, T> {
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private static String writeAttribute(UINode node, Attribute key) {
+    private static String writeAttribute(UIElement node, Attribute key) {
         return key.write(node.get(key));
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private void applyIdentity(Map<T, T> fields, UINode node) {
+    private void applyIdentity(Map<T, T> fields, UIElement node) {
         T id = fields.get(key(ID));
         if (id != null) node.setId(ops.getStringValue(id));
         T classes = fields.get(key(CLASSES));
@@ -241,25 +238,25 @@ public final class UINodeMirror<T> implements NodeMirror<UINode, T> {
      */
     @Override
     @Nullable
-    public T encodeInlineStyle(UINode node) {
+    public T encodeInlineStyle(UIElement node) {
         T style = InlineStyleCodec.encode(ops, node);
         return style == null ? ops.createMap(Map.of()) : style;
     }
 
     @Override
-    public void applyInlineStyle(T value, UINode node) {
+    public void applyInlineStyle(T value, UIElement node) {
         InlineStyleCodec.decodeInto(ops, value, node);
     }
 
     // ── Structure ────────────────────────────────────────────────────────────
 
     @Override
-    public void insertChild(UINode parent, UINode child, int index) {
+    public void insertChild(UIElement parent, UIElement child, int index) {
         parent.insertAt(index, child);
     }
 
     @Override
-    public void removeChild(UINode parent, UINode child) {
+    public void removeChild(UIElement parent, UIElement child) {
         parent.remove(child);
     }
 
@@ -273,20 +270,20 @@ public final class UINodeMirror<T> implements NodeMirror<UINode, T> {
      * attribute encoder already carries it with no special case.
      */
     @Override
-    public Set<String> reportedEventsOf(UINode node) {
+    public Set<String> reportedEventsOf(UIElement node) {
         String joined = node.get(Attribute.REPORTS);
         if (joined == null || joined.isEmpty()) return Set.of();
         return new LinkedHashSet<>(Arrays.asList(joined.split(" ")));
     }
 
     @Override
-    public void addReportedEvent(UINode node, String kind) {
+    public void addReportedEvent(UIElement node, String kind) {
         // ASKED AND ANSWERED HERE, not at the client. "Can this kind of widget report X" is a fact
         // about the class and lives on its contract; "was this one asked to" is the session's, and
         // is what the attribute below records. Before this check a session could ask any node for any
         // string: the request was described, travelled, and hit a `default` arm on the far side that
         // logged it could not observe such a thing and carried on.
-        WidgetContract<UINode> contract = WidgetContracts.of(node);
+        WidgetContract<UIElement> contract = WidgetContracts.of(node);
         if (contract == null) {
             throw new IllegalStateException(node.tagName() + " has no WidgetContract, so there is "
                     + "nothing it can be asked to report");
@@ -301,7 +298,7 @@ public final class UINodeMirror<T> implements NodeMirror<UINode, T> {
     }
 
     @Override
-    public TreeSource<UINode> sourceOver(UINode root) {
-        return new UINodeTreeSource(root);
+    public TreeSource<UIElement> sourceOver(UIElement root) {
+        return new UIElementTreeSource(root);
     }
 }

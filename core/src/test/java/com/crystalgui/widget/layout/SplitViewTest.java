@@ -1,6 +1,6 @@
 package com.crystalgui.widget.layout;
 
-import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.dom.UIElement;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -71,7 +71,7 @@ public class SplitViewTest {
     @Test
     public void rootRejectsPublicChildren() {
         SplitView sv = new SplitView();
-        assertThrows(UnsupportedOperationException.class, () -> sv.append(new UINode()));
+        assertThrows(UnsupportedOperationException.class, () -> sv.append(new UIElement()));
     }
 
     /** ...but the panes are ordinary elements and must accept content normally. That's the whole
@@ -79,8 +79,8 @@ public class SplitViewTest {
     @Test
     public void panesAcceptChildren() {
         SplitView sv = new SplitView();
-        UINode a = new UINode();
-        UINode b = new UINode();
+        UIElement a = new UIElement();
+        UIElement b = new UIElement();
 
         sv.first().append(a);
         sv.second().append(b);
@@ -94,7 +94,7 @@ public class SplitViewTest {
     @Test
     public void paneContentRemainsRemovable() {
         SplitView sv = new SplitView();
-        UINode content = new UINode();
+        UIElement content = new UIElement();
         sv.first().append(content);
 
         assertTrue(sv.first().remove(content));
@@ -105,8 +105,8 @@ public class SplitViewTest {
     @Test
     public void clearingAPaneDoesNotDetachTheStructure() {
         SplitView sv = new SplitView();
-        UINode first = sv.first();
-        sv.first().append(new UINode());
+        UIElement first = sv.first();
+        sv.first().append(new UIElement());
 
         sv.first().removeAll();
 
@@ -117,8 +117,8 @@ public class SplitViewTest {
     @Test
     public void firstAndSecondReplaceRatherThanAppend() {
         SplitView sv = new SplitView();
-        UINode original = new UINode();
-        UINode replacement = new UINode();
+        UIElement original = new UIElement();
+        UIElement replacement = new UIElement();
 
         sv.first(original).first(replacement);
 
