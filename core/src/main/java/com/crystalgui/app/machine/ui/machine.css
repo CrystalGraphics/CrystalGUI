@@ -224,3 +224,37 @@
 #tune {
     width: 120px;
 }
+
+/*
+ * The three collections, side by side.
+ *
+ * A fixed height on each column is what makes the streams demonstrable rather than merely correct: a
+ * column sized to its content would realise every row the window holds and there would be nothing to
+ * scroll, which is the one thing a viewer has to do for a window to move.
+ */
+.machine-streams {
+    flex-direction: row;
+    gap-all: 12px;
+    margin-top: 10px;
+}
+
+.machine-stream-column {
+    width: 0;
+    flex-grow: 1;
+    height: 180px;
+    gap-all: 3px;
+    overflow: auto;
+}
+
+.machine-slot {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 6px;
+    height: 20px;
+}
+
+.machine-take {
+    width: 54px;
+    min-height: 16px;
+    height: 16px;
+}

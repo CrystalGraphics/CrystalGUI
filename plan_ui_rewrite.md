@@ -907,6 +907,26 @@ in a described child list, so the next `insert` op lands one index off, and `Pro
 
 #### 7.4 — Inventories, logs and file lists; the two-process check · S · after: 7.1, 7.2, F4
 
+> **SHIPPED, less the two-process run.** `StreamsPanel` in the Machine example — a streamed inventory
+> with a Take button per row, a followed log, and a file list read through
+> `io.workspace().files().list(...)` — attached over the whole model beside `EnginePanel`. Four tests
+> (`aLogThatGrowsWhileFollowedShipsOnlyTheNewRows` with two viewers, plus three in
+> `MachineExampleTest`), and `docs/CGUI_BUILDING_UIS.md` §7b says which shape is for what.
+>
+> **Built as containers rather than a `TableView` and a `ListView`.** The rows are what stream, and a
+> `ListView` is the client's view of them — which is the same finding 7.3 recorded from the census
+> side. A `TableView` here would have needed the columns half 7.0 deferred, and building it against a
+> stream it does not own would have put the demonstration in the wrong place.
+>
+> **The two-process check with `runClient -PcgJoin` is NOT done** — it needs a person at two clients,
+> which is the user's to run. The headless half measures what it can: bounded traffic, the follow, and
+> a viewer above the tail keeping its elements.
+>
+> One test had to change: `MachineExampleTest.countElements` walked `children()`, which since 7.2
+> includes the viewer's own controls — and the workspace column is exactly that. It counts
+> `describedChildren()` now, which is the comparison the integrity check itself makes.
+
+
 The three things the M7 row always promised, in the Machine example: the inventory (a streamed
 `TableView` with a "take" button per row), a log (a streamed `ListView` following its tail), and a
 file list read through `io.workspace().files().list(...)` into a local list — shown side by side so

@@ -29,6 +29,7 @@ import com.crystalgui.app.machine.ui.MachineStyles;
 import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
+import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.widget.control.Button;
@@ -133,6 +134,22 @@ public class MachineExampleTest {
         /** The window on screen, for the tests that drive a close from the client's side. */
         ClientWindowContext shown() {
             return ClientWindows.of(clientEnd).windows().get(0);
+        }
+
+        /**
+         * Says which rows of a streamed collection this client is looking at.
+         *
+         * <p>What {@code RemoteRows} sends from a scroll handler, written out here because the panel's
+         * client half is a list this test drives rather than a view with a viewport.</p>
+         */
+        void showingRows(UIElement streamed, int from, int to) {
+            StateMap<Object> args = new StateMap<>(PlainOps.INSTANCE);
+            args.putInt(UiMethods.WINDOW, server.session().windowId());
+            args.putInt("nid", server.session().idOf(streamed));
+            args.putInt("from", from);
+            args.putInt("to", to);
+            clientEnd.call(UiMethods.ROWS, args, null, null);
+            settle(8);
         }
     }
 
@@ -625,9 +642,86 @@ public class MachineExampleTest {
         }
     }
 
+    // ── The three collections ────────────────────────────────────────────────
+
+    /**
+     * <b>An inventory is streamed: a window of it exists, not all of it.</b>
+     *
+     * <p>Two hundred slots and a screenful described. The number is not the point — the point is that
+     * it does not depend on the number, which is what makes the same code right for a chest and for a
+     * warehouse.</p>
+     */
+    @Test
+    public void theInventoryShipsAWindowRatherThanEveryslot() {
+        Loopback net = new Loopback().open();
+        assertEquals(200, net.machine.slotCount());
+        assertEquals("nobody has said what they are looking at yet",
+                0, net.client.streams.inventory.describedChildren().size());
+
+        net.showingRows(net.serverPanel.streams.inventory, 0, 12);
+
+        int described = net.client.streams.inventory.describedChildren().size();
+        assertTrue("a window, not two hundred rows: " + described, described < 40);
+        assertTrue("...and the rows are there", described >= 12);
+    }
+
+    /**
+     * <b>A button in a streamed row reports like any other button.</b>
+     *
+     * <p>The difference between this and a display list, and the reason the rows go through the mirror
+     * rather than beside it: a row is an ordinary described subtree, so everything that works on a
+     * described widget works on one without anything being said about streams.</p>
+     */
+    @Test
+    public void aTakeButtonInAStreamedRowReportsLikeAnyOther() {
+        Loopback net = new Loopback().open();
+        net.showingRows(net.serverPanel.streams.inventory, 0, 12);
+        int before = net.machine.logSize();
+        assertTrue("slot 3 has something in it to take", net.machine.slots(3, 4).get(0).count() > 0);
+
+        // The CLIENT's button, in the row the client decoded -- not the server's.
+        UIElement row = net.client.streams.inventory.describedChildren().get(3);
+        ((Button) row.children().get(1)).onPressed.emit();
+        net.settle(6);
+
+        assertEquals("the server emptied the slot the row was showing",
+                0, net.machine.slots(3, 4).get(0).count());
+        assertEquals("...and wrote a line about it", before + 1, net.machine.logSize());
+    }
+
+    /**
+     * <b>The workspace column is read through the fs protocol, not described.</b>
+     *
+     * <p>This connection carries no workspace at all, so the column says so — and the point is what it
+     * cost the mirror to say it: nothing. The rows are local, so the server has no idea the column
+     * exists.</p>
+     */
+    @Test
+    public void theWorkspaceColumnNeverTouchesTheMirror() {
+        Loopback net = new Loopback().open();
+
+        assertEquals("nothing about the file list was described",
+                0, net.serverPanel.streams.files.describedChildren().size());
+        assertEquals(0, net.client.streams.files.describedChildren().size());
+        assertTrue("...and the client built its own rows regardless",
+                net.client.streams.files.children().size() > 0);
+        for (UIElement row : net.client.streams.files.children()) {
+            assertTrue("every one of them is the viewer's own", row.isLocal());
+        }
+    }
+
+    /**
+     * How many DESCRIBED elements a tree holds.
+     *
+     * <p>{@code describedChildren()}, never {@code children()}: since 7.2 a panel's {@code client(io)}
+     * may add controls of the viewer's own — the workspace column's rows are exactly that — and those
+     * are the one thing the two sides are meant to differ by. Counting the light tree would compare a
+     * server's tree against a client's tree plus whatever the viewer added, which is the comparison the
+     * integrity check itself deliberately does not make.</p>
+     */
     private static int countElements(UIElement element) {
         int total = 1;
-        for (UIElement child : element.children()) total += countElements(child);
+        for (UIElement child : element.describedChildren()) total += countElements(child);
         return total;
     }
 }

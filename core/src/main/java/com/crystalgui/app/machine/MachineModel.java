@@ -1,5 +1,9 @@
 package com.crystalgui.app.machine;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 /**
  * <b>Step 1 — the truth the server owns.</b>
  *
@@ -31,6 +35,7 @@ package com.crystalgui.app.machine;
  */
 public final class MachineModel {
 
+
     /** How much of a cycle one tick completes at full throughput. Slow enough to watch. */
     private static final float CYCLE_SPEED = 0.02f;
 
@@ -52,6 +57,18 @@ public final class MachineModel {
      * <p>The constructor is package-private: an engine is made by the machine it belongs to.</p>
      */
     private final EngineModel engine = new EngineModel();
+
+    public MachineModel() {
+        for (int i = 0; i < 200; i++) {
+            slots.add(new Slot(i, ITEMS[i % ITEMS.length], 1 + (i * 7) % 64));
+        }
+        append("machine assembled");
+    }
+
+    /** Enough names that a scrolled window plainly shows different rows. */
+    private static final String[] ITEMS = {
+            "Iron Ingot", "Copper Wire", "Redstone", "Quartz", "Glass Pane", "Coal", "Gear", "Piston"
+    };
 
     public boolean isRunning() {
         return running;
@@ -104,6 +121,72 @@ public final class MachineModel {
     public void purge() {
         if (progress == 0f) return;
         progress = 0f;
+    }
+
+    // ── Two collections, because a collection is what a stream is for ────────────────────────────
+
+    /**
+     * What is in the machine, as a list long enough that describing all of it would be silly.
+     *
+     * <p>Two hundred slots is not a lot and is already more than a panel shows. The point of the
+     * number is that the cost of the UI does not depend on it — a viewer sees a window of rows, and
+     * the same code serves two hundred or ten thousand.</p>
+     */
+    private final List<Slot> slots = new ArrayList<>();
+
+    /** What the machine has done, newest last — what a viewer FOLLOWS. */
+    private final List<String> log = new ArrayList<>();
+
+    /** One inventory slot. Its {@code index} is its identity and does not change when it empties. */
+    public record Slot(int index, String item, int count) {
+    }
+
+    public List<Slot> slots() {
+        return Collections.unmodifiableList(slots);
+    }
+
+    public int slotCount() {
+        return slots.size();
+    }
+
+    /** A window of the inventory. What a {@code RowSource} answers with. */
+    public List<Slot> slots(int from, int to) {
+        int start = Math.max(0, Math.min(from, slots.size()));
+        int end = Math.max(start, Math.min(to, slots.size()));
+        return List.copyOf(slots.subList(start, end));
+    }
+
+    /** Empties a slot, keeping its place. Refused for an index nobody has. */
+    public boolean take(int index) {
+        for (int i = 0; i < slots.size(); i++) {
+            Slot slot = slots.get(i);
+            if (slot.index() != index) continue;
+            if (slot.count() == 0) return false;
+            slots.set(i, new Slot(index, slot.item(), 0));
+            append("took " + slot.count() + " x " + slot.item() + " from slot " + index);
+            return true;
+        }
+        return false;
+    }
+
+    public List<String> log() {
+        return Collections.unmodifiableList(log);
+    }
+
+    public int logSize() {
+        return log.size();
+    }
+
+    /** A window of the log. */
+    public List<String> log(int from, int to) {
+        int start = Math.max(0, Math.min(from, log.size()));
+        int end = Math.max(start, Math.min(to, log.size()));
+        return List.copyOf(log.subList(start, end));
+    }
+
+    /** Writes a line. The log is what a following viewer receives without asking. */
+    public void append(String line) {
+        log.add(line);
     }
 
     /**
