@@ -65,7 +65,7 @@ public final class RemoteCommands<T> {
     /**
      * Listens on {@code connection} and installs what it contributes into {@code registry}.
      *
-     * <p>Not memoised, unlike {@code WorkspaceClient.forConnection}: a second of these on one connection
+     * <p>Not memoised, unlike a workspace: a second of these on one connection
      * would register {@code command/contribute} twice and the router refuses a duplicate, which is the
      * right failure and needs no help. The registry is a parameter rather than
      * {@code CommandRegistry.global()} so a test — and a host that wants server commands quarantined —

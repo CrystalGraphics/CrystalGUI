@@ -13,21 +13,16 @@ import javax.annotation.Nullable;
 /**
  * Somebody else changed this file. Which version survives?
  *
- * <h3>Why this is a modal dialog and not the balloon it replaces</h3>
+ * <h3>Why this is a modal dialog</h3>
  *
- * <p>The protocol half of this was done deliberately and first: {@code Failure.isConflict()} carries the
- * live etag and a delta against a file that moved is <b>refused rather than merged</b>, because merging
- * is a decision with a UI attached and does not belong in a write path. This is that UI.</p>
+ * <p>The protocol half comes first: a write against a file that moved is <b>refused rather than
+ * merged</b>, and {@code FsError.actualEtag} carries what the file now holds. Merging is a decision
+ * with a UI attached and does not belong in a write path — this is that UI.</p>
  *
- * <p>What it replaces was a {@code Notification} offering one action, <i>"Reopen to take theirs"</i>. Two
- * things are wrong with that and neither is cosmetic. It <b>fades</b> — a balloon the user was not looking
- * at takes the decision by default, and the default is "your save silently did not happen". And its one
- * button <b>destroys unsaved work in one click with no confirmation</b>, while the other resolution — keep
- * mine — was not offered at all, so a user who wanted it had to know to copy their buffer out first.</p>
- *
- * <p>A conflict is one of the few moments in an editor where every route loses something. That earns the
- * interruption: the whole argument against modals is that they interrupt, and this is the case where
- * interrupting is the point.</p>
+ * <p>A notification would not do. It <b>fades</b>, so a user who was not looking takes the default, and
+ * the default here is "your save silently did not happen". A conflict is one of the few moments in an
+ * editor where every route loses something, and that earns the interruption: the whole argument against
+ * modals is that they interrupt, and this is the case where interrupting is the point.</p>
  *
  * <h3>Three outcomes, and the safe one is what Escape and focus do</h3>
  *

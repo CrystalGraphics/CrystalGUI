@@ -13,7 +13,7 @@ import java.util.Locale;
  *
  * <h3>The provider's facts could not reach the client</h3>
  *
- * <p>{@code plan_fs_rewrite.md} D21, G7:</p>
+ * <p>Four client decisions depend on the answer:</p>
  *
  * <ul>
  *   <li><b>Case.</b> {@code PATH_CASE_SENSITIVE} was advertised as a capability and read by nobody. So

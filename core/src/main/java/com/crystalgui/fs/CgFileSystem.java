@@ -66,7 +66,7 @@ public interface CgFileSystem {
      * <b>Part of a file</b> — the capability {@link CgFileCapability#FILE_OPEN_READ_WRITE_CLOSE} names,
      * which was declared and implemented by nothing.
      *
-     * <p>What it is for: {@code WorkspaceRpc}'s chunked transfer snapshotted the whole file into memory
+     * <p>What it is for: a chunked transfer that snapshotted the whole file into memory
      * and handed out slices of it, so four peers opening four 100 MB files cost 400 MB of server heap to
      * send bytes it had already read. Its own javadoc named this fix. With a ranged read a transfer is
      * {@code (resource, etag, size)} and holds nothing at all.</p>

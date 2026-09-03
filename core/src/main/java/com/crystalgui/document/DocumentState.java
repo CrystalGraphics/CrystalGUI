@@ -1,17 +1,13 @@
 package com.crystalgui.document;
 
 /**
- * <b>What state a document is in — one enum, read by every surface.</b>
+ * What state a document is in — <b>one enum, read by every surface</b>.
  *
- * <p>{@code plan_fs_rewrite.md} A7. There were five answers to this question and they were spread over
- * three classes: {@code externallyChanged} and {@code externallyDeleted} sets on the workbench,
- * {@code unreadable} and {@code requested} flags on the document store, and {@code viewersLoaded}
- * beside them. A tab's decoration, the save path, the conflict dialog and the session record each read
- * a different one, and a state nobody had thought to write into all five was a state some of them
- * disagreed about.</p>
+ * <p>A tab's decoration, the save path, the conflict dialog and the session record all ask this, so
+ * there is one answer rather than a set of flags each of them reads a different one of.</p>
  *
- * <p>Ported from VS Code's {@code TextFileEditorModel}, which carries the same set under the same
- * names: dirty, orphaned, conflicting, error.</p>
+ * <p>The same set VS Code's {@code TextFileEditorModel} carries, under the same names: dirty,
+ * orphaned, conflicting, error.</p>
  */
 public enum DocumentState {
 

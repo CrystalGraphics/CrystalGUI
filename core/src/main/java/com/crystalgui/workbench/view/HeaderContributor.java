@@ -14,7 +14,7 @@ import com.crystalgui.ui.dom.UIElement;
  *
  * <p>A view cannot reach its container to do that itself, and should not: it does not know whether it is
  * alone in one, sharing it with a sibling, or in a container at all. So it <em>offers</em> an element and
- * the container decides where it goes — the same direction of dependency {@code FileDocument} uses to
+ * the container decides where it goes — the same direction of dependency a document view uses to
  * answer what it has to say without knowing what shows it.</p>
  */
 public interface HeaderContributor {

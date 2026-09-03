@@ -3,16 +3,14 @@ package com.crystalgui.fs.protocol;
 /**
  * <b>The method names, and nothing else.</b>
  *
- * <p>{@code WorkspaceProtocol} carried sixty constants: twenty method names and forty field keys, the
- * field keys read by hand at one end and written by hand at the other. That is where a field could be
- * written on one side and never read on the other with nothing to say so — the shape
- * {@code plan_fs_rewrite.md} N27 names, and the reason every payload is a record with a codec now.</p>
+ * <p>Method names only: what each one carries is a record with a codec in {@link FsMessages}, so a
+ * field written on one side is provably the field read on the other.</p>
  *
  * <p>Two shapes. A <b>request</b> is a question with an answer, and a client is refused if it may not
- * ask. A <b>notification</b> is the server telling a client something; it is one-way, costs no pending
- * entry and no timeout slot, and there is nothing to answer. Every push was a request before F2
- * (N24) — {@code fs.changed}, {@code fs.presence} and {@code fs.capabilities} each opened a call the
- * client answered with nothing and the server waited ten seconds for.</p>
+ * ask. A <b>notification</b> is the server telling a client something: one-way, costing no pending
+ * entry and no timeout slot, with nothing to answer. {@code fs/changed}, {@code fs/presence} and
+ * {@code fs/capabilities} are notifications — sent as requests they would each occupy a slot and a
+ * timeout per watched file per change per peer.</p>
  */
 public final class FsMethods {
 

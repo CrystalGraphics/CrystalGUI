@@ -22,14 +22,24 @@ import java.util.function.BiConsumer;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * <b>Open documents, over the wire</b> — where {@code document}'s headless model meets the filesystem.
+ * The open documents, and the wire underneath them.
+ *
+ * <pre>{@code
+ * documents.open(resource).then(reference -> …);
+ * documents.save(document).onError(conflict -> …);
+ * documents.onDidChangeState.connect((document, state) -> …);
+ * }</pre>
+ *
+ * <p>Built over a {@link Workspace} and a {@link DocumentKinds}: opening reads the resource through the
+ * workspace, asks the kinds which model to build, and hands back a {@link DocumentReference}. A second
+ * caller for one resource joins the document already open, which is what makes two split panes one
+ * document.</p>
  *
  * <h3>The save is the synchronisation point</h3>
  *
- * <p>{@code plan_fs_rewrite.md} §4, D10. A document lives on one client between saves; a save quotes
- * the etag and is refused if the file moved; the refusal is a conflict a person resolves. Every
- * disagreement is an etag mismatch, surfaces where somebody can act on it, and is testable with one
- * client and one file.</p>
+ * <p>A document lives on one client between saves. A save quotes the etag it last saw and is refused
+ * if the file moved; the refusal is a conflict a person resolves. So every disagreement is an etag
+ * mismatch and surfaces where somebody can act on it.</p>
  *
  * <h3>What a change on the server means depends on whether the document is dirty</h3>
  *

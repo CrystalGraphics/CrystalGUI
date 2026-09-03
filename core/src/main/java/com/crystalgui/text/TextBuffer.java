@@ -233,7 +233,7 @@ public final class TextBuffer {
      * {@code replace(0, length(), text)} and every {@code replace} records. So <b>Ctrl+Z after an
      * external reload restored the stale text</b>: the file on disk said one thing, the buffer another,
      * and the undo stack offered to put the second one back as though the user had typed it.
-     * {@code FileDocument.adopt}'s own contract has said loading must never push a step since it was
+     * {@code DocumentModel.adopt}'s own contract has said loading must never push a step since it was
      * written; nothing enforced it.</p>
      *
      * <p>The document still MOVES — the version bumps, the decorations adjust, {@link #onChanged} fires —

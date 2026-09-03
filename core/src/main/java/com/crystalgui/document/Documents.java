@@ -13,15 +13,10 @@ import java.util.Objects;
 import java.util.function.UnaryOperator;
 
 /**
- * <b>Every open document, by resource</b> — one per resource, held by reference count.
+ * Every open document, by {@link Resource} — one per resource, held by reference count.
  *
- * <h3>Headless, and keyed by {@link Resource}</h3>
- *
- * <p>{@code plan_fs_rewrite.md} N1, D1. {@code OpenDocuments} was keyed by {@code CgPath}, so a
- * {@code library://} class or a generated shader source could not be in it at all — and the workbench
- * grew a parallel lane of roughly four hundred lines re-deriving open, adopt and presentation for a
- * second key type, with its own javadoc calling it a stopgap "until a second non-file document kind
- * turns up". Two did.</p>
+ * <p>Keyed by resource rather than by path, so a project file, a decompiled class and a generated
+ * shader source are all in one store and there is one way to open any of them.</p>
  *
  * <h3>Case folding is the server's rule, passed in</h3>
  *

@@ -32,7 +32,7 @@ import java.io.File;
  * The Minecraft host for {@link CrystalEditor}.
  *
  * <p>{@code CrystalEditor}'s own javadoc states the contract this implements: <i>"A host supplies a
- * {@link com.crystalgui.fs.WorkspaceClient} and a window; everything else is decided here."</i> So this
+ * {@link com.crystalgui.fs.client.Workspace} and a window; everything else is decided here."</i> So this
  * class is deliberately small — it owns a {@link UIDocument}, drives one frame, and saves on close.
  * Which panels exist, what the layout is, which commands answer to which keys and where focus starts
  * are all the editor's, and none of them appear below.</p>

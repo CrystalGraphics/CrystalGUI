@@ -33,7 +33,7 @@ import java.util.function.Function;
  * <h3>Why it cannot simply read the file</h3>
  *
  * <p>Because {@code sourceOf} is called from inside a compile, on the analysis thread, and reading a file
- * goes over {@code WorkspaceClient} — which is a round trip and may be a genuine network one. Blocking
+ * goes over the wire — which is a round trip and may be a genuine network one. Blocking
  * there would stall a keystroke on I/O. So a miss returns null and schedules the read, exactly as the
  * file tree lists a directory it has not seen yet and fills in when the answer lands.</p>
  *

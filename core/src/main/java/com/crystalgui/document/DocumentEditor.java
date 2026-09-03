@@ -8,7 +8,7 @@ import com.crystalgui.ui.dom.UIElement;
  *
  * <p>And it names {@code UIElement}, not a widget: a view is an element, and which widget it is made of
  * is the editor's business. That is what lets the document layer sit below {@code widget} once the
- * classes it replaces are gone, and it is why {@link DocumentModel} and this are separate types —
+ * document layer sit below {@code widget}, and it is why {@link DocumentModel} and this are separate —
  * the model is what the document IS, this is what one way of looking at it happens to be.</p>
  *
  * <h3>Several of these may exist for one document</h3>

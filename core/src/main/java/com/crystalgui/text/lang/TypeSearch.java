@@ -14,7 +14,7 @@ import java.util.List;
  * classpath once for completion and holds up to sixty thousand entries. But <b>{@code core/} must never
  * depend on {@code language/}</b> — that is what keeps tree-sitter's platform natives and ECJ's fifteen
  * megabytes off a dedicated server — so the picker cannot name it. This is the inversion, and it is the
- * same shape as {@link com.crystalgui.fs.ResourceContentProvider}: {@code core/} declares the question,
+ * same shape as {@code fs.client.ContentProvider}: {@code core/} declares the question,
  * an engine answers it from the other side.</p>
  *
  * <h3>What a provider owes, and what it does not</h3>

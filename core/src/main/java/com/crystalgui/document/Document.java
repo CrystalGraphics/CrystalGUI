@@ -8,26 +8,20 @@ import java.util.Objects;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * <b>One open document</b> — an object with an identity that survives being renamed.
+ * One open document — an object whose identity survives being renamed.
  *
- * <h3>Identity is the object, and the resource is a property of it</h3>
+ * <h3>The document is the key; the resource is a property of it</h3>
  *
- * <p>{@code plan_fs_rewrite.md} N4, D2. A text document was a {@code record(editor, resource)}, so a
- * rename moved the entry in the store's map and the document went on answering the old name. Four
- * stores rekeyed independently — the Problems panel's scope, {@code Markers}, the language attachment
- * and the run session — three of them by hand and one, {@code RunPanels}, by <b>forgetting</b> the
- * session rather than retargeting it. Nothing was ever told.</p>
- *
- * <p>So: the document is the key, {@link #resource()} is a property, and {@link #onDidChangeResource}
- * is the one event every store subscribes to. IntelliJ's {@code VirtualFile} is the same object after a
- * rename, and its {@code VFilePropertyChangeEvent} is this signal.</p>
+ * <p>{@link #resource()} is what it is currently called and {@link #onDidChangeResource} is the one
+ * event a store subscribes to, so a rename moves the document rather than orphaning every map keyed on
+ * its old name. IntelliJ's {@code VirtualFile} is the same object after a rename, and its
+ * {@code VFilePropertyChangeEvent} is this signal.</p>
  *
  * <h3>Held through a reference, released by the last holder</h3>
  *
- * <p>A tab, a diff, a merge view, the Problems panel and a background compile may each hold one. The
- * model is disposed when the last is released — later than a tab closing, and never earlier, which is
- * the failure this replaces: a document released while the index still held it, reported as
- * <em>"Parser is closed"</em>.</p>
+ * <p>A tab, a diff, a merge view, the Problems panel and a background compile may each hold one, and
+ * the model is disposed when the last is released — later than a tab closing, and never earlier. A
+ * document disposed while an index still held it surfaces as <em>"Parser is closed"</em>.</p>
  *
  * <h3>Headless</h3>
  *
@@ -121,9 +115,8 @@ public final class Document {
     /**
      * Whether there is unsaved work — <b>a comparison, not a serialisation</b>.
      *
-     * <p>It used to be {@code encode()} against the bytes last read, for every open document on every
-     * change, which for a shader graph means writing the whole graph to JSON to decide whether a tab
-     * needs an asterisk.</p>
+     * <p>Two ints, so asking costs nothing. Encoding and comparing against the bytes last read would
+     * mean writing a whole shader graph to JSON to decide whether a tab needs an asterisk.</p>
      */
     public boolean isDirty() {
         return model.version() != savedVersion;

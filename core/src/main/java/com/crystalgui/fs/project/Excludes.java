@@ -8,7 +8,7 @@ import java.util.List;
  *
  * <h3>There were three, and production used none of them</h3>
  *
- * <p>{@code plan_fs_rewrite.md} N23. {@code WorkspaceService} matched {@code *} and {@code ?} anywhere;
+ * <p>A pattern matching {@code *} and {@code ?} anywhere is not what a person writes;
  * {@code NioFileEventSource} matched a <em>leading</em> {@code *} only, while its javadoc claimed
  * "the same rule"; {@code FilePatternMap} had a third, case-folded, for file icons. So a project
  * excluding {@code node_modules/*} was excluded from listings and watched anyway, and a client was told

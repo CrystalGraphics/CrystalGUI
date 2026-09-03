@@ -21,26 +21,30 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * <b>Who is watching what, for the whole workspace</b> — one hub, not one watcher per peer.
+ * Who is watching what, for the whole workspace — <b>one hub, not one watcher per peer</b>.
  *
- * <h3>Four defects, all of them in the shape it replaces</h3>
+ * <pre>{@code
+ * hub.watch(peer, actor, folder, true);              // a subscription
+ * Map<Object, List<FileChange>> out = hub.tick(actor, service.drainFileEvents());
+ * out = hub.poll(actor);                             // the reconciling rescan
+ * }</pre>
  *
- * <p>{@code plan_fs_rewrite.md} D19:</p>
+ * <p>A host drains the filesystem's events once a tick and hands them here; the hub answers a list per
+ * peer, and a peer with nothing to hear about is absent from the map rather than present with an empty
+ * list. What it does on the way:</p>
  *
  * <ul>
- *   <li><b>N28 — files only.</b> A client could watch what it had read, so another client's create,
- *       rename or delete inside a folder you had expanded never reached you. The tree simply went
- *       stale, and nothing anywhere said so.</li>
- *   <li><b>N29 — no {@code created}, no {@code renamed}.</b> The wire carried modified and deleted, so
- *       an external rename arrived as a deletion and the client closed the tab.</li>
- *   <li><b>N30 — no coalescing.</b> A directory rename with fifty open files was fifty separate
- *       notifications, each invalidating a listing and refreshing the tree.</li>
- *   <li><b>N25 — a stat per peer.</b> One drained batch was handed to every peer and each re-stat-ed
- *       the same file: K peers meant K stats per event, plus the poll's K x M. The hub stats a path
- *       <b>once per tick</b> and every subscriber reads the same answer.</li>
+ *   <li><b>Stats a path once</b> however many peers watch it — the cost is per file, not per peer.</li>
+ *   <li><b>Coalesces per path</b>, so a save that raised three events (truncate, write, rename into
+ *       place) is one change rather than three reloads on the far side.</li>
+ *   <li><b>Pairs a deletion and a creation carrying one etag into a rename</b>, which is the only way
+ *       to get one out of a filesystem watcher: NIO, {@code inotify} and
+ *       {@code ReadDirectoryChangesW} all report the two halves separately.</li>
+ *   <li><b>Watches directories</b>, recursively or not, so another client's create inside a folder you
+ *       have expanded reaches you.</li>
  * </ul>
  *
- * <h3>The etag poll survives, and it is not a fallback</h3>
+ * <h3>The etag poll is the reconciliation, not a fallback</h3>
  *
  * <p>Every OS primitive underneath drops events under load — a {@code WatchKey} raises OVERFLOW once
  * its queue fills, and macOS's {@code WatchService} is itself a poll. The documented recovery is a
@@ -66,8 +70,8 @@ public final class WatchHub {
     /**
      * The etag each watched FILE last had, shared by every peer.
      *
-     * <p>The hub's, not a peer's, which is the whole of N25's fix: two peers watching one file cost one
-     * stat between them. A peer that subscribes later is seeded from here rather than re-stat-ing.</p>
+     * <p>The hub's, not a peer's, so two peers watching one file cost one stat between them. A peer
+     * that subscribes later is seeded from here rather than re-stat-ing.</p>
      */
     private final Map<CgPath, String> lastEtag = new LinkedHashMap<>();
 
@@ -203,8 +207,8 @@ public final class WatchHub {
     /**
      * The reconciliation: re-stat everything watched and report what moved.
      *
-     * <p>Once per FILE over the union of every peer's subscriptions, which is N25's fix — it used to be
-     * once per file per peer, twice a second.</p>
+     * <p>Once per file over the union of every peer's subscriptions, so the cost is the number of
+     * watched files rather than that times the number of peers.</p>
      */
     public Map<Object, List<FsMessages.FileChange>> poll(WorkspaceActor actor) {
         Map<CgPath, FsMessages.FileChange> found = new LinkedHashMap<>();

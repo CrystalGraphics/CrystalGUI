@@ -46,7 +46,7 @@ import com.crystalgui.core.command.CommandRegistry;
  *
  * <p>A {@link Workbench} is the <em>shell</em>: a dock, a file tree, editors, a Problems panel. This is
  * the <b>product</b> built on it — which panels exist, what the default arrangement is, which commands
- * the application answers to, and where focus starts. A host supplies a {@link WorkspaceClient} and a
+ * the application answers to, and where focus starts. A host supplies a {@link Workspace} and a
  * window; everything else is decided here.</p>
  *
  * <h3>Why this is not a harness scene</h3>

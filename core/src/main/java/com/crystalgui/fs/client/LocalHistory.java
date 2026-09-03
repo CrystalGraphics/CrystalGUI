@@ -16,13 +16,12 @@ import java.util.function.LongSupplier;
  * <b>What was in this file at each of the last few saves</b> — IntelliJ's Local History, VS Code's
  * {@code workingCopyHistory} behind its Timeline.
  *
- * <h3>Two things it makes possible that nothing else could</h3>
+ * <h3>Two things it makes possible</h3>
  *
- * <p>{@code plan_fs_rewrite.md} D13. <b>"Keep mine" becomes recoverable</b> — a conflict resolved by
- * overwriting is currently the end of the other person's version, with nowhere it survives. And it
- * supplies <b>the merge base</b>: a three-way merge needs the common ancestor, which was a comment in
- * the workbench pointing at a content cache that any read or any change notification could evict
- * (N8). The last entry before this session's edits IS that ancestor, and it is on disk.</p>
+ * <p><b>"Keep mine" is recoverable</b> — a conflict resolved by overwriting would otherwise be the end
+ * of the other person's version, with nowhere it survives. And it supplies <b>the merge base</b>: a
+ * three-way merge needs the common ancestor, and the last entry before this session's edits is exactly
+ * that, on disk rather than in a cache any read could evict.</p>
  *
  * <h3>Client-local, bounded, and skipped for large files</h3>
  *

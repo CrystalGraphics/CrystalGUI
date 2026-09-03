@@ -15,10 +15,10 @@ import java.util.Set;
  *
  * <p>The server already knows the answer and has since Phase 4 — {@code fs.watch} is sent for every file
  * a client reads, so the set of watched paths <em>is</em> the set of open files. But a
- * {@link WorkspaceWatcher} belongs to one {@link WorkspaceRpc}, which belongs to one peer, so each
+ * A watch belongs to one connection's binding, which belongs to one peer, so each
  * knows only its own. Presence is the question every other peer's answer, which makes it the first
  * piece of workspace state that is genuinely per <b>server</b> rather than per connection — hence its
- * home on {@link WorkspaceService}, the one object every {@code WorkspaceRpc} already shares.</p>
+ * home on {@link WorkspaceService}, the one object every binding already shares.</p>
  *
  * <h3>A version counter rather than a listener</h3>
  *
@@ -43,7 +43,7 @@ public final class WorkspacePresence {
     /**
      * Who has UNSAVED changes, per path.
      *
-     * <p>{@code plan_fs_rewrite.md} D12. Presence answered "who has this open", which is the wrong
+     * <p>Presence answering "who has this open" is the wrong
      * question for the moment it matters: two people find out they are both editing a file when the
      * second one saves and is refused with a conflict, by which point both have work to reconcile.
      * "X is editing this file" on the first keystroke is what every collaborative editor shows, and it

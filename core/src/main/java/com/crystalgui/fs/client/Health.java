@@ -12,15 +12,10 @@ import java.util.function.LongSupplier;
  *
  * <h3>Why a UI over a wire needs this and a local one does not</h3>
  *
- * <p>{@code plan_fs_rewrite.md} D24. Every operation in this workspace crosses a socket, and when one
- * is slow there is nothing on screen that says so: a tab that will not open, a save that has not come
- * back and a tree that has not refreshed all look identical to an application that has hung. The
- * measured round trip in singleplayer is ~58 ms and a busy server is far worse, so "is it slow or is it
- * broken" is a question a person asks routinely and could not answer.</p>
- *
- * <p>It is also the measurement that decides whether optimistic explorer updates are ever worth
- * building: below a threshold they are needless machinery, and only a number can say which side of it a
- * deployment is on.</p>
+ * <p>Every operation in this workspace crosses a socket, and when one is slow nothing on screen says
+ * so: a tab that will not open, a save that has not come back and a tree that has not refreshed all
+ * look identical to an application that has hung. The round trip is ~58 ms in singleplayer and far
+ * worse on a busy server, so "is it slow or is it broken" is a question a person asks routinely.</p>
  *
  * <h3>An estimate, not a measurement of the network</h3>
  *

@@ -9,15 +9,11 @@ import org.jetbrains.annotations.Nullable;
 import java.util.List;
 
 /**
- * <b>Every filesystem payload, as a record with a codec.</b>
+ * Every filesystem payload, as a record with a codec.
  *
- * <h3>What this replaces</h3>
- *
- * <p>{@code plan_fs_rewrite.md} N27. {@code WorkspaceRpc.installOn} was 230 lines of {@code StateMap}
- * puts, mirrored by hand in {@code WorkspaceClient} — two hand-written readers of forty string keys,
- * with nothing checking that a field written at one end was read at the other. The failure that shape
- * produces is the quietest kind: a value crosses the wire correctly and is dropped on arrival, and
- * every observable on both sides looks right.</p>
+ * <p>One codec serves both ends, so a field written on one side is provably the field read on the
+ * other. Packing and unpacking by hand at each end cannot give that: a value crosses the wire
+ * correctly, is dropped on arrival, and every observable on both sides looks right.</p>
  *
  * <p>Records, so the fields are the type. One codec per record, so the encoding is stated once and both
  * halves use the same one. A required field that is missing throws naming itself, which is what
@@ -36,7 +32,7 @@ public final class FsMessages {
 
     // ── Shared field names ──────────────────────────────────────────────────────────────────────
     // Package-private and used by the codecs below ONLY. They are not a vocabulary a handler reads:
-    // that was WorkspaceProtocol's shape, and the point of this file is that nothing outside it
+    // a bare constant is the shape this file exists to remove: nothing outside it
     // spells a wire key.
 
     private static final String PATH = "path";
@@ -393,9 +389,8 @@ public final class FsMessages {
                     .field(ID, Codecs.STRING, value.id())
                     .field("displayName", Codecs.STRING, value.displayName())
                     .optionalList("sourceRoots", Codecs.STRING, value.sourceRoots())
-                    // THE IGNORE RULES TRAVEL. They were the server's alone, so the crawl, Go to File
-                    // and the tree each had their own idea of what to skip and none of them was the
-                    // project's. @see plan_fs_rewrite.md D22
+                    // THE IGNORE RULES TRAVEL, so the crawl, Go to File and the tree all skip what the
+                    // PROJECT says to skip rather than each holding its own idea of it.
                     .optionalList("excludes", Codecs.STRING, value.excludes())
                     .build();
         }
