@@ -14,6 +14,7 @@ import com.crystalgui.desktop.Desktop;
 import com.crystalgui.core.async.Reply;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.async.ReplyError;
+import com.crystalgui.document.BytesDocumentModel;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.document.DocumentKind;
@@ -31,9 +32,11 @@ import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.client.WorkspaceDocuments;
 import com.crystalgui.fs.protocol.FsError;
 import com.crystalgui.fs.protocol.FsMessages;
+import com.crystalgui.workbench.editor.BinaryFileView;
 import com.crystalgui.workbench.editor.EditorService;
 import com.crystalgui.workbench.editor.TextEditorView;
 import com.crystalgui.text.TextBuffer;
+import com.crystalgui.text.TextEncoding;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
 import com.crystalgui.text.cursor.IndentationProvider;
@@ -913,6 +916,11 @@ public class Workbench extends UIElement implements DataProvider {
                 // a document with no tab could not analyse at all -- which is the state the Problems
                 // panel, a background compile and Go to Definition all want it in.
                 .model((resource, bytes) -> {
+                    // BINARY OPENS AS BYTES. Decoding a PNG as UTF-8 gives an editor full of
+                    // replacement characters -- and it is EDITABLE, so the first Ctrl+S writes that
+                    // back over the file. The sniff is a NUL in the first 8000 bytes, with UTF-16
+                    // excepted because its mark says outright that every other byte is a NUL.
+                    if (TextEncoding.looksBinary(bytes)) return new BytesDocumentModel(bytes);
                     TextDocumentModel model = TextDocumentModel.of(bytes);
                     LanguageRegistry.Entry entry = LanguageRegistry.forFileName(languageFileNameOf(resource));
                     // A FRESH tokenizer per document -- the interface exists for implementations holding
@@ -932,6 +940,12 @@ public class Workbench extends UIElement implements DataProvider {
                     return model;
                 })
                 .editor(document -> {
+                    // NOT A TEXT EDITOR FOR SOMETHING THAT IS NOT TEXT. A viewer says what the file is
+                    // and offers no way to write nonsense back; VS Code's binary editor and IntelliJ's
+                    // "file is not displayable" occupy the same slot.
+                    if (document.model() instanceof BytesDocumentModel binary) {
+                        return new BinaryFileView(document.resource(), binary);
+                    }
                     TextDocumentModel model = (TextDocumentModel) document.model();
                     TextEditor created = new TextEditor("");
                     created.addClass(FILE_EDITOR_CLASS);

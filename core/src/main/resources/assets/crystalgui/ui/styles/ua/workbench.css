@@ -1569,6 +1569,31 @@ workbench .__activity-item__.__panel-focused__:hover {
  *
  * Class-qualified rather than a bare `texteditor` rule, which would reach every editor in the engine --
  * including the ones a page deliberately gives a fixed height. */
+/* A file with no text in it — its name, its type and its size, centred and unselectable.
+ *
+ * The same slot VS Code's binary editor and IntelliJ's "file is not displayable" occupy. It is a
+ * VIEWER on purpose: a text editor over binary shows replacement characters and is writable, so the
+ * first Ctrl+S writes them back over the file. */
+.__binary-file__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+    align-items: center;
+    justify-content: center;
+    gap-all: 4px;
+    background-color: var(--surface-editor, #1E1E1E);
+}
+
+.__binary-file-name__ {
+    font-size: 13;
+    color: var(--fg, #CCCCCC);
+}
+
+.__binary-file-detail__ {
+    font-size: 10;
+    color: var(--fg-secondary, #888888);
+}
+
 texteditor.__file-editor__ {
     width: 100%;
     height: 0;
