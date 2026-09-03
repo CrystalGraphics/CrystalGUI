@@ -6,7 +6,7 @@ import com.crystalgui.ui.input.keymap.Keymap;
 import com.crystalgui.widget.graph.node.NodeCreationMenu;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.ClipboardActions;
+import com.crystalgui.core.data.ClipboardActions;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
@@ -30,7 +30,7 @@ import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.ui.UiDataKeys;
+import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.ui.dom.UIDocument;
@@ -160,7 +160,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
      *
      * <p>Runs the registered graph commands rather than reaching for the clipboard itself, so the one
      * copy of "what does cutting a selection do" stays in {@code GraphCommands} where its undo grouping
-     * and its paste offset already live. @see com.crystalgui.ui.ClipboardActions</p>
+     * and its paste offset already live. @see com.crystalgui.core.data.ClipboardActions</p>
      */
     private final ClipboardActions clipboardActions = new ClipboardActions() {
         @Override

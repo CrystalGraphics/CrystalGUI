@@ -1,7 +1,7 @@
 package com.crystalgui.core.undo;
 
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.ui.UiDataKeys;
+import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.core.data.DataKey;
 
 import javax.annotation.Nullable;

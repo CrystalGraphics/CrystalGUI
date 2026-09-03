@@ -1,7 +1,6 @@
 package com.crystalgui.style.property.visual.transform;
 
 import com.crystalgui.style.property.visual.border.LengthPercent;
-import com.crystalgui.ui.UITransform;
 import org.junit.Test;
 
 import java.util.List;
@@ -20,23 +19,23 @@ public class TransformValueTest {
 
     private static final float EPS = 1e-5f;
 
-    private static List<UITransform.Op> ops(String css) {
-        UITransform t = new TransformValue(css).compute();
+    private static List<Transform.Op> ops(String css) {
+        Transform t = new TransformValue(css).compute();
         assertNotNull("expected '" + css + "' to parse", t);
         return t.ops();
     }
 
     @Test
     public void noneIsTheIdentity() {
-        assertEquals(UITransform.IDENTITY, new TransformValue("none").compute());
+        assertEquals(Transform.IDENTITY, new TransformValue("none").compute());
         assertTrue(new TransformValue("NONE").compute().isIdentity());
     }
 
     @Test
     public void translateTakesLengthsAndPercentages() {
-        List<UITransform.Op> got = ops("translate(10px, 50%)");
+        List<Transform.Op> got = ops("translate(10px, 50%)");
         assertEquals(1, got.size());
-        assertEquals(UITransform.Kind.TRANSLATE, got.get(0).kind());
+        assertEquals(Transform.Kind.TRANSLATE, got.get(0).kind());
         assertEquals(LengthPercent.px(10f), got.get(0).lx());
         assertEquals(LengthPercent.percent(0.5f), got.get(0).ly());
     }
@@ -47,14 +46,14 @@ public class TransformValueTest {
         assertEquals(LengthPercent.ZERO, ops("translate(10px)").get(0).ly());
     }
 
-    /** The axis variants collapse into the two-argument form — see UITransform's divergence note. */
+    /** The axis variants collapse into the two-argument form — see Transform's divergence note. */
     @Test
     public void axisVariantsCollapseToTheTwoArgumentForm() {
-        UITransform.Op x = ops("translateX(5px)").get(0);
+        Transform.Op x = ops("translateX(5px)").get(0);
         assertEquals(LengthPercent.px(5f), x.lx());
         assertEquals(LengthPercent.ZERO, x.ly());
 
-        UITransform.Op y = ops("translateY(5px)").get(0);
+        Transform.Op y = ops("translateY(5px)").get(0);
         assertEquals(LengthPercent.ZERO, y.lx());
         assertEquals(LengthPercent.px(5f), y.ly());
 
@@ -65,7 +64,7 @@ public class TransformValueTest {
     /** Unlike translate, a one-argument scale applies to BOTH axes. That asymmetry is CSS's. */
     @Test
     public void oneArgumentScaleAppliesToBothAxes() {
-        UITransform.Op op = ops("scale(2)").get(0);
+        Transform.Op op = ops("scale(2)").get(0);
         assertEquals(2f, op.fx(), EPS);
         assertEquals(2f, op.fy(), EPS);
     }
@@ -74,7 +73,7 @@ public class TransformValueTest {
     public void rotateAndSkewCarryRadians() {
         assertEquals((float) Math.PI / 4f, ops("rotate(45deg)").get(0).fx(), EPS);
 
-        UITransform.Op skew = ops("skew(45deg, 10deg)").get(0);
+        Transform.Op skew = ops("skew(45deg, 10deg)").get(0);
         assertEquals((float) Math.PI / 4f, skew.fx(), EPS);
         assertEquals((float) Math.toRadians(10), skew.fy(), EPS);
         assertEquals("skew's second argument defaults to zero", 0f, ops("skew(45deg)").get(0).fy(), EPS);
@@ -83,15 +82,15 @@ public class TransformValueTest {
     /** The whole reason the value is a list: order survives parsing. */
     @Test
     public void functionsKeepTheirWrittenOrder() {
-        List<UITransform.Op> got = ops("translate(10px, 5px) scale(2) rotate(45deg)");
+        List<Transform.Op> got = ops("translate(10px, 5px) scale(2) rotate(45deg)");
         assertEquals(3, got.size());
-        assertEquals(UITransform.Kind.TRANSLATE, got.get(0).kind());
-        assertEquals(UITransform.Kind.SCALE, got.get(1).kind());
-        assertEquals(UITransform.Kind.ROTATE, got.get(2).kind());
+        assertEquals(Transform.Kind.TRANSLATE, got.get(0).kind());
+        assertEquals(Transform.Kind.SCALE, got.get(1).kind());
+        assertEquals(Transform.Kind.ROTATE, got.get(2).kind());
 
-        List<UITransform.Op> reversed = ops("rotate(45deg) scale(2) translate(10px, 5px)");
-        assertEquals(UITransform.Kind.ROTATE, reversed.get(0).kind());
-        assertEquals(UITransform.Kind.TRANSLATE, reversed.get(2).kind());
+        List<Transform.Op> reversed = ops("rotate(45deg) scale(2) translate(10px, 5px)");
+        assertEquals(Transform.Kind.ROTATE, reversed.get(0).kind());
+        assertEquals(Transform.Kind.TRANSLATE, reversed.get(2).kind());
     }
 
     /** Spaces inside a call must not split it into two tokens. */

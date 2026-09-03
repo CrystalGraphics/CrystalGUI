@@ -22,7 +22,7 @@ import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.desktop.window.WindowRegistry;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.UITransform;
+import com.crystalgui.style.property.visual.transform.Transform;
 import org.joml.Vector2f;
 import com.crystalgui.widget.dnd.Resizer;
 import com.crystalgui.widget.overlay.Dialog;
@@ -535,7 +535,7 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
             // size and hung outside the panel holding it, over the taskbar. The old engine could not
             // get this wrong -- it composed `translate(left, top); scale(s, s)` into a pose by hand,
             // and a pose scales about its origin.
-            mirror.setTransform(UITransform.of(UITransform.Op.scale(0.5f, 0.5f)));
+            mirror.setTransform(Transform.of(Transform.Op.scale(0.5f, 0.5f)));
             frame();
             assertEquals("a mirror pivots about its source's centre, not its own corner",
                     boxOf(host).worldX(), mirror.worldX(), 0.01f);
@@ -820,7 +820,7 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
         assertNotNull(box);
         assertTrue("the open animation is not playing", frame.isAnimating());
         assertNotSame("the box carries no compositor transform mid-animation",
-                UITransform.IDENTITY, box.transform());
+                Transform.IDENTITY, box.transform());
         assertTrue("the box carries no compositor opacity mid-animation", box.opacity() < 1f);
 
         // CANCEL, never a wait: a timeline advances on wall time a test loop cannot step, and every

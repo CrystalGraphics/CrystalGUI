@@ -17,7 +17,7 @@ import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Checkbox;
 import com.crystalgui.ui.service.Drag;
-import com.crystalgui.ui.UITransform;
+import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.scroll.ScrollerView;
@@ -432,7 +432,7 @@ public final class TaskbarDesigner {
         // itself. @see WindowAnimation#write
         StyleGroup.inlinePipeline(island.getStyle().getGeneralGroup(),
                 g -> g.transform(offsetX == 0f && offsetY == 0f
-                        ? UITransform.IDENTITY : UITransform.translate(offsetX, offsetY)));
+                        ? Transform.IDENTITY : Transform.translate(offsetX, offsetY)));
         refreshReadout();
     }
 

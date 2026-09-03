@@ -1,8 +1,8 @@
 package com.crystalgui.core.command;
 
 import com.crystalgui.core.data.DataContext;
-import com.crystalgui.ui.ClipboardActions;
-import com.crystalgui.ui.UiDataKeys;
+import com.crystalgui.core.data.ClipboardActions;
+import com.crystalgui.ui.data.UiDataKeys;
 
 import javax.annotation.Nullable;
 import java.util.function.Predicate;

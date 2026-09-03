@@ -1,5 +1,6 @@
-package com.crystalgui.ui;
+package com.crystalgui.ui.data;
 
+import com.crystalgui.core.data.ClipboardActions;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.settings.Settings;
 import com.crystalgui.core.undo.UndoStack;

@@ -5,7 +5,7 @@ import com.crystalgui.style.ComputedStyle;
 import com.crystalgui.style.TaffyBridge;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.Overflow;
-import com.crystalgui.ui.UITransform;
+import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.UIElement;
 import dev.vfyjxf.taffy.geometry.FloatRect;
@@ -69,7 +69,7 @@ public final class Box {
     // so it survives a freeze with nothing captured and a mirror shows the same offset.
     private @Nullable Integer zIndexOverride;
     private @Nullable Float opacityOverride;
-    private @Nullable UITransform transformOverride;
+    private @Nullable Transform transformOverride;
 
     final Matrix4f localToWorld = new Matrix4f();
     final Matrix4f worldToLocal = new Matrix4f();
@@ -400,14 +400,14 @@ public final class Box {
         opacityOverride = opacity;
     }
 
-    public UITransform transform() {
+    public Transform transform() {
         if (transformOverride != null) return transformOverride;
-        UITransform t = node.computedStyle().get(StylePropertyRegistry.TRANSFORM);
-        return t == null ? UITransform.IDENTITY : t;
+        Transform t = node.computedStyle().get(StylePropertyRegistry.TRANSFORM);
+        return t == null ? Transform.IDENTITY : t;
     }
 
     /** A compositor's transform, above the cascade's; {@code null} withdraws it. Layout-free. */
-    public void setTransform(@Nullable UITransform transform) {
+    public void setTransform(@Nullable Transform transform) {
         transformOverride = transform;
         tree.transformsChanged();
     }

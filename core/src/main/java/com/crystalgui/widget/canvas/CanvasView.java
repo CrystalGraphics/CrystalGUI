@@ -13,7 +13,7 @@ import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.style.property.visual.border.LengthPercent;
-import com.crystalgui.ui.UITransform;
+import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.event.MouseEvent;
 import dev.vfyjxf.taffy.style.TaffyPosition;
@@ -33,7 +33,7 @@ import java.util.Set;
  *
  * <h3>Zoom is a {@code transform}, which is why this is small</h3>
  * <p>CSS {@code transform} is layout-free by construction — Taffy never sees it — so scaling the
- * whole plane cannot reflow anything, and {@code UITransform.applyTo} is the single definition shared
+ * whole plane cannot reflow anything, and {@code Transform.applyTo} is the single definition shared
  * by the render {@code PoseStack} and the hit-test chain, so clicks follow the picture with no code
  * here at all. That is the whole reason this widget is a few hundred lines rather than a coordinate
  * system of its own: the engine already had the hard half.</p>
@@ -730,9 +730,9 @@ public class CanvasView extends UIElement {
      * value, so a pan drag that reports the same position twice costs nothing.</p>
      */
     private void applyView() {
-        UITransform view = UITransform.of(
-                UITransform.Op.translate(LengthPercent.px(panX), LengthPercent.px(panY)),
-                UITransform.Op.scale(zoom, zoom));
+        Transform view = Transform.of(
+                Transform.Op.translate(LengthPercent.px(panX), LengthPercent.px(panY)),
+                Transform.Op.scale(zoom, zoom));
         StyleGroup.inlinePipeline(content.getStyle().getGeneralGroup(), g -> g.transform(view));
     }
 

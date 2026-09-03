@@ -7,7 +7,7 @@ import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.ui.UITransform;
+import com.crystalgui.style.property.visual.transform.Transform;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -16,7 +16,7 @@ import static org.junit.Assert.*;
  * Value-level and wire-level coverage of {@code transform} / {@code transform-origin}.
  *
  * <p>Headless, i.e. with no CrystalGraphics on the classpath — which is the point: a dedicated server
- * builds a tree, sets a transform, and ships it. If {@link UITransform} or its codec ever picked up a
+ * builds a tree, sets a transform, and ships it. If {@link Transform} or its codec ever picked up a
  * rendering dependency, this test set is what fails.</p>
  *
  * <p>The CSS-facing half lives in {@code TransformCssTest} in the ordinary test set, because
@@ -54,16 +54,17 @@ public class TransformStylePropertiesTest {
      * is BINARY, so a property that forgot to set one would silently pass everything except this. */
     @Test
     public void matchingListsInterpolateComponentWise() {
-        UITransform mid = StylePropertyRegistry.TRANSFORM.getInterpolator()
-                .interpolate(UITransform.scale(1f), UITransform.scale(3f), 0.5f);
+        Transform mid = StylePropertyRegistry.TRANSFORM.getInterpolator()
+                                                       .interpolate(Transform.scale(1f), Transform.scale(3f), 0.5f);
         assertEquals(2f, mid.ops().get(0).fx(), EPS);
         assertEquals(2f, mid.ops().get(0).fy(), EPS);
     }
 
     @Test
     public void translationsInterpolateInTheirOwnUnit() {
-        UITransform mid = StylePropertyRegistry.TRANSFORM.getInterpolator()
-                .interpolate(UITransform.translate(0f, 0f), UITransform.translate(10f, 20f), 0.5f);
+        Transform mid = StylePropertyRegistry.TRANSFORM.getInterpolator()
+                                                       .interpolate(
+                                                               Transform.translate(0f, 0f), Transform.translate(10f, 20f), 0.5f);
         assertEquals(LengthPercent.px(5f), mid.ops().get(0).lx());
         assertEquals(LengthPercent.px(10f), mid.ops().get(0).ly());
     }
@@ -72,8 +73,8 @@ public class TransformStylePropertiesTest {
      * that gap is documented. What must NOT happen is interpolating mismatched kinds pairwise. */
     @Test
     public void mismatchedListsSnap() {
-        UITransform scale = UITransform.scale(2f);
-        UITransform rotate = UITransform.rotate(1f);
+        Transform scale = Transform.scale(2f);
+        Transform rotate = Transform.rotate(1f);
         var interp = StylePropertyRegistry.TRANSFORM.getInterpolator();
 
         assertEquals("different kinds", scale, interp.interpolate(scale, rotate, 0.4f));
@@ -86,8 +87,8 @@ public class TransformStylePropertiesTest {
      * half of it interpolating and half not. */
     @Test
     public void incommensurableTranslationsSnapTheWholeTransform() {
-        UITransform from = UITransform.of(UITransform.Op.translate(LengthPercent.px(0f), LengthPercent.ZERO));
-        UITransform to = UITransform.of(UITransform.Op.translate(LengthPercent.percent(1f), LengthPercent.ZERO));
+        Transform from = Transform.of(Transform.Op.translate(LengthPercent.px(0f), LengthPercent.ZERO));
+        Transform to = Transform.of(Transform.Op.translate(LengthPercent.percent(1f), LengthPercent.ZERO));
         assertEquals(from, StylePropertyRegistry.TRANSFORM.getInterpolator().interpolate(from, to, 0.4f));
     }
 
@@ -100,11 +101,11 @@ public class TransformStylePropertiesTest {
     @Test
     public void transformsRoundTripToAClient() {
         UIElement element = new UIElement();
-        element.getStyle().getGeneralGroup().transform(UITransform.of(
-                UITransform.Op.translate(LengthPercent.px(10f), LengthPercent.percent(0.25f)),
-                UITransform.Op.scale(2f, 3f),
-                UITransform.Op.rotate(1.25f),
-                UITransform.Op.skew(0.1f, 0.2f)));
+        element.getStyle().getGeneralGroup().transform(Transform.of(
+                Transform.Op.translate(LengthPercent.px(10f), LengthPercent.percent(0.25f)),
+                Transform.Op.scale(2f, 3f),
+                Transform.Op.rotate(1.25f),
+                Transform.Op.skew(0.1f, 0.2f)));
         element.getStyle().getGeneralGroup()
                 .transformOrigin(LengthPercent.px(4f), LengthPercent.percent(0f));
 

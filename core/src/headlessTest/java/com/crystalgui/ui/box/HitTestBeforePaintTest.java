@@ -8,7 +8,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 
 import com.crystalgui.style.property.visual.Overflow;
-import com.crystalgui.ui.UITransform;
+import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
@@ -77,7 +77,7 @@ public class HitTestBeforePaintTest {
     public void aTransformMovesTheHitWithTheDrawing() {
         UIDocument document = new UIDocument();
         UIElement node = absolute(0, 0, 50, 50);
-        general(node, g -> g.transform(UITransform.translate(100, 0)));
+        general(node, g -> g.transform(Transform.translate(100, 0)));
         document.append(node);
         document.update(800, 600);
 
@@ -85,7 +85,7 @@ public class HitTestBeforePaintTest {
         assertSame("where it was laid out there is nothing", document, hit(document, 10, 10));
         assertSame("where it is drawn there it is", node, hit(document, 110, 10));
 
-        box(node).setTransform(UITransform.translate(0, 200));
+        box(node).setTransform(Transform.translate(0, 200));
         document.layout(800, 600);
         assertSame("a compositor's transform, above the cascade's", node, hit(document, 10, 210));
     }

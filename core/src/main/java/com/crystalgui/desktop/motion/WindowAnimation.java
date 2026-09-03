@@ -6,7 +6,7 @@ import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.transition.ActiveTransition;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.ui.UITransform;
+import com.crystalgui.style.property.visual.transform.Transform;
 
 import javax.annotation.Nullable;
 
@@ -45,7 +45,7 @@ import java.util.function.BooleanSupplier;
  * <h3>It borrows the engine's interpolator rather than reimplementing one</h3>
  *
  * <p>{@link ActiveTransition} already holds the from/to/duration/easing maths, and
- * {@code StyleProperty}'s interpolators already know how to lerp a {@link UITransform} by CSS's
+ * {@code StyleProperty}'s interpolators already know how to lerp a {@link Transform} by CSS's
  * list-matching rule. What is not reused is the part that caused the trouble — the cascade deciding
  * <em>whether</em> to animate. So this is a port of the engine's own machinery into a driver that runs
  * it directly.</p>
@@ -78,12 +78,12 @@ public final class WindowAnimation implements WindowMotion {
      */
     private final BooleanSupplier alive;
 
-    private ActiveTransition<UITransform> transform;
+    private ActiveTransition<Transform> transform;
     private ActiveTransition<Float> opacity;
 
     /** @see #tickFrame — the clock is rebased on the first advance, the value is not. */
-    private final UITransform from;
-    private final UITransform to;
+    private final Transform from;
+    private final Transform to;
     private final float fromOpacity;
     private final float toOpacity;
     private final long durationNanos;
@@ -122,7 +122,7 @@ public final class WindowAnimation implements WindowMotion {
      * value" is a frame of the END state, which is a visible flash at the beginning of every gesture.
      * The ticker exists to advance it, not to begin it.</p>
      */
-    WindowAnimation(UIElement target, BooleanSupplier alive, UITransform from, UITransform to,
+    WindowAnimation(UIElement target, BooleanSupplier alive, Transform from, Transform to,
                     float fromOpacity, float toOpacity, LengthPercent originX, LengthPercent originY,
                     long durationNanos, Easing easing, @Nullable Runnable onDone) {
         this.target = target;
@@ -171,12 +171,12 @@ public final class WindowAnimation implements WindowMotion {
     }
 
     /** Where this animation is going. The only observable of a motion whose whole point is its target. */
-    UITransform target() {
+    Transform target() {
         return transform.toValue();
     }
 
     /** Where it started. Paired with {@link #target()} so a test can check the two actually LERP. */
-    UITransform startValue() {
+    Transform startValue() {
         return transform.fromValue();
     }
 
@@ -252,7 +252,7 @@ public final class WindowAnimation implements WindowMotion {
             virtualNow += Math.min(delta, MAX_STEP_NANOS);
         }
         long now = virtualNow;
-        UITransform value = transform.currentValue(now);
+        Transform value = transform.currentValue(now);
         write(value, opacity.currentValue(now));
 
         if (!transform.isFinished(now)) return true;
@@ -332,7 +332,7 @@ public final class WindowAnimation implements WindowMotion {
      * counterpart here — a box override dirties the transforms itself, and layout composes every
      * matrix from it, so paint and hit-testing cannot disagree.</p>
      */
-    private void write(@Nullable UITransform transform, @Nullable Float opacity) {
+    private void write(@Nullable Transform transform, @Nullable Float opacity) {
         Box box = target.box();
         if (box == null) return;
         box.setTransform(transform);

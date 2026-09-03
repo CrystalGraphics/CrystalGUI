@@ -687,7 +687,7 @@ CanvasView            overflow: hidden — the window, and the element gestures 
   wrong in a way every user notices immediately and no test catches, because a test written from the
   implementation agrees with the implementation. Pinned by asserting both consumers in one test.
 - **Zoom is CSS `transform`**, which is layout-free by construction — scaling the plane cannot reflow
-  anything, and `UITransform.applyTo` is shared by the render pose and the hit-test chain, so clicks
+  anything, and `Transform.applyTo` is shared by the render pose and the hit-test chain, so clicks
   follow the picture with no code in the widget. That is why this is a few hundred lines.
 - **`transform-origin` is pinned to `0 0` at IMPORTANT.** It defaults to 50% and every conversion here
   assumes the plane scales about its top-left; a theme setting it would offset the whole canvas by
@@ -698,8 +698,8 @@ CanvasView            overflow: hidden — the window, and the element gestures 
 - **A bare left-drag does not pan.** It is reserved for 6.2.4's marquee. Middle-drag always pans;
   Space+left is the escape hatch for a mouse with no usable middle button (Figma/Blender/Photoshop's
   answer). The gesture is read in the **capture** phase so it beats whatever is under the cursor.
-- **Three coordinate spaces**: world (what you author), logical (what `the box tree.getX()` and
-  `screenToLocal` speak), physical (raw pointer pixels). `screenToWorld` crosses all three;
+- **Three coordinate spaces**: world (what you author), logical (what `Box.x()` and
+  `UIElement.toLocal` speak), physical (raw pointer pixels). `screenToWorld` crosses all three;
   `worldToViewport` returns *logical*, not physical, and says so.
 
 ### Culling skips paint, not layout

@@ -6,7 +6,7 @@ import com.crystalgui.serialization.Codecs;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.visual.border.LengthPercent;
-import com.crystalgui.ui.UITransform;
+import com.crystalgui.style.property.visual.transform.Transform;
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 import dev.vfyjxf.taffy.style.TaffyDimension;
 
@@ -141,17 +141,17 @@ public final class StyleValueCodecs {
      * One {@code transform} function. Only the fields the kind uses are written — a {@code scale} does
      * not carry two {@code LengthPercent}s it would ignore on the way back in.
      */
-    private static final Codec<UITransform.Op> TRANSFORM_OP = new Codec<UITransform.Op>() {
+    private static final Codec<Transform.Op> TRANSFORM_OP = new Codec<Transform.Op>() {
         @Override
-        public <T> T encode(DynamicOps<T> ops, UITransform.Op input) {
-            var out = Codecs.map(ops).field("k", Codecs.enumOf(UITransform.Kind.class), input.kind());
-            if (input.kind() == UITransform.Kind.TRANSLATE) {
+        public <T> T encode(DynamicOps<T> ops, Transform.Op input) {
+            var out = Codecs.map(ops).field("k", Codecs.enumOf(Transform.Kind.class), input.kind());
+            if (input.kind() == Transform.Kind.TRANSLATE) {
                 out.field("x", LENGTH_PERCENT, input.lx()).field("y", LENGTH_PERCENT, input.ly());
             } else {
                 out.field("x", Codecs.FLOAT, input.fx());
                 // rotate() has no second component; omitting it keeps the common node small and the
                 // encoding a pure function of the value, which the content-hash cache depends on.
-                if (input.kind() != UITransform.Kind.ROTATE) {
+                if (input.kind() != Transform.Kind.ROTATE) {
                     out.field("y", Codecs.FLOAT, input.fy());
                 }
             }
@@ -159,26 +159,26 @@ public final class StyleValueCodecs {
         }
 
         @Override
-        public <T> UITransform.Op decode(DynamicOps<T> ops, T input) {
+        public <T> Transform.Op decode(DynamicOps<T> ops, T input) {
             var in = Codecs.read(ops, input);
-            UITransform.Kind kind = in.field("k", Codecs.enumOf(UITransform.Kind.class));
-            if (kind == UITransform.Kind.TRANSLATE) {
-                return UITransform.Op.translate(in.field("x", LENGTH_PERCENT), in.field("y", LENGTH_PERCENT));
+            Transform.Kind kind = in.field("k", Codecs.enumOf(Transform.Kind.class));
+            if (kind == Transform.Kind.TRANSLATE) {
+                return Transform.Op.translate(in.field("x", LENGTH_PERCENT), in.field("y", LENGTH_PERCENT));
             }
             float x = in.field("x", Codecs.FLOAT);
             float y = in.optional("y", Codecs.FLOAT, 0f);
             return switch (kind) {
-                case SCALE -> UITransform.Op.scale(x, y);
-                case ROTATE -> UITransform.Op.rotate(x);
-                case SKEW -> UITransform.Op.skew(x, y);
+                case SCALE -> Transform.Op.scale(x, y);
+                case ROTATE -> Transform.Op.rotate(x);
+                case SKEW -> Transform.Op.skew(x, y);
                 default -> throw new CodecException("Unhandled transform op kind '" + kind + "'");
             };
         }
     };
 
     /** {@code transform}, as its ordered function list — order is the whole point of the value type. */
-    public static final Codec<UITransform> TRANSFORM =
-            Codecs.xmap(Codecs.listOf(TRANSFORM_OP), UITransform::of, UITransform::ops);
+    public static final Codec<Transform> TRANSFORM =
+            Codecs.xmap(Codecs.listOf(TRANSFORM_OP), Transform::of, Transform::ops);
 
     static {
         BY_TYPE.put(String.class, Codecs.STRING);
@@ -190,7 +190,7 @@ public final class StyleValueCodecs {
         BY_TYPE.put(LengthPercentageAuto.class, LENGTH_PERCENTAGE_AUTO);
         BY_TYPE.put(TaffyDimension.class, DIMENSION);
         BY_TYPE.put(LengthPercent.class, LENGTH_PERCENT);
-        BY_TYPE.put(UITransform.class, TRANSFORM);
+        BY_TYPE.put(Transform.class, TRANSFORM);
     }
 
     /**

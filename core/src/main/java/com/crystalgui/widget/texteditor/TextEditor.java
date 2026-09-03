@@ -39,16 +39,16 @@ import com.crystalgui.text.syntax.SyntaxToken;
 import com.crystalgui.text.syntax.SyntaxTokenizer;
 import com.crystalgui.text.view.RenderWhitespace;
 import com.crystalgui.text.wrap.*;
-import com.crystalgui.ui.ClipboardActions;
+import com.crystalgui.core.data.ClipboardActions;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.input.keymap.Keymap;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UISlot;
-import com.crystalgui.ui.UiDataKeys;
+import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.text.WordOperations;
-import com.crystalgui.ui.UITransform;
+import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.widget.scroll.ScrollerView;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.event.KeyboardEvent;
@@ -4988,7 +4988,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      *
      * <p>So the exemption stays on the viewport, which is what needs it, and a layer inside it takes
      * the translate back. Children are positioned in <b>document coordinates</b> that do not change
-     * when the view moves; the layer carries one {@link UITransform}, which is layout-free by
+     * when the view moves; the layer carries one {@link Transform}, which is layout-free by
      * construction — Taffy never sees it. A scroll frame writes one matrix instead of several hundred
      * style values and runs no layout at all. This is Monaco's {@code linesContent}.</p>
      *
@@ -5058,7 +5058,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * Moves the scroll layers, once a frame.
      *
      * <p>The whole cost of scrolling, in three writes. {@code replaceOrPutCandidate} no-ops on an
-     * unchanged value and {@link UITransform} compares by value, so a frame that did not scroll writes
+     * unchanged value and {@link Transform} compares by value, so a frame that did not scroll writes
      * nothing at all — and a frame that did writes one matrix per layer rather than two style values
      * per decoration.</p>
      *
@@ -5081,7 +5081,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
 
     private static void translate(@Nullable UIElement layer, float x, float y) {
         Box box = layer == null ? null : layer.box();
-        if (box != null) box.setTransform(UITransform.translate(x, y));
+        if (box != null) box.setTransform(Transform.translate(x, y));
     }
 
     /** Width of the code area — the client box, less the gutter and whatever the vertical bar covers. */
@@ -6269,7 +6269,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
     }
 
     /**
-     * What Cut/Copy/Paste mean in a text editor. @see com.crystalgui.ui.ClipboardActions
+     * What Cut/Copy/Paste mean in a text editor. @see com.crystalgui.core.data.ClipboardActions
      *
      * <p>Held rather than built per call: {@code getData} is asked while a menu is being built, once per
      * row, and a fresh object each time would make identity meaningless to anything caching one.</p>

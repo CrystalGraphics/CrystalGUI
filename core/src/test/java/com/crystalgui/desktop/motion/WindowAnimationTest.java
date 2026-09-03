@@ -1,7 +1,7 @@
 package com.crystalgui.desktop.motion;
 
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.ui.UITransform;
+import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.core.window.WindowPolicy;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.style.property.StylePropertyRegistry;
@@ -103,7 +103,7 @@ public class WindowAnimationTest extends UiDocumentTestBase {
         return frame;
     }
 
-    private UITransform transformOf(WindowFrame frame) {
+    private Transform transformOf(WindowFrame frame) {
         return frame.getStyle().getComputed(StylePropertyRegistry.TRANSFORM);
     }
 
@@ -136,7 +136,7 @@ public class WindowAnimationTest extends UiDocumentTestBase {
         frame.resizeTo(200, 140);
 
         assertNotEquals("the document flashed at full size before shrinking to its entry state",
-                UITransform.IDENTITY, transformOf(frame));
+                Transform.IDENTITY, transformOf(frame));
     }
 
     /**

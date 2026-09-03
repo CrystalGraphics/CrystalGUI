@@ -239,7 +239,7 @@ property (width, padding, ...) must be visible to Taffy in the same frame it cha
 `drainDirtyMatch` runs *only* inside `calculateStyle`, so a window that is never painted never matches
 a selector at all.
 
-The `rootTransform` push is deliberate and load-bearing: `the box tree.localToWorld` falls back to the
+The `rootTransform` push is deliberate and load-bearing: `Box.localToWorld` falls back to the
 same matrix for the root, so hit-testing is correct *before* the first paint. Don't inline a
 `pose.scale(...)` here — that is exactly how the two definitions of `uiScale` drifted apart before.
 
@@ -612,7 +612,7 @@ box), `scale`/`scaleX`/`scaleY` (unitless), `rotate`, `skew`/`skewX`/`skewY`, an
 multiplication, so `translate(10px) scale(2)` and `scale(2) translate(10px)` are genuinely different —
 the first translates then scales the translated space, the second scales first so the same translate
 lands at 20. A translate-field-plus-scale-field value type cannot represent that distinction at all.
-`UITransform` therefore stores `List<Op>` and `applyTo` walks it in order; each JOML call
+`Transform` therefore stores `List<Op>` and `applyTo` walks it in order; each JOML call
 post-multiplies, so declaration order *is* the composition order with no reversal.
 
 **`transform-origin` is two real longhands** (`transform-origin-x`/`-y`, both `LengthPercent`), with
@@ -620,16 +620,18 @@ post-multiplies, so declaration order *is* the composition order with no reversa
 Keywords (`left`/`center`/`right`/`top`/`bottom`) resolve to percentages, and the reversed keyword pair
 (`top left`) is accepted as CSS allows.
 
-**Hit-testing follows automatically and this is the load-bearing invariant.** `the box tree.localToWorld`
-and the paint `PoseStack` both call the *same* `UITransform.applyTo`. If they ever diverged, a click
-would land somewhere other than what is drawn and nothing about the rendering would look wrong —
-`UITransformTest` exists to pin exactly that.
+**Hit-testing follows automatically and this is the load-bearing invariant.** `Box.localToWorld`
+and the paint `PoseStack` both call the *same* `Transform.applyTo`. If they ever diverged, a click
+would land somewhere other than what is drawn and nothing about the rendering would look wrong.
+`HitTestBeforePaintTest` is what pins it, and it pins the stronger half: a click lands on what layout
+put there with **no paint having happened at all**, which is only possible because the matrices come
+from the layout pass rather than from something a painter reconciles.
 
 Non-inheritable, matching CSS. It already reaches descendants through the matrix chain, and inheritance
 here is pull-based — an inherited change does not fire the inheriting element's `StyleChangeListener`s,
 which is the very mechanism that dirties the subtree's matrices.
 
-**Set from Java** with `element.setTransform(UITransform…)` (sugar writing `transform` at `INLINE`
+**Set from Java** with `element.setTransform(Transform…)` (sugar writing `transform` at `INLINE`
 origin) or `style(s -> s.general(g -> g.transformOrigin(x, y)))`.
 
 ---
@@ -766,7 +768,7 @@ went unnoticed.
 | Box-model shorthand expansion | `core/src/main/java/com/crystalgui/style/property/layout/BoxEdgeShorthands.java` |
 | Border-radius shorthand expansion + value type | `core/src/main/java/com/crystalgui/style/property/visual/border/` (`BorderRadiusShorthand`, `BorderRadiusProperties`, `LengthPercent`) |
 | `line-height` value + property | `core/src/main/java/com/crystalgui/style/property/visual/text/` (`LineHeightValue`, `LineHeightProperty`) |
-| `transform` value type | `core/src/main/java/com/crystalgui/ui/UITransform.java` (ordered `Op` list + `applyTo`) |
+| `transform` value type | `core/src/main/java/com/crystalgui/ui/Transform.java` (ordered `Op` list + `applyTo`) |
 | `transform` parsing/property/origin shorthand | `core/src/main/java/com/crystalgui/style/property/visual/transform/` (`TransformValue`, `TransformProperty`, `TransformOriginShorthand`) |
 | Shared CSS parsing helpers | `core/src/main/java/com/crystalgui/style/CssParsingUtil.java` (`splitTopLevelCommas`, `splitFunctionList`), `.../style/CssAngle.java` |
 | Frame lifecycle | `core/src/main/java/com/crystalgui/ui/UIDocument.java` |

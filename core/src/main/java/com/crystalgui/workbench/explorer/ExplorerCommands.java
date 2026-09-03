@@ -26,7 +26,7 @@ import java.util.List;
 
 import javax.annotation.Nullable;
 import com.crystalgui.core.settings.Settings;
-import com.crystalgui.ui.UiDataKeys;
+import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.workbench.chrome.preferences.Preferences;
 
 /**

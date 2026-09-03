@@ -32,7 +32,7 @@ import com.crystalgui.style.property.visual.transform.TransformProperty;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.style.transition.TransitionSpec;
 import com.crystalgui.style.transition.TransitionValue;
-import com.crystalgui.ui.UITransform;
+import com.crystalgui.style.property.visual.transform.Transform;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
@@ -405,7 +405,7 @@ public class StylePropertyRegistry {
 
     // ── transform ────────────────────────────────────────────────────────────
     //
-    // CSS's transform, as an ordered function list (see UITransform for why the order has to be
+    // CSS's transform, as an ordered function list (see Transform for why the order has to be
     // preserved rather than decomposed into fields). Layout-free: Taffy never sees it, so there is no
     // TaffyBridge listener here — a transform moves pixels and the hit-test matrix, nothing else.
     //
@@ -419,8 +419,8 @@ public class StylePropertyRegistry {
     // Deliberately NOT inheritable, matching CSS. A transform already reaches the whole subtree through
     // the matrix chain, and inheritance here is pull-based — an inherited change does not fire the
     // inheriting element's listeners, which is exactly the invalidation this depends on.
-    public static final StyleProperty<UITransform> TRANSFORM =
-            create(new TransformProperty("transform", UITransform.IDENTITY));
+    public static final StyleProperty<Transform> TRANSFORM =
+            create(new TransformProperty("transform", Transform.IDENTITY));
     // transform-origin is 1-2 value shorthand syntax over these two (see TransformOriginShorthand),
     // the same way margin/padding/outline-offset work. Both default to 50% — the element's own centre,
     // so an unqualified scale or rotation stays put, as in CSS.

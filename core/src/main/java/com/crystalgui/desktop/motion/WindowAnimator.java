@@ -10,7 +10,7 @@ import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIElement;
 import org.joml.Vector2f;
-import com.crystalgui.ui.UITransform;
+import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.dom.UIDocument;
 
 import javax.annotation.Nullable;
@@ -22,7 +22,7 @@ import javax.annotation.Nullable;
  *
  * <p>Every one of these animates {@code transform} and {@code opacity} and nothing else, which is not a
  * shortcut — it is what a compositor does. DWM, Quartz and Mutter all animate a window's <em>surface</em>:
- * the window is drawn once and the result is scaled and slid about. {@link UITransform} is layout-free by
+ * the window is drawn once and the result is scaled and slid about. {@link Transform} is layout-free by
  * construction here (Taffy never sees it), so a window flying into the taskbar reflows nothing and its
  * contents are not re-measured sixty times a second. Animating {@code left}/{@code top}/{@code width}/
  * {@code height} instead would draw the same picture and re-run layout for the whole window to do it,
@@ -153,7 +153,7 @@ public final class WindowAnimator {
     /**
      * Identity written as ONE SCALE, and identity written as a TRANSLATE then a SCALE.
      *
-     * <p><b>Never {@link UITransform#IDENTITY}, which is an EMPTY function list.</b> CSS interpolates two
+     * <p><b>Never {@link Transform#IDENTITY}, which is an EMPTY function list.</b> CSS interpolates two
      * transforms component-wise only when their function lists line up, and this engine implements that
      * rule exactly — {@code TransformProperty.interpolate} opens with {@code if (a.size() != b.size())
      * return snap(...)}, and {@code snap} is the binary rule: {@code t < 0.5 ? from : to}. An empty list
@@ -170,11 +170,11 @@ public final class WindowAnimator {
      * by writing both ends with the same functions, which is the standard advice for CSS transform
      * animations anyway". These are that, and every {@code play*} below pairs its endpoints.</p>
      */
-    private static final UITransform NEUTRAL_SCALE = UITransform.scale(1f, 1f);
+    private static final Transform NEUTRAL_SCALE = Transform.scale(1f, 1f);
 
-    private static final UITransform NEUTRAL_MAPPING = UITransform.of(
-            UITransform.Op.translate(LengthPercent.px(0f), LengthPercent.px(0f)),
-            UITransform.Op.scale(1f, 1f));
+    private static final Transform NEUTRAL_MAPPING = Transform.of(
+            Transform.Op.translate(LengthPercent.px(0f), LengthPercent.px(0f)),
+            Transform.Op.scale(1f, 1f));
 
     private static final LengthPercent CORNER = LengthPercent.px(0f);
     private static final LengthPercent CENTRE = LengthPercent.percent(0.5f);
@@ -231,13 +231,13 @@ public final class WindowAnimator {
      * observable that catches it coming back.</p>
      */
     @Nullable
-    public UITransform currentTarget() {
+    public Transform currentTarget() {
         return current instanceof WindowAnimation move ? move.target() : null;
     }
 
     /** Where the running animation started. @see WindowAnimation#startValue */
     @Nullable
-    public UITransform currentStart() {
+    public Transform currentStart() {
         return current instanceof WindowAnimation move ? move.startValue() : null;
     }
 
@@ -246,7 +246,7 @@ public final class WindowAnimator {
     /** The window arrives: unfolds from a sliver at its own bottom edge, fading in. */
     public void playOpen() {
         if (!enabled) return;
-        start(UITransform.scale(SHOW_SCALE_X, SHOW_SCALE_Y), NEUTRAL_SCALE,
+        start(Transform.scale(SHOW_SCALE_X, SHOW_SCALE_Y), NEUTRAL_SCALE,
                 0f, 1f, CENTRE, BOTTOM, SHOW_NANOS, ARRIVING, null);
     }
 
@@ -263,7 +263,7 @@ public final class WindowAnimator {
             then.run();
             return;
         }
-        start(NEUTRAL_SCALE, UITransform.scale(DESTROY_SCALE), 1f, 0f,
+        start(NEUTRAL_SCALE, Transform.scale(DESTROY_SCALE), 1f, 0f,
                 CENTRE, CENTRE, DESTROY_NANOS, MOVING, then);
     }
 
@@ -292,7 +292,7 @@ public final class WindowAnimator {
         // has nothing left to draw -- so a taskbar preview of a minimised one has to be a picture taken
         // while it was still whole. Requested here, taken on the next paint, which is still frame one of
         // the animation and therefore still an untransformed, fully opaque window.
-        UITransform into = towardTaskbar();
+        Transform into = towardTaskbar();
         if (into == null) {
             playClose(then);
             return;
@@ -304,7 +304,7 @@ public final class WindowAnimator {
     /** The window grows back out of its taskbar button — {@link #playMinimize} reversed. */
     public void playRestore() {
         if (!enabled) return;
-        UITransform from = towardTaskbar();
+        Transform from = towardTaskbar();
         if (from == null) {
             playOpen();
             return;
@@ -327,9 +327,9 @@ public final class WindowAnimator {
      */
     @Nullable
 
-    private UITransform towardTaskbar() {
+    private Transform towardTaskbar() {
         UIElement entry = taskbarEntry();
-        UITransform viaEntry = entry == null ? null : toward(entry);
+        Transform viaEntry = entry == null ? null : toward(entry);
         // FALLS THROUGH, rather than returning whatever `toward` answered. An entry can EXIST and still
         // have no box -- the strip hidden, or the button laid out on a later frame than the press -- and
         // returning its null went all the way back to the plain close animation. Reported as "it just
@@ -347,11 +347,11 @@ public final class WindowAnimator {
         // The old accessor was absolute and had to be subtracted back off; `Box.x()` is the offset from
         // the HOST, and a frame is a child of this layer, so both terms are already in one space.
         // @see plan_m6.md 6.4
-        return UITransform.of(
-                UITransform.Op.translate(
+        return Transform.of(
+                Transform.Op.translate(
                         LengthPercent.px(area.width() / 2f - frame.boxX()),
                         LengthPercent.px(area.height() - frame.boxY())),
-                UITransform.Op.scale(MINIMIZE_FALLBACK_SCALE, MINIMIZE_FALLBACK_SCALE));
+                Transform.Op.scale(MINIMIZE_FALLBACK_SCALE, MINIMIZE_FALLBACK_SCALE));
     }
 
     /**
@@ -369,7 +369,7 @@ public final class WindowAnimator {
      * {@link WindowAnimation} pins for the animation's whole life.</p>
      */
     @Nullable
-    private UITransform toward(@Nullable UIElement target) {
+    private Transform toward(@Nullable UIElement target) {
         if (target == null) return null;
         Box to = target.box();
         UIElement area = frame.parentElement();
@@ -381,11 +381,11 @@ public final class WindowAnimator {
         if (selfW <= 0f || selfH <= 0f) return null;
         if (to.width() <= 0f || to.height() <= 0f) return null;
         Vector2f origin = Box.originIn(to, space);
-        return UITransform.of(
-                UITransform.Op.translate(
+        return Transform.of(
+                Transform.Op.translate(
                         LengthPercent.px(origin.x - frame.boxX()),
                         LengthPercent.px(origin.y - frame.boxY())),
-                UITransform.Op.scale(to.width() / selfW, to.height() / selfH));
+                Transform.Op.scale(to.width() / selfW, to.height() / selfH));
     }
 
     /**
@@ -513,7 +513,7 @@ public final class WindowAnimator {
      * <p>Runs {@code then} immediately when the window is not in a tree: there is nothing to draw and
      * nothing to tick, and a continuation that never fired would strand a close forever.</p>
      */
-    private void start(UITransform from, UITransform to, float fromOpacity, float toOpacity,
+    private void start(Transform from, Transform to, float fromOpacity, float toOpacity,
                        LengthPercent originX, LengthPercent originY,
                        long durationNanos, Easing easing, @Nullable Runnable then) {
         cancelCurrent();

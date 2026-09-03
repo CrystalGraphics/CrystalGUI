@@ -3,9 +3,6 @@ package com.crystalgui.ui.dom;
 import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Resize;
-import com.crystalgui.core.data.DataProvider;
-import com.crystalgui.core.settings.Settings;
-import com.crystalgui.core.settings.SettingsScope;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.GeneralGroup;
 import com.crystalgui.style.LayoutGroup;
@@ -21,10 +18,9 @@ import com.crystalgui.style.property.visual.Overflow;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 import com.crystalgui.style.property.visual.ScrollBehavior;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.data.Transform2D;
-import com.crystalgui.ui.EventListenerGroup;
+import com.crystalgui.ui.event.EventListenerGroup;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.event.EventTarget;
@@ -33,8 +29,7 @@ import com.crystalgui.ui.event.FocusEvent;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
-import com.crystalgui.ui.input.keymap.Keymap;
-import com.crystalgui.ui.input.keymap.KeymapScope;
+
 import java.util.Collection;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -84,9 +79,6 @@ import org.joml.Vector2f;
  * could not spell (M2).</p>
  */
 public class UIElement extends UINode implements EventTarget, Styleable {
-
-
-
 
     private String id = "";
 
