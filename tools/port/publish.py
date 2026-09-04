@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish the members a PACKAGE SPLIT put on the far side of a boundary, from the compiler's list.
+"""Widen the members a SPLIT put on the far side of a boundary, from the compiler's list.
 
     ./gradlew :core:compileJava > build.log 2>&1
     python tools/port/publish.py build.log
@@ -30,6 +30,19 @@ CORE = os.path.join(ROOT, 'core', 'src', 'main', 'java', 'com', 'crystalgui')
 # `foo() is not public in Bar; cannot be accessed from outside package`
 NOT_PUBLIC = re.compile(
     r'error: (?P<member>[\w$]+)(?:\([^)]*\))? is not public in (?P<owner>[\w.$]+);')
+
+# `documents has private access in Workbench` -- the SAME-package split, which is the cheaper one.
+#
+# A class extracted into its own file beside the one it came out of reaches nothing private, and the
+# answer is package-private rather than public: the collaborator is in the package, and publishing
+# would put on the engine's public surface what is really one class talking to another.
+#
+# NOT anchored on `error:`. javac reports it there for a plain call and on a CONTINUATION line for a
+# method reference -- `invalid method reference` on the error line, then the reason under it -- so an
+# anchored pattern silently sees half of them, which is worse than none: the count reads low and the
+# split looks cheaper than it is.
+HAS_PRIVATE = re.compile(
+    r'(?P<member>[\w$]+)(?:\([^)]*\))? has private access in (?P<owner>[\w.$]+)')
 
 MODIFIERS = r'(?:static\s+|final\s+|abstract\s+|synchronized\s+|native\s+|default\s+|<[^>]+>\s+)*'
 
@@ -62,6 +75,19 @@ def publish(path, member):
     return bool(n)
 
 
+def unprivate(path, member):
+    """Drop `private` from one member, leaving it package-private. Returns whether it changed."""
+    text = io.open(path, encoding='utf-8').read()
+    pattern = re.compile(
+        r'^(?P<indent>[ \t]+)private\s+'
+        r'(?P<rest>' + MODIFIERS + r'(?:[\w.$<>\[\], ?]+\s+)?' + re.escape(member) + r'\s*[(=;<])',
+        re.M)
+    new, n = pattern.subn(lambda m: m.group('indent') + m.group('rest'), text, count=1)
+    if n:
+        io.open(path, 'w', encoding='utf-8', newline='\n').write(new)
+    return bool(n)
+
+
 def main():
     if len(sys.argv) != 2:
         print(__doc__)
@@ -70,16 +96,19 @@ def main():
 
     wanted = set()
     for m in NOT_PUBLIC.finditer(log):
-        wanted.add((m.group('owner').rsplit('.', 1)[-1], m.group('member')))
+        wanted.add((m.group('owner').rsplit('.', 1)[-1], m.group('member'), 'public'))
+    for m in HAS_PRIVATE.finditer(log):
+        wanted.add((m.group('owner').rsplit('.', 1)[-1], m.group('member'), 'package'))
 
     done, missed = 0, []
-    for owner, member in sorted(wanted):
+    for owner, member, how in sorted(wanted):
         path = owner_file(owner)
-        if path and publish(path, member):
+        widen = publish if how == 'public' else unprivate
+        if path and widen(path, member):
             done += 1
         else:
             missed.append('%s.%s' % (owner, member))
-    print('members published: %d' % done)
+    print('members widened: %d' % done)
     if missed:
         print('\nCOULD NOT PUBLISH (%d) -- declaration not matched, do these by hand:\n  %s'
               % (len(missed), ' '.join(missed)))

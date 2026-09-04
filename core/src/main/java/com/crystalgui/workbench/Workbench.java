@@ -1,6 +1,7 @@
 package com.crystalgui.workbench;
 
 
+import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.workbench.toolwindow.ToolWindowKind;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.workbench.decoration.FileDecorations;
@@ -214,26 +215,81 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     // Events go to Notifications (severity, actions, a bounded history); ambient text goes to StatusBar
     // (keyed per writer, replaced rather than accumulated). See com.crystalgui.core.notify.
 
-    private final Workspace workspace;
+    final Workspace workspace;
 
     /** Every kind of document this workbench can open. An instance, so two workbenches differ. */
-    private final DocumentKinds kinds = new DocumentKinds();
+    final DocumentKinds kinds = new DocumentKinds();
 
     /** The open documents, and the wire underneath them. */
-    private final WorkspaceDocuments documents;
+    final WorkspaceDocuments documents;
 
     /** The tabs over those documents — the ONE open lane. @see EditorService */
-    private final EditorService editors;
-    private final DockPanelRegistry<UIElement> registry = new DockPanelRegistry<>();
-    private final ProjectFileTree fileTree;
-    private final ProblemsPanel problems = new ProblemsPanel();
+    final EditorService editors;
+    final DockPanelRegistry<UIElement> registry = new DockPanelRegistry<>();
+
+    /**
+     * Saving, and what a conflict means — extracted at W5.
+     *
+     * <p>A <em>document</em> concern that had grown onto the shell: writing a tab back, the stale-write
+     * question and its three answers, the merge, and what closing something has to ask before it
+     * discards anything.</p>
+     */
+    final SaveActions saveActions = new SaveActions(this);
+
+    /**
+     * How a tab presents itself, and what the dock and the documents owe each other — extracted at W5.
+     *
+     * <p>The seven registry providers, the placeholder rebuild, the failure banner, releasing a closed
+     * panel and following a rename. Every one of them is PULLED by the strip when it builds a tab rather
+     * than pushed in afterwards, which is what makes a rebuilt strip correct on the frame it is
+     * rebuilt.</p>
+     */
+    final DocumentTabs documentTabs = new DocumentTabs(this);
+
+    /**
+     * The ONE open lane's shell half — extracted at W5.
+     *
+     * <p>{@code open}, {@code openFile}, {@code openResource} and their {@code At} variants, the
+     * extension bindings, the ref a path maps to, and which dock a placement lands in. Editor-service
+     * work that had grown onto the shell because the shell is what owns the dock.</p>
+     */
+    final WorkbenchOpener opener = new WorkbenchOpener(this);
+
+    /**
+     * What the workspace declares, and the three snapshots an analysis thread reads — extracted at W5.
+     *
+     * <p>A <em>language</em> concern that lived on the shell. It is the one cluster here whose comments
+     * are all about threads: everything it holds is read off the frame thread and written on it, which
+     * is why the snapshots are volatile and why nothing in it may reach a widget.</p>
+     */
+    final ProjectSourcesIndex projectSources = new ProjectSourcesIndex(this);
+
+    /**
+     * Every document's problems, indexed, counted and pointed at the panel — extracted at W5.
+     */
+    final ProblemsBinding problemsBinding = new ProblemsBinding(this);
+
+    /**
+     * Who else is in the file that is in front — extracted at W5.
+     */
+    final PresenceBinding presenceBinding = new PresenceBinding(this);
+
+    /**
+     * The tree's half of the workbench — extracted at W5.
+     *
+     * <p>What a change on the server means to it, what a drop onto it does, the recursive watches per
+     * project root, and following the active tab.</p>
+     */
+    final ExplorerBinding explorerBinding = new ExplorerBinding(this);
+    final ProjectFileTree fileTree;
+    final ProblemsPanel problems = new ProblemsPanel();
 
     /** The notification history. @see #NOTIFICATIONS_TYPE */
     private final NotificationsView notificationsView = new NotificationsView();
 
     /** The transient half — balloons over the bottom-right corner. @see NotificationBalloons */
     private final NotificationBalloons balloons = new NotificationBalloons();
-    private final DockArea dock;
+    final DockArea dock;
 
     /** The fixed region frame — sidebar, editor, panel, auxiliary. @see WorkbenchRegions */
     private WorkbenchRegions regions;
@@ -274,30 +330,13 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * path nothing has measured yet.</p>
      */
     @Nullable
-    private String openBufferText(CgPath path) {
+    String openBufferText(CgPath path) {
         Document document = documents.get(Resource.of(path));
         if (document == null) return null;
         byte[] bytes = document.model().encode();
         return bytes == null ? null : new String(bytes, StandardCharsets.UTF_8);
     }
 
-    /**
-     * A background read landed, so anything that resolved without it is now out of date.
-     *
-     * <h3>A flag, because this is not the UI thread</h3>
-     *
-     * <p>It runs on whatever thread the workspace client answers on. Walking the open editors from here
-     * would reach {@code setEnabled}-shaped state and end in {@code invalidateStyleMatch()}, adding to
-     * {@code StyleEngine}'s dirty-match set while the frame is copying it — the {@code RunSessions} crash
-     * exactly, which arrives as an {@code ArrayIndexOutOfBoundsException} out of {@code advanceFrame} with
-     * nothing about this class in the trace.</p>
-     *
-     * <p>So: set, and let {@link #tick} drain it. Coalescing is free and wanted — a workspace crawl fills
-     * many files in one frame and they all mean the same single "ask again".</p>
-     */
-    private void onProjectIndexFilled() {
-        projectSourcesMoved = true;
-    }
 
     /**
      * Anything an open document resolves against has changed — ask the editors again.
@@ -310,7 +349,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * <p>Volatile because {@link #onProjectIndexFilled} runs on whatever thread the workspace client
      * answers on; drained by {@link #tick} on the UI thread.</p>
      */
-    private volatile boolean projectSourcesMoved;
+    volatile boolean projectSourcesMoved;
 
     // ── What the index is allowed to see ────────────────────────────────────────────────────────
     //
@@ -326,13 +365,13 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     // exist". Identical to the symptom of having no index at all.
 
     /** Every file the crawl has reached, as of the last frame. */
-    private volatile List<CgPath> crawledFiles = List.of();
+    volatile List<CgPath> crawledFiles = List.of();
 
     /** Project id to declared source roots, as of the last frame. */
-    private volatile Map<String, List<String>> projectRoots = Map.of();
+    volatile Map<String, List<String>> projectRoots = Map.of();
 
     /** Open documents' text, as of the last frame — the tier that beats the file on disk. */
-    private volatile Map<CgPath, String> bufferSnapshot = Map.of();
+    volatile Map<CgPath, String> bufferSnapshot = Map.of();
 
     /** A buffer's CONTENT moved since the snapshot was taken. UI thread only. */
     /**
@@ -344,163 +383,19 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * boolean threw it away; keeping it means a keystroke re-encodes the document it landed in and reuses
      * the string already held for the others.</p>
      */
-    private final Set<CgPath> dirtyBuffers = new HashSet<>();
+    final Set<CgPath> dirtyBuffers = new HashSet<>();
 
     /** Which documents the snapshot covers, so opening or closing one is noticed. UI thread only. */
-    private final Set<CgPath> snapshotOver = new HashSet<>();
+    final Set<CgPath> snapshotOver = new HashSet<>();
 
     /** The tree source revision these snapshots were taken at. @see WorkspaceTreeSource#indexRevision() */
-    private int lastIndexRevision = -1;
+    int lastIndexRevision = -1;
 
     /** Whether the workspace's own inputs moved on the PREVIOUS frame. @see #refreshProjectIndexInputs */
-    private boolean workspaceMovedLastFrame;
+    boolean workspaceMovedLastFrame;
 
-    /**
-     * Re-takes the three snapshots the index reads. UI thread, once a frame.
-     *
-     * <h3>Nothing here is re-derived unless something says it changed</h3>
-     *
-     * <p>This runs every frame, so every unguarded line in it is a per-frame cost. {@code knownFiles()}
-     * builds a list of <b>every file in the workspace</b>, and the roots walk is over that same list — so
-     * taking them unconditionally meant allocating and walking the whole workspace sixty times a second to
-     * discover that nothing had happened. {@link WorkspaceTreeSource#indexRevision()} answers that in a
-     * field read.</p>
-     *
-     * <p>Buffers are the same argument one level down: encoding an open document is not free, and
-     * {@code refreshDirtyMarkers} doing it for every open file every frame is precisely what
-     * {@code Document.onDidChange} was added to stop.</p>
-     */
-    private void refreshProjectIndexInputs() {
-        int revision = fileTree == null ? 0 : fileTree.source().indexRevision();
-        boolean workspaceMoved = revision != lastIndexRevision;
-        if (workspaceMoved) {
-            lastIndexRevision = revision;
-            List<CgPath> files = fileTree == null ? List.of() : fileTree.source().knownFiles();
-            crawledFiles = files;
 
-            Map<String, List<String>> roots = new HashMap<>();
-            for (CgPath file : files) {
-                if (file == null) continue;
-                roots.computeIfAbsent(file.project(),
-                        id -> fileTree == null ? SourceRoots.CONVENTION
-                                : fileTree.source().sourceRootsOf(id));
-            }
-            projectRoots = roots;
-        }
 
-        // A BIGGER WORKSPACE RESOLVES MORE NAMES, so a crawl that grew is a reason to ask again.
-        //
-        // This is the case that shipped broken and the hardest to see, because every part of it behaves
-        // correctly. A file is opened immediately; the crawl is still walking; the package it imports has
-        // not been reached yet, so the index truthfully reports that nothing is declared there and the
-        // import is marked unresolvable. The crawl then finds it, the index becomes right, and NOTHING
-        // re-runs the analysis that was wrong -- so the error stands for the life of the session while
-        // every file opened afterwards resolves perfectly. It reads as a problem with the broken file
-        // rather than as a race with a background walk.
-        //
-        // ONCE IT SETTLES, not on every change. The crawl lands listings continuously at startup, and a
-        // debounced job whose trigger fires every frame is a job that never runs -- the first analysis
-        // would be pushed back until the whole walk finished. Announcing on the frame AFTER the last
-        // change fires at each point the crawl pauses, which is when its answer is worth re-asking.
-        if (!workspaceMoved && workspaceMovedLastFrame) projectSourcesMoved = true;
-        workspaceMovedLastFrame = workspaceMoved;
-
-        refreshBufferSnapshot();
-    }
-
-    /**
-     * Re-takes the open documents' text, when it has moved.
-     *
-     * <p>Its own method because it ends in a guard clause, and a guard clause halfway down a three-part
-     * method is a trap for whatever gets added below it — the same reason a paint method may skip the
-     * draw but never the method.</p>
-     */
-    private void refreshBufferSnapshot() {
-        List<CgPath> open = openPaths();
-        // THE SET, NOT THE COUNT. Two independent things move this snapshot -- a buffer's content, and
-        // which documents are open -- and comparing counts gets the second wrong in BOTH directions. One
-        // file closing while another opens leaves the count identical with every entry different, so the
-        // snapshot silently keeps a closed document's text, which outranks the file on disk. And a
-        // document whose text cannot be encoded never enters the snapshot at all, so the counts differ
-        // for as long as it is open and every frame re-encodes every buffer -- the exact per-frame cost
-        // this whole shape exists to avoid.
-        if (dirtyBuffers.isEmpty() && snapshotOver.size() == open.size()
-                && snapshotOver.containsAll(open)) return;
-
-        // REBUILT WHOLE, so a closed document's text leaves with it. A stale entry here outranks the file
-        // on disk, so a document that was closed and edited elsewhere would resolve to what it used to say.
-        Map<CgPath, String> buffers = new HashMap<>();
-        for (CgPath path : open) {
-            // ALREADY HELD AND STILL TRUE. `encode()` serialises the whole document, so re-taking it for
-            // a file nobody touched is the per-frame cost this shape exists to avoid, paid per keystroke
-            // instead -- and paid for every open document rather than the one being typed into. The map
-            // is still REBUILT rather than patched, so a closed document's text still leaves with it.
-            if (!dirtyBuffers.contains(path)) {
-                String held = bufferSnapshot.get(path);
-                if (held != null) {
-                    buffers.put(path, held);
-                    continue;
-                }
-            }
-            String text;
-            try {
-                text = openBufferText(path);
-            } catch (RuntimeException unreadable) {
-                // ONE DOCUMENT'S PROBLEM IS NOT THE FRAME'S. Encoding reaches into a live widget, and a
-                // document that is closing has already disposed its tokenizer -- asking it for text throws
-                // `IllegalStateException: Parser is closed`, which is the same fault
-                // `reopeningAClosedFileShowsTheLiveEditor` was written for. Thrown from here it escapes
-                // `tick()`, so every later line of the frame is skipped: the dock never attaches the panel
-                // it was mid-way through opening, and a REOPENED FILE COMES UP BLANK. Nothing in that
-                // symptom points at a cache of source text.
-                //
-                // Skipped rather than fatal because this cache is best-effort by construction -- `sourceOf`
-                // answering null is a supported state that costs one re-analysis, and it is what a file
-                // nobody has open already returns.
-                continue;
-            }
-            if (text != null) buffers.put(path, text);
-        }
-        bufferSnapshot = buffers;
-        snapshotOver.clear();
-        snapshotOver.addAll(open);
-        dirtyBuffers.clear();
-        // The buffer tier moved, so anything that resolved against the old one is stale -- the same
-        // announcement a landed read makes, for the same reason.
-        projectSourcesMoved = true;
-    }
-
-    /**
-     * Tells every open editor that the world outside its document moved.
-     *
-     * <p>Needed because {@code ProjectSources.sourceOf} answers null for a file nobody has open and
-     * schedules a read — so the first analysis after opening a file that names a sibling resolves nothing.
-     * Without this the error stands until the author types, which reads as the feature being flaky rather
-     * than as one missing signal.</p>
-     *
-     * <p>Broadcast to every editor rather than to the ones that asked. A services object cannot say which
-     * names it failed to resolve, and an analysis is debounced and keyed — so the cost of telling a
-     * document that did not care is one coalesced job that finds nothing changed.</p>
-     */
-    private void announceProjectSourcesMoved() {
-        if (!projectSourcesMoved) return;
-        projectSourcesMoved = false;
-        // AND THE TREE, whose rows resolve against the same thing an editor does. A `.java` row shows
-        // what the file DECLARES, read through `ProjectSources` -- which answers null for a file nobody
-        // has read yet and schedules the read. Without this the row keeps the file-type icon until
-        // something else happens to rebind it, so a package's icons appear one at a time as you click
-        // around, or never. @see ProjectFileTree#requestRefresh
-        fileTree.requestRefresh();
-        // AND EVERY TAB, for the same reason and one more: a tab's icon is pulled when the tab is BUILT
-        // and never re-read, which was correct while it was a function of the file NAME. It is now a
-        // function of what the file declares, and that answer arrives later than the tab does.
-        syncTabDecorations();
-        for (CgPath path : openPaths()) {
-            TextEditor editor = editorFor(path);
-            if (editor == null || editor.languageServices() == null) continue;
-            editor.languageServices().environmentChanged();
-        }
-    }
 
     /** What the workspace declares. @see ProjectIndex */
     public ProjectSources projectSources() {
@@ -515,7 +410,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * document. Before that existed, nothing updated the tab when a path changed — it kept its old title,
      * {@code Ctrl+S} wrote to the old name, and opening the new name produced a second editor.</p>
      */
-    private final FileOperations files;
+    final FileOperations files;
 
     /** Marked internal exactly ONCE, while empty. {@code markAsInternal()} RECURSES, and stamping a
      * populated subtree makes {@code removeChild} silently refuse everything under it — which is how the
@@ -541,7 +436,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * to remember to call it. Recording at the call sites instead is how a recent list ends up missing
      * the paths opened by the palette, by a problem row, or by a session restore.</p>
      */
-    private final RecentFiles recentFiles = new RecentFiles();
+    final RecentFiles recentFiles = new RecentFiles();
 
     /**
      * The line along the bottom — Parts step 6.
@@ -553,7 +448,16 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * <p>It reads {@code StatusBar} itself rather than being fed. Anything on it is an item some writer
      * keyed, which is what the keying was for; nothing needs to route a string through here.</p>
      */
-    private final StatusBarView statusBar = new StatusBarView();
+    /**
+     * The bar's model — an instance since W5, and per workbench.
+     *
+     * <p>It was a static, which was a shortcut from when there was one window. Two applications on one
+     * desktop cannot share one line: the caret readout of whichever editor was focused last would win,
+     * and closing one application would take entries off the other's bar.</p>
+     */
+    private final StatusBar statusBarModel = new StatusBar();
+
+    private final StatusBarView statusBar = new StatusBarView(statusBarModel);
 
     /**
      * The two tool-window rails. Chrome, not panels — see where they are added.
@@ -603,6 +507,10 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     @Override
     public Object getData(DataKey<?> key) {
         if (key == WORKBENCH) return this;
+        // THE BAR THIS WORKBENCH OWNS. Answered here rather than by the view, for the
+        // reason the menu bar above is: the walk finds ancestors, and the bar is a SIBLING
+        // of the content everything is focused inside.
+        if (key == UiDataKeys.STATUS_BAR) return statusBarModel;
         // ANSWERED HERE, NOT BY THE BAR. The walk only finds ancestors, and the menu bar is a SIBLING of
         // the content everything is focused inside -- so a command resolving outward from a focused editor
         // would never reach it. The workbench is the nearest thing that is an ancestor of both.
@@ -685,13 +593,13 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // EVERY DOCUMENT'S PROBLEMS REACH THE MARKERS, whatever kind of document it is. This indexed
         // the open TEXT documents' sets, so a graph left the panel empty by construction while its
         // compiler produced a dozen attributed errors with nowhere to go. @see DocumentModel#diagnostics
-        markerWatch.add(documents.onDidOpen.connect(document -> indexProblemsOf(document)));
-        for (Document already : documents.all()) indexProblemsOf(already);
-        markerWatch.add(markers.onDidChange.connect(resource -> refreshProblemCount()));
+        markerWatch.add(documents.onDidOpen.connect(document -> problemsBinding.indexProblemsOf(document)));
+        for (Document already : documents.all()) problemsBinding.indexProblemsOf(already);
+        markerWatch.add(markers.onDidChange.connect(resource -> problemsBinding.refreshProblemCount()));
         // ATTACHED WORKBENCHES ONLY, for the reason above it: this is a listener on a PROCESS-LIVED
         // static, so a workbench that subscribed from its constructor would stay reachable for ever and
         // keep an entire editor tree alive behind it.
-        capabilityWatch.add(LanguageRegistry.onCapabilityChanged.connect(this::attachLateServices));
+        capabilityWatch.add(LanguageRegistry.onCapabilityChanged.connect(projectSources::attachLateServices));
         // A LIBRARY TYPE'S KIND ARRIVING LATE is the same event as a project file's declaration arriving
         // late, so it sets the same flag and is coalesced with it. `symbolOf` is allowed to answer "not
         // yet" precisely so that working it out cannot land on a frame; this is the other half of that
@@ -702,7 +610,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
                     resource -> projectSourcesMoved = true);
             capabilityWatch.add(subscription::dispose);
         }
-        refreshProblemCount();
+        problemsBinding.refreshProblemCount();
         current.addDataProvider(this);
         // The rail's buttons, once there is a window to take a registry from.
         //
@@ -737,16 +645,97 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         UndoCommands.register();
     }
 
-    /**
-     * Puts a document's problems into the workbench's marker index.
-     *
-     * <p>Every kind of document, which is the change: this indexed the open TEXT documents' sets, so a
-     * graph left the Problems panel empty by construction while its compiler produced a dozen attributed
-     * errors with nowhere to go. A kind that reports none simply answers null.</p>
-     */
-    private void indexProblemsOf(Document document) {
-        DiagnosticSet problems = document.diagnostics();
-        if (problems != null) markers.attach(document.resource(), problems);
+
+    // ---- The facade's own lane -------------------------------------------------------------
+    //
+    // Thin by design. Each of these is on WorkbenchContext or called from outside the package, and the
+    // work behind it moved at W5 -- so what is left here is the SURFACE, which is the thing an
+    // application and an extension are written against and the thing that must not move when the
+    // engine is rearranged behind it.
+
+    /** Adds a file type. @see DocumentKind */
+    @Override
+    public Workbench contribute(DocumentKind kind) {
+        opener.contribute(kind);
+        return this;
+    }
+
+    /** As {@link #contribute}, plus the file patterns that open into this kind's panel. */
+    @Override
+    public Workbench contribute(DocumentKind kind, String... extensions) {
+        opener.contribute(kind, extensions);
+        return this;
+    }
+
+    /** Opens {@code input} where the placement says and how the options say. */
+    public DockLeaf open(DockInput input, DockPlacement placement, DockOpenOptions options) {
+        return opener.open(input, placement, options);
+    }
+
+    /** Opens {@code input} beside whatever is in front. */
+    public DockLeaf open(DockInput input) {
+        return opener.open(input);
+    }
+
+    /** The panel ref a path opens as. */
+    public DockPanelRef refFor(CgPath path) {
+        return opener.refFor(path);
+    }
+
+    @Override
+    public void openFile(CgPath path) {
+        opener.openFile(path);
+    }
+
+    @Override
+    public void openFile(CgPath path, @Nullable Runnable onOpened) {
+        opener.openFile(path, onOpened);
+    }
+
+    @Override
+    public void openResource(Resource resource) {
+        opener.openResource(resource);
+    }
+
+    @Override
+    public void openResource(Resource resource, @Nullable Runnable onOpened) {
+        opener.openResource(resource, onOpened);
+    }
+
+    /** Opens {@code path} and puts the caret at {@code at}. */
+    public void openFileAt(CgPath path, @Nullable TextPoint at) {
+        opener.openFileAt(path, at);
+    }
+
+    /** Opens {@code resource} and puts the caret at {@code at}. */
+    public void openResourceAt(Resource resource, @Nullable TextPoint at) {
+        opener.openResourceAt(resource, at);
+    }
+
+    /** ...and reveals {@code member} once the document is there, for a declaration with no position. */
+    public void openResourceAt(Resource resource, @Nullable TextPoint at, @Nullable String member) {
+        opener.openResourceAt(resource, at, member);
+    }
+
+    /** Writes the active tab back. A stale write is reported distinctly -- it has a recovery path. */
+    @Override
+    public boolean saveActiveFile() {
+        return saveActions.saveActiveFile();
+    }
+
+    /** Writes back every dirty document. @return how many were written */
+    public int saveAll() {
+        return saveActions.saveAll();
+    }
+
+    /** Whether {@code path} has unsaved changes. */
+    public boolean isDirty(CgPath path) {
+        return saveActions.isDirty(path);
+    }
+
+    /** Every file with unsaved changes. */
+    public List<CgPath> unsavedFiles() {
+        return saveActions.unsavedFiles();
     }
 
     /** Brings a tool window to the front, creating it if it is not open. */
@@ -784,7 +773,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
                 (path, onText) -> workspace.files().readWhole(Resource.of(path))
                         .then(read -> onText.accept(new String(read.bytes(), StandardCharsets.UTF_8)))
                         .onError(error -> onText.accept(null)),
-                this::onProjectIndexFilled);
+                projectSources::onProjectIndexFilled);
         // REGISTERED HERE, where the field exists. Contributed rather than set, because two workbenches in
         // one process are two projects rather than a fight over one slot -- which is also why this cannot
         // live in registerCommands, which runs once per CLASS: the second workbench would never register
@@ -810,16 +799,16 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // built and has no reason to look again on its own.
         lifetime.add(markers.onDidChange.connect(resource -> {
             fileTree.getDecorations().invalidate();
-            syncTabDecorations();
+            documentTabs.syncTabDecorations();
         }));
-        lifetime.add(fileTree.onFileChosen.connect(this::openFile));
-        lifetime.add(fileTree.onFilesDropped.connect(this::dropFiles));
+        lifetime.add(fileTree.onFileChosen.connect(opener::openFile));
+        lifetime.add(fileTree.onFilesDropped.connect(explorerBinding::dropFiles));
         // RENDERED FROM THE RESULT, never from the call site. One update path serves this client's own
         // operations and another client's alike -- see Q11 in the chrome plan, and why two paths into
         // one model always end up disagreeing.
-        lifetime.add(files.onDidRun.connect(this::refreshAfter));
+        lifetime.add(files.onDidRun.connect(documentTabs::refreshAfter));
         // AND THE TABS FOLLOW THE DOCUMENTS. @see #followDocuments
-        followDocuments();
+        documentTabs.followDocuments();
         // ANOTHER CLIENT'S CHANGES, through the same path as our own -- which is the whole reason the
         // explorer renders from events rather than from its own call sites (Q11). The server pushes
         // fs.changed for anything watched; a create or delete elsewhere shows up here without the tree
@@ -835,7 +824,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // roots, on every host, always: the loop that stood here ran over an empty list and watched
         // nothing at all. Nothing failed, and the explorer simply never heard about another client's
         // create, delete or rename outside the files it happened to have open.
-        lifetime.add(fileTree.source().onDidChangeProjects().connect(this::watchProjectRoots));
+        lifetime.add(fileTree.source().onDidChangeProjects().connect(explorerBinding::watchProjectRoots));
         fileTree.getDecorations().addProvider(externalChanges);
 
         // A RECONNECT INVALIDATES EVERYTHING AT ONCE, and for a different reason than a change does --
@@ -850,101 +839,21 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // in afterwards, which is what makes a rebuilt strip correct on the frame it is rebuilt -- a dock
         // rearrangement recreates every tab element, and anything pushed would have to be pushed again by
         // someone who noticed.
-        registry.setTitleProvider(this::tabTitleFor);
-        registry.setWindowTitleProvider(this::windowTitleFor);
-        registry.setIconProvider(this::tabIconFor);
-        registry.setIconElementProvider(this::viewerIconElement);
-        registry.setTooltipProvider(Workbench::tabTooltipFor);
-        registry.setIconTooltipProvider(this::tabIconTooltipFor);
-        registry.setDecorationProvider(this::tabDecorationFor);
+        registry.setTitleProvider(documentTabs::tabTitleFor);
+        registry.setWindowTitleProvider(documentTabs::windowTitleFor);
+        registry.setIconProvider(documentTabs::tabIconFor);
+        registry.setIconElementProvider(documentTabs::viewerIconElement);
+        registry.setTooltipProvider(DocumentTabs::tabTooltipFor);
+        registry.setIconTooltipProvider(documentTabs::tabIconTooltipFor);
+        registry.setDecorationProvider(documentTabs::tabDecorationFor);
 
-        // THE FALLBACK KIND: every text file, and every resource in a registered scheme. A decompiled
-        // class opens through this one too, which is what makes the viewer lane unnecessary rather than
-        // merely shorter -- see EditorService.
-        contribute(DocumentKind.of(FILE_TYPE, "File").fallback()
-                // THE MODEL WIRES THE LANGUAGE, because the language belongs to the DOCUMENT and not to a
-                // view of it. It hung off the editor, so two panes onto one file held two parse trees and
-                // a document with no tab could not analyse at all -- which is the state the Problems
-                // panel, a background compile and Go to Definition all want it in.
-                .model((resource, bytes) -> {
-                    // BINARY OPENS AS BYTES. Decoding a PNG as UTF-8 gives an editor full of
-                    // replacement characters -- and it is EDITABLE, so the first Ctrl+S writes that
-                    // back over the file. The sniff is a NUL in the first 8000 bytes, with UTF-16
-                    // excepted because its mark says outright that every other byte is a NUL.
-                    if (TextEncoding.looksBinary(bytes)) return new BytesDocumentModel(bytes);
-                    TextDocumentModel model = TextDocumentModel.of(bytes);
-                    LanguageRegistry.Entry entry = LanguageRegistry.forFileName(languageFileNameOf(resource));
-                    // A FRESH tokenizer per document -- the interface exists for implementations holding
-                    // a parse tree per file, and sharing one would cross-contaminate them.
-                    //
-                    // AND ITS DOC COMMENTS READ. A grammar reports `/** ... */` as ONE comment token,
-                    // because to a parser that is what it is -- the tags and the HTML inside are a
-                    // convention rather than syntax. `DocComments` is the lexing pass that reads them,
-                    // composed here rather than inside `newTokenizer` so the registry keeps answering
-                    // with what was registered.
-                    //
-                    // Fresh services per document too, and for the same reason: they hold a compile
-                    // result about THIS text. Null unless a language module registered an engine, which
-                    // is the whole feature flag -- see LanguageServices. Released by the model.
-                    model.setLanguage(entry.language(), DocComments.refining(entry.newTokenizer()),
-                            entry.newServices(model.buffer(), resource));
-                    return model;
-                })
-                .editor(document -> {
-                    // NOT A TEXT EDITOR FOR SOMETHING THAT IS NOT TEXT. A viewer says what the file is
-                    // and offers no way to write nonsense back; VS Code's binary editor and IntelliJ's
-                    // "file is not displayable" occupy the same slot.
-                    if (document.model() instanceof BytesDocumentModel binary) {
-                        return new BinaryFileView(document.resource(), binary);
-                    }
-                    TextDocumentModel model = (TextDocumentModel) document.model();
-                    TextEditor created = new TextEditor("");
-                    created.addClass(FILE_EDITOR_CLASS);
-                    // A VIEW OF THE MODEL'S BUFFER, never a copy of its text: two split panes are two
-                    // editors over one buffer, so a keystroke in either is one edit on one document with
-                    // one undo history. Copying is what made a second pane a second document.
-                    created.setBuffer(model.buffer());
-                    created.setLanguage(model.language());
-                    created.setTokenizer(model.tokenizer());
-                    created.setLanguageServices(model.services());
-                    // WRITABLE ONLY IF THE RESOURCE IS. A decompiled class is read-only because its
-                    // provider says so, and asking the workspace is what lets one kind serve both.
-                    if (workspace.isReadOnly(document.resource())) {
-                        created.addClass(VIEWER_CLASS);
-                        created.setReadOnly(true);
-                    }
-                    // AND IF THE TOKENIZER CAN FOLD, IT FOLDS. A tokenizer holding a parse tree already
-                    // knows where a block begins and ends, which is strictly better than guessing from
-                    // indentation -- and asking it costs no second parse, which a separate provider
-                    // would. The indentation provider stays the default and answers for every language
-                    // with no grammar behind it, which is most of them.
-                    if (model.tokenizer() instanceof FoldingRangeProvider folding) {
-                        created.setFoldingProvider(folding);
-                    }
-                    // AND IF IT CAN SAY HOW DEEP A LINE IS, Enter asks it rather than reading the last
-                    // character of the line -- which is right for a brace language and silently wrong for
-                    // a `case` arm, a wrapped expression, or a nested CSS rule.
-                    if (model.tokenizer() instanceof IndentationProvider indent) {
-                        created.setIndentationProvider(indent);
-                    }
-                    // A CROSS-FILE jump, which the editor announces rather than performs. Same-file jumps
-                    // never arrive here because the editor already made them; this hears only what
-                    // genuinely needs the workspace.
-                    routeDefinitionsOf(created);
-                    // Here rather than only from WorkbenchSettings.apply: a document opened after the
-                    // settings were installed would otherwise get the widget's own defaults, so folding
-                    // and tab size would apply to the files that happened to be open when a preference
-                    // was last changed and to no others -- which reads as the setting working
-                    // intermittently.
-                    WorkbenchSettings.applyTo(this, created);
-                    return new TextEditorView(created);
-                }));
+        opener.contribute(TextFileKind.declare(this));
 
         dock = new DockArea(registry, defaultLayout());
 
         // ASKED BEFORE ANYTHING IS DISCARDED. Ctrl+W on an edited file used to throw the work away with no
         // warning at all -- the tab marker said it was modified and nothing acted on that.
-        dock.setCloseGuard(this::confirmClose);
+        dock.setCloseGuard(saveActions::confirmClose);
         // Two of this widget's per-frame polls, replaced by the announcement they were both watching for.
         // Not registered on a Disposable: the signal belongs to the dock, this workbench owns the dock, so
         // the subscription cannot outlive either -- an ownership registration here would be ceremony.
@@ -958,8 +867,8 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // region existed -- which is what a server opening a tool window does. Free when the set is
         // empty, which is every frame but the few that matter. @see ToolWindowManager#retryPendingShows
         if (toolWindowManager != null) toolWindowManager.retryPendingShows();
-            revealActiveFile();
-            rebindProblems();
+            explorerBinding.revealActiveFile();
+            problemsBinding.rebindProblems();
             bindStatusToActiveTab();
         }));
         // The rails' :checked state follows the dock's structure and nothing else, so they can subscribe
@@ -969,7 +878,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // document stayed open, its editor stayed reachable and anything it owned -- a preview pool, a
         // renderer -- lived until the process did. Disposer could not help, because the thing that knew
         // the tab was gone had no way to say so.
-        lifetime.add(dock.onDidClosePanel.connect(this::releaseClosedPanel));
+        lifetime.add(dock.onDidClosePanel.connect(documentTabs::releaseClosedPanel));
         // ...AND ITS PLACEHOLDER RECORD, which is keyed by a ref and would otherwise outlive the
         // panel and be read against whatever reopened under the same name.
         lifetime.add(dock.onDidClosePanel.connect(placeholders::remove));
@@ -993,12 +902,12 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
          * every keystroke, and rebuilding there would detach the editor the user is typing in. It fires
          * only when what is ON SCREEN is not the view the tab now has.
          */
-        lifetime.add(editors.onDidChangeState.connect(this::refreshPanelForTab));
+        lifetime.add(editors.onDidChangeState.connect(documentTabs::refreshPanelForTab));
         // PRESENCE MOVES WITHOUT THE TAB MOVING. It was refreshed on a tab change alone, which was
         // enough while nothing ever pushed one -- somebody else opening the file you are looking at
         // changes the answer and changes nothing about which tab is in front.
-        lifetime.add(workspace.presence().onDidChange.connect(this::refreshPresence));
-        registerFailureBanner();
+        lifetime.add(workspace.presence().onDidChange.connect(presenceBinding::refreshPresence));
+        documentTabs.registerFailureBanner();
         // Tab dirty markers. Was a per-frame refreshDirtyMarkers(), which meant encoding every open
         // document -- a whole shader graph serialised sixty times a second -- to notice a marker that
         // moves when somebody types. The equality guard SURVIVES the move: the announcement means
@@ -1007,7 +916,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         lifetime.add(documents.onDidChangeState.connect((document, state) -> {
             CgPath path = document.resource().asPath();
             if (path == null) return;
-            refreshDirtyMarkers();
+            documentTabs.refreshDirtyMarkers();
             // AND THE INDEX'S VIEW OF IT. This signal means "content moved", which is exactly when a
             // snapshot of that content stops being true. Marked rather than re-encoded, so a burst of
             // keystrokes costs one encode on the next frame instead of one each.
@@ -1128,7 +1037,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
             // positioning on the next line acted on the editor from BEFORE the click. That is correct for
             // a problem in the file you are already looking at and wrong for every other, which is why it
             // read as intermittent rather than as broken.
-            openFile(node.resource().asPath(), () -> {
+            opener.openFile(node.resource().asPath(), () -> {
                 TextEditor editor = activeEditor();
                 if (editor == null) return;
                 editor.revealAt(at);
@@ -1147,7 +1056,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         lifetime.add(problems.onQuickFixesRequested.connect(node -> {
             if (node.diagnostic() == null || node.resource() == null || !node.resource().isProject()) return;
             TextPoint at = node.diagnostic().start();
-            openFile(node.resource().asPath(), () -> {
+            opener.openFile(node.resource().asPath(), () -> {
                 TextEditor editor = activeEditor();
                 if (editor == null) return;
                 editor.revealAt(at);
@@ -1198,8 +1107,14 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         return recentFiles;
     }
 
-    public StatusBarView statusBar() {
+    public StatusBarView statusBarView() {
         return statusBar;
+    }
+
+    /** The bar an entry goes on. @see UiDataKeys#STATUS_BAR */
+    @Override
+    public StatusBar statusBar() {
+        return statusBarModel;
     }
 
     public DockArea dock() {
@@ -1221,7 +1136,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     private final List<Disposable> activeExtensions = new ArrayList<>();
 
     /** One recursive watch per project root, keyed by the root it covers. @see #watchProjectRoots */
-    private final Map<CgPath, RootWatch> rootWatches = new HashMap<>();
+    final Map<CgPath, RootWatch> rootWatches = new HashMap<>();
 
     /**
      * Lets go of everything: the listeners, the watches, the registry entry, and the open tabs.
@@ -1269,7 +1184,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * resource, so disposing it only unwatches when the last holder lets go — and until then this
      * workbench's listener would go on being called on a signal it no longer has any business reading.</p>
      */
-    private static final class RootWatch implements Disposable {
+    static final class RootWatch implements Disposable {
         private final Workspace.Watch watch;
         private final Connection listener;
 
@@ -1285,40 +1200,6 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         }
     }
 
-    /**
-     * Takes a recursive watch on every project root, and drops the ones whose root is gone.
-     *
-     * <p>Runs whenever the listing changes rather than once, because it can change: a reconnect
-     * re-lists, and a project opened or closed on the server moves the set. Re-taking a root already
-     * watched would cost a second subscription — {@code Workspace.watch} would hand back the same
-     * object with its holder count bumped, and this would add a second listener to it — so a root
-     * already in the map is left alone.</p>
-     */
-    private void watchProjectRoots() {
-        List<CgPath> roots = fileTree.source().roots();
-        List<CgPath> gone = new ArrayList<>();
-        for (Map.Entry<CgPath, RootWatch> each : rootWatches.entrySet()) {
-            if (!roots.contains(each.getKey())) gone.add(each.getKey());
-        }
-        for (CgPath root : gone) rootWatches.remove(root).dispose();
-
-        for (CgPath root : roots) {
-            if (rootWatches.containsKey(root)) continue;
-            Workspace.Watch watch = workspace.watch(Resource.of(root), true);
-            Connection listener = watch.onChanged.connect(changes -> {
-                for (FsMessages.FileChange change : changes) {
-                    CgPath moved = CgPath.parse(change.path());
-                    fileTree.source().invalidate(moved.parent());
-                    if (!change.from().isEmpty()) {
-                        fileTree.source().invalidate(CgPath.parse(change.from()).parent());
-                    }
-                    externalChange(change);
-                }
-                fileTree.treeView().refresh();
-            });
-            rootWatches.put(root, new RootWatch(watch, listener));
-        }
-    }
 
     public DockPanelRegistry<UIElement> panels() {
         return registry;
@@ -1501,85 +1382,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     }
 
 
-    /**
-     * Opens {@code input} <b>where</b> {@code placement} says and <b>how</b> {@code options} say.
-     *
-     * <h3>What this replaced</h3>
-     *
-     * <p>Three overloads — {@code openPanel(ref)}, {@code openPanelWith(sibling, ref)} and
-     * {@code openPanelBeside(ref, zone, share)} — which read as three operations and were really one
-     * operation with two independent variables. Their genuine differences were buried in their bodies:
-     * one activated what it opened, one deliberately restored the previous selection, one set a size
-     * share. A caller wanting "beside, without stealing focus" had no overload and no way to ask.</p>
-     *
-     * <p>That is VS Code's {@code openEditor(input, options, group)}, and the reason it has that shape.</p>
-     *
-     * @return the leaf it landed in, so a caller can act on it without searching for it again
-     */
-    public DockLeaf open(DockInput input, DockPlacement placement, DockOpenOptions options) {
-        // THE DOCK THE USER IS WORKING IN, which is not always this workbench's own -- see activeDock().
-        // Shadowed deliberately: every line below means "the dock this open is going into", and one
-        // resolution at the top is what stops half a method reading the field and half the answer.
-        DockArea dock = activeDock();
-        DockPanelRef ref = input.ref();
 
-        // ALREADY OPEN wins over placement, always. Re-opening a file that is on screen means "show me
-        // that one", never "make a second copy of it somewhere else" -- and a placement that ignored this
-        // would silently duplicate a document, which is the one outcome no caller wants.
-        DockLeaf existing = dock.layout().leafContaining(ref);
-        if (existing != null) {
-            existing.activate(ref);
-            dock.syncGroups();
-            if (options.activates()) dock.setActiveGroup(dock.groupFor(existing));
-            return existing;
-        }
-
-        DockLeaf target = DockPlacement.resolve(placement, dock);
-        boolean splitting = placement instanceof DockPlacement.Side;
-        if (target == null) target = centralLeaf(dock);
-
-        if (!splitting) {
-            // The selection is captured and PUT BACK when the caller asked not to activate. DockLeaf.add
-            // activates what it inserts, which is right for a file and wrong for a companion panel.
-            DockPanelRef wasActive = target.activePanel();
-            long timed = FrameProfile.begin();
-            target.add(ref);
-            FrameProfile.step(timed, "dock.leaf.add");
-            if (!options.activates() && wasActive != null) target.activate(wasActive);
-            timed = FrameProfile.begin();
-            dock.syncGroups();
-            FrameProfile.step(timed, "dock.syncGroups");
-            if (options.activates()) {
-                timed = FrameProfile.begin();
-                dock.setActiveGroup(dock.groupFor(target));
-                FrameProfile.step(timed, "dock.setActiveGroup");
-            }
-            return target;
-        }
-
-        DockDropZone zone = ((DockPlacement.Side) placement).zone();
-        float whole = target.size();
-        DockLeaf placed = dock.layout().drop(target, zone, new DockLeaf(ref));
-        if (options.hasShare()) {
-            // Ratios within a branch are all that matter, so this is correct whether drop inserted a
-            // sibling (the two weights still sum to the target's old share, leaving every other child
-            // untouched) or wrapped the target in a new branch (where the pair are its only children).
-            target.size(whole * (1f - options.share()));
-            placed.size(whole * options.share());
-        }
-        // requestRebuild, not syncGroups: the TREE changed, not just a selection.
-        //
-        // The new pane is deliberately NOT made active even when asked. It has no group yet -- the
-        // rebuild is deferred to the next frame -- so asking for one now yields null, and setting THAT
-        // sends rebuild() down its "nothing is active" path, which picks leaves.get(0): the file tree.
-        dock.requestRebuild();
-        return placed;
-    }
-
-    /** Opens into the central work area and brings it forward — what opening a file means. */
-    public DockLeaf open(DockInput input) {
-        return open(input, DockPlacement.central(), DockOpenOptions.ACTIVATE);
-    }
 
     // ── Files ───────────────────────────────────────────────────────────────────────────────────
 
@@ -1590,24 +1393,8 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * against the {@code DockPanelDescriptor} registry that defined it, and that registry belongs to this
      * workbench. A global map would let one window bind a type the other cannot build.</p>
      */
-    private final FilePatternMap<String> editorBindings = new FilePatternMap<>();
+    final FilePatternMap<String> editorBindings = new FilePatternMap<>();
 
-    /**
-     * Opens files matching these extensions with the panel type {@code typeId} instead of the text editor.
-     *
-     * <p>The host registers the panel itself with {@link #registerPanel} and then says which files it is
-     * for. The two are separate calls because they are separate facts — a panel type can exist without
-     * claiming any file (the graph, the Problems list), and a binding is meaningless without a panel to
-     * build.</p>
-     *
-     * <p>A bound panel is handed the same {@code PATH_STATE} and title as a text editor would be, so its
-     * factory reads the path exactly the same way and nothing else in the dock needs to know a binding
-     * happened.</p>
-     */
-    public Workbench bindEditorExtensions(String typeId, String... extensions) {
-        editorBindings.putExtensions(typeId, extensions);
-        return this;
-    }
 
     /** As {@link #bindEditorExtensions}, for files identified by their whole name — {@code Dockerfile}. */
     public Workbench bindEditorNames(String typeId, String... fileNames) {
@@ -1621,25 +1408,6 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         return this;
     }
 
-    /**
-     * The panel reference identifying one open file — {@code path} is what makes two of them distinct.
-     *
-     * <p><b>The type comes from the binding, not from a constant.</b> This returned {@link #FILE_TYPE}
-     * unconditionally, which is why every file opened in a text editor however little sense that made: a
-     * PNG arrived as mojibake and a {@code .shadergraph} as JSON. Resolution is
-     * {@link FilePatternMap}'s — exact name, then extension, then glob — and the text editor is the
-     * fallback rather than the rule.</p>
-     *
-     * <p>An instance method now, because bindings belong to a workbench. It is also the identity used to
-     * <em>find</em> an open tab again, for closing and for renaming, so it must be a pure function of the
-     * path and the bindings — which it is, since bindings are registered at startup. A rename that changes
-     * the extension therefore legitimately produces a different ref, and the rename path already replaces
-     * one ref with the other: renaming {@code a.txt} to {@code a.png} swaps the editor with it, which is
-     * the correct answer rather than an accident.</p>
-     */
-    public DockPanelRef refFor(CgPath path) {
-        return refForResource(Resource.of(path));
-    }
 
     /**
      * Which panel type shows this resource — the binding, or the fallback text editor.
@@ -1654,106 +1422,11 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         return bound == null ? FILE_TYPE : bound;
     }
 
-    /**
-     * Opens a file in its own tab, or focuses the tab it is already in.
-     *
-     * <p><b>Reads first, adds the tab second.</b> A tab created before the content arrives stays empty when
-     * the read fails, and the failure has nowhere to go but a status line nobody was watching — leaving a
-     * blank editor with no explanation.</p>
-     */
-    public void openFile(CgPath path) {
-        openFile(path, null);
-    }
 
-    /**
-     * Opens a file and runs {@code onOpened} <b>once the document actually exists</b>.
-     *
-     * <p><b>The callback is the whole point, because this method has two paths and only one of them is
-     * synchronous.</b> A file already on screen is activated and returns immediately; a file that is not
-     * open goes through a read, which is a round trip, and returns long before anything has
-     * been adopted. Every caller that wanted to do something <em>to</em> the file it just opened wrote
-     * the second statement as though the first had finished:</p>
-     * 
-     * @param onOpened run after the document is present and its tab is active, on both paths; never run
-     *                 if the read fails, since there is nothing to act on
-     */
-    public void openFile(CgPath path, @Nullable Runnable onOpened) {
-        // BEFORE the already-open early return below, so re-activating a tab still promotes the file.
-        // "Recent" means recently used, not recently created -- and the branch that returns early is the
-        // common one once a session has been running for a while.
-        recentFiles.record(path);
-        DockPanelRef ref = refFor(path);
-        for (DockLeaf leaf : dock.layout().leaves()) {
-            if (leaf.indexOf(ref) < 0) continue;
-            leaf.activate(ref);
-            // syncGroups, not requestRebuild: only the selection changed, and this usually runs inside the
-            // click that asked for it -- a widget must never rebuild the elements it is being clicked on.
-            dock.syncGroups();
-            dock.setActiveGroup(dock.groupFor(leaf));
-            if (onOpened != null) onOpened.run();
-            return;
-        }
-        openResource(Resource.of(path), onOpened);
-    }
 
-    /**
-     * Opens anything — a project file, a decompiled class, a generated shader — in one lane.
-     *
-     * <p>{@code openFile} and the viewer lane were two of these, and the second cost four hundred lines:
-     * its own state key, its own editor map, its own loaded-set, its own read, its own re-derivation of
-     * adopt and presentation. The cause was a document store keyed by {@code CgPath}, so anything that
-     * was not a project file could not be in it. Keyed by {@link Resource} there is one store and one
-     * lane, and {@link EditorService} is what holds it.</p>
-     *
-     * <p><b>Nothing happens when nothing knows how to read the scheme.</b> That is the ordinary state of
-     * a deployment shipping no engine: the answer to "go to declaration" is then the same as it was
-     * before any of this existed. Silence rather than an error, for the reason the three-tier absence
-     * rule gives everywhere else.</p>
-     *
-     * @param onOpened run once the document exists and its tab is active; never run if the read fails,
-     *                 since there is nothing to act on
-     */
-    public void openResource(Resource resource, @Nullable Runnable onOpened) {
-        if (resource == null) return;
-        if (!resource.isProject() && workspace.providerFor(resource) == null) return;
-        CgPath path = resource.asPath();
-        if (path != null) recentFiles.record(path);
-        DockPanelRef ref = refForResource(resource);
-        // THE TAB FIRST, so a split, a drag and a layout restore all build the panel from the ref alone
-        // and the read is the document store's business rather than this method's.
-        for (DockLeaf leaf : dock.layout().leaves()) {
-            if (leaf.indexOf(ref) < 0) continue;
-            // syncGroups, not requestRebuild: only the selection changed, and this usually runs inside
-            // the click that asked for it -- a widget must never rebuild the elements it is being
-            // clicked on.
-            leaf.activate(ref);
-            dock.syncGroups();
-            dock.setActiveGroup(dock.groupFor(leaf));
-            editors.open(EditorInput.of(resource))
-                    .then(tab -> runWhenReady(tab, onOpened));
-            return;
-        }
-        editors.open(EditorInput.of(resource))
-                .onError(failure -> Notifications.show(openFailed(resource, failure)
-                        // AN ACTION, because a read failure is the case actions exist for: it is usually
-                        // transient (a server round trip), the recovery is exactly what was just
-                        // attempted, and without one the message names a problem and leaves the user to
-                        // find the verb again.
-                        .withAction("Retry", () -> openResource(resource, onOpened))))
-                .then(tab -> {
-                    open(DockInput.of(ref));
-                    // AFTER open(), not before: the tab has to be the active one for activeEditor() to
-                    // answer with the document this callback is about.
-                    runWhenReady(tab, onOpened);
-                });
-    }
 
-    /** @see #openResource(Resource, Runnable) */
-    public void openResource(Resource resource) {
-        openResource(resource, null);
-    }
 
-    private void runWhenReady(EditorService.Tab tab, @Nullable Runnable then) {
+    void runWhenReady(EditorService.Tab tab, @Nullable Runnable then) {
         if (then == null) return;
         editors.activate(tab);
         then.run();
@@ -1790,34 +1463,6 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         return this;
     }
 
-    /**
-     * Sends this editor's cross-document jumps somewhere — a workspace file, or a viewer.
-     *
-     * <p><b>Every editor the workbench builds needs this, and one of them did not have it.</b> A viewer
-     * was created without it, so Ctrl+B <em>inside</em> a library class emitted into a signal nobody was
-     * listening to — and so did the documentation popup's Jump to Source, which is the same call one
-     * layer up. Both looked like resolution failing, while the hover in the very same file was drawing
-     * the symbol's full documentation: the engine had the answer throughout and nothing was carrying
-     * it.</p>
-     *
-     * <p>Written once and called from both, rather than copied into the viewer, because the two are
-     * expected to stay identical: jumping out of a library class into another library class is the same
-     * gesture as jumping out of your own file, and a reader drilling through the JDK is doing it
-     * repeatedly. Two copies would be two places for the routing rules to drift.</p>
-     */
-    private void routeDefinitionsOf(TextEditor editor) {
-        editor.onDefinitionChosen.connect(site -> {
-            if (site.resource() == null) return;
-            // A RESOURCE THE WORKSPACE DOES NOT HOLD goes to a viewer. This used to return here, so
-            // Ctrl+B into anything on the classpath did nothing -- and it read as the engine having
-            // no answer, when the engine had simply never been asked for one.
-            if (!site.resource().isProject()) {
-                openResourceAt(site.resource(), site.start(), site.member());
-                return;
-            }
-            openFileAt(site.resource().asPath(), site.start());
-        });
-    }
 
     /**
      * Where this workbench schedules background work — the shared pool unless a caller says otherwise.
@@ -1868,7 +1513,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * IntelliJ says the same thing, and how a reader tells at a glance whether they are looking at what
      * somebody wrote.</p>
      */
-    private String titleOf(Resource resource) {
+    String titleOf(Resource resource) {
         ContentProvider provider = workspace.providerFor(resource);
         String named = provider == null ? null : provider.displayName(resource);
         if (named != null) return named;
@@ -1878,91 +1523,10 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         return dot < 0 || dot == path.length() - 1 ? path : path.substring(dot + 1);
     }
 
-    /**
-     * What file name a resource's content should be treated as, for choosing a language.
-     *
-     * <p>{@code LanguageRegistry} answers by file name and a library resource has none. Only the
-     * provider knows what it produced, so only the provider can say that its output is Java.</p>
-     */
-    private String languageFileNameOf(Resource resource) {
-        if (resource.isProject()) return resource.name();
-        ContentProvider provider = workspace.providerFor(resource);
-        return provider == null ? resource.name() : provider.languageFileName(resource);
-    }
 
-    /**
-     * Opens a non-workspace resource and puts the caret at {@code at}, focusing it.
-     *
-     * <h3>One definition, two callers, and a third coming</h3>
-     *
-     * <p>Ctrl+B into a library class and Go to Class are the same act with different ways of naming the
-     * target — one has a {@code DeclarationSite}, the other has a name and a line somebody typed. The
-     * routing between them was written inline for the first caller; extracting it when the second arrived
-     * is the rule {@code routeDefinitionsOf} already states about its own two halves ("two copies would be
-     * two places for the routing rules to drift").</p>
-     *
-     * <p><b>The viewer's own editor, never {@code activeEditor()}.</b> That resolves through
-     * {@code PATH_STATE}, which a viewer panel deliberately does not carry, so it answers null here — and
-     * a null there is silent: the tab opens at the top of the file and the reveal simply does not happen,
-     * which reads as the declaration having been at line 1.</p>
-     *
-     * @param at where to put the caret, or null to open at the top — which is what a name with no
-     *           location means, and is not an error
-     */
-    public void openFileAt(CgPath path, @Nullable TextPoint at) {
-        if (path == null) return;
-        openFile(path, () -> {
-            TextEditor opened = activeEditor();
-            if (opened == null) return;
-            if (at != null) opened.revealAt(at);
-            UIDocument window = document();
-            if (window != null) window.focus().requestFocus(opened);
-        });
-    }
 
-    /** @see #openFileAt — the same act for a resource the workspace does not hold. */
-    public void openResourceAt(Resource resource, @Nullable TextPoint at) {
-        openResourceAt(resource, at, null);
-    }
 
-    /**
-     * @param member the member to land on once the text exists, or null when {@code at} is already right
-     *               — see {@code DeclarationSite.member}
-     */
-    public void openResourceAt(Resource resource, @Nullable TextPoint at, @Nullable String member) {
-        if (resource == null) return;
-        openResource(resource, () -> {
-            TextEditor opened = editorFor(resource);
-            if (opened == null) return;
-            if (at != null) opened.revealAt(at);
-            UIDocument window = document();
-            if (window != null) window.focus().requestFocus(opened);
-            if (member != null) revealMember(resource, opened, member);
-        });
-    }
 
-    /**
-     * Moves the caret onto {@code member} once the provider has worked out where it is.
-     *
-     * <h3>Off the UI thread, and the reveal to the top happens anyway</h3>
-     *
-     * <p>{@link ContentProvider#locate} parses the reconstructed text, which is the same order of cost
-     * as producing it, so it cannot run in the callback that opened the tab. The tab therefore opens at
-     * the top and the caret arrives a moment later — which is the behaviour every IDE has for a
-     * decompiled class and is strictly better than holding the tab closed until a parse finishes.</p>
-     */
-    private void revealMember(Resource resource, TextEditor viewer, String member) {
-        ContentProvider provider = workspace.providerFor(resource);
-        if (provider == null) return;
-        provider.locate(resource, member).then(point -> {
-            if (point == null) return;
-            // NOTHING IS REVEALED IF THE TAB MOVED ON. A reader who navigates twice quickly must not
-            // have the first answer land in the second class, so the editor is re-read rather than
-            // captured, and a mismatch leaves the caret where the open put it.
-            if (editorFor(resource) != viewer) return;
-            viewer.revealAt(point);
-        });
-    }
 
     /** The file behind the active tab, or null when the active tab is not a file. */
     @Nullable
@@ -1974,7 +1538,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // gives that tab a different type id, so testing for FILE_TYPE made every bound document report
         // "no file tab active" -- unsaveable by the very mechanism that opened it.
         if (panel == null) return null;
-        Resource resource = viewedResource(panel);
+        Resource resource = documentTabs.viewedResource(panel);
         return resource == null ? null : resource.asPath();
     }
 
@@ -1984,7 +1548,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         DockGroup group = dock.activeGroup();
         if (group == null) return null;
         DockPanelRef panel = group.leaf().activePanel();
-        return panel == null ? null : viewedResource(panel);
+        return panel == null ? null : documentTabs.viewedResource(panel);
     }
 
     /** The active document, whatever kind it is. */
@@ -2110,8 +1674,8 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * answerable for a document that has no content to report at all.</p>
      */
     private void bindStatusToActiveTab() {
-        statusBar.breadcrumbs().setCrumbs(trailFor(activeFilePath()));
-        refreshPresence();
+        statusBar.breadcrumbs().setCrumbs(saveActions.trailFor(activeFilePath()));
+        presenceBinding.refreshPresence();
 
         Document active = activeDocument();
         if (active == activeStatusDocument) return;
@@ -2129,134 +1693,9 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         if (view != null) view.activated(active);
     }
 
-    /**
-     * The project, then the path within it — which is what IntelliJ shows and what a bare path cannot say.
-     *
-     * <p>{@code segments()} is project-<em>relative</em>, so a file at the project root produced a
-     * one-segment trail reading just {@code manifest.mf}: true, and useless, because the one thing a
-     * breadcrumb is for is saying where among several places you are.</p>
-     */
-    private static List<Breadcrumbs.Crumb> trailFor(@Nullable CgPath path) {
-        if (path == null) return List.of();
-        List<Breadcrumbs.Crumb> trail = new ArrayList<>();
-        trail.add(Breadcrumbs.Crumb.of(path.project()));
-        List<String> segments = path.segments();
-        for (int i = 0; i < segments.size(); i++) {
-            String name = segments.get(i);
-            // THE FILE GETS AN ICON; THE FOLDERS ABOVE IT DO NOT. IntelliJ draws a folder glyph on every
-            // directory crumb, and in a 22px bar that is four near-identical marks competing with the one
-            // that carries information -- the file's type is the thing you cannot read off the text.
-            if (i < segments.size() - 1) {
-                trail.add(Breadcrumbs.Crumb.of(name));
-                continue;
-            }
-            FileIconTheme theme = FileIconTheme.getDefault();
-            trail.add(new Breadcrumbs.Crumb(name, theme.drawableFor(name, false, false),
-                    theme.classFor(name, false)));
-        }
-        return trail;
-    }
 
-    /** Writes the active tab back. A stale write is reported distinctly — it has a recovery path. */
-    public boolean saveActiveFile() {
-        CgPath target = activeFilePath();
-        if (target == null) {
-            Notifications.show(Notification.warning("No file tab active"));
-            return false;
-        }
-        Document document = documents.get(Resource.of(target));
-        if (document == null) return false;
-        if (!document.state().isSaveable()) {
-            Notifications.show(Notification.error("Refusing to save")
-                    .withDetail(target.name() + " — " + document.state()));
-            return false;
-        }
-        byte[] written = document.model().encode();
-        documents.save(document)
-                .then(ok -> saved(target))
-                .onError(failure -> {
-                    if (failure instanceof FsError problem && problem.is(FsError.CONFLICT)) {
-                        askWhichVersionSurvives(target, written);
-                        return;
-                    }
-                    Notifications.show(saveFailed(target, failure)
-                            .withAction("Retry", this::saveActiveFile));
-                });
-        return true;
-    }
 
-    /**
-     * The document is already marked saved by {@link WorkspaceDocuments#save} — <b>at the version the
-     * bytes were taken</b>, not at the version it holds now, so an edit made while the write crossed the
-     * wire leaves it dirty afterwards. This is only what the workbench has to do afterwards.
-     */
-    private void saved(CgPath target) {
-        // THE DISAGREEMENT IS OVER, whichever way it was resolved -- a successful write means this
-        // buffer is now what the server holds. Leaving the mark would show a conflict badge on a file
-        // that has none, which teaches people to ignore the badge.
-        externallyChanged.remove(target);
-        externallyDeleted.remove(target);
-        refreshTabTitles();
-    }
 
-    /**
-     * Phase 5.5 — a conflict is a question, not a notification.
-     *
-     * <p>This was a balloon whose single action was <i>"Reopen to take theirs"</i>, and the comment beside
-     * it already said the prose had named the fix and that it should be a button. It understated the
-     * problem twice. A balloon <b>fades</b>, so a user who was not looking takes the default — and the
-     * default was "your save silently did not happen". And that one button <b>discards unsaved work in a
-     * click</b>, while the opposite resolution, keep mine, was not offered at all.</p>
-     *
-     * <p>Both resolutions destroy something, which is exactly the case that earns a modal.
-     * @see ConflictDialog</p>
-     */
-    /**
-     * Phase 6.3 — what to do when a file changes on the server underneath an open editor.
-     *
-     * <p>The notification has crossed the wire since Phase 4 and reached <b>only the file tree</b>: an
-     * open editor was never told. So a clean buffer showed stale content for ever, a deleted file left a
-     * perfectly normal-looking tab, and a change under a dirty buffer was discovered at save time or not
-     * at all.</p>
-     *
-     * <table>
-     *   <tr><th>State</th><th>What happens</th></tr>
-     *   <tr><td>Clean, changed</td><td><b>Reloaded silently.</b> The overwhelmingly common case — a
-     *       git checkout, an external save — and prompting for it is what makes a watcher feel naggy
-     *       rather than helpful. VS Code does the same, and there is nothing to lose: the buffer and the
-     *       file agreed a moment ago</td></tr>
-     *   <tr><td>Dirty, changed</td><td>Marked and <b>left alone</b>. Reloading would destroy unsaved
-     *       work without asking; the decision belongs at save time, where {@code ConflictDialog} already
-     *       makes it with all three answers on the table</td></tr>
-     *   <tr><td>Deleted</td><td>Marked, buffer kept. Closing the tab throws away text the user may well
-     *       want to write back — which is the whole reason the buffer is worth more than the file</td></tr>
-     *   <tr><td>Not open</td><td>Nothing. The tree refresh above is the entire correct response</td></tr>
-     * </table>
-     */
-    private void externalChange(FsMessages.FileChange change) {
-        CgPath path = CgPath.parse(change.path());
-        // THE DOCUMENT ITSELF ALREADY ACTED. WorkspaceDocuments watches every open document and has
-        // moved it to ORPHANED, CONFLICTING or reloaded it before this runs -- which is why this is a
-        // BADGE and not a decision. Two places deciding what a change means is how a reload and a
-        // conflict prompt came to race each other.
-        Document document = documents.get(Resource.of(path));
-        if (document == null) return;
-        switch (document.state()) {
-            case ORPHANED -> {
-                externallyDeleted.add(path);
-                externallyChanged.remove(path);
-            }
-            case CONFLICTING -> {
-                externallyDeleted.remove(path);
-                externallyChanged.add(path);
-            }
-            default -> {
-                externallyDeleted.remove(path);
-                externallyChanged.remove(path);
-            }
-        }
-        refreshTabTitles();
-    }
 
     /**
      * The badge an externally-changed or deleted file carries — Phase 6.3.
@@ -2302,153 +1741,22 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     };
 
     /** Files that moved on the server under a DIRTY buffer, so the tab can say so. @see #externalChange */
-    private final Set<CgPath> externallyChanged = new LinkedHashSet<>();
+    final Set<CgPath> externallyChanged = new LinkedHashSet<>();
 
     /** Files deleted on the server while still open here. @see #externalChange */
-    private final Set<CgPath> externallyDeleted = new LinkedHashSet<>();
+    final Set<CgPath> externallyDeleted = new LinkedHashSet<>();
 
-    /**
-     * Phase 5.6 — who else has this file open, phrased for a human.
-     *
-     * <p>{@code null} rather than an empty string when nobody is known, because the dialog omits the
-     * whole line rather than drawing "nobody has it open" — which would be a claim, and the client cannot
-     * make it: an empty presence list means <em>nothing has been said</em>, not that the file is
-     * unoccupied.</p>
-     *
-     * <p><b>Who is EDITING, not who has it open.</b> That is the question that matters and the one
-     * presence could not answer: two people found out they were both editing a file when the second one
-     * saved and was refused. @see Workspace.Presence#whoIsEditing</p>
-     */
-    @Nullable
-    private String othersEditing(@Nullable CgPath target) {
-        // NOT A FILE, so nobody is editing it. A dock panel need not be about a path at all -- a
-        // networked panel a server opened as a tab is the first one that is not, and this threw out of
-        // the active-panel signal, which runs inside the click that activated the tab.
-        if (target == null) return null;
-        return phrase(workspace.presence().whoIsEditing(Resource.of(target)));
-    }
 
-    private void askWhichVersionSurvives(CgPath target, byte[] written) {
-        // CAPTURED BEFORE ANYTHING READS: finishRead overwrites cachedContent with whatever the server
-        // now holds, so a base fetched after the read is the SERVER version wearing the name of the
-        // ancestor -- and a three-way merge against that reports every one of my own edits as a conflict.
-        // THE LAST VERSION THIS CLIENT WROTE, which is what a common ancestor IS. Read from the local
-        // history rather than from a content cache: a cache is overwritten by whatever the server now
-        // holds, so a base fetched after the conflicting read is THEIRS wearing the ancestor's name --
-        // and a three-way merge against that reports every one of my own edits as a conflict.
-        byte[] base = workspace.history() == null
-                ? null : workspace.history().mergeBase(Resource.of(target));
-        ConflictDialog.ask(this, target, othersEditing(target),
-                () -> overwrite(target, written),
-                () -> openFile(target),
-                // No base, no merge. A file that was never read has no common ancestor, and offering the
-                // option and then failing is worse than not offering it.
-                base == null ? null : () -> openMerge(target, written, base));
-    }
 
-    /**
-     * Fetches the server's current copy and opens a three-way merge over it.
-     *
-     * <p>The read is what makes this asynchronous: {@code written} and {@code base} are both already in
-     * hand, and only <em>theirs</em> has to come off the wire.</p>
-     */
-    private void openMerge(CgPath target, byte[] written, byte[] base) {
-        files.readWhole(Resource.of(target))
-                .then(theirs -> showMerge(target, base, written, theirs.bytes()))
-                .onError(failure -> Notifications.show(saveFailed(target, failure)));
-    }
 
-    private void showMerge(CgPath target, byte[] base, byte[] mine, byte[] theirs) {
-        UIDocument window = document();
-        if (window == null) return;
 
-        ThreeWayMerge merge = ThreeWayMerge.of(text(base), text(mine), text(theirs));
-        MergeView view = new MergeView(merge);
-
-        Dialog dialog = new Dialog("Merge " + target.name());
-        dialog.getContent().append(view);
-
-        UIElement actions = new UIElement();
-        actions.addClass(MergeView.DIALOG_ACTIONS_CLASS);
-        dialog.getContent().append(actions);
-
-        Button apply = new Button("Save merged");
-        Button cancel = new Button("Cancel");
-        actions.append(apply);
-        actions.append(cancel);
-
-        // GATED ON EVERY CONFLICT HAVING BEEN DECIDED, not on there being none. An undecided conflict
-        // still produces text -- it defaults to mine -- so an ungated button would write a merge nobody
-        // read and it would look like it worked.
-        Runnable syncEnabled = () -> {
-            boolean ready = view.isResolved();
-            apply.setEnabled(ready);
-            apply.setHitTest(ready);
-        };
-        view.onChanged.connect(syncEnabled);
-        syncEnabled.run();
-
-        apply.onPressed.connect(() -> {
-            String merged = view.mergedText();
-            dialog.close();
-            overwrite(target, merged.getBytes(StandardCharsets.UTF_8));
-        });
-        cancel.onPressed.connect(dialog::close);
-
-        window.addOverlay(dialog, this);
-        dialog.onClosed.connect(dialog::removeSelf);
-        dialog.showModal();
-        window.focus().requestFocus(cancel);
-    }
-
-    private static String text(byte[] bytes) {
+    static String text(byte[] bytes) {
         return new String(bytes, StandardCharsets.UTF_8);
     }
 
-    /**
-     * <b>Keep mine</b> — writes the active file over whatever the server holds.
-     *
-     * <p>Named rather than left inline inside the conflict handler, because it is one of the three
-     * answers {@code ConflictDialog} offers and the only one with no other way to reach it. A branch that
-     * exists only inside a modal's callback cannot be tested without driving the modal, which is how a
-     * resolution path ends up being the one nobody checks.</p>
-     */
-    public boolean overwriteActiveFile() {
-        CgPath target = activeFilePath();
-        if (target == null) return false;
-        Document document = documents.get(Resource.of(target));
-        if (document == null || !document.state().isSaveable()) return false;
-        overwrite(target, document.model().encode());
-        return true;
-    }
 
-    private void overwrite(CgPath target, byte[] written) {
-        Document document = documents.get(Resource.of(target));
-        if (document == null) return;
-        documents.save(document, WorkspaceDocuments.SaveReason.EXPLICIT, true)
-                .then(ok -> saved(target))
-                .onError(
-                // A SECOND failure is not another conflict -- overwrite carries no etag, so it cannot be
-                // refused as stale. Anything arriving here is a real error and belongs on the ordinary
-                // path rather than reopening the question.
-                again -> Notifications.show(saveFailed(target, again)));
-    }
 
-    /**
-     * The two failures a read or a write raises, phrased once.
-     *
-     * <p>Returned rather than shown, so a caller can add the action it knows about — retrying an open
-     * means something different from retrying a save.</p>
-     */
-    private static Notification openFailed(Resource resource, ReplyError failure) {
-        return Notification.error("Open failed")
-                .withDetail(resource.name() + " — " + failure.detail());
-    }
 
-    /** @see #openFailed */
-    private static Notification saveFailed(CgPath path, ReplyError failure) {
-        return Notification.error("Save failed").withDetail(path.name() + " — " + failure.detail());
-    }
 
     /** Every file operation, each answering a {@link Reply}. */
     public FileOperations files() {
@@ -2503,136 +1811,11 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         return workspace;
     }
 
-    /**
-     * Re-reads the folder an operation touched.
-     *
-     * <p>Both ends of a move are covered, because the SERVER reports a rename as one event carrying
-     * both — which is what the tree subscribes to. This is the local half, for the operation this
-     * client itself issued.</p>
-     */
-    private void refreshAfter(Resource resource) {
-        CgPath path = resource.asPath();
-        if (path != null) fileTree.source().invalidate(path.parent());
-        fileTree.treeView().refresh();
-    }
 
-    /**
-     * Keeps the dock in step with what the document store did.
-     *
-     * <p>The store announces what happened to a document and the dock follows. It hears about another
-     * client's rename through the same {@code fs.changed} as its own, so a file renamed from anywhere
-     * moves its tab — not only one renamed from here.</p>
-     */
-    private void followDocuments() {
-        documents.onDidClose.connect(document -> {
-            Resource resource = document.resource();
-            // The TAB goes too, and this is the half that is easy to forget: a document dropped with its
-            // tab left behind leaves the dock asking the registry to rebuild a panel for a file that no
-            // longer exists, which comes back as the "__missing__" placeholder.
-            dock.layout().closePanel(refForResource(resource));
-            dock.requestRebuild();
-        });
-        documents.onDidOpen.connect(document -> document.onDidChangeResource.connect((from, to) -> {
-            // In place, so the tab keeps its position and its selection. A remove-then-add would send the
-            // renamed file to the end of the strip and, if it was active, hand the selection to a
-            // neighbour on the way -- the file you just renamed vanishing from where you were looking.
-            DockPanelRef was = refForResource(from);
-            DockPanelRef now = refForResource(to);
-            for (DockLeaf leaf : dock.layout().leaves()) {
-                if (leaf.replace(was, now)) break;
-            }
-            dock.requestRebuild();
-        }));
-    }
 
-    private DockLeaf centralLeaf() {
-        return centralLeaf(dock);
-    }
 
-    /** The central leaf of {@code in} — which is not always this workbench's own dock. @see #activeDock */
-    private static DockLeaf centralLeaf(DockArea in) {
-        for (DockLeaf leaf : in.layout().leaves()) {
-            if (leaf.isCentral()) return leaf;
-        }
-        return in.layout().leaves().get(0);
-    }
 
-    /**
-     * The dock a newly opened document goes into — <b>the one the user is working in</b> (W9).
-     *
-     * <h3>Asked of the compositor, not tracked here</h3>
-     *
-     * <p>Once an editor tab can be torn out into a window of its own, "open this file" has more than one
-     * possible destination, and both references answer it the same way: the last editor group you were
-     * in gets the next file. Opening into this workbench's own dock regardless would mean a torn-out
-     * window could never be worked in — every file you opened from it would appear behind it, in the
-     * window you had just deliberately left.</p>
-     *
-     * <p>The answer is the <b>active window</b>, which the desktop already tracks and already updates on
-     * exactly the gestures that should move it: a press in a frame, focus arriving, the switcher. A
-     * second notion of "active dock" maintained here would be a copy of that, kept in step by hand, and
-     * would disagree with the title bar the first time one of them missed an event.</p>
-     *
-     * <p>Falls back to this workbench's own dock whenever the active window is not a torn-out one, which
-     * covers the ordinary case, the no-desktop case, and the editor's own frame.</p>
-     */
-    public DockArea activeDock() {
-        UIDocument window = document();
-        if (window == null) return dock;
-        WindowFrame active = Desktop.of(window).activeWindow();
-        if (active instanceof DockWindow torn && torn.area() != null) return torn.area();
-        return dock;
-    }
 
-    /**
-     * Registers a kind of document, and the dock panel that shows one — <b>the whole registration</b>.
-     *
-     * <p>What a package that owns a file type calls, and the only thing an application has to know
-     * about that package. One call rather than two, because the panel's content simply <em>is</em> a
-     * view of the document: separated, a host can register a panel type it has no kind for, which
-     * builds a tab that cannot be saved and reports nothing wrong.</p>
-     *
-     * <pre>{@code
-     * workbench.contribute(DocumentKind.of("mymod:graph", "Shader Graph")
-     *         .model(GraphModel::decode)
-     *         .editor(GraphView::new), "shadergraph");
-     * }</pre>
-     *
-     * <p>The panel's factory reaches the tab through {@link EditorService} rather than reading the file
-     * itself, which is what makes a split, a drag and a layout restore all show the SAME document —
-     * rather than one that re-read over whatever was unsaved in it.</p>
-     */
-    public Workbench contribute(DocumentKind kind) {
-        kinds.register(kind);
-        registry.register(DockPanelDescriptor.document(kind.id(), kind.displayName()), ref -> {
-            Resource resource = Resource.parse(ref.state(PATH_STATE, ""));
-            EditorInput input = EditorInput.of(resource);
-            EditorService.Tab tab = editors.tabFor(input);
-            if (tab == null) {
-                // The dock also builds panels after a layout RESTORE, where nothing has opened this file
-                // yet. Through the ONE lane rather than a read of our own, so the second pane of a split
-                // joins the document the first one already holds.
-                editors.open(input);
-                tab = editors.tabFor(input);
-            }
-            DocumentEditor view = tab == null ? null : tab.editor();
-            // A TAB EXISTS IMMEDIATELY, IN LOADING, and its view arrives when the read lands -- which is
-            // what lets a session restore put twelve tabs on screen at once rather than revealing them
-            // one round trip at a time. An empty element is the placeholder until then.
-            //
-            // RECORDED, because DockGroup memoises what it built and nothing would ask again. What the
-            // placeholder was built FOR is the whole guard: with it, a panel is rebuilt exactly when the
-            // element on screen is not what this factory would produce now, and never for a state change
-            // that does not move the answer. @see #refreshPanelForTab
-            if (view != null) {
-                placeholders.remove(ref);
-                return view.view();
-            }
-            placeholders.put(ref, tab == null ? DocumentState.LOADING : tab.state());
-            return new UIElement();
-        });
-        return this;
-    }
 
     /**
      * What the panel factory last built a <b>placeholder</b> for, by ref — and no entry once a real
@@ -2642,99 +1825,11 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * The alternative was to interrogate the element on screen, which cannot survive a banner wrapping
      * it and would rebuild the editor on every keystroke the moment one did.</p>
      */
-    private final Map<DockPanelRef, DocumentState> placeholders = new HashMap<>();
+    final Map<DockPanelRef, DocumentState> placeholders = new HashMap<>();
 
-    /**
-     * Rebuilds a panel whose placeholder no longer stands for anything true.
-     *
-     * <p>Two transitions matter and nothing else does. A tab that <b>gains a view</b> while a
-     * placeholder is on screen: the read landed, and the dock's memo is still the empty element it built
-     * while the read was in flight. And a placeholder whose <b>state moved</b> — in practice
-     * {@code LOADING -> FAILED}, which is the only way a tab with no view changes — so the banner below
-     * can say what went wrong.</p>
-     *
-     * <p><b>Not "the state changed".</b> This signal also fires on {@code CLEAN -> DIRTY}, which is every
-     * keystroke; rebuilding there would detach the editor being typed in, which is the widget-rebuild
-     * trap on the one widget that can least afford it. Once a view is up there is no entry in
-     * {@link #placeholders} and this method does nothing at all.</p>
-     */
-    private void refreshPanelForTab(EditorService.Tab tab) {
-        DockPanelRef ref = refForResource(tab.resource());
-        if (dock.builtContentFor(ref) == null) return;   // not on screen; nothing to replace
-        if (closeIfTheFileIsGone(tab, ref)) return;
-        DocumentState placeholder = placeholders.get(ref);
-        if (tab.editor() != null) {
-            if (placeholder != null) dock.rebuildPanel(ref);
-            return;
-        }
-        if (placeholder != null && placeholder != tab.state()) dock.rebuildPanel(ref);
-    }
 
-    /**
-     * <b>A tab for a file that is no longer there closes itself.</b>
-     *
-     * <p>What both references do, and the distinction they draw is the whole of this method. A session
-     * remembers what was open when it was written; between then and now a file can be deleted, renamed
-     * or moved, and a tab for one is not a problem to report — it is a tab with no subject. VS Code
-     * drops it on restore and IntelliJ drops it; neither asks, because there is nothing to decide.</p>
-     *
-     * <p><b>Only for {@code NOT_FOUND}.</b> A file that is still there and could not be READ is a
-     * different thing entirely — no permission, a bad encoding, larger than the cap, a provider that
-     * failed — and closing the tab would throw away both the fact and the {@code Retry} that can act on
-     * it. That one keeps its banner. The code is the discriminator rather than the message, which is
-     * what {@code FsError} carries a code FOR.</p>
-     *
-     * <p>Silent, deliberately. {@code openResource} notifies on a failed open because somebody just
-     * asked for that file; this fires for a tab nobody asked for today, and a notification per deleted
-     * file on every launch is noise about something that was already true.</p>
-     *
-     * @return whether the tab was closed, so the caller stops touching a panel that has gone
-     */
-    private boolean closeIfTheFileIsGone(EditorService.Tab tab, DockPanelRef ref) {
-        if (tab.state() != DocumentState.FAILED) return false;
-        ReplyError why = tab.failure();
-        if (why == null || !why.is(FsError.NOT_FOUND)) return false;
-        placeholders.remove(ref);
-        editors.close(tab);
-        if (dock.layout().closePanel(ref)) dock.requestRebuild();
-        return true;
-    }
 
-    /**
-     * A tab whose document could not be read says so, with a way to try again.
-     *
-     * <p>Without it a file that has been deleted or renamed under a saved session comes back as a blank
-     * pane and nothing anywhere explains it — which is indistinguishable from the editor being broken,
-     * and was reported as exactly that. A banner rather than content because the panel legitimately has
-     * nothing to show: this is the one place that can say WHY there is nothing.</p>
-     *
-     * <p>{@code Tab.retry()} has carried the javadoc <i>"what a retry affordance on the tab calls"</i>
-     * since it was written, and there was no such affordance.</p>
-     */
-    private void registerFailureBanner() {
-        registry.registerBanner(panel -> {
-            // A PANEL NEED NOT BE ABOUT A FILE. A tool window has no path state at all, and
-            // `Resource.parse("")` THROWS rather than answering null -- so a provider that parses first
-            // and asks questions afterwards takes down the build of every panel in the dock, not its
-            // own. The same shape as the active-panel signal assuming a path, one layer over.
-            String path = panel.state(PATH_STATE, "");
-            if (path.isEmpty()) return null;
-            Resource about = Resource.parse(path);
-            EditorService.Tab tab = editors.tabFor(EditorInput.of(about));
-            if (tab == null || tab.state() != DocumentState.FAILED) return null;
-            ReplyError why = tab.failure();
-            return Notification.error(about.name() + " could not be opened")
-                    .withDetail(why == null ? "the read failed" : why.detail())
-                    .withAction("Retry", tab::retry);
-        });
-    }
 
-    /** As {@link #contribute}, plus the file patterns that open into this kind's panel. */
-    public Workbench contribute(DocumentKind kind, String... extensions) {
-        contribute(kind);
-        if (extensions.length > 0) bindEditorExtensions(kind.id(), extensions);
-        return this;
-    }
 
     // ── Unsaved changes (E16) ───────────────────────────────────────────────────────────────────
 
@@ -2749,399 +1844,24 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      */
     public static final String DIRTY_MARKER = " *";
 
-    /**
-     * Whether this open file has changes that are not on disk.
-     *
-     * <p>Compared against the bytes last read or written rather than counted from edit events: a counter
-     * says "modified" after a change <em>and its undo</em>, which is exactly the state somebody is in when
-     * they close a tab and get asked to save a file identical to the one already there.</p>
-     *
-     * <p>False for a file that is not open, and false for one whose document refused to load it. Encoding
-     * <p><b>A version comparison, never an encode-and-compare.</b> {@code version() != savedVersion()} is
-     * the whole test: monotonic, so it cannot be fooled by a change and its undo landing back on the same
-     * bytes, and free, where the comparison it replaces serialised every open document once a frame.</p>
-     */
-    public boolean isDirty(CgPath path) {
-        Document document = documents.get(Resource.of(path));
-        return document != null && document.isDirty();
-    }
 
-    /** Every open file with unsaved changes, in no particular order. */
-    public List<CgPath> unsavedFiles() {
-        List<CgPath> dirty = new ArrayList<>();
-        for (Document document : documents.dirty()) {
-            CgPath path = document.resource().asPath();
-            if (path != null) dirty.add(path);
-        }
-        return dirty;
-    }
 
-    /**
-     * Writes every modified file.
-     *
-     * <p>Issued per file rather than as one call, because they succeed and fail separately — the same
-     * reasoning the drop and the paste follow. No undo grouping, though: saving is not an edit, and it is
-     * not on the undo stack at all.</p>
-     *
-     * @return how many writes were issued
-     */
-    public int saveAll() {
-        int issued = 0;
-        for (Document document : documents.dirty()) {
-            CgPath path = document.resource().asPath();
-            if (path == null) continue;
-            issued++;
-            documents.save(document)
-                    .then(ok -> refreshTabTitles())
-                    .onError(failure -> Notifications.show(saveFailed(path, failure)));
-        }
-        if (issued == 0) Notifications.show(Notification.info("Nothing to save"));
-        return issued;
-    }
 
-    /**
-     * Whether {@code panel} may close now, asking the user first when it would discard unsaved work.
-     *
-     * <p>Returns <b>false</b> for a modified file and puts up a prompt, rather than trying to answer
-     * "yes, eventually": the prompt is asynchronous, so there is no answer to give at the moment the dock
-     * asks. Confirming closes through {@link DockArea#closePanelDiscarding}, which skips this guard —
-     * without that it would ask again, forever.</p>
-     *
-     * <p>Only files are guarded. A tool panel — the tree, Problems — holds nothing that is not on disk, and
-     * asking about it would train the answer out of the user by the time it matters.</p>
-     */
-    private boolean confirmClose(DockPanelRef panel) {
-        String state = panel.state(PATH_STATE, "");
-        if (state.isEmpty()) return true;
-        CgPath path = CgPath.parse(state);
-        if (!isDirty(path)) return true;
 
-        InputDialog.confirm(this, "Unsaved changes",
-                path.name() + " has unsaved changes — Enter to discard, Escape to keep editing",
-                () -> dock.closePanelDiscarding(panel));
-        return false;
-    }
 
-    /**
-     * What each tab's label should say right now — the file name, plus a marker when it is modified.
-     *
-     * <p>Registered as the registry's title provider, so it is consulted whenever a tab is built or
-     * refreshed. Returns null for a panel with no file, which is the provider contract's way of saying
-     * "nothing to add" and lets the registry fall through to the panel's own title.</p>
-     *
-     * <p>Reads {@code TITLE} state directly rather than calling {@code registry.titleOf}, which would
-     * re-enter this method.</p>
-     */
-    @Nullable
-    private String tabTitleFor(DockPanelRef panel) {
-        Resource viewed = viewedResource(panel);
-        if (viewed != null) return viewerDisplayName(viewed);
-        String path = panel.state(PATH_STATE, "");
-        if (path.isEmpty()) return null;
-        String title = panel.state(DockPanelRef.TITLE, CgPath.parse(path).name());
-        return isDirty(CgPath.parse(path)) ? title + DIRTY_MARKER : title;
-    }
 
-    /**
-     * How a tab is coloured — the same answer the file's row in the tree gets, from the same providers.
-     *
-     * <p>Asked of {@link FileDecorations} rather than of {@code markers} directly, and that is the point
-     * of routing it this way: a tab and a tree row showing different things about one file is precisely
-     * the disagreement a shared model exists to prevent, and everything else that decorates a file —
-     * dirty state, VCS, whatever comes next — reaches the tab for free rather than needing a second
-     * mechanism per surface.</p>
-     *
-     * <p><b>Not bubbled and not directory-resolved</b>: a tab is always a file.</p>
-     */
-    @Nullable
-    private String tabDecorationFor(DockPanelRef panel) {
-        // A BORROWED FILE IS TINTED, which is the one decoration a viewer carries and the reason it can
-        // share the file-decoration slot rather than needing a second one: a library class has no VCS
-        // state, no dirty marker and no compile errors of its own to report, so nothing can collide.
-        // IntelliJ tints these tabs for the same reason -- it is the fastest way to say "this is not
-        // yours" without spending a word on it.
-        Resource resource = viewedResource(panel);
-        if (resource == null) return null;
-        CgPath path = resource.asPath();
-        if (path == null) return LIBRARY_DECORATION;
-        // NULL IS THE ORDINARY ANSWER -- an undecorated file is the state nearly every file is in, and
-        // resolve() says so with null rather than with an empty decoration.
-        FileDecoration decoration = fileTree.getDecorations().resolve(path, false);
-        return decoration == null ? null : decoration.styleClass();
-    }
 
-    /**
-     * Re-reads every open tab's decoration.
-     *
-     * <p>Through the dock's own {@code refreshPanelPresentation} rather than by walking leaves to groups
-     * to tabs — the walk {@code DockArea} explicitly warns callers off, because it keeps compiling long
-     * after the dock changes how a tab is built.</p>
-     */
-    private void syncTabDecorations() {
-        for (DockPanelRef panel : dock.allPanels()) dock.refreshPanelPresentation(panel);
-    }
 
-    /**
-     * Which icon a tab shows — the same one the file's row in the tree shows, from the same theme.
-     *
-     * <p>Static, because it depends on nothing but the panel. It is no longer pulled once and kept,
-     * though: the icon element beside this one asks what the file DECLARES, and that answer is read
-     * through {@code ProjectSources}, which does not have it until the file has been read. So
-     * {@link #announceProjectSourcesMoved} re-reads every tab's presentation when one lands.</p>
-     */
-    @Nullable
-    private String tabIconFor(DockPanelRef panel) {
-        Resource viewed = viewedResource(panel);
-        if (viewed != null) {
-            // A DECLARATION'S GLYPH IS AN ELEMENT, not a name -- see viewerIconElement, which the dock
-            // asks for first. This is the fallback for a viewer showing a FILE: a `.java` tab takes the
-            // file icon, exactly as one in the project does.
-            String name = viewerDisplayName(viewed);
-            return name == null ? null : FileIconTheme.getDefault().iconFor(name, false, false);
-        }
-        return null;
-    }
 
-    /**
-     * The glyph for a viewer tab showing a DECLARATION, or null to fall back to a file icon.
-     *
-     * <p>{@link SymbolIcon} is the union point: the completion popup builds the same widget from the
-     * same {@code completion-kind-*} vocabulary, so a tab and a completion row cannot come to disagree
-     * about what an interface looks like. It also carries the {@code static} and {@code final} marks,
-     * which an icon NAME cannot — they are layers stacked over the glyph rather than a picture.</p>
-     *
-     * <p>Null when nothing can say what the tab holds — see {@link #symbolFor}, which is where both
-     * kinds of tab now ask the same question.</p>
-     */
-    @Nullable
-    private UIElement viewerIconElement(DockPanelRef panel) {
-        SymbolInfo symbol = symbolFor(panel);
-        if (symbol == null) return null;
-        return new SymbolIcon().show(symbol.kind(), symbol.modifiers());
-    }
 
-    /**
-     * What the thing behind this tab IS, or null when nothing knows.
-     *
-     * <p><b>Both kinds of tab, through one seam.</b> This used to ask only about a VIEWER panel, so a
-     * decompiled {@code FlexDirection.class} drew an enum glyph and hovered "Final enum" while the
-     * author's own {@code Main.java} in the next tab drew a file icon — the same question, asked of a
-     * resource nobody had registered a provider for. {@code ProjectSourceSymbols} answers
-     * {@code project://} now, and this is where the tab stopped asking.</p>
-     *
-     * <p>Null stays a supported answer at every step: no resource, no provider, no symbol, or a symbol
-     * with no kind all fall through to the file-type icon the tab drew before.</p>
-     */
-    @Nullable
-    private SymbolInfo symbolFor(DockPanelRef panel) {
-        Resource resource = viewedResource(panel);
-        if (resource == null) return null;
-        ContentProvider provider = workspace.providerFor(resource);
-        SymbolInfo symbol = provider == null ? null : provider.symbolOf(resource);
-        return symbol == null || symbol.kind() == null ? null : symbol;
-    }
 
-    /**
-     * What a tab says on hover — where the thing it shows actually is.
-     *
-     * <p>The label is a bare name, and a name stops identifying anything the moment two of them collide:
-     * two {@code Main.java} in one workspace, or {@code java.util.List} beside {@code java.awt.List}. The
-     * second pair is the reason a viewer answers with its <b>fully-qualified</b> name rather than a file
-     * path — there often is no file, the tab is a decompilation, and the qualified name is the only thing
-     * that names it uniquely.</p>
-     *
-     * <p>Null for a panel that is not about a location at all — a console, the Problems view — which the
-     * registry reads as "no tooltip", not as an empty one.</p>
-     */
-    /**
-     * A torn-out window's caption: {@code Project - name.ext [where]} — W9.
-     *
-     * <h3>Three parts, in the order they are useful</h3>
-     *
-     * <p>A tab can be terse because it sits in a strip of siblings and is read by shape; a caption is
-     * read alone, from across a desktop, and is the only thing that can say which of three files called
-     * {@code build.gradle.kts} this one is. So it names the workspace, then the file, then where the
-     * file is — the file in the middle because that is what the eye is looking for, with the context on
-     * either side of it.</p>
-     *
-     * <p><b>Both kinds of document take the same shape</b>, which is the point of doing it here rather
-     * than twice. A workspace file's "where" is its directory within the project; a borrowed class's is
-     * its package, and its project is the workspace you are in rather than one of its own — a library
-     * class belongs to a jar, not to the project, and the caption is still telling you where YOU are.
-     * With more than one project open that stops being unambiguous, so it says nothing instead of
-     * guessing (see {@code WorkspaceTreeSource.soleProjectName}).</p>
-     *
-     * <p>Null for anything that is not a document at all — a torn-out tool window has a name and no
-     * location — and the registry falls back to the tab label for those.</p>
-     */
-    @Nullable
-    private String windowTitleFor(DockPanelRef panel) {
-        WorkspaceTreeSource source = fileTree != null ? fileTree.source() : null;
 
-        Resource viewed = viewedResource(panel);
-        if (viewed == null) return null;
-        CgPath path = viewed.asPath();
-        if (path != null) return projectCaption(source, path);
-        // A qualified name is its own path: everything up to the last dot is the package, and the
-        // display name is already the file-shaped form of the last segment ("JarFile.java"), so
-        // neither half has to be reassembled from the other.
-        String qualified = viewed.path();
-        int lastDot = qualified.lastIndexOf('.');
-        String pkg = lastDot > 0 ? qualified.substring(0, lastDot) : "";
-        return caption(source == null ? null : source.soleProjectName(),
-                viewerDisplayName(viewed), pkg);
-    }
 
-    private static String projectCaption(@Nullable WorkspaceTreeSource source, CgPath path) {
-        String within = path.path();
-        int lastSlash = within.lastIndexOf('/');
-        String directory = lastSlash > 0 ? within.substring(0, lastSlash) : "";
-        return caption(source == null ? null : source.displayNameOf(path), path.name(), directory);
-    }
 
-    /**
-     * {@code Project - name [where]}, with either context omitted when there is none.
-     *
-     * <p>Omitted rather than left empty: a caption reading {@code " - name []"} says the same thing as
-     * {@code "name"} and looks like a bug in the formatter, which is worse than saying less.</p>
-     */
-    private static String caption(@Nullable String project, String name, @Nullable String where) {
-        StringBuilder out = new StringBuilder();
-        if (project != null && !project.isEmpty()) out.append(project).append(" - ");
-        out.append(name);
-        if (where != null && !where.isEmpty()) out.append(" [").append(where).append(']');
-        return out.toString();
-    }
 
-    @Nullable
-    private static String tabTooltipFor(DockPanelRef panel) {
-        Resource viewed = viewedResource(panel);
-        return viewed == null ? null : viewed.path();
-    }
 
-    /**
-     * What a tab's ICON says on hover — what the declaration behind it <em>is</em>.
-     *
-     * <p>The one fact a library tab shows nowhere else. Nothing in {@code ArrayList.class} distinguishes a
-     * class from an interface, an enum or an annotation, and the glyph is where that answer already
-     * lives — so the icon is the part of the tab that has something of its own to say, and this is it in
-     * words. {@link SymbolIcon#describe} is the single source of both, so the picture and the sentence
-     * cannot drift apart.</p>
-     *
-     * <p>And it is no longer only a library tab that has it: a project {@code .java} row and its tab
-     * both show what the file declares, so the sentence follows them there. A tab whose provider cannot
-     * say keeps the file icon and gets no icon tooltip, which is the honest pair.</p>
-     */
-    @Nullable
-    private String tabIconTooltipFor(DockPanelRef panel) {
-        SymbolInfo symbol = symbolFor(panel);
-        return symbol == null ? null : SymbolIcon.describe(symbol.kind(), symbol.modifiers());
-    }
 
-    /**
-     * The resource a panel shows, or null for a tab that is not about one.
-     *
-     * <p><b>One question for every kind of tab.</b> There were two — a viewer panel carried its own
-     * state key and a file panel carried {@link #PATH_STATE} — so every presentation method below began
-     * by asking which kind it had, and each of them got a different half of the answer right.</p>
-     */
-    @Nullable
-    private static Resource viewedResource(DockPanelRef panel) {
-        String text = panel.state(PATH_STATE, "");
-        if (text.isEmpty()) return null;
-        try {
-            return Resource.parse(text);
-        } catch (RuntimeException notAResource) {
-            return null;
-        }
-    }
 
-    /**
-     * What a viewer tab is called — the provider's answer, or the bare type name.
-     *
-     * <p>Asked of the provider rather than derived here, because the extension depends on what is
-     * SERVING the resource: {@code ArrayList.java} where source was attached and
-     * {@code FlexDirection.class} where the bytes were decompiled. The workbench has no way to know
-     * which, and inventing {@code .java} for both would put a source extension on a tab full of
-     * reconstructed code.</p>
-     *
-     * <p><b>Not written into the ref.</b> {@link DockPanelRef} equality includes its state, and the ref
-     * is how an open tab is FOUND again — so a title that can change between two reads would orphan the
-     * tab it names. The ref keeps the stable simple name; this decorates it for display, which is
-     * exactly the split the title provider exists for.</p>
-     */
-    @Nullable
-    private String viewerDisplayName(Resource resource) {
-        return titleOf(resource);
-    }
-
-    /**
-     * Brings every visible tab label into line with its document.
-     *
-     * <p>The labels are otherwise only computed when the strip is <b>rebuilt</b>, and a rebuild is exactly
-     * what must not happen for this: it detaches and recreates the tab elements, so doing it on every
-     * keystroke would tear down the tab the user is typing under — the rule the table header and the file
-     * tree both paid for. Setting the text on the tabs that already exist changes nothing structural.</p>
-     */
-    private void refreshTabTitles() {
-        for (DockLeaf leaf : dock.layout().leaves()) {
-            DockGroup group = dock.groupFor(leaf);
-            if (group == null) continue;
-            for (DockPanelRef panel : group.panels()) dock.refreshPanelPresentation(panel);
-        }
-    }
-
-    /**
-     * Keeps the dirty markers current.
-     *
-     * <p>Polled rather than pushed, because a document goes dirty by being <em>typed into</em> and there is
-     * no edit event to hang this on that would not also mean routing every keystroke through the workbench.
-     * The cost is one string comparison per open document per frame, and it is only when the answer changes
-     * that any element is touched.</p>
-     */
-    /**
-     * Releases the document behind a panel that has just been closed.
-     *
-     * <h3>Only when nothing else is showing it</h3>
-     *
-     * <p>A document can have more than one tab — a split showing the same file twice, or a derived view
-     * of it. Closing one must not release what the other is still drawing, so this asks the layout
-     * whether any panel still names this resource before letting go.</p>
-     *
-     * <p>Unsaved work is not a consideration here, deliberately: the dock's close <b>guard</b> already
-     * asked before anything got this far, and re-asking at release time would be a second prompt for one
-     * decision.</p>
-     */
-    private void releaseClosedPanel(DockPanelRef closed) {
-        String raw = closed.state(DockPanelRef.PATH, "");
-        if (raw.isEmpty()) return;
-        CgPath path;
-        try {
-            Resource resource = Resource.parse(raw);
-            // Only a project resource owns a document. A derived view is somebody else's business and
-            // releasing its ORIGIN because a generated tab closed would take the graph with it.
-            if (!resource.isProject()) return;
-            path = resource.asPath();
-        } catch (RuntimeException unparseable) {
-            return;
-        }
-        for (DockLeaf leaf : dock.layout().leaves()) {
-            for (DockPanelRef panel : leaf.panels()) {
-                if (path.toString().equals(panel.state(DockPanelRef.PATH, ""))) return;
-            }
-        }
-        long timed = FrameProfile.begin();
-        // THE TAB'S REFERENCE, and nothing more. The document is disposed by its LAST holder, which may
-        // be the Problems panel, an index or a background compile -- later than the tab, and never
-        // earlier. That ordering is the "Parser is closed" defect, inverted.
-        EditorService.Tab tab = editors.tabFor(EditorInput.of(Resource.of(path)));
-        if (tab != null) editors.close(tab);
-        FrameProfile.step(timed, "close.editors.close (release the tab's reference)");
-        timed = FrameProfile.begin();
-        onDidCloseDocument.emit(path);
-        FrameProfile.step(timed, "close.onDidCloseDocument -> "
-                + onDidCloseDocument.connectionCount() + " listeners");
-    }
 
     /**
      * A document was released, because the last tab showing it closed.
@@ -3166,15 +1886,8 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      */
     public final Signal.Action onDidJoinWindow = new Signal.Action();
 
-    private void refreshDirtyMarkers() {
-        List<CgPath> dirty = unsavedFiles();
-        if (!dirty.equals(lastDirty)) {
-            lastDirty = dirty;
-            refreshTabTitles();
-        }
-    }
 
-    private List<CgPath> lastDirty = new ArrayList<>();
+    List<CgPath> lastDirty = new ArrayList<>();
 
 
     /**
@@ -3247,41 +1960,6 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         return paths;
     }
 
-    /**
-     * <b>Fills in documents that were opened before their language could answer.</b>
-     *
-     * <p>Services are attached once, when a document is created, and that is right — they hold a compile
-     * result about <em>this</em> text and re-creating them would throw one away. It is also why an editor
-     * already on screen when an engine band finished downloading stayed dark until it was closed and
-     * reopened: {@code JavaLanguage} retries its resolve per document, so a document opened <em>after</em>
-     * the band arrived was fine and one opened before it was not, which reads as the feature working for
-     * some files and not others.</p>
-     *
-     * <p><b>Only the nulls.</b> Anything already attached is left alone — replacing a live services object
-     * would discard a compile result about text that has not changed, and re-subscribe every listener that
-     * hangs off it. Filling a gap is not the same operation as refreshing.</p>
-     *
-     * <p>On the UI thread, because {@code LanguageRegistry.onCapabilityChanged} is emitted there — see
-     * that signal's own note for why an emit from a job would be a different and much worse thing.</p>
-     */
-    private void attachLateServices() {
-        for (Document document : documents.all()) {
-            if (!(document.model() instanceof TextDocumentModel model)) continue;
-            if (model.services() != null) continue;
-            Resource resource = document.resource();
-            LanguageRegistry.Entry entry = LanguageRegistry.forFileName(languageFileNameOf(resource));
-            // THE MODEL'S, so every view of the document gets them at once -- which is the whole reason
-            // they moved off the editor. Setting them on one pane of a split left the other analysing
-            // against nothing.
-            model.setLanguage(entry.language(), DocComments.refining(entry.newTokenizer()),
-                    entry.newServices(model.buffer(), resource));
-            TextEditor editor = editorFor(resource);
-            if (editor == null) continue;
-            editor.setLanguage(model.language());
-            editor.setTokenizer(model.tokenizer());
-            editor.setLanguageServices(model.services());
-        }
-    }
 
     /** The text editor for a path, or null when that file is not opened by a text editor. */
     @Nullable
@@ -3321,73 +1999,13 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * without a settings store behaves like one built with the shipped defaults — a default stated in two
      * places that disagree is worse than either.</p>
      */
-    private boolean autoReveal = false;
+    boolean autoReveal = false;
 
-    public Workbench setAutoReveal(boolean enabled) {
-        this.autoReveal = enabled;
-        return this;
-    }
 
     @Nullable
-    private CgPath revealed;
+    CgPath revealed;
 
-    /**
-     * Selects the active file in the tree when the active tab changes.
-     *
-     * <p>On a CHANGE only. Revealing every frame would fight the user for the selection — they click a
-     * folder, and a frame later the tree jumps back to whatever file is open.</p>
-     */
-    private void revealActiveFile() {
-        if (!autoReveal) return;
-        CgPath active = activeFilePath();
-        if (active == null || active.equals(revealed)) return;
-        revealed = active;
-        fileTree.reveal(active);
-    }
 
-    /**
-     * Performs a drag-and-drop from the tree — move by default, copy with the modifier.
-     *
-     * <p>Each item is issued independently, for the reason paste is: several files dropped into a folder
-     * are several operations that can succeed or fail separately, and stopping on the first refusal leaves
-     * the user guessing which ones landed.</p>
-     */
-    private void dropFiles(List<CgPath> sources, ProjectFileTree.DropRequest request) {
-        // ONE UNDO STEP FOR THE WHOLE DROP, and it settles when its members do -- the batch used to take
-        // `track()` runnables the caller had to remember to call, and a forgotten one left the
-        // transaction open for good.
-        files.batch(request.copy() ? "copy files" : "move files", batch -> {
-            for (CgPath source : sources) {
-                // A folder dropped into itself or its own descendant would move a directory under
-                // itself, which the filesystem refuses with a message about paths rather than about the
-                // gesture.
-                if (source.equals(request.destination()) || source.contains(request.destination())) {
-                    Notifications.show(Notification.error("Cannot move")
-                            .withDetail(source.name() + " into itself"));
-                    continue;
-                }
-                CgPath target = request.destination().resolve(source.name());
-                if (target.equals(source)) continue;   // dropped back where it already is
-                // IN THE BATCH, like the move beside it. It was a bare read-and-create outside the
-                // batch, so a copy that failed was reported by nothing while the move next to it was
-                // named -- and a dropped FOLDER did nothing at all, a read of a directory being an
-                // error. `fs/copy` is the server's now and takes a whole subtree.
-                if (request.copy()) {
-                    batch.copy(Resource.of(source), Resource.of(target));
-                } else {
-                    batch.rename(Resource.of(source), Resource.of(target), false);
-                }
-            }
-        }).then(result -> {
-            if (result.isCompletelySuccessful()) return;
-            // NAMED, which is the whole point of reporting per item: the eleven that moved stay moved
-            // and the one that did not is said out loud.
-            for (FileOperations.Failure failure : result.failures()) {
-                Notifications.show(Notification.error("Could not " + result.label())
-                        .withDetail(failure.resource().name() + " -- " + failure.error().detail()));
-            }
-        });
-    }
 
     // installExplorerCommands(window) used to live here and be called EVERY FRAME from tick(), behind a
     // commandsInstalled flag, for one reason: registration needed a window to reach a registry. Commands
@@ -3412,10 +2030,10 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // WHAT THE INDEX MAY SEE, re-taken on this thread because the crawl above just grew the list the
         // analysis thread reads. Before announceProjectSourcesMoved, so a buffer that moved this frame is
         // announced this frame rather than next. @see #refreshProjectIndexInputs
-        refreshProjectIndexInputs();
+        projectSources.refreshProjectIndexInputs();
         // A project file's text landed, so anything that resolved without it is stale. Drained here
         // because the read answers on the client's thread. @see #onProjectIndexFilled
-        announceProjectSourcesMoved();
+        projectSources.announceProjectSourcesMoved();
         // STAYS PER FRAME, and the attempt to move it to onWindowChanged is why this comment exists.
         //
         // It looks like a one-shot dressed as a loop -- ProjectFileTree.loadProjects latches on
@@ -3455,7 +2073,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * <p>An instance rather than a static for the reason on {@link Markers}: the index holds a listener on
      * every set in it, so a process-wide one can never let a document go.</p>
      */
-    private final Markers markers = new Markers();
+    final Markers markers = new Markers();
 
     /** @see #markers */
     public Markers markers() {
@@ -3478,121 +2096,20 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     private final ConnectionGroup capabilityWatch = new ConnectionGroup();
 
     @Nullable
-    private StatusBarEntryAccessor problemCountEntry;
+    StatusBarEntryAccessor problemCountEntry;
 
     /** Ahead of the shader graph's own readouts, which are about one document. */
-    private static final int PROBLEM_COUNT_PRIORITY = 200;
+    static final int PROBLEM_COUNT_PRIORITY = 200;
 
-    /** The workspace's error and warning totals, as one status entry. @see Markers */
-    private void refreshProblemCount() {
-        int errors = markers.count(DiagnosticSeverity.ERROR);
-        int warnings = markers.count(DiagnosticSeverity.WARNING);
-        // WITHDRAWN WHEN THERE IS NOTHING TO SAY, rather than reading "0 errors, 0 warnings". A clean
-        // workspace is the normal state, and a permanent zero is a readout you learn to stop seeing.
-        if (errors == 0 && warnings == 0) {
-            if (problemCountEntry != null) problemCountEntry.dispose();
-            problemCountEntry = null;
-            return;
-        }
-        StatusBarEntry entry = new StatusBarEntry("Problems",
-                errors + " " + (errors == 1 ? "error" : "errors")
-                        + ", " + warnings + " " + (warnings == 1 ? "warning" : "warnings"),
-                "Problems in the workspace", SHOW_PROBLEMS,
-                errors > 0 ? StatusBarEntry.Kind.ERROR : StatusBarEntry.Kind.WARNING);
-        if (problemCountEntry == null) {
-            problemCountEntry = StatusBar.addEntry(entry, "workbench.problems",
-                    StatusBarAlignment.LEFT, PROBLEM_COUNT_PRIORITY);
-        } else {
-            problemCountEntry.update(entry);
-        }
-    }
 
-    /**
-     * Phase 5.6 — says who else has the active file open.
-     *
-     * <p>The data has existed since Phase 4 and nothing showed it: {@code fs.watch} is sent for every
-     * file a client reads, so the server has always known. What was missing was a view <em>across</em>
-     * peers — a watcher belongs to one connection — and anywhere to put the answer.</p>
-     *
-     * <p><b>Removed rather than emptied when nobody is there.</b> A permanent "1 person" slot that
-     * usually reads zero is a thing the eye learns to skip, which is the one failure a presence
-     * indicator cannot afford. Same shape as the problem count above, and for the same reason.</p>
-     */
-    private void refreshPresence() {
-        CgPath active = activeFilePath();
-        String editing = othersEditing(active);
-        String viewing = othersWithOpen(active);
-        if (editing == null && viewing == null) {
-            if (presenceEntry != null) presenceEntry.dispose();
-            presenceEntry = null;
-            return;
-        }
-        // EDITING LEADS, because it is the half that costs somebody their work. Who merely has it open
-        // is the fuller picture and belongs in the tooltip -- which is what this entry's tooltip has
-        // always CLAIMED to say ("also has this file open") while its text said who was editing.
-        String name = editing != null ? "Editing" : "Viewing";
-        String text = editing != null ? editing : viewing;
-        StatusBarEntry entry = new StatusBarEntry(name, text, tooltipFor(editing, viewing),
-                null, StatusBarEntry.Kind.STANDARD);
-        if (presenceEntry == null) {
-            presenceEntry = StatusBar.addEntry(entry, "workbench.presence",
-                    StatusBarAlignment.RIGHT, PRESENCE_PRIORITY);
-        } else {
-            presenceEntry.update(entry);
-        }
-    }
 
-    /** Both halves, each said only when there is somebody in it. @see #refreshPresence */
-    private static String tooltipFor(@Nullable String editing, @Nullable String viewing) {
-        if (editing == null) return viewing + " has this file open";
-        if (viewing == null) return editing + " is editing this file";
-        return editing + " is editing this file; " + viewing + " has it open";
-    }
 
-    /**
-     * Who else has this file open, phrased for a human — the softer half of presence.
-     *
-     * <p>Worth saying on its own: somebody reading a file you are about to change is not a conflict and
-     * is still worth knowing, and it is the only thing there is to say before anybody has typed. The
-     * accessor behind it was written with the rest of presence and read by nothing, because nothing
-     * ever sent a {@code fs/presence} notification for it to read.</p>
-     */
-    @Nullable
-    private String othersWithOpen(@Nullable CgPath target) {
-        if (target == null) return null;
-        return phrase(workspace.presence().whoElseHasOpen(Resource.of(target)));
-    }
 
-    /** {@code alice}, {@code alice and bob}, {@code alice and 3 others}. */
-    @Nullable
-    private static String phrase(List<String> people) {
-        if (people.isEmpty()) return null;
-        if (people.size() == 1) return people.get(0);
-        if (people.size() == 2) return people.get(0) + " and " + people.get(1);
-        return people.get(0) + " and " + (people.size() - 1) + " others";
-    }
 
     /** Right of the problem count and left of anything a document contributes. */
-    private static final int PRESENCE_PRIORITY = 50;
+    static final int PRESENCE_PRIORITY = 50;
 
     @Nullable
-    private StatusBarEntryAccessor presenceEntry;
+    StatusBarEntryAccessor presenceEntry;
 
-    /**
-     * Keeps the panel pointed at this workspace's index.
-     *
-     * <p>Bound <b>once</b>, not per tab. It used to re-point at the active document's set on every tab
-     * change, which is what made it a second opinion about the file already on screen; the index is the
-     * whole workspace, so switching tabs changes nothing about what it should show. Re-binding would also
-     * rebuild the tree and throw away which files you had expanded.</p>
-     */
-    private void rebindProblems() {
-        if (problems.source() == null || problems.source().markers() != markers) {
-            problems.bindTo(markers);
-        }
-        // WHICH FILE IS IN FRONT, told on every tab change whether or not the filter is on -- so switching
-        // "Show Active File Only" on narrows to what you are looking at now rather than to whatever
-        // happened to be in front when you last switched it off.
-        problems.setActiveResource(activeResource());
-    }
 }

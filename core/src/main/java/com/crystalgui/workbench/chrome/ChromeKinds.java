@@ -1,5 +1,6 @@
 package com.crystalgui.workbench.chrome;
 
+import com.crystalgui.core.notify.StatusBar;
 import com.crystalgui.workbench.chrome.menu.MenuBarView;
 import com.crystalgui.workbench.chrome.notification.NotificationBalloons;
 import com.crystalgui.workbench.chrome.notification.NotificationsView;
@@ -42,7 +43,11 @@ public final class ChromeKinds implements NodeKinds {
     public void register() {
         UIElementRegistry.register(QuickPick.NAME, QuickPick::new, NodeContract.INERT);
         UIElementRegistry.register(MenuBarView.NAME, () -> new MenuBarView(CommandRegistry.global()), NodeContract.INERT);
-        UIElementRegistry.register(StatusBarView.NAME, StatusBarView::new, NodeContract.INERT);
+        // A BAR OF ITS OWN when one is DECODED rather than built by a workbench. A described tree
+        // names the kind and nothing else, so there is no workbench to ask -- and an unbound bar with
+        // no entries is the honest answer, exactly as an unbound WindowFrame is.
+        UIElementRegistry.register(StatusBarView.NAME, () -> new StatusBarView(new StatusBar()),
+                NodeContract.INERT);
         UIElementRegistry.register(ProgressStatusItem.NAME, ProgressStatusItem::new, NodeContract.INERT);
         UIElementRegistry.register(ProcessesPopover.NAME, ProcessesPopover::new, NodeContract.INERT);
         UIElementRegistry.register(Breadcrumbs.NAME, Breadcrumbs::new, NodeContract.INERT);

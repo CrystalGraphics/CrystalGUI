@@ -1,5 +1,7 @@
 package com.crystalgui.workbench.editor;
 
+import com.crystalgui.ui.data.UiDataKeys;
+import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.notify.StatusBar;
 import com.crystalgui.core.notify.StatusBarAlignment;
 import com.crystalgui.core.notify.StatusBarEntry;
@@ -67,7 +69,14 @@ public final class TextEditorView implements DocumentEditor {
      * withdrawing is {@code dispose()} on the handle, not a second call naming the string again. A
      * missed deactivation can only replace these, never leak them.</p>
      */
-    private static final List<StatusBarEntryAccessor> ACTIVE_ENTRIES = new ArrayList<>();
+    /**
+     * The entries THIS view published, so it withdraws its own.
+     *
+     * <p>Was static, which is the defect {@code StatusBar} being static made invisible: two editors
+     * shared one list, so activating the second withdrew the first's readouts and deactivating either
+     * cleared both. One tab, one list.</p>
+     */
+    private final List<StatusBarEntryAccessor> activeEntries = new ArrayList<>();
 
     /** The one entry that is rewritten while the view stays active. */
     @Nullable
@@ -112,8 +121,8 @@ public final class TextEditorView implements DocumentEditor {
             caretSubscription.disconnect();
             caretSubscription = null;
         }
-        for (StatusBarEntryAccessor entry : ACTIVE_ENTRIES) entry.dispose();
-        ACTIVE_ENTRIES.clear();
+        for (StatusBarEntryAccessor entry : activeEntries) entry.dispose();
+        activeEntries.clear();
         caretEntry = null;
         if (!active) return;
 
@@ -136,11 +145,27 @@ public final class TextEditorView implements DocumentEditor {
     }
 
     /** Registers one entry on the right-hand group and keeps it for withdrawal. */
-    private static StatusBarEntryAccessor add(StatusBarEntry entry, String id, int priority) {
+    private StatusBarEntryAccessor add(StatusBarEntry entry, String id, int priority) {
+        StatusBar bar = statusBar();
+        // NO BAR IS AN ORDINARY STATE, not a failure: a document opened on a surface that has none --
+        // a bare desktop window, a headless fixture -- has nowhere to put a readout and must not fail
+        // for it. The caret entry is already nullable for the same reason.
+        if (bar == null) return null;
         StatusBarEntryAccessor accessor =
-                StatusBar.addEntry(entry, id, StatusBarAlignment.RIGHT, priority);
-        ACTIVE_ENTRIES.add(accessor);
+                bar.addEntry(entry, id, StatusBarAlignment.RIGHT, priority);
+        activeEntries.add(accessor);
         return accessor;
+    }
+
+    /**
+     * The bar of the surface this view is on, or null.
+     *
+     * <p>Resolved from where the editor IS rather than handed in, which is what lets a view below the
+     * workbench layer write to a workbench's bar without naming one. @see UiDataKeys#STATUS_BAR</p>
+     */
+    @Nullable
+    private StatusBar statusBar() {
+        return DataContext.from(editor).get(UiDataKeys.STATUS_BAR);
     }
 
     /** IntelliJ's {@code 111:32} — one-based, as every gutter and every error message already is. */

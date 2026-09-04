@@ -1,5 +1,6 @@
 package com.crystalgui.workbench.chrome;
 
+import com.crystalgui.core.notify.StatusBar;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.workbench.chrome.menu.MenuBarView;
 import com.crystalgui.workbench.chrome.notification.NotificationsView;
@@ -199,7 +200,7 @@ public class ChromeBatchPortTest extends UiDocumentTestBase {
         ProblemsPanel problems = new ProblemsPanel();
         NotificationsView notifications = new NotificationsView();
         NavigatorView navigator = new NavigatorView();
-        StatusBarView status = new StatusBarView();
+        StatusBarView status = new StatusBarView(new StatusBar());
         Breadcrumbs crumbs = new Breadcrumbs();
 
         List<UIElement> panels = List.of(problems, notifications, navigator, status, crumbs);

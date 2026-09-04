@@ -254,8 +254,8 @@ public class CrystalEditor extends UIElement implements Disposable, WindowChrome
         }));
         // READ ON DEMAND, never carried by the signal: composing the line walks every entry, and the caret
         // readout writes on every selection change.
-        lifetime.add(StatusBar.onDidChange.connect(() -> {
-            String text = StatusBar.text();
+        lifetime.add(workbench.statusBar().onDidChange.connect(() -> {
+            String text = workbench.statusBar().text();
             if (!text.isEmpty()) onStatus.emit(text);
         }));
         // The inspector and the generated source follow the front tab. Was a per-frame poll; the dock

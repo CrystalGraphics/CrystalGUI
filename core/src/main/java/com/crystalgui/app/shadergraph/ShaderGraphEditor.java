@@ -1,4 +1,6 @@
 package com.crystalgui.app.shadergraph;
+import com.crystalgui.ui.data.UiDataKeys;
+import com.crystalgui.core.data.DataContext;
 import com.crystalgui.app.shadergraph.node.ShaderVectorFieldWidget;
 import com.crystalgui.app.shadergraph.node.ShaderColorFieldWidget;
 import com.crystalgui.app.shadergraph.blackboard.BlackboardPanel;
@@ -169,6 +171,18 @@ public class ShaderGraphEditor extends UIElement
 
     @Nullable
     private StatusBarEntryAccessor lineOwnerEntry;
+
+    /**
+     * The bar of the surface this graph is on, or null.
+     *
+     * <p>Resolved from where the graph IS rather than reached as a static: since W5 a status bar
+     * belongs to a workbench, and this package sits below that layer and may not name one.
+     * @see UiDataKeys#STATUS_BAR</p>
+     */
+    @Nullable
+    private StatusBar statusBar() {
+        return DataContext.from(this).get(UiDataKeys.STATUS_BAR);
+    }
 
     /** Left group, compile summary ahead of the line-owner readout. @see StatusBar */
     private static final int COMPILE_PRIORITY = 100;
@@ -486,7 +500,7 @@ public class ShaderGraphEditor extends UIElement
                 lastCompileTooltip, lastCompileFailed ? "workbench.showProblems" : null,
                 lastCompileFailed ? StatusBarEntry.Kind.ERROR : StatusBarEntry.Kind.STANDARD);
         if (compileEntry == null) {
-            compileEntry = StatusBar.addEntry(entry, COMPILE_STATUS, StatusBarAlignment.LEFT,
+            compileEntry = statusBar().addEntry(entry, COMPILE_STATUS, StatusBarAlignment.LEFT,
                     COMPILE_PRIORITY);
         } else {
             compileEntry.update(entry);
@@ -931,7 +945,7 @@ public class ShaderGraphEditor extends UIElement
         StatusBarEntry entry = StatusBarEntry.of("Emitting node", "line " + line + " emitted by "
                 + (node == null ? owner : node.typeId() + "  (" + owner + ")"));
         if (lineOwnerEntry == null) {
-            lineOwnerEntry = StatusBar.addEntry(entry, LINE_OWNER_STATUS, StatusBarAlignment.LEFT,
+            lineOwnerEntry = statusBar().addEntry(entry, LINE_OWNER_STATUS, StatusBarAlignment.LEFT,
                     LINE_OWNER_PRIORITY);
         } else {
             lineOwnerEntry.update(entry);

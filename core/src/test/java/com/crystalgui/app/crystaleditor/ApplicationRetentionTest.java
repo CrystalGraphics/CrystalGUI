@@ -17,7 +17,6 @@ import org.junit.Test;
 
 import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.core.notify.Notifications;
-import com.crystalgui.core.notify.StatusBar;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
@@ -48,7 +47,8 @@ import com.crystalgui.widget.config.inspector.InspectorRegistry;
  * <h3>What it counts</h3>
  *
  * <p>Every process-wide holder an editor writes itself into, plus the per-connection ones on the
- * {@link Workspace}. Dock banner providers were one of them and are deliberately absent: since W1 they
+ * {@link Workspace}. The status bar left this census at W5 and its absence is the point: it is an
+ * instance per workbench now, so it goes when the workbench does and there is no static to count. Dock banner providers were one of them and are deliberately absent: since W1 they
  * live on the workbench's own {@code DockPanelRegistry}, so their lifetime is structural and there is
  * no longer a static list to read — which is the better answer than an assertion about one.</p>
  *
@@ -113,7 +113,6 @@ public class ApplicationRetentionTest {
     @After
     public void closeWorkspace() {
         Notifications.resetForTesting();
-        StatusBar.resetForTesting();
         InspectorRegistry.resetForTesting();
         ProjectSourcesRegistry.resetForTesting();
         Disposer.resetForTesting();
@@ -126,7 +125,6 @@ public class ApplicationRetentionTest {
         counts.put("Disposer.liveCount()", Disposer.liveCount());
         counts.put("Notifications.onDidChange", Notifications.onDidChange.connectionCount());
         counts.put("Notifications.onDidChangeUnread", Notifications.onDidChangeUnread.connectionCount());
-        counts.put("StatusBar.onDidChange", StatusBar.onDidChange.connectionCount());
         counts.put("InspectorRegistry.onDidChangeSubject",
                 InspectorRegistry.onDidChangeSubject.connectionCount());
         counts.put("InspectorRegistry sections", InspectorRegistry.all().size());

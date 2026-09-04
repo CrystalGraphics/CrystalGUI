@@ -290,7 +290,7 @@ public final class WorkbenchSettings {
         themes.setTheme(themeId(ThemeRegistry.themes(), workbench.resolve(UI_THEME)));
         themes.setScheme(themeId(ThemeRegistry.schemes(), workbench.resolve(EDITOR_SCHEME)));
 
-        workbench.setAutoReveal(workbench.resolve(AUTO_REVEAL));
+        workbench.explorerBinding.setAutoReveal(workbench.resolve(AUTO_REVEAL));
         workbench.fileTree().source().setSortOrder(sortOrder(workbench));
         workbench.fileTree().treeView().refresh();
 

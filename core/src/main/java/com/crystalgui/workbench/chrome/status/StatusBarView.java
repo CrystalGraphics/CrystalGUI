@@ -116,6 +116,9 @@ public class StatusBarView extends UIElement {
      */
     private static final int RIGHT_GROUP_RESERVED = 1;
 
+    /** The bar this view draws. Handed in, never found: a view of nothing in particular is a bug. */
+    private final StatusBar model;
+
     private final UIElement leftGroup = new UIElement();
     private final UIElement rightGroup = new UIElement();
     private final UIElement spacer = new UIElement();
@@ -129,8 +132,9 @@ public class StatusBarView extends UIElement {
 
     private final ProgressStatusItem progress = new ProgressStatusItem();
 
-    public StatusBarView() {
+    public StatusBarView(StatusBar model) {
         super(NAME);
+        this.model = model;
         addClass(BAR_CLASS);
         // NOT markAsInternal(). Whether this part is internal to its host is the host's decision — the
         // shell adds it with addInternalChild — and stamping it here would recurse over a subtree whose
@@ -171,7 +175,7 @@ public class StatusBarView extends UIElement {
         append(hideMenu);
         hideMenu.onItemActivated.connect(item -> {
             String id = menuIds.get(item);
-            if (id != null) StatusBar.setHidden(id, !StatusBar.isHidden(id));
+            if (id != null) model.setHidden(id, !model.isHidden(id));
         });
         events.getGroup(MouseEvent.Down.class).attachListener((element, event) -> {
             if (event.getButtonId() != CgMouseCodes.RIGHT_BUTTON) return;
@@ -189,15 +193,15 @@ public class StatusBarView extends UIElement {
     private void populateHideMenu() {
         hideMenu.clearItems();
         menuIds.clear();
-        for (StatusBarEntryAccessor accessor : StatusBar.allEntries()) {
-            String id = StatusBar.idOf(accessor);
+        for (StatusBarEntryAccessor accessor : model.allEntries()) {
+            String id = model.idOf(accessor);
             MenuItem item = hideMenu.addCheckableItem(accessor.entry().name());
-            item.setSelected(!StatusBar.isHidden(id));
+            item.setSelected(!model.isHidden(id));
             menuIds.put(item, id);
         }
     }
 
-    /** The hide menu, so a test can activate a row rather than calling StatusBar.setHidden directly. */
+    /** The hide menu, so a test can activate a row rather than calling model.setHidden directly. */
     public Menu hideMenu() {
         populateHideMenu();
         return hideMenu;
@@ -243,14 +247,14 @@ public class StatusBarView extends UIElement {
     @Override
     protected void connected() {
         subscriptions.disconnectAll();
-        subscriptions.add(StatusBar.onDidChange.connect(this::refresh));
+        subscriptions.add(model.onDidChange.connect(this::refresh));
         refresh();
     }
 
     /** Brings the rendered slots in line with the service. Cheap when nothing changed. */
     public void refresh() {
-        List<StatusBarEntryAccessor> left = StatusBar.entries(StatusBarAlignment.LEFT);
-        List<StatusBarEntryAccessor> right = StatusBar.entries(StatusBarAlignment.RIGHT);
+        List<StatusBarEntryAccessor> left = model.entries(StatusBarAlignment.LEFT);
+        List<StatusBarEntryAccessor> right = model.entries(StatusBarAlignment.RIGHT);
 
         // GONE FIRST, so an entry that moved from one group to the other does not briefly exist twice.
         dropSlotsNotIn(left, right);

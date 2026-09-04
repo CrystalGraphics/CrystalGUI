@@ -1,5 +1,6 @@
 package com.crystalgui.ui.data;
 
+import com.crystalgui.core.notify.StatusBar;
 import com.crystalgui.core.data.ClipboardActions;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.settings.Settings;
@@ -94,6 +95,21 @@ public final class UiDataKeys {
      * apart. Whoever owns persistence answers this; the window root is the fallback for a host that has
      * nobody to ask.</p>
      */
+    /**
+     * The status bar of whatever surface this element is on — <b>an instance, since W5</b>.
+     *
+     * <p>It was a static, which was a shortcut from when there was one window: two applications on one
+     * desktop cannot share one line of text, and the caret readout of whichever editor was focused last
+     * would win. A widget that has something to say resolves this from where it IS, which is how it
+     * says it to the right bar without naming a workbench — a text editor and a shader graph are both
+     * below the workbench layer and may not import it.</p>
+     *
+     * <p>Null on a surface with no bar, which is an ordinary state: a widget in a bare desktop window
+     * has nowhere to put a status entry and must not fail for it.</p>
+     */
+    public static final DataKey<StatusBar> STATUS_BAR =
+            DataKey.create("ui.statusBar", StatusBar.class);
+
     public static final DataKey<Settings> SETTINGS_HOST =
             DataKey.create("settingsHost", Settings.class);
 }
