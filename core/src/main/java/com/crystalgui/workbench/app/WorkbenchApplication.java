@@ -1,4 +1,4 @@
-package com.crystalgui.workbench;
+package com.crystalgui.workbench.app;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -36,6 +36,9 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.workbench.Workbench;
+import com.crystalgui.workbench.WorkbenchSession;
+import com.crystalgui.workbench.WorkbenchSettings;
 import com.crystalgui.workbench.chrome.menu.ChromeCommands;
 import com.crystalgui.workbench.dock.DockGroup;
 import com.crystalgui.workbench.dock.layout.DockLayout;

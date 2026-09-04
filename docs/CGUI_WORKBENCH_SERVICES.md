@@ -1255,7 +1255,7 @@ are a wrapper — one lifetime, one id, and the second file's only real content 
 The declaration stays a `static final` so a launcher can read what an extension claims without
 activating it.
 
-A line in `META-INF/services/com.crystalgui.workbench.WorkbenchExtension` says *this jar has the
+A line in `META-INF/services/com.crystalgui.workbench.extension.WorkbenchExtension` says *this jar has the
 feature*; a manifest's `with(...)` says *this product enables it*. Availability is discovered, so it is a
 fact about the jars present rather than about which module remembered to make a call — and an id nothing
 contributed is a logged absence, never an error, which is what lets `crystalgui:scripting` be listed by

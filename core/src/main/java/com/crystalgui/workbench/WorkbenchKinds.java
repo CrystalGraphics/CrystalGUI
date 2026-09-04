@@ -6,6 +6,7 @@ import com.crystalgui.ui.dom.NodeContract;
 import com.crystalgui.ui.dom.NodeKinds;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
+import com.crystalgui.workbench.app.WorkbenchApplication;
 import com.crystalgui.workbench.diff.DiffView;
 import com.crystalgui.workbench.diff.MergeView;
 import com.crystalgui.workbench.dock.DockArea;

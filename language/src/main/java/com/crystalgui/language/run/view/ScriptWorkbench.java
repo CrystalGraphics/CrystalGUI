@@ -3,8 +3,7 @@ package com.crystalgui.language.run.view;
 import com.crystalgui.fs.protocol.ScriptingMode;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.workbench.WorkbenchContext;
-import com.crystalgui.workbench.WorkbenchExtension;
-import com.crystalgui.workbench.WorkbenchExtensions;
+import com.crystalgui.workbench.extension.WorkbenchExtension;
 import com.crystalgui.core.async.JobKey;
 import com.crystalgui.core.async.JobLane;
 import com.crystalgui.core.async.JobScheduler;
@@ -17,7 +16,6 @@ import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.widget.texteditor.TextEditor;
-import com.crystalgui.workbench.WorkbenchContext;
 
 import javax.annotation.Nullable;
 

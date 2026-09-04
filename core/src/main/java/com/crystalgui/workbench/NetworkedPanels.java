@@ -197,12 +197,12 @@ public final class NetworkedPanels implements WindowMount {
      * naming a key does not get the window, it gets whatever that server decides the key means now.</p>
      */
     private void askServerFor(DockPanelRef ref, String typeId, String windowKey) {
-        if (asking.contains(typeId + " " + windowKey)) return;
-        asking.add(typeId + " " + windowKey);
+        if (asking.contains(typeId + "\0" + windowKey)) return;
+        asking.add(typeId + "\0" + windowKey);
         StateMap<Object> args = new StateMap<>(PlainOps.INSTANCE);
         if (!windowKey.isEmpty()) args.putString(UiMethods.KEY, windowKey);
         ClientWindows.requestOpen(typeId, args, granted -> {
-            asking.remove(typeId + " " + windowKey);
+            asking.remove(typeId + "\0" + windowKey);
             if (granted) return;
             // A TAB THAT CAN NEVER BE FILLED is worse than one that is gone. The machine was broken, the
             // block was mined, the player is somewhere else -- and a placeholder with no explanation is

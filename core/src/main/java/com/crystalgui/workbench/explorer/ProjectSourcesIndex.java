@@ -1,16 +1,15 @@
-package com.crystalgui.workbench;
+package com.crystalgui.workbench.explorer;
 
 import com.crystalgui.document.Document;
 import com.crystalgui.document.TextDocumentModel;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.project.SourceRoots;
-import com.crystalgui.text.lang.ProjectSources;
 import com.crystalgui.text.syntax.DocComments;
 import com.crystalgui.text.syntax.LanguageRegistry;
 import com.crystalgui.widget.texteditor.TextEditor;
-import com.crystalgui.workbench.explorer.ProjectFileTree;
-import com.crystalgui.workbench.explorer.WorkspaceTreeSource;
+import com.crystalgui.workbench.Workbench;
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,11 +17,11 @@ import java.util.Map;
 /**
  * Extracted from {@link Workbench}. See the plan's §4.5 for why this cluster is one thing.
  */
-final class ProjectSourcesIndex {
+public final class ProjectSourcesIndex {
 
     private final Workbench workbench;
 
-    ProjectSourcesIndex(Workbench workbench) {
+    public ProjectSourcesIndex(Workbench workbench) {
         this.workbench = workbench;
     }
 
@@ -40,7 +39,7 @@ final class ProjectSourcesIndex {
      * <p>So: set, and let {@link #tick} drain it. Coalescing is free and wanted — a workspace crawl fills
      * many files in one frame and they all mean the same single "ask again".</p>
      */
-    void onProjectIndexFilled() {
+    public void onProjectIndexFilled() {
         workbench.projectSourcesMoved = true;
     }
 
@@ -59,7 +58,7 @@ final class ProjectSourcesIndex {
      * {@code refreshDirtyMarkers} doing it for every open file every frame is precisely what
      * {@code Document.onDidChange} was added to stop.</p>
      */
-    void refreshProjectIndexInputs() {
+    public void refreshProjectIndexInputs() {
         int revision = workbench.fileTree == null ? 0 : workbench.fileTree.source().indexRevision();
         boolean workspaceMoved = revision != workbench.lastIndexRevision;
         if (workspaceMoved) {
@@ -171,7 +170,7 @@ final class ProjectSourcesIndex {
      * names it failed to resolve, and an analysis is debounced and keyed — so the cost of telling a
      * document that did not care is one coalesced job that finds nothing changed.</p>
      */
-    void announceProjectSourcesMoved() {
+    public void announceProjectSourcesMoved() {
         if (!workbench.projectSourcesMoved) return;
         workbench.projectSourcesMoved = false;
         // AND THE TREE, whose rows resolve against the same thing an editor does. A `.java` row shows
@@ -208,7 +207,7 @@ final class ProjectSourcesIndex {
      * <p>On the UI thread, because {@code LanguageRegistry.onCapabilityChanged} is emitted there — see
      * that signal's own note for why an emit from a job would be a different and much worse thing.</p>
      */
-    void attachLateServices() {
+    public void attachLateServices() {
         for (Document document : workbench.documents.all()) {
             if (!(document.model() instanceof TextDocumentModel model)) continue;
             if (model.services() != null) continue;

@@ -1,7 +1,7 @@
 # Every extension on the classpath is FOUND; nothing lists them in code. Contributing was a call, and
 # a call can only name what the class making it is allowed to see -- the shader graph lives in `app/`,
 # above the workbench, so an APPLICATION had to contribute it, and a mod's extension could never be in
-# that list at all. @see com.crystalgui.workbench.WorkbenchExtensions
+# that list at all. @see com.crystalgui.workbench.extension.WorkbenchExtensions
 #
 # Being here is availability, never enablement: an application's manifest names the ids it wants, and
 # an id nothing contributed is a logged absence rather than an error.

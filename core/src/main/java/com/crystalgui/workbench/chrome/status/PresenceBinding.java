@@ -1,21 +1,22 @@
-package com.crystalgui.workbench;
+package com.crystalgui.workbench.chrome.status;
 
-import com.crystalgui.core.notify.StatusBar;
 import com.crystalgui.core.notify.StatusBarAlignment;
 import com.crystalgui.core.notify.StatusBarEntry;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
+import com.crystalgui.workbench.Workbench;
+
 import java.util.List;
 import javax.annotation.Nullable;
 
 /**
  * Extracted from {@link Workbench}. See the plan's §4.5 for why this cluster is one thing.
  */
-final class PresenceBinding {
+public final class PresenceBinding {
 
     private final Workbench workbench;
 
-    PresenceBinding(Workbench workbench) {
+    public PresenceBinding(Workbench workbench) {
         this.workbench = workbench;
     }
 
@@ -30,7 +31,7 @@ final class PresenceBinding {
      * usually reads zero is a thing the eye learns to skip, which is the one failure a presence
      * indicator cannot afford. Same shape as the problem count above, and for the same reason.</p>
      */
-    void refreshPresence() {
+    public void refreshPresence() {
         CgPath active = workbench.activeFilePath();
         String editing = workbench.saveActions.othersEditing(active);
         String viewing = othersWithOpen(active);
@@ -77,7 +78,7 @@ final class PresenceBinding {
 
     /** {@code alice}, {@code alice and bob}, {@code alice and 3 others}. */
     @Nullable
-    static String phrase(List<String> people) {
+    public static String phrase(List<String> people) {
         if (people.isEmpty()) return null;
         if (people.size() == 1) return people.get(0);
         if (people.size() == 2) return people.get(0) + " and " + people.get(1);

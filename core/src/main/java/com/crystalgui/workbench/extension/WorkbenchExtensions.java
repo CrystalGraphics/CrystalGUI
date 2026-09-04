@@ -1,4 +1,4 @@
-package com.crystalgui.workbench;
+package com.crystalgui.workbench.extension;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -11,6 +11,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.dispose.Disposable;
+import com.crystalgui.workbench.WorkbenchContext;
 
 /**
  * Where a {@link WorkbenchExtension} makes itself available — process-wide, like {@code ContentProviders}.

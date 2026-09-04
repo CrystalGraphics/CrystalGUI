@@ -4,6 +4,13 @@ package com.crystalgui.workbench;
 import java.nio.file.Path;
 import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.ui.data.UiDataKeys;
+import com.crystalgui.workbench.chrome.status.PresenceBinding;
+import com.crystalgui.workbench.chrome.status.ProblemsBinding;
+import com.crystalgui.workbench.dock.WorkbenchOpener;
+import com.crystalgui.workbench.editor.TextFileKind;
+import com.crystalgui.workbench.explorer.*;
+import com.crystalgui.workbench.extension.WorkbenchExtension;
+import com.crystalgui.workbench.extension.WorkbenchExtensions;
 import com.crystalgui.workbench.toolwindow.ToolWindowKind;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.workbench.decoration.FileDecorations;
@@ -13,13 +20,9 @@ import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
 
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.async.JobScheduler;
-import com.crystalgui.desktop.Desktop;
 import com.crystalgui.core.async.Reply;
 import com.crystalgui.core.dispose.Disposable;
-import com.crystalgui.core.async.ReplyError;
-import com.crystalgui.document.BytesDocumentModel;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.document.DocumentKind;
@@ -27,7 +30,6 @@ import com.crystalgui.document.DocumentKinds;
 import com.crystalgui.document.DocumentState;
 import com.crystalgui.document.EditorInput;
 import com.crystalgui.document.RecentFiles;
-import com.crystalgui.document.TextDocumentModel;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.core.pattern.FilePatternMap;
@@ -35,54 +37,32 @@ import com.crystalgui.fs.client.ContentProvider;
 import com.crystalgui.fs.client.FileOperations;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.client.WorkspaceDocuments;
-import com.crystalgui.fs.protocol.FsError;
-import com.crystalgui.fs.protocol.FsMessages;
-import com.crystalgui.workbench.editor.BinaryFileView;
 import com.crystalgui.workbench.editor.EditorService;
 import com.crystalgui.workbench.editor.TextEditorView;
-import com.crystalgui.text.TextEncoding;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
-import com.crystalgui.text.cursor.IndentationProvider;
-import com.crystalgui.text.fold.FoldingRangeProvider;
-import com.crystalgui.text.syntax.DocComments;
 import com.crystalgui.text.syntax.LanguageRegistry;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.workbench.chrome.palette.CommandPalette;
-import com.crystalgui.workbench.chrome.status.Breadcrumbs;
 import com.crystalgui.workbench.chrome.palette.QuickPick;
 import com.crystalgui.workbench.chrome.status.StatusBarView;
 import com.crystalgui.workbench.decoration.FileDecoration;
 import com.crystalgui.workbench.decoration.FileDecorationProvider;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.widget.display.SymbolIcon;
-import com.crystalgui.text.lang.SymbolInfo;
-import com.crystalgui.text.diff.ThreeWayMerge;
-import com.crystalgui.widget.control.Button;
-import com.crystalgui.widget.overlay.Dialog;
-import com.crystalgui.widget.overlay.InputDialog;
 import com.crystalgui.workbench.chrome.notification.NotificationBalloons;
 import com.crystalgui.workbench.chrome.notification.NotificationsView;
 import com.crystalgui.workbench.chrome.problems.ProblemsPanel;
-import com.crystalgui.desktop.window.WindowFrame;
-import com.crystalgui.workbench.diff.ConflictDialog;
-import com.crystalgui.workbench.diff.MergeView;
 import com.crystalgui.workbench.dock.DockArea;
-import com.crystalgui.workbench.dock.DockWindow;
 import com.crystalgui.workbench.dock.drag.DockDropZone;
 import com.crystalgui.workbench.dock.DockGroup;
 import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
 import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
-import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.workbench.dock.panel.DockInput;
 import com.crystalgui.workbench.dock.panel.DockOpenOptions;
 import com.crystalgui.workbench.dock.drag.DockPlacement;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
-import com.crystalgui.workbench.explorer.ExplorerCommands;
-import com.crystalgui.workbench.explorer.ProjectFileTree;
-import com.crystalgui.workbench.explorer.WorkspaceTreeSource;
 import com.crystalgui.workbench.region.DockRegion;
 import com.crystalgui.workbench.region.RegionDropOverlay;
 import com.crystalgui.workbench.region.RegionSide;
@@ -115,10 +95,7 @@ import com.crystalgui.core.command.Command;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.core.notify.StatusBar;
-import com.crystalgui.core.notify.StatusBarAlignment;
-import com.crystalgui.core.notify.StatusBarEntry;
 import com.crystalgui.core.notify.StatusBarEntryAccessor;
-import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.diagnostic.Markers;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.workbench.chrome.menu.MainMenuCommands;
@@ -217,17 +194,17 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     // Events go to Notifications (severity, actions, a bounded history); ambient text goes to StatusBar
     // (keyed per writer, replaced rather than accumulated). See com.crystalgui.core.notify.
 
-    final Workspace workspace;
+    public final Workspace workspace;
 
     /** Every kind of document this workbench can open. An instance, so two workbenches differ. */
-    final DocumentKinds kinds = new DocumentKinds();
+    public final DocumentKinds kinds = new DocumentKinds();
 
     /** The open documents, and the wire underneath them. */
-    final WorkspaceDocuments documents;
+    public final WorkspaceDocuments documents;
 
     /** The tabs over those documents — the ONE open lane. @see EditorService */
-    final EditorService editors;
-    final DockPanelRegistry<UIElement> registry = new DockPanelRegistry<>();
+    public final EditorService editors;
+    public final DockPanelRegistry<UIElement> registry = new DockPanelRegistry<>();
 
     /**
      * Saving, and what a conflict means — extracted at W5.
@@ -236,7 +213,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * question and its three answers, the merge, and what closing something has to ask before it
      * discards anything.</p>
      */
-    final SaveActions saveActions = new SaveActions(this);
+    public final SaveActions saveActions = new SaveActions(this);
 
     /**
      * How a tab presents itself, and what the dock and the documents owe each other — extracted at W5.
@@ -246,7 +223,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * than pushed in afterwards, which is what makes a rebuilt strip correct on the frame it is
      * rebuilt.</p>
      */
-    final DocumentTabs documentTabs = new DocumentTabs(this);
+    public final DocumentTabs documentTabs = new DocumentTabs(this);
 
     /**
      * The ONE open lane's shell half — extracted at W5.
@@ -255,7 +232,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * extension bindings, the ref a path maps to, and which dock a placement lands in. Editor-service
      * work that had grown onto the shell because the shell is what owns the dock.</p>
      */
-    final WorkbenchOpener opener = new WorkbenchOpener(this);
+    public final WorkbenchOpener opener = new WorkbenchOpener(this);
 
     /**
      * What the workspace declares, and the three snapshots an analysis thread reads — extracted at W5.
@@ -283,15 +260,15 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * project root, and following the active tab.</p>
      */
     final ExplorerBinding explorerBinding = new ExplorerBinding(this);
-    final ProjectFileTree fileTree;
-    final ProblemsPanel problems = new ProblemsPanel();
+    public final ProjectFileTree fileTree;
+    public final ProblemsPanel problems = new ProblemsPanel();
 
     /** The notification history. @see #NOTIFICATIONS_TYPE */
     private final NotificationsView notificationsView = new NotificationsView();
 
     /** The transient half — balloons over the bottom-right corner. @see NotificationBalloons */
     private final NotificationBalloons balloons = new NotificationBalloons();
-    final DockArea dock;
+    public final DockArea dock;
 
     /** The fixed region frame — sidebar, editor, panel, auxiliary. @see WorkbenchRegions */
     private WorkbenchRegions regions;
@@ -332,7 +309,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * path nothing has measured yet.</p>
      */
     @Nullable
-    String openBufferText(CgPath path) {
+    public String openBufferText(CgPath path) {
         Document document = documents.get(Resource.of(path));
         if (document == null) return null;
         byte[] bytes = document.model().encode();
@@ -351,7 +328,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * <p>Volatile because {@link #onProjectIndexFilled} runs on whatever thread the workspace client
      * answers on; drained by {@link #tick} on the UI thread.</p>
      */
-    volatile boolean projectSourcesMoved;
+    public volatile boolean projectSourcesMoved;
 
     // ── What the index is allowed to see ────────────────────────────────────────────────────────
     //
@@ -367,13 +344,13 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     // exist". Identical to the symptom of having no index at all.
 
     /** Every file the crawl has reached, as of the last frame. */
-    volatile List<CgPath> crawledFiles = List.of();
+    public volatile List<CgPath> crawledFiles = List.of();
 
     /** Project id to declared source roots, as of the last frame. */
-    volatile Map<String, List<String>> projectRoots = Map.of();
+    public volatile Map<String, List<String>> projectRoots = Map.of();
 
     /** Open documents' text, as of the last frame — the tier that beats the file on disk. */
-    volatile Map<CgPath, String> bufferSnapshot = Map.of();
+    public volatile Map<CgPath, String> bufferSnapshot = Map.of();
 
     /** A buffer's CONTENT moved since the snapshot was taken. UI thread only. */
     /**
@@ -385,16 +362,16 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * boolean threw it away; keeping it means a keystroke re-encodes the document it landed in and reuses
      * the string already held for the others.</p>
      */
-    final Set<CgPath> dirtyBuffers = new HashSet<>();
+    public final Set<CgPath> dirtyBuffers = new HashSet<>();
 
     /** Which documents the snapshot covers, so opening or closing one is noticed. UI thread only. */
-    final Set<CgPath> snapshotOver = new HashSet<>();
+    public final Set<CgPath> snapshotOver = new HashSet<>();
 
     /** The tree source revision these snapshots were taken at. @see WorkspaceTreeSource#indexRevision() */
-    int lastIndexRevision = -1;
+    public int lastIndexRevision = -1;
 
     /** Whether the workspace's own inputs moved on the PREVIOUS frame. @see #refreshProjectIndexInputs */
-    boolean workspaceMovedLastFrame;
+    public boolean workspaceMovedLastFrame;
 
 
 
@@ -412,7 +389,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * document. Before that existed, nothing updated the tab when a path changed — it kept its old title,
      * {@code Ctrl+S} wrote to the old name, and opening the new name produced a second editor.</p>
      */
-    final FileOperations files;
+    public final FileOperations files;
 
     /** Marked internal exactly ONCE, while empty. {@code markAsInternal()} RECURSES, and stamping a
      * populated subtree makes {@code removeChild} silently refuse everything under it — which is how the
@@ -438,7 +415,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * to remember to call it. Recording at the call sites instead is how a recent list ends up missing
      * the paths opened by the palette, by a problem row, or by a session restore.</p>
      */
-    final RecentFiles recentFiles = new RecentFiles();
+    public final RecentFiles recentFiles = new RecentFiles();
 
     /**
      * The line along the bottom — Parts step 6.
@@ -1175,7 +1152,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     private final List<Disposable> activeExtensions = new ArrayList<>();
 
     /** One recursive watch per project root, keyed by the root it covers. @see #watchProjectRoots */
-    final Map<CgPath, RootWatch> rootWatches = new HashMap<>();
+    public final Map<CgPath, RootWatch> rootWatches = new HashMap<>();
 
     /**
      * Lets go of everything: the listeners, the watches, the registry entry, and the open tabs.
@@ -1226,11 +1203,11 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * resource, so disposing it only unwatches when the last holder lets go — and until then this
      * workbench's listener would go on being called on a signal it no longer has any business reading.</p>
      */
-    static final class RootWatch implements Disposable {
+    public static final class RootWatch implements Disposable {
         private final Workspace.Watch watch;
         private final Connection listener;
 
-        RootWatch(Workspace.Watch watch, Connection listener) {
+ public RootWatch(Workspace.Watch watch, Connection listener) {
             this.watch = watch;
             this.listener = listener;
         }
@@ -1435,7 +1412,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * against the {@code DockPanelDescriptor} registry that defined it, and that registry belongs to this
      * workbench. A global map would let one window bind a type the other cannot build.</p>
      */
-    final FilePatternMap<String> editorBindings = new FilePatternMap<>();
+    public final FilePatternMap<String> editorBindings = new FilePatternMap<>();
 
 
     /** As {@link #bindEditorExtensions}, for files identified by their whole name — {@code Dockerfile}. */
@@ -1468,7 +1445,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
 
 
 
-    void runWhenReady(EditorService.Tab tab, @Nullable Runnable then) {
+    public void runWhenReady(EditorService.Tab tab, @Nullable Runnable then) {
         if (then == null) return;
         editors.activate(tab);
         then.run();
@@ -1783,10 +1760,10 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     };
 
     /** Files that moved on the server under a DIRTY buffer, so the tab can say so. @see #externalChange */
-    final Set<CgPath> externallyChanged = new LinkedHashSet<>();
+    public final Set<CgPath> externallyChanged = new LinkedHashSet<>();
 
     /** Files deleted on the server while still open here. @see #externalChange */
-    final Set<CgPath> externallyDeleted = new LinkedHashSet<>();
+    public final Set<CgPath> externallyDeleted = new LinkedHashSet<>();
 
 
 
@@ -1867,7 +1844,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * The alternative was to interrogate the element on screen, which cannot survive a banner wrapping
      * it and would rebuild the editor on every keystroke the moment one did.</p>
      */
-    final Map<DockPanelRef, DocumentState> placeholders = new HashMap<>();
+    public final Map<DockPanelRef, DocumentState> placeholders = new HashMap<>();
 
 
 
@@ -2053,11 +2030,11 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * without a settings store behaves like one built with the shipped defaults — a default stated in two
      * places that disagree is worse than either.</p>
      */
-    boolean autoReveal = false;
+    public boolean autoReveal = false;
 
 
     @Nullable
-    CgPath revealed;
+    public CgPath revealed;
 
 
 
@@ -2127,7 +2104,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * <p>An instance rather than a static for the reason on {@link Markers}: the index holds a listener on
      * every set in it, so a process-wide one can never let a document go.</p>
      */
-    final Markers markers = new Markers();
+    public final Markers markers = new Markers();
 
     /** @see #markers */
     public Markers markers() {
@@ -2150,10 +2127,10 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     private final ConnectionGroup capabilityWatch = new ConnectionGroup();
 
     @Nullable
-    StatusBarEntryAccessor problemCountEntry;
+    public StatusBarEntryAccessor problemCountEntry;
 
     /** Ahead of the shader graph's own readouts, which are about one document. */
-    static final int PROBLEM_COUNT_PRIORITY = 200;
+    public static final int PROBLEM_COUNT_PRIORITY = 200;
 
 
 
@@ -2161,9 +2138,9 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
 
 
     /** Right of the problem count and left of anything a document contributes. */
-    static final int PRESENCE_PRIORITY = 50;
+    public static final int PRESENCE_PRIORITY = 50;
 
     @Nullable
-    StatusBarEntryAccessor presenceEntry;
+    public StatusBarEntryAccessor presenceEntry;
 
 }

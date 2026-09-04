@@ -1,4 +1,4 @@
-package com.crystalgui.workbench;
+package com.crystalgui.workbench.editor;
 
 import com.crystalgui.document.BytesDocumentModel;
 import com.crystalgui.document.DocumentKind;
@@ -9,9 +9,8 @@ import com.crystalgui.text.fold.FoldingRangeProvider;
 import com.crystalgui.text.syntax.DocComments;
 import com.crystalgui.text.syntax.LanguageRegistry;
 import com.crystalgui.widget.texteditor.TextEditor;
-import com.crystalgui.workbench.editor.BinaryFileView;
-import com.crystalgui.workbench.editor.EditorService;
-import com.crystalgui.workbench.editor.TextEditorView;
+import com.crystalgui.workbench.Workbench;
+import com.crystalgui.workbench.WorkbenchSettings;
 
 /**
  * The fallback file type — every text file, and every resource in a registered scheme.
@@ -24,13 +23,13 @@ import com.crystalgui.workbench.editor.TextEditorView;
  * <p>A decompiled class opens through this too, which is what makes a separate viewer lane
  * unnecessary rather than merely shorter. @see com.crystalgui.workbench.editor.EditorService</p>
  */
-final class TextFileKind {
+public final class TextFileKind {
 
     private TextFileKind() {
     }
 
     /** The kind, bound to one workbench — its editors ask that workbench's settings and workspace. */
-    static DocumentKind declare(Workbench workbench) {
+    public static DocumentKind declare(Workbench workbench) {
         // THE FALLBACK KIND: every text file, and every resource in a registered scheme. A decompiled
         // class opens through this one too, which is what makes the viewer lane unnecessary rather than
         // merely shorter -- see EditorService.

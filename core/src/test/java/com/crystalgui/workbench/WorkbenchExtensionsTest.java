@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
+import com.crystalgui.workbench.extension.WorkbenchExtension;
+import com.crystalgui.workbench.extension.WorkbenchExtensions;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
