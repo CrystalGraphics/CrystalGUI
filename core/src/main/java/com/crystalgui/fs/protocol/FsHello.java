@@ -30,6 +30,18 @@ import java.util.Locale;
  *
  * <p>Modelled on HTTP/2's {@code SETTINGS}, which the wire's own multiplexer already speaks: the peer
  * states its parameters once, up front, rather than each side probing for them.</p>
+ *
+ * <h3>{@code workspaceId} — which workspace this is, said once</h3>
+ *
+ * <p>A stable name for the set of projects this server serves, derived once and persisted beside the
+ * root, so it survives a rename of the directory the way a project id survives a move. It is what a
+ * client's per-workspace records are keyed by — an application's session arrangement, chiefly — and
+ * before it existed every client keyed those on a constant it held for the one project it knew about,
+ * which is why rejoining a different world read the previous one's layout.</p>
+ *
+ * <p>Empty from a server that has never heard of the field, which is an ordinary answer: a client falls
+ * back to a hash of the sorted project ids it was listed, VS Code's multi-root workspace id computed
+ * the same way for the same reason.</p>
  */
 public record FsHello(int protocolVersion,
                       boolean caseSensitive,
@@ -37,7 +49,19 @@ public record FsHello(int protocolVersion,
                       int maxNameLength,
                       long servicesTierBytes,
                       long readOnlyTierBytes,
-                      long maxFileBytes) {
+                      long maxFileBytes,
+                      String workspaceId) {
+
+    /**
+     * A compact record with no identity — what a client assumes before a server has answered, and what
+     * an older server's greeting decodes to.
+     */
+    public FsHello(int protocolVersion, boolean caseSensitive, List<String> reservedNames,
+                   int maxNameLength, long servicesTierBytes, long readOnlyTierBytes,
+                   long maxFileBytes) {
+        this(protocolVersion, caseSensitive, reservedNames, maxNameLength, servicesTierBytes,
+                readOnlyTierBytes, maxFileBytes, "");
+    }
 
     /**
      * Bumped only for a change a client that has not been rebuilt cannot survive.
@@ -133,6 +157,7 @@ public record FsHello(int protocolVersion,
                     .optional("readOnlyTier", Codecs.LONG, value.readOnlyTierBytes(),
                             DEFAULT_READ_ONLY_TIER)
                     .optional("maxFile", Codecs.LONG, value.maxFileBytes(), 0L)
+                    .optional("workspaceId", Codecs.STRING, value.workspaceId(), "")
                     .build();
         }
 
@@ -146,7 +171,8 @@ public record FsHello(int protocolVersion,
                     in.optional("maxName", Codecs.INT, 255),
                     in.optional("servicesTier", Codecs.LONG, DEFAULT_SERVICES_TIER),
                     in.optional("readOnlyTier", Codecs.LONG, DEFAULT_READ_ONLY_TIER),
-                    in.optional("maxFile", Codecs.LONG, 100L * 1024 * 1024));
+                    in.optional("maxFile", Codecs.LONG, 100L * 1024 * 1024),
+                    in.optional("workspaceId", Codecs.STRING, ""));
         }
     };
 }

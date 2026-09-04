@@ -1,5 +1,8 @@
 package com.crystalgui.desktop.window;
 
+import com.crystalgui.desktop.app.ApplicationKind;
+import java.util.Map;
+import java.util.LinkedHashMap;
 import com.crystalgui.core.signal.Signal;
 
 import com.crystalgui.core.window.WindowState;
@@ -97,7 +100,33 @@ public final class WindowRegistry {
      * questions, and each caller asks the one it means.</p>
      */
     public List<WindowFrame> taskbarOrder() {
-        return withoutToolWindows(live);
+        return groupedByApplication(withoutToolWindows(live));
+    }
+
+    /**
+     * Open order, with every window of one application kept together.
+     *
+     * <p>What a taskbar does everywhere: Windows groups by {@code AppUserModelID}, GNOME and macOS by
+     * application outright. Without it, opening a second window of one product drops its entry wherever
+     * the clock happened to put it and the strip stops reading as a list of applications.</p>
+     *
+     * <p><b>Stable, and by FIRST appearance</b> — an application keeps the position its earliest window
+     * gave it, and its windows keep their order within the group. A grouping that re-sorted by anything
+     * else would move entries under the pointer whenever a window opened somewhere else in the strip,
+     * which is the one thing a taskbar must never do. Windows with no application declared are
+     * untouched: they group under the null key and stay where they were.</p>
+     */
+    private static List<WindowFrame> groupedByApplication(List<WindowFrame> from) {
+        // Keyed by the application ID rather than the manifest, so two desktops that installed the same
+        // kind object and one that did not still group identically -- an id is what the field MEANS.
+        Map<String, List<WindowFrame>> groups = new LinkedHashMap<>();
+        for (WindowFrame frame : from) {
+            ApplicationKind kind = frame.application();
+            groups.computeIfAbsent(kind == null ? "" : kind.id(), key -> new ArrayList<>()).add(frame);
+        }
+        List<WindowFrame> out = new ArrayList<>(from.size());
+        for (List<WindowFrame> group : groups.values()) out.addAll(group);
+        return out;
     }
 
     /** Most-recently-activated first, without tool windows — what the switcher offers. @see #taskbarOrder() */
@@ -205,6 +234,12 @@ public final class WindowRegistry {
             // while nobody is looking. It stays over the cap, which is the honest outcome: the cap is a
             // budget, not a promise.
             if (!frame.canDiscard()) continue;
+            // AND AN APPLICATION'S MAIN WINDOW IS NOT A CACHE ENTRY (D17). A hidden one is the product
+            // running in the background -- every document, the arrangement and the undo history intact,
+            // with its taskbar entry the way back -- so evicting it would QUIT an application nobody
+            // asked to quit, silently, because seven other windows happened to be hidden. Quitting is
+            // `Application.dispose()`: recorded, never inferred from a cap.
+            if (frame.isApplicationMain()) continue;
             // MARKED, so anything listening can tell this from a close somebody asked for. Both end in
             // destroy(); only the flag separates "the cap ran out" from "the user decided".
             frame.markEvicting();

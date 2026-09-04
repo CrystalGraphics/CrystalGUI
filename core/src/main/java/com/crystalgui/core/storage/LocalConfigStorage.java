@@ -56,6 +56,16 @@ public final class LocalConfigStorage implements ConfigStorage {
         return directory;
     }
 
+    /**
+     * A real subdirectory, not a key prefix — so {@link #directory()} keeps answering somewhere a
+     * compiler can write, and an application's files are visibly its own on disk.
+     */
+    @Override
+    public ConfigStorage scoped(String scope) {
+        if (scope == null || scope.isEmpty()) return this;
+        return new LocalConfigStorage(directory.resolve(scope.replace(':', '.').replace('/', '.')));
+    }
+
     @Nullable
     @Override
     public String read(String name) {

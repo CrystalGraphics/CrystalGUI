@@ -1,575 +1,112 @@
 package com.crystalgui.app.crystaleditor;
 
-import com.crystalgui.workbench.toolwindow.ToolWindowKind;
-import com.crystalgui.core.data.DataProvider;
+import java.util.List;
+
 import com.crystalgui.core.dispose.Disposable;
-import com.crystalgui.core.signal.ConnectionGroup;
-import com.crystalgui.core.notify.Notification;
-import com.crystalgui.core.notify.NotificationEvent;
-import com.crystalgui.core.notify.Notifications;
-import com.crystalgui.core.notify.StatusBar;
-import com.crystalgui.core.signal.Signal;
-import com.crystalgui.fs.client.Workspace;
-import com.crystalgui.app.shadergraph.ShaderGraphContribution;
-import com.crystalgui.core.settings.Settings;
-import com.crystalgui.core.settings.SettingsCodec;
-import com.crystalgui.core.settings.SettingsLayer;
-import com.crystalgui.core.settings.SettingsModel;
-import com.crystalgui.core.storage.ConfigStorage;
-import com.crystalgui.serialization.DynamicOps;
-import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.workbench.WorkbenchSession;
-import com.crystalgui.workbench.WorkbenchSettings;
-import com.crystalgui.widget.config.inspector.Inspector;
-import com.crystalgui.widget.config.inspector.InspectorRegistry;
-import com.crystalgui.ui.data.UiDataKeys;
-import com.crystalgui.desktop.window.WindowChrome;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.workbench.chrome.menu.ChromeCommands;
-import com.crystalgui.workbench.dock.DockGroup;
-import com.crystalgui.workbench.dock.layout.DockLayout;
-import com.crystalgui.workbench.dock.layout.DockLayoutCodec;
-import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
-import com.crystalgui.workbench.region.DockRegion;
-import com.crystalgui.document.DocumentEditor;
-import com.crystalgui.workbench.editor.EditorService;
-import com.crystalgui.workbench.Workbench;
-import com.crystalgui.ui.input.FocusPolicy;
-
-import javax.annotation.Nullable;
-
-import com.crystalgui.core.data.DataKey;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.window.WindowPolicy;
+import com.crystalgui.desktop.app.ApplicationKind;
+import com.crystalgui.desktop.app.ApplicationRegistry;
+import com.crystalgui.document.DocumentKind;
+import com.crystalgui.example.notes.NotesKind;
+import com.crystalgui.app.shadergraph.ShaderGraphExtension;
+import com.crystalgui.workbench.WorkbenchApplication;
+import com.crystalgui.workbench.WorkbenchExtensions;
+import com.crystalgui.workbench.extension.InspectorExtension;
 
 /**
- * The editor — the whole application, as one element.
+ * <b>The editor — as a manifest.</b>
  *
- * <p>A {@link Workbench} is the <em>shell</em>: a dock, a file tree, editors, a Problems panel. This is
- * the <b>product</b> built on it — which panels exist, what the default arrangement is, which commands
- * the application answers to, and where focus starts. A host supplies a {@link Workspace} and a
- * window; everything else is decided here.</p>
+ * <p>Which is all a product is once there is an engine underneath it: an id, a name, an icon, the files
+ * it opens, and the list of features it enables. Everything that used to be here — the workbench, the
+ * window, the preferences, the session, the status line, the initial focus, the menu bar in the caption
+ * — is {@link WorkbenchApplication}, and every one of those was shared behaviour that happened to live
+ * in one product because there was only one.</p>
  *
- * <h3>Why this is not a harness scene</h3>
+ * <p>The measure of it: <b>a second application on this desktop is a second constant in a file like this
+ * one.</b> A graph-only product names {@code shadergraph} and {@code inspector} and stops; a notes
+ * product names {@code notes}. Neither is a class, neither is a second dock, and neither has to be
+ * remembered by a host.</p>
  *
- * <p>Because it was one, and that meant the only assembled editor in the project lived in a debug tool.
- * Every line of it is application behaviour: that {@code Ctrl+S} writes the active file and the layout
- * lives on {@code Ctrl+Shift+S}, that the shader graph opens in the work area, that an application decides
- * where focus starts. None of it demonstrates anything. What a scene legitimately keeps is the
- * <b>fake half</b> — a workspace client backed by something other than a real server — plus whatever
- * diagnostics that scene wants to draw on top.</p>
+ * <h3>What is still a decision here, and it is three things</h3>
  *
- * <h3>Keys are commands, not key handling</h3>
+ * <ol>
+ *   <li>which extensions are on — {@link #EXTENSIONS};</li>
+ *   <li>what the window is called, keyed and what closing it means — a workbench is not a dialog, so
+ *       {@link WindowPolicy#HIDE_ON_CLOSE}: every document, the arrangement and the undo history survive
+ *       it, and the taskbar entry is how it comes back;</li>
+ *   <li>which files it declares itself the handler for, so "open with" can answer with nothing
+ *       running.</li>
+ * </ol>
  *
- * <p>The scene used to intercept raw key codes. Everything here is a registered {@link
- * com.crystalgui.core.command.Command} instead, which means each one is rebindable, shows up in the
- * palette with its accelerator, and can be greyed when it does not apply — none of which a
- * {@code switch} on a scan code can offer. See {@link CrystalEditorCommands}.</p>
+ * <h3>One instance</h3>
+ *
+ * <p>{@link ApplicationKind#singleInstance()}, because a workbench's whole promise is that closing it
+ * keeps everything — a second one would be a second dock over the same documents and the same session
+ * record. A second launch activates the one that is running and hands it whatever file it was carrying,
+ * exactly as a second {@code open} on macOS does.</p>
  */
-public class CrystalEditor extends UIElement implements Disposable, WindowChrome, DataProvider {
-    /** The application shell. `ua/workbench.css` names the tag. */
-    public static final Name NAME = Name.of("crystaleditor");
+public final class CrystalEditor {
 
+    private CrystalEditor() {
+    }
+
+    public static final String ID = "crystalgui:editor";
+
+    /** {@code language/}'s, contributed by {@code LanguageStack} and absent where there is no band. */
+    public static final String SCRIPTING = "crystalgui:scripting";
+
+    /** What this product turns on. Ids, resolved against {@link WorkbenchExtensions} at launch. */
+    public static final List<String> EXTENSIONS = List.of(
+            InspectorExtension.ID,
+            ShaderGraphExtension.ID,
+            NotesKind.ID,
+            // LISTED ON EVERY HOST, present on some. An id nothing contributed is a logged absence, not
+            // an error -- which is what lets scripting be named here and be simply absent on a host with
+            // no engine band, the same three-tier degradation the language stack already follows.
+            SCRIPTING);
+
+    /** The manifest. Data: a launcher lists it, a search matches it, "open with" reads it. */
+    public static final ApplicationKind KIND = ApplicationKind.of(ID, "Crystal Editor")
+            .icon("crystalgui:logo")
+            .category("Development")
+            .keywords("code", "editor", "ide", "files", "shader", "graph")
+            // WHAT IT DECLARES ITSELF THE HANDLER FOR. Answerable with nothing running, which is the
+            // requirement: "open with" is asked of an application that may never have been launched, so
+            // it cannot be derived by building one and asking its workbench which kinds it registered.
+            .opens(DocumentKind.FilePatterns.extension("shadergraph"),
+                    DocumentKind.FilePatterns.extension("java"),
+                    DocumentKind.FilePatterns.extension("js"),
+                    DocumentKind.FilePatterns.extension("json"),
+                    DocumentKind.FilePatterns.extension("md"),
+                    DocumentKind.FilePatterns.extension("txt"),
+                    DocumentKind.FilePatterns.extension("shader"),
+                    DocumentKind.FilePatterns.extension("glsl"),
+                    DocumentKind.FilePatterns.extension("css"),
+                    DocumentKind.FilePatterns.extension("notes"))
+            .singleInstance()
+            .launch(context -> WorkbenchApplication.of(context)
+                    .with(EXTENSIONS)
+                    .title("Crystal Editor")
+                    .key("editor:main")
+                    .policy(WindowPolicy.HIDE_ON_CLOSE)
+                    .start());
 
     /**
-     * The inspector tool window.
+     * Makes the editor available on a desktop, and contributes what only this layer can name.
      *
-     * <p>A general one — see {@link Inspector}. It knows no types; a package makes something inspectable
-     * by registering an {@code InspectorSection}, which is why this class no longer names a graph.</p>
+     * <p>Two registries, because they answer different questions and have different lifetimes: an
+     * <em>extension</em> is contributed process-wide (this host has the feature), an
+     * <em>application</em> is installed per desktop (this shell offers the product). Contributing is
+     * idempotent — a second call is warned about and ignored — so a host may say this whenever it is
+     * ready without tracking whether it already has.</p>
+     *
+     * @return a handle that takes the editor off that desktop's launcher
      */
-    public static final String INSPECTOR_TYPE = "inspector";
-
-    /** How much of the work area the emitted source takes when it is first opened. */
-    private static final float SOURCE_SHARE = 0.28f;
-
-    /**
-     * Whatever a status line should say — <b>composed here, announced elsewhere</b>.
-     *
-     * <p>No longer a sink anything writes into. Events go to {@link Notifications} and ambient text to
-     * {@link StatusBar}, and this editor subscribes to both and flattens them into the one string a host
-     * can bind. That is the split those two exist for: a contribution announces without knowing whether
-     * anyone is listening, and where the result is drawn stays this application's decision.</p>
-     *
-     * <p>Kept as a {@code Signal.Value<String>} because a host wants one line, not a channel per kind —
-     * the harness scene binds exactly this.</p>
-     */
-    public final Signal.Value<String> onStatus = new Signal.Value<>();
-
-    private final Workbench workbench;
-
-    /** Marked internal exactly ONCE, while empty. {@code markAsInternal()} RECURSES, and stamping a
-     * populated subtree makes {@code removeChild} silently refuse everything below it. */
-    private final UIElement content = new UIElement();
-
-    /**
-     * The one inspector — general, and pointed at whatever is selected.
-     *
-     * <p>Built eagerly: the dock caches a panel factory's result permanently, so returning a placeholder
-     * while waiting for something hands back the panel for the rest of the session.</p>
-     */
-    private final Inspector inspector = new Inspector();
-    
-
-    /** The last {@link #saveLayout} result, so {@link #restoreLayout()} has something to restore. */
-    @Nullable
-    private Object savedLayout;
-
-    private boolean focusGiven;
-
-    /**
-     * This editor, for a command that acts on one.
-     *
-     * <p>What let {@code CrystalEditorCommands} stop capturing an editor and a window, and with them the
-     * last reason {@code install(window)} existed.</p>
-     */
-    public static final DataKey<CrystalEditor> CRYSTAL_EDITOR =
-            DataKey.create("crystalEditor.new", CrystalEditor.class);
-
-    @Override
-    public Object getData(DataKey<?> key) {
-        if (key == CRYSTAL_EDITOR) return this;
-        // THE STORE PREFERENCES ARE WRITTEN TO, which is this element's and not the window root's.
-        //
-        // `loadPreferences` reads the user layer into this store, `savePreferences` writes that layer
-        // back out, and `WorkbenchSettings.install` subscribes to its `onChanged` -- so this is the one
-        // store a preference has to land in to be heard, applied, or kept. @see UiDataKeys#SETTINGS_HOST
-        if (key == UiDataKeys.SETTINGS_HOST) return settingsHost();
-        return null;
+    public static Disposable install(ApplicationRegistry applications) {
+        // CONTRIBUTED HERE because `workbench/` cannot name `app/` -- it is a layer below it, which is
+        // exactly the rule that stops the engine knowing about its products. `WorkbenchExtensions`
+        // bootstraps what ships in `core/` and has no way to reach the shader graph.
+        WorkbenchExtensions.contribute(new ShaderGraphExtension());
+        return applications.install(KIND);
     }
-
-    /** Names this editor at the window level too — {@code Mod+S} is pressed with nothing focused as often
-     * as not. Same reason {@code Workbench} does it; see {@code DataContext}. */
-    @Override
-    protected void connected() {
-        super.connected();
-        UIDocument document = document();
-        if (document == null) return;
-        document.addDataProvider(this);
-        // AND THE APPEARANCE AXES, REPLAYED NOW THAT THERE IS A DOCUMENT TO INSTALL THEM ON.
-        //
-        // `WorkbenchSettings.apply` installs the theme and the editor colour scheme through
-        // `UiThemeManager.installInto(document.styles())`, and it reads `workbench.document()` to find
-        // the engine -- but `install` is called from `loadPreferences`, which a host runs while
-        // building the editor, long before it is added to anything. So the document was null, the
-        // install was silently skipped, and nothing ever asked again: the tree carried the user-agent
-        // sheet and nothing else.
-        //
-        // What that looks like is not a missing theme. Every syntax capture resolves through a
-        // `::highlight()` rule in the SCHEME, so with no scheme sheet installed `keyword`, `type`,
-        // `string` and the rest all resolve to an empty HighlightStyle -- and the editor draws
-        // correctly tokenised code in one flat colour. It reads as the language stack being absent,
-        // which is why it was reported that way, and the services were attached the whole time.
-        //
-        // Idempotent by contract ("safe to call as often as you like"), and the manager's own same-id
-        // guard makes the theme and scheme a no-op when they have not moved. Same shape as the
-        // deferred answer a session restore needs: asked once too early, replayed on arrival.
-        WorkbenchSettings.apply(workbench);
-    }
-
-    /**
-     * <p>OFF SCREEN IS THE MOMENT TO WRITE, and the editor is what knows it — not the host. A screen
-     * closing detaches the compositor, which detaches everything on it, so this fires without any
-     * platform having to remember. The old engine had one hook for both ends and this engine has two,
-     * which makes what each is FOR readable: the save belongs to LEAVING.</p>
-     */
-    @Override
-    protected void disconnected() {
-        UIDocument leaving = document();
-        if (leaving != null) {
-            saveState(leaving);
-            leaving.removeDataProvider(this);
-        }
-        super.disconnected();
-    }
-
-    /**
-     * Writes everything this editor is responsible for keeping — its session and its preferences.
-     *
-     * <p><b>A host says where the config lives and nothing else.</b> Both platforms used to call
-     * {@code saveSession} and {@code savePreferences} themselves, with the project id and the viewport
-     * size passed back in — two copies of one policy, in two files nobody reads together, each free to
-     * forget a half. The editor knows the id (it was handed one to restore from) and knows its own
-     * window, so it knows both without being told.</p>
-     *
-     * <p>Silently does nothing before {@link #restoreSession} has named a project: there is no record to
-     * write yet, and inventing an id to write one under is worse than not writing.</p>
-     */
-    public void saveState() {
-        saveState(document());
-    }
-
-    private void saveState(@Nullable UIDocument window) {
-        if (sessionProjectId == null || window == null) return;
-        Box surface = window.box();
-        if (surface == null) return;
-        saveSession(sessionProjectId, (int) surface.width(), (int) surface.height());
-        savePreferences();
-    }
-
-    /** Which project's session this editor is holding. @see #saveState */
-    @Nullable
-    private String sessionProjectId;
-
-    /**
-     * The application's own verbs — saving, layout, and the command palette.
-     *
-     * <p>These are the <em>product's</em> offerings rather than a widget's, which is why they sit on the
-     * shell element and not on a generic one. They are still per class and context-resolved like every
-     * other set; nothing here is registered per window any more.</p>
-     */
-    @Override
-    protected void registerCommands(CommandRegistry registry) {
-        CrystalEditorCommands.register();
-        ChromeCommands.register();
-    }
-
-    /**
-     * What this editor subscribed to while it was being built.
-     *
-     * <p>Three of the six are on process-wide statics ({@code Notifications}, {@code StatusBar},
-     * {@code InspectorRegistry}) and every one of those closures captures {@code this}, so an editor
-     * that dropped them stayed reachable for the life of the process — with its workbench, its dock,
-     * its documents and its tabs behind it.</p>
-     */
-    private final ConnectionGroup lifetime = new ConnectionGroup();
-
-    /** What {@link ShaderGraphContribution} registered outside the workbench. @see #dispose() */
-    private final Disposable shaderGraph;
-
-    /** The Inspector's registration, withdrawn with this editor. @see #dispose() */
-    private final Disposable inspectorPanel;
-
-    public CrystalEditor(Workspace workspace) {
-        super(NAME);
-        setFocusPolicy(FocusPolicy.NONE);
-        workbench = new Workbench(workspace);
-        // BOTH CHANNELS INTO ONE LINE. A notification is an event and wins the line when it arrives; the
-        // ambient text is what is left showing between them. Flattening is this application's choice --
-        // a host with room for a toast area would connect them separately instead.
-        lifetime.add(Notifications.onDidChange.connect(event -> {
-            if (event.kind() == NotificationEvent.Kind.ADDED && event.notification() != null) {
-                onStatus.emit(event.notification().getMessage());
-            }
-        }));
-        // READ ON DEMAND, never carried by the signal: composing the line walks every entry, and the caret
-        // readout writes on every selection change.
-        lifetime.add(workbench.statusBar().onDidChange.connect(() -> {
-            String text = workbench.statusBar().text();
-            if (!text.isEmpty()) onStatus.emit(text);
-        }));
-        // The inspector and the generated source follow the front tab. Was a per-frame poll; the dock
-        // announces it now. Subscribed here rather than on attach because the dock exists as soon as the
-        // workbench does, and this editor owns the workbench -- there is nothing to wait for and nothing
-        // that can outlive it.
-        lifetime.add(workbench.dock().onDidChangeActivePanel.connect(panel -> refreshInspector()));
-        // AND WHEN A DOCUMENT LANDS. The active PANEL is announced as soon as the dock has built its
-        // tree, which can be before the document behind it exists -- activeDocument() reads the open-file
-        // store, and a restored tab's content arrives over the network some frames later. Following only
-        // the panel therefore leaves the inspector empty at startup until something else moves, which is
-        // exactly what "I have to click something first" is.
-        lifetime.add(workbench.onDidOpenDocument.connect(path -> refreshInspector()));
-        // AND ON ANY ANNOUNCED CHANGE. The two above say "a different panel is in front" and "a document
-        // arrived"; this says "what is being looked at has moved", which is the one a selection produces.
-        // Re-resolving the active document here rather than only re-reading the old one is what makes the
-        // panel fill at startup, where the first announcement can arrive before the dock has settled on
-        // an active tab.
-        lifetime.add(InspectorRegistry.onDidChangeSubject.connect(this::refreshInspector));
-        // A restore waits on listings, which arrive over several frames -- a folder cannot be expanded
-        // before the listing revealing it lands. Retried per LISTING rather than per frame: fewer
-        // attempts, and every one of them at a moment when the answer may actually have changed.
-        lifetime.add(workbench.fileTree().source().onDidLoadListing().connect(directory -> {
-            if (session != null) session.tick();
-        }));
-
-        // ONE CALL, NAMING ONE PACKAGE. Which extension opens as a graph, how to build one, what its
-        // generated source is and what it tells the inspector are all that package's statements about
-        // itself -- see ShaderGraphContribution. This class chooses which contributions to enable, which
-        // is the only decision about file types an application should be making.
-        shaderGraph = ShaderGraphContribution.register(workbench);
-
-        // BESIDE the canvas, not in its strip. A tab in the same group would hide the graph, and the whole
-        // point of the emitted source is watching it change as you wire -- a panel you have to switch away
-        // from the graph to read is a panel that is never read.
-        //
-        // ONE DECLARATION, which is the whole of what this application says about the panel: where it
-        // goes, what builds it, and that it is open on a fresh workspace. The registration, the factory
-        // and the showPanel that used to follow were three statements about one panel.
-        //
-        // The inspector IS the panel content and exists from the start. No wrapper -- the one that used
-        // to sit between it and the dock existed only to be swapped into -- and no placeholder, which
-        // the dock would have cached in its place for ever.
-        inspectorPanel = workbench.registerToolWindow(
-                ToolWindowKind.of(INSPECTOR_TYPE, "Inspector")
-                        .icon("crystalgui:package")
-                        .region(DockRegion.AUXILIARY)
-                        .view(ctx -> inspector)
-                        .openByDefault());
-        // The Inspector opens with the workbench (openByDefault above); the generated source does not.
-        // It is a document opened on demand by showCompiled(), so putting one in the default layout
-        // would mean a tab for a graph nobody has opened yet.
-
-        content.addClass(CONTENT_CLASS);
-        append(content);
-        content.append(workbench);
-    }
-
-    /** UNIQUE, never the shared {@code "__content__"} — {@code CanvasView} uses that name for its
-     * transformed world plane, so a descendant rule naming it also styles every graph plane below. */
-    public static final String CONTENT_CLASS = "__editor-content__";
-
-    /**
-     * The main menu bar — offered to whatever window this editor is put in.
-     *
-     * <p>Client-side decorations: an editor inside a {@code WindowFrame} would otherwise have two
-     * headers stacked on each other, the window's caption and its own menu row, one of them nearly
-     * empty. The bar is <b>moved</b> into the caption rather than duplicated or hidden, so there is
-     * still exactly one of it — see {@link WindowChrome}, which also names the four toolkits that
-     * arrive at this arrangement.</p>
-     *
-     * <p>An editor that is nobody's window content is untouched: nothing asks, and the bar stays where
-     * the workbench put it.</p>
-     */
-    @Override
-    @Nullable
-    public UIElement captionChrome() {
-        return workbench().menuBar();
-    }
-
-    public Workbench workbench() {
-        return workbench;
-    }
-
-    public Inspector inspector() {
-        return inspector;
-    }
-
-    /**
-     * Rebuilds the inspector from whatever is in front.
-     *
-     * <h3>A SEED, not the policy</h3>
-     *
-     * <p>The subject is the <b>focus owner</b>, and the {@link Inspector} resolves that itself — latching
-     * it, ignoring focus that lands inside itself, and keeping the last describable one. None of that is
-     * an application decision, and while it lived here it was expressed as "the active document's view",
-     * which capped the inspectable set to documents: a section describing a file-tree row or a timeline
-     * key could register successfully and never once be asked.</p>
-     *
-     * <p>What remains is genuinely a seed. A restored tab exists before anything has been focused — there
-     * is no focus owner to derive a subject from, and nothing will move until the user clicks — so the
-     * workbench states what it just opened. Focus supersedes it the moment there is one.</p>
-     */
-    private void refreshInspector() {
-        EditorService.Tab active = workbench.editors().active();
-        DocumentEditor view = active == null ? null : active.editor();
-        if (view != null) inspector.inspect(view.view());
-    }
-
-
-
-    /**
-     * Makes {@code wanted} the host's child, doing nothing when it already is.
-     *
-     * <h3>Asks about PARENTAGE, not about the child list</h3>
-     *
-     * <p>This read {@code children.size() == 1 && children.get(0) == wanted}, and that threw
-     * {@code "Cannot add the same child twice"} — because {@code clearAllChildren()} <b>silently refuses
-     * internal children</b>, so a host whose subtree had been stamped by a {@code markAsInternal()}
-     * somewhere above it kept its child through the clear and then rejected the add. The list said one
-     * thing and the tree another.</p>
-     *
-     * <p>Parentage cannot disagree with itself. It is also the question actually being asked: "is the host
-     * already showing this?" — and the size check was answering a stricter one that happens to coincide
-     * most of the time, which is the worst kind of check.</p>
-     */
-
-    // install(UIDocument) is gone, and nothing replaced it.
-    //
-    // Every command set in the application now arrives with the element that owns it -- DockArea the
-    // dock's, GraphView the graph's, TextEditor the editor's, Workbench the explorer's, and this class
-    // its own -- each through UIElement.registerCommands, once per class. Their chords are either
-    // declared on the commands (application-wide) or bound in bindKeys on the element that scopes them.
-    // Constructing the editor is what wires it; there is nothing for a host to remember.
-
-    // ── Persistence ─────────────────────────────────────────────────────────────────────────────
-
-    /**
-     * Where preferences and session records go. Null until {@link #useConfig} is called, and everything
-     * below is then a no-op — an editor with nowhere to save is a valid one, and is what a test is.
-     */
-    @Nullable
-    private ConfigStorage storage;
-
-    @Nullable
-    private WorkbenchSession session;
-
-    /**
-     * Gives the editor somewhere to keep the user's preferences and its session records, and loads the
-     * preferences immediately.
-     *
-     * <p>Loading here rather than at first paint because the values decide how things are built:
-     * {@code editor.tabSize} is read when a document is created, so arriving late would apply it to every
-     * file except the ones already open.</p>
-     */
-    public CrystalEditor useConfig(ConfigStorage storage) {
-        this.storage = storage;
-        // AND THE ENGINE'S HALF OF IT. An extension asks the workbench for a cache directory -- the
-        // scripting one wants somewhere to put compiled output -- and the workbench has nowhere to get
-        // one unless the application that owns the store hands it over.
-        workbench.useConfig(storage);
-        this.session = new WorkbenchSession(workbench, storage);
-        // AND THE WORKSPACE'S OWN CLIENT-LOCAL STORE, which nothing supplied. `Workspace.setStorage`
-        // is what gives it a Backup and a LocalHistory, and without it both accessors answer null on
-        // every host: unsaved work was never written anywhere, and the conflict dialog's three-way
-        // merge had no common ancestor to merge against. The host is the only thing that knows where
-        // this client's own writable data lives, and this is where it says so.
-        workbench.workspace().setStorage(storage);
-        loadPreferences();
-        return this;
-    }
-
-    @Nullable
-    public WorkbenchSession session() {
-        return session;
-    }
-
-    /** The user layer, read into the ROOT scope so it applies to every panel. @see WorkbenchSettings */
-    public void loadPreferences() {
-        if (storage == null) return;
-        SettingsModel loaded = SettingsCodec.fromJson(storage.read(USER_SETTINGS_FILE));
-        settingsHost().replaceLayer(SettingsLayer.USER, loaded.asMap());
-        WorkbenchSettings.install(workbench, settingsHost());
-        // Written on change rather than only at shutdown. A preferences window that applies immediately
-        // and saves only on a clean exit loses everything to a crash -- and the file is a few hundred
-        // bytes, so there is nothing to batch. VS Code writes settings.json the same way.
-        settingsHost().onChanged.connect(change -> {
-            if (change.layer() == SettingsLayer.USER) savePreferences();
-        });
-    }
-
-    public void savePreferences() {
-        if (storage == null || !storage.isWritable()) return;
-        storage.write(USER_SETTINGS_FILE,
-                SettingsCodec.toJson(settingsHost().layer(SettingsLayer.USER)));
-    }
-
-    /**
-     * The scope preferences live in: this element, which is the outermost thing every panel resolves
-     * through.
-     *
-     * <p>Not the workbench's own store. Settings resolve <em>outward</em>, so a value written on the
-     * workbench would be invisible to anything outside it, and a value written here reaches everything —
-     * which is what "a preference" means.</p>
-     */
-    public Settings settingsHost() {
-        return settings();
-    }
-
-    public static final String USER_SETTINGS_FILE = "settings.json";
-
-    /** Restores the last session for {@code projectId}, unless the user has turned that off. */
-    public boolean restoreSession(String projectId) {
-        // REMEMBERED EVEN WHEN THE RESTORE IS DECLINED. Turning session restore off means "do not put
-        // the last arrangement back", never "stop recording this one" -- so the id is still what a save
-        // is written under, and forgetting it here would quietly stop persisting for anyone who had the
-        // setting off.
-        sessionProjectId = projectId;
-        boolean restored = session != null
-                && workbench.resolve(WorkbenchSettings.RESTORE_SESSION)
-                && session.restore(projectId);
-        // UNSAVED WORK IS NOT PART OF "the last arrangement", and is not gated on wanting it back.
-        // "Do not reopen my tabs" is a preference about a layout; "throw away what I never saved" is
-        // not the same sentence, and reading one as the other loses somebody's work silently. Both
-        // references restore hot-exit buffers regardless of whether windows are reopened.
-        //
-        // AFTER the session, so the session's arrangement decides which pane a file lands in and this
-        // only adds tabs for files the session did not have -- a file it did have is already open, and
-        // opening it again answers the same tab.
-        workbench.editors().restoreUnsavedWork();
-        return restored;
-    }
-
-    public void saveSession(String projectId, int screenWidth, int screenHeight) {
-        if (session != null) session.save(projectId, screenWidth, screenHeight);
-    }
-
-    // ── Layout ──────────────────────────────────────────────────────────────────────────────────
-
-    /**
-     * Serialises the pane arrangement.
-     *
-     * <p>Reads the divider positions back out of the widgets first, or the blob records the weights the
-     * layout was <em>built</em> with rather than the ones on screen.</p>
-     */
-    public <T> T saveLayout(DynamicOps<T> ops, int screenWidth, int screenHeight) {
-        workbench.dock().pullWeightsIntoLayout();
-        T encoded = DockLayoutCodec.encode(workbench.dock().layout(), ops, screenWidth, screenHeight);
-        savedLayout = encoded;
-        return encoded;
-    }
-
-    /** Restores whatever {@link #saveLayout} last produced. False when there is nothing to restore or the
-     * codec refuses the blob — which is a normal outcome, not an error path. */
-    @SuppressWarnings("unchecked")
-    public <T> boolean restoreLayout(DynamicOps<T> ops) {
-        if (savedLayout == null) {
-            Notifications.show(Notification.info("No saved layout").withDetail("nothing to restore yet"));
-            return false;
-        }
-        DockLayout restored = DockLayoutCodec.decode((T) savedLayout, ops, workbench.panels());
-        if (restored == null) {
-            Notifications.show(Notification.error("Layout refused").withDetail("the saved arrangement could not be applied"));
-            return false;
-        }
-        workbench.dock().setLayout(restored);
-        return true;
-    }
-
-    // ── Focus ───────────────────────────────────────────────────────────────────────────────────
-
-    /**
-     * Hands focus to the dock once there is a group to hand it to. Idempotent; call it per frame.
-     *
-     * <p>An application decides where focus starts, and an IDE opens with its editor focused. Without this
-     * the window opens with focus <b>null</b>, and every command whose {@code enabledWhen} walks up from
-     * the focused element reports unavailable — so the palette opens almost entirely dimmed and reads as
-     * broken.</p>
-     *
-     * <p>{@code requestPointerFocus}, never {@code requestFocus}: the latter is PROGRAMMATIC and therefore
-     * rings, so the editor would open with a focus outline nobody asked for.</p>
-     */
-    public void giveInitialFocus() {
-        if (focusGiven) return;
-        UIDocument window = document();
-        if (window == null) return;
-        DockGroup group = workbench.dock().activeGroup();
-        if (group == null) return;
-        if (window.focus().focused() == null) {
-            window.focus().requestPointerFocus(group);
-        }
-        focusGiven = true;
-    }
-
-    /**
-     * Releases every open shader graph's preview renderers. Safe to call more than once.
-     *
-     * <p>Every one of them, not "the graph": each open file has its own editor and its own
-     * {@code CgPreviewRenderer} holding an FBO per node, so freeing only the one in front would leak the
-     * rest — which the single scratch graph this replaced could never do.</p>
-     */
-    @Override
-    public void dispose() {
-        // The GRAPHS need nothing of their own: every one is registered as a child when it is built, so
-        // the tree releases them. The list this replaced was never pruned -- every graph ever opened
-        // stayed reachable for the session, and that retention was the only reason its GL pool was
-        // freed at exit at all.
-        //
-        // What DOES need saying is everything below, which is why this body was a comment: an editor
-        // wrote itself into six signals and a contribution, and took none of it back.
-        lifetime.disconnectAll();
-        inspectorPanel.dispose();
-        shaderGraph.dispose();
-        workbench.dispose();
-    }
-
 }

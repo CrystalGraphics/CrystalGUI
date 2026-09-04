@@ -1863,7 +1863,7 @@ tab.decoration-error {
 
 /* ── The editor ──
  * The whole application: a workbench, the panels it ships, and the commands it answers to. */
-crystaleditor {
+application {
     width: 100%;
     height: 100%;
     flex-grow: 1;
@@ -1872,7 +1872,7 @@ crystaleditor {
 
 /* Child combinator, and a unique class name -- "__content__" is shared (CanvasView uses it for its
  * transformed world plane), so a descendant rule naming it reaches into every graph below. */
-crystaleditor > .__editor-content__ {
+application > .__editor-content__ {
     width: 100%;
     flex-grow: 1;
     flex-basis: 0;

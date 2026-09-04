@@ -365,6 +365,7 @@ public final class Workspace implements Disposable {
                 .then(answer -> {
                     if (answer == null) return;
                     hello = answer;
+                    greeted = true;
                     onDidGreet.emit(answer);
                     askCapabilities();
                 });
@@ -389,6 +390,22 @@ public final class Workspace implements Disposable {
                 .then(answer -> {
                     if (answer != null) capabilities.apply(answer);
                 });
+    }
+
+    private boolean greeted;
+
+    /**
+     * Whether the server has actually answered, as opposed to {@link #server()}'s assumptions.
+     *
+     * <p>The two are not the same question and {@code server()} cannot answer this one: it returns a
+     * usable {@link FsHello} from the moment the client exists, because every caller of it needs an
+     * answer rather than a null. So a consumer that must run <em>once the server has spoken</em> — a
+     * session restore keyed on which workspace this is, chiefly — has nothing to test but this.</p>
+     *
+     * <p>False again after a {@link #rebind}: a new peer has not greeted, whatever the last one said.</p>
+     */
+    public boolean hasGreeted() {
+        return greeted;
     }
 
     /** What the server said about itself. The conservative assumptions until it has answered. */
@@ -436,6 +453,9 @@ public final class Workspace implements Disposable {
         capabilities.clear();
         presence.clear();
         health.reset();
+        // NOT GREETED UNTIL THIS ONE ANSWERS. The field describes a PEER, and a reconnect is a different
+        // peer -- the same rule the watches below follow, and for the same reason.
+        greeted = false;
         greet();
         for (Watch watch : new ArrayList<>(watches.values())) {
             calls.send(FsMethods.WATCH, FsMessages.pathRequest(),

@@ -65,4 +65,26 @@ public interface ConfigStorage {
     default Path directory() {
         return null;
     }
+
+    /**
+     * This store's named corner of itself — <b>an application's own files</b>.
+     *
+     * <p>Two applications on one desktop share one config directory, and both of them write a
+     * {@code settings.json} and a session record. Unscoped, the second to save wins and the user's two
+     * products quietly become one: the same collision two status bars were (D20). What stays at the
+     * root is what is genuinely shared — the desktop's arrangement, the theme, backups, local history —
+     * because those describe the machine rather than any one product.</p>
+     *
+     * <p>The general answer is a key prefix ({@link ScopedConfigStorage}); a store that is a real
+     * directory answers with a real subdirectory, so {@link #directory()} stays somewhere a compiler can
+     * write into.</p>
+     */
+    default ConfigStorage scoped(String scope) {
+        if (scope == null || scope.isEmpty()) return this;
+        // '/' AND ':' BOTH, because an application id is namespaced ("crystalgui:editor") and a colon is
+        // not a legal path character on Windows -- so a scope that reached a real filesystem unsanitised
+        // would produce a directory that cannot be created, and LocalConfigStorage would log a warning
+        // and go read-only for that application alone.
+        return new ScopedConfigStorage(this, scope.replace(':', '.').replace('/', '.'));
+    }
 }

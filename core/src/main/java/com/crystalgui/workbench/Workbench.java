@@ -751,7 +751,20 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     /** Reveals the Notifications panel. */
     public static final String SHOW_NOTIFICATIONS = "workbench.showNotifications";
 
+    /**
+     * A workbench with every contributed extension on — which is what a test and a harness scene mean,
+     * and what a host meant before applications existed.
+     */
     public Workbench(Workspace workspace) {
+        this(workspace, null);
+    }
+
+    /**
+     * @param extensionIds the extensions this workbench enables, in the order named, or null for
+     *                     everything contributed. An application's manifest is what names them, which is
+     *                     how two applications on one desktop enable different sets
+     */
+    public Workbench(Workspace workspace, @Nullable List<String> extensionIds) {
         super(NAME);
         if (workspace == null) throw new IllegalArgumentException("A Workbench needs a workspace");
         this.workspace = workspace;
@@ -1070,12 +1083,11 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
 
         // EXTENSIONS LAST, when everything they may reach has been built.
         //
-        // ALL OF THEM, for now. An application's manifest will name the ids it wants -- that is what
-        // lets two applications on one desktop enable different sets -- and until an application
-        // concept exists there is nothing to ask. What this already settles is which HOST remembered
-        // what: the Notes kind was registered by two harness scenes and by no loader, so a file type
-        // shipped in this repository opened in the harness and not in the game.
-        activeExtensions.addAll(WorkbenchExtensions.activateAll(this));
+        // WHAT THE APPLICATION ASKED FOR, and everything contributed when nobody asked -- a workbench
+        // built directly, by a test or a scene, still gets the lot. What this settles is which HOST
+        // remembered what: the Notes kind was registered by two harness scenes and by no loader, so a
+        // file type shipped in this repository opened in the harness and not in the game.
+        activeExtensions.addAll(WorkbenchExtensions.activate(this, extensionIds));
     }
 
     /**
@@ -1202,6 +1214,9 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // captures the workbench. Measured: that is the path a heap walk finds from a process-wide
         // static to a workbench that has already been disposed.
         documents.dispose();
+        // AND THE RAILS' OWN COMMANDS, which are in the WINDOW's registry rather than the global one --
+        // so they outlive this workbench by exactly as long as the surface does, each one capturing it.
+        for (StripeView stripe : stripes()) stripe.dispose();
     }
 
     /**
@@ -1925,6 +1940,18 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * while the read is still in flight.</p>
      */
     public final Signal.Value<CgPath> onDidOpenDocument = new Signal.Value<>();
+
+    /**
+     * The same signal, as an accessor.
+     *
+     * <p>The engine's idiom is a {@code public final Signal} field and an interface cannot carry one, so
+     * {@link WorkbenchContext} declares it as a method — the same trade {@code WorkspaceProjects} makes,
+     * for the same reason: a consumer written against the context does not name the engine.</p>
+     */
+    @Override
+    public Signal.Value<CgPath> onDidOpenDocument() {
+        return onDidOpenDocument;
+    }
 
     /**
      * The document for a path, or null when nothing has it open.

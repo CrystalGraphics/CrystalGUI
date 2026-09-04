@@ -1,13 +1,12 @@
 package com.crystalgui.app;
 
-import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.app.shadergraph.ShaderGraphEditor;
 import com.crystalgui.ui.dom.NodeContract;
 import com.crystalgui.ui.dom.NodeKinds;
 import com.crystalgui.ui.dom.UIElementRegistry;
 
 /**
- * <b>The application layer's kinds</b> — the two shells that are named by a stylesheet.
+ * <b>The application layer's kinds</b> — what a stylesheet names and a host builds.
  *
  * <p>Its own service rather than an entry in {@code WorkbenchKinds}, for the reason
  * {@link NodeKinds} exists: a LAYER speaks for itself, and the workbench does not know what an
@@ -21,11 +20,13 @@ public final class AppKinds implements NodeKinds {
 
     @Override
     public void register() {
-        // CASCADE-ONLY, both of them: an editor is built by a host with a workspace client and a
-        // shader graph editor with a document, and nothing describes either over a wire. What a
-        // registration buys here is the TAG -- `ua/workbench.css` names both outright, so without one
-        // every rule written for them would match nothing, silently.
-        UIElementRegistry.registerTag(CrystalEditor.NAME, NodeContract.INERT);
+        // CASCADE-ONLY: a shader graph editor is built with a document and nothing describes one
+        // over a wire. What a registration buys here is the TAG -- `ua/workbench.css` names it
+        // outright, so without one every rule written for it would match nothing, silently.
+        //
+        // The editor's own shell used to be the other entry. It is `WorkbenchApplication` now and
+        // registered by `WorkbenchKinds`, because the element is the ENGINE's and what is left in
+        // `app/` is a manifest -- which is data, and declares no kind at all.
         UIElementRegistry.registerTag(ShaderGraphEditor.NAME, NodeContract.INERT);
     }
 }

@@ -1,5 +1,6 @@
 package com.crystalgui.desktop.window;
 
+import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.window.WindowPolicy;
 import com.crystalgui.core.window.WindowState;
@@ -1513,6 +1514,48 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
         this.key = key;
         return this;
     }
+
+    /** Which product this window belongs to, or null for a window that is nobody's. @see #setApplication */
+    @Nullable
+    public ApplicationKind application() {
+        return application;
+    }
+
+    /**
+     * Declares which application this window belongs to — Windows' {@code AppUserModelID}, X11's
+     * {@code WM_CLASS}.
+     *
+     * <p>One field, and every shell feature reads it: the taskbar groups entries under it, the switcher
+     * can cycle by product rather than by window, a jump list is that kind's own, and eviction leaves
+     * an application's <b>main</b> window alone (D17) — a hidden main window is the product running in
+     * the background, and a cap on hidden windows must never quit one nobody asked to quit.</p>
+     */
+    public WindowFrame setApplication(@Nullable ApplicationKind application) {
+        this.application = application;
+        if (owner != null) owner.registry().changed();
+        return this;
+    }
+
+    /**
+     * Marks this the application's main window — the one closing does not quit.
+     *
+     * <p>Set by {@code WorkbenchApplication} on the window it opens, and read only by eviction. A second
+     * window the same application opens is an ordinary one and may be evicted like any other.</p>
+     */
+    public WindowFrame markApplicationMain() {
+        this.applicationMain = true;
+        return this;
+    }
+
+    /** @see #markApplicationMain() */
+    public boolean isApplicationMain() {
+        return applicationMain;
+    }
+
+    @Nullable
+    private ApplicationKind application;
+
+    private boolean applicationMain;
 
     /**
      * Whether this window's content may be thrown away — asked before a destroying close and before

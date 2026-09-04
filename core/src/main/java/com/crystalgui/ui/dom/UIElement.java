@@ -675,7 +675,19 @@ public class UIElement extends UINode implements EventTarget, Styleable {
      * subtree matches nothing until it thaws, and thawing re-matches it.</p>
      */
     private void markSubtreeDirty(StyleEngine engine) {
-        engine.markDirty(this);
+        // A NODE THAT HAS LEFT THE TREE IS NOT RE-MATCHED, and the walk still descends past it: a
+        // detach clears its children's document BEFORE the parent's, so the parent is the one still
+        // holding a document while its subtree is already out.
+        //
+        // Not an optimisation. `Focus.forget` blurs on the way out, which invalidates the match on the
+        // detaching frame and marks its whole subtree -- AFTER each of those nodes has already been
+        // handed to `StyleEngine.onElementDetached`. They went back into `dirtyMatch` for a tree they
+        // had left, the next cascade re-matched them, and `rematch` wrote them into
+        // `highlightsByElement`, which is a STRONG map keyed by element and is cleaned only by the
+        // detach notification that had already run. So every closed window's whole subtree stayed
+        // pinned in the style engine for the life of the document -- invisibly, because re-matching
+        // something nobody draws produces no wrong pixel and no error.
+        if (document != null) engine.markDirty(this);
         invalidateExposedParts(engine);
         for (UIElement child : children) {
             if (!child.frozen) child.markSubtreeDirty(engine);

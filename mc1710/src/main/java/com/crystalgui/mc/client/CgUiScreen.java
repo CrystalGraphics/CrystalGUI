@@ -10,6 +10,7 @@ import com.crystalgui.desktop.Desktop;
 import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.app.crystaleditor.CrystalEditor;
+import com.crystalgui.workbench.WorkbenchApplication;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.storage.LocalConfigStorage;
 import com.crystalgui.language.run.view.RunPanels;
@@ -99,7 +100,7 @@ public final class CgUiScreen extends GuiScreen {
      * {@code GuiScreen} each time one is shown, so the state has to live somewhere that is not the
      * screen.</p>
      */
-    private static CrystalEditor editor;
+    private static WorkbenchApplication editor;
     /**
      * The scale this host draws at.
      *
@@ -174,22 +175,6 @@ public final class CgUiScreen extends GuiScreen {
     private static final float FIRST_RUN_FRACTION = 0.86f;
 
 
-    /**
-     * The connection the project list was last asked on, or {@code null} for never.
-     *
-     * <p>Was a {@code boolean}, and the editor is <b>static and outlives every screen</b> —
-     * {@code disposeAll} says so itself: <i>"frees the editor at game shutdown, not called on close"</i>.
-     * So a one-shot flag meant the project list was asked for <b>at most once per game session</b>,
-     * however many worlds were joined afterwards. Leave a world, join another, press F6: an empty Project
-     * panel, no root, New File and New Folder greyed because there is nowhere to create INTO — and
-     * nothing in the log, because the ask never happened rather than failing.</p>
-     *
-     * <p>Keyed on the connection because that is what actually changes. Re-opening the editor on the same
-     * wire must not re-ask (the tree already has its roots and a second listing would be pure churn), and
-     * a new wire must.</p>
-     */
-    @Nullable
-    private static ProtocolConnection<Object> projectsAskedOn;
 
     /** Set by the pump when an Escape reached the window and nothing consumed it. @see CgUiInput */
     private boolean closeRequested;
@@ -328,6 +313,10 @@ public final class CgUiScreen extends GuiScreen {
                 // A supplier because the editor is built later than this and on demand.
                 .setWindowMount(() -> editor == null
                         ? null : editor.workbench().windowMount(host.windowMount()));
+        // WHAT THIS HOST OFFERS. Installing a manifest is not launching one: the desktop can now list
+        // the editor, answer "open with" for a `.shadergraph`, and group its windows, all with nothing
+        // running. Which is the whole of what a loader has to say about a product.
+        CrystalEditor.install(host.desktop().applications());
         // NO SEPARATE ROOT: the DOCUMENT is the root on this engine, so the class the host sheet keys
         // on goes on it directly.
         host.document().addClass(ROOT_CLASS);
@@ -376,52 +365,23 @@ public final class CgUiScreen extends GuiScreen {
      */
     private boolean ensureEditorWindow() {
         if (editorWindow != null) return true;
-        if (host.workspace() == null) {
-            // THE FILES LIVE ON THE SERVER (Phase 4 B2) -- in single-player that is the integrated
-            // server -- so there is genuinely nothing for a workbench to show without one. Named rather
-            // than left to throw out of a constructor, because "the editor needs a world" and "the editor
-            // is broken" look identical from the outside, and the second is what a crash report says.
-            CrystalGuiCore.LOGGER.warn("The editor needs a world: CgUiConnections.client() is null, so the "
-                    + "join event has not fired. The desktop is open and the editor is not on it.");
-            return false;
-        }
-        File dataDir = mc.mcDataDir;
-        editor = new CrystalEditor(host.workspace());
-        trace("CrystalEditor construction");
-        // THE SAME storage the desktop's arrangement went into. Two would be two answers to the question
-        // of where a private directory is.
-        editor.useConfig(host.config());
-
+        // ONE CALL, AND EVERY REFUSAL IS THE REGISTRY'S. "The editor needs a world" used to be a log
+        // line written here, beside the storage wiring, the class registration, the window's title, key,
+        // policy and icon, the first-run geometry, the project ask and the session restore -- fourteen
+        // decisions, none of which is about Minecraft, all of which are the same answer on every host.
+        // What is left below is the two that genuinely are: how big a first-run window is on THIS
+        // display, and that the arrangement record is applied over it rather than under it.
+        com.crystalgui.desktop.app.Application launched = host.desktop().applications()
+                .launch(CrystalEditor.KIND, host.workspace(), host.config());
+        if (!(launched instanceof WorkbenchApplication)) return false;
+        editor = (WorkbenchApplication) launched;
+        trace("CrystalEditor launch");
         editor.addClass(EDITOR_CLASS);
+        editorWindow = editor.mainWindow();
 
-        // RUN AND STOP NEED NO LINE HERE. `ScriptWorkbench` contributes itself as a WorkbenchExtension
-        // from LanguageStack.registerAll, so a workbench activates it and asks IT for a cache
-        // directory -- which this screen used to work out and pass in. That was the shape that decided
-        // a feature by which host remembered it: the Run panel was here and in two harness scenes and
-        // nowhere else, and a fourth host would have had to know to ask.
-        trace("scripting install");
-        // HIDE_ON_CLOSE, because a workbench is not a dialog: closing it keeps every document, the dock
-        // arrangement and the undo history, and its taskbar entry is how it comes back. That is the same
-        // promise the static fields above already made, now made by the lifecycle instead of by keeping
-        // a reference nobody could see.
-        //
-        // Escape then falls out end to end with nothing here to arrange it: the cascade inside the
-        // window runs first (a dropdown, then a modal), the window is its own last close watcher so its
-        // policy minimises it, and only an Escape that nothing wanted reaches handleKeyboardInput below
-        // and closes the screen.
-        editorWindow = desktop().addWindow(new WindowFrame("Crystal Editor"));
-        editorWindow.setPolicy(WindowPolicy.HIDE_ON_CLOSE).setKey("editor:main");
-        editorWindow.setIcon("crystalgui:logo");
-        // setContent, not content().addChild -- it is what ADOPTS the editor's menu bar into the
-        // caption, so the window has one header rather than two stacked on each other.
-        editorWindow.setContent(editor);
-        // A WINDOW ON A DESKTOP, not a full-screen editor — and only as a DEFAULT: the record below
-        // overrides it the moment there is one, so this is what a first run looks like and nothing else.
-        //
-        // It used to maximise here, which was right while the desktop was a migration nobody was meant
-        // to notice: a maximised frame IS the editor that was there before W7. Once the compositor is
-        // the point, that default hides everything it was built for — the taskbar, the caption, snapping,
-        // the fact that there is a desktop at all — behind an application that happens to fill the screen.
+        // A WINDOW ON A DESKTOP, not a full-screen editor -- and only as a DEFAULT: the arrangement
+        // record overrides it the moment there is one, so this is what a first run looks like and
+        // nothing else.
         //
         // Sized in LOGICAL pixels off the display and DEFAULT_UI_SCALE, which is the scale this host
         // deliberately never changes. A percentage in the sheet would be tempting and would lose to the
@@ -432,11 +392,6 @@ public final class CgUiScreen extends GuiScreen {
                 Math.round(logicalHeight * FIRST_RUN_FRACTION));
         editorWindow.moveTo(Math.round(logicalWidth * (1f - FIRST_RUN_FRACTION) / 2f),
                 Math.round(logicalHeight * (1f - FIRST_RUN_FRACTION) / 2f));
-
-        // WHERE THE ARRANGEMENT LIVES, and nothing else -- CrystalOS W12. The compositor owns reading it,
-        // applying it to windows as they open, and writing it again when the screen closes; a host has no
-        // business holding a second copy of that policy. AFTER the editor window is open, so the record
-        // is applied over the defaults above rather than under them.
         trace("editor window");
         return true;
     }
@@ -541,14 +496,10 @@ public final class CgUiScreen extends GuiScreen {
         // ONE HOST TICK, before anything reads the workspace: the client is repaired if the wire
         // moved, and the mount is re-asked. Both were written out here; both are the same on any host.
         host.frame(delta);
-        ProtocolConnection<Object> live = CgUiConnections.client();
-        if (live != null && live != projectsAskedOn) {
-            projectsAskedOn = live;
-            editor.workbench().fileTree().loadProjects();
-            // AFTER loadProjects, never before: the restore parks the folders it wants expanded and
-            // retries until the listings that reveal them arrive, so asking first parks everything.
-            editor.restoreSession(CgUiWorkspaceHost.PROJECT_ID);
-        }
+        // THE PROJECT ASK AND THE SESSION RESTORE WERE HERE, keyed on a static "which wire did I ask
+        // on". Both are the application's: it hangs them off the greeting and the project listing, which
+        // fire again on a reconnect -- so rejoining a different world reads THAT world's record, which
+        // a per-process latch could never do. @see WorkbenchApplication
 
 
         // MINECRAFT WRITES GL STATE BEHIND CrystalGraphics' BACK, SO THE SHADOW MUST BE DROPPED HERE.
@@ -603,8 +554,6 @@ public final class CgUiScreen extends GuiScreen {
         // The shadow cannot see the three lines above either, so tell it so rather than leaving it
         // describing a context that no longer exists.
         CgGlState.invalidateAllIfPresent();
-
-        if (editor != null) editor.giveInitialFocus();
 
         framesPainted++;
         // UNATTENDED SCRIPT RUN, off unless asked for. On the CLIENT THREAD, which is where the Run
@@ -732,13 +681,12 @@ public final class CgUiScreen extends GuiScreen {
         return false;
     }
 
-    /** Frees the editor at game shutdown. Not called on close — see the {@code editor} field. */
+    /** Quits the editor at game shutdown. Not called on close — see the {@code editor} field. */
     public static void disposeAll() {
-        if (editor != null) Disposer.dispose(editor);
+        if (editor != null) editor.dispose();
         if (host != null) host.dispose();
         editor = null;
         editorWindow = null;
         host = null;
-        projectsAskedOn = null;
     }
 }

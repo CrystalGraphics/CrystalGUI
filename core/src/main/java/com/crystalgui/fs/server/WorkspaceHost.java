@@ -1,5 +1,7 @@
 package com.crystalgui.fs.server;
 
+import java.util.UUID;
+import java.nio.charset.StandardCharsets;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
@@ -99,7 +101,7 @@ public final class WorkspaceHost {
      * says what its own project excludes.</p>
      */
     public static final List<String> DEFAULT_EXCLUDES =
-            Arrays.asList(".git", ".gradle", "build", "out", "node_modules", "*.class");
+            Arrays.asList(".git", ".gradle", ".crystalgui", "build", "out", "node_modules", "*.class");
 
     /** Seconds between watcher polls. */
     private static final float POLL_SECONDS = 0.5f;
@@ -168,7 +170,8 @@ public final class WorkspaceHost {
         ProjectRegistry registry = new ProjectRegistry()
                 .register(() -> Collections.singletonList(project));
         service = new WorkspaceService(registry, new LocalFileSystem(registry), host.permission())
-                .setScriptingPolicy(host.scripting());
+                .setScriptingPolicy(host.scripting())
+                .setWorkspaceId(identityOf(root));
         CrystalGuiCore.LOGGER.info("[cgui-fs] serving {}", root);
 
         // ONE source for the project, not one per player: every watch costs an OS handle and Linux caps
@@ -312,6 +315,38 @@ public final class WorkspaceHost {
      * <p>An empty file tree and a broken file tree look identical, which is the whole reason for the
      * README: the first launch needs something in it that proves a listing crossed the wire.</p>
      */
+    /**
+     * A stable name for this workspace — <b>read once, written once, never derived from the path</b>.
+     *
+     * <p>Kept in {@code .crystalgui/workspace.id} under the root, so it survives the directory being
+     * renamed or the world being copied elsewhere the way a project id survives a move. Deriving it from
+     * the absolute path instead would be free and would mean a rename silently becomes a different
+     * workspace: every client's arrangement, and every per-workspace record it keys, quietly starts
+     * again from nothing.</p>
+     *
+     * <p>Inside the root rather than beside it because that is the one directory a host is guaranteed to
+     * be able to write to, and the dot-prefixed name is already excluded from the listing. A read or
+     * write that fails answers empty, which is the same as an older server: the client falls back to a
+     * hash of the project ids and nothing is broken, only less stable.</p>
+     */
+    private static String identityOf(Path root) {
+        Path file = root.resolve(".crystalgui").resolve("workspace.id");
+        try {
+            if (Files.isRegularFile(file)) {
+                String stored = new String(Files.readAllBytes(file), StandardCharsets.UTF_8).trim();
+                if (!stored.isEmpty()) return stored;
+            }
+            String minted = UUID.randomUUID().toString().replace("-", "");
+            Files.createDirectories(file.getParent());
+            Files.write(file, minted.getBytes(StandardCharsets.UTF_8));
+            return minted;
+        } catch (IOException couldNotKeepIt) {
+            CrystalGuiCore.LOGGER.warn("[cgui-fs] could not keep a workspace id at {}; clients will key "
+                    + "their records on the project list instead", file, couldNotKeepIt);
+            return "";
+        }
+    }
+
     private static void seed(Path root) {
         try {
             Files.createDirectories(root);
