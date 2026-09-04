@@ -4,6 +4,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -271,7 +272,7 @@ public class DisposerTest {
     @Test
     public void disposingSomethingDoesNotRetainIt() {
         Disposable one = named("one");
-        java.lang.ref.WeakReference<Disposable> watched = new java.lang.ref.WeakReference<>(one);
+        WeakReference<Disposable> watched = new WeakReference<>(one);
         Disposer.dispose(one);
 
         one = null;

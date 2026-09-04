@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import org.junit.Test;
 
 /**
@@ -390,7 +391,7 @@ public class LayeringTest {
         Path notes = root.resolve("com/crystalgui/example/notes/NotesExtension.class");
         assertTrue("the Notes extension was not compiled: " + notes, Files.isRegularFile(notes));
 
-        java.util.Set<String> referenced = ClassReferences.referencesOf(notes);
+        Set<String> referenced = ClassReferences.referencesOf(notes);
         assertTrue("an extension is written against com/crystalgui/workbench/WorkbenchContext",
                 referenced.contains("com/crystalgui/workbench/WorkbenchContext"));
         assertTrue("...and must not name the engine itself -- an engine that can be named can be "

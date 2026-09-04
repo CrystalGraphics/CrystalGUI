@@ -18,6 +18,7 @@ import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.texteditor.TextEditor;
 import com.crystalgui.workbench.decoration.FileDecorations;
+import com.crystalgui.workbench.editor.EditorService;
 import com.crystalgui.workbench.dock.DockArea;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
@@ -66,7 +67,7 @@ public interface WorkbenchContext {
     DocumentKinds kinds();
 
     /** The tabs over those documents — the one open lane. */
-    com.crystalgui.workbench.editor.EditorService editors();
+    EditorService editors();
 
     /** Problems, by owner. */
     Markers markers();
