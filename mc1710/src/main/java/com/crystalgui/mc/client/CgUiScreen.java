@@ -13,7 +13,6 @@ import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.storage.LocalConfigStorage;
 import com.crystalgui.language.run.view.RunPanels;
-import com.crystalgui.language.run.view.ScriptWorkbench;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.desktop.window.WindowFrame;
@@ -174,8 +173,6 @@ public final class CgUiScreen extends GuiScreen {
      */
     private static final float FIRST_RUN_FRACTION = 0.86f;
 
-    /** Run and Stop for the active file, or null where no engine band opened. @see #initGui */
-    private static ScriptWorkbench scripting;
 
     /**
      * The connection the project list was last asked on, or {@code null} for never.
@@ -397,21 +394,11 @@ public final class CgUiScreen extends GuiScreen {
 
         editor.addClass(EDITOR_CLASS);
 
-        // RUN AND STOP, for the file in front. Installed here rather than by CrystalEditor because it
-        // belongs to the LANGUAGE module: the editor is the shell, and a shell that hard-wired a Run
-        // panel would drag ECJ and Rhino into every application built on it. CgUiDockScene installs it
-        // the same way and for the same reason.
-        //
-        // Null when no engine band opened, and the commands are then deliberately NOT registered -- a
-        // Run row that cannot run anything teaches people the feature is broken rather than unavailable.
-        //
-        // The cache root is beside the config rather than inside the workspace: compiled output is
-        // derived, private, and must not become part of a project a resource pack could ship.
-        scripting = ScriptWorkbench.install(
-                CommandRegistry.global(), editor.workbench(),
-                new File(dataDir, "config/crystalgui/script-cache").toPath());
-        if (scripting != null) editor.workbench().revealPanel(RunPanels.RUN_TYPE);
-
+        // RUN AND STOP NEED NO LINE HERE. `ScriptWorkbench` contributes itself as a WorkbenchExtension
+        // from LanguageStack.registerAll, so a workbench activates it and asks IT for a cache
+        // directory -- which this screen used to work out and pass in. That was the shape that decided
+        // a feature by which host remembered it: the Run panel was here and in two harness scenes and
+        // nowhere else, and a fourth host would have had to know to ask.
         trace("scripting install");
         // HIDE_ON_CLOSE, because a workbench is not a dialog: closing it keeps every document, the dock
         // arrangement and the undo history, and its taskbar entry is how it comes back. That is the same
@@ -624,7 +611,7 @@ public final class CgUiScreen extends GuiScreen {
         // command runs too -- a probe on a worker would prove nothing about a failure that reaches the
         // game loop. @see CgUiAutoTest#runScriptOnce
         if (framesPainted == CgUiAutoTest.RUN_SCRIPT_ON_FRAME) {
-            CgUiAutoTest.runScriptOnce(scripting);
+            CgUiAutoTest.runScriptOnce();
         }
         // The §15.5 A proof, on the same frame budget. @see CgUiAutoTest#probeLiveBytesOnce
         if (framesPainted == 5) CgUiAutoTest.probeLiveBytesOnce();

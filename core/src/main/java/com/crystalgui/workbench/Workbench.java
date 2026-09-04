@@ -1,6 +1,8 @@
 package com.crystalgui.workbench;
 
 
+import java.nio.file.Path;
+import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.workbench.toolwindow.ToolWindowKind;
 import com.crystalgui.ui.dom.Attribute;
@@ -1109,6 +1111,31 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
 
     public StatusBarView statusBarView() {
         return statusBar;
+    }
+
+    /**
+     * Where private records go. Null until an application says, and everything derived from it is then
+     * absent — which is an ordinary state, not a broken one.
+     */
+    @Nullable
+    private ConfigStorage storage;
+
+    /**
+     * Gives this workbench somewhere private to keep derived output.
+     *
+     * <p>Called by the application that owns the store, never by a host: where a private directory IS
+     * is a host fact, and which parts of one an application uses is the application's.</p>
+     */
+    public Workbench useConfig(@Nullable ConfigStorage storage) {
+        this.storage = storage;
+        return this;
+    }
+
+    @Override
+    @Nullable
+    public Path cacheDirectory(String name) {
+        Path root = storage == null ? null : storage.directory();
+        return root == null ? null : root.resolve(name);
     }
 
     /** The bar an entry goes on. @see UiDataKeys#STATUS_BAR */

@@ -1,5 +1,6 @@
 package com.crystalgui.workbench;
 
+import java.nio.file.Path;
 import com.crystalgui.core.notify.StatusBar;
 import java.util.List;
 import java.util.function.Function;
@@ -154,6 +155,17 @@ public interface WorkbenchContext {
      *         workbench and a half-removed panel type is worse than a kept one
      */
     Disposable registerToolWindow(ToolWindowKind kind);
+
+    /**
+     * A private directory for derived output, or null on a host with nowhere to put one.
+     *
+     * <p>Compiled scripts, an index, a thumbnail cache — things that are rebuildable and must never
+     * become part of a project somebody ships, which is why it is beside the config store rather than
+     * inside the workspace. Null is an ordinary answer: an extension that caches nowhere still works,
+     * and a test is exactly that host.</p>
+     */
+    @Nullable
+    Path cacheDirectory(String name);
 
     /** Adds a panel type and how to build one. */
     WorkbenchContext registerPanel(DockPanelDescriptor descriptor,

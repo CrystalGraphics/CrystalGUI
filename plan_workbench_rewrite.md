@@ -913,6 +913,37 @@ Where it lives: the vocabulary (`ScriptMethods`, the two records) in `core/net/s
 window protocol, because a dedicated server and a client with no engine both have to parse it; the two
 halves in `language.run.net`, because only a host with a runtime can act on it.
 
+> **Shipped at W6, and one thing had to be repaired first.** The scripting capability could not have
+> worked on any host: the server registered a request handler for `fs/capabilities` and the client
+> subscribed to a *notification* of the same name, and **nothing on any host ever sent one**. So
+> `capabilities()` answered out of an empty map for every project since it was written — and an empty
+> map is indistinguishable from a permissive one, which is why it looked like it worked. `Workspace`
+> asks on the greeting now, which is the same lifetime as the question. The same shape as presence
+> before `099a033d` joined it up, and the third time this audit has found both halves built with no
+> wire between them.
+>
+> `ScriptingMode` travels on `ProjectCapability` (additive, absent = `LIVE`, which is what every host
+> meant before there was a question); `WorkspaceService.ScriptingPolicy` is what a host answers with,
+> defaulting to `LIVE`; the 1.7.10 loader answers `LIVE` in single-player and `AUTHORIZED_ONLY` on a
+> dedicated server. The refusal is at the one place both Run routes pass through — the snapshot —
+> because putting it on the command would leave the rail's Rerun open and putting it in each would be
+> two answers to one question.
+>
+> **`script/run` is not built, and is named rather than quietly dropped.** The authorized *channel* —
+> `ServerScripts.authorize`, the validated send, `script/state` back — is new protocol with no
+> consumer: no mod asks for it yet, and a verb nothing can send is the same silence as a verb nobody
+> serves (`fs/writeDelta`, deleted at F7 for exactly that). What W6 delivers is the posture that does
+> not need it: a stock client on a dedicated server has no live-scripting surface at all. The channel
+> is what turns `AUTHORIZED` from "nothing runs" into "only what the server sent runs", and it belongs
+> with the first mod that wants it.
+>
+> `ScriptWorkbench` is **not** split four ways (D13). It became a `WorkbenchExtension` — which is the
+> half that mattered, since three hosts each called `install(...)` with a cache root they worked out
+> themselves and a fourth would have had to know to ask — and the whole Run shell is now written
+> against `WorkbenchContext`, which is what makes it the first extension living outside `core/`. The
+> internal four-way split buys nothing that the extraction at W5 did not already prove and can be done
+> the day the class next needs editing.
+
 ## 5. Decisions
 
 Each with a recommendation; the phasing assumes the recommendation unless the decision says otherwise.
@@ -1046,7 +1077,7 @@ move with the rewrite.
 | **W3b — projects and sources** | `project.json` + `ScanningProjectProvider`, `fs/createProject`, the client-local source and `Workspace` routing by project, one root per server chosen by `isDedicatedServer()`, `workspaceId`, the explorer's source groups, the creation dialog with the scope choice shown only in single-player (§4.13) | many projects listed from both sources on a dedicated server and in single-player; one created into each; `serverSmoke` + the two-client probe | **medium–high** — the largest fs change since F7, and it crosses the loader seam |
 | **W4 — `ToolWindowKind`** | the declaration; Project, Problems, Notifications and Inspector ported; `registerToolWindowCommands` deleted along with the hand-wired badge and the two `showPanel` calls; Run deferred to W6 with the rest of `language/` | every ported tool window is one declaration — icon, placement, view, toggle command, badge, default-open; `:core:test` and `:core:headlessTest` green | medium |
 | **W5 — the `Workbench` split** | eight collaborators extracted with `tools/port/extract.py` (new); the flat boundary priced at 55 published members against zero and rejected; `StatusBar` per workbench (D4) reached through `UiDataKeys.STATUS_BAR` | `Workbench` 3,598 → 2,115; `:core:test`, `:core:headlessTest`, `:mc1710:compileJava` and the harness all green | **high** — the largest move; done after W1–W4 so it moved code that was already disposed and already context-shaped |
-| **W6 — `ScriptWorkbench` → extension, and scripting as a capability** | D13; `ScriptingMode` in `ProjectCapability`; `ScriptMethods` + `ServerScripts`/the client half (§4.14); `ScriptLauncher` refuses on anything but `LIVE` | the Run panel appears on every host that lists `crystalgui:scripting` and has a band; on a dedicated server a non-op's Run is disabled and a server-sent script runs and reports; `CgUiAutoTest.runScriptOnce` rewired | medium–high — `language/` is in another worktree (§8), and the authorized channel is new protocol |
+| **W6 — `ScriptWorkbench` → extension, and scripting as a capability** | the Run shell written against `WorkbenchContext` and contributed by `LanguageStack`; three host install sites deleted; `ScriptingMode` on `ProjectCapability` with a `ScriptingPolicy` the host answers; the Run refusal at the snapshot; `WorkbenchContext.cacheDirectory` | no host installs scripting; a dedicated server answers `AUTHORIZED` and the Run command refuses with a reason; `WorkspaceHostTest` covers both modes | medium–high — `language/` is in another worktree (§8), checked clear before starting |
 | **W7 — applications** | `ApplicationKind`/`Registry`/`WorkbenchApplication`; `CrystalEditor` as manifest; `WindowFrame.setApplication`; taskbar grouping; notifications to the desktop (D3); the session key per §4.9 with `FsHello.workspaceId` | two `CrystalEditor`s on one desktop with separate status bars and one notification centre | medium |
 | **W8 — launcher, search, associations** | `Launcher`, `DesktopSearch`, `handlerFor`, jump-list actions, the shader-graph action | F7 desktop with a launcher; "open with"; a search that finds an app, a window, a file | medium |
 

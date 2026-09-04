@@ -72,6 +72,21 @@ public final class WorkspaceHost {
         /** Who may do what. @see WorkspacePermission */
         WorkspacePermission permission();
 
+        /**
+         * Who may RUN this workspace's files, and where.
+         *
+         * <p>A different question from {@link #permission}, which says what may be done to a file:
+         * this says what may be done with what is in one. A server that lets everybody read and only
+         * operators write may still let nobody run anything in their own client.</p>
+         *
+         * <p>Defaults to {@link WorkspaceService.ScriptingPolicy#LIVE}, which is what every host meant
+         * before the question existed — an in-process workspace and a single-player world are the
+         * player's own machine.</p>
+         */
+        default WorkspaceService.ScriptingPolicy scripting() {
+            return WorkspaceService.ScriptingPolicy.LIVE;
+        }
+
         /** What to call a peer — for a permission check, for presence, and for an audit line. */
         WorkspaceActor actorFor(Object peer);
     }
@@ -152,7 +167,8 @@ public final class WorkspaceHost {
                 new ProjectInfo(projectId, displayName), root, excludes);
         ProjectRegistry registry = new ProjectRegistry()
                 .register(() -> Collections.singletonList(project));
-        service = new WorkspaceService(registry, new LocalFileSystem(registry), host.permission());
+        service = new WorkspaceService(registry, new LocalFileSystem(registry), host.permission())
+                .setScriptingPolicy(host.scripting());
         CrystalGuiCore.LOGGER.info("[cgui-fs] serving {}", root);
 
         // ONE source for the project, not one per player: every watch costs an OS handle and Linux caps

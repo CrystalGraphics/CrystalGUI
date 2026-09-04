@@ -402,8 +402,11 @@ public final class WorkspaceBinding<T> {
     public FsMessages.CapabilitiesNotification capabilities() {
         List<FsMessages.ProjectCapability> out = new ArrayList<>();
         for (WorkspaceService.ProjectCapability capability : service.capabilities(actor)) {
+            // THE SCRIPTING MODE TRAVELS WITH THE OTHER TWO, because it is the same kind of statement
+            // and arrives at the same moment: what this actor may do with this project. Dropping it
+            // here is exactly the shape that makes a capability look enforced and be advisory.
             out.add(new FsMessages.ProjectCapability(capability.project(),
-                    capability.mayRead(), capability.mayWrite()));
+                    capability.mayRead(), capability.mayWrite(), capability.scripting()));
         }
         return new FsMessages.CapabilitiesNotification(out);
     }

@@ -21,7 +21,7 @@ import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
 import com.crystalgui.widget.texteditor.EditorCommands;
 import com.crystalgui.widget.texteditor.TextEditor;
 import com.crystalgui.widget.collection.list.ListView;
-import com.crystalgui.workbench.Workbench;
+import com.crystalgui.workbench.WorkbenchContext;
 import com.crystalgui.workbench.decoration.FileDecorations;
 
 import javax.annotation.Nullable;
@@ -61,7 +61,7 @@ public final class RunPanels {
      *                 the things that would be stopped. Null for a workbench that shows a console somebody
      *                 else fills
      */
-    public static RunPanel install(Workbench workbench, RunConsole console, RunSessions sessions,
+    public static RunPanel install(WorkbenchContext workbench, RunConsole console, RunSessions sessions,
                                    @Nullable ScriptRuntimes runtimes) {
         RunPanel panel = new RunPanel().bindTo(console).bindSessions(sessions);
         // ONE SOURCE FOR "IS ANYTHING RUNNING", and it is the runtimes — the same objects `script.stop`'s
@@ -164,7 +164,7 @@ public final class RunPanels {
 
         // THE INDICATOR, which is free once the provider exists: the tree already merges independent
         // contributors and bubbles them to folders.
-        FileDecorations decorations = workbench.fileTree().getDecorations();
+        FileDecorations decorations = workbench.decorations();
         decorations.addProvider(new RunDecorations(sessions));
         // AND THE THING THAT MAKES IT VISIBLE. A provider is PULLED during bind, so registering one is
         // only half: without this the row's colour appeared whenever the tree happened to rebind for some

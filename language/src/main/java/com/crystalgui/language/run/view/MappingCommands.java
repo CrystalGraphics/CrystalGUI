@@ -13,7 +13,7 @@ import com.crystalgui.language.map.ReadableSource;
 import com.crystalgui.text.Change;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.widget.texteditor.TextEditor;
-import com.crystalgui.workbench.Workbench;
+import com.crystalgui.workbench.WorkbenchContext;
 
 import javax.annotation.Nullable;
 
@@ -65,7 +65,7 @@ public final class MappingCommands {
 
     public static final String REMAP = "script.remapToReadable";
 
-    private final Workbench workbench;
+    private final WorkbenchContext workbench;
     private final JobKey remapKey = JobKey.of(MappingCommands.class, "remap-to-readable");
 
     /** The memoised enablement answer, and what it was computed from. @see #canRemap */
@@ -74,7 +74,7 @@ public final class MappingCommands {
     private int scannedVersion = -1;
     private boolean scannedAnswer;
 
-    private MappingCommands(Workbench workbench) {
+    private MappingCommands(WorkbenchContext workbench) {
         this.workbench = workbench;
     }
 
@@ -87,7 +87,7 @@ public final class MappingCommands {
      * rule to carry it: rows dim rather than disappear, so the entry keeps its place in the Edit menu and
      * simply reads as unavailable on a host with nothing to remap.</p>
      */
-    public static void register(CommandRegistry registry, Workbench workbench) {
+    public static void register(CommandRegistry registry, WorkbenchContext workbench) {
         MappingCommands commands = new MappingCommands(workbench);
         registry.register(Command.of(REMAP, "Remap to Readable Names")
                 // ITS OWN GROUP, so a separator falls between it and Find. It is not one of the editor's

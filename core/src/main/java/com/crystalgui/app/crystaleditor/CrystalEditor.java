@@ -413,6 +413,10 @@ public class CrystalEditor extends UIElement implements Disposable, WindowChrome
      */
     public CrystalEditor useConfig(ConfigStorage storage) {
         this.storage = storage;
+        // AND THE ENGINE'S HALF OF IT. An extension asks the workbench for a cache directory -- the
+        // scripting one wants somewhere to put compiled output -- and the workbench has nowhere to get
+        // one unless the application that owns the store hands it over.
+        workbench.useConfig(storage);
         this.session = new WorkbenchSession(workbench, storage);
         // AND THE WORKSPACE'S OWN CLIENT-LOCAL STORE, which nothing supplied. `Workspace.setStorage`
         // is what gives it a Backup and a LocalHistory, and without it both accessors answer null on

@@ -51,6 +51,7 @@ public final class LocalConfigStorage implements ConfigStorage {
         this.writable = usable;
     }
 
+    @Override
     public Path directory() {
         return directory;
     }
