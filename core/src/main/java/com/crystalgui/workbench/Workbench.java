@@ -17,6 +17,7 @@ import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.document.DocumentKind;
 import com.crystalgui.document.DocumentKinds;
+import com.crystalgui.document.DocumentState;
 import com.crystalgui.document.EditorInput;
 import com.crystalgui.document.RecentFiles;
 import com.crystalgui.document.TextDocumentModel;
@@ -60,6 +61,7 @@ import com.crystalgui.workbench.chrome.problems.ProblemsPanel;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.workbench.diff.ConflictDialog;
 import com.crystalgui.workbench.diff.MergeView;
+import com.crystalgui.workbench.dock.banner.DockBanners;
 import com.crystalgui.workbench.dock.DockArea;
 import com.crystalgui.workbench.dock.DockWindow;
 import com.crystalgui.workbench.dock.drag.DockDropZone;
@@ -1015,6 +1017,9 @@ public class Workbench extends UIElement implements DataProvider {
         // renderer -- lived until the process did. Disposer could not help, because the thing that knew
         // the tab was gone had no way to say so.
         dock.onDidClosePanel.connect(this::releaseClosedPanel);
+        // ...AND ITS PLACEHOLDER RECORD, which is keyed by a ref and would otherwise outlive the
+        // panel and be read against whatever reopened under the same name.
+        dock.onDidClosePanel.connect(placeholders::remove);
         // AND THE EDITOR THAT TOOK OVER GETS THE FOCUS THE CLOSED ONE HAD. Spent a frame later -- see
         // focusActiveEditorPending.
         dock.onDidClosePanel.connect(panel -> focusActiveEditorPending = FOCUS_AFTER_CLOSE_FRAMES);
@@ -1035,7 +1040,8 @@ public class Workbench extends UIElement implements DataProvider {
          * every keystroke, and rebuilding there would detach the editor the user is typing in. It fires
          * only when what is ON SCREEN is not the view the tab now has.
          */
-        editors.onDidChangeState.connect(this::rebuildPanelIfItsViewArrived);
+        editors.onDidChangeState.connect(this::refreshPanelForTab);
+        registerFailureBanner();
         // Tab dirty markers. Was a per-frame refreshDirtyMarkers(), which meant encoding every open
         // document -- a whole shader graph serialised sixty times a second -- to notice a marker that
         // moves when somebody types. The equality guard SURVIVES the move: the announcement means
@@ -2359,24 +2365,6 @@ public class Workbench extends UIElement implements DataProvider {
     }
 
     /**
-     * Rebuilds a panel that is showing something other than its tab's view.
-     *
-     * <p>Contains rather than equals, because {@code DockGroup} may have wrapped the view in a banner
-     * column — comparing identity there would rebuild on every state change, which is every keystroke,
-     * and each rebuild would detach the editor being typed in.</p>
-     *
-     * @see com.crystalgui.workbench.dock.DockArea#rebuildPanel
-     */
-    private void rebuildPanelIfItsViewArrived(EditorService.Tab tab) {
-        DocumentEditor view = tab.editor();
-        if (view == null) return;   // still loading, or it failed and has nothing to show
-        DockPanelRef ref = refForResource(tab.resource());
-        UIElement built = dock.builtContentFor(ref);
-        if (built == null || built.contains(view.view())) return;
-        dock.rebuildPanel(ref);
-    }
-
-    /**
      * Registers a kind of document, and the dock panel that shows one — <b>the whole registration</b>.
      *
      * <p>What a package that owns a file type calls, and the only thing an application has to know
@@ -2410,10 +2398,84 @@ public class Workbench extends UIElement implements DataProvider {
             DocumentEditor view = tab == null ? null : tab.editor();
             // A TAB EXISTS IMMEDIATELY, IN LOADING, and its view arrives when the read lands -- which is
             // what lets a session restore put twelve tabs on screen at once rather than revealing them
-            // one round trip at a time. An empty element is the placeholder for that frame.
-            return view == null ? new UIElement() : view.view();
+            // one round trip at a time. An empty element is the placeholder until then.
+            //
+            // RECORDED, because DockGroup memoises what it built and nothing would ask again. What the
+            // placeholder was built FOR is the whole guard: with it, a panel is rebuilt exactly when the
+            // element on screen is not what this factory would produce now, and never for a state change
+            // that does not move the answer. @see #refreshPanelForTab
+            if (view != null) {
+                placeholders.remove(ref);
+                return view.view();
+            }
+            placeholders.put(ref, tab == null ? DocumentState.LOADING : tab.state());
+            return new UIElement();
         });
         return this;
+    }
+
+    /**
+     * What the panel factory last built a <b>placeholder</b> for, by ref — and no entry once a real
+     * view is up.
+     *
+     * <p>One writer (the factory) and one reader ({@link #refreshPanelForTab}), so the two cannot drift.
+     * The alternative was to interrogate the element on screen, which cannot survive a banner wrapping
+     * it and would rebuild the editor on every keystroke the moment one did.</p>
+     */
+    private final Map<DockPanelRef, DocumentState> placeholders = new HashMap<>();
+
+    /**
+     * Rebuilds a panel whose placeholder no longer stands for anything true.
+     *
+     * <p>Two transitions matter and nothing else does. A tab that <b>gains a view</b> while a
+     * placeholder is on screen: the read landed, and the dock's memo is still the empty element it built
+     * while the read was in flight. And a placeholder whose <b>state moved</b> — in practice
+     * {@code LOADING -> FAILED}, which is the only way a tab with no view changes — so the banner below
+     * can say what went wrong.</p>
+     *
+     * <p><b>Not "the state changed".</b> This signal also fires on {@code CLEAN -> DIRTY}, which is every
+     * keystroke; rebuilding there would detach the editor being typed in, which is the widget-rebuild
+     * trap on the one widget that can least afford it. Once a view is up there is no entry in
+     * {@link #placeholders} and this method does nothing at all.</p>
+     */
+    private void refreshPanelForTab(EditorService.Tab tab) {
+        DockPanelRef ref = refForResource(tab.resource());
+        if (dock.builtContentFor(ref) == null) return;   // not on screen; nothing to replace
+        DocumentState placeholder = placeholders.get(ref);
+        if (tab.editor() != null) {
+            if (placeholder != null) dock.rebuildPanel(ref);
+            return;
+        }
+        if (placeholder != null && placeholder != tab.state()) dock.rebuildPanel(ref);
+    }
+
+    /**
+     * A tab whose document could not be read says so, with a way to try again.
+     *
+     * <p>Without it a file that has been deleted or renamed under a saved session comes back as a blank
+     * pane and nothing anywhere explains it — which is indistinguishable from the editor being broken,
+     * and was reported as exactly that. A banner rather than content because the panel legitimately has
+     * nothing to show: this is the one place that can say WHY there is nothing.</p>
+     *
+     * <p>{@code Tab.retry()} has carried the javadoc <i>"what a retry affordance on the tab calls"</i>
+     * since it was written, and there was no such affordance.</p>
+     */
+    private void registerFailureBanner() {
+        DockBanners.register(panel -> {
+            // A PANEL NEED NOT BE ABOUT A FILE. A tool window has no path state at all, and
+            // `Resource.parse("")` THROWS rather than answering null -- so a provider that parses first
+            // and asks questions afterwards takes down the build of every panel in the dock, not its
+            // own. The same shape as the active-panel signal assuming a path, one layer over.
+            String path = panel.state(PATH_STATE, "");
+            if (path.isEmpty()) return null;
+            Resource about = Resource.parse(path);
+            EditorService.Tab tab = editors.tabFor(EditorInput.of(about));
+            if (tab == null || tab.state() != DocumentState.FAILED) return null;
+            ReplyError why = tab.failure();
+            return Notification.error(about.name() + " could not be opened")
+                    .withDetail(why == null ? "the read failed" : why.detail())
+                    .withAction("Retry", tab::retry);
+        });
     }
 
     /** As {@link #contribute}, plus the file patterns that open into this kind's panel. */
