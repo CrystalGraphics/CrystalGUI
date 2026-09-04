@@ -1,0 +1,181 @@
+package com.crystalgui.net.protocol;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
+
+import javax.annotation.Nullable;
+
+import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.net.wire.FrameMultiplexer;
+import com.crystalgui.net.wire.WireTransport;
+import com.crystalgui.serialization.PlainOps;
+
+/**
+ * <b>One {@link ProtocolConnection} per peer</b> — opened when they arrive, closed when they leave, and
+ * ticked together.
+ *
+ * <p>The table and its rules, with nothing about how a platform learns that somebody arrived. A loader
+ * turns its own events into {@link #open}, {@link #close} and {@link #tick}; everything between those
+ * calls — the multiplexer per peer, the transport, the pump, dropping a frame for a peer that has gone,
+ * failing outstanding calls on a close, and one peer's exception not stopping the rest — is the same
+ * wherever the events come from.</p>
+ *
+ * <h3>Keyed by what is stable, never by what is convenient</h3>
+ *
+ * <p>The key is the caller's, and the caller is expected to have thought about it. 1.7.10 pays for this
+ * exactly: it constructs a new player entity on every respawn and every dimension change, so an
+ * entity-keyed table is orphaned by the first death — inbound frames name the new body, the lookup
+ * misses, and every frame from that client is dropped for the rest of the session, while outbound keeps
+ * working. That reads as an input bug and is an identity one. Its key is the profile UUID.</p>
+ *
+ * <h3>One table, one side</h3>
+ *
+ * <p>A process that is both — single-player is — holds two of these, because the two sides are ticked by
+ * different events and closed by different ones. Sharing a table would tick the client's peer on the
+ * server's tick, which is a timing change nobody asked for.</p>
+ *
+ * <h3>Threads</h3>
+ *
+ * <p>Frames arrive on the network's thread; connections open, close and tick on the thread that owns
+ * whatever the handlers touch. So the map is a {@link ConcurrentHashMap} and nothing else is shared:
+ * {@link ProtocolConnection#tick()} is the only thing that dispatches.</p>
+ */
+public final class Connections {
+
+    /** Where a frame goes. Supplied per peer, because only the host knows how to reach one. */
+    @FunctionalInterface
+    public interface Outbound {
+        void send(byte[] frame);
+    }
+
+    /** Everything a peer needs, kept together so closing one closes all of it. */
+    private static final class Held {
+        final FrameMultiplexer frames;
+        final ProtocolConnection<Object> connection;
+        @Nullable
+        final Object peer;
+
+        Held(FrameMultiplexer frames, ProtocolConnection<Object> connection, @Nullable Object peer) {
+            this.frames = frames;
+            this.connection = connection;
+            this.peer = peer;
+        }
+    }
+
+    private final Map<Object, Held> peers = new ConcurrentHashMap<>();
+    private final String which;
+    private final int maxFrameBytes;
+    private final boolean initiator;
+
+    @Nullable
+    private Consumer<Object> onClosed;
+
+    /**
+     * @param which         "server" or "client" — for log lines, and the only thing that differs in them
+     * @param maxFrameBytes the channel's frame cap
+     * @param initiator     whether this side allocates odd stream ids. The two ends must disagree, as
+     *                      HTTP/2 splits them, so both can allocate concurrently without agreeing on
+     *                      anything: a client initiates, a server does not
+     */
+    public Connections(String which, int maxFrameBytes, boolean initiator) {
+        this.which = which;
+        this.maxFrameBytes = maxFrameBytes;
+        this.initiator = initiator;
+    }
+
+    /**
+     * Called with a peer whose connection has just closed, so per-peer state elsewhere can be dropped.
+     *
+     * <p>Anything that bound per-peer state must be told, or its maps grow for the life of the server —
+     * a leak that only shows on a box that has been up for a week.</p>
+     */
+    public Connections onPeerClosed(Consumer<Object> listener) {
+        this.onClosed = listener;
+        return this;
+    }
+
+    /**
+     * Opens a connection for {@code key}.
+     *
+     * @param peer     what handlers see as {@link ProtocolConnection#peer()}; null where there is one
+     *                 peer and it needs no naming
+     * @param outbound how to reach it. <b>Resolved at send time by the caller</b>, never captured: on a
+     *                 host whose peer objects are replaced (1.7.10 replaces a player entity on every
+     *                 respawn) a captured target sends to a body nobody is in
+     */
+    public ProtocolConnection<Object> open(Object key, @Nullable Object peer, Outbound outbound) {
+        FrameMultiplexer frames = new FrameMultiplexer(maxFrameBytes, initiator, outbound::send);
+        WireTransport transport = new WireTransport(frames);
+        // The pump goes in here rather than being left to a caller: tick() is then the one call, and a
+        // subsystem that forgot to pump would receive nothing, silently.
+        ProtocolConnection<Object> connection =
+                Protocols.open(transport, PlainOps.INSTANCE, transport::pump, peer);
+        peers.put(key, new Held(frames, connection, peer));
+        return connection;
+    }
+
+    /** The connection held for {@code key}, or null. */
+    @Nullable
+    public ProtocolConnection<Object> get(Object key) {
+        Held held = peers.get(key);
+        return held == null ? null : held.connection;
+    }
+
+    /**
+     * <b>Network thread.</b> Hands a frame to its peer's multiplexer, which only enqueues.
+     *
+     * <p>A frame for a peer that has already gone is dropped rather than opening one: a connection is
+     * created by a lifecycle event, never by traffic. Creating one here would resurrect a peer that has
+     * left, and would make a disconnect racy against whatever was still in flight.</p>
+     */
+    public void route(Object key, byte[] frame) {
+        Held held = peers.get(key);
+        if (held != null) held.frames.onFrameReceived(frame);
+    }
+
+    /**
+     * Closes one peer's connection and forgets it.
+     *
+     * <p>Fails everything outstanding rather than letting each caller wait out its own timeout. A peer
+     * that is gone is knowable now; ten seconds of silence per pending call is not information.</p>
+     *
+     * @return whether there was one
+     */
+    public boolean close(Object key, String reason) {
+        Held held = peers.remove(key);
+        if (held == null) return false;
+        if (held.peer != null && onClosed != null) onClosed.accept(held.peer);
+        held.connection.close(reason);
+        return true;
+    }
+
+    /**
+     * Ticks every connection.
+     *
+     * <p><b>One peer's exception must not stop every other peer being ticked.</b> On a server that is
+     * the difference between one player's broken handler and every player's session freezing — and the
+     * frozen ones would show no error of their own, which is the shape that gets diagnosed as a network
+     * fault.</p>
+     */
+    public void tick() {
+        for (Held held : peers.values()) {
+            try {
+                held.connection.tick();
+            } catch (RuntimeException failed) {
+                CrystalGuiCore.LOGGER.error("[cgui-net] {} connection tick failed: {}",
+                        which, failed.getMessage(), failed);
+            }
+        }
+    }
+
+    /** Closes everything. On a stop, so no caller is left waiting out a timeout for a dead process. */
+    public void closeAll(String reason) {
+        for (Object key : peers.keySet().toArray()) close(key, reason);
+    }
+
+    /** How many peers hold one. Diagnostics, and what a leak would show up in. */
+    public int size() {
+        return peers.size();
+    }
+}

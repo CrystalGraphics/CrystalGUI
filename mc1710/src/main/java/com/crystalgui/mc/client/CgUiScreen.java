@@ -1,5 +1,9 @@
 package com.crystalgui.mc.client;
 
+import com.crystalgui.mc.net.CgUiWorkspaceHost;
+import com.crystalgui.desktop.host.DesktopHost;
+import com.crystalgui.desktop.host.HostServices;
+import java.nio.file.Path;
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.desktop.Desktop;
@@ -127,8 +131,15 @@ public final class CgUiScreen extends GuiScreen {
         return (now - previous) / 1_000_000_000f;
     }
 
-    private static UIDocument uiWindow;
-    private static Mc1710Workspace workspace;
+    /**
+     * The surface, the compositor, the workspace and the window mount — everything a host is handed.
+     *
+     * <p>Four static fields and a class of its own, until W3. What this screen used to hold: a
+     * {@code UIDocument} it built and styled, a {@code Mc1710Workspace} that lazily opened a client and
+     * rebound it, a config storage, and a mount it re-asked per frame. None of that was about Minecraft,
+     * and all of it is {@link DesktopHost} now.</p>
+     */
+    private static DesktopHost host;
 
     /**
      * The workspace this screen's editor is using, or null before there is one.
@@ -139,7 +150,7 @@ public final class CgUiScreen extends GuiScreen {
      */
     @Nullable
     public static Workspace workspaceForProbe() {
-        return workspace == null ? null : workspace.client();
+        return host == null ? null : host.workspace();
     }
     /** The window the editor lives in. @see #initGui */
     private static WindowFrame editorWindow;
@@ -219,7 +230,7 @@ public final class CgUiScreen extends GuiScreen {
 
     /** Whether the editor has been built — read by the pump before it touches anything. */
     static boolean isReady() {
-        return uiWindow != null;
+        return host != null;
     }
 
     /**
@@ -232,7 +243,7 @@ public final class CgUiScreen extends GuiScreen {
      * is a window here; so is the worked example's panel. @see com.crystalgui.mc.example.MachineExampleClient
      */
     public static UIDocument window() {
-        return uiWindow;
+        return host == null ? null : host.document();
     }
 
     /**
@@ -244,7 +255,7 @@ public final class CgUiScreen extends GuiScreen {
      * present, whether anything is pinned, the overlay -- it asks here.</p>
      */
     public static Desktop desktop() {
-        return uiWindow == null ? null : Desktop.of(uiWindow);
+        return host == null ? null : host.desktop();
     }
 
     void requestClose() {
@@ -285,13 +296,9 @@ public final class CgUiScreen extends GuiScreen {
         // than as a missing flag.
         Keyboard.enableRepeatEvents(true);
 
-        if (uiWindow != null) {
+        if (host != null) {
             // Reopening: the desktop comes back exactly as it was left. Everything below built it once.
-            // exitHudMode first, and it is a no-op unless the screen was closed with something pinned --
-            // it is what puts back the windows the HUD hid, and it has to run BEFORE the resume so the
-            // desktop it restores them onto is the attached one.
-            desktop().exitHudMode();
-            desktop().resume();
+            host.shown();
             bringEditorForward();
             return;
         }
@@ -317,38 +324,52 @@ public final class CgUiScreen extends GuiScreen {
      */
     private void buildDesktop() {
         trace("begin");
-        File dataDir = mc.mcDataDir;
-        // NO ROOT. The files live on the SERVER now (Phase 4 B2) -- in single-player that is the
-        // integrated server, which is why there is one code path rather than a local special case.
-        workspace = new Mc1710Workspace();
-        trace("workspace + language registration");
+        host = DesktopHost.create(new Mc1710Host())
+                // WHAT A SERVER'S WINDOW IS OFFERED FIRST. The workbench honours an editor-tab or
+                // tool-window hint and hands everything else back to the desktop, so a client with no
+                // editor open still gets every window -- which is the hint working rather than failing.
+                // A supplier because the editor is built later than this and on demand.
+                .setWindowMount(() -> editor == null
+                        ? null : editor.workbench().windowMount(host.windowMount()));
+        // NO SEPARATE ROOT: the DOCUMENT is the root on this engine, so the class the host sheet keys
+        // on goes on it directly.
+        host.document().addClass(ROOT_CLASS);
+        host.document().styles().addStylesheet(StyleSheet.parse(HOST_STYLES));
+        trace("DesktopHost + host stylesheet");
+    }
 
-        // BESIDE the workspace, not inside it: a session record is private and must not become part of
-        // a project a resource pack could ship. ONE storage, shared: the editor's preferences and session
-        // records and the desktop's window arrangement all live in the same private directory, and
-        // building two would be two answers to the question of where that is.
-        config = new LocalConfigStorage(new File(dataDir, "config/crystalgui").toPath());
+    /**
+     * The three things only this platform can answer. @see HostServices
+     *
+     * <p>Where private files go, how big a pixel is, and whether there is a server. Everything the
+     * screen used to decide for itself — the window's title, its key, its icon, its close policy, its
+     * first-run geometry, when to ask for the project list — was the same answer on every host and is
+     * not asked here.</p>
+     */
+    private final class Mc1710Host implements HostServices {
 
-        // NO SEPARATE ROOT: the DOCUMENT is the root on this engine, so the class the
-        // host sheet keys on goes on it directly.
-        uiWindow = new UIDocument();
-        uiWindow.addClass(ROOT_CLASS);
-        // THE SCALE, ONCE. It lives on the box tree's root transform, which is the matrix layout
-        // composes, painting reads and hit-testing inverts -- so there is no second place it can be
-        // applied and no window in which the three can disagree. The old engine re-derived it inside
-        // `init` on every frame and had to invalidate every cached transform when it moved.
-        uiWindow.boxes().setUiScale(DEFAULT_UI_SCALE);
-        // NOT INSTALLED FOR YOU. Without this the window matches no selector at all and the editor
-        // renders as an unstyled column of boxes.
-        uiWindow.styles().addStylesheet(StyleSheet.DEFAULT);
-        uiWindow.styles().addStylesheet(StyleSheet.parse(HOST_STYLES));
+        @Override
+        public Path configDirectory() {
+            // BESIDE the workspace, never inside it: a session record is private and must not become
+            // part of a project a resource pack could ship.
+            return new File(mc.mcDataDir, "config/crystalgui").toPath();
+        }
 
-        // WHERE THE ARRANGEMENT LIVES, and nothing else -- CrystalOS W12. The compositor owns reading it,
-        // applying it to windows as they open, and writing it again when the screen closes; a host has no
-        // business holding a second copy of that policy.
-        desktop().persistTo(config, DESKTOP_ID);
+        @Override
+        public float uiScale() {
+            return DEFAULT_UI_SCALE;
+        }
 
-        trace("UIDocument + stylesheets");
+        @Override
+        public String desktopId() {
+            return DESKTOP_ID;
+        }
+
+        @Override
+        @Nullable
+        public ProtocolConnection<Object> connection() {
+            return CgUiConnections.client();
+        }
     }
 
     /**
@@ -358,7 +379,7 @@ public final class CgUiScreen extends GuiScreen {
      */
     private boolean ensureEditorWindow() {
         if (editorWindow != null) return true;
-        if (!workspace.isConnected()) {
+        if (host.workspace() == null) {
             // THE FILES LIVE ON THE SERVER (Phase 4 B2) -- in single-player that is the integrated
             // server -- so there is genuinely nothing for a workbench to show without one. Named rather
             // than left to throw out of a constructor, because "the editor needs a world" and "the editor
@@ -368,11 +389,11 @@ public final class CgUiScreen extends GuiScreen {
             return false;
         }
         File dataDir = mc.mcDataDir;
-        editor = new CrystalEditor(workspace.client());
+        editor = new CrystalEditor(host.workspace());
         trace("CrystalEditor construction");
         // THE SAME storage the desktop's arrangement went into. Two would be two answers to the question
         // of where a private directory is.
-        editor.useConfig(config);
+        editor.useConfig(host.config());
 
         editor.addClass(EDITOR_CLASS);
 
@@ -530,19 +551,16 @@ public final class CgUiScreen extends GuiScreen {
         // only appears in game.
         pumpInput();
 
-        // ONE NETWORK TICK, before anything reads the workspace.
-        workspace.pump(delta);
+        // ONE HOST TICK, before anything reads the workspace: the client is repaired if the wire
+        // moved, and the mount is re-asked. Both were written out here; both are the same on any host.
+        host.frame(delta);
         ProtocolConnection<Object> live = CgUiConnections.client();
-        // WHERE A SERVER'S WINDOWS GO. Re-asked per frame for the same reason the workspace client is:
-        // free when the wire has not moved, and a rebind nothing re-asks for can never fire. Windows
-        // that arrived before this point were queued by ClientWindows and land on the next tick.
-        CgUiWindowMount.bind(live, editor.workbench());
         if (live != null && live != projectsAskedOn) {
             projectsAskedOn = live;
             editor.workbench().fileTree().loadProjects();
             // AFTER loadProjects, never before: the restore parks the folders it wants expanded and
             // retries until the listings that reveal them arrive, so asking first parks everything.
-            editor.restoreSession(Mc1710Workspace.PROJECT_ID);
+            editor.restoreSession(CgUiWorkspaceHost.PROJECT_ID);
         }
 
 
@@ -631,7 +649,7 @@ public final class CgUiScreen extends GuiScreen {
      * neither device.</p>
      */
     private void pumpInput() {
-        if (uiWindow == null) return;
+        if (host == null) return;
         if (Mouse.isCreated()) {
             while (Mouse.next()) handleMouseInput();
         }
@@ -652,7 +670,8 @@ public final class CgUiScreen extends GuiScreen {
      */
     @Override
     public void handleKeyboardInput() {
-        if (uiWindow == null) return;
+        UIDocument window = window();
+        if (window == null) return;
         // THE SENSE WAS INVERTED, and both halves of the symptom followed from it.
         //
         // consumeKeyboardEvent returns TRUE when the UI CONSUMED the key -- that return exists precisely
@@ -660,7 +679,7 @@ public final class CgUiScreen extends GuiScreen {
         // closed on an Escape the window had already dealt with, and stayed open on one nobody wanted:
         // Escape on bare desktop did nothing at all, while Escape in the editor closed a popup AND the
         // whole screen. Reported exactly that way -- "it only closes when I escape on the editor".
-        boolean consumed = CgUiInput.pumpKeyboard(uiWindow);
+        boolean consumed = CgUiInput.pumpKeyboard(window);
         if (!consumed && Keyboard.getEventKeyState() && Keyboard.getEventKey() == Keyboard.KEY_ESCAPE) {
             closeRequested = true;
         }
@@ -669,9 +688,10 @@ public final class CgUiScreen extends GuiScreen {
     /** <b>The mouse pump.</b> Once per event, same contract as above. */
     @Override
     public void handleMouseInput() {
-        if (uiWindow == null) return;
+        UIDocument window = window();
+        if (window == null) return;
         // Raw device height, never GuiScreen.height -- see CgUiInput.pumpMouse.
-        CgUiInput.pumpMouse(uiWindow, mc.displayHeight);
+        CgUiInput.pumpMouse(window, mc.displayHeight);
     }
 
     /**
@@ -699,18 +719,7 @@ public final class CgUiScreen extends GuiScreen {
         // records its session and preferences, each because it went off screen and each knowing what it
         // is responsible for. A host says where the config directory is; it does not say what to put in
         // it. @see Desktop#persistTo and CrystalEditor#saveState
-        if (uiWindow != null) {
-            // PINNED WINDOWS SURVIVE THE SCREEN CLOSING, which is the half of a pin that Win32's
-            // WS_EX_TOPMOST has no way to express -- it has no desktop to close. With something pinned
-            // the compositor goes to the HUD instead of off: every UNPINNED window is hidden (detached,
-            // so it freezes exactly as before) and the pinned ones keep laying out, ticking and painting
-            // over the running game through CgUiHud.
-            //
-            // With nothing pinned this is the suspend it always was, which is strictly cheaper: the
-            // whole compositor leaves the tree in one detach rather than window by window.
-            if (desktop().hasPinnedWindows()) desktop().enterHudMode();
-            else desktop().suspend();
-        }
+        if (host != null) host.hidden();
     }
 
     /**
@@ -739,10 +748,10 @@ public final class CgUiScreen extends GuiScreen {
     /** Frees the editor at game shutdown. Not called on close — see the {@code editor} field. */
     public static void disposeAll() {
         if (editor != null) Disposer.dispose(editor);
+        if (host != null) host.dispose();
         editor = null;
         editorWindow = null;
-        uiWindow = null;
-        workspace = null;
+        host = null;
         projectsAskedOn = null;
     }
 }
