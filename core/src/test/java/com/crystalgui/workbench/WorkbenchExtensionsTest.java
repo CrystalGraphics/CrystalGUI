@@ -14,6 +14,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.crystalgui.app.shadergraph.ShaderGraphExtension;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.example.notes.NotesKind;
 import com.crystalgui.fs.client.Workspace;
@@ -81,6 +82,25 @@ public class WorkbenchExtensionsTest {
         } finally {
             workbench.dispose();
         }
+    }
+
+    /**
+     * ...and one from a layer ABOVE the workbench is there too, which a list could never manage.
+     *
+     * <p>The shader graph lives in {@code app/}, above {@code workbench/}, so the method that used to
+     * name what this repository ships could not see it — and the consequence was not tidiness: an
+     * <em>application</em> had to contribute it, which made a feature's availability a product's
+     * responsibility and put it out of reach of every other product. A {@code ServiceLoader} points the
+     * other way, so a mod's extension arrives through exactly the door ours does.</p>
+     *
+     * <p>Asserted through {@link WorkbenchExtensions#byId}, which is what a manifest's {@code with(...)}
+     * resolves against — the question is whether the id is <b>available</b>, not whether anything
+     * enabled it.</p>
+     */
+    @Test
+    public void anExtensionFromALayerAboveTheWorkbenchIsFoundToo() {
+        assertNotNull("the shader graph lives in app/, so nothing in workbench/ could have listed it",
+                WorkbenchExtensions.byId(ShaderGraphExtension.ID));
     }
 
     /** ...and it goes when the workbench does, because activate() hands back what it registered. */

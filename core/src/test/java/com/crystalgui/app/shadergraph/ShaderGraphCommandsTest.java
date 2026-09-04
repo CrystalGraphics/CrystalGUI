@@ -32,7 +32,7 @@ import com.crystalgui.ui.input.keymap.Keymap;
  * them, the way {@code TextEditor} always has with {@link EditorCommands}.</p>
  *
  * <p><b>An application's commands are still the application's.</b> The dock, the palette and Save stay in
- * {@code CrystalEditor.install} — those are choices about what a product offers, not about what a graph
+ * {@code CrystalEditor.KIND}'s extension list — those are choices about what a product offers, not about what a graph
  * <em>is</em>.</p>
  */
 public class ShaderGraphCommandsTest extends UiDocumentTestBase {

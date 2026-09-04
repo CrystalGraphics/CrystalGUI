@@ -1,7 +1,10 @@
 package com.crystalgui.desktop.app;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+import java.util.ServiceConfigurationError;
+import java.util.ServiceLoader;
 
 import javax.annotation.Nullable;
 
@@ -20,6 +23,14 @@ import com.crystalgui.fs.client.Workspace;
  * {@link #installed()}, a taskbar groups by {@link Application#kind()}, "open with" asks
  * {@link #handlerFor}, and a second launch of a single-instance application activates what is already
  * there instead of starting another.</p>
+ *
+ * <h3>Nothing installs these; they are DISCOVERED</h3>
+ *
+ * <p>Every {@link ApplicationKinds} service on the classpath is run once against this registry, lazily,
+ * on the first question anybody asks it — the arrangement {@code UIElementRegistry} already uses, and
+ * for the same reason: being correct must not depend on a host remembering to call anything. Three
+ * hosts each naming {@code CrystalEditor} is a list of products that differs per loader, and it makes a
+ * mod's own application need a line in code it does not own.</p>
  *
  * <h3>Installing is not launching, and that is the whole point</h3>
  *
@@ -42,6 +53,56 @@ public final class ApplicationRegistry {
         this.desktop = desktop;
     }
 
+    /** Whether the {@link ApplicationKinds} services have been run against this registry. */
+    private boolean bootstrapped;
+
+    /**
+     * Runs every {@link ApplicationKinds} service once — what makes this desktop's offering a function
+     * of the CLASSPATH rather than of which loader happened to start it.
+     *
+     * <p>Called at the top of every read below, so a launcher drawing a list, an "open with" lookup and
+     * a launch all find the same set with nothing having been installed by hand.</p>
+     *
+     * <p><b>Loaded with THIS class's loader, never the context one.</b> On 1.7.10 the context
+     * classloader is whatever the host left there, and LaunchWrapper's is not the one that defined
+     * these classes — a {@code ServiceLoader} pointed at it finds nothing, or finds a second copy of
+     * everything. The defining loader is the only one guaranteed to see the jar this interface came
+     * from.</p>
+     *
+     * <p><b>Per registry, not per process</b>, because installing is per desktop: two shells in one
+     * installation offer the same products and keep separate running instances.</p>
+     */
+    public void bootstrap() {
+        if (bootstrapped) return;
+        // SET BEFORE THE LOOP: a service installs, and `install` bootstraps, so anything else would
+        // re-enter here and run every service twice.
+        bootstrapped = true;
+        Iterator<ApplicationKinds> services =
+                ServiceLoader.load(ApplicationKinds.class, ApplicationRegistry.class.getClassLoader())
+                        .iterator();
+        while (true) {
+            ApplicationKinds kinds;
+            try {
+                if (!services.hasNext()) break;
+                kinds = services.next();
+            } catch (ServiceConfigurationError | RuntimeException | LinkageError broken) {
+                // A SERVICE THAT WILL NOT LOAD COSTS ITS OWN PRODUCTS AND NOT THE DESKTOP. The
+                // iterator throws on the ENTRY, so this has to bracket `next()` rather than the body --
+                // catching only around the call below leaves one mod's missing class emptying the
+                // launcher.
+                CrystalGuiCore.LOGGER.error("[cgui] an ApplicationKinds service could not be loaded; "
+                        + "its applications are not installed", broken);
+                continue;
+            }
+            try {
+                kinds.register(this);
+            } catch (RuntimeException | LinkageError failed) {
+                CrystalGuiCore.LOGGER.error("[cgui] the ApplicationKinds service '{}' failed to install "
+                        + "its applications: {}", kinds.getClass().getName(), failed.getMessage(), failed);
+            }
+        }
+    }
+
     /**
      * Makes an application available on this desktop.
      *
@@ -49,6 +110,7 @@ public final class ApplicationRegistry {
      */
     public Disposable install(ApplicationKind kind) {
         if (kind == null) return () -> { };
+        bootstrap();
         for (ApplicationKind already : installed) {
             if (already.id().equals(kind.id())) {
                 // LAST ONE LOSES, said out loud -- the same rule WorkbenchExtensions follows for the same
@@ -69,11 +131,13 @@ public final class ApplicationRegistry {
 
     /** Everything installed, in installation order. */
     public List<ApplicationKind> installed() {
+        bootstrap();
         return List.copyOf(installed);
     }
 
     @Nullable
     public ApplicationKind byId(String id) {
+        bootstrap();
         for (ApplicationKind kind : installed) {
             if (kind.id().equals(id)) return kind;
         }
@@ -93,6 +157,7 @@ public final class ApplicationRegistry {
      */
     @Nullable
     public Application launch(ApplicationKind kind, LaunchContext context) {
+        bootstrap();
         if (kind.isSingleInstance()) {
             Application already = firstRunning(kind);
             if (already != null) {
@@ -164,6 +229,7 @@ public final class ApplicationRegistry {
      */
     @Nullable
     public ApplicationKind handlerFor(Resource resource) {
+        bootstrap();
         for (Application live : running) {
             if (live.kind().handles(resource)) return live.kind();
         }
@@ -175,6 +241,7 @@ public final class ApplicationRegistry {
 
     /** Every running instance, in launch order. */
     public List<Application> running() {
+        bootstrap();
         return List.copyOf(running);
     }
 

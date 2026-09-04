@@ -91,22 +91,12 @@ public final class CrystalEditor {
                     .policy(WindowPolicy.HIDE_ON_CLOSE)
                     .start());
 
-    /**
-     * Makes the editor available on a desktop, and contributes what only this layer can name.
-     *
-     * <p>Two registries, because they answer different questions and have different lifetimes: an
-     * <em>extension</em> is contributed process-wide (this host has the feature), an
-     * <em>application</em> is installed per desktop (this shell offers the product). Contributing is
-     * idempotent — a second call is warned about and ignored — so a host may say this whenever it is
-     * ready without tracking whether it already has.</p>
-     *
-     * @return a handle that takes the editor off that desktop's launcher
-     */
-    public static Disposable install(ApplicationRegistry applications) {
-        // CONTRIBUTED HERE because `workbench/` cannot name `app/` -- it is a layer below it, which is
-        // exactly the rule that stops the engine knowing about its products. `WorkbenchExtensions`
-        // bootstraps what ships in `core/` and has no way to reach the shader graph.
-        WorkbenchExtensions.contribute(new ShaderGraphExtension());
-        return applications.install(KIND);
-    }
+    // install() IS GONE, and nothing replaced it.
+    //
+    // It did two things, and both are now discovered: the manifest is offered to every desktop by
+    // `com.crystalgui.app.Applications` (an ApplicationKinds service), and the shader-graph extension
+    // by a line in META-INF/services -- which is where it belonged, because contributing it from HERE
+    // made an application responsible for a feature's availability. What is left in this file is a
+    // constant, which is what "a manifest is data" has to mean if it means anything: a host that adds
+    // this jar to its classpath offers the editor, and one that does not, does not.
 }
