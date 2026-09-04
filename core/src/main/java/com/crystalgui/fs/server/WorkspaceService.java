@@ -384,6 +384,48 @@ public final class WorkspaceService {
         files.rename(from, to, overwrite);
     }
 
+    /**
+     * Copies a file, or a whole directory, <b>on the server</b>.
+     *
+     * <p>The bytes never leave the machine they are already on, which is the whole reason this is a
+     * verb rather than a client-side read-and-create: copying a 40 MB file was a 40 MB download
+     * followed by a 40 MB upload, and copying a FOLDER could not be expressed at all.</p>
+     *
+     * <p>Both ends are authorised, and they are different questions: reading the source and writing the
+     * destination. A copy into the source's own subtree is refused rather than recursing forever.</p>
+     */
+    public void copy(WorkspaceActor actor, CgPath from, CgPath to, boolean overwrite) {
+        authorise(actor, from, WorkspaceOperation.READ);
+        authorise(actor, to, WorkspaceOperation.WRITE);
+        if (!from.project().equals(to.project())) {
+            throw new CgFileSystemException(CgFileError.INVALID_PATH,
+                    "cannot copy across projects: " + from + " -> " + to);
+        }
+        // INTO ITSELF is the one shape that does not terminate: each level copied adds a level to walk.
+        if (from.equals(to) || from.contains(to)) {
+            throw new CgFileSystemException(CgFileError.INVALID_PATH,
+                    "cannot copy " + from + " into itself");
+        }
+        copyTree(from, to, overwrite);
+    }
+
+    /** One entry, then whatever is under it. @see #copy */
+    private void copyTree(CgPath from, CgPath to, boolean overwrite) {
+        CgFileEntry entry = files.stat(from);
+        if (!entry.isDirectory()) {
+            // The same cap a read enforces, and before the allocation for the same reason.
+            if (entry.size() > MAX_FILE_BYTES) {
+                throw CgFileSystemException.tooLarge(from, entry.size(), MAX_FILE_BYTES);
+            }
+            files.write(to, files.read(from), true, overwrite);
+            return;
+        }
+        files.mkdir(to);
+        for (CgFileEntry child : files.list(from)) {
+            copyTree(from.resolve(child.name()), to.resolve(child.name()), overwrite);
+        }
+    }
+
     /** The bytes of a file and the etag they were read at. */
     public record FileContent(CgPath path, byte[] content, String etag) {
     }

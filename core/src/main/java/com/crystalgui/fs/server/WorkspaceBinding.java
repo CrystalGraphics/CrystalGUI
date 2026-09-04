@@ -268,6 +268,61 @@ public final class WorkspaceBinding<T> {
             return etag;
         }));
 
+        /*
+         * COPY IS A SERVER VERB because a copy's bytes are already on the server. The client did it as
+         * a read and a create -- a 40 MB download followed by a 40 MB upload -- and could not express a
+         * directory at all, since a read of one is an error.
+         */
+        registry.register(FsMethods.COPY, (args, respond) -> mutate(respond, () -> {
+            FsMessages.MoveRequest request = decode(FsMessages.moveRequest(), args);
+            CgPath from = CgPath.parse(request.from());
+            CgPath to = CgPath.parse(request.to());
+            String repeat = operations.answerFor(request.op());
+            if (repeat != null) return repeat;
+
+            requireValidName(to);
+            service.copy(actor, from, to, request.overwrite());
+            String etag = service.stat(actor, to).etag();
+            hub.noteWritten(to, etag);
+            audit.record(actor, WorkspaceOperation.WRITE, to);
+            operations.record(request.op(), etag);
+            return etag;
+        }));
+
+        /*
+         * WHAT MAKES THE TRASH SOMETHING YOU CAN LOOK IN. `delete` answered a trash id and `restore`
+         * redeemed one, so the only recoverable deletions were the ones a client still held a receipt
+         * for -- which is this session's, and only until it forgot. Everything deleted before that was
+         * on disk, kept, and unreachable.
+         */
+        registry.register(FsMethods.TRASH_LIST, (args, respond) -> guard(respond, () -> {
+            FsMessages.PathRequest request = decode(FsMessages.pathRequest(), args);
+            String project = CgPath.parse(request.path()).project();
+            List<FsMessages.TrashEntry> out = new ArrayList<>();
+            for (WorkspaceTrash.Entry entry : service.trashList(actor, project)) {
+                out.add(new FsMessages.TrashEntry(entry.id(), entry.originalPath().toString(),
+                        entry.actor(), entry.deletedAt(), entry.directory(), entry.size()));
+            }
+            return encode(FsMessages.trashListResponse(), new FsMessages.TrashListResponse(out));
+        }));
+
+        registry.register(FsMethods.PURGE, (args, respond) -> mutate(respond, () -> {
+            FsMessages.PathRequest request = decode(FsMessages.pathRequest(), args);
+            String repeat = operations.answerFor(request.op());
+            if (repeat != null) return repeat;
+
+            // AUTHORISED AGAINST WHERE IT CAME FROM, which is what `service.purge` does -- an id says
+            // nothing about permissions, and destroying somebody's deleted file is a write where it
+            // used to live.
+            if (!service.purge(actor, request.path())) {
+                throw new CgFileSystemException(CgFileError.FILE_NOT_FOUND,
+                        "no such trash entry: " + request.path());
+            }
+            audit.record(actor, WorkspaceOperation.WRITE, null);
+            operations.record(request.op(), request.path());
+            return request.path();
+        }));
+
         registry.register(FsMethods.WATCH, (args, respond) -> guard(respond, () -> {
             FsMessages.PathRequest request = decode(FsMessages.pathRequest(), args);
             CgPath path = CgPath.parse(request.path());

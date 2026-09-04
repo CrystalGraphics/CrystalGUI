@@ -236,22 +236,115 @@ public class WorkspaceEndToEndTest {
     }
 
     /**
-     * <b>A copy of a large file copies all of it.</b>
+     * <b>A copy is one message, and the bytes never leave the server.</b>
      *
-     * <p>{@code copy} is a read and a create, because the server has no copy verb — so it inherited the
-     * truncation whole: the destination was created EMPTY and the operation reported success. Same for
-     * the explorer's copy-drop, which spells the pair out itself.</p>
+     * <p>It was a read and a create here, so a 40 MB file made a 40 MB round trip in each direction to
+     * end up beside itself — and it inherited the transfer truncation whole, creating the destination
+     * EMPTY and reporting success. The count is the assertion that separates the two: a read-and-create
+     * of a file this size is the read, five chunk pulls and an upload.</p>
      */
     @Test
-    public void aCopyOfALargeFileCopiesAllOfIt() {
+    public void aCopyIsOneMessageAndTheBytesNeverCrossTheWire() {
         String big = bigText();
         files.seed("proj:big.txt", big);
+        link[1].clearSent();
 
         workspace.files().copy(file("big.txt"), file("copy.txt"));
         for (int i = 0; i < 6; i++) pump();
 
-        assertEquals(big.length(),
-                files.read(CgPath.parse("proj:copy.txt")).length);
+        assertEquals("every byte, on the server",
+                big.length(), files.read(CgPath.parse("proj:copy.txt")).length);
+        assertEquals("one request, carrying two paths: " + link[1].sent(),
+                1, link[1].sent().size());
+    }
+
+    /**
+     * <b>...and a DIRECTORY can be copied at all</b>, which is what a client-side read could never do.
+     *
+     * <p>A read of a directory is an error, so the explorer's copy-drop silently did nothing for every
+     * folder dropped on it — the operation ran, failed, and was reported by nobody.</p>
+     */
+    @Test
+    public void aDirectoryIsCopiedWhole() {
+        files.seed("proj:src/a/one.txt", "1");
+        files.seed("proj:src/a/deep/two.txt", "2");
+
+        workspace.files().copy(file("src/a"), file("src/b"));
+        pump();
+
+        assertEquals("1", new String(files.read(CgPath.parse("proj:src/b/one.txt")),
+                StandardCharsets.UTF_8));
+        assertEquals("the whole subtree, not one level",
+                "2", new String(files.read(CgPath.parse("proj:src/b/deep/two.txt")),
+                        StandardCharsets.UTF_8));
+    }
+
+    /** Into its own subtree is the one shape that would not terminate. */
+    @Test
+    public void copyingADirectoryIntoItselfIsRefused() {
+        files.seed("proj:src/a/one.txt", "1");
+
+        List<ReplyError> errors = new ArrayList<>();
+        workspace.files().copy(file("src/a"), file("src/a/inner")).onError(errors::add);
+        pump();
+
+        assertFalse("it was refused", errors.isEmpty());
+        assertEquals(FsError.INVALID_PATH, errors.get(0).code());
+    }
+
+    // ── The trash ───────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>What is in the trash can be asked for.</b>
+     *
+     * <p>{@code fs/trashList} and {@code fs/purge} were declared in the vocabulary and served by
+     * nobody, and {@code WorkspaceService} implemented both — so the only recoverable deletions were
+     * the ones a client still held a receipt for. Everything deleted before this session was on the
+     * server's disk, kept, and unreachable by any route.</p>
+     */
+    @Test
+    public void theTrashListsWhatWasDeleted() {
+        workspace.files().delete(MAIN);
+        pump();
+
+        Reply<List<FsMessages.TrashEntry>> reply = workspace.files().trash(file("src"));
+        pump();
+
+        assertNotNull("it answered: " + reply.error(), reply.result());
+        assertEquals(1, reply.result().size());
+        assertEquals("proj:src/Main.java", reply.result().get(0).path());
+        assertTrue("and says how big it was", reply.result().get(0).size() > 0);
+    }
+
+    /** ...and purging one destroys it, so a restore afterwards has nothing to redeem. */
+    @Test
+    public void purgingATrashedEntryDestroysIt() {
+        Reply<String> deleted = workspace.files().delete(MAIN);
+        pump();
+        String trashId = deleted.result();
+
+        workspace.files().purge(trashId);
+        pump();
+
+        Reply<List<FsMessages.TrashEntry>> after = workspace.files().trash(file("src"));
+        pump();
+        assertEquals("nothing left to recover", 0, after.result().size());
+
+        List<ReplyError> errors = new ArrayList<>();
+        workspace.files().restore(trashId).onError(errors::add);
+        pump();
+        assertFalse("and the receipt no longer redeems", errors.isEmpty());
+    }
+
+    /** A purge of an id nobody issued is a refusal, never a quiet success. */
+    @Test
+    public void purgingSomethingThatIsNotThereSaysSo() {
+        List<ReplyError> errors = new ArrayList<>();
+        workspace.files().purge("trash-nope").onError(errors::add);
+        pump();
+
+        assertFalse(errors.isEmpty());
+        assertEquals(FsError.NOT_FOUND, errors.get(0).code());
     }
 
     /**
