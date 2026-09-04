@@ -1,12 +1,16 @@
 package com.crystalgui.workbench;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import java.nio.file.Paths;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.junit.After;
 import org.junit.Before;
@@ -67,6 +71,13 @@ public class LoadedTabReplacesItsPlaceholderTest extends UiDocumentTestBase {
     private static final String PROJECT = "scratch";
     private static final CgPath FILE = CgPath.parse(PROJECT + ":Main.java");
 
+    private static final String NL = System.lineSeparator();
+
+    private InMemoryFileSystem files;
+
+    /** Paths the server refuses to serve. @see #refuseReadsOf */
+    private final Set<String> refused = new HashSet<>();
+
     private Workbench workbench;
     private InMemoryTransport<Object>[] link;
     private ProtocolConnection<Object> serverEnd;
@@ -76,12 +87,15 @@ public class LoadedTabReplacesItsPlaceholderTest extends UiDocumentTestBase {
     public void openWorkbench() {
         Protocols.resetForTesting();
 
-        InMemoryFileSystem files = new InMemoryFileSystem()
-                .seed(FILE.toString(), "class Main { }\n");
+        files = new InMemoryFileSystem().seed(FILE.toString(), "class Main { }" + NL);
+        // A FILE THAT IS THERE AND WILL NOT BE SERVED, which is the case the auto-close must NOT take.
+        // A permission is how a real server refuses one, and it answers NO_PERMISSIONS rather than
+        // NOT_FOUND -- which is the whole distinction under test.
         WorkspaceService service = new WorkspaceService(
                 new ProjectRegistry().register(() -> List.of(
                         new WorkspaceProject(PROJECT, "Scratch", Paths.get("/srv/scratch")))),
-                files, WorkspacePermission.ALLOW_ALL);
+                files,
+                (actor, project, path, operation) -> path == null || !refused.contains(path.toString()));
 
         link = InMemoryTransport.pair();
         serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "host");
@@ -183,20 +197,62 @@ public class LoadedTabReplacesItsPlaceholderTest extends UiDocumentTestBase {
      * once the panel exists. The banner is that somewhere.</p>
      */
     @Test
-    public void aRestoredTabWhoseFileIsGoneSaysSo() {
+    public void aRestoredTabWhoseFileIsGoneClosesItself() {
         CgPath missing = CgPath.parse(PROJECT + ":nope.java");
-        workbench.open(DockInput.of(workbench.refFor(missing)));
+        DockPanelRef ref = workbench.refFor(missing);
+        workbench.open(DockInput.of(ref));
+        frameAndPump();
+        assertTrue("the tab is there to be dropped", inTheDock(ref));
+
         for (int i = 0; i < 12; i++) frameAndPump();
 
-        EditorService.Tab tab = workbench.editors().tabFor(EditorInput.of(Resource.of(missing)));
-        assertNotNull("a tab exists for it", tab);
-        assertEquals("and the read failed", DocumentState.FAILED, tab.state());
+        assertFalse("a tab with no subject is not a problem to report", inTheDock(ref));
+        assertNull("...and nothing is left holding the document",
+                workbench.editors().tabFor(EditorInput.of(Resource.of(missing))));
+    }
 
-        List<Notification> banners = DockBanners.bannersFor(workbench.refFor(missing));
+    /**
+     * <b>...and a file that is still THERE and could not be read keeps its tab, and its banner.</b>
+     *
+     * <p>The distinction both references draw, and the reason the discriminator is the {@code FsError}
+     * CODE rather than the fact of a failure. A deleted file is a tab with no subject; a file that
+     * cannot be read is a fact about a file that still exists — no permission, a bad encoding, over the
+     * cap — and closing the tab throws away both the fact and the {@code Retry} that can act on it.</p>
+     */
+    @Test
+    public void aFileThatCannotBeReadKeepsItsTabAndSaysWhy() {
+        CgPath refused = CgPath.parse(PROJECT + ":locked.java");
+        files.seed(refused.toString(), "class Locked { }");
+        // NOT a delete: the file is there, and the server refuses to serve it.
+        refuseReadsOf(refused);
+
+        DockPanelRef ref = workbench.refFor(refused);
+        workbench.open(DockInput.of(ref));
+        for (int i = 0; i < 12; i++) frameAndPump();
+
+        EditorService.Tab tab = workbench.editors().tabFor(EditorInput.of(Resource.of(refused)));
+        assertNotNull("the tab stays", tab);
+        assertEquals(DocumentState.FAILED, tab.state());
+        assertTrue("...and so does its panel", inTheDock(ref));
+
+        List<Notification> banners = DockBanners.bannersFor(ref);
         assertEquals("exactly one thing to say about it", 1, banners.size());
-        assertTrue("...and it names the file", banners.get(0).getMessage().contains("nope.java"));
+        assertTrue("...and it names the file", banners.get(0).getMessage().contains("locked.java"));
         assertTrue("...and offers a way out", banners.get(0).actions().stream()
                 .anyMatch(action -> "Retry".equals(action.label())));
+    }
+
+    /** Makes the server refuse this path -- present, and not served. */
+    private void refuseReadsOf(CgPath path) {
+        refused.add(path.toString());
+    }
+
+    /** Whether the main dock still holds a panel for {@code ref}. */
+    private boolean inTheDock(DockPanelRef ref) {
+        for (DockLeaf leaf : workbench.dock().layout().leaves()) {
+            if (leaf.indexOf(ref) >= 0) return true;
+        }
+        return false;
     }
 
     /**

@@ -2441,12 +2441,43 @@ public class Workbench extends UIElement implements DataProvider {
     private void refreshPanelForTab(EditorService.Tab tab) {
         DockPanelRef ref = refForResource(tab.resource());
         if (dock.builtContentFor(ref) == null) return;   // not on screen; nothing to replace
+        if (closeIfTheFileIsGone(tab, ref)) return;
         DocumentState placeholder = placeholders.get(ref);
         if (tab.editor() != null) {
             if (placeholder != null) dock.rebuildPanel(ref);
             return;
         }
         if (placeholder != null && placeholder != tab.state()) dock.rebuildPanel(ref);
+    }
+
+    /**
+     * <b>A tab for a file that is no longer there closes itself.</b>
+     *
+     * <p>What both references do, and the distinction they draw is the whole of this method. A session
+     * remembers what was open when it was written; between then and now a file can be deleted, renamed
+     * or moved, and a tab for one is not a problem to report — it is a tab with no subject. VS Code
+     * drops it on restore and IntelliJ drops it; neither asks, because there is nothing to decide.</p>
+     *
+     * <p><b>Only for {@code NOT_FOUND}.</b> A file that is still there and could not be READ is a
+     * different thing entirely — no permission, a bad encoding, larger than the cap, a provider that
+     * failed — and closing the tab would throw away both the fact and the {@code Retry} that can act on
+     * it. That one keeps its banner. The code is the discriminator rather than the message, which is
+     * what {@code FsError} carries a code FOR.</p>
+     *
+     * <p>Silent, deliberately. {@code openResource} notifies on a failed open because somebody just
+     * asked for that file; this fires for a tab nobody asked for today, and a notification per deleted
+     * file on every launch is noise about something that was already true.</p>
+     *
+     * @return whether the tab was closed, so the caller stops touching a panel that has gone
+     */
+    private boolean closeIfTheFileIsGone(EditorService.Tab tab, DockPanelRef ref) {
+        if (tab.state() != DocumentState.FAILED) return false;
+        ReplyError why = tab.failure();
+        if (why == null || !why.is(FsError.NOT_FOUND)) return false;
+        placeholders.remove(ref);
+        editors.close(tab);
+        if (dock.layout().closePanel(ref)) dock.requestRebuild();
+        return true;
     }
 
     /**
