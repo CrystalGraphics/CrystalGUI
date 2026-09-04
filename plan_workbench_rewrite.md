@@ -536,6 +536,47 @@ absence of `openByDefault`. VS Code — `viewsContainers.activitybar` → a kind
 were wrong, one by a factor of two, and that the only honest instrument is a scratch tree plus `javac`
 (`tools/port/pricesplit.py` — deleted since M6 and rebuilt at D24). W5 in the phasing runs it before committing to these boundaries.
 
+> **Shipped at W5. `Workbench` 3,598 → 2,115 lines**, eight collaborators beside it:
+>
+> | | lines | |
+> |---|---|---|
+> | `SaveActions` | 322 | saving, the stale-write question and its three answers, the merge, what a close must ask |
+> | `DocumentTabs` | 496 | the seven registry providers, placeholders, the failure banner, release-on-close, follow-rename |
+> | `WorkbenchOpener` | 471 | `open`/`openFile`/`openResource` and their `At` variants, the bindings, `refFor`, `activeDock` |
+> | `TextFileKind` | 116 | the fallback kind, out of the constructor |
+> | `ProjectSourcesIndex` | 230 | the three volatile snapshots and the late-services attach |
+> | `ProblemsBinding` | 76 | the marker index, the count entry, the panel binding |
+> | `PresenceBinding` | 87 | the status entry and its phrasing |
+> | `ExplorerBinding` | 187 | external change, drops, the root watches, auto-reveal |
+>
+> **The boundary is FLAT, and that is measured rather than assumed.** The table above proposed
+> `workbench/editor/` and `workbench/ext/`; making that move and compiling it prices at **55 published
+> members** — sixteen of them `Workbench`'s own internals (`dock`, `documents`, `registry`,
+> `placeholders`, `externallyChanged`, `lastDirty`), which is publishing the shell's private state to the
+> whole engine so that one class can talk to another. Beside it, one package costs **nothing** and keeps
+> every one of them package-private. The sub-packages buy a filing convention and sell the encapsulation
+> the split was for; they are not taken. (The first reading said *eight* members, which is what a compile
+> reports when it stops at eight package-private CLASSES and never reaches their members — `nested.py`'s
+> warning, met again.)
+>
+> **The names are not the plan's.** `ProblemsExtension` and its three siblings are `*Binding` classes,
+> because they are not `WorkbenchExtension`s: their panels are still the workbench's own fields behind
+> public accessors that `language/`, the harness and the loader all read. Turning them into extensions
+> is what W7 needs when an application chooses its panels, and calling them that now would be a name
+> that is not yet true.
+>
+> **D4 shipped with it.** `StatusBar` is an instance per workbench, reached by a widget through
+> `UiDataKeys.STATUS_BAR` — which is what lets a `TextEditorView` or a shader graph, both below the
+> workbench layer, write to a workbench's bar without naming one. `TextEditorView.ACTIVE_ENTRIES` was
+> static too, so two editors shared one list: activating the second withdrew the first's readouts.
+>
+> **What made this mechanical rather than a rewrite** is `tools/port/extract.py`, written here: it cuts
+> a named cluster out with its comments, prefixes references back to the owner, and leaves the rest to
+> the compiler. Its own first version rewrote *inside comments* — "this usually runs inside the click"
+> became "workbench usually runs" — which is worse than a missing comment, because prose that has been
+> through a find-and-replace still reads as prose somebody wrote. It masks comments and string literals
+> now, and the three extractions were redone from the original.
+
 ### 4.6 Process-wide → per-scope (A7, A12, A15)
 
 | Today | Becomes | Why |
@@ -901,7 +942,7 @@ Each with a recommendation; the phasing assumes the recommendation unless the de
 | **D21** | Theme and editor scheme | The **theme** (tokens) is the desktop's — one style engine per document; the **editor colour scheme** is per application, installed as a sheet *scoped to the application's root* (`StyleEngine.addStylesheet(sheet, root)` exists for this) | `UiThemeManager.installInto(window.styles())` is document-wide today, so two applications' schemes would fight and the last to install wins |
 | **D22** | Which application receives a server-pushed `EDITOR_TAB` / `TOOL_WINDOW` window? | The most-recently-active workbench application; the desktop when none is running | `NetworkedPanels` is per workbench and the mount is per connection, so a route has to be chosen; MRU is what every "open in the current window" rule does |
 | **D23** | Existing session files under the old name | A one-time fallback read of `session.<first project id>.json` when the new key has no record, then written under the new key | Costs ten lines; without it every user loses one arrangement on the day the key changes |
-| **D24** | `tools/port/pricesplit.py` | **Rebuilt** — it existed at `629ccbf9` and was deleted with the port tools; the plan cites it for W5. Copy a package into a scratch tree, apply the partition, `javac`, count `is not public`. ~60 lines | A split priced from source has been wrong three times (`plan_m6.md` §6); the instrument has to exist before W5 |
+| **D24** ~~rebuild~~ | `tools/port/pricesplit.py` | **It was never deleted** — it is tracked at HEAD, 94 lines, from `629ccbf9`, and the plan's claim that it went with the port tools was wrong. It was used at W5 as written; `publish.py` beside it gained the same-package case (`has private access`), which it did not have | A split priced from source has been wrong three times (`plan_m6.md` §6); the instrument existed and the plan had lost track of it |
 | **D25** | Are the client's own GLOBAL projects reachable while connected to a dedicated server? | **Yes, served locally through the protocol** (§4.13), edit-only as far as scripts go (§4.14); a server serves exactly one root and an integrated server's is the world's | Hiding a player's own notes and configs the moment they join a server makes the global scope pointless; serving them through the same protocol is what keeps etags, trash, watches and presence honest for them |
 | **D26** | When is a scope chosen? | **Only in single-player** — GLOBAL or WORLD, WORLD preselected, and the choice picks the *source* the `fs/createProject` goes to. Title screen: local only. Dedicated: the server only, for authorised actors; no option shown | A dedicated server has one world and therefore one root; the option would be a choice with one answer |
 | **D27** | Who grants `LIVE` scripting on a dedicated server? | The server's config, per actor, defaulting to nobody; `AUTHORIZED` is the default for every server project; the client's local scope is `NONE` while remote | §4.14: a stock client offers no live surface on a server unless the server says so |
@@ -1004,7 +1045,7 @@ move with the rewrite.
 | **W3 — the host seam** | `HostServices`, `DesktopHost`, `DesktopWindowMount` (in `desktop.host`), `net.protocol.Connections`, `fs.server.WorkspaceHost`; `Mc1710Workspace` and `CgUiWindowMount` **deleted**; `CgUiScreen` rewired onto the host (it shrinks at W7, with the application) | `:mc1710:compileJava`, `serverSmoke` — both green; `WorkspaceHostTest` drives the server side headlessly for the first time | **medium** — crosses the loader seam, so only `serverSmoke` and a client can see it |
 | **W3b — projects and sources** | `project.json` + `ScanningProjectProvider`, `fs/createProject`, the client-local source and `Workspace` routing by project, one root per server chosen by `isDedicatedServer()`, `workspaceId`, the explorer's source groups, the creation dialog with the scope choice shown only in single-player (§4.13) | many projects listed from both sources on a dedicated server and in single-player; one created into each; `serverSmoke` + the two-client probe | **medium–high** — the largest fs change since F7, and it crosses the loader seam |
 | **W4 — `ToolWindowKind`** | the declaration; Project, Problems, Notifications and Inspector ported; `registerToolWindowCommands` deleted along with the hand-wired badge and the two `showPanel` calls; Run deferred to W6 with the rest of `language/` | every ported tool window is one declaration — icon, placement, view, toggle command, badge, default-open; `:core:test` and `:core:headlessTest` green | medium |
-| **W5 — the `Workbench` split** | `pricesplit.py` rebuilt (D24) and run first; the extraction per §4.5; `StatusBar` per workbench (D4) | `:core:check`; the 1,745+1,749 tests | **high** — the largest move; done after W1–W4 so it moves code that is already disposed and already context-shaped |
+| **W5 — the `Workbench` split** | eight collaborators extracted with `tools/port/extract.py` (new); the flat boundary priced at 55 published members against zero and rejected; `StatusBar` per workbench (D4) reached through `UiDataKeys.STATUS_BAR` | `Workbench` 3,598 → 2,115; `:core:test`, `:core:headlessTest`, `:mc1710:compileJava` and the harness all green | **high** — the largest move; done after W1–W4 so it moved code that was already disposed and already context-shaped |
 | **W6 — `ScriptWorkbench` → extension, and scripting as a capability** | D13; `ScriptingMode` in `ProjectCapability`; `ScriptMethods` + `ServerScripts`/the client half (§4.14); `ScriptLauncher` refuses on anything but `LIVE` | the Run panel appears on every host that lists `crystalgui:scripting` and has a band; on a dedicated server a non-op's Run is disabled and a server-sent script runs and reports; `CgUiAutoTest.runScriptOnce` rewired | medium–high — `language/` is in another worktree (§8), and the authorized channel is new protocol |
 | **W7 — applications** | `ApplicationKind`/`Registry`/`WorkbenchApplication`; `CrystalEditor` as manifest; `WindowFrame.setApplication`; taskbar grouping; notifications to the desktop (D3); the session key per §4.9 with `FsHello.workspaceId` | two `CrystalEditor`s on one desktop with separate status bars and one notification centre | medium |
 | **W8 — launcher, search, associations** | `Launcher`, `DesktopSearch`, `handlerFor`, jump-list actions, the shader-graph action | F7 desktop with a launcher; "open with"; a search that finds an app, a window, a file | medium |

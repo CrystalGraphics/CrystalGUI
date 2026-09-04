@@ -1,5 +1,6 @@
 package com.crystalgui.workbench;
 
+import com.crystalgui.core.notify.StatusBar;
 import java.util.List;
 import java.util.function.Function;
 
@@ -70,6 +71,9 @@ public interface WorkbenchContext {
 
     /** The tabs over those documents — the one open lane. */
     EditorService editors();
+
+    /** The status bar of this workbench — per workbench since W5, never a static. */
+    StatusBar statusBar();
 
     /** Problems, by owner. */
     Markers markers();

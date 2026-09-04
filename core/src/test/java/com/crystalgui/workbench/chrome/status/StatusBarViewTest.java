@@ -34,12 +34,20 @@ import static org.junit.Assert.assertTrue;
  */
 public class StatusBarViewTest extends UiDocumentTestBase {
 
+    /**
+     * The bar under test — an instance since W5, and this fixture is where that shows.
+     *
+     * <p>It used to be a static, so every test in this class shared one and each had to reset it. A
+     * fresh bar per test is what an instance buys, and the {@code resetForTesting} calls that went with
+     * it are gone.</p>
+     */
+    private final StatusBar model = new StatusBar();
+
     private StatusBarView bar;
 
     @Before
     public void setUp() {
-        StatusBar.resetForTesting();
-        bar = new StatusBarView();
+        bar = new StatusBarView(model);
         UIElement root = new UIElement().layout(l -> l.width(400).height(100));
         root.append(bar);
         document.append(root);
@@ -49,7 +57,6 @@ public class StatusBarViewTest extends UiDocumentTestBase {
 
     @After
     public void tearDown() {
-        StatusBar.resetForTesting();
     }
 
     private void settle() {
@@ -62,8 +69,8 @@ public class StatusBarViewTest extends UiDocumentTestBase {
         return deepAll(group, StatusBarView.ITEM_CLASS);
     }
 
-    private static StatusBarEntryAccessor add(String name, String text, StatusBarAlignment alignment) {
-        return StatusBar.addEntry(StatusBarEntry.of(name, text), name, alignment);
+    private StatusBarEntryAccessor add(String name, String text, StatusBarAlignment alignment) {
+        return model.addEntry(StatusBarEntry.of(name, text), name, alignment);
     }
 
     private static String textOf(UIElement item) {
@@ -127,8 +134,8 @@ public class StatusBarViewTest extends UiDocumentTestBase {
      */
     @Test
     public void twoWritersSharingAnIdEachKeepTheirOwnEntry() {
-        StatusBar.addEntry(StatusBarEntry.of("Build", "compiling"), "shared", StatusBarAlignment.LEFT);
-        StatusBar.addEntry(StatusBarEntry.of("Index", "indexing"), "shared", StatusBarAlignment.LEFT);
+        model.addEntry(StatusBarEntry.of("Build", "compiling"), "shared", StatusBarAlignment.LEFT);
+        model.addEntry(StatusBarEntry.of("Index", "indexing"), "shared", StatusBarAlignment.LEFT);
         settle();
 
         List<UIElement> left = itemsIn(StatusBarView.LEFT_CLASS);
@@ -145,9 +152,9 @@ public class StatusBarViewTest extends UiDocumentTestBase {
      */
     @Test
     public void higherPriorityRendersFurtherLeft() {
-        StatusBar.addEntry(StatusBarEntry.of("Encoding", "UTF-8"), "encoding",
+        model.addEntry(StatusBarEntry.of("Encoding", "UTF-8"), "encoding",
                 StatusBarAlignment.RIGHT, 98);
-        StatusBar.addEntry(StatusBarEntry.of("Cursor position", "51:39"), "caret",
+        model.addEntry(StatusBarEntry.of("Cursor position", "51:39"), "caret",
                 StatusBarAlignment.RIGHT, 100);
         settle();
 
@@ -220,14 +227,14 @@ public class StatusBarViewTest extends UiDocumentTestBase {
         settle();
         assertEquals(2, itemsIn(StatusBarView.RIGHT_CLASS).size());
 
-        StatusBar.setHidden("encoding", true);
+        model.setHidden("encoding", true);
         settle();
         assertEquals("the hidden entry is still rendered", 1, itemsIn(StatusBarView.RIGHT_CLASS).size());
         assertEquals("51:39", textOf(itemsIn(StatusBarView.RIGHT_CLASS).get(0)));
-        assertEquals("a menu could not offer it back", 2, StatusBar.allEntries().size());
-        assertTrue(StatusBar.isHidden("encoding"));
+        assertEquals("a menu could not offer it back", 2, model.allEntries().size());
+        assertTrue(model.isHidden("encoding"));
 
-        StatusBar.setHidden("encoding", false);
+        model.setHidden("encoding", false);
         settle();
         assertEquals(2, itemsIn(StatusBarView.RIGHT_CLASS).size());
     }
@@ -242,7 +249,7 @@ public class StatusBarViewTest extends UiDocumentTestBase {
      */
     @Test
     public void anEntryWithACommandIsMarkedClickable() {
-        StatusBarEntryAccessor accessor = StatusBar.addEntry(
+        StatusBarEntryAccessor accessor = model.addEntry(
                 new StatusBarEntry("Shader graph compilation", "2 errors", null,
                         "workbench.showProblems", StatusBarEntry.Kind.ERROR),
                 "compile", StatusBarAlignment.LEFT);
@@ -308,14 +315,14 @@ public class StatusBarViewTest extends UiDocumentTestBase {
      * the name/text split is for — you cannot offer "hide 51:39" as a checkbox, and the text it would name
      * changes on every keystroke.</p>
      *
-     * <p>Driven through the menu rather than through {@code StatusBar.setHidden}, because a surface that
+     * <p>Driven through the menu rather than through {@code model.setHidden}, because a surface that
      * reaches the setter is the whole point of it existing.</p>
      */
     @Test
     public void theHideMenuNamesEntriesAndTogglesThem() {
-        StatusBar.addEntry(StatusBarEntry.of("Cursor position", "51:39"), "caret",
+        model.addEntry(StatusBarEntry.of("Cursor position", "51:39"), "caret",
                 StatusBarAlignment.RIGHT, 100);
-        StatusBar.addEntry(StatusBarEntry.of("File encoding", "UTF-8"), "encoding",
+        model.addEntry(StatusBarEntry.of("File encoding", "UTF-8"), "encoding",
                 StatusBarAlignment.RIGHT, 98);
         settle();
         assertEquals(2, itemsIn(StatusBarView.RIGHT_CLASS).size());
@@ -347,7 +354,7 @@ public class StatusBarViewTest extends UiDocumentTestBase {
      */
     @Test
     public void aSlotKeepsOneTooltipAcrossUpdates() {
-        StatusBarEntryAccessor compile = StatusBar.addEntry(
+        StatusBarEntryAccessor compile = model.addEntry(
                 new StatusBarEntry("Build", "compiled 9n/8e", "996 chars", null,
                         StatusBarEntry.Kind.STANDARD),
                 "compile", StatusBarAlignment.LEFT);

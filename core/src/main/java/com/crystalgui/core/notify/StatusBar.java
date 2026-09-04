@@ -45,8 +45,6 @@ import java.util.Set;
  */
 public final class StatusBar {
 
-    private StatusBar() {
-    }
 
     /**
      * The set of entries, or one of them, changed.
@@ -57,10 +55,10 @@ public final class StatusBar {
      * move, whether or not anything was listening for a string. A listener re-reads what it needs, exactly
      * as {@code DiagnosticSet.onChanged} and {@code TreeObserver.stateChanged} already do.</p>
      */
-    public static final Signal.Action onDidChange = new Signal.Action();
+    public final Signal.Action onDidChange = new Signal.Action();
 
     /** Registration order, which is the tiebreak when two entries share a priority. */
-    private static int sequence;
+    private int sequence;
 
     /**
      * Entry ids the user has switched off — VS Code's status bar context menu, IntelliJ's
@@ -77,16 +75,16 @@ public final class StatusBar {
      *
      * <p>Not persisted yet — the same honest limit as notification suppression, and for the same reason.</p>
      */
-    private static final Set<String> HIDDEN = new LinkedHashSet<>();
+    private final Set<String> HIDDEN = new LinkedHashSet<>();
 
     /** Switches an entry id off, or back on. @see #HIDDEN */
-    public static void setHidden(String id, boolean hidden) {
+    public void setHidden(String id, boolean hidden) {
         if (id == null || id.isEmpty()) return;
         boolean changed = hidden ? HIDDEN.add(id) : HIDDEN.remove(id);
         if (changed) onDidChange.emit();
     }
 
-    public static boolean isHidden(String id) {
+    public boolean isHidden(String id) {
         return HIDDEN.contains(id);
     }
 
@@ -96,21 +94,21 @@ public final class StatusBar {
      * <p>Distinct from {@link #entries()}, which is what a bar renders: a menu has to list what you have
      * switched off, or there is no way to switch it back on.</p>
      */
-    public static List<StatusBarEntryAccessor> allEntries() {
+    public List<StatusBarEntryAccessor> allEntries() {
         List<Live> all = new ArrayList<>(ENTRIES);
         all.sort(BY_PRIORITY);
         return new ArrayList<>(all);
     }
 
     /** The id an accessor was registered under. */
-    public static String idOf(StatusBarEntryAccessor accessor) {
+    public String idOf(StatusBarEntryAccessor accessor) {
         return accessor instanceof Live ? ((Live) accessor).id : "";
     }
 
-    private static final List<Live> ENTRIES = new ArrayList<>();
+    private final List<Live> ENTRIES = new ArrayList<>();
 
     /** The separator between two entries in {@link #text()}. */
-    private static final String SEPARATOR = "   ";
+    private final String SEPARATOR = "   ";
 
     /**
      * Puts an entry on the bar and hands back the handle that owns it.
@@ -121,7 +119,7 @@ public final class StatusBar {
      * @param alignment which end it belongs at
      * @param priority  higher sits closer to that end. Ties break by registration order.
      */
-    public static StatusBarEntryAccessor addEntry(StatusBarEntry entry, String id,
+    public StatusBarEntryAccessor addEntry(StatusBarEntry entry, String id,
                                                   StatusBarAlignment alignment, int priority) {
         if (entry == null) throw new IllegalArgumentException("a status entry needs content");
         Live live = new Live(id == null ? entry.name() : id, entry,
@@ -132,7 +130,7 @@ public final class StatusBar {
     }
 
     /** As {@link #addEntry(StatusBarEntry, String, StatusBarAlignment, int)}, at the default priority. */
-    public static StatusBarEntryAccessor addEntry(StatusBarEntry entry, String id,
+    public StatusBarEntryAccessor addEntry(StatusBarEntry entry, String id,
                                                   StatusBarAlignment alignment) {
         return addEntry(entry, id, alignment, 0);
     }
@@ -143,7 +141,7 @@ public final class StatusBar {
      * <p>Both groups sort the same way, because "higher priority is further left" is a statement about the
      * bar rather than about a group. @see StatusBar
      */
-    public static List<StatusBarEntryAccessor> entries(StatusBarAlignment alignment) {
+    public List<StatusBarEntryAccessor> entries(StatusBarAlignment alignment) {
         List<Live> group = new ArrayList<>();
         for (Live live : ENTRIES) {
             if (live.alignment == alignment && !HIDDEN.contains(live.id)) group.add(live);
@@ -153,17 +151,17 @@ public final class StatusBar {
     }
 
     /** Highest priority first; registration order breaks a tie. */
-    private static final Comparator<Live> BY_PRIORITY =
+    private final Comparator<Live> BY_PRIORITY =
             Comparator.<Live>comparingInt(live -> -live.priority).thenComparingInt(live -> live.sequence);
 
     /** Every live entry, both groups, left group first. */
-    public static List<StatusBarEntryAccessor> entries() {
+    public List<StatusBarEntryAccessor> entries() {
         List<StatusBarEntryAccessor> all = new ArrayList<>(entries(StatusBarAlignment.LEFT));
         all.addAll(entries(StatusBarAlignment.RIGHT));
         return all;
     }
 
-    public static int size() {
+    public int size() {
         return ENTRIES.size();
     }
 
@@ -173,7 +171,7 @@ public final class StatusBar {
      * <p>For anything that wants a flat string — a log, a headless assertion, the harness's single label.
      * Deliberately ignores alignment, since a line has no ends.</p>
      */
-    public static String text() {
+    public String text() {
         StringBuilder out = new StringBuilder();
         for (StatusBarEntryAccessor accessor : entries()) {
             if (out.length() > 0) out.append(SEPARATOR);
@@ -183,7 +181,7 @@ public final class StatusBar {
     }
 
     /** Empties the bar. For tests that need isolation, never for production. */
-    public static void resetForTesting() {
+    public void resetForTesting() {
         ENTRIES.clear();
         HIDDEN.clear();
         sequence = 0;
@@ -191,7 +189,7 @@ public final class StatusBar {
     }
 
     /** One registered entry. Its own accessor, so the handle and the record cannot come apart. */
-    private static final class Live implements StatusBarEntryAccessor {
+    private final class Live implements StatusBarEntryAccessor {
 
         final String id;
         private final StatusBarAlignment alignment;
