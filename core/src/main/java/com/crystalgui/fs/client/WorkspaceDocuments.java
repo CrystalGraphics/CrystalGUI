@@ -2,7 +2,6 @@ package com.crystalgui.fs.client;
 
 import com.crystalgui.core.async.PendingReply;
 import com.crystalgui.core.async.Reply;
-import com.crystalgui.core.async.ReplyError;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentKind;
@@ -93,17 +92,16 @@ public final class WorkspaceDocuments {
         documents.onDidClose.connect(document -> {
             Workspace.Watch watch = watches.remove(document.resource());
             if (watch != null) watch.dispose();
+            // THE UNWATCH TAKES THIS CLIENT OUT OF THE PATH'S PRESENCE, so there is nothing to
+            // withdraw -- only the memo of what the server was told, which describes a document that
+            // no longer exists.
+            reportedEditing.remove(document.resource());
             onDidClose.emit(document);
         });
         // THE SERVER'S CASE RULE, asked once it has answered. Until then the conservative assumption
         // holds -- see FsHello.unknown, and why the failure it produces is the one an etag catches.
         workspace.onDidGreet.connect(hello ->
                 documents.setKeyStrategy(workspace.documentKeyStrategy()));
-    }
-
-    /** The headless store underneath. What holds the documents; this holds the wire. */
-    public Documents store() {
-        return documents;
     }
 
     // ── Opening ─────────────────────────────────────────────────────────────────────────────────
@@ -224,9 +222,30 @@ public final class WorkspaceDocuments {
                 }
             }
         });
-        document.onDidChangeState.connect(state -> onDidChangeState.emit(document, state));
+        document.onDidChangeState.connect(state -> {
+            onDidChangeState.emit(document, state);
+            reportEditing(document);
+        });
         document.onDidChange.connect(() -> backup(document));
     }
+
+    /**
+     * Tells the server when this client's dirtiness <b>changes</b>, and only then.
+     *
+     * <p>Sent on the transition rather than on every state change, because a state change is not the
+     * same event: a document goes STALE and back to CLEAN without anybody having typed, and a reload
+     * moves it twice. What the far side needs is the edge.</p>
+     */
+    private void reportEditing(Document document) {
+        boolean dirty = document.isDirty();
+        Boolean told = reportedEditing.get(document.resource());
+        if (told != null && told == dirty) return;
+        reportedEditing.put(document.resource(), dirty);
+        workspace.setEditing(document.resource(), dirty);
+    }
+
+    /** Per open document, the last dirtiness the server was told. @see #reportEditing */
+    private final Map<Resource, Boolean> reportedEditing = new LinkedHashMap<>();
 
     // ── What a change on the server means ───────────────────────────────────────────────────────
 
@@ -346,6 +365,17 @@ public final class WorkspaceDocuments {
     private void recordHistory(Document document, byte[] content) {
         LocalHistory history = workspace.history();
         if (history != null) history.record(document.resource(), content);
+    }
+
+    /**
+     * Throws away every offer of unsaved work — the answer when somebody declines to restore it.
+     *
+     * <p>The half {@link #restorable} needs to be a question rather than a standing obligation: without
+     * it a declined offer is made again on every launch, for ever, because nothing has said no.</p>
+     */
+    public void discardRestorable() {
+        Backup store = workspace.backup();
+        if (store != null) store.discardAll();
     }
 
     /**

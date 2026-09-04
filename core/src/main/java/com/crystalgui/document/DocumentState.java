@@ -43,11 +43,6 @@ public enum DocumentState {
     /** The bytes could not be read, or could not be applied by the model. Saving is refused. */
     FAILED;
 
-    /** Whether this state means there is content on screen that is worth saving. */
-    public boolean hasUnsavedWork() {
-        return this == DIRTY || this == CONFLICTING;
-    }
-
     /** Whether a save may proceed without asking anybody anything. */
     public boolean isSaveable() {
         return this == CLEAN || this == DIRTY || this == ORPHANED;

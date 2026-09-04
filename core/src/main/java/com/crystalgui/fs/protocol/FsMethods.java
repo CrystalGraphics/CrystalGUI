@@ -105,6 +105,21 @@ public final class FsMethods {
     /** Request. Drops a subscription. */
     public static final String UNWATCH = "fs/unwatch";
 
+    /**
+     * Request. Says this client has, or no longer has, unsaved changes to a path.
+     *
+     * <p><b>Dirtiness is the client's to report and nobody else's</b> — it is
+     * {@code version != savedVersion} on a document only this client holds, so the server cannot
+     * observe it and cannot infer it: a file with no writes coming is equally one nobody has touched
+     * and one somebody has been typing in for ten minutes. Which is the whole question presence exists
+     * to answer, and why "who has it open" alone is the weaker signal.</p>
+     *
+     * <p>{@code op} is {@code "dirty"} or empty, the same shape {@link #WATCH} uses for
+     * {@code "recursive"}. A request rather than a notification because it is rare — once per
+     * clean-to-dirty transition, never per keystroke — and a refusal is worth hearing.</p>
+     */
+    public static final String EDITING = "fs/editing";
+
     // ── What the server says without being asked ────────────────────────────────────────────────
 
     /** <b>Notification.</b> Files changed. Coalesced per tick, and carries {@code renamed} as one event. */

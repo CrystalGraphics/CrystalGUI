@@ -1041,6 +1041,10 @@ public class Workbench extends UIElement implements DataProvider {
          * only when what is ON SCREEN is not the view the tab now has.
          */
         editors.onDidChangeState.connect(this::refreshPanelForTab);
+        // PRESENCE MOVES WITHOUT THE TAB MOVING. It was refreshed on a tab change alone, which was
+        // enough while nothing ever pushed one -- somebody else opening the file you are looking at
+        // changes the answer and changes nothing about which tab is in front.
+        workspace.presence().onDidChange.connect(this::refreshPresence);
         registerFailureBanner();
         // Tab dirty markers. Was a per-frame refreshDirtyMarkers(), which meant encoding every open
         // document -- a whole shader graph serialised sixty times a second -- to notice a marker that
@@ -2129,11 +2133,7 @@ public class Workbench extends UIElement implements DataProvider {
         // networked panel a server opened as a tab is the first one that is not, and this threw out of
         // the active-panel signal, which runs inside the click that activated the tab.
         if (target == null) return null;
-        List<String> others = workspace.presence().whoIsEditing(Resource.of(target));
-        if (others.isEmpty()) return null;
-        if (others.size() == 1) return others.get(0);
-        if (others.size() == 2) return others.get(0) + " and " + others.get(1);
-        return others.get(0) + " and " + (others.size() - 1) + " others";
+        return phrase(workspace.presence().whoIsEditing(Resource.of(target)));
     }
 
     private void askWhichVersionSurvives(CgPath target, byte[] written) {
@@ -3299,20 +3299,57 @@ public class Workbench extends UIElement implements DataProvider {
      * indicator cannot afford. Same shape as the problem count above, and for the same reason.</p>
      */
     private void refreshPresence() {
-        String others = othersEditing(activeFilePath());
-        if (others == null) {
+        CgPath active = activeFilePath();
+        String editing = othersEditing(active);
+        String viewing = othersWithOpen(active);
+        if (editing == null && viewing == null) {
             if (presenceEntry != null) presenceEntry.dispose();
             presenceEntry = null;
             return;
         }
-        StatusBarEntry entry = new StatusBarEntry("Editing",
-                others, others + " also has this file open", null, StatusBarEntry.Kind.STANDARD);
+        // EDITING LEADS, because it is the half that costs somebody their work. Who merely has it open
+        // is the fuller picture and belongs in the tooltip -- which is what this entry's tooltip has
+        // always CLAIMED to say ("also has this file open") while its text said who was editing.
+        String name = editing != null ? "Editing" : "Viewing";
+        String text = editing != null ? editing : viewing;
+        StatusBarEntry entry = new StatusBarEntry(name, text, tooltipFor(editing, viewing),
+                null, StatusBarEntry.Kind.STANDARD);
         if (presenceEntry == null) {
             presenceEntry = StatusBar.addEntry(entry, "workbench.presence",
                     StatusBarAlignment.RIGHT, PRESENCE_PRIORITY);
         } else {
             presenceEntry.update(entry);
         }
+    }
+
+    /** Both halves, each said only when there is somebody in it. @see #refreshPresence */
+    private static String tooltipFor(@Nullable String editing, @Nullable String viewing) {
+        if (editing == null) return viewing + " has this file open";
+        if (viewing == null) return editing + " is editing this file";
+        return editing + " is editing this file; " + viewing + " has it open";
+    }
+
+    /**
+     * Who else has this file open, phrased for a human — the softer half of presence.
+     *
+     * <p>Worth saying on its own: somebody reading a file you are about to change is not a conflict and
+     * is still worth knowing, and it is the only thing there is to say before anybody has typed. The
+     * accessor behind it was written with the rest of presence and read by nothing, because nothing
+     * ever sent a {@code fs/presence} notification for it to read.</p>
+     */
+    @Nullable
+    private String othersWithOpen(@Nullable CgPath target) {
+        if (target == null) return null;
+        return phrase(workspace.presence().whoElseHasOpen(Resource.of(target)));
+    }
+
+    /** {@code alice}, {@code alice and bob}, {@code alice and 3 others}. */
+    @Nullable
+    private static String phrase(List<String> people) {
+        if (people.isEmpty()) return null;
+        if (people.size() == 1) return people.get(0);
+        if (people.size() == 2) return people.get(0) + " and " + people.get(1);
+        return people.get(0) + " and " + (people.size() - 1) + " others";
     }
 
     /** Right of the problem count and left of anything a document contributes. */

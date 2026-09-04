@@ -341,9 +341,62 @@ public final class WorkspaceBinding<T> {
             return null;
         }));
 
+        // DIRTINESS IS THE CLIENT'S TO REPORT. The server cannot observe it -- a file with no writes
+        // coming is equally one nobody has touched and one somebody has been typing in for ten minutes.
+        registry.register(FsMethods.EDITING, (args, respond) -> guard(respond, () -> {
+            FsMessages.PathRequest request = decode(FsMessages.pathRequest(), args);
+            CgPath path = CgPath.parse(request.path());
+            // AUTHORISED AS A READ, which is what having it open already required. Saying you are
+            // editing something you may not read would advertise that it exists.
+            service.stat(actor, path);
+            service.presence().setEditing(actor, path, "dirty".equals(request.op()));
+            return null;
+        }));
+
         registry.register(FsMethods.CAPABILITIES, (args, respond) ->
                 answer(respond, FsMessages.capabilitiesNotification(), capabilities()));
     }
+
+    /**
+     * What this peer should be told about who else is here — or <b>null when it already knows</b>.
+     *
+     * <p>Scoped to the paths <em>this</em> actor has open, which is the only scope that is both useful
+     * and safe: a peer hears about a file the moment somebody else opens one it is holding, and hears
+     * nothing about files it never asked for. Telling everyone about everything would leak which files
+     * exist to somebody who never asked — the rule the change fan-out already follows.</p>
+     *
+     * <p>Two gates, and both are needed. The version counter makes the common tick free. The equality
+     * check makes it <b>exact</b>: presence is global, so anybody's change bumps the version for
+     * everybody, and without it every peer would be re-sent its own unchanged picture on every one of
+     * somebody else's keystroke-driven transitions.</p>
+     */
+    @Nullable
+    public FsMessages.PresenceNotification presenceFor() {
+        int version = service.presence().version();
+        if (version == lastPresenceVersion) return null;
+        lastPresenceVersion = version;
+
+        List<FsMessages.PresenceEntry> entries = new ArrayList<>();
+        for (CgPath path : service.presence().pathsOpenBy(actor)) {
+            List<String> editing = service.presence().whoElseIsEditing(actor, path);
+            // OTHERS ONLY. The client's map is "who else", so filtering here is what makes its own
+            // accessor mean what it is named -- and a peer listing itself would show you your own name
+            // as somebody to worry about.
+            for (String who : service.presence().whoElseHasOpen(actor, path)) {
+                entries.add(new FsMessages.PresenceEntry(path.toString(), who, editing.contains(who)));
+            }
+        }
+        if (entries.equals(lastPresence)) return null;
+        lastPresence = entries;
+        return new FsMessages.PresenceNotification(entries);
+    }
+
+    /** @see #presenceFor */
+    private int lastPresenceVersion = -1;
+
+    /** @see #presenceFor */
+    @Nullable
+    private List<FsMessages.PresenceEntry> lastPresence;
 
     /** What this peer may do, per project. A HINT — the server re-checks every operation regardless. */
     public FsMessages.CapabilitiesNotification capabilities() {
