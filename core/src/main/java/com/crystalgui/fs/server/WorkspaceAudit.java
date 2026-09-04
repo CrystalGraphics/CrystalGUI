@@ -89,8 +89,13 @@ public final class WorkspaceAudit {
         return mine.size() < limit;
     }
 
-    /** Records a mutation that happened. */
-    public void record(WorkspaceActor actor, WorkspaceOperation operation, CgPath path) {
+    /**
+     * Records a mutation that happened.
+     *
+     * <p>The path is nullable because not every mutation has a live one: purging a trash entry destroys
+     * something that is already nowhere.</p>
+     */
+    public void record(WorkspaceActor actor, WorkspaceOperation operation, @Nullable CgPath path) {
         write(actor, operation, path, false, "");
     }
 

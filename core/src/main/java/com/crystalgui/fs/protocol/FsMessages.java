@@ -378,6 +378,66 @@ public final class FsMessages {
 
     // ── Projects ────────────────────────────────────────────────────────────────────────────────
 
+    // ── The trash ───────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * One recoverable deletion.
+     *
+     * @param path      where it came from, and where a restore puts it back
+     * @param actor     who deleted it — a shared workspace's trash holds everybody's
+     * @param deletedAt milliseconds since the epoch
+     * @param size      total bytes held, which for a directory is the whole subtree
+     */
+    public record TrashEntry(String id, String path, String actor, long deletedAt,
+                             boolean directory, long size) {
+    }
+
+    public static final Codec<TrashEntry> TRASH_ENTRY = new Codec<>() {
+        @Override
+        public <U> U encode(DynamicOps<U> ops, TrashEntry value) {
+            return Codecs.<U>map(ops)
+                    .field(ID, Codecs.STRING, value.id())
+                    .field(PATH, Codecs.STRING, value.path())
+                    .optional("actor", Codecs.STRING, value.actor(), "")
+                    .optional("at", Codecs.LONG, value.deletedAt(), 0L)
+                    .optional("dir", Codecs.BOOL, value.directory(), false)
+                    .optional("size", Codecs.LONG, value.size(), 0L)
+                    .build();
+        }
+
+        @Override
+        public <U> TrashEntry decode(DynamicOps<U> ops, U input) {
+            Codecs.MapCodecReader<U> in = Codecs.read(ops, input);
+            return new TrashEntry(in.field(ID, Codecs.STRING),
+                    in.field(PATH, Codecs.STRING),
+                    in.optional("actor", Codecs.STRING, ""),
+                    in.optional("at", Codecs.LONG, 0L),
+                    in.optional("dir", Codecs.BOOL, false),
+                    in.optional("size", Codecs.LONG, 0L));
+        }
+    };
+
+    /** What is recoverable in one project, newest first. */
+    public record TrashListResponse(List<TrashEntry> entries) {
+    }
+
+    public static Codec<TrashListResponse> trashListResponse() {
+        return new Codec<>() {
+            @Override
+            public <U> U encode(DynamicOps<U> ops, TrashListResponse value) {
+                return Codecs.<U>map(ops)
+                        .field("entries", Codecs.listOf(TRASH_ENTRY), value.entries())
+                        .build();
+            }
+
+            @Override
+            public <U> TrashListResponse decode(DynamicOps<U> ops, U input) {
+                return new TrashListResponse(
+                        Codecs.read(ops, input).optionalList("entries", TRASH_ENTRY));
+            }
+        };
+    }
+
     public record ProjectEntry(String id, String displayName, List<String> sourceRoots,
                                List<String> excludes) {
     }

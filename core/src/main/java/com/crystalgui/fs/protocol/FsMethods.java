@@ -57,8 +57,14 @@ public final class FsMethods {
     /** Request. Replaces a file, refusing if it moved since the quoted etag. */
     public static final String WRITE = "fs/write";
 
-    /** Request. The same, expressed as a change set — for a save that touched a few lines of a big file. */
-    public static final String WRITE_DELTA = "fs/writeDelta";
+    /*
+     * There is no `fs/writeDelta`. It was declared here -- "the same, expressed as a change set" --
+     * and served by nobody, sent by nobody, and named in no plan step that had been done. A verb in
+     * this file is a promise to whoever reads it, and one with neither a producer nor a consumer is
+     * the same silence this vocabulary exists to remove. It belongs with plan_phase6.md's histogram
+     * differ, which is what would produce the splices; until something can, the honest surface is the
+     * one that does not mention it.
+     */
 
     /** Request. Creates a file that must not already exist. */
     public static final String CREATE = "fs/create";

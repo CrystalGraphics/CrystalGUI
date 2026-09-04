@@ -3148,13 +3148,12 @@ public class Workbench extends UIElement implements DataProvider {
                 }
                 CgPath target = request.destination().resolve(source.name());
                 if (target.equals(source)) continue;   // dropped back where it already is
-                // COPY IS A READ AND A CREATE, because the server has no copy verb: a file's bytes are
-                // what a copy is OF, and asking for them is the one thing that makes a copy across a
-                // wire honest about what it costs.
+                // IN THE BATCH, like the move beside it. It was a bare read-and-create outside the
+                // batch, so a copy that failed was reported by nothing while the move next to it was
+                // named -- and a dropped FOLDER did nothing at all, a read of a directory being an
+                // error. `fs/copy` is the server's now and takes a whole subtree.
                 if (request.copy()) {
-                    Resource from = Resource.of(source);
-                    Resource to = Resource.of(target);
-                    files.readWhole(from).then(read -> files.create(to, read.bytes()));
+                    batch.copy(Resource.of(source), Resource.of(target));
                 } else {
                     batch.rename(Resource.of(source), Resource.of(target), false);
                 }

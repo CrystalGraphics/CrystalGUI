@@ -409,20 +409,57 @@ public final class FileOperations {
     }
 
     /**
-     * Copies a file — <b>a read and a create</b>, because the server has no copy verb.
+     * Copies a file or a directory — <b>on the server</b>.
      *
-     * <p>The bytes are what a copy is <em>of</em>, and across a wire they have to travel. A server-side
-     * copy would be a better answer for a large file and is a protocol change rather than a client
-     * one.</p>
+     * <p>It was a read and a create here, which meant a 40 MB file made a 40 MB round trip in each
+     * direction to end up beside itself, and a FOLDER could not be copied at all: a read of one is an
+     * error, so the explorer's copy-drop silently did nothing for every directory dropped on it. The
+     * bytes are already where they are going; only the instruction has to travel.</p>
+     *
+     * <p>Queued behind the <b>source</b>, as a rename is: what a copy is exposed to is a pending write
+     * to the thing it is copying, and a destination that does not exist yet has nothing outstanding.</p>
      */
+    public Reply<String> copy(Resource from, Resource to, boolean overwrite) {
+        Reply<String> copied = mutate(from, FsMethods.COPY, FsMessages.moveRequest(),
+                op -> new FsMessages.MoveRequest(from.toString(), to.toString(), overwrite, op));
+        // A COPY'S UNDO IS A DELETE OF WHAT IT MADE, never a restore: nothing was taken away.
+        record("copy " + from.name(),
+                () -> copy(from, to, overwrite),
+                () -> delete(to));
+        return copied;
+    }
+
     public Reply<String> copy(Resource from, Resource to) {
-        PendingReply<String> done = new PendingReply<>(null);
-        readWhole(from)
-                .onError(done::fail)
-                .then(content -> create(to, content.bytes())
-                        .onError(done::fail)
-                        .then(done::resolve));
-        return done;
+        return copy(from, to, false);
+    }
+
+    /**
+     * What is recoverable in a project, newest first.
+     *
+     * <p>The half of the trash that could not be reached. A delete answered an id and a restore
+     * redeemed one, so the only recoverable deletions were those a client still held a receipt for —
+     * this session's, and only until it forgot. Everything deleted before that was on the server's
+     * disk, kept, and unreachable by any route.</p>
+     *
+     * @param inProject any resource in the project whose trash is wanted; its project is what is asked
+     */
+    public Reply<List<FsMessages.TrashEntry>> trash(Resource inProject) {
+        return calls.send(FsMethods.TRASH_LIST, FsMessages.pathRequest(),
+                        new FsMessages.PathRequest(inProject.toString()),
+                        FsMessages.trashListResponse())
+                .map(FsMessages.TrashListResponse::entries);
+    }
+
+    /**
+     * Destroys a trashed entry for good.
+     *
+     * <p><b>Not undoable, and that is the point of it</b> — the entry is the only copy left, so there is
+     * nothing an undo step could put back. Everything else here records one.</p>
+     */
+    public Reply<String> purge(String trashId) {
+        return calls.send(FsMethods.PURGE, FsMessages.pathRequest(),
+                        new FsMessages.PathRequest(trashId), FsMessages.etagResponse())
+                .map(FsMessages.EtagResponse::etag);
     }
 
     /**
