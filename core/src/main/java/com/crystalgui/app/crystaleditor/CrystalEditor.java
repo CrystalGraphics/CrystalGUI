@@ -392,6 +392,12 @@ public class CrystalEditor extends UIElement implements Disposable, WindowChrome
     public CrystalEditor useConfig(ConfigStorage storage) {
         this.storage = storage;
         this.session = new WorkbenchSession(workbench, storage);
+        // AND THE WORKSPACE'S OWN CLIENT-LOCAL STORE, which nothing supplied. `Workspace.setStorage`
+        // is what gives it a Backup and a LocalHistory, and without it both accessors answer null on
+        // every host: unsaved work was never written anywhere, and the conflict dialog's three-way
+        // merge had no common ancestor to merge against. The host is the only thing that knows where
+        // this client's own writable data lives, and this is where it says so.
+        workbench.workspace().setStorage(storage);
         loadPreferences();
         return this;
     }
@@ -442,8 +448,19 @@ public class CrystalEditor extends UIElement implements Disposable, WindowChrome
         // is written under, and forgetting it here would quietly stop persisting for anyone who had the
         // setting off.
         sessionProjectId = projectId;
-        if (session == null || !workbench.resolve(WorkbenchSettings.RESTORE_SESSION)) return false;
-        return session.restore(projectId);
+        boolean restored = session != null
+                && workbench.resolve(WorkbenchSettings.RESTORE_SESSION)
+                && session.restore(projectId);
+        // UNSAVED WORK IS NOT PART OF "the last arrangement", and is not gated on wanting it back.
+        // "Do not reopen my tabs" is a preference about a layout; "throw away what I never saved" is
+        // not the same sentence, and reading one as the other loses somebody's work silently. Both
+        // references restore hot-exit buffers regardless of whether windows are reopened.
+        //
+        // AFTER the session, so the session's arrangement decides which pane a file lands in and this
+        // only adds tabs for files the session did not have -- a file it did have is already open, and
+        // opening it again answers the same tab.
+        workbench.editors().restoreUnsavedWork();
+        return restored;
     }
 
     public void saveSession(String projectId, int screenWidth, int screenHeight) {
