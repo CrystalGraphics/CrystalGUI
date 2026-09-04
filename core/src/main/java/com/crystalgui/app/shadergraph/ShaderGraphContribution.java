@@ -12,7 +12,7 @@ import com.crystalgui.workbench.dock.drag.DockPlacement;
 import com.crystalgui.widget.config.inspector.InspectorRegistry;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentKind;
-import com.crystalgui.workbench.Workbench;
+import com.crystalgui.workbench.WorkbenchContext;
 
 import javax.annotation.Nullable;
 
@@ -65,7 +65,7 @@ public final class ShaderGraphContribution {
      * {@link com.crystalgui.core.notify.Notifications} instead, and an application displays them or does
      * not.</p>
      */
-    public static Disposable register(Workbench workbench) {
+    public static Disposable register(WorkbenchContext workbench) {
         // A GRAPH IS ITS OWN MODEL AND ITS OWN VIEW, and saying so is more honest than splitting it: the
         // canvas holds the GraphDocument, the previews and the Blackboard are bound to that instance at
         // construction, and a load copies into it rather than replacing it (see GraphView.load). A second
@@ -143,7 +143,7 @@ public final class ShaderGraphContribution {
     }
 
     /** Opens the generated shader for {@code graph}, beside it. */
-    public static boolean showGenerated(Workbench workbench, @Nullable ShaderGraphEditor graph) {
+    public static boolean showGenerated(WorkbenchContext workbench, @Nullable ShaderGraphEditor graph) {
         if (graph == null || graph.resource() == null) return false;
         Resource generated = Resource.derived(SOURCE_SCHEME, graph.resource());
         DockPanelRef ref = new DockPanelRef(SOURCE_TYPE)
@@ -160,7 +160,7 @@ public final class ShaderGraphContribution {
      * beside the document store.</p>
      */
     @Nullable
-    private static ShaderGraphEditor graphFor(Workbench workbench, String rawResource) {
+    private static ShaderGraphEditor graphFor(WorkbenchContext workbench, String rawResource) {
         if (rawResource.isEmpty()) return null;
         Resource parsed;
         try {

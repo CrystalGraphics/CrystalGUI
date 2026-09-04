@@ -897,10 +897,16 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
             UIElement self = asElement();
             SessionState<?> session = doc.sessionState();
             if (session != null && self != null) session.captureFrom(self);
-            if (self != null) {
-                doc.unindex(self);
-                doc.styles().onElementDetached(self);
-            }
+            if (self != null) doc.unindex(self);
+            // AND A DOCUMENT-LEVEL PROVIDER GOES WITH ITS OWNER. `removeDataProvider`'s own javadoc
+            // states the rule -- "a provider whose owner has left the tree must go, or it answers for a
+            // corpse" -- and left to each widget it is a rule every one of them got wrong the same way:
+            // the obvious `document().removeDataProvider(this)` in `disconnected()` reads correctly and
+            // never fires, because a detach QUEUES that callback and nulls the node's document before
+            // the queue is drained, so `document()` answers null there every time. The workbench and
+            // the application shell both did exactly that, and every one ever attached stayed in
+            // `scopeProviders` -- with its whole tree behind it -- for the life of the document.
+            if (this instanceof DataProvider) doc.removeDataProvider((DataProvider) this);
             // ANYTHING HOLDING THIS NODE HAS TO BE TOLD, or the reference outlives the tree it made
             // sense in. The old engine's `unregisterElement` did all five and each has an invariant
             // behind it: hover left in a detached subtree makes the next diff walk two trees that
@@ -918,6 +924,16 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
                 doc.animation().forget(self);
                 doc.dismiss().forget(self);
                 doc.demote(self);
+                // THE CASCADE LAST, and the order is load-bearing rather than arbitrary. Every one of
+                // the five above can write STATE -- `Focus.forget` clears `:focus` on the way out --
+                // and a state change calls `invalidateStyleMatch()`, which marks the element dirty
+                // again. Told first, the style engine dropped the element and was handed it straight
+                // back: it stayed in `dirtyMatch` for a tree it had left, the next cascade re-matched
+                // it, and `rematch` wrote it into `highlightsByElement`, which is a STRONG map keyed by
+                // element and is only ever cleaned by the detach notification that had already run. So
+                // a detached subtree was pinned in the style engine for the life of the document --
+                // silently, because a re-match of something nobody draws produces no symptom at all.
+                doc.styles().onElementDetached(self);
             }
             doc.queue(this::disconnected);
         }

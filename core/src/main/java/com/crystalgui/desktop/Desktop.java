@@ -1,5 +1,6 @@
 package com.crystalgui.desktop;
 
+import com.crystalgui.desktop.app.ApplicationRegistry;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.box.BoxPainter;
 import com.crystalgui.render.CgUiPaintContext;
@@ -1508,6 +1509,8 @@ public class Desktop extends UIElement implements DataProvider {
         ctx.endFrame();
     }
 
+    private final ApplicationRegistry applications = new ApplicationRegistry(this);
+
     /** The window layer — the work area's box, and the containing block every frame is placed in. */
     public UIElement windowLayer() {
         return windows;
@@ -1516,6 +1519,17 @@ public class Desktop extends UIElement implements DataProvider {
     /** Every live window, visible or hidden — the model, not the tree. @see WindowRegistry */
     public WindowRegistry registry() {
         return registry;
+    }
+
+    /**
+     * What is installed on this desktop and what is running — the shell's side of an application.
+     *
+     * <p>Per desktop rather than process-wide, for the reason every other per-scope registry here is:
+     * two desktops in one installation (a game client and a dedicated tool) offer different products and
+     * neither should have to know the other exists.</p>
+     */
+    public ApplicationRegistry applications() {
+        return applications;
     }
 
     /**

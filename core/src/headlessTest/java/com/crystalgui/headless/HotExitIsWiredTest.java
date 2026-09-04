@@ -14,43 +14,45 @@ import static org.junit.Assert.assertTrue;
  * <p>Unsaved work is backed up on every edit and given back on the next launch, and the giving-back
  * runs through three links that each read as complete from the others. The middle one —
  * {@code EditorService.restoreUnsavedWork} actually restoring the content — is driven directly by
- * {@code EditorServiceTest}. The two at the ends are single calls inside {@link
- * com.crystalgui.app.crystaleditor.CrystalEditor}, and both were missing:</p>
+ * {@code EditorServiceTest}. The two at the ends are single calls inside {@code WorkbenchApplication}
+ * — they were {@code CrystalEditor}'s until W7 made that a manifest and the runtime a shared one —
+ * and both were missing:</p>
  *
  * <ul>
- *   <li>{@code useConfig} wired the preferences and the session record and <b>not</b>
+ *   <li>the launch wired the preferences and the session record and <b>not</b>
  *       {@code Workspace.setStorage}, so {@code backup()} answered null on every host and nothing was
  *       ever written — taking {@code LocalHistory}, and with it the conflict dialog's merge base.</li>
- *   <li>{@code restoreSession} never called {@code restoreUnsavedWork}, so nothing offered it back.</li>
+ *   <li>the session restore never called {@code restoreUnsavedWork}, so nothing offered it back.</li>
  * </ul>
  *
  * <h3>Why a scan and not a fixture</h3>
  *
- * <p>A test that <em>builds</em> a {@code CrystalEditor} was written first and deleted. The class
- * installs into process-wide registries and retains itself through a static {@code Notifications}
- * signal it never disconnects, so four of them in one worker exhausted the heap <b>and</b> shifted the
- * computed colours {@code ConfigKitTest} asserts — sixteen green tests in isolation, two failures in
- * the suite. Constructing an application to check that one line survives is the wrong instrument;
- * a reference in the constant pool is the real question, and it is the same one
- * {@code ExecutionNeedsNoGrammarTest} and {@code ModeStackTest} ask.</p>
+ * <p>A test that <em>builds</em> an application was written first and deleted, and both halves of why
+ * are still true. It exhausted the heap — which W0's {@code ApplicationRetentionTest} now measures on
+ * purpose — and it shifted the computed colours {@code ConfigKitTest} asserts, because installing a
+ * theme substitutes variables into the shipped {@code StyleSheet.DEFAULT} in place. That second one bit
+ * again the day an application started loading preferences unconditionally, and the fixture that does
+ * build one has to reset the theme manager afterwards. Constructing an application to check that one
+ * line survives is the wrong instrument; a reference in the constant pool is the real question, and it
+ * is the same one {@code ExecutionNeedsNoGrammarTest} and {@code ModeStackTest} ask.</p>
  *
  * <p>It cannot see whether the calls are <em>reachable</em> — only that they are there. That is worth
  * saying out loud, and it is still the whole of what broke: neither line existed at all.</p>
  */
 public class HotExitIsWiredTest {
 
-    private static final String EDITOR = "com/crystalgui/app/crystaleditor/CrystalEditor.class";
+    private static final String EDITOR = "com/crystalgui/workbench/WorkbenchApplication.class";
 
     private Set<String> calls() throws IOException {
         Path editor = ClassReferences.mainClassesRoot(getClass()).resolve(EDITOR);
-        assertTrue("the editor was not compiled: " + editor, editor.toFile().isFile());
+        assertTrue("the application runtime was not compiled: " + editor, editor.toFile().isFile());
         return ClassReferences.memberReferencesOf(editor);
     }
 
     /** The host's store has to reach the workspace, or nothing is ever backed up. */
     @Test
     public void theEditorHandsItsStoreToTheWorkspace() throws IOException {
-        assertTrue("CrystalEditor.useConfig must call Workspace.setStorage — without it "
+        assertTrue("WorkbenchApplication must call Workspace.setStorage — without it "
                         + "Workspace.backup() and history() are null on every host",
                 calls().contains("com/crystalgui/fs/client/Workspace.setStorage"));
     }
@@ -58,7 +60,7 @@ public class HotExitIsWiredTest {
     /** ...and somebody has to ask for the work back. */
     @Test
     public void theEditorOffersUnsavedWorkBack() throws IOException {
-        assertTrue("CrystalEditor.restoreSession must call EditorService.restoreUnsavedWork — "
+        assertTrue("the session restore must call EditorService.restoreUnsavedWork — "
                         + "otherwise it is backed up on every edit and offered by nobody",
                 calls().contains("com/crystalgui/workbench/editor/EditorService.restoreUnsavedWork"));
     }

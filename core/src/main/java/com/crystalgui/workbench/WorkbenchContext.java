@@ -1,5 +1,10 @@
 package com.crystalgui.workbench;
 
+import com.crystalgui.core.signal.Signal;
+import com.crystalgui.workbench.dock.panel.DockOpenOptions;
+import com.crystalgui.workbench.dock.panel.DockInput;
+import com.crystalgui.workbench.dock.layout.DockLeaf;
+import com.crystalgui.workbench.dock.drag.DockPlacement;
 import java.nio.file.Path;
 import com.crystalgui.core.notify.StatusBar;
 import java.util.List;
@@ -134,6 +139,28 @@ public interface WorkbenchContext {
 
     /** @return whether there was something to save */
     boolean saveActiveFile();
+
+    /**
+     * A document arrived in a tab.
+     *
+     * <p>Not the same signal as the dock's active-panel change, and an extension that follows what is
+     * in front needs both: the active PANEL is announced as soon as the dock has built its tree, which
+     * can be before the document behind it exists — a restored tab's content arrives over the network
+     * some frames later. Following only the panel leaves such an extension looking at nothing until
+     * something else moves, which is exactly what "I have to click something first" is.</p>
+     */
+    Signal.Value<CgPath> onDidOpenDocument();
+
+    /**
+     * Opens anything the dock can hold, wherever the caller says.
+     *
+     * <p>The general form the four {@code open*} methods above are conveniences over — a panel that is
+     * not a document, or a placement that is not "wherever the active group is", needs it. The shader
+     * graph's generated source is both: a derived resource, opened <em>beside</em> the graph it came
+     * from rather than as a tab in the same group, because the whole point of it is watching it change
+     * as you wire.</p>
+     */
+    DockLeaf open(DockInput input, DockPlacement placement, DockOpenOptions options);
 
     // ── Contributing ────────────────────────────────────────────────────────────────────────────
 

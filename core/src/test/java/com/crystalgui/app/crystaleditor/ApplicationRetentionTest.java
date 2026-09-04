@@ -2,9 +2,9 @@ package com.crystalgui.app.crystaleditor;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
-import java.lang.ref.WeakReference;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -15,7 +15,14 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.crystalgui.style.theme.UiThemeManager;
 import com.crystalgui.core.dispose.Disposer;
+import com.crystalgui.core.storage.ConfigStorage;
+import com.crystalgui.core.storage.InMemoryConfigStorage;
+import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.motion.WindowAnimator;
+import com.crystalgui.desktop.app.Application;
+import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.project.ProjectRegistry;
@@ -73,6 +80,10 @@ public class ApplicationRetentionTest {
 
     private static final int EDITORS = 4;
 
+    private UIDocument surface;
+    private Desktop desktop;
+    private ConfigStorage storage;
+    private boolean animationsWere;
     private InMemoryTransport<Object>[] link;
     private ProtocolConnection<Object> serverEnd;
     private ProtocolConnection<Object> clientEnd;
@@ -102,6 +113,21 @@ public class ApplicationRetentionTest {
                 PlainOps.INSTANCE).installOn(serverEnd);
 
         workspace = Workspace.of(clientEnd);
+
+        // A REAL DESKTOP, because an application is launched onto one and its window is what a dispose
+        // has to destroy -- and because the retention question is now partly the compositor's: a window
+        // that survives its application is a whole editor tree still in the registry.
+        // ANIMATIONS OFF, and it is what makes this test able to see a leak at all: with them on, a
+        // destroyed window's taskbar entry collapses over several frames and the strip holds the frame
+        // meanwhile -- and no test runs frames, so every disposed application would stay reachable
+        // through the taskbar and the assertion below would fail for a reason that is not a leak.
+        animationsWere = WindowAnimator.isEnabled();
+        WindowAnimator.setEnabled(false);
+
+        surface = new UIDocument();
+        desktop = Desktop.of(surface);
+        storage = new InMemoryConfigStorage();
+        CrystalEditor.install(desktop.applications());
     }
 
     /**
@@ -112,11 +138,23 @@ public class ApplicationRetentionTest {
      */
     @After
     public void closeWorkspace() {
+        // NULL WHEN THE COLLECTABILITY TEST DROPPED IT ON PURPOSE.
+        if (desktop != null) {
+            for (Application running : desktop.applications().running()) running.dispose();
+        }
+        // AND THE THEME, because installing one MUTATES SHIPPED SHEETS. `WorkbenchSettings.apply`
+        // substitutes the active theme's variables into `StyleSheet.DEFAULT` itself -- a process-wide
+        // object -- so an application left running leaves every later test in this worker computing
+        // colours from a themed user-agent sheet. `ConfigKitTest` is where that lands: two of its
+        // colour assertions fail in the suite and pass in isolation, which is the shape this file's own
+        // javadoc predicted before an application ever attached to a document.
+        UiThemeManager.getInstance().resetForTesting();
         Notifications.resetForTesting();
         InspectorRegistry.resetForTesting();
         ProjectSourcesRegistry.resetForTesting();
         Disposer.resetForTesting();
         Protocols.resetForTesting();
+        WindowAnimator.setEnabled(animationsWere);
     }
 
     /** Every holder the retention chain is visible in, named so a failure reads as a list. */
@@ -133,6 +171,8 @@ public class ApplicationRetentionTest {
         counts.put("Workspace.files().onDidRun", workspace.files().onDidRun.connectionCount());
         counts.put("Workspace.files().onDidFail", workspace.files().onDidFail.connectionCount());
         counts.put("Workspace.presence().onDidChange", workspace.presence().onDidChange.connectionCount());
+        counts.put("applications running", desktop.applications().running().size());
+        counts.put("desktop windows", desktop.registry().size());
         return counts;
     }
 
@@ -151,7 +191,7 @@ public class ApplicationRetentionTest {
         Map<String, Integer> before = census();
 
         for (int i = 0; i < EDITORS; i++) {
-            Disposer.dispose(new CrystalEditor(workspace));
+            launch().dispose();
         }
 
         Map<String, Integer> after = census();
@@ -160,38 +200,66 @@ public class ApplicationRetentionTest {
     }
 
     /**
-     * <b>...and the strong form: a disposed editor is garbage.</b>
+     * <b>...and the strong form: nothing that outlives the screen still holds a disposed editor.</b>
      *
      * <p>The census can only see holders it knows the name of, and the last one found was reachable
-     * through none of them: a heap walk from every static in {@code com.crystalgui} traced
-     * {@code ContentProviders.onDidChange} → a {@code Workspace} → its {@code onDidGreet} → the
-     * {@code WorkspaceDocuments} a workbench built → its {@code DocumentKinds} → a {@code DocumentKind}
-     * whose model factory captures the workbench. Not one counter moved for that, and it kept the whole
-     * editor tree.</p>
+     * through none of them: a walk from every static in the jar traced
+     * {@code ContentProviders.onDidChange} &rarr; a {@code Workspace} &rarr; its {@code onDidGreet}
+     * &rarr; the {@code WorkspaceDocuments} a workbench built &rarr; its {@code DocumentKinds} &rarr; a
+     * {@code DocumentKind} whose model factory captures the workbench. Not one counter moved for that,
+     * and it kept the whole editor tree.</p>
      *
-     * <p>So this is the assertion that does not need to know what to look for. It is GC-dependent, which
-     * is why it retries rather than gcs once, and why the census stays beside it: when this fails, the
-     * census is what says whether it is a listener, a registry, or something with no name yet.</p>
+     * <h3>A PATH, not a {@code WeakReference}</h3>
+     *
+     * <p>Because the failure message is the entire value of this test. A weak handle that refuses to
+     * clear can only ever say "still reachable", which is where the last four rounds of this went; the
+     * walk says <em>through what</em>, and naming the field is what turned one red assertion into five
+     * separate fixes — a detach that re-marked the subtree it had just released, a document-level
+     * provider nothing withdrew, a rail's window-registry commands, a rail's focus subscription, and a
+     * project listing asked before the server had greeted. It is also not GC-dependent, so it neither
+     * flakes nor passes by luck.</p>
+     *
+     * <p>What it cannot see is stated on {@link ReferencePaths}: a weak edge is skipped deliberately, and
+     * anything held only inside a JDK structure with no public iteration is invisible. So "no path" means
+     * <b>nothing in this jar's statics, and nothing that outlives the screen, is holding it</b> — which is
+     * the leak class that matters. Whatever is reachable only through the {@code UIDocument} dies with
+     * the screen, and one of those is beyond an application's reach anyway:
+     * {@code EventListenerGroup} has no way to take a listener off again — its own callers say so —
+     * so every widget that has ever attached one to the root is held by that root for the document's
+     * whole life.</p>
      */
     @Test
-    public void aDisposedEditorIsCollectable() {
-        CrystalEditor editor = new CrystalEditor(workspace);
-        WeakReference<CrystalEditor> watched = new WeakReference<>(editor);
-        Disposer.dispose(editor);
-        editor = null;
+    public void nothingOutlivingTheScreenHoldsADisposedEditor() {
+        Application editor = launch();
+        editor.dispose();
 
-        for (int attempt = 0; attempt < 40 && watched.get() != null; attempt++) {
-            System.gc();
-            try {
-                Thread.sleep(20);
-            } catch (InterruptedException interrupted) {
-                Thread.currentThread().interrupt();
-                break;
-            }
+        Map<Object, String> outlivesTheScreen = new LinkedHashMap<>();
+        outlivesTheScreen.put(workspace, "the workspace");
+        outlivesTheScreen.put(clientEnd, "the connection");
+        String path = ReferencePaths.find(editor, outlivesTheScreen);
+
+        assertNull("a disposed editor is still held by something that outlives its screen, so the whole "
+                + "tree behind it -- workbench, dock, documents, tabs -- is still in "
+                + "the heap. The chain: " + path, path);
+    }
+
+    /**
+     * The counter-control for the walk itself.
+     *
+     * <p>A search that could not find anything would report "no path" for a live editor too, and this
+     * whole file would be measuring a broken instrument. It is the same shape as the census's own
+     * counter-control one method down.</p>
+     */
+    @Test
+    public void theWalkCanSeeALiveEditor() {
+        Application editor = launch();
+        try {
+            assertNotNull("the reference walk found no path to an editor that is plainly still running, "
+                    + "so the assertion beside it is vacuous",
+                    ReferencePaths.find(editor, Map.of(desktop, "the desktop")));
+        } finally {
+            editor.dispose();
         }
-
-        assertNull("a disposed editor is still reachable from somewhere, so the whole tree behind it "
-                + "-- workbench, dock, documents, tabs -- is still in the heap", watched.get());
     }
 
     /**
@@ -203,13 +271,20 @@ public class ApplicationRetentionTest {
     @Test
     public void aLiveEditorIsVisibleInTheCensus() {
         Map<String, Integer> before = census();
-        CrystalEditor editor = new CrystalEditor(workspace);
+        Application editor = launch();
         try {
             Map<String, Integer> after = census();
             assertNotEquals("a live editor registered itself with nothing the census reads, so the "
                     + "retention assertion beside this one is vacuous", before, after);
         } finally {
-            Disposer.dispose(editor);
+            editor.dispose();
         }
+    }
+
+    /** One launch of the shipped manifest, refused loudly rather than answering null into an NPE. */
+    private Application launch() {
+        Application launched = desktop.applications().launch(CrystalEditor.KIND, workspace, storage);
+        if (launched == null) throw new AssertionError("the editor manifest refused to launch");
+        return launched;
     }
 }

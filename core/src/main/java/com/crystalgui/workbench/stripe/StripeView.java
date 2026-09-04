@@ -215,6 +215,9 @@ public class StripeView extends UIElement {
     // ── Subscriptions and deferred work ─────────────────────────────────────────────────────────
 
     @Nullable
+    /** The window-registry commands this rail put there, so {@link #dispose()} can take them back. */
+    private final java.util.List<String> registered = new java.util.ArrayList<>();
+
     private Connection panelSubscription;
 
     @Nullable
@@ -433,6 +436,32 @@ public class StripeView extends UIElement {
      * container, each lighting up when it opened. Membership is asked freshly every time rather than
      * tracked, which is what makes the answer incapable of drifting.</p>
      */
+    /**
+     * Gives back everything this rail put somewhere that outlives it.
+     *
+     * <p>Its {@code view.<type>} commands live in the WINDOW's registry, which is the surface's and not
+     * the workbench's — deliberately, because each one captures this workbench and a captured owner
+     * cannot be registered once for the application. The cost of that choice is this method: without
+     * it the surface holds a command holding a workbench holding its whole tree, for ever.</p>
+     */
+    public void dispose() {
+        if (commands != null) {
+            for (String id : registered) commands.unregister(id);
+        }
+        registered.clear();
+        if (panelSubscription != null) panelSubscription.disconnect();
+        if (badgeSubscription != null) badgeSubscription.disconnect();
+        if (placementSubscription != null) placementSubscription.disconnect();
+        // AND THE WINDOW'S OWN FOCUS SIGNAL, which is the one that outlives everything else here: it
+        // belongs to the SURFACE, so a rail that never let go of it kept its workbench alive for as long
+        // as the desktop existed, whatever else was cleaned up.
+        if (focusSubscription != null) focusSubscription.disconnect();
+        panelSubscription = null;
+        badgeSubscription = null;
+        placementSubscription = null;
+        focusSubscription = null;
+    }
+
     public void sync(CommandRegistry commands) {
         this.commands = commands;
         ToolWindowManager toolWindows = workbench.toolWindowManager();
@@ -448,6 +477,12 @@ public class StripeView extends UIElement {
             if (!commands.contains(commandId)) {
                 commands.register(Command.of(commandId, descriptor.title())
                                          .run(() -> workbench.togglePanel(typeId)));
+                // REMEMBERED, so it can be taken back. These go in the WINDOW's registry and each one
+                // captures this workbench, so a workbench that never withdrew them left its whole tree
+                // reachable from the surface for as long as the surface lived -- and a second
+                // application opening in the same window inherited a rail command pointing at a
+                // workbench that had been disposed.
+                registered.add(commandId);
             }
 
             DockRegion region = toolWindows.regionOf(typeId);

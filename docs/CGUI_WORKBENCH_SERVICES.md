@@ -1185,6 +1185,64 @@ The only new parts are the bag and one boolean.
 - **No version bump for adopting it.** The `widgets` key is additive and every read tolerates its
   absence; bumping discards every existing arrangement.
 
+## Applications, extensions and the engine
+
+**Five tiers, and each names only the one below.** A *host* supplies a surface, a config directory and a
+connection; the *shell* (`Desktop`) composites windows; an *application* is a manifest plus the features
+it enables; the *engine* (`Workbench`) is what a workbench IS; an *extension* attaches a feature to one.
+
+```java
+// desktop/app — what is installed, answerable with nothing running
+ApplicationKind.of("mymod:notes", "Notes")
+        .icon("mymod:notes")
+        .opens(DocumentKind.FilePatterns.extension("notes"))
+        .singleInstance()
+        .launch(context -> WorkbenchApplication.of(context)
+                .with("crystalgui:notes")            // the extension ids this product turns on
+                .title("Notes")
+                .key("notes:main")
+                .policy(WindowPolicy.HIDE_ON_CLOSE)
+                .start());
+```
+
+`desktop.applications().install(kind)` makes it available; `launch(kind, workspace, storage)` starts one
+and answers an `Application` — its `mainWindow()`, `open(resource)`, `activate()` and `dispose()`.
+
+**A second product is a second manifest, never a second shell.** The list of extension ids is the whole
+of what distinguishes one workbench application from another; `WorkbenchApplication` is the shared
+runtime — the workbench, the window, the preferences, the session, the status flattening, the menu bar
+in the caption and the initial focus. `CrystalEditor` is a manifest and three choices.
+
+### The rules that are easy to get wrong
+
+| Rule | Why |
+|---|---|
+| **Installing is not launching** | A launcher lists installed manifests, `handlerFor(resource)` answers "open with", and a search matches keywords — all with nothing running. Deriving associations by building an application and asking its workbench is what made them unanswerable before |
+| **Closing is not quitting** | Under `HIDE_ON_CLOSE` the window goes away and the application is still running, with every document and the whole arrangement intact. `Application.dispose()` is the other verb — and it is why `WindowRegistry.evictIfNeeded` exempts an application's **main** window (D17): a cap on hidden windows must never quit a product nobody asked to quit |
+| **Each application gets its own corner of the storage** | `ConfigStorage.scoped(applicationId)`, applied by the registry before the factory runs. Two products sharing one directory both write `settings.json` and a session record, and the second to save wins |
+| **The session is keyed by (application id, workspace identity)** | A record describes a *workbench over a workspace*, whose tabs may come from any project — one record per project over one dock would restore N layouts onto one screen. The identity is the `workspaceId` the server greets with, or a hash of the sorted project ids from a server that has never heard of it |
+| **An id nothing contributed is a logged absence** | The three-tier degradation the language stack already follows, and what lets `crystalgui:scripting` be listed by every manifest and simply be missing on a host with no engine band |
+| **A `Workbench` built directly still gets everything** | `new Workbench(workspace)` activates every contributed extension — which is what a test and a harness scene mean. Only an application filters |
+| **The window knows its application** | `WindowFrame.setApplication(kind)` — Windows' `AppUserModelID`, X11's `WM_CLASS`. The taskbar groups by it, keeping one product's windows adjacent by first appearance |
+
+### Writing an extension
+
+```java
+public final class NotesExtension implements WorkbenchExtension {
+    @Override public String id() { return "crystalgui:notes"; }
+    @Override public Disposable activate(WorkbenchContext workbench) {
+        return NotesKind.register(workbench.kinds());   // everything it registered, in one handle
+    }
+}
+```
+
+`WorkbenchExtensions.contribute(extension)` says *this host has the feature*; a manifest's `with(...)`
+says *this product enables it*. Contribution is process-wide and belongs in a mod's own init; the engine
+bootstraps what ships in `core/`. An extension is written against `WorkbenchContext` and never against
+`Workbench` — `LayeringTest` asserts that from the constant pool.
+
+---
+
 ## Contributions
 
 **A feature declares what it can do; nothing enumerates features.** This is the principle the six earlier

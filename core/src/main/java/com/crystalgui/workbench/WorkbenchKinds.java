@@ -79,6 +79,7 @@ public final class WorkbenchKinds implements NodeKinds {
         // null or empty rather than invented; a decoded one is inert, which is what a description of
         // a workbench would mean anyway.
         UIElementRegistry.registerTag(Workbench.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(WorkbenchApplication.NAME, NodeContract.INERT);
         UIElementRegistry.registerTag(ProjectFileTree.NAME, NodeContract.INERT);
         UIElementRegistry.register(ViewContainer.NAME,
                 () -> new ViewContainer("", ""), NodeContract.INERT);

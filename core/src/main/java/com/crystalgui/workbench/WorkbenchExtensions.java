@@ -9,6 +9,7 @@ import javax.annotation.Nullable;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.example.notes.NotesExtension;
+import com.crystalgui.workbench.extension.InspectorExtension;
 
 /**
  * Where a {@link WorkbenchExtension} makes itself available — process-wide, like {@code ContentProviders}.
@@ -91,6 +92,36 @@ public final class WorkbenchExtensions {
         if (bootstrapped) return;
         bootstrapped = true;
         contribute(new NotesExtension());
+        contribute(new InspectorExtension());
+    }
+
+    /**
+     * Activates the ones {@code wanted} names, in the order the manifest named them.
+     *
+     * <p>An id nothing contributed is a <b>logged absence</b>, never an error — the three-tier
+     * degradation the language stack already follows, and what lets {@code crystalgui:scripting} be
+     * listed by every application and be simply missing on a host with no engine band. An extension that
+     * is contributed and not listed is not activated: that is how two applications on one desktop enable
+     * different sets, which is the whole reason the manifest names ids rather than the engine deciding.
+     * </p>
+     *
+     * @param wanted the ids, or null for everything contributed — which is what a {@code Workbench}
+     *               built directly, by a test or a scene with no application around it, still means
+     */
+    public static List<Disposable> activate(WorkbenchContext workbench, @Nullable List<String> wanted) {
+        if (wanted == null) return activateAll(workbench);
+        List<Disposable> active = new ArrayList<>();
+        for (String id : wanted) {
+            WorkbenchExtension extension = byId(id);
+            if (extension == null) {
+                CrystalGuiCore.LOGGER.info("[cgui] the extension '{}' is not present on this host; "
+                        + "the application runs without it", id);
+                continue;
+            }
+            Disposable handle = activateOne(extension, workbench);
+            if (handle != null) active.add(handle);
+        }
+        return active;
     }
 
     /**
@@ -105,15 +136,21 @@ public final class WorkbenchExtensions {
     public static List<Disposable> activateAll(WorkbenchContext workbench) {
         List<Disposable> active = new ArrayList<>();
         for (WorkbenchExtension extension : all()) {
-            try {
-                Disposable handle = extension.activate(workbench);
-                if (handle != null) active.add(handle);
-            } catch (RuntimeException failed) {
-                CrystalGuiCore.LOGGER.error("[cgui] the workbench extension '{}' failed to activate: {}",
-                        extension.id(), failed.getMessage(), failed);
-            }
+            Disposable handle = activateOne(extension, workbench);
+            if (handle != null) active.add(handle);
         }
         return active;
+    }
+
+    @Nullable
+    private static Disposable activateOne(WorkbenchExtension extension, WorkbenchContext workbench) {
+        try {
+            return extension.activate(workbench);
+        } catch (RuntimeException failed) {
+            CrystalGuiCore.LOGGER.error("[cgui] the workbench extension '{}' failed to activate: {}",
+                    extension.id(), failed.getMessage(), failed);
+            return null;
+        }
     }
 
     /** Empties the registry, bootstrap included. For tests that need isolation, never for production. */

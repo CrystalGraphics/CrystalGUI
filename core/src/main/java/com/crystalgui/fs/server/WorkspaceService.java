@@ -172,6 +172,26 @@ public final class WorkspaceService {
 
     private ScriptingPolicy scripting = ScriptingPolicy.LIVE;
 
+    private String workspaceId = "";
+
+    /**
+     * A stable name for the set of projects this server serves, or empty when nobody named one.
+     *
+     * <p>Travels in the greeting, and is what a client keys its per-workspace records by — chiefly an
+     * application's session arrangement. Empty is an ordinary answer and the client falls back to a hash
+     * of the project ids it was listed; what it must never be is a name that means a different workspace
+     * on the next launch, which is why a host derives it once and writes it down rather than computing
+     * it from the root's path.</p>
+     */
+    public String workspaceId() {
+        return workspaceId;
+    }
+
+    public WorkspaceService setWorkspaceId(String id) {
+        this.workspaceId = id == null ? "" : id;
+        return this;
+    }
+
     /**
      * Says who may run this workspace's files.
      *

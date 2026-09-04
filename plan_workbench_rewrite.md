@@ -1078,10 +1078,41 @@ move with the rewrite.
 | **W4 — `ToolWindowKind`** | the declaration; Project, Problems, Notifications and Inspector ported; `registerToolWindowCommands` deleted along with the hand-wired badge and the two `showPanel` calls; Run deferred to W6 with the rest of `language/` | every ported tool window is one declaration — icon, placement, view, toggle command, badge, default-open; `:core:test` and `:core:headlessTest` green | medium |
 | **W5 — the `Workbench` split** | eight collaborators extracted with `tools/port/extract.py` (new); the flat boundary priced at 55 published members against zero and rejected; `StatusBar` per workbench (D4) reached through `UiDataKeys.STATUS_BAR` | `Workbench` 3,598 → 2,115; `:core:test`, `:core:headlessTest`, `:mc1710:compileJava` and the harness all green | **high** — the largest move; done after W1–W4 so it moved code that was already disposed and already context-shaped |
 | **W6 — `ScriptWorkbench` → extension, and scripting as a capability** | the Run shell written against `WorkbenchContext` and contributed by `LanguageStack`; three host install sites deleted; `ScriptingMode` on `ProjectCapability` with a `ScriptingPolicy` the host answers; the Run refusal at the snapshot; `WorkbenchContext.cacheDirectory` | no host installs scripting; a dedicated server answers `AUTHORIZED` and the Run command refuses with a reason; `WorkspaceHostTest` covers both modes | medium–high — `language/` is in another worktree (§8), checked clear before starting |
-| **W7 — applications** | `ApplicationKind`/`Registry`/`WorkbenchApplication`; `CrystalEditor` as manifest; `WindowFrame.setApplication`; taskbar grouping; notifications to the desktop (D3); the session key per §4.9 with `FsHello.workspaceId` | two `CrystalEditor`s on one desktop with separate status bars and one notification centre | medium |
+| **W7 — applications** ✅ | `ApplicationKind`/`Application`/`ApplicationRegistry`/`LaunchContext` in `desktop.app`; `WorkbenchApplication` + `WorkbenchApplicationCommands` in `workbench`; `CrystalEditor` 575 lines → a manifest; `InspectorExtension` and `ShaderGraphExtension`; `Workbench(workspace, ids)`; `WindowFrame.setApplication` + `markApplicationMain`; taskbar grouping by first appearance; D17 eviction exemption; `ConfigStorage.scoped` (D20); `FsHello.workspaceId` + `WorkspaceHost` persisting one; the session key per §4.9 with the D23 fallback; three hosts rewired | `TwoApplicationsTest` — two applications on one desktop, separate status bars, one notification centre, different feature sets, grouped in the taskbar, and a single-instance second launch that activates the first | medium |
 | **W8 — launcher, search, associations** | `Launcher`, `DesktopSearch`, `handlerFor`, jump-list actions, the shader-graph action | F7 desktop with a launcher; "open with"; a search that finds an app, a window, a file | medium |
 
 W0–W3 answer claim 5 and the blocker; W4–W6 answer claims 2–3; W7–W8 answer claims 1 and 4.
+
+> **W7 as shipped — five deviations, each with its reason.**
+>
+> 1. **`WorkbenchApplication` lives in `workbench`, not `desktop.app`.** It names `Workbench`, and
+>    `LayeringTest` puts `desktop` *below* `workbench`. So `desktop.app` holds the OS-level concept —
+>    the manifest, the running instance, the registry, the launch — and names no workbench at all,
+>    which is what lets a non-workbench application exist later without touching it.
+> 2. **The builder ends in `.start()`.** §4.2's sketch has the fluent chain returning an `Application`
+>    directly; that would mean the workbench and the window are built before the extension list is
+>    known, or mutated after the window is on screen. One terminal word buys a complete declaration.
+> 3. **`ApplicationKind.action(...)` is not shipped.** A jump-list row nothing can invoke is a declared
+>    row that never appears — the write-only-slot failure this repository documents five times over. It
+>    arrives at W8 with the launcher, which is the phasing table's own placement for jump-list actions.
+> 4. **D3 is deferred with it.** `Notification.source` was written and reverted for the same reason:
+>    nothing sets it and nothing reads it until the balloons and the bell move to the desktop, and until
+>    then it is a field that looks like a feature. The acceptance's "one notification centre" is
+>    asserted as it stands — `Notifications` is process-wide and both applications land in it.
+> 5. **`CrystalEditorCommands` moved rather than staying unchanged.** §4.10 says unchanged; it keyed on
+>    a `CrystalEditor` and offered Save File, which is a thing a *workbench* does. Left where it was, a
+>    second workbench application would have had to call the editor's registration to get its own Save.
+>    The ids are untouched, so no keymap moves.
+>
+> **And it cost five leak fixes that were nobody's plan step.** W0's retention test could not see them
+> while an editor was never attached to a document; an application always is. Each is an
+> `AGENTS.md` row: `document()` is null inside `disconnected()`; a detach told the cascade before it
+> blurred and was handed the subtree straight back; the stripe rails' window-registry commands and
+> focus subscription; and a project listing asked before the greeting, whose in-flight continuation
+> outlives the asker. The instrument changed with them — `aDisposedEditorIsCollectable` is now
+> `nothingOutlivingTheScreenHoldsADisposedEditor` over a reference **walk** that names the chain,
+> because a `WeakReference` that refuses to clear can only ever say "still reachable", which is where
+> four rounds of it went.
 
 **Every step that adds or moves a service API updates `docs/CGUI_WORKBENCH_SERVICES.md` in the same
 commit** — the standing rule in `AGENTS.md`, and the one the filesystem cutover broke once. The `AGENTS.md`
