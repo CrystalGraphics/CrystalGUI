@@ -1,5 +1,7 @@
 package com.crystalgui.workbench;
 
+import com.crystalgui.fs.Resource;
+import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -103,6 +105,40 @@ public class WorkbenchExtensionsTest {
     public void anExtensionFromALayerAboveTheWorkbenchIsFoundToo() {
         assertNotNull("the shader graph lives in app/, so nothing in workbench/ could have listed it",
                 WorkbenchExtensions.byId(ShaderGraphContribution.ID));
+    }
+
+    /**
+     * <b>W6.5's whole claim: an engine with no extensions is not an IDE.</b>
+     *
+     * <p>{@code new Workbench(workspace)} used to ship Project, Problems and Notifications whether an
+     * application asked or not, so a graph-only product got an empty Problems panel and a file tree it
+     * had no use for. Nothing could make this assertion before: the registrations were three calls in
+     * the constructor.</p>
+     *
+     * <p><b>And it still opens a file</b>, which is the half that keeps this honest — an engine that
+     * registered nothing because it was broken would satisfy the first assertion perfectly.</p>
+     */
+    @Test
+    public void aWorkbenchThatEnablesNothingHasNoPanelsAndStillOpensAFile() {
+        Workbench workbench = new Workbench(workspace, List.of());
+        try {
+            assertEquals("an engine that enables no extensions registered a tool window anyway",
+                    List.of(), workbench.panels().descriptors().stream()
+                            .filter(DockPanelDescriptor::isSingleton)
+                            .map(DockPanelDescriptor::typeId)
+                            .sorted()
+                            .toList());
+            // THE COUNTER-CONTROL, and it has to be something SYNCHRONOUS: opening a file is a round
+            // trip, so asserting `openPaths()` here would be asserting that the fixture pumps its
+            // transport. The engine's own fallback text kind is the honest test that it is alive --
+            // an engine that registered nothing because it was broken would satisfy the list above
+            // perfectly, and this is what separates that from "it enabled nothing".
+            assertNotNull("an engine with no extensions has no text kind either, so it is not an "
+                            + "engine -- the assertion above is measuring a broken constructor",
+                    workbench.kinds().forResource(Resource.of(PROJECT, "Main.java")));
+        } finally {
+            workbench.dispose();
+        }
     }
 
     /** ...and it goes when the workbench does, because activate() hands back what it registered. */

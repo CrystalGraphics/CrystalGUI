@@ -1255,6 +1255,13 @@ are a wrapper — one lifetime, one id, and the second file's only real content 
 The declaration stays a `static final` so a launcher can read what an extension claims without
 activating it.
 
+**The engine's own panels come through this door too.** Project, Problems, Notifications, Presence
+and the Inspector are all extensions — `new Workbench(workspace, List.of())` has no tool windows at
+all, and that is asserted. It is not economy: the built-ins are the only real test of the seam, and if
+Problems could not be expressed as one then no third-party panel could be either. What stays on the
+engine is what is true whether or not anybody is looking — the project listing, the file decorations,
+the root watches, an external change reaching a document.
+
 A line in `META-INF/services/com.crystalgui.workbench.extension.WorkbenchExtension` says *this jar has the
 feature*; a manifest's `with(...)` says *this product enables it*. Availability is discovered, so it is a
 fact about the jars present rather than about which module remembered to make a call — and an id nothing

@@ -1,5 +1,6 @@
 package com.crystalgui.workbench;
 
+import com.crystalgui.workbench.extension.SessionSlice;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.document.EditorInput;
@@ -159,7 +160,17 @@ public final class WorkbenchSession {
     private static final String KEY_DOCK = "dock";
     private static final String KEY_TOOL_WINDOWS = "toolWindows";
     private static final String KEY_ACTIVE = "active";
-    private static final String KEY_EXPANDED = "expanded";
+    /**
+     * The old top-level list of expanded folders — <b>read once, never written</b>.
+     *
+     * <p>It is the explorer's now, under {@code extensions}, and the explorer reads this as a fallback
+     * when its own corner is absent. Ten lines against every user losing one arrangement on the day the
+     * key moved, which is the same trade {@code WorkbenchApplication} makes for the record's NAME.</p>
+     */
+    static final String KEY_EXPANDED = "expanded";
+
+    /** {@code "extensions": { "<extension id>": {...} }}. @see SessionSlice */
+    private static final String KEY_EXTENSIONS = "extensions";
     private static final String KEY_FILES = "files";
     /**
      * Widget state that outlives the run -- {@link SessionState}, keyed by element id.
@@ -223,20 +234,6 @@ public final class WorkbenchSession {
     private static final String KEY_WIDTH = "width";
     private static final String KEY_HEIGHT = "height";
 
-    /**
-     * How many <b>listings</b> a pending expansion is retried across before it is written off.
-     *
-     * <p>Was frames, when {@link #tick()} ran from a per-frame ticker. It is now driven by
-     * {@code WorkspaceTreeSource.onDidLoadListing}, so each attempt happens at a moment when the answer
-     * may actually have changed rather than sixty times a second regardless.</p>
-     *
-     * <p>The budget therefore only counts down while the workspace is genuinely still answering. A folder
-     * that will <em>never</em> list — because it was deleted since the session was recorded — no longer
-     * decrements anything and simply lingers in the pending set. That is harmless in a way it was not
-     * before: the whole reason for a give-up was that the retry ran a set difference every frame for the
-     * rest of the session, and nothing runs per frame any more.</p>
-     */
-    private static final int EXPANSION_ATTEMPTS = 600;
 
     private final Workbench workbench;
     private final ConfigStorage storage;
@@ -244,10 +241,6 @@ public final class WorkbenchSession {
     /** View state read from a record, waiting for its file's content to arrive. */
     private final Map<CgPath, JsonElement> pendingViewState = new LinkedHashMap<>();
 
-    /** Folders a record says were open, waiting for the listing that reveals they exist. */
-    private final Set<CgPath> pendingExpansion = new LinkedHashSet<>();
-
-    private int attemptsLeft;
 
     @Nullable
     private CgPath pendingActive;
@@ -347,8 +340,16 @@ public final class WorkbenchSession {
         CgPath active = workbench.activeFilePath();
         if (active != null) out.putString(KEY_ACTIVE, active.toString());
 
-        List<CgPath> expanded = workbench.fileTree().treeView().expandedItems();
-        out.putList(KEY_EXPANDED, expanded, (entry, path) -> entry.putString(KEY_PATH, path.toString()));
+        // WHAT THE EXTENSIONS REMEMBER, each in its own corner. The expanded folders were written
+        // here, by name, off `fileTree().treeView()` -- which is the reach that stopped the explorer
+        // being an extension at all. @see SessionSlice
+        StateMap<JsonElement> extensions = new StateMap<>(JsonOps.INSTANCE);
+        for (SessionSlice slice : workbench.sessionSlices()) {
+            StateMap<JsonElement> corner = new StateMap<>(JsonOps.INSTANCE);
+            slice.write(corner);
+            if (!corner.isEmpty()) extensions.putRaw(slice.id(), corner.encode());
+        }
+        if (!extensions.isEmpty()) out.putRaw(KEY_EXTENSIONS, extensions.encode());
 
         // ASKED OF THE TABS THAT EXIST, because a view state belongs to a VIEW: two split panes onto one
         // file have one document and two carets, and the document has neither of them.
@@ -657,12 +658,19 @@ public final class WorkbenchSession {
         // and hoping the branches they named still existed.
         workbench.toolWindowManager().applyVisibility();
 
-        pendingExpansion.clear();
-        for (String raw : in.getList(KEY_EXPANDED, map -> map.getString(KEY_PATH, ""))) {
-            if (!raw.isEmpty()) pendingExpansion.add(parseOrNull(raw));
+        // AND EACH EXTENSION'S OWN CORNER, or an empty map -- which is an ordinary first run and is
+        // handed over rather than skipped, so a slice has one code path instead of two.
+        StateMap<JsonElement> extensions = in.has(KEY_EXTENSIONS)
+                ? new StateMap<>(JsonOps.INSTANCE, in.getRaw(KEY_EXTENSIONS))
+                : new StateMap<>(JsonOps.INSTANCE);
+        for (SessionSlice slice : workbench.sessionSlices()) {
+            StateMap<JsonElement> corner = extensions.has(slice.id())
+                    ? new StateMap<>(JsonOps.INSTANCE, extensions.getRaw(slice.id()))
+                    : new StateMap<>(JsonOps.INSTANCE);
+            // THE WHOLE RECORD IS PASSED WHEN THE CORNER IS EMPTY, so a slice can read a key this
+            // session used to own at the top level. @see #KEY_EXPANDED
+            slice.read(corner.isEmpty() ? in : corner);
         }
-        pendingExpansion.remove(null);
-        attemptsLeft = EXPANSION_ATTEMPTS;
 
         String active = in.getString(KEY_ACTIVE, "");
         pendingActive = active.isEmpty() ? null : parseOrNull(active);
@@ -766,34 +774,21 @@ public final class WorkbenchSession {
      * @return whether anything is still pending
      */
     public boolean tick() {
-        if (pendingExpansion.isEmpty() && pendingActive == null) return false;
-        if (attemptsLeft-- <= 0) {
-            // Written off rather than retried forever: a folder in the record may simply have been deleted
-            // since, and an unbounded retry would run a set difference every frame for the whole session.
-            pendingExpansion.clear();
-            pendingActive = null;
-            return false;
-        }
-
-        List<CgPath> remaining = new ArrayList<>(pendingExpansion);
-        for (CgPath folder : remaining) {
-            if (!workbench.fileTree().source().hasChildren(folder)) continue;
-            workbench.fileTree().treeView().setExpanded(folder, true);
-            pendingExpansion.remove(folder);
-        }
-
-        if (pendingExpansion.isEmpty() && pendingActive != null) {
-            CgPath active = pendingActive;
-            pendingActive = null;
-            // Last, so the reveal it triggers lands on a tree that has finished opening itself.
-            workbench.openFile(active);
-        }
-        return !pendingExpansion.isEmpty() || pendingActive != null;
+        if (pendingActive == null) return false;
+        CgPath active = pendingActive;
+        pendingActive = null;
+        // THE FOLDER EXPANSION USED TO BE HERE, with a 600-attempt budget, because the active file had
+        // to be opened LAST -- "so the reveal it triggers lands on a tree that has finished opening
+        // itself". That coupling was between the engine and one panel, and it is the explorer's own
+        // business now: its slice hangs its retry off `onDidLoadListing` and its auto-reveal expands
+        // whatever the open needs. @see SessionSlice
+        workbench.openFile(active);
+        return false;
     }
 
     /** True while a restore is still waiting on listings or reads. */
     public boolean isRestoring() {
-        return !pendingExpansion.isEmpty() || !pendingViewState.isEmpty() || pendingActive != null;
+        return !pendingViewState.isEmpty() || pendingActive != null;
     }
 
     @Nullable

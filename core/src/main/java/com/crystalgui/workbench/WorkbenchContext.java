@@ -1,5 +1,7 @@
 package com.crystalgui.workbench;
 
+import com.crystalgui.core.settings.SettingsScope;
+import com.crystalgui.workbench.explorer.WorkspaceTreeSource;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.workbench.dock.panel.DockOpenOptions;
 import com.crystalgui.workbench.dock.panel.DockInput;
@@ -31,6 +33,7 @@ import com.crystalgui.workbench.dock.DockArea;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
 import com.crystalgui.workbench.dock.panel.DockPanelRegistry;
+import com.crystalgui.workbench.extension.SessionSlice;
 import com.crystalgui.workbench.toolwindow.ToolWindowKind;
 import com.crystalgui.workbench.toolwindow.ToolWindowManager;
 
@@ -59,7 +62,7 @@ import com.crystalgui.workbench.toolwindow.ToolWindowManager;
  * two spellings of one thing for as long as it took to get there, which is the drift this interface
  * exists to prevent.</p>
  */
-public interface WorkbenchContext {
+public interface WorkbenchContext extends SettingsScope {
 
     // ── The workspace under it ──────────────────────────────────────────────────────────────────
 
@@ -68,6 +71,20 @@ public interface WorkbenchContext {
 
     /** The projects and their listings. @see WorkspaceProjects */
     WorkspaceProjects projects();
+
+    /**
+     * The same listing, typed concretely — <b>what a tree VIEW needs and the model contract does not
+     * carry</b>.
+     *
+     * <p>{@code filter}, {@code visibleRowFor} and {@code drainRefresh} are view-model methods: a
+     * filtered tree, a path-to-row mapping and a coalesced redraw. {@link #projects()} is the honest
+     * contract for everything else and is what eight consumers use.</p>
+     *
+     * <p><b>This is a named leak, not a clean seam.</b> The honest fix is to separate the listing cache
+     * from the tree adapter, so the engine owns the first and the explorer owns the second; until then
+     * one object is both, and a panel that draws it needs the whole object. W3b's territory.</p>
+     */
+    WorkspaceTreeSource projectListing();
 
     /** The open documents, one per resource. */
     WorkspaceDocuments documents();
@@ -108,6 +125,16 @@ public interface WorkbenchContext {
     @Nullable
     CgPath activeFilePath();
 
+    /**
+     * What is in front, as a resource — <b>a panel need not be about a file</b>.
+     *
+     * <p>{@link #activeFilePath()} answers null for a shader graph's generated source, a diff or a
+     * networked panel; this answers for all of them, which is what a feature filtering "the active
+     * thing" wants. Null means nothing has been said.</p>
+     */
+    @Nullable
+    Resource activeResource();
+
     /** The text editor in front, or null when what is in front is not one. */
     @Nullable
     TextEditor activeEditor();
@@ -139,6 +166,14 @@ public interface WorkbenchContext {
 
     /** @return whether there was something to save */
     boolean saveActiveFile();
+
+    /** Who else is EDITING {@code target}, phrased for a human, or null when nobody is. */
+    @Nullable
+    String othersEditing(@Nullable CgPath target);
+
+    /** Who else merely has it open. @see #othersEditing */
+    @Nullable
+    String othersViewing(@Nullable CgPath target);
 
     /**
      * A document arrived in a tab.
@@ -182,6 +217,18 @@ public interface WorkbenchContext {
      *         workbench and a half-removed panel type is worse than a kept one
      */
     Disposable registerToolWindow(ToolWindowKind kind);
+
+    /**
+     * Claims a corner of the session record for this extension. @see SessionSlice
+     *
+     * <p>What a FEATURE remembers between runs, as opposed to what the engine does. The engine
+     * serialises the dock layout, the tool-window placements and the per-tab view state; it has no way
+     * to reach inside an extension, and reaching for one is exactly the arrangement being removed —
+     * {@code WorkbenchSession} named {@code fileTree().treeView().expandedItems()} outright.</p>
+     *
+     * @return a handle that withdraws the slice, so a deactivated extension stops being written
+     */
+    Disposable registerSessionSlice(SessionSlice slice);
 
     /**
      * A private directory for derived output, or null on a host with nowhere to put one.

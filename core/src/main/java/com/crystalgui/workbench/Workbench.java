@@ -1,11 +1,13 @@
 package com.crystalgui.workbench;
 
 
+import com.crystalgui.workbench.extension.ProjectExtension;
+import com.crystalgui.workbench.extension.ProblemsExtension;
+import com.crystalgui.workbench.extension.NotificationsExtension;
+import com.crystalgui.workbench.extension.SessionSlice;
 import java.nio.file.Path;
 import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.ui.data.UiDataKeys;
-import com.crystalgui.workbench.chrome.status.PresenceBinding;
-import com.crystalgui.workbench.chrome.status.ProblemsBinding;
 import com.crystalgui.workbench.dock.WorkbenchOpener;
 import com.crystalgui.workbench.editor.TextFileKind;
 import com.crystalgui.workbench.explorer.*;
@@ -52,7 +54,6 @@ import com.crystalgui.workbench.decoration.FileDecorationProvider;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.workbench.chrome.notification.NotificationBalloons;
 import com.crystalgui.workbench.chrome.notification.NotificationsView;
-import com.crystalgui.workbench.chrome.problems.ProblemsPanel;
 import com.crystalgui.workbench.dock.DockArea;
 import com.crystalgui.workbench.dock.drag.DockDropZone;
 import com.crystalgui.workbench.dock.DockGroup;
@@ -135,10 +136,17 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     /** A document panel — one instance per file, distinguished by its {@code path} state. */
     public static final String FILE_TYPE = "file";
 
-    public static final String PROJECT_TYPE = "project";
-    public static final String PROBLEMS_TYPE = "problems";
+    /** @deprecated the panel is {@code ProjectExtension} now. @see ProjectExtension#TYPE */
+    @Deprecated
+    public static final String PROJECT_TYPE = ProjectExtension.TYPE;
+    /** @deprecated the panel is {@code ProblemsExtension} now. @see ProblemsExtension#TYPE */
+    @Deprecated
+    public static final String PROBLEMS_TYPE = ProblemsExtension.TYPE;
     /** The notification history — IntelliJ's own tool window, on the auxiliary rail beside the bell. */
-    public static final String NOTIFICATIONS_TYPE = "notifications";
+    /** @deprecated the panel is {@code NotificationsExtension} now; this names its id for callers
+     * that have not moved. @see NotificationsExtension#TYPE */
+    @Deprecated
+    public static final String NOTIFICATIONS_TYPE = NotificationsExtension.TYPE;
 
     /**
      * The state key carrying which file a {@link #FILE_TYPE} panel shows.
@@ -243,16 +251,14 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      */
     final ProjectSourcesIndex projectSources = new ProjectSourcesIndex(this);
 
-    /**
-     * Every document's problems, indexed, counted and pointed at the panel — extracted at W5.
-     */
-    final ProblemsBinding problemsBinding = new ProblemsBinding(this);
 
     /**
      * Who else is in the file that is in front — extracted at W5.
      */
-    final PresenceBinding presenceBinding = new PresenceBinding(this);
 
+
+    /** The transient half — balloons over the bottom-right corner. @see NotificationBalloons */
+    private final NotificationBalloons balloons = new NotificationBalloons();
     /**
      * The tree's half of the workbench — extracted at W5.
      *
@@ -260,14 +266,19 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * project root, and following the active tab.</p>
      */
     final ExplorerBinding explorerBinding = new ExplorerBinding(this);
-    public final ProjectFileTree fileTree;
-    public final ProblemsPanel problems = new ProblemsPanel();
 
-    /** The notification history. @see #NOTIFICATIONS_TYPE */
-    private final NotificationsView notificationsView = new NotificationsView();
+    /**
+     * The project listing and the file decorations — <b>the engine's, not a panel's</b>.
+     *
+     * <p>Both used to be constructed by {@code ProjectFileTree}, so {@link #projects()} and
+     * {@link #decorations()} were reads through a widget: a workbench with no explorer had no listing
+     * and no decorations either, and the explorer could not become an extension without taking the
+     * engine's own model with it. @see WorkspaceProjects</p>
+     */
+    private final WorkspaceTreeSource projectListing;
 
-    /** The transient half — balloons over the bottom-right corner. @see NotificationBalloons */
-    private final NotificationBalloons balloons = new NotificationBalloons();
+    private final FileDecorations fileDecorations = new FileDecorations();
+
     public final DockArea dock;
 
     /** The fixed region frame — sidebar, editor, panel, auxiliary. @see WorkbenchRegions */
@@ -564,17 +575,11 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // accumulated and every later change did O(entries) work in every live view.
         markerWatch.disconnectAll();
         capabilityWatch.disconnectAll();
-        if (current == null) {
-            if (problemCountEntry != null) problemCountEntry.dispose();
-            problemCountEntry = null;
-            return;
-        }
-        // EVERY DOCUMENT'S PROBLEMS REACH THE MARKERS, whatever kind of document it is. This indexed
-        // the open TEXT documents' sets, so a graph left the panel empty by construction while its
-        // compiler produced a dozen attributed errors with nowhere to go. @see DocumentModel#diagnostics
-        markerWatch.add(documents.onDidOpen.connect(document -> problemsBinding.indexProblemsOf(document)));
-        for (Document already : documents.all()) problemsBinding.indexProblemsOf(already);
-        markerWatch.add(markers.onDidChange.connect(resource -> problemsBinding.refreshProblemCount()));
+        if (current == null) return;
+        // THE PROBLEM INDEXING AND THE COUNT WERE HERE, gated on being attached because a workbench
+        // subscribing from its constructor "stayed subscribed and kept writing its own entry into the
+        // one static bar". Both halves of that are gone -- the bar is per workbench, and an extension's
+        // handle is disposed with the workbench -- so the feature owns them. @see ProblemsExtension
         // ATTACHED WORKBENCHES ONLY, for the reason above it: this is a listener on a PROCESS-LIVED
         // static, so a workbench that subscribed from its constructor would stay reachable for ever and
         // keep an entire editor tree alive behind it.
@@ -589,7 +594,6 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
                     resource -> projectSourcesMoved = true);
             capabilityWatch.add(subscription::dispose);
         }
-        problemsBinding.refreshProblemCount();
         current.addDataProvider(this);
         // The rail's buttons, once there is a window to take a registry from.
         //
@@ -696,6 +700,20 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         opener.openResourceAt(resource, at, member);
     }
 
+    /** Who else is EDITING it, phrased for a human. @see SaveActions#phrase */
+    @Override
+    @Nullable
+    public String othersEditing(@Nullable CgPath target) {
+        return saveActions.othersEditing(target);
+    }
+
+    /** Who else merely has it open. @see #othersEditing */
+    @Override
+    @Nullable
+    public String othersViewing(@Nullable CgPath target) {
+        return saveActions.othersViewing(target);
+    }
+
     /** Writes the active tab back. A stale write is reported distinctly -- it has a recovery path. */
     @Override
     public boolean saveActiveFile() {
@@ -723,10 +741,14 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     }
 
     /** Reveals the Problems panel. What a failing status readout points at. */
-    public static final String SHOW_PROBLEMS = "workbench.showProblems";
+    /** @deprecated @see ProblemsExtension#SHOW */
+    @Deprecated
+    public static final String SHOW_PROBLEMS = ProblemsExtension.SHOW;
 
     /** Reveals the Notifications panel. */
-    public static final String SHOW_NOTIFICATIONS = "workbench.showNotifications";
+    /** @deprecated @see NotificationsExtension#SHOW */
+    @Deprecated
+    public static final String SHOW_NOTIFICATIONS = NotificationsExtension.SHOW;
 
     /**
      * A workbench with every contributed extension on — which is what a test and a harness scene mean,
@@ -771,30 +793,21 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // live in registerCommands, which runs once per CLASS: the second workbench would never register
         // its own index and the first would answer from a file tree nobody is looking at.
         ProjectSourcesRegistry.contribute(projectIndex);
-        this.fileTree = new ProjectFileTree(workspace);
-        // At construction, not on the first frame with a window: the registry is global, so there is
-        // nothing left to wait for.
-        this.fileTree.setContextMenu(
-                CommandRegistry.global(), ExplorerCommands::menu);
-        // The explorer IS the workspace's undo scope. UndoScope.nearest walks outward from focus, so
-        // Ctrl+Z in the tree reaches file operations and Ctrl+Z in an editor still reaches its own text.
-        this.fileTree.setUndoStack(files.undoStack());
+        this.projectListing = new WorkspaceTreeSource(workspace);
         // PROBLEMS AS A DECORATION. Everything for this already existed -- the weights, the
         // `.decoration-error` classes, the tree's own resolve-and-apply -- and nothing read Markers.
         //
         // Through `pendingRefresh` rather than a direct refresh, for the reason FileDecorations records:
         // a provider can fire from inside a click handler on a row, and a widget must never rebuild the
         // elements it is being clicked on.
-        this.fileTree.getDecorations().addProvider(new DiagnosticDecorations(markers));
+        fileDecorations.addProvider(new DiagnosticDecorations(markers));
         // ONE SIGNAL, BOTH SURFACES. The tree redraws from the decorations' own announcement; the tabs
         // have to be told, because a tab is not a decoration consumer -- it pulls a class when it is
         // built and has no reason to look again on its own.
         lifetime.add(markers.onDidChange.connect(resource -> {
-            fileTree.getDecorations().invalidate();
+            fileDecorations.invalidate();
             documentTabs.syncTabDecorations();
         }));
-        lifetime.add(fileTree.onFileChosen.connect(opener::openFile));
-        lifetime.add(fileTree.onFilesDropped.connect(explorerBinding::dropFiles));
         // RENDERED FROM THE RESULT, never from the call site. One update path serves this client's own
         // operations and another client's alike -- see Q11 in the chrome plan, and why two paths into
         // one model always end up disagreeing.
@@ -816,8 +829,8 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // roots, on every host, always: the loop that stood here ran over an empty list and watched
         // nothing at all. Nothing failed, and the explorer simply never heard about another client's
         // create, delete or rename outside the files it happened to have open.
-        lifetime.add(fileTree.source().onDidChangeProjects().connect(explorerBinding::watchProjectRoots));
-        fileTree.getDecorations().addProvider(externalChanges);
+        lifetime.add(projectListing.onDidChangeProjects().connect(explorerBinding::watchProjectRoots));
+        fileDecorations.addProvider(externalChanges);
 
         // A RECONNECT INVALIDATES EVERYTHING AT ONCE, and for a different reason than a change does --
         // CrystalOS W11. The client survives a disconnect and rejoin so that a window retained across one
@@ -825,7 +838,6 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // to, and no fs.changed can arrive to say so: nothing was watching, because there was nothing to
         // watch with. Wired here beside the notification above so there is one place the tree learns that
         // the far side has moved under it.
-        lifetime.add(workspace.onDidReconnect.connect(fileTree::markListingsStale));
 
         // How a tab presents itself. Both are PULLED by the strip when it builds a tab rather than pushed
         // in afterwards, which is what makes a rebuilt strip correct on the frame it is rebuilt -- a dock
@@ -859,9 +871,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // region existed -- which is what a server opening a tool window does. Free when the set is
         // empty, which is every frame but the few that matter. @see ToolWindowManager#retryPendingShows
         if (toolWindowManager != null) toolWindowManager.retryPendingShows();
-            explorerBinding.revealActiveFile();
-            problemsBinding.rebindProblems();
-            bindStatusToActiveTab();
+                bindStatusToActiveTab();
         }));
         // The rails' :checked state follows the dock's structure and nothing else, so they can subscribe
         // now. Their BUTTONS wait for a window -- see onWindowChanged.
@@ -898,7 +908,6 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // PRESENCE MOVES WITHOUT THE TAB MOVING. It was refreshed on a tab change alone, which was
         // enough while nothing ever pushed one -- somebody else opening the file you are looking at
         // changes the answer and changes nothing about which tab is in front.
-        lifetime.add(workspace.presence().onDidChange.connect(presenceBinding::refreshPresence));
         documentTabs.registerFailureBanner();
         // Tab dirty markers. Was a per-frame refreshDirtyMarkers(), which meant encoding every open
         // document -- a whole shader graph serialised sixty times a second -- to notice a marker that
@@ -978,86 +987,6 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // and, for notifications, the badge. Anchors match where the default arrangement puts them, so
         // closing a panel and reopening it from the activity bar lands it back where it was rather than
         // somewhere merely legal.
-        registerToolWindow(ToolWindowKind.of(PROJECT_TYPE, "Project")
-                .icon("crystalgui:folder")
-                .anchor(DockDropZone.SPLIT_LEFT)
-                .view(ctx -> fileTree)
-                .openByDefault());
-        registerToolWindow(ToolWindowKind.of(PROBLEMS_TYPE, "Problems")
-                .icon("crystalgui:toolwindows/problems")
-                .anchor(DockDropZone.SPLIT_DOWN)
-                .view(ctx -> problems)
-                .toggle(SHOW_PROBLEMS)
-                .openByDefault());
-        // THE AUXILIARY RAIL, which is where IntelliJ keeps it and is not an arbitrary choice: the
-        // notification history is something you consult, not something you work in, so it belongs on the
-        // side that holds the things you glance at rather than beside the project tree.
-        //
-        // A DOT, NOT A COUNT. IntelliJ marks the bell and does not say how many, which is the right call:
-        // the number is not actionable -- you open the panel either way -- and a two-digit count over a
-        // 20px rail icon is unreadable. Written whether or not the panel has ever been opened, because
-        // the count is what tells you to open it; a window dragged from one stripe to the other keeps it
-        // with no further wiring.
-        registerToolWindow(ToolWindowKind.of(NOTIFICATIONS_TYPE, "Notifications")
-                .icon("crystalgui:toolwindows/notifications")
-                .region(DockRegion.AUXILIARY)
-                .side(RegionSide.PRIMARY)
-                .view(ctx -> notificationsView)
-                .toggle(SHOW_NOTIFICATIONS)
-                .badge((ctx, set) -> {
-                    Connection watch = Notifications.onDidChangeUnread.connect(
-                            count -> set.accept(count == null || count <= 0 ? null : ViewContainerRegistry.DOT));
-                    return watch::disconnect;
-                }));
-
-        // BOTH HANDLERS ARE INLINE, and deliberately not folded into one openAndReveal(CgPath, TextPoint).
-        //
-        // That helper reads as the obvious de-duplication and gives this class a navigation API in terms
-        // of a text POSITION -- which is knowledge a workbench has no business holding. It arranges panels
-        // and owns documents; where a caret goes inside one is the editor's affair, and a method here
-        // taking a TextPoint invites every future caller to route text navigation through the shell.
-        //
-        // What the two handlers actually share is `openFile(path, continuation)`, which is already the
-        // primitive and is already stated once. The four lines they each spell out are the CALLER's
-        // business -- which editor, what to do with it -- and spelling them out is what keeps the coupling
-        // pointing the right way.
-        lifetime.add(problems.onProblemChosen.connect(node -> {
-            if (node.diagnostic() == null || node.resource() == null || !node.resource().isProject()) return;
-            TextPoint at = node.diagnostic().start();
-            // AS THE CONTINUATION OF THE OPEN, not as the statement after it. openFile is asynchronous for
-            // a file that is not already on screen -- it returns before the read has come back -- so
-            // positioning on the next line acted on the editor from BEFORE the click. That is correct for
-            // a problem in the file you are already looking at and wrong for every other, which is why it
-            // read as intermittent rather than as broken.
-            opener.openFile(node.resource().asPath(), () -> {
-                TextEditor editor = activeEditor();
-                if (editor == null) return;
-                editor.revealAt(at);
-                UIDocument window = document();
-                if (window != null) window.focus().requestFocus(editor);
-            });
-        }));
-
-        // SHOW QUICK-FIXES IS NAVIGATE PLUS ONE STEP, and it is spelled out here for the same reason the
-        // handler above is: which editor and what to do with it is the caller's business. The panel has
-        // no editor and must not reach for one -- it asks, and this answers.
-        //
-        // The list is opened INSIDE the continuation, after the caret has been placed: the actions are
-        // resolved from an offset, so asking before the file is open and positioned would ask about
-        // wherever the previous editor's caret happened to be.
-        lifetime.add(problems.onQuickFixesRequested.connect(node -> {
-            if (node.diagnostic() == null || node.resource() == null || !node.resource().isProject()) return;
-            TextPoint at = node.diagnostic().start();
-            opener.openFile(node.resource().asPath(), () -> {
-                TextEditor editor = activeEditor();
-                if (editor == null) return;
-                editor.revealAt(at);
-                UIDocument window = document();
-                if (window != null) window.focus().requestFocus(editor);
-                editor.showCodeActionsAt(editor.getCaret());
-            });
-        }));
-
         // EXTENSIONS LAST, when everything they may reach has been built.
         //
         // WHAT THE APPLICATION ASKED FOR, and everything contributed when nobody asked -- a workbench
@@ -1249,19 +1178,19 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         return networkedPanels;
     }
 
+
     /** The networked panels on this workbench, or null before anything asked for a mount. */
     @Nullable
     public NetworkedPanels networkedPanels() {
         return networkedPanels;
     }
 
-    public ProjectFileTree fileTree() {
-        return fileTree;
+    /** @see WorkbenchContext#projectListing */
+    @Override
+    public WorkspaceTreeSource projectListing() {
+        return projectListing;
     }
 
-    public ProblemsPanel problems() {
-        return problems;
-    }
 
     /** Adds a host's own panel type — a shader graph, a console, an inspector. */
     /**
@@ -1337,6 +1266,22 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // caught the moment the notification badge became a kind's rather than a line in the ctor.
         toolWindowHandles.add(handle);
         return handle;
+    }
+
+    /** Every {@link SessionSlice} an extension claimed, in registration order. @see WorkbenchSession */
+    private final List<SessionSlice> sessionSlices = new ArrayList<>();
+
+    /** @see WorkbenchContext#registerSessionSlice */
+    @Override
+    public Disposable registerSessionSlice(SessionSlice slice) {
+        if (slice == null) return () -> { };
+        sessionSlices.add(slice);
+        return () -> sessionSlices.remove(slice);
+    }
+
+    /** What {@code WorkbenchSession} writes and reads. Package-private: it is the record's, not an API. */
+    List<SessionSlice> sessionSlices() {
+        return sessionSlices;
     }
 
     /** Every {@link #registerToolWindow} handle, so this workbench can withdraw its own. */
@@ -1694,7 +1639,6 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      */
     private void bindStatusToActiveTab() {
         statusBar.breadcrumbs().setCrumbs(saveActions.trailFor(activeFilePath()));
-        presenceBinding.refreshPresence();
 
         Document active = activeDocument();
         if (active == activeStatusDocument) return;
@@ -1816,12 +1760,12 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      */
     @Override
     public FileDecorations decorations() {
-        return fileTree.getDecorations();
+        return fileDecorations;
     }
 
     @Override
     public WorkspaceProjects projects() {
-        return fileTree.source();
+        return projectListing;
     }
 
     /** The workspace this workbench is a view of. */
@@ -2022,19 +1966,9 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     @Nullable
     private DiagnosticSet boundTo;
 
-    /**
-     * Whether the tree follows the active tab — {@code explorer.autoReveal}, <b>default off</b>.
-     *
-     * <p>Which is IntelliJ's posture and not VS Code's; see {@code WorkbenchSettings.AUTO_REVEAL} for why
-     * the default went that way. The field's own default matches the setting's so a workbench built
-     * without a settings store behaves like one built with the shipped defaults — a default stated in two
-     * places that disagree is worse than either.</p>
-     */
-    public boolean autoReveal = false;
 
 
     @Nullable
-    public CgPath revealed;
 
 
 
@@ -2057,7 +1991,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // outside, and a latch on that turned the crawl off the first time every known directory happened
         // to be in flight -- and left it off when a folder appeared later. The step is O(budget) against a
         // queue, so asking every frame costs nothing once the queue is empty.
-        fileTree.source().indexStep(WorkspaceTreeSource.DEFAULT_INDEX_BUDGET);
+        projectListing.indexStep(WorkspaceTreeSource.DEFAULT_INDEX_BUDGET);
         // WHAT THE INDEX MAY SEE, re-taken on this thread because the crawl above just grew the list the
         // analysis thread reads. Before announceProjectSourcesMoved, so a buffer that moved this frame is
         // announced this frame rather than next. @see #refreshProjectIndexInputs
@@ -2065,18 +1999,13 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // A project file's text landed, so anything that resolved without it is stale. Drained here
         // because the read answers on the client's thread. @see #onProjectIndexFilled
         projectSources.announceProjectSourcesMoved();
-        // STAYS PER FRAME, and the attempt to move it to onWindowChanged is why this comment exists.
-        //
-        // It looks like a one-shot dressed as a loop -- ProjectFileTree.loadProjects latches on
-        // `projectsRequested`, so this is free after the first call. It is really a RETRY: a client's
-        // window id is not valid until its session has opened, and the server discards a packet addressed
-        // to another window, so a call made too early is thrown away with no error at all
-        // (WorkspaceTreeSource.loadProjects says exactly this). Attach happens before that, and because
-        // the latch is set on the ATTEMPT rather than on success, one early call poisons it permanently:
-        // twelve explorer tests came up with no project roots at all.
-        //
-        // Moving it needs a session-opened announcement, which is step 4's territory, not this one.
-        fileTree.loadProjects();
+        // THE PROJECT LISTING IS ASKED FOR PER FRAME, and the latch is the SOURCE's rather than a
+        // panel's -- which is what let the explorer leave. It looks like a one-shot dressed as a loop and
+        // is really a RETRY: a client's window id is not valid until its session has opened, and the
+        // server discards a packet addressed to another window, so a call made too early is thrown away
+        // with no error at all. Moving it off the frame needs a session-opened announcement, which is
+        // W3b's territory rather than this one's.
+        projectListing.loadProjects(() -> { }, () -> { });
         return true;
     }
 
@@ -2111,8 +2040,6 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         return markers;
     }
 
-    private final ConnectionGroup markerWatch = new ConnectionGroup();
-
     /**
      * ONE connection for the workbench, not one per document.
      *
@@ -2120,27 +2047,11 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * add a listener per file opened, all of them doing the same whole-workspace sweep. The question
      * "which open documents are missing services" is about the workspace, so it is asked once.</p>
      *
-     * <p>In a group so it is released with everything else this workbench holds: a static signal outliving
-     * a disposed workbench is a leak that keeps a whole editor tree alive, and this one is on
+     * <p>In a group so it is released with everything else this workbench holds: a static signal
+     * outliving a disposed workbench is a leak that keeps a whole editor tree alive, and this one is on
      * {@code LanguageRegistry}, which lives for the process.</p>
      */
     private final ConnectionGroup capabilityWatch = new ConnectionGroup();
 
-    @Nullable
-    public StatusBarEntryAccessor problemCountEntry;
-
-    /** Ahead of the shader graph's own readouts, which are about one document. */
-    public static final int PROBLEM_COUNT_PRIORITY = 200;
-
-
-
-
-
-
-    /** Right of the problem count and left of anything a document contributes. */
-    public static final int PRESENCE_PRIORITY = 50;
-
-    @Nullable
-    public StatusBarEntryAccessor presenceEntry;
-
+    private final ConnectionGroup markerWatch = new ConnectionGroup();
 }

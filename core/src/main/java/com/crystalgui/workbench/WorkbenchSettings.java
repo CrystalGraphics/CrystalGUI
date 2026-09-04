@@ -290,9 +290,12 @@ public final class WorkbenchSettings {
         themes.setTheme(themeId(ThemeRegistry.themes(), workbench.resolve(UI_THEME)));
         themes.setScheme(themeId(ThemeRegistry.schemes(), workbench.resolve(EDITOR_SCHEME)));
 
-        workbench.explorerBinding.setAutoReveal(workbench.resolve(AUTO_REVEAL));
-        workbench.fileTree().source().setSortOrder(sortOrder(workbench));
-        workbench.fileTree().treeView().refresh();
+        // AUTO-REVEAL IS NOT PUSHED ANY MORE. It was written onto the engine through a setter, so the
+        // engine held a field for a panel it may not have; the explorer resolves the preference at the
+        // moment it reveals, where it cannot go stale. @see ProjectExtension
+        // THE ORDER IS THE MODEL'S and setting it invalidates, which ANNOUNCES -- so the panel
+        // showing the listing redraws itself and this no longer names a widget.
+        workbench.projectListing().setSortOrder(sortOrder(workbench));
 
         for (CgPath path : workbench.openPaths()) {
             TextEditor editor = workbench.editorFor(path);

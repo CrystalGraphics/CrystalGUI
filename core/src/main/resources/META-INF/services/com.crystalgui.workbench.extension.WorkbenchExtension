@@ -10,4 +10,8 @@
 # `*Extension` wrapper beside the declaration was two files with one lifetime between them.
 com.crystalgui.example.notes.NotesKind
 com.crystalgui.workbench.extension.InspectorExtension
+com.crystalgui.workbench.extension.NotificationsExtension
+com.crystalgui.workbench.extension.ProblemsExtension
+com.crystalgui.workbench.extension.PresenceExtension
+com.crystalgui.workbench.extension.ProjectExtension
 com.crystalgui.app.shadergraph.ShaderGraphContribution

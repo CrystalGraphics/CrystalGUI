@@ -46,8 +46,9 @@ public final class DocumentTabs {
      */
     void refreshAfter(Resource resource) {
         CgPath path = resource.asPath();
-        if (path != null) workbench.fileTree.source().invalidate(path.parent());
-        workbench.fileTree.treeView().refresh();
+        // INVALIDATING ANNOUNCES, so there is no `treeView().refresh()` beside it any more: whoever
+        // is showing the listing subscribes. @see WorkspaceTreeSource#onDidInvalidate
+        if (path != null) workbench.projects().invalidate(path.parent());
     }
 
     /**
@@ -208,7 +209,7 @@ public final class DocumentTabs {
         if (path == null) return Workbench.LIBRARY_DECORATION;
         // NULL IS THE ORDINARY ANSWER -- an undecorated file is the state nearly every file is in, and
         // resolve() says so with null rather than with an empty decoration.
-        FileDecoration decoration = workbench.fileTree.getDecorations().resolve(path, false);
+        FileDecoration decoration = workbench.decorations().resolve(path, false);
         return decoration == null ? null : decoration.styleClass();
     }
 
@@ -318,7 +319,7 @@ public final class DocumentTabs {
      */
     @Nullable
     String windowTitleFor(DockPanelRef panel) {
-        WorkspaceTreeSource source = workbench.fileTree != null ? workbench.fileTree.source() : null;
+        WorkspaceTreeSource source = workbench.projectListing();
 
         Resource viewed = viewedResource(panel);
         if (viewed == null) return null;

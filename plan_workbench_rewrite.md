@@ -1034,6 +1034,25 @@ Four calls have no home yet, and they are the honest cost of the step:
 - `:core:test`, `:core:headlessTest`, `:mc1710:compileJava` and the harness green. `CgUiDesktopScene`
   names `Workbench.PROJECT_TYPE` three times and moves with the constant.
 
+#### Shipped, with three deviations
+
+1. **`ProjectSourcesIndex` stayed on the engine**, so there is no `crystalgui:project-sources` id. It
+   has no panel and no UI — it feeds the language stack's type resolution, and an extension that
+   registers nothing a user can see is a listing entry with nothing behind it.
+2. **`WorkbenchContext.projectListing()` is a named leak.** A tree VIEW needs `filter`,
+   `visibleRowFor` and `drainRefresh`, which are not model contract; `projects()` remains the honest
+   surface for the eight consumers that only want the model. The fix is separating the listing cache
+   from the tree adapter — W3b — and it is documented as a leak rather than hidden behind a cast.
+3. **Four things had to change shape first**, and they are the real content of the step. The engine
+   took back its own model (`projects()` and `decorations()` were reads *through* `ProjectFileTree`,
+   which constructed both); `WorkspaceTreeSource.onDidInvalidate` replaced a watcher calling
+   `treeView().refresh()` on a widget; `ProjectFileTree.PROJECT_TREE` replaced `ExplorerCommands`
+   asking the context for a `Workbench` and calling `fileTree()` on it; and the auto-reveal preference
+   stopped being pushed onto the engine through a setter.
+
+`Workbench` lost **181 lines** and names no panel at all. `WorkbenchSession` lost the 600-attempt
+expansion retry with the explorer's slice.
+
 #### Risks
 
 **The explorer is the whole risk.** Problems, Notifications and Presence are small and independent;
@@ -1185,7 +1204,7 @@ move with the rewrite.
 | **W5 — the `Workbench` split** | eight collaborators extracted with `tools/port/extract.py` (new); the flat boundary priced at 55 published members against zero and rejected; `StatusBar` per workbench (D4) reached through `UiDataKeys.STATUS_BAR` | `Workbench` 3,598 → 2,115; `:core:test`, `:core:headlessTest`, `:mc1710:compileJava` and the harness all green | **high** — the largest move; done after W1–W4 so it moved code that was already disposed and already context-shaped |
 | **W6 — `ScriptWorkbench` → extension, and scripting as a capability** | the Run shell written against `WorkbenchContext` and contributed by `LanguageStack`; three host install sites deleted; `ScriptingMode` on `ProjectCapability` with a `ScriptingPolicy` the host answers; the Run refusal at the snapshot; `WorkbenchContext.cacheDirectory` | no host installs scripting; a dedicated server answers `AUTHORIZED` and the Run command refuses with a reason; `WorkspaceHostTest` covers both modes | medium–high — `language/` is in another worktree (§8), checked clear before starting |
 | **W7 — applications** ✅ | `ApplicationKind`/`Application`/`ApplicationRegistry`/`LaunchContext` in `desktop.app`; `WorkbenchApplication` + `WorkbenchApplicationCommands` in `workbench`; `CrystalEditor` 575 lines → a manifest; `InspectorExtension` and `ShaderGraphExtension`; `Workbench(workspace, ids)`; `WindowFrame.setApplication` + `markApplicationMain`; taskbar grouping by first appearance; D17 eviction exemption; `ConfigStorage.scoped` (D20); `FsHello.workspaceId` + `WorkspaceHost` persisting one; the session key per §4.9 with the D23 fallback; three hosts rewired | `TwoApplicationsTest` — two applications on one desktop, separate status bars, one notification centre, different feature sets, grouped in the taskbar, and a single-instance second launch that activates the first | medium |
-| **W6.5 — the built-in panels become extensions** | `ProjectExtension`, `ProblemsExtension`, `NotificationsExtension`, `PresenceExtension` in `workbench.extension`, each owning its panel, its binding, its type id and its command; `SessionSlice` (§4.9b) built so the explorer's expanded folders leave `WorkbenchSession`; `Workbench.fileTree()`/`problems()` deleted; `CrystalEditor.EXTENSIONS` names the five. Numbered before W7 because it is engine work that precedes the application layer — done after it because the seam had to exist first (§4.15) | `new Workbench(workspace, List.of())` has no tool windows, no rail buttons and no `view.*` commands and still opens a file; a manifest naming only `crystalgui:problems` gets Problems and no blank sidebar column; `CrystalEditor` unchanged on screen | **medium–high** — the explorer carries the session slice and 12 in-package files; the other three are small |
+| **W6.5 — the built-in panels become extensions** ✅ | `ProjectExtension`, `ProblemsExtension`, `NotificationsExtension`, `PresenceExtension` in `workbench.extension`, each owning its panel, its binding, its type id and its command; `SessionSlice` (§4.9b) built so the explorer's expanded folders leave `WorkbenchSession`; `Workbench.fileTree()`/`problems()` deleted; `CrystalEditor.EXTENSIONS` names the five. Numbered before W7 because it is engine work that precedes the application layer — done after it because the seam had to exist first (§4.15) | `new Workbench(workspace, List.of())` has no tool windows, no rail buttons and no `view.*` commands and still opens a file; a manifest naming only `crystalgui:problems` gets Problems and no blank sidebar column; `CrystalEditor` unchanged on screen | **medium–high** — the explorer carries the session slice and 12 in-package files; the other three are small |
 | **W8 — launcher, search, associations** | `Launcher`, `DesktopSearch`, `handlerFor`, jump-list actions, the shader-graph action | F7 desktop with a launcher; "open with"; a search that finds an app, a window, a file | medium |
 
 W0–W3 answer claim 5 and the blocker; W4–W6 answer claims 2–3; W7–W8 answer claims 1 and 4.

@@ -78,6 +78,9 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath>, Worksp
         this.sortOrder = order == null ? SortOrder.DEFAULT : order;
         for (List<CgPath> listing : children.values()) listing.sort(this::compare);
         dirty = true;
+        // AND SAID OUT LOUD, because the view that draws this order is not the one that set it: the
+        // preference is applied by the workbench and the tree is a panel that may not even be enabled.
+        onDidInvalidate.emit();
         return this;
     }
 
@@ -153,6 +156,21 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath>, Worksp
      * <p>Emitted before {@code onLoaded}, so a listener sees the roots the refresh is about to draw.</p>
      */
     private final Signal.Action onDidChangeProjects = new Signal.Action();
+
+    /**
+     * A listing was dropped and re-asked — <b>what a view showing it redraws from</b>.
+     *
+     * <p>The engine invalidates when the workspace reports a change, and something has to tell the tree.
+     * That used to be a direct {@code fileTree.treeView().refresh()} from the watcher, which is a model
+     * reaching for a widget and is what kept the explorer inside the engine. A signal points the other
+     * way: whoever is showing this listing subscribes, and the model never learns that anyone is.</p>
+     */
+    private final Signal.Action onDidInvalidate = new Signal.Action();
+
+    /** @see #onDidInvalidate */
+    public Signal.Action onDidInvalidate() {
+        return onDidInvalidate;
+    }
 
     @Override
     public Signal.Action onDidChangeProjects() {
@@ -339,6 +357,7 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath>, Worksp
         // show up at all, which is the failure the old comment above was written about.
         request(directory);
         dirty = true;
+        onDidInvalidate.emit();
     }
 
     /**

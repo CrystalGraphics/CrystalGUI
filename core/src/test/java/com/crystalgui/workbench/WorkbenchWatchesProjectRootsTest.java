@@ -107,7 +107,7 @@ public class WorkbenchWatchesProjectRootsTest extends UiDocumentTestBase {
         for (int i = 0; i < 8; i++) frameAndPump();
 
         assertEquals("the listing landed and the tree has its root",
-                List.of(ROOT), workbench.fileTree().source().roots());
+                List.of(ROOT), workbench.projects().roots());
         assertEquals("the workbench watches the project root it was just given -- taking the watch in "
                         + "the constructor watched an empty list",
                 1, root.onChanged.connectionCount());

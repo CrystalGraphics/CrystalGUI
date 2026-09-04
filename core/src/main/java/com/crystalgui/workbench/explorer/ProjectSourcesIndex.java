@@ -59,19 +59,18 @@ public final class ProjectSourcesIndex {
      * {@code Document.onDidChange} was added to stop.</p>
      */
     public void refreshProjectIndexInputs() {
-        int revision = workbench.fileTree == null ? 0 : workbench.fileTree.source().indexRevision();
+        int revision = workbench.projects().indexRevision();
         boolean workspaceMoved = revision != workbench.lastIndexRevision;
         if (workspaceMoved) {
             workbench.lastIndexRevision = revision;
-            List<CgPath> files = workbench.fileTree == null ? List.of() : workbench.fileTree.source().knownFiles();
+            List<CgPath> files = workbench.projects().knownFiles();
             workbench.crawledFiles = files;
 
             Map<String, List<String>> roots = new HashMap<>();
             for (CgPath file : files) {
                 if (file == null) continue;
                 roots.computeIfAbsent(file.project(),
-                        id -> workbench.fileTree == null ? SourceRoots.CONVENTION
-                                : workbench.fileTree.source().sourceRootsOf(id));
+                        id -> workbench.projects().sourceRootsOf(id));
             }
             workbench.projectRoots = roots;
         }
@@ -178,7 +177,9 @@ public final class ProjectSourcesIndex {
         // has read yet and schedules the read. Without this the row keeps the file-type icon until
         // something else happens to rebind it, so a package's icons appear one at a time as you click
         // around, or never. @see ProjectFileTree#requestRefresh
-        workbench.fileTree.requestRefresh();
+        // THE LISTING ANNOUNCES; whoever is drawing it redraws. This used to call requestRefresh()
+        // on the tree, which is engine code reaching for a panel that may not be enabled.
+        workbench.projects().invalidateAll();
         // AND EVERY TAB, for the same reason and one more: a tab's icon is pulled when the tab is BUILT
         // and never re-read, which was correct while it was a function of the file NAME. It is now a
         // function of what the file declares, and that answer arrives later than the tab does.

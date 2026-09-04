@@ -17,7 +17,16 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Extracted from {@link Workbench}. See the plan's §4.5 for why this cluster is one thing.
+ * <b>What a change on the server means to this workbench</b> — the engine's half of what used to be
+ * "the explorer's binding".
+ *
+ * <p>The recursive watch per project root and the external-change handling stayed here when the tree
+ * became {@code ProjectExtension}: they are true whether or not anybody is looking at a tree, and what
+ * they touch — the listing, the open documents, the tab titles — is the engine's. What went with the
+ * panel was reveal-on-tab-change, the auto-reveal preference and drag-and-drop, none of which mean
+ * anything without a view.</p>
+ *
+ * <p>Extracted from {@link Workbench}. See the plan's §4.5 for why this cluster is one thing.
  */
 public final class ExplorerBinding {
 
@@ -37,7 +46,7 @@ public final class ExplorerBinding {
      * already in the map is left alone.</p>
      */
     public void watchProjectRoots() {
-        List<CgPath> roots = workbench.fileTree.source().roots();
+        List<CgPath> roots = workbench.projects().roots();
         List<CgPath> gone = new ArrayList<>();
         for (Map.Entry<CgPath, Workbench.RootWatch> each : workbench.rootWatches.entrySet()) {
             if (!roots.contains(each.getKey())) gone.add(each.getKey());
@@ -50,13 +59,15 @@ public final class ExplorerBinding {
             Connection listener = watch.onChanged.connect(changes -> {
                 for (FsMessages.FileChange change : changes) {
                     CgPath moved = CgPath.parse(change.path());
-                    workbench.fileTree.source().invalidate(moved.parent());
+                    workbench.projects().invalidate(moved.parent());
                     if (!change.from().isEmpty()) {
-                        workbench.fileTree.source().invalidate(CgPath.parse(change.from()).parent());
+                        workbench.projects().invalidate(CgPath.parse(change.from()).parent());
                     }
                     externalChange(change);
                 }
-                workbench.fileTree.treeView().refresh();
+                // NO `treeView().refresh()` HERE any more: invalidating ANNOUNCES, and whoever is
+                // showing the listing subscribes. A watcher reaching for a widget is what kept the
+                // explorer inside the engine. @see WorkspaceTreeSource#onDidInvalidate
             });
             workbench.rootWatches.put(root, new Workbench.RootWatch(watch, listener));
         }
@@ -119,69 +130,6 @@ public final class ExplorerBinding {
             }
         }
         workbench.documentTabs.refreshTabTitles();
-    }
-
-    public Workbench setAutoReveal(boolean enabled) {
-        workbench.autoReveal = enabled;
-        return workbench;
-    }
-
-    /**
-     * Selects the active file in the tree when the active tab changes.
-     *
-     * <p>On a CHANGE only. Revealing every frame would fight the user for the selection — they click a
-     * folder, and a frame later the tree jumps back to whatever file is open.</p>
-     */
-    public void revealActiveFile() {
-        if (!workbench.autoReveal) return;
-        CgPath active = workbench.activeFilePath();
-        if (active == null || active.equals(workbench.revealed)) return;
-        workbench.revealed = active;
-        workbench.fileTree.reveal(active);
-    }
-
-    /**
-     * Performs a drag-and-drop from the tree — move by default, copy with the modifier.
-     *
-     * <p>Each item is issued independently, for the reason paste is: several files dropped into a folder
-     * are several operations that can succeed or fail separately, and stopping on the first refusal leaves
-     * the user guessing which ones landed.</p>
-     */
-    public void dropFiles(List<CgPath> sources, ProjectFileTree.DropRequest request) {
-        // ONE UNDO STEP FOR THE WHOLE DROP, and it settles when its members do -- the batch used to take
-        // `track()` runnables the caller had to remember to call, and a forgotten one left the
-        // transaction open for good.
-        workbench.files.batch(request.copy() ? "copy files" : "move files", batch -> {
-            for (CgPath source : sources) {
-                // A folder dropped into itself or its own descendant would move a directory under
-                // itself, which the filesystem refuses with a message about paths rather than about the
-                // gesture.
-                if (source.equals(request.destination()) || source.contains(request.destination())) {
-                    Notifications.show(Notification.error("Cannot move")
-                            .withDetail(source.name() + " into itself"));
-                    continue;
-                }
-                CgPath target = request.destination().resolve(source.name());
-                if (target.equals(source)) continue;   // dropped back where it already is
-                // IN THE BATCH, like the move beside it. It was a bare read-and-create outside the
-                // batch, so a copy that failed was reported by nothing while the move next to it was
-                // named -- and a dropped FOLDER did nothing at all, a read of a directory being an
-                // error. `fs/copy` is the server's now and takes a whole subtree.
-                if (request.copy()) {
-                    batch.copy(Resource.of(source), Resource.of(target));
-                } else {
-                    batch.rename(Resource.of(source), Resource.of(target), false);
-                }
-            }
-        }).then(result -> {
-            if (result.isCompletelySuccessful()) return;
-            // NAMED, which is the whole point of reporting per item: the eleven that moved stay moved
-            // and the one that did not is said out loud.
-            for (FileOperations.Failure failure : result.failures()) {
-                Notifications.show(Notification.error("Could not " + result.label())
-                        .withDetail(failure.resource().name() + " -- " + failure.error().detail()));
-            }
-        });
     }
 
 }

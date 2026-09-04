@@ -44,7 +44,7 @@ public final class TrashPicker {
 
     /** Asks every open project's trash, then shows what came back. */
     public static void open(UIDocument window, Workbench workbench) {
-        List<CgPath> roots = workbench.fileTree().source().roots();
+        List<CgPath> roots = workbench.projects().roots();
         if (roots.isEmpty()) return;
 
         List<FsMessages.TrashEntry> gathered = new ArrayList<>();

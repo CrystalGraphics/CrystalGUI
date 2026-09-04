@@ -125,7 +125,34 @@ public final class SaveActions {
         // networked panel a server opened as a tab is the first one that is not, and this threw out of
         // the active-panel signal, which runs inside the click that activated the tab.
         if (target == null) return null;
-        return workbench.presenceBinding.phrase(workbench.workspace.presence().whoIsEditing(Resource.of(target)));
+        return phrase(workbench.workspace.presence().whoIsEditing(Resource.of(target)));
+    }
+
+    /**
+     * Who else merely has it open, phrased the same way — <b>the softer half of presence</b>.
+     *
+     * <p>Somebody reading a file you are about to change is not a conflict and is still worth knowing,
+     * and it is the only thing there is to say before anybody has typed.</p>
+     */
+    @Nullable
+    public String othersViewing(@Nullable CgPath target) {
+        if (target == null) return null;
+        return phrase(workbench.workspace.presence().whoElseHasOpen(Resource.of(target)));
+    }
+
+    /**
+     * {@code alice}, {@code alice and bob}, {@code alice and 3 others}.
+     *
+     * <p>Here rather than on the feature that draws it, because BOTH halves of presence are phrased and
+     * the conflict dialog asks for one of them. A copy on each side is six lines that get fixed in one
+     * of the two.</p>
+     */
+    @Nullable
+    public static String phrase(List<String> people) {
+        if (people.isEmpty()) return null;
+        if (people.size() == 1) return people.get(0);
+        if (people.size() == 2) return people.get(0) + " and " + people.get(1);
+        return people.get(0) + " and " + (people.size() - 1) + " others";
     }
 
     private void askWhichVersionSurvives(CgPath target, byte[] written) {
