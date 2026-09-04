@@ -196,6 +196,26 @@ public final class Document {
         markSaved(newEtag);
     }
 
+    /**
+     * Content that is <b>not</b> what the file holds — unsaved work coming back from a backup.
+     *
+     * <p>Deliberately not {@link #adopt}: that one ends in {@code markSaved}, which is the whole
+     * difference. Here {@code savedVersion} is left pointing at the version the FILE's own content
+     * produced while the model moves past it, so {@link #isDirty} is true by arithmetic rather than by
+     * a flag somebody has to remember to set — and the tab's asterisk, the close prompt, the backup
+     * sweep and {@code Documents.dirty} all agree without being told.</p>
+     *
+     * <p><b>The etag is the backup's, never the file's as it is now.</b> That is what makes the restore
+     * honest: if the file moved while this client was away, the next save quotes an etag the server no
+     * longer holds and is refused as a conflict somebody can act on — where quoting the current one
+     * would overwrite whatever happened in the meantime without a word.</p>
+     */
+    public void adoptUnsaved(byte[] bytes, @Nullable String backupEtag) {
+        model.adopt(bytes);
+        this.etag = backupEtag;
+        setState(DocumentState.DIRTY);
+    }
+
     // ── Lifetime ────────────────────────────────────────────────────────────────────────────────
 
     /**

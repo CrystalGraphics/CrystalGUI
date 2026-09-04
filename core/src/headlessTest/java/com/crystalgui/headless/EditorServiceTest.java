@@ -1,6 +1,7 @@
 package com.crystalgui.headless;
 
 import com.crystalgui.core.async.Reply;
+import com.crystalgui.core.async.ReplyError;
 import com.crystalgui.core.storage.InMemoryConfigStorage;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentKind;
@@ -375,7 +376,73 @@ public class EditorServiceTest {
         pump();
 
         assertEquals(1, restored);
-        assertNotNull(editors.tabFor(EditorInput.of(MAIN)));
+        EditorService.Tab back = editors.tabFor(EditorInput.of(MAIN));
+        assertNotNull(back);
+        // THE BYTES, which is what "gives it back" MEANS. Opening alone reads the server's copy and
+        // settles CLEAN, so this method read the store, counted, and threw the work away -- and the
+        // count above is all the test used to assert, so it passed against exactly that.
+        assertEquals("// half-typed\n" + "class Main {}\n",
+                back.document().as(TextDocumentModel.class).buffer().toString());
+        assertTrue("and it comes back DIRTY: the file does not hold this", back.isDirty());
+        assertEquals(DocumentState.DIRTY, back.state());
+    }
+
+    /**
+     * <b>...and dirty against the etag it was in step with</b>, not against the file as it is now.
+     *
+     * <p>The half that decides whether somebody loses work. The file moved while this client was away;
+     * quoting the etag the restore happened to read would let the next save overwrite that change
+     * without a word, where quoting the backup's makes it a conflict a person can act on.</p>
+     */
+    @Test
+    public void restoredWorkQuotesTheEtagItWasInStepWith() {
+        EditorService.Tab tab = open(MAIN);
+        String beforeTheyWrote = tab.document().etag();
+        tab.document().as(TextDocumentModel.class).buffer().insert(0, "// mine\n");
+        editors.closeAll();
+
+        // SOMEBODY ELSE WRITES IT while this client is away.
+        service.write(WorkspaceActor.LOCAL, MAIN_PATH,
+                "theirs\n".getBytes(StandardCharsets.UTF_8), null);
+
+        editors.restoreUnsavedWork();
+        pump();
+        EditorService.Tab back = editors.tabFor(EditorInput.of(MAIN));
+
+        assertEquals("the backup's etag, not the one on the server now",
+                beforeTheyWrote, back.document().etag());
+
+        List<ReplyError> errors = new ArrayList<>();
+        editors.saveActive().onError(errors::add);
+        pump();
+        assertFalse("so the save is refused rather than silently winning", errors.isEmpty());
+        assertEquals(FsError.CONFLICT, errors.get(0).code());
+    }
+
+    /** A restore must not resurrect work for a file no kind claims — the counter-control on the count. */
+    @Test
+    public void nothingIsRestoredWhenNoKindClaimsTheFile() {
+        EditorService.Tab tab = open(MAIN);
+        tab.document().as(TextDocumentModel.class).buffer().insert(0, "// typed\n");
+        editors.closeAll();
+        kinds = new DocumentKinds();
+        editors = new EditorService(workspace, documents, kinds);
+
+        assertEquals(0, editors.restoreUnsavedWork());
+    }
+
+    /** Declining the offer must take it OFF the table, or it is made again on every launch for ever. */
+    @Test
+    public void discardingUnsavedWorkTakesItOffTheTable() {
+        EditorService.Tab tab = open(MAIN);
+        tab.document().as(TextDocumentModel.class).buffer().insert(0, "// typed\n");
+        editors.closeAll();
+        assertEquals(1, workspace.backup().restorable().size());
+
+        editors.discardUnsavedWork();
+
+        assertEquals(0, workspace.backup().restorable().size());
+        assertEquals(0, editors.restoreUnsavedWork());
     }
 
     @Test

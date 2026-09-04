@@ -195,7 +195,13 @@ public final class EditorService implements Disposable {
         int restored = 0;
         for (Backup.Entry entry : documents.restorable()) {
             if (kinds.forResource(entry.resource()) == null) continue;
-            open(EditorInput.of(entry.resource()));
+            // THE BYTES, once the document is there. Opening alone reads the SERVER's copy and settles
+            // CLEAN, so the work this method exists to give back was read from the store, counted, and
+            // thrown away -- and the count is what the covering test asserted, so it passed throughout.
+            open(EditorInput.of(entry.resource())).then(tab -> {
+                Document document = tab.document();
+                if (document != null) document.adoptUnsaved(entry.content(), entry.etag());
+            });
             restored++;
         }
         return restored;
