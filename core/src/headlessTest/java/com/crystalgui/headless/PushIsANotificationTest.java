@@ -123,7 +123,7 @@ public class PushIsANotificationTest {
     /** The change reaches the client and leaves nothing pending on the server. */
     @Test
     public void aPushIsANotification() {
-        workspace.files().read(Resource.of(FILE));
+        workspace.files().readResponse(Resource.of(FILE));
         pump();
         assertEquals("the read settled", 0, serverSide.router().pendingRequests());
 

@@ -124,8 +124,8 @@ public class WorkspaceReconnectTest {
         Server next = reconnect(new InMemoryFileSystem().seed("p:a.txt", "from the new server"));
 
         String[] got = {null};
-        workspace.files().read(Resource.of(FILE))
-                .then(answer -> got[0] = new String(answer.content(), StandardCharsets.UTF_8));
+        workspace.files().readWhole(Resource.of(FILE))
+                .then(answer -> got[0] = new String(answer.bytes(), StandardCharsets.UTF_8));
         next.pump();
 
         assertEquals("from the new server", got[0]);

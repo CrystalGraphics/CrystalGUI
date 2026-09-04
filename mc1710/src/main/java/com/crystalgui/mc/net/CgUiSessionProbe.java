@@ -422,22 +422,22 @@ public final class CgUiSessionProbe {
             // underneath this client is refused rather than clobbered.
             deltaWriteStarted = true;
             Resource readme = Resource.of(CgPath.of(CgUiWorkspaceHost.PROJECT_ID, "README.md"));
-            files.files().read(readme)
+            files.files().readWhole(readme)
                     .onError(failure -> CrystalGuiCore.LOGGER.error(
                             "[session-probe] README read failed: {}", failure.code()))
                     .then(first -> {
-                        String before = new String(first.content(), StandardCharsets.UTF_8);
+                        String before = new String(first.bytes(), StandardCharsets.UTF_8);
                         CrystalGuiCore.LOGGER.info("[session-probe] README is {} bytes", before.length());
                         String edited = "#!" + before.substring(Math.min(1, before.length()));
                         files.files()
                                 .write(readme, edited.getBytes(StandardCharsets.UTF_8), first.etag())
                                 .onError(failure -> CrystalGuiCore.LOGGER.error(
                                         "[session-probe] conditional write failed: {}", failure.code()))
-                                .then(etag -> files.files().read(readme)
+                                .then(etag -> files.files().readWhole(readme)
                                         .onError(f -> CrystalGuiCore.LOGGER.error(
                                                 "[session-probe] re-read failed: {}", f.code()))
                                         .then(second -> {
-                                            String after = new String(second.content(),
+                                            String after = new String(second.bytes(),
                                                     StandardCharsets.UTF_8);
                                             CrystalGuiCore.LOGGER.info("[session-probe] after the "
                                                     + "conditional write the file starts \"{}\"",

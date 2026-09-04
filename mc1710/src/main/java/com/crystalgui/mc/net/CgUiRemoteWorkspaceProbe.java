@@ -162,9 +162,9 @@ public final class CgUiRemoteWorkspaceProbe {
             if (!readBack) {
                 if (reading) return;
                 reading = true;
-                files.files().read(Resource.of(probe))
+                files.files().readWhole(Resource.of(probe))
                         .then(document -> {
-                            String text = new String(document.content(), StandardCharsets.UTF_8);
+                            String text = new String(document.bytes(), StandardCharsets.UTF_8);
                             readBack = FIRST_TEXT.equals(text);
                             CrystalGuiCore.LOGGER.info("[remote-probe] 3/4 read it back: {} bytes, "
                                     + "matches={}", text.length(), readBack);
@@ -188,9 +188,9 @@ public final class CgUiRemoteWorkspaceProbe {
                         .then(stat -> files.files()
                                 .write(resource, EDITED_TEXT.getBytes(StandardCharsets.UTF_8),
                                         stat.etag())
-                                .then(etag -> files.files().read(resource)
+                                .then(etag -> files.files().readWhole(resource)
                                         .then(after -> {
-                                            String text = new String(after.content(),
+                                            String text = new String(after.bytes(),
                                                     StandardCharsets.UTF_8);
                                             deltaApplied = text.startsWith("EDITED ");
                                             CrystalGuiCore.LOGGER.info("[remote-probe] 4/4 after the "
