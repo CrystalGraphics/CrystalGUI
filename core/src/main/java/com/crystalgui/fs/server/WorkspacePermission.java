@@ -1,5 +1,6 @@
-package com.crystalgui.fs;
+package com.crystalgui.fs.server;
 
+import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.project.WorkspaceProject;
 
 /**

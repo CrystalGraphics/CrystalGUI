@@ -1,10 +1,10 @@
 package com.crystalgui.headless;
 
-import com.crystalgui.fs.CgFileCapability;
+import com.crystalgui.fs.provider.CgFileCapability;
 import com.crystalgui.fs.CgFileError;
 import com.crystalgui.fs.CgFileSystemException;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.LocalFileSystem;
+import com.crystalgui.fs.provider.LocalFileSystem;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
 import org.junit.After;

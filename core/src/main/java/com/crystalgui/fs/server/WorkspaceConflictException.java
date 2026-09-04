@@ -1,5 +1,8 @@
-package com.crystalgui.fs;
+package com.crystalgui.fs.server;
 
+import com.crystalgui.fs.provider.CgFileEntry;
+import com.crystalgui.fs.CgFileError;
+import com.crystalgui.fs.CgPath;
 import lombok.Getter;
 
 /**

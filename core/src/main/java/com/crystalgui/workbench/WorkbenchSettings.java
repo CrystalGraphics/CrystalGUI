@@ -1,6 +1,5 @@
 package com.crystalgui.workbench;
 
-import com.crystalgui.core.collection.table.SortOrder;
 import com.crystalgui.core.settings.Setting;
 import com.crystalgui.core.settings.Settings;
 import com.crystalgui.core.settings.SettingsCategory;

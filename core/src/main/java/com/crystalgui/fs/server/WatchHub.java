@@ -1,12 +1,10 @@
 package com.crystalgui.fs.server;
 
-import com.crystalgui.fs.CgFileEntry;
+import com.crystalgui.fs.provider.CgFileEntry;
 import com.crystalgui.fs.CgFileError;
-import com.crystalgui.fs.CgFileEvent;
+import com.crystalgui.fs.provider.CgFileEvent;
 import com.crystalgui.fs.CgFileSystemException;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.WorkspaceActor;
-import com.crystalgui.fs.WorkspaceService;
 import com.crystalgui.fs.protocol.FsMessages;
 
 import org.jetbrains.annotations.Nullable;

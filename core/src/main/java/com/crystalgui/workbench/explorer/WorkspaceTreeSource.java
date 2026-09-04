@@ -1,13 +1,9 @@
 package com.crystalgui.workbench.explorer;
 
-import com.crystalgui.core.collection.table.SortOrder;
-import com.crystalgui.fs.CgFileEntry;
-import com.crystalgui.fs.CgFileError;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.project.SourceRoots;
-import com.crystalgui.fs.project.ProjectInfo;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.protocol.FsError;

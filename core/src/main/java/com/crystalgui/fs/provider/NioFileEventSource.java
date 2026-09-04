@@ -1,5 +1,6 @@
-package com.crystalgui.fs;
+package com.crystalgui.fs.provider;
 
+import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.project.Excludes;
 import com.crystalgui.core.CrystalGuiCore;

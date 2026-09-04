@@ -18,12 +18,12 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.crystalgui.fs.CgFileEntry;
+import com.crystalgui.fs.provider.CgFileEntry;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.InMemoryFileSystem;
-import com.crystalgui.fs.WorkspaceActor;
-import com.crystalgui.fs.WorkspacePermission;
-import com.crystalgui.fs.WorkspaceService;
+import com.crystalgui.fs.provider.InMemoryFileSystem;
+import com.crystalgui.fs.server.WorkspaceActor;
+import com.crystalgui.fs.server.WorkspacePermission;
+import com.crystalgui.fs.server.WorkspaceService;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.project.ProjectInfo;
 import com.crystalgui.fs.project.ProjectRegistry;

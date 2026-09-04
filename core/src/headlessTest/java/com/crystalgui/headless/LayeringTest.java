@@ -230,7 +230,19 @@ public class LayeringTest {
     public void theFilesystemTiersDoNotReachUpward() throws IOException {
         Path root = ClassReferences.mainClassesRoot(getClass());
         List<String> tiers = List.of(
+                // A PROJECT IS A NAMED ROOT, and a FILESYSTEM is what resolves one to a real directory
+                // -- so `provider` names `project` and not the other way round. It was the other way
+                // round for an afternoon: `CgPath`, `CgFileError` and `CgFileSystemException` were
+                // moved into `provider` with the rest, `project` names all three, and the two packages
+                // became a CYCLE that compiles perfectly and cannot be ordered here at all. They live
+                // at `fs`'s root instead, with `Resource` -- a path, a failure and an identity are the
+                // vocabulary every tier names, which is what a root package is for.
+                //
+                // The root itself is NOT a tier and cannot be: `com/crystalgui/fs/` is a prefix of
+                // every entry below, so listing it would fail each package against its own parent.
+                // It needs no entry -- those four classes import nothing from `fs` at all.
                 "com/crystalgui/fs/project/",
+                "com/crystalgui/fs/provider/",
                 // SHARED, and therefore below both halves rather than between them. A server that
                 // could not name the protocol could not answer, and a protocol that named either half
                 // would put one of them on the other's classpath.

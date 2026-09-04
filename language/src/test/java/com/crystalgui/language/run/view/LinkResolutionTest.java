@@ -6,7 +6,6 @@ import com.crystalgui.language.run.console.ConsoleFilter;
 import com.crystalgui.language.run.console.RunConsole;
 import com.crystalgui.language.run.console.RunLevel;
 import com.crystalgui.language.run.console.RunMessage;
-import com.crystalgui.language.run.view.RunPanels;
 import org.junit.Test;
 import com.crystalgui.language.run.RunSessions;
 import com.crystalgui.language.run.RunState;

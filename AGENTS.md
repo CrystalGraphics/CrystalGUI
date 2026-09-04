@@ -1922,19 +1922,31 @@ com.crystalgui.document        WHAT AN OPEN DOCUMENT IS, headless and below `wid
                                by a tab closing, which is the "Parser is closed" defect inverted),
                                DocumentState, EditorInput, RecentFiles
 
-com.crystalgui.fs              CgPath, Resource (a tab's input, whether or not it is a file — the
-                               project scheme keeps CgPath's exact text, so every saved document and
-                               session keeps parsing), CgFileSystem + LocalFileSystem/InMemoryFileSystem,
-                               CgFileEvent + NioFileEventSource, WorkspaceService (the server's own
-                               filesystem), WorkspacePermission, WorkspaceActor, WorkspaceTrash,
-                               WorkspacePresence
-  .project                     ProjectRegistry, ProjectInfo, WorkspaceProject, SourceRoots, Excludes
+com.crystalgui.fs              FOUR classes, and each is vocabulary every tier below names: Resource
+                               (a tab's input, whether or not it is a file — the project scheme keeps
+                               CgPath's exact text, so every saved document and session keeps parsing),
+                               CgPath, CgFileError and CgFileSystemException. They import nothing from
+                               `fs` at all, which is what makes the root a root rather than a drawer —
+                               and is why `LayeringTest` needs no entry for it. Everything else moved
+                               into a tier below; twenty top-level files became four.
+  .project                     ProjectRegistry, ProjectInfo, WorkspaceProject, SourceRoots, Excludes,
+                               ProjectProvider. The bottom tier.
+  .provider                    A FILESYSTEM AND NOTHING ABOUT A WORKSPACE: CgFileSystem (the SPI),
+                               LocalFileSystem, InMemoryFileSystem (a complete one, on a monotonic
+                               clock, which is what makes an etag reproducible), CgFileEntry,
+                               CgFileType, CgFileCapability, CgFileEvent + CgFileEventSource +
+                               NioFileEventSource. It names `.project` and NOT the reverse — a project
+                               is a named root and a filesystem is what resolves one to a directory
   .protocol                    THE WIRE, shared by both halves and naming neither: FsMethods (the method
                                names), FsMessages (every payload as a record with a codec, so a field
                                written on one side is provably the field read on the other), FsError (a
                                code and fields — a conflict carries the etag the file actually holds),
                                FsHello (the greeting: case rule, reserved names, size tiers)
-  .server                      WorkspaceBinding (one CONNECTION's end — decode, ask the service, encode;
+  .server                      WorkspaceService (the server's own filesystem: authorise, etag, cap,
+                               trash), WorkspacePermission + WorkspaceActor + WorkspaceOperation,
+                               WorkspaceTrash, WorkspacePresence, WorkspaceConflictException,
+                               ServerWorkspace (the service with the actor already decided — what a
+                               panel is handed), WorkspaceBinding (one CONNECTION's end — decode, ask the service, encode;
                                owns this actor's audit, its idempotency table and its entry in the hub),
                                WatchHub (ONE subscription table for the whole server: a path is stat-ed
                                once per tick however many peers watch it, a save's several events

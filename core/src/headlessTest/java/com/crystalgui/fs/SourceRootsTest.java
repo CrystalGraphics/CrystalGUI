@@ -2,6 +2,7 @@ package com.crystalgui.fs;
 
 import com.crystalgui.fs.project.SourceRoots;
 import com.crystalgui.fs.project.ProjectInfo;
+import com.crystalgui.fs.CgPath;
 import org.junit.Test;
 
 import java.util.List;

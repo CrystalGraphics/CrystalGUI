@@ -1,4 +1,4 @@
-package com.crystalgui.fs;
+package com.crystalgui.fs.server;
 
 /**
  * What is being attempted, for {@link WorkspacePermission}.

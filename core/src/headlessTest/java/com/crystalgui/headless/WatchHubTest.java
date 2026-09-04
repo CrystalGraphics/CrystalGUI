@@ -1,15 +1,15 @@
 package com.crystalgui.headless;
 
-import com.crystalgui.fs.CgFileCapability;
-import com.crystalgui.fs.CgFileEntry;
-import com.crystalgui.fs.CgFileEvent;
-import com.crystalgui.fs.CgFileSystem;
+import com.crystalgui.fs.provider.CgFileCapability;
+import com.crystalgui.fs.provider.CgFileEntry;
+import com.crystalgui.fs.provider.CgFileEvent;
+import com.crystalgui.fs.provider.CgFileSystem;
 import com.crystalgui.fs.CgFileSystemException;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.InMemoryFileSystem;
-import com.crystalgui.fs.WorkspaceActor;
-import com.crystalgui.fs.WorkspacePermission;
-import com.crystalgui.fs.WorkspaceService;
+import com.crystalgui.fs.provider.InMemoryFileSystem;
+import com.crystalgui.fs.server.WorkspaceActor;
+import com.crystalgui.fs.server.WorkspacePermission;
+import com.crystalgui.fs.server.WorkspaceService;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.protocol.FsMessages;

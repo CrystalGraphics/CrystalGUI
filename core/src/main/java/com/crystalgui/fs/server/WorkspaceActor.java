@@ -1,4 +1,4 @@
-package com.crystalgui.fs;
+package com.crystalgui.fs.server;
 
 /**
  * Whoever is asking — a player, on the host's terms.

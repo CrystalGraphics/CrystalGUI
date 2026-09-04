@@ -3,6 +3,7 @@ package com.crystalgui.fs;
 import com.crystalgui.core.async.Reply;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.CgPath;
 import com.crystalgui.serialization.PlainOps;
 
 import org.junit.Test;

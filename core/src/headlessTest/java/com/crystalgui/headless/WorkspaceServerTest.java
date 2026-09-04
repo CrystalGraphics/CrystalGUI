@@ -1,12 +1,12 @@
 package com.crystalgui.headless;
 
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.InMemoryFileSystem;
-import com.crystalgui.fs.WorkspaceActor;
-import com.crystalgui.fs.WorkspaceOperation;
-import com.crystalgui.fs.WorkspacePermission;
-import com.crystalgui.fs.WorkspacePresence;
-import com.crystalgui.fs.WorkspaceService;
+import com.crystalgui.fs.provider.InMemoryFileSystem;
+import com.crystalgui.fs.server.WorkspaceActor;
+import com.crystalgui.fs.server.WorkspaceOperation;
+import com.crystalgui.fs.server.WorkspacePermission;
+import com.crystalgui.fs.server.WorkspacePresence;
+import com.crystalgui.fs.server.WorkspaceService;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.server.RecentOperations;

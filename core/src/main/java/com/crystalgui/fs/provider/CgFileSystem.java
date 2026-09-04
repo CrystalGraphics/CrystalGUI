@@ -1,5 +1,8 @@
-package com.crystalgui.fs;
+package com.crystalgui.fs.provider;
 
+import com.crystalgui.fs.CgFileError;
+import com.crystalgui.fs.CgFileSystemException;
+import com.crystalgui.fs.CgPath;
 import java.util.List;
 import java.util.Set;
 

@@ -5,7 +5,6 @@ import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.text.Change;
 
 import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
@@ -13,7 +12,6 @@ import cpw.mods.fml.common.gameevent.TickEvent;
 import net.minecraft.client.Minecraft;
 
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 
 /**
  * The workspace against a <b>genuinely separate server process</b> — {@code -PcgRemoteProbe}.

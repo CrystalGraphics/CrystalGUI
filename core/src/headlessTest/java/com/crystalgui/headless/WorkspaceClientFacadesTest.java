@@ -1,6 +1,5 @@
 package com.crystalgui.headless;
 
-import com.crystalgui.core.async.ReplyError;
 import com.crystalgui.core.storage.InMemoryConfigStorage;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
