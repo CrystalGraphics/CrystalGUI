@@ -65,6 +65,14 @@ public final class ExplorerCommands {
     public static final String COPY_RELATIVE_PATH = "explorer.copyRelativePath";
     public static final String REFRESH = "explorer.refresh";
 
+    /**
+     * <b>Restore Deleted File…</b> — the trash, made reachable.
+     *
+     * <p>Every delete has been kept on the server since deletes were reversible; nothing could ask what
+     * was in there, so the only recoverable deletion was one this session still held a receipt for.</p>
+     */
+    public static final String RESTORE_DELETED = "explorer.restoreDeleted";
+
     /** Open a file by name — VS Code's Ctrl+P, IntelliJ's Go to File. */
     public static final String GO_TO_FILE = "explorer.goToFile";
 
@@ -154,6 +162,19 @@ public final class ExplorerCommands {
                 .run(context -> confirmDelete(workbenchFor(context), context))
                 .enabledWhen(context -> workbenchFor(context) != null && isRenameable(target(context))
                         && mayWrite(workbenchFor(context), target(context))));
+
+        registry.register(Command.of(RESTORE_DELETED, "Restore Deleted File…")
+                // BESIDE DELETE, in the section that modifies the tree, because that is where somebody
+                // looks a minute after pressing Delete. No binding: it is rare and it is not a gesture.
+                .menu(MenuId.EXPLORER_CONTEXT, "4_modify", 30)
+                .run(context -> {
+                    Workbench workbench = workbenchFor(context);
+                    UIDocument window = workbench == null ? null : workbench.document();
+                    if (window == null) return;
+                    TrashPicker.open(window, workbench);
+                })
+                // A PROJECT, not a selection: what you are restoring is by definition not in the tree.
+                .enabledWhen(context -> hasProject(workbenchFor(context))));
 
         registry.register(Command.of(COPY_PATH, "Copy Path")
                 .menu(MenuId.EXPLORER_CONTEXT, "3_paths", 10)
