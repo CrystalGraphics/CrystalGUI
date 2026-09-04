@@ -3,7 +3,6 @@ package com.crystalgui.workbench.dock.banner;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.notify.Notification;
 
-import com.crystalgui.widget.config.inspector.InspectorRegistry;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import java.util.ArrayList;
 import java.util.List;
@@ -31,6 +30,17 @@ public final class DockBanners {
     public static void register(DockBannerProvider provider) {
         if (provider == null || PROVIDERS.contains(provider)) return;
         PROVIDERS.add(provider);
+    }
+
+    /**
+     * How many providers are registered.
+     *
+     * <p>Nothing in production asks. A leak assertion does, and until it did there was no way to observe
+     * that a registration had gone — {@link #register} still has no counterpart, so every provider a
+     * workbench contributes outlives it.</p>
+     */
+    public static int size() {
+        return PROVIDERS.size();
     }
 
     /** What every provider had to say about {@code panel}. Empty is the common answer. */

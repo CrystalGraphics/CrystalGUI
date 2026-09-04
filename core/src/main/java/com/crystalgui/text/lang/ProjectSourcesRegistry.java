@@ -43,6 +43,17 @@ public final class ProjectSourcesRegistry {
     }
 
     /**
+     * How many providers are registered.
+     *
+     * <p>{@link #hasProvider()} answers what production asks; this answers what a leak assertion asks,
+     * and they are different questions. A registry nothing is ever withdrawn from stays non-empty, so a
+     * boolean cannot separate one live workbench from four dead ones.</p>
+     */
+    public static int size() {
+        return PROVIDERS.size();
+    }
+
+    /**
      * A view over every registered provider, safe to hand across the engine bridge.
      *
      * <p>A live view rather than a snapshot: it is built once and held by an analysis that may outlive
