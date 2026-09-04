@@ -1099,7 +1099,18 @@ W0–W3 answer claim 5 and the blocker; W4–W6 answer claims 2–3; W7–W8 ans
 >    nothing sets it and nothing reads it until the balloons and the bell move to the desktop, and until
 >    then it is a field that looks like a feature. The acceptance's "one notification centre" is
 >    asserted as it stands — `Notifications` is process-wide and both applications land in it.
-> 5. **`CrystalEditorCommands` moved rather than staying unchanged.** §4.10 says unchanged; it keyed on
+> 5. **Nothing is installed by a host — both registries are `ServiceLoader` services.** W7 shipped with
+>    `CrystalEditor.install(desktop.applications())` at three call sites, and that is `NodeKinds`'
+>    defect restored one layer up: what a desktop offers becomes a function of which loader started it,
+>    and a mod's application cannot be in the list at all because the list is in code it does not own.
+>    `ApplicationKinds` is the SPI (taking the registry, because discovery is per process and
+>    installing is per desktop) and `WorkbenchExtension` is now itself a service. The second half is
+>    the one a list could never fix: a list names only what the class holding it may SEE, which is why
+>    the shader-graph extension had to be contributed by an *application*. `install`/`contribute` stay
+>    public for what a service cannot serve — a manifest or an extension built at run time, which is
+>    how the language stack offers the Run shell, since that is a question about an engine band rather
+>    than about a jar.
+> 6. **`CrystalEditorCommands` moved rather than staying unchanged.** §4.10 says unchanged; it keyed on
 >    a `CrystalEditor` and offered Save File, which is a thing a *workbench* does. Left where it was, a
 >    second workbench application would have had to call the editor's registration to get its own Save.
 >    The ids are untouched, so no keymap moves.

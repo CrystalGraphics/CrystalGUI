@@ -313,10 +313,6 @@ public final class CgUiScreen extends GuiScreen {
                 // A supplier because the editor is built later than this and on demand.
                 .setWindowMount(() -> editor == null
                         ? null : editor.workbench().windowMount(host.windowMount()));
-        // WHAT THIS HOST OFFERS. Installing a manifest is not launching one: the desktop can now list
-        // the editor, answer "open with" for a `.shadergraph`, and group its windows, all with nothing
-        // running. Which is the whole of what a loader has to say about a product.
-        CrystalEditor.install(host.desktop().applications());
         // NO SEPARATE ROOT: the DOCUMENT is the root on this engine, so the class the host sheet keys
         // on goes on it directly.
         host.document().addClass(ROOT_CLASS);

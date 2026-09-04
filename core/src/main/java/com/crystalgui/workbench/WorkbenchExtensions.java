@@ -1,22 +1,35 @@
 package com.crystalgui.workbench;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+import java.util.ServiceConfigurationError;
+import java.util.ServiceLoader;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.dispose.Disposable;
-import com.crystalgui.example.notes.NotesExtension;
-import com.crystalgui.workbench.extension.InspectorExtension;
 
 /**
  * Where a {@link WorkbenchExtension} makes itself available — process-wide, like {@code ContentProviders}.
  *
  * <p>Contributing is how a module says <em>this exists on this host</em>; it is not what turns it on.
- * A mod calls {@link #contribute} from its own init, the engine contributes what it ships in
- * {@link #bootstrap()}, and a workbench activates them.</p>
+ * An application's manifest names the ids it wants and a workbench activates those.</p>
+ *
+ * <h3>They are DISCOVERED, not listed</h3>
+ *
+ * <p>Every {@code WorkbenchExtension} on the classpath is found through {@link ServiceLoader}, so being
+ * available is a fact about the jars present rather than about which module remembered to make a call.
+ * {@link #bootstrap()} used to be a method naming what {@code core/} ships, which had two costs and the
+ * second is the one that matters: it could not reach a layer above it — the shader graph lives in
+ * {@code app/}, so <em>an application had to contribute it</em>, and a mod's extension could never be
+ * in that list at all because the list is in code it does not own.</p>
+ *
+ * <p>{@link #contribute} stays for what a service cannot serve: an extension built at run time, from
+ * something only the running process knows. The language stack uses it, because whether the Run shell
+ * is available is a question about an engine BAND rather than about a jar.</p>
  *
  * <h3>Every contributed extension is activated, for now</h3>
  *
@@ -81,18 +94,40 @@ public final class WorkbenchExtensions {
     }
 
     /**
-     * Contributes what this repository ships. Idempotent, and called by every read.
+     * Finds every extension on the classpath. Idempotent, and called by every read.
      *
      * <p>Here rather than in a static initialiser on each extension, because a class nobody has touched
-     * has not initialised — which is the trap {@code UIElementRegistry} records for element kinds, one
-     * layer down. The list is short on purpose: an extension belongs here only if it ships in this jar
-     * and every host should have the option of it.</p>
+     * has not initialised — the trap {@code UIElementRegistry} records for element kinds, one layer
+     * down. And a {@code ServiceLoader} rather than a list, because a list can only name what the
+     * class holding it is allowed to see.</p>
+     *
+     * <p><b>Loaded with THIS class's loader, never the context one.</b> On 1.7.10 the context
+     * classloader is whatever the host left there, and LaunchWrapper's is not the one that defined
+     * these classes.</p>
      */
     public static synchronized void bootstrap() {
         if (bootstrapped) return;
+        // SET BEFORE THE LOOP: `contribute` reads nothing that bootstraps, but a service's constructor
+        // legitimately might, and re-entering here would run every service twice.
         bootstrapped = true;
-        contribute(new NotesExtension());
-        contribute(new InspectorExtension());
+        Iterator<WorkbenchExtension> services =
+                ServiceLoader.load(WorkbenchExtension.class, WorkbenchExtensions.class.getClassLoader())
+                        .iterator();
+        while (true) {
+            WorkbenchExtension extension;
+            try {
+                if (!services.hasNext()) break;
+                extension = services.next();
+            } catch (ServiceConfigurationError | RuntimeException | LinkageError broken) {
+                // A SERVICE THAT WILL NOT LOAD COSTS ITS OWN FEATURE AND NOT THE WORKBENCH. The
+                // iterator throws on the ENTRY, so this brackets `next()` -- catching only around the
+                // body would let one mod's missing class stop every extension after it in the file.
+                CrystalGuiCore.LOGGER.error("[cgui] a WorkbenchExtension service could not be loaded; "
+                        + "its feature is absent on this host", broken);
+                continue;
+            }
+            contribute(extension);
+        }
     }
 
     /**

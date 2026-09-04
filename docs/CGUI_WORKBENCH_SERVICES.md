@@ -1205,8 +1205,14 @@ ApplicationKind.of("mymod:notes", "Notes")
                 .start());
 ```
 
-`desktop.applications().install(kind)` makes it available; `launch(kind, workspace, storage)` starts one
-and answers an `Application` — its `mainWindow()`, `open(resource)`, `activate()` and `dispose()`.
+**Nothing installs it.** A line in `META-INF/services/com.crystalgui.desktop.app.ApplicationKinds`
+names a class that puts the manifest into whatever registry asks, and every desktop runs those services
+once, lazily, on its first question — the arrangement `UIElementRegistry` already uses. So a jar on the
+classpath offers its products, and `launch(kind, workspace, storage)` starts one and answers an
+`Application` — its `mainWindow()`, `open(resource)`, `activate()` and `dispose()`.
+
+`ApplicationRegistry.install(kind)` stays public for what a service cannot serve: a manifest built at
+run time from something only the running process knows.
 
 **A second product is a second manifest, never a second shell.** The list of extension ids is the whole
 of what distinguishes one workbench application from another; `WorkbenchApplication` is the shared
@@ -1224,6 +1230,7 @@ in the caption and the initial focus. `CrystalEditor` is a manifest and three ch
 | **An id nothing contributed is a logged absence** | The three-tier degradation the language stack already follows, and what lets `crystalgui:scripting` be listed by every manifest and simply be missing on a host with no engine band |
 | **A `Workbench` built directly still gets everything** | `new Workbench(workspace)` activates every contributed extension — which is what a test and a harness scene mean. Only an application filters |
 | **The window knows its application** | `WindowFrame.setApplication(kind)` — Windows' `AppUserModelID`, X11's `WM_CLASS`. The taskbar groups by it, keeping one product's windows adjacent by first appearance |
+| **A host names no product and no feature** | Both are `ServiceLoader` services. A list in code can only name what the class holding it may see — which is why the shader-graph extension had to be contributed by an *application*, and why a mod's own could never be in either list at all. Two products claiming one file type is the ordinary case; the first installed wins |
 
 ### Writing an extension
 
@@ -1236,10 +1243,16 @@ public final class NotesExtension implements WorkbenchExtension {
 }
 ```
 
-`WorkbenchExtensions.contribute(extension)` says *this host has the feature*; a manifest's `with(...)`
-says *this product enables it*. Contribution is process-wide and belongs in a mod's own init; the engine
-bootstraps what ships in `core/`. An extension is written against `WorkbenchContext` and never against
-`Workbench` — `LayeringTest` asserts that from the constant pool.
+A line in `META-INF/services/com.crystalgui.workbench.WorkbenchExtension` says *this jar has the
+feature*; a manifest's `with(...)` says *this product enables it*. Availability is discovered, so it is a
+fact about the jars present rather than about which module remembered to make a call — and an id nothing
+contributed is a logged absence, never an error, which is what lets `crystalgui:scripting` be listed by
+every manifest and simply be missing on a host with no engine band.
+
+`WorkbenchExtensions.contribute(extension)` stays for what a service cannot serve: one built at run
+time. The language stack uses it, because whether the Run shell is available is a question about an
+engine *band* rather than about a jar. An extension is written against `WorkbenchContext` and never
+against `Workbench` — `LayeringTest` asserts that from the constant pool.
 
 ---
 

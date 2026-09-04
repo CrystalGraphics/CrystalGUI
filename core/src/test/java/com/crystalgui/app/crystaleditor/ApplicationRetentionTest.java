@@ -127,7 +127,6 @@ public class ApplicationRetentionTest {
         surface = new UIDocument();
         desktop = Desktop.of(surface);
         storage = new InMemoryConfigStorage();
-        CrystalEditor.install(desktop.applications());
     }
 
     /**

@@ -15,6 +15,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.app.shadergraph.ShaderGraphContribution;
 import com.crystalgui.style.theme.UiThemeManager;
 import com.crystalgui.core.dispose.Disposer;
@@ -82,6 +83,11 @@ public class TwoApplicationsTest {
                     .title("Graphs")
                     .key("graphs:main")
                     .start());
+
+    /** A type nothing else on the classpath claims. @see #openWithIsAnsweredFromTheManifestBeforeAnythingIsLaunched */
+    private static final ApplicationKind ONLY_MINE = ApplicationKind.of("test:only-mine", "Only Mine")
+            .opens(DocumentKind.FilePatterns.extension("twoapps"))
+            .launch(context -> WorkbenchApplication.of(context).title("Only Mine").start());
 
     /** A third with no features at all — the counter-control for "did the list do anything". */
     private static final ApplicationKind BARE = ApplicationKind.of("test:bare", "Bare")
@@ -198,12 +204,36 @@ public class TwoApplicationsTest {
                 ShaderGraphContribution.GRAPH_TYPE, bare.workbench().kinds().forResource(graph).id());
     }
 
-    /** D19/LaunchServices: answerable from the manifests, with nothing running. */
+    /**
+     * <b>The acceptance for discovery: a product this repository ships is on every desktop, and no host
+     * asked for it.</b>
+     *
+     * <p>Which is the whole of what the change bought. Three hosts each called
+     * {@code CrystalEditor.install(...)} and a fourth would have had to remember; a mod's own
+     * application could not be in that list at all, because the list was in code it does not own. The
+     * fixture below installs its own kinds and never mentions the editor.</p>
+     */
+    @Test
+    public void theShippedEditorIsOfferedWithNoHostCodeAtAll() {
+        assertNotNull("nothing installed CrystalEditor, so the desktop offers whatever the loader "
+                        + "remembered rather than what is on the classpath",
+                desktop.applications().byId(CrystalEditor.ID));
+    }
+
+    /**
+     * D19/LaunchServices: answerable from the manifests, with nothing running.
+     *
+     * <p><b>An extension only THIS manifest claims</b>, because the shipped editor declares
+     * {@code .shadergraph} too and is discovered into every registry — so asking about that one tests
+     * installation order rather than the lookup. Two products claiming a type is the ordinary case and
+     * the first installed wins; what has to be true here is that a declaration is found at all and that
+     * an undeclared type finds nobody.</p>
+     */
     @Test
     public void openWithIsAnsweredFromTheManifestBeforeAnythingIsLaunched() {
-        desktop.applications().install(GRAPHS_ONLY);
-        assertSame("a manifest that declares the extension did not answer for it", GRAPHS_ONLY,
-                desktop.applications().handlerFor(Resource.of(PROJECT, "a.shadergraph")));
+        desktop.applications().install(ONLY_MINE);
+        assertSame("a manifest that declares the extension did not answer for it", ONLY_MINE,
+                desktop.applications().handlerFor(Resource.of(PROJECT, "a.twoapps")));
         assertNull("something claimed a file no manifest mentions",
                 desktop.applications().handlerFor(Resource.of(PROJECT, "a.zip")));
         assertTrue("installing launched something", desktop.applications().running().isEmpty());

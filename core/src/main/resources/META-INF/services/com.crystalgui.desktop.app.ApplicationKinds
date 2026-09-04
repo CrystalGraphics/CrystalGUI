@@ -1,0 +1,4 @@
+# What this jar OFFERS a desktop. A manifest is data, and discovering it is what makes that true: a jar
+# on the classpath offers its products and the desktop lists them, rather than three hosts each naming
+# CrystalEditor and a fourth forgetting to. @see com.crystalgui.desktop.app.ApplicationKinds
+com.crystalgui.app.Applications
