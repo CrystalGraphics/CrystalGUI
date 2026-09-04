@@ -380,6 +380,40 @@ public class DockArea extends UIElement {
     }
 
     /**
+     * <b>This panel's content is stale — build it again.</b>
+     *
+     * <p>{@link DockGroup} memoises what it built, deliberately: the map survives every rebuild of the
+     * tree above, which is what stops a split or a drag rebuilding a live editor underneath the user.
+     * The cost is that an element built from something that was <em>not ready yet</em> is what that
+     * panel shows for ever, and the only thing that knows it has become ready is whatever was waiting.</p>
+     *
+     * <p>The case it exists for is a session restore. A restored layout names files nothing has read,
+     * so the dock builds first and the factory starts the read; when it lands a frame or two later the
+     * tab has an editor and the panel is still showing the empty element that stood in for it. Nothing
+     * rebuilt it, because a rebuild re-reads the memo rather than the factory.</p>
+     *
+     * <p>Does nothing for a ref no group holds, which is the ordinary case for a file that is open in
+     * the document store and not on screen.</p>
+     */
+    /** What is on screen for {@code panel}, or null when no group has built one. */
+    @Nullable
+    public UIElement builtContentFor(DockPanelRef panel) {
+        for (DockGroup group : groups.values()) {
+            UIElement built = group.builtContentFor(panel);
+            if (built != null) return built;
+        }
+        return null;
+    }
+
+    public void rebuildPanel(DockPanelRef panel) {
+        for (DockGroup group : groups.values()) {
+            if (group.builtContentFor(panel) == null) continue;
+            group.forgetContent(panel);
+            requestRebuild();
+        }
+    }
+
+    /**
      * Asks for a strip resync on the next frame — {@link #syncGroups()} with the deferral of a rebuild.
      *
      * <h3>Both halves are needed, and each has a reason the other does not cover</h3>
