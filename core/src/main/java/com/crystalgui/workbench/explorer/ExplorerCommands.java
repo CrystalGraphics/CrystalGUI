@@ -123,6 +123,19 @@ public final class ExplorerCommands {
         return context.data().get(Workbench.WORKBENCH);
     }
 
+    /**
+     * The tree a command acts on.
+     *
+     * <p>Asked of the CONTEXT rather than of the workbench, which is what let the explorer become an
+     * extension — the engine no longer holds a field for a panel an application may not enable. Null is
+     * an ordinary answer and every caller already guarded for it, because {@code fileTree()} was
+     * nullable too. @see ProjectFileTree#PROJECT_TREE
+     */
+    @Nullable
+    private static ProjectFileTree treeFor(CommandContext context) {
+        return context.data().get(ProjectFileTree.PROJECT_TREE);
+    }
+
     private static void declare(CommandRegistry registry) {
         registry.register(Command.of(NEW_FILE, "New File…")
                 .menu(MenuId.EXPLORER_NEW, "1_new", 10)
@@ -253,8 +266,8 @@ public final class ExplorerCommands {
                 // element's chain first, so the tree's own binding wins only while the tree has focus.
                 .run(context -> {
                     Workbench workbench = workbenchFor(context);
-                    if (workbench != null && workbench.fileTree() != null) {
-                        workbench.fileTree().openFind();
+                    if (workbench != null && treeFor(context) != null) {
+                        treeFor(context).openFind();
                     }
                 })
                 .enabledWhen(context -> workbenchFor(context) != null));
@@ -289,8 +302,8 @@ public final class ExplorerCommands {
                 .binding("F5")
                 .run(context -> {
                     Workbench workbench = workbenchFor(context);
-                    workbench.fileTree().source().invalidateAll();
-                    workbench.fileTree().treeView().refresh();
+                    treeFor(context).source().invalidateAll();
+                    treeFor(context).treeView().refresh();
                 })
                 // No target needed any more -- it reloads the whole tree, so the only thing that could make
                 // it meaningless is having no project open at all.
@@ -298,7 +311,7 @@ public final class ExplorerCommands {
     }
 
     private static boolean hasProject(@Nullable Workbench workbench) {
-        return workbench != null && !workbench.fileTree().source().roots().isEmpty();
+        return workbench != null && !workbench.projects().roots().isEmpty();
     }
 
     /**
@@ -428,7 +441,7 @@ public final class ExplorerCommands {
     /** The names already in a folder, as far as the tree has listed it — for incremental naming. */
     private static List<String> namesIn(Workbench workbench, CgPath directory) {
         List<String> names = new ArrayList<>();
-        for (CgPath child : workbench.fileTree().source().children(directory)) names.add(child.name());
+        for (CgPath child : workbench.projects().children(directory)) names.add(child.name());
         return names;
     }
 
@@ -465,7 +478,7 @@ public final class ExplorerCommands {
 
     /** Where a New lands: inside the selection when it is a folder, beside it when it is a file. */
     private static CgPath newParentFor(Workbench workbench, CgPath selected) {
-        return workbench.fileTree().isDirectory(selected) ? selected : selected.parent();
+        return workbench.projects().isDirectory(selected) ? selected : selected.parent();
     }
 
     /**
@@ -482,7 +495,7 @@ public final class ExplorerCommands {
     private static CgPath destinationFor(Workbench workbench, CommandContext context) {
         CgPath selected = target(context);
         if (selected != null) return newParentFor(workbench, selected);
-        List<CgPath> roots = workbench.fileTree().source().roots();
+        List<CgPath> roots = treeFor(context).source().roots();
         return roots.isEmpty() ? null : roots.get(0);
     }
 
@@ -505,7 +518,7 @@ public final class ExplorerCommands {
         CgPath parent = destinationFor(workbench, context);
         if (parent == null) return;
 
-        ProjectFileTree tree = workbench.fileTree();
+        ProjectFileTree tree = treeFor(context);
         if (tree != null && tree.document() != null) {
             tree.beginNew(parent, folder, name -> createEntry(workbench, parent.resolve(name), folder));
             return;
@@ -545,7 +558,7 @@ public final class ExplorerCommands {
         if (!isRenameable(path)) return;
         CgPath parent = path.parent();
 
-        ProjectFileTree tree = workbench.fileTree();
+        ProjectFileTree tree = treeFor(context);
         if (tree != null && tree.document() != null) {
             tree.reveal(path);
             tree.beginRename(path, name -> rename(workbench, path, parent.resolve(name)));
@@ -571,7 +584,7 @@ public final class ExplorerCommands {
     private static void confirmDelete(Workbench workbench, CommandContext context) {
         CgPath path = target(context);
         if (!isRenameable(path)) return;
-        boolean directory = workbench.fileTree().isDirectory(path);
+        boolean directory = treeFor(context).isDirectory(path);
 
         if (!workbench.resolve(WorkbenchSettings.CONFIRM_DELETE)) {
             // Turned off deliberately, so it deletes. Still routed through the same file service, so undo

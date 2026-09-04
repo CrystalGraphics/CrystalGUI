@@ -118,7 +118,7 @@ public final class GoToFile {
         // THE LIST, NOT THE WORKBENCH. Read per query rather than snapshotted at open, so a listing that
         // lands while the picker is up is searchable without reopening it.
         pick.setSource((query, sink) ->
-                fetchInto(query, workbench.fileTree().source().knownFiles(), sink));
+                fetchInto(query, workbench.projects().knownFiles(), sink));
         pick.onAccepted.connect(id -> {
             long accepted = FrameProfile.enter("ENTER accepted " + id);
             try {

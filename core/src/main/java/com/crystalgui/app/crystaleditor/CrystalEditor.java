@@ -10,6 +10,10 @@ import com.crystalgui.app.shadergraph.ShaderGraphContribution;
 import com.crystalgui.workbench.app.WorkbenchApplication;
 import com.crystalgui.workbench.extension.WorkbenchExtensions;
 import com.crystalgui.workbench.extension.InspectorExtension;
+import com.crystalgui.workbench.extension.NotificationsExtension;
+import com.crystalgui.workbench.extension.PresenceExtension;
+import com.crystalgui.workbench.extension.ProblemsExtension;
+import com.crystalgui.workbench.extension.ProjectExtension;
 
 /**
  * <b>The editor — as a manifest.</b>
@@ -55,7 +59,11 @@ public final class CrystalEditor {
 
     /** What this product turns on. Ids, resolved against {@link WorkbenchExtensions} at launch. */
     public static final List<String> EXTENSIONS = List.of(
+            ProjectExtension.ID,
+            ProblemsExtension.ID,
             InspectorExtension.ID,
+            NotificationsExtension.ID,
+            PresenceExtension.ID,
             ShaderGraphContribution.ID,
             NotesKind.ID,
             // LISTED ON EVERY HOST, present on some. An id nothing contributed is a logged absence, not

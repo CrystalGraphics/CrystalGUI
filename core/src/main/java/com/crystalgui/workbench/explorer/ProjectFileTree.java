@@ -162,16 +162,29 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
      * The decorations shown on rows. Empty until something registers a provider, which is why a tree with
      * no version control and no diagnostics costs nothing for the feature.
      */
-    private final FileDecorations decorations = new FileDecorations();
+    /**
+     * <b>Handed over, not owned</b> — and that is what let the explorer become an extension.
+     *
+     * <p>The tree used to construct both this and its {@link WorkspaceTreeSource}, which made the
+     * engine's own {@code decorations()} and {@code projects()} accessors reads THROUGH a widget: a
+     * workbench with no explorer had no file decorations and no project listing either. The model
+     * belongs to the workbench and the view to the feature, which is the same split
+     * {@code WorkspaceProjects} was extracted for at W2.</p>
+     */
+    private final FileDecorations decorations;
 
-    {
-        // A provider changing state has to reach the rows, and nothing else would carry it: decorations
-        // are read during bind(), so a tree that is already bound shows the state from whenever it last
-        // was. Routed through pendingRefresh rather than calling tree.refresh() straight away, for the
-        // reason activate() spells out -- a provider may well fire from inside a click handler on a row,
-        // and a widget must never rebuild the elements it is being clicked on.
-        decorations.onChanged.connect(() -> pendingRefresh = true);
-    }
+
+    /**
+     * The tree a command acts on — resolved from the data context, never through the workbench.
+     *
+     * <p>Which is what let the explorer become an extension. {@code ExplorerCommands} used to ask the
+     * context for a {@code Workbench} and then call {@code fileTree()} on it, so the ENGINE had to hold
+     * a field for a panel it may not have. Registered document-level, exactly as
+     * {@code Workbench.WORKBENCH} is, so it answers with focus anywhere — a menu-bar Save or a palette
+     * invocation resolves nothing through the focused element.</p>
+     */
+    public static final DataKey<ProjectFileTree> PROJECT_TREE =
+            DataKey.create("projectTree", ProjectFileTree.class);
 
     public FileDecorations getDecorations() {
         return decorations;
@@ -228,10 +241,19 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
         return workspace;
     }
 
-    public ProjectFileTree(Workspace workspace) {
+    /** @param source and {@code decorations} are the WORKBENCH's; see the field note. */
+    public ProjectFileTree(Workspace workspace, WorkspaceTreeSource source, FileDecorations decorations) {
         super(NAME);
         this.workspace = workspace;
-        this.source = new WorkspaceTreeSource(workspace);
+        this.source = source;
+        this.decorations = decorations;
+        // A provider changing state has to reach the rows, and nothing else would carry it: decorations
+        // are read during bind(), so a tree that is already bound shows the state from whenever it last
+        // was. Routed through pendingRefresh rather than calling tree.refresh() straight away, for the
+        // reason activate() spells out -- a provider may well fire from inside a click handler on a row,
+        // and a widget must never rebuild the elements it is being clicked on.
+        decorations.onChanged.connect(() -> pendingRefresh = true);
+    
         this.tree = new TreeView<>(source);
         tree.addClass(TREE_CLASS);
         tree.setRenderer(new FilesRenderer(this));
@@ -355,6 +377,13 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
     @Override
     protected void connected() {
         super.connected();
+        // ANNOUNCED TO THE SURFACE, so a command can resolve this tree with focus anywhere -- which
+        // is what let the explorer become an extension: ExplorerCommands used to ask the context for a
+        // Workbench and call fileTree() on it, so the ENGINE had to hold a field for a panel it may not
+        // have. No matching removal: the engine drops a detached provider itself, and document()
+        // answers null inside disconnected() anyway. @see #PROJECT_TREE
+        UIDocument surface = document();
+        if (surface != null) surface.addDataProvider(this);
         // THE PER-FRAME HOOK, and the guard is not the old one's: `registerTicker` was
         // HashSet-backed and idempotent, and `Animation.every` is a plain add, so a second attach
         // without this is a second hook. `disconnected()` clears it, or a panel that is hidden and
@@ -863,6 +892,7 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
      */
     @Override
     public Object getData(DataKey<?> key) {
+        if (key == PROJECT_TREE) return this;
         if (key == UiDataKeys.CLIPBOARD) return clipboardActions;
         Object undo = undoScopeData(key);
         return undo;
