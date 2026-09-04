@@ -28,8 +28,8 @@ import static org.junit.Assert.assertTrue;
  * the next model written by copying this one would inherit the reach.</p>
  *
  * <p>So {@link com.crystalgui.example.notes.NotesModel} may name no widget and no element, the
- * declaration beside it may name nothing but the document layer, and the view is the one half that
- * names widgets. <b>Read on the constant pool</b>, because that is the real question — a class file
+ * declaration beside it may name nothing but the document layer <em>and the two-method seam that
+ * attaches it</em>, and the view is the one half that names widgets. <b>Read on the constant pool</b>, because that is the real question — a class file
  * that names a type at all is one some input can reach it through, where a runtime check only ever
  * proves it for the path the test happened to take.</p>
  */
@@ -53,7 +53,15 @@ public class WorkspaceApiTest {
             "com/crystalgui/core/async/",
             "com/crystalgui/core/signal/",
             "com/crystalgui/core/undo/",
-            "com/crystalgui/core/dispose/");
+            "com/crystalgui/core/dispose/",
+            // AND THE SEAM, WHICH IS TWO INTERFACES AND NOT A PACKAGE. A file type is attached by
+            // implementing `WorkbenchExtension` and taking a `WorkbenchContext`, so a declaration
+            // genuinely names those -- it used to name neither only because a second class held them
+            // and delegated back, which is a wrapper wearing a boundary's clothes. Naming the two
+            // types rather than `com/crystalgui/workbench/` is what keeps the assertion sharp: an
+            // author reaches the SEAM, never the engine, and `Workbench` itself is still refused.
+            "com/crystalgui/workbench/WorkbenchExtension",
+            "com/crystalgui/workbench/WorkbenchContext");
 
     /** The model's own share of it: no workspace either, because a model knows nothing about files. */
     private static final List<String> MODEL_SURFACE = List.of(
@@ -102,9 +110,15 @@ public class WorkspaceApiTest {
         }
     }
 
-    /** The declaration is the document layer and nothing else — no widget, no dock, no workbench. */
+    /**
+     * The declaration is the document layer plus the seam — no widget, no dock, no {@code Workbench}.
+     *
+     * <p>{@code WorkbenchExtension} and {@code WorkbenchContext} are named individually rather than by
+     * package, which is the whole point: an author writes against two interfaces, and the engine class
+     * behind them stays as refused as a widget is.</p>
+     */
     @Test
-    public void theDeclarationNamesOnlyTheDocumentLayer() throws IOException {
+    public void theDeclarationNamesOnlyTheDocumentLayerAndTheSeam() throws IOException {
         assertEquals(List.of(), reachesOutside("NotesKind.class", AUTHOR_SURFACE));
     }
 

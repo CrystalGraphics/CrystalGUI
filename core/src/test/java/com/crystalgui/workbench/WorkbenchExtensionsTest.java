@@ -14,7 +14,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.crystalgui.app.shadergraph.ShaderGraphExtension;
+import com.crystalgui.app.shadergraph.ShaderGraphContribution;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.example.notes.NotesKind;
 import com.crystalgui.fs.client.Workspace;
@@ -100,7 +100,7 @@ public class WorkbenchExtensionsTest {
     @Test
     public void anExtensionFromALayerAboveTheWorkbenchIsFoundToo() {
         assertNotNull("the shader graph lives in app/, so nothing in workbench/ could have listed it",
-                WorkbenchExtensions.byId(ShaderGraphExtension.ID));
+                WorkbenchExtensions.byId(ShaderGraphContribution.ID));
     }
 
     /** ...and it goes when the workbench does, because activate() hands back what it registered. */

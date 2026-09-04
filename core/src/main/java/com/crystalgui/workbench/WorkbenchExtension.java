@@ -12,13 +12,22 @@ import com.crystalgui.core.dispose.Disposable;
  * nobody.</p>
  *
  * <pre>{@code
- * public final class NotesExtension implements WorkbenchExtension {
- *     public String id() { return "crystalgui:notes"; }
+ * public final class NotesKind implements WorkbenchExtension {
+ *     public static final String ID = "crystalgui:notes";
+ *     public static final DocumentKind KIND = DocumentKind.of(ID, "Notes")...;
+ *
+ *     public NotesKind() { }                       // ServiceLoader's rule
+ *     public String id() { return ID; }
  *     public Disposable activate(WorkbenchContext workbench) {
- *         return NotesKind.register(workbench.kinds());
+ *         return workbench.kinds().register(KIND);
  *     }
  * }
  * }</pre>
+ *
+ * <p>plus one line in {@code META-INF/services/com.crystalgui.workbench.WorkbenchExtension}. <b>One
+ * class per feature</b>: a declaration and a separate {@code *Extension} beside it read as a boundary
+ * and are a wrapper — one lifetime, one id, and the second file's only real content is the name of the
+ * first.</p>
  *
  * <h3>The handle is the contract</h3>
  *

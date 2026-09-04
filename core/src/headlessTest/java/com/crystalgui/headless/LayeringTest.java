@@ -376,8 +376,8 @@ public class LayeringTest {
      * <p>{@code WorkbenchContext} exists so that a feature can attach itself to a workbench without
      * being able to reach into one, and an interface only holds that line if something checks it. This
      * is the first case of the rule, asserted where it is already true: the Notes file type is a
-     * complete extension — an id, one call and a handle back — and its class file names the context
-     * and not {@code Workbench}.</p>
+     * complete extension — an id, a declaration and a handle back, in one class — and its class file
+     * names the context and not {@code Workbench}.</p>
      *
      * <p><b>What it deliberately does not yet assert</b> is the whole rule: nothing under {@code app/}
      * or {@code language/} may name the engine. Both still do, and porting them is the point of two
@@ -388,7 +388,7 @@ public class LayeringTest {
     @Test
     public void anExtensionNamesTheContextAndNotTheEngine() throws IOException {
         Path root = ClassReferences.mainClassesRoot(getClass());
-        Path notes = root.resolve("com/crystalgui/example/notes/NotesExtension.class");
+        Path notes = root.resolve("com/crystalgui/example/notes/NotesKind.class");
         assertTrue("the Notes extension was not compiled: " + notes, Files.isRegularFile(notes));
 
         Set<String> referenced = ClassReferences.referencesOf(notes);
