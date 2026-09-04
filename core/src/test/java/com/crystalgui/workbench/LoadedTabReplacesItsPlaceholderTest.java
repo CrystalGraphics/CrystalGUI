@@ -12,6 +12,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.crystalgui.core.notify.Notification;
 import com.crystalgui.document.DocumentState;
 import com.crystalgui.document.EditorInput;
 import com.crystalgui.fs.CgPath;
@@ -35,6 +36,7 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.texteditor.TextEditor;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
+import com.crystalgui.workbench.dock.banner.DockBanners;
 import com.crystalgui.workbench.dock.panel.DockInput;
 import com.crystalgui.workbench.editor.EditorService;
 
@@ -168,21 +170,78 @@ public class LoadedTabReplacesItsPlaceholderTest extends UiDocumentTestBase {
     }
 
     /**
-     * A tab whose read FAILED keeps whatever the dock built rather than rebuilding for ever.
+     * <b>A restored tab whose file is gone says so, and offers to try again.</b>
      *
-     * <p>{@code editor()} answers null for a failed tab, so the guard returns before it can ask the
-     * dock — which is what stops a file that cannot be read from asking for a rebuild on every
-     * announcement it makes.</p>
+     * <p>The half the first fix did not reach. A session record names files that were there when it was
+     * written, and a deleted or renamed one comes back as a tab whose read fails — {@code editor()} is
+     * null for ever, so the placeholder is what that tab shows, and nothing anywhere explains it. A
+     * blank pane with no explanation is indistinguishable from the editor being broken, and was
+     * reported as exactly that.</p>
+     *
+     * <p>The restore path is also where the failure is dropped: {@code openResource} attaches an
+     * {@code onError} and the panel factory does not, because it only has somewhere to put the answer
+     * once the panel exists. The banner is that somewhere.</p>
      */
     @Test
-    public void aFailedReadDoesNotRebuildForever() {
-        DockPanelRef missing = workbench.refFor(CgPath.parse(PROJECT + ":nope.java"));
-        workbench.open(DockInput.of(missing));
+    public void aRestoredTabWhoseFileIsGoneSaysSo() {
+        CgPath missing = CgPath.parse(PROJECT + ":nope.java");
+        workbench.open(DockInput.of(workbench.refFor(missing)));
         for (int i = 0; i < 12; i++) frameAndPump();
 
-        UIElement shown = contentOf(missing);
-        for (int i = 0; i < 6; i++) frameAndPump();
-        assertSame("nothing rebuilt it", shown, contentOf(missing));
+        EditorService.Tab tab = workbench.editors().tabFor(EditorInput.of(Resource.of(missing)));
+        assertNotNull("a tab exists for it", tab);
+        assertEquals("and the read failed", DocumentState.FAILED, tab.state());
+
+        List<Notification> banners = DockBanners.bannersFor(workbench.refFor(missing));
+        assertEquals("exactly one thing to say about it", 1, banners.size());
+        assertTrue("...and it names the file", banners.get(0).getMessage().contains("nope.java"));
+        assertTrue("...and offers a way out", banners.get(0).actions().stream()
+                .anyMatch(action -> "Retry".equals(action.label())));
+    }
+
+    /**
+     * The counter-control: a tab that opened fine has nothing to say.
+     *
+     * <p>A banner provider written as "answer for every panel" would put an error bar over every file
+     * in the editor, which is the failure mode a provider that cannot say no has.</p>
+     */
+    @Test
+    public void aTabThatOpenedFineHasNoBanner() {
+        workbench.open(DockInput.of(workbench.refFor(FILE)));
+        for (int i = 0; i < 12; i++) frameAndPump();
+
+        assertTrue("nothing to say about a file that opened",
+                DockBanners.bannersFor(workbench.refFor(FILE)).isEmpty());
+    }
+
+    /**
+     * <b>A panel that is about no file at all costs nothing and breaks nothing.</b>
+     *
+     * <p>A tool window has no {@code path} state, and {@code Resource.parse("")} THROWS rather than
+     * answering null — so a banner provider that parses first and asks questions afterwards takes down
+     * the build of every panel in the dock, not its own. That is what happened: the whole workbench
+     * stopped opening, from a provider written to put a message over one tab.</p>
+     */
+    @Test
+    public void aPanelAboutNoFileGetsNoBannerAndDoesNotThrow() {
+        assertTrue("a ref with no path state says nothing",
+                DockBanners.bannersFor(new DockPanelRef("workbench.problems")).isEmpty());
+    }
+
+    /**
+     * ...and a provider that throws costs its own banner, never the panel.
+     *
+     * <p>A provider is contributed code running inside the dock's panel build. Without the isolation an
+     * exception there costs the PANEL and every other panel in the same rebuild — a workbench where
+     * nothing opens because something wanted to put a message over one tab.</p>
+     */
+    @Test
+    public void aProviderThatThrowsDoesNotTakeThePanelDown() {
+        DockBanners.register(panel -> {
+            throw new IllegalStateException("this provider is broken");
+        });
+        assertTrue("the broken one contributed nothing and the rest still answered",
+                DockBanners.bannersFor(workbench.refFor(FILE)).isEmpty());
     }
 
     /** What the dock has built for {@code ref}, reaching through the tab's content host. */

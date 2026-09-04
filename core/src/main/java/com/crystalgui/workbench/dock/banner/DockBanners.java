@@ -1,5 +1,6 @@
 package com.crystalgui.workbench.dock.banner;
 
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.notify.Notification;
 
 import com.crystalgui.widget.config.inspector.InspectorRegistry;
@@ -37,7 +38,18 @@ public final class DockBanners {
         if (PROVIDERS.isEmpty() || panel == null) return List.of();
         List<Notification> found = new ArrayList<>();
         for (DockBannerProvider provider : PROVIDERS) {
-            Notification banner = provider.bannerFor(panel);
+            Notification banner;
+            try {
+                banner = provider.bannerFor(panel);
+            } catch (RuntimeException failed) {
+                // A PROVIDER IS CONTRIBUTED CODE and this runs inside the dock's panel build, so an
+                // exception here does not cost its own banner -- it costs the PANEL, and every other
+                // panel in the same rebuild with it. A workbench where nothing opens because something
+                // wanted to put a message over one tab is the wrong trade in every direction.
+                CrystalGuiCore.LOGGER.error("A dock banner provider failed for {}: {}",
+                        panel, failed.getMessage(), failed);
+                continue;
+            }
             if (banner != null) found.add(banner);
         }
         return found;
