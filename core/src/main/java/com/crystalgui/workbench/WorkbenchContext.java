@@ -5,6 +5,7 @@ import java.util.function.Function;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentKind;
 import com.crystalgui.document.DocumentKinds;
@@ -23,6 +24,7 @@ import com.crystalgui.workbench.dock.DockArea;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
 import com.crystalgui.workbench.dock.panel.DockPanelRegistry;
+import com.crystalgui.workbench.toolwindow.ToolWindowKind;
 import com.crystalgui.workbench.toolwindow.ToolWindowManager;
 
 /**
@@ -135,6 +137,19 @@ public interface WorkbenchContext {
 
     /** Adds a file type, plus the extensions that open into it. */
     WorkbenchContext contribute(DocumentKind kind, String... extensions);
+
+    /**
+     * Adds a tool window from one declaration. @see ToolWindowKind
+     *
+     * <p>Here rather than on {@code toolWindowManager()} — which is where the plan put it — because a
+     * kind derives a command and an accelerator as well as a panel, and the manager can register
+     * neither: it holds the regions and the panel registry, not the workbench's keymap.</p>
+     *
+     * @return a handle that withdraws what can be withdrawn — the command, its key and the badge
+     *         subscription. The panel type itself stays, because the registry it is in dies with this
+     *         workbench and a half-removed panel type is worse than a kept one
+     */
+    Disposable registerToolWindow(ToolWindowKind kind);
 
     /** Adds a panel type and how to build one. */
     WorkbenchContext registerPanel(DockPanelDescriptor descriptor,

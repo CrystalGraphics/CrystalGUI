@@ -496,6 +496,26 @@ Mapping to the references, so a reader from either recognises it: IntelliJ `tool
 absence of `openByDefault`. VS Code — `viewsContainers.activitybar` → a kind with `region(SIDEBAR)`,
 `views` → `view(...)`, `viewsWelcome` is not ported.
 
+> **Shipped at W4, with three deviations.** `registerToolWindow(kind)` is on **`WorkbenchContext`**, not
+> on `toolWindows()`: a kind derives a command and an accelerator as well as a panel, and
+> `ToolWindowManager` can register neither — it holds the regions and the panel registry, not the
+> workbench's keymap. The **badge** is an installer (`Badge.install(ctx, sink) -> Disposable`) rather than
+> a signal/value pair, because a badge is a subscription and both halves — what to watch and how to let
+> go — have to travel with it. And the built-ins are declared **per instance** rather than as static
+> constants, because their views are the workbench's own fields (`fileTree`, `problems`,
+> `notificationsView`); one declaration is still one declaration.
+>
+> **Run is not ported.** It lives in `language/run/view`, which is checked out in another worktree
+> (§8.1), and W6 is where that stack is opened. Project, Problems, Notifications and Inspector are.
+>
+> Two things the port caught immediately, both of which are the point of having one declaration.
+> `registerToolWindow` must run **after** `toolWindowManager` exists — the descriptors used to be
+> registered early and shown late, and folding the two together moved the whole thing into a window where
+> the manager was still null. And a kind's badge is a subscription on a **process-wide** signal, so a
+> workbench must dispose the handles it created for its own kinds: `ApplicationRetentionTest` failed on
+> `Notifications.onDidChangeUnread: 0 -> 4` within a minute of the notification badge becoming a kind's
+> rather than a line in the constructor. That is W0 doing exactly what it was written first for.
+
 ### 4.5 The engine — `Workbench` decomposed by the clusters in §1.1
 
 | Today's cluster | Lines | Becomes | Where |
@@ -983,7 +1003,7 @@ move with the rewrite.
 | **W2 — `WorkbenchContext` + `WorkbenchExtension`** | the interface extracted (no behaviour change), measured from what the outside calls; `WorkspaceProjects` named as an interface over the explorer's model (§4.11, the move deferred to W5); `WorkbenchExtensions` + `activateAll`, activated by the workbench and disposed with it; `NotesExtension` first, and the harness's two `NotesKind.register` calls deleted; `LayeringTest` case for extensions | notes appear on every host with no host code — `aShippedExtensionIsActiveOnAPlainWorkbench` | low |
 | **W3 — the host seam** | `HostServices`, `DesktopHost`, `DesktopWindowMount` (in `desktop.host`), `net.protocol.Connections`, `fs.server.WorkspaceHost`; `Mc1710Workspace` and `CgUiWindowMount` **deleted**; `CgUiScreen` rewired onto the host (it shrinks at W7, with the application) | `:mc1710:compileJava`, `serverSmoke` — both green; `WorkspaceHostTest` drives the server side headlessly for the first time | **medium** — crosses the loader seam, so only `serverSmoke` and a client can see it |
 | **W3b — projects and sources** | `project.json` + `ScanningProjectProvider`, `fs/createProject`, the client-local source and `Workspace` routing by project, one root per server chosen by `isDedicatedServer()`, `workspaceId`, the explorer's source groups, the creation dialog with the scope choice shown only in single-player (§4.13) | many projects listed from both sources on a dedicated server and in single-player; one created into each; `serverSmoke` + the two-client probe | **medium–high** — the largest fs change since F7, and it crosses the loader seam |
-| **W4 — `ToolWindowKind`** | the declaration; Problems, Notifications, Run, Inspector ported; `registerToolWindowCommands` deleted | every tool window has one declaration; `View ▸ Tool Windows` and the palette rows are derived | medium |
+| **W4 — `ToolWindowKind`** | the declaration; Project, Problems, Notifications and Inspector ported; `registerToolWindowCommands` deleted along with the hand-wired badge and the two `showPanel` calls; Run deferred to W6 with the rest of `language/` | every ported tool window is one declaration — icon, placement, view, toggle command, badge, default-open; `:core:test` and `:core:headlessTest` green | medium |
 | **W5 — the `Workbench` split** | `pricesplit.py` rebuilt (D24) and run first; the extraction per §4.5; `StatusBar` per workbench (D4) | `:core:check`; the 1,745+1,749 tests | **high** — the largest move; done after W1–W4 so it moves code that is already disposed and already context-shaped |
 | **W6 — `ScriptWorkbench` → extension, and scripting as a capability** | D13; `ScriptingMode` in `ProjectCapability`; `ScriptMethods` + `ServerScripts`/the client half (§4.14); `ScriptLauncher` refuses on anything but `LIVE` | the Run panel appears on every host that lists `crystalgui:scripting` and has a band; on a dedicated server a non-op's Run is disabled and a server-sent script runs and reports; `CgUiAutoTest.runScriptOnce` rewired | medium–high — `language/` is in another worktree (§8), and the authorized channel is new protocol |
 | **W7 — applications** | `ApplicationKind`/`Registry`/`WorkbenchApplication`; `CrystalEditor` as manifest; `WindowFrame.setApplication`; taskbar grouping; notifications to the desktop (D3); the session key per §4.9 with `FsHello.workspaceId` | two `CrystalEditor`s on one desktop with separate status bars and one notification centre | medium |
