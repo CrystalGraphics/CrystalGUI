@@ -274,7 +274,7 @@ public class CrystalEditor extends UIElement implements Disposable, WindowChrome
         // A restore waits on listings, which arrive over several frames -- a folder cannot be expanded
         // before the listing revealing it lands. Retried per LISTING rather than per frame: fewer
         // attempts, and every one of them at a moment when the answer may actually have changed.
-        lifetime.add(workbench.fileTree().source().onDidLoadListing.connect(directory -> {
+        lifetime.add(workbench.fileTree().source().onDidLoadListing().connect(directory -> {
             if (session != null) session.tick();
         }));
 

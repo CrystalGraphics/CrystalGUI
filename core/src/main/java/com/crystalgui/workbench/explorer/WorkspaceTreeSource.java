@@ -1,5 +1,6 @@
 package com.crystalgui.workbench.explorer;
 
+import com.crystalgui.fs.client.WorkspaceProjects;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.fs.CgPath;
@@ -43,7 +44,7 @@ import javax.annotation.Nullable;
  * claiming the status line covered it, so when the call was being dropped outright the tree was simply
  * empty with no reason given.</p>
  */
-public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
+public final class WorkspaceTreeSource implements TreeDataSource<CgPath>, WorkspaceProjects {
 
     /**
      * How a directory's entries are ordered — VS Code's {@code explorer.sortOrder}, minus the two that
@@ -134,7 +135,12 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
      * <p><b>A refused listing is announced too.</b> It is still an answer about that directory, and the
      * case that most needs the restore to move on is the one where the folder is simply gone.</p>
      */
-    public final Signal.Value<CgPath> onDidLoadListing = new Signal.Value<>();
+    private final Signal.Value<CgPath> onDidLoadListing = new Signal.Value<>();
+
+    @Override
+    public Signal.Value<CgPath> onDidLoadListing() {
+        return onDidLoadListing;
+    }
 
     /**
      * The roots changed — a project listing landed, or a re-listing replaced the ones before it.
@@ -146,7 +152,12 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
      *
      * <p>Emitted before {@code onLoaded}, so a listener sees the roots the refresh is about to draw.</p>
      */
-    public final Signal.Action onDidChangeProjects = new Signal.Action();
+    private final Signal.Action onDidChangeProjects = new Signal.Action();
+
+    @Override
+    public Signal.Action onDidChangeProjects() {
+        return onDidChangeProjects;
+    }
 
     /**
      * Bumped whenever anything the PROJECT INDEX derives from changes — a directory listing, or a

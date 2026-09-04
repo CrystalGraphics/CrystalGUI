@@ -368,4 +368,33 @@ public class LayeringTest {
         assertTrue("a widget package no tier governs -- renamed without updating LayeringTest and "
                 + "plan_m6.md §2.6?\n" + String.join("\n", ungoverned), ungoverned.isEmpty());
     }
+
+    /**
+     * <b>An extension names the CONTEXT, never the engine.</b>
+     *
+     * <p>{@code WorkbenchContext} exists so that a feature can attach itself to a workbench without
+     * being able to reach into one, and an interface only holds that line if something checks it. This
+     * is the first case of the rule, asserted where it is already true: the Notes file type is a
+     * complete extension — an id, one call and a handle back — and its class file names the context
+     * and not {@code Workbench}.</p>
+     *
+     * <p><b>What it deliberately does not yet assert</b> is the whole rule: nothing under {@code app/}
+     * or {@code language/} may name the engine. Both still do, and porting them is the point of two
+     * later steps rather than something to smuggle in here — an assertion that fails, or one that is
+     * ignored, is worse than the narrow one that passes. {@code CrystalEditor} holds a {@code Workbench}
+     * field, and the Run shell names it in four files that live in another worktree.</p>
+     */
+    @Test
+    public void anExtensionNamesTheContextAndNotTheEngine() throws IOException {
+        Path root = ClassReferences.mainClassesRoot(getClass());
+        Path notes = root.resolve("com/crystalgui/example/notes/NotesExtension.class");
+        assertTrue("the Notes extension was not compiled: " + notes, Files.isRegularFile(notes));
+
+        java.util.Set<String> referenced = ClassReferences.referencesOf(notes);
+        assertTrue("an extension is written against com/crystalgui/workbench/WorkbenchContext",
+                referenced.contains("com/crystalgui/workbench/WorkbenchContext"));
+        assertTrue("...and must not name the engine itself -- an engine that can be named can be "
+                        + "reached into, which is the whole reason the interface exists",
+                !referenced.contains("com/crystalgui/workbench/Workbench"));
+    }
 }

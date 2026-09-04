@@ -1,6 +1,8 @@
 package com.crystalgui.workbench;
 
 
+import com.crystalgui.workbench.decoration.FileDecorations;
+import com.crystalgui.fs.client.WorkspaceProjects;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
@@ -143,7 +145,7 @@ import com.crystalgui.text.lang.ProjectSourcesRegistry;
  * layout restore — so it is answered from {@link EditorService}, which holds the tab and its document.
  * Reading the file there instead would discard unsaved edits on every one of those.</p>
  */
-public class Workbench extends UIElement implements DataProvider, Disposable {
+public class Workbench extends UIElement implements WorkbenchContext, DataProvider, Disposable {
     /** The shell. `ua/workbench.css` names the tag. */
     public static final Name NAME = Name.of("workbench");
 
@@ -865,7 +867,7 @@ public class Workbench extends UIElement implements DataProvider, Disposable {
         // roots, on every host, always: the loop that stood here ran over an empty list and watched
         // nothing at all. Nothing failed, and the explorer simply never heard about another client's
         // create, delete or rename outside the files it happened to have open.
-        lifetime.add(fileTree.source().onDidChangeProjects.connect(this::watchProjectRoots));
+        lifetime.add(fileTree.source().onDidChangeProjects().connect(this::watchProjectRoots));
         fileTree.getDecorations().addProvider(externalChanges);
 
         // A RECONNECT INVALIDATES EVERYTHING AT ONCE, and for a different reason than a change does --
@@ -1175,6 +1177,15 @@ public class Workbench extends UIElement implements DataProvider, Disposable {
                 editor.showCodeActionsAt(editor.getCaret());
             });
         }));
+
+        // EXTENSIONS LAST, when everything they may reach has been built.
+        //
+        // ALL OF THEM, for now. An application's manifest will name the ids it wants -- that is what
+        // lets two applications on one desktop enable different sets -- and until an application
+        // concept exists there is nothing to ask. What this already settles is which HOST remembered
+        // what: the Notes kind was registered by two harness scenes and by no loader, so a file type
+        // shipped in this repository opened in the harness and not in the game.
+        activeExtensions.addAll(WorkbenchExtensions.activateAll(this));
     }
 
     /**
@@ -1227,6 +1238,9 @@ public class Workbench extends UIElement implements DataProvider, Disposable {
      */
     private final ConnectionGroup lifetime = new ConnectionGroup();
 
+    /** What each {@link WorkbenchExtension} handed back from {@code activate}. @see #dispose() */
+    private final List<Disposable> activeExtensions = new ArrayList<>();
+
     /** One recursive watch per project root, keyed by the root it covers. @see #watchProjectRoots */
     private final Map<CgPath, RootWatch> rootWatches = new HashMap<>();
 
@@ -1242,6 +1256,10 @@ public class Workbench extends UIElement implements DataProvider, Disposable {
      */
     @Override
     public void dispose() {
+        // EXTENSIONS FIRST, in reverse activation order -- a later one may have been built from an
+        // earlier one's contribution, which is the same argument Disposer makes about children.
+        for (int i = activeExtensions.size() - 1; i >= 0; i--) activeExtensions.get(i).dispose();
+        activeExtensions.clear();
         lifetime.disconnectAll();
         markerWatch.disconnectAll();
         capabilityWatch.disconnectAll();
@@ -1402,6 +1420,7 @@ public class Workbench extends UIElement implements DataProvider, Disposable {
     }
 
     /** The tool-window half, for anything that wants it directly rather than through the delegates. */
+    @Override
     public ToolWindowManager toolWindowManager() {
         return toolWindowManager;
     }
@@ -2376,7 +2395,35 @@ public class Workbench extends UIElement implements DataProvider, Disposable {
         return kinds;
     }
 
+    /**
+     * The projects and their listings.
+     *
+     * <p>The explorer's tree source, named by what it IS rather than by the widget that holds it. Five
+     * things outside the explorer read it -- this class for the crawl and the roots, the session for
+     * its expansion retry, the settings, Go to File and the editor -- so it was already a service in
+     * everything but who owned it. The physical split of the 864-line class follows; naming it now is
+     * what lets an extension be written against the model instead of against a widget's field.</p>
+     */
+    /**
+     * What the explorer draws beside a file.
+     *
+     * <p>Named here because a decoration is contributed by whoever knows the fact — the language stack
+     * marks what a script is, the shader graph marks a generated file — and none of them should have to
+     * reach through the explorer's widget to say so. It was the eleventh and last thing {@code language/}
+     * needed from the engine that the context did not already carry.</p>
+     */
+    @Override
+    public FileDecorations decorations() {
+        return fileTree.getDecorations();
+    }
+
+    @Override
+    public WorkspaceProjects projects() {
+        return fileTree.source();
+    }
+
     /** The workspace this workbench is a view of. */
+    @Override
     public Workspace workspace() {
         return workspace;
     }

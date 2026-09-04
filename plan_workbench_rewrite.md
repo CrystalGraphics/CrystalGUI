@@ -453,6 +453,21 @@ public interface WorkbenchContext {
 `language/` may name `com/crystalgui/workbench/Workbench` — only the context. That is the enforcement
 v1 proposed and it is the whole reason the interface exists rather than the class being handed over.
 
+> **Shipped at W2, with three deviations worth writing down.** The interface carries **today's names**:
+> `toolWindowManager()` rather than `toolWindows()` — which is not caution, the name is already taken by
+> the accessor answering a `ToolWindowLayout` — and no `statusBar()`, because a status bar is still a
+> process-wide static until D4. `disposer()` is absent because `activate` returning a `Disposable` made it
+> redundant. And the surface was **measured rather than designed**: the union of what the outside actually
+> calls is seventeen methods from `app/`, eleven from `language/`, eight from the harness and three from
+> the loader; `decorations()` is on it because `RunPanels` reaches `fileTree().getDecorations()`, which was
+> the last thing `language/` wanted that the context did not carry.
+>
+> **`LayeringTest` gained the rule for extensions only.** `NotesExtension`'s class file names
+> `WorkbenchContext` and not `Workbench`, asserted from the constant pool. The full rule — nothing under
+> `app/` or `language/` may name the engine — is not yet assertable: `CrystalEditor` holds a `Workbench`
+> field and the Run shell names it in four files, which is W6's and W7's port. An assertion that fails, or
+> one that is `@Ignore`d, would be worse than the narrow one that passes.
+
 ### 4.4 `ToolWindowKind` — the panel API, shaped like `DocumentKind`
 
 ```java
@@ -682,6 +697,17 @@ Four rules go with it, each of which the current tree pays for somewhere:
    else's tool window goes through `ToolWindowKind.viewInto(id)`. Activation is in manifest order, and
    an extension that needs another's *service* uses a process-wide registry, as `ProjectSourcesRegistry`
    already is.
+
+> **Shipped at W2 as an INTERFACE, not a move.** `fs.client.WorkspaceProjects` names the listing model
+> and `WorkspaceTreeSource` implements it, so `ctx.projects()` answers a service rather than a widget's
+> field and every consumer outside the explorer is written against the smaller thing today. The physical
+> split of the 864-line class is left to W5, where it is priced with the rest of the `Workbench` split:
+> the seam is what an extension needs, and moving 380 lines is what a package boundary needs — doing the
+> first without the second costs nothing and unblocks W4 and W6.
+>
+> One cost is real and worth stating: the engine's idiom is a `public final Signal` field, and an
+> interface cannot carry one, so `onDidLoadListing()` and `onDidChangeProjects()` are accessors. They are
+> the only signals in this stack reached through a call.
 
 ### 4.12 What belongs to the workspace, the application, the desktop, and the process
 
@@ -929,7 +955,7 @@ move with the rewrite.
 |---|---|---|---|
 | **W0 — the leak test** | `ApplicationRetentionTest`: build and dispose four `CrystalEditor`s; assert `Disposer.liveCount()`, static signal `connectionCount()`s and `ProjectSourcesRegistry.size()` return to baseline. **It fails on the current tree**, which is the point | the test exists and is red | none |
 | **W1 — disposal** | `Workbench implements Disposable`; every ctor subscription into a `ConnectionGroup`; `Watch`es disposed; `ProjectSourcesRegistry` withdrawn; `CrystalEditor.dispose()` real; `DockBanners` → registry-owned | W0 green | low |
-| **W2 — `WorkbenchContext` + `WorkbenchExtension`** | the interface extracted (no behaviour change); `WorkspaceProjects` promoted out of the explorer (§4.11) and, with `WorkspaceDocuments` and `ProjectIndex`, moved to per-workspace ownership (§4.12); the registry; `NotesExtension` ported first; `LayeringTest` case | notes appear on every host with no host code | low |
+| **W2 — `WorkbenchContext` + `WorkbenchExtension`** | the interface extracted (no behaviour change), measured from what the outside calls; `WorkspaceProjects` named as an interface over the explorer's model (§4.11, the move deferred to W5); `WorkbenchExtensions` + `activateAll`, activated by the workbench and disposed with it; `NotesExtension` first, and the harness's two `NotesKind.register` calls deleted; `LayeringTest` case for extensions | notes appear on every host with no host code — `aShippedExtensionIsActiveOnAPlainWorkbench` | low |
 | **W3 — the host seam** | `HostServices`, `DesktopHost`, `DesktopWindowMount`, `Connections`, `WorkspaceHost`; `Mc1710Workspace` deleted; `CgUiScreen` shrunk; `HarnessHost` | `:mc1710:compileJava`, `serverSmoke`, `runClient -PcgJoin`, the session probe; `LoaderNamesNoProductTest` | **medium** — crosses the loader seam, so only `serverSmoke` and a client can see it |
 | **W3b — projects and sources** | `project.json` + `ScanningProjectProvider`, `fs/createProject`, the client-local source and `Workspace` routing by project, one root per server chosen by `isDedicatedServer()`, `workspaceId`, the explorer's source groups, the creation dialog with the scope choice shown only in single-player (§4.13) | many projects listed from both sources on a dedicated server and in single-player; one created into each; `serverSmoke` + the two-client probe | **medium–high** — the largest fs change since F7, and it crosses the loader seam |
 | **W4 — `ToolWindowKind`** | the declaration; Problems, Notifications, Run, Inspector ported; `registerToolWindowCommands` deleted | every tool window has one declaration; `View ▸ Tool Windows` and the palette rows are derived | medium |
