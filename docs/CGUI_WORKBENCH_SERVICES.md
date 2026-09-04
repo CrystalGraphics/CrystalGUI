@@ -1235,13 +1235,25 @@ in the caption and the initial focus. `CrystalEditor` is a manifest and three ch
 ### Writing an extension
 
 ```java
-public final class NotesExtension implements WorkbenchExtension {
-    @Override public String id() { return "crystalgui:notes"; }
+public final class NotesKind implements WorkbenchExtension {
+    public static final String ID = "crystalgui:notes";
+    public static final DocumentKind KIND = DocumentKind.of(ID, "Notes")
+            .files(DocumentKind.FilePatterns.extension("notes"))
+            .model((resource, bytes) -> NotesModel.decode(bytes))
+            .editor(NotesView::new);
+
+    public NotesKind() { }                                  // ServiceLoader's rule
+    @Override public String id() { return ID; }
     @Override public Disposable activate(WorkbenchContext workbench) {
-        return NotesKind.register(workbench.kinds());   // everything it registered, in one handle
+        return workbench.kinds().register(KIND);            // everything it registered, in one handle
     }
 }
 ```
+
+**One class per feature.** A declaration and a separate `*Extension` beside it read as a boundary and
+are a wrapper — one lifetime, one id, and the second file's only real content is the name of the first.
+The declaration stays a `static final` so a launcher can read what an extension claims without
+activating it.
 
 A line in `META-INF/services/com.crystalgui.workbench.WorkbenchExtension` says *this jar has the
 feature*; a manifest's `with(...)` says *this product enables it*. Availability is discovered, so it is a

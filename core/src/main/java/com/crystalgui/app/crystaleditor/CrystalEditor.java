@@ -8,7 +8,7 @@ import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.desktop.app.ApplicationRegistry;
 import com.crystalgui.document.DocumentKind;
 import com.crystalgui.example.notes.NotesKind;
-import com.crystalgui.app.shadergraph.ShaderGraphExtension;
+import com.crystalgui.app.shadergraph.ShaderGraphContribution;
 import com.crystalgui.workbench.WorkbenchApplication;
 import com.crystalgui.workbench.WorkbenchExtensions;
 import com.crystalgui.workbench.extension.InspectorExtension;
@@ -58,7 +58,7 @@ public final class CrystalEditor {
     /** What this product turns on. Ids, resolved against {@link WorkbenchExtensions} at launch. */
     public static final List<String> EXTENSIONS = List.of(
             InspectorExtension.ID,
-            ShaderGraphExtension.ID,
+            ShaderGraphContribution.ID,
             NotesKind.ID,
             // LISTED ON EVERY HOST, present on some. An id nothing contributed is a logged absence, not
             // an error -- which is what lets scripting be named here and be simply absent on a host with

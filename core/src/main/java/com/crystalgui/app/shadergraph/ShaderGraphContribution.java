@@ -13,6 +13,7 @@ import com.crystalgui.widget.config.inspector.InspectorRegistry;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentKind;
 import com.crystalgui.workbench.WorkbenchContext;
+import com.crystalgui.workbench.WorkbenchExtension;
 
 import javax.annotation.Nullable;
 
@@ -29,11 +30,33 @@ import javax.annotation.Nullable;
  * types, because the set is open by construction.</p>
  *
  * <p>So the package that owns the type declares it, and an application's only decision is which
- * contributions to enable — one call naming one package.</p>
+ * contributions to enable — <b>an id in a list</b>. Nothing calls this: one line in
+ * {@code META-INF/services/com.crystalgui.workbench.WorkbenchExtension} is how the jar says it has the
+ * feature. It used to be contributed by {@code CrystalEditor}, which made a feature's availability a
+ * product's responsibility and put it out of reach of every other product.</p>
  */
-public final class ShaderGraphContribution {
+public final class ShaderGraphContribution implements WorkbenchExtension {
 
-    private ShaderGraphContribution() {
+    /** The id an application's manifest names to enable the graph. @see WorkbenchExtension */
+    public static final String ID = "crystalgui:shadergraph";
+
+    /** {@code ServiceLoader} needs a public no-argument constructor. */
+    public ShaderGraphContribution() {
+    }
+
+    @Override
+    public String id() {
+        return ID;
+    }
+
+    /**
+     * The attachment. A one-line override rather than a class of its own: {@code ShaderGraphExtension}
+     * held exactly this and the id, and a declaration split from its attachment reads as a boundary
+     * while being a wrapper — one lifetime, one id, one reason to exist.
+     */
+    @Override
+    public Disposable activate(WorkbenchContext workbench) {
+        return register(workbench);
     }
 
     /** A {@code .shadergraph} file. The only kind of shader graph — there is no pathless scratch one. */

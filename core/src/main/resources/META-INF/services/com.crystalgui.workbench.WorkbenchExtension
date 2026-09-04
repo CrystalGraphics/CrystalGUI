@@ -5,6 +5,9 @@
 #
 # Being here is availability, never enablement: an application's manifest names the ids it wants, and
 # an id nothing contributed is a logged absence rather than an error.
-com.crystalgui.example.notes.NotesExtension
+#
+# ONE CLASS PER FEATURE. Each of these declares its own id and attaches itself; a separate
+# `*Extension` wrapper beside the declaration was two files with one lifetime between them.
+com.crystalgui.example.notes.NotesKind
 com.crystalgui.workbench.extension.InspectorExtension
-com.crystalgui.app.shadergraph.ShaderGraphExtension
+com.crystalgui.app.shadergraph.ShaderGraphContribution
