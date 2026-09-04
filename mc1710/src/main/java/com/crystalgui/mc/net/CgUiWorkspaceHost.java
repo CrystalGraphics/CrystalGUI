@@ -251,6 +251,11 @@ public final class CgUiWorkspaceHost {
                 if (!events.isEmpty()) fanOut(events);
             }
 
+            // AND WHO IS HERE, on the same tick and for the same reason: presence is what stops two
+            // people finding out they were both editing when the second one saves and is refused.
+            // Free when nothing has moved -- a version counter, then an exact comparison per peer.
+            fanOutPresence();
+
             untilPoll -= 1f / 20f;
             if (untilPoll > 0f) return;
             untilPoll = POLL_SECONDS;
@@ -298,6 +303,31 @@ public final class CgUiWorkspaceHost {
             } catch (RuntimeException failed) {
                 // One player's dispatch must not stop every other player hearing about the change.
                 CrystalGuiCore.LOGGER.error("[cgui-fs] file-event dispatch failed: {}",
+                        failed.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Tells each peer who else is in the files it has open.
+     *
+     * <p>Per peer rather than broadcast, because presence is <b>scoped to what that peer holds</b>: a
+     * player hears about a file the moment somebody else opens one they have open, and hears nothing
+     * about files they never asked for. The same rule the change fan-out follows, for the same reason —
+     * telling everybody about everything would leak which files exist to somebody who never asked.</p>
+     */
+    private static void fanOutPresence() {
+        for (Map.Entry<Object, WorkspaceBinding<Object>> entry : BY_PEER.entrySet()) {
+            ProtocolConnection<Object> connection = CONNECTIONS.get(entry.getKey());
+            if (connection == null) continue;
+            FsMessages.PresenceNotification mine = entry.getValue().presenceFor();
+            if (mine == null) continue;
+            try {
+                connection.notify(FsMethods.PRESENCE, new StateMap<>(PlainOps.INSTANCE,
+                        FsMessages.presenceNotification().encode(PlainOps.INSTANCE, mine)));
+            } catch (RuntimeException failed) {
+                // One player's dispatch must not stop every other player hearing who is here.
+                CrystalGuiCore.LOGGER.error("[cgui-fs] presence dispatch failed: {}",
                         failed.getMessage());
             }
         }

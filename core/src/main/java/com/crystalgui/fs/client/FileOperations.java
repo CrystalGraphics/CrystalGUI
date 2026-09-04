@@ -484,12 +484,6 @@ public final class FileOperations {
         return candidate;
     }
 
-    /** Whether anything is outstanding for this resource. For a test, and for the health readout. */
-    public boolean isBusy(Resource resource) {
-        Reply<?> outstanding = queues.get(resource);
-        return outstanding != null && !outstanding.isDone();
-    }
-
     // ── Batches ─────────────────────────────────────────────────────────────────────────────────
 
     /**

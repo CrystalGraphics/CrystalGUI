@@ -170,7 +170,7 @@ public final class InMemoryFileSystem implements CgFileSystem {
     // ── Seeding, for tests and fixtures ─────────────────────────────────────────────────────────
 
     /** Creates a project root, so a filesystem can be populated before anything is registered. */
-    public InMemoryFileSystem addProject(String project) {
+    private InMemoryFileSystem addProject(String project) {
         roots.computeIfAbsent(project, key -> new Node(true, tick()));
         return this;
     }

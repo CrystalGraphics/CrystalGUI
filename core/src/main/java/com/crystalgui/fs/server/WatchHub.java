@@ -12,11 +12,9 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
 /**
  * Who is watching what, for the whole workspace — <b>one hub, not one watcher per peer</b>.
@@ -125,16 +123,6 @@ public final class WatchHub {
     public int subscriptionCount(Object peer) {
         Map<CgPath, Subscription> mine = byPeer.get(peer);
         return mine == null ? 0 : mine.size();
-    }
-
-    public boolean isWatching(Object peer, CgPath path) {
-        Map<CgPath, Subscription> mine = byPeer.get(peer);
-        return mine != null && mine.containsKey(path);
-    }
-
-    /** Every peer with at least one subscription. */
-    public Set<Object> peers() {
-        return new LinkedHashSet<>(byPeer.keySet());
     }
 
     /** Drops the shared etag once nobody is watching that path, so the map cannot grow for ever. */

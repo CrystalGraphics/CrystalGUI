@@ -144,10 +144,13 @@ public final class WorkspacePresence {
         return others;
     }
 
-    /** Everyone with {@code path} open, by display name. */
-    public synchronized List<String> whoHasOpen(CgPath path) {
-        Map<String, String> here = byPath.get(path);
-        return here == null ? Collections.emptyList() : new ArrayList<>(here.values());
+    /** Every path {@code actor} has open — what that peer has to be told about. */
+    public synchronized List<CgPath> pathsOpenBy(WorkspaceActor actor) {
+        List<CgPath> mine = new ArrayList<>();
+        for (Map.Entry<CgPath, Map<String, String>> entry : byPath.entrySet()) {
+            if (entry.getValue().containsKey(actor.id())) mine.add(entry.getKey());
+        }
+        return mine;
     }
 
     /** Everyone <em>except</em> {@code actor} — which is what a UI ever wants to say. */

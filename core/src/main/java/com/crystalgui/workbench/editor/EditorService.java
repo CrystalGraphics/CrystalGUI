@@ -201,6 +201,17 @@ public final class EditorService implements Disposable {
         return restored;
     }
 
+    /**
+     * Throws away what {@link #restoreUnsavedWork} would have offered.
+     *
+     * <p>The other answer, and the one that makes the offer a question. Without it a host that shows
+     * "restore your unsaved work?" and is told no has nowhere to put the no, so the same work is
+     * offered again on the next launch and every launch after it.</p>
+     */
+    public void discardUnsavedWork() {
+        documents.discardRestorable();
+    }
+
     @Override
     public void dispose() {
         closeAll();

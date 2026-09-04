@@ -335,6 +335,26 @@ public final class Workspace implements Disposable {
         return watch;
     }
 
+    /**
+     * Tells the server this client has, or no longer has, unsaved changes to a file.
+     *
+     * <p><b>Nobody else can say it.</b> Dirtiness is {@code version != savedVersion} on a document only
+     * this client holds, so the server can neither observe it nor infer it — a file with no writes
+     * coming is equally one nobody has touched and one somebody has been typing in for ten minutes.
+     * That is the question presence exists to answer, and it is why "who has it open" alone is the
+     * weaker signal: two people find out they were both editing when the second one saves and is
+     * refused.</p>
+     *
+     * <p>Sent on the transition, never per keystroke. {@link WorkspaceDocuments} is the caller, because
+     * a document's state is what changed.</p>
+     */
+    public Reply<String> setEditing(Resource resource, boolean dirty) {
+        return calls.send(FsMethods.EDITING, FsMessages.pathRequest(),
+                        new FsMessages.PathRequest(resource.toString(), dirty ? "dirty" : ""),
+                        FsMessages.etagResponse())
+                .map(FsMessages.EtagResponse::etag);
+    }
+
     // ── The greeting ────────────────────────────────────────────────────────────────────────────
 
     /** Asks what this server is. First, because four client decisions depend on the answer. */
