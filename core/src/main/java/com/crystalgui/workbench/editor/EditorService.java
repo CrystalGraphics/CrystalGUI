@@ -96,7 +96,7 @@ public final class EditorService implements Disposable {
         onDidOpen.emit(tab);
 
         PendingReply<Tab> opened = new PendingReply<>(() -> close(tab));
-        documents.open(input.resource())
+        documents.open(input.resource(), input.preferredKindId())
                 .onError(error -> {
                     tab.fail(error);
                     opened.fail(error);
@@ -280,6 +280,10 @@ public final class EditorService implements Disposable {
             Document document = document();
             if (document == null || !document.kind().hasEditor()) return null;
             editor = document.kind().createEditor(document);
+            // THE OPENING'S, applied to the VIEW. A read-only opening and an editable one are two tabs
+            // over ONE document -- which is what lets a diff's left pane sit beside the live file --
+            // so the refusal cannot live on the model without taking the other tab down with it.
+            if (input.isReadOnly()) editor.setReadOnly(true);
             return editor;
         }
 

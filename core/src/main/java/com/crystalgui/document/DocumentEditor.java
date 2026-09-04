@@ -34,6 +34,21 @@ public interface DocumentEditor {
     default void activated(boolean active) {
     }
 
+    /**
+     * This <b>opening</b> refuses edits, whatever the model would allow.
+     *
+     * <p>A property of the view and never of the document, which is what makes it expressible at all:
+     * the same class file is read-only through the library scheme and editable when the user has its
+     * source in a project, and a document is one per resource. So a diff's left pane can sit beside the
+     * live document with the two sharing a model, a history and a parse tree, and only one of them
+     * taking keystrokes.</p>
+     *
+     * <p>Default no-op, which is the honest answer for a view that has nothing to type into — a binary
+     * preview is already read-only by having no editor in it.</p>
+     */
+    default void setReadOnly(boolean readOnly) {
+    }
+
     /** Where you were looking — caret, scroll, folds, pan, zoom. Restored by the session. */
     default <T> void writeViewState(StateMap<T> out) {
     }

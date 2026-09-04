@@ -116,16 +116,40 @@ public final class WorkspaceDocuments {
      * tab's hold the same object.</p>
      */
     public Reply<DocumentReference> open(Resource resource) {
+        return open(resource, null);
+    }
+
+    /**
+     * The same, opened <b>as</b> a named kind rather than as the file's name suggests.
+     *
+     * <p>"Open With…", and a caller that knows something the name does not — a generated shader source
+     * has no extension of its own and is GLSL.</p>
+     *
+     * <p><b>It can only apply on the first open, and says so rather than pretending.</b> A
+     * {@link DocumentKind} is a model as well as an editor, and a document is one per resource, so
+     * opening a file that is already open under another kind would mean two models writing one file.
+     * That is refused with a conflict naming the kind it IS open as. The alternative — quietly joining
+     * the open document — hands the caller a tab that looks like the one they asked for and is not, and
+     * an "Open With" that silently does nothing is worse than one that explains itself.</p>
+     */
+    public Reply<DocumentReference> open(Resource resource, @Nullable String preferredKindId) {
         Document existing = documents.get(resource);
         if (existing != null) {
+            if (preferredKindId != null && !preferredKindId.equals(existing.kind().id())) {
+                return Reply.failed(new FsError(FsError.CONFLICT, resource.name()
+                        + " is already open as " + existing.kind().displayName()
+                        + "; close it before opening it as something else"));
+            }
             DocumentReference reference = documents.reference(resource);
             return Reply.of(reference);
         }
 
-        DocumentKind kind = kinds.forResource(resource);
+        DocumentKind kind = preferredKindId == null
+                ? kinds.forResource(resource) : kinds.byId(preferredKindId);
         if (kind == null) {
-            return Reply.failed(new FsError(FsError.INVALID_PATH,
-                    "nothing knows how to open " + resource));
+            return Reply.failed(new FsError(FsError.INVALID_PATH, preferredKindId == null
+                    ? "nothing knows how to open " + resource
+                    : "no document kind '" + preferredKindId + "' is registered"));
         }
 
         PendingReply<DocumentReference> opened = new PendingReply<>(null);

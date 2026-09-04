@@ -88,6 +88,11 @@ public final class TextEditorView implements DocumentEditor {
         return editor;
     }
 
+    @Override
+    public void setReadOnly(boolean readOnly) {
+        editor.setReadOnly(readOnly);
+    }
+
     public TextEditor editor() {
         return editor;
     }

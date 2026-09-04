@@ -36,6 +36,11 @@ public final class EditorInput {
      *
      * <p>For "Open With…", and for a caller that knows something the name does not — a generated shader
      * source has no extension of its own and is GLSL.</p>
+     *
+     * <p><b>It applies on the FIRST open of a resource and is refused afterwards.</b> A
+     * {@link DocumentKind} is a model as well as an editor and a document is one per resource, so a
+     * file already open under another kind cannot be reopened under this one without two models writing
+     * one file — {@code WorkspaceDocuments.open} answers a conflict naming the kind it IS open as.</p>
      */
     public EditorInput as(String kindId) {
         return new EditorInput(resource, kindId, readOnly);

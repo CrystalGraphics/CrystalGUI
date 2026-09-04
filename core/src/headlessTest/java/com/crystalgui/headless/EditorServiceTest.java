@@ -4,6 +4,7 @@ import com.crystalgui.core.async.Reply;
 import com.crystalgui.core.storage.InMemoryConfigStorage;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentKind;
+import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.document.DocumentKinds;
 import com.crystalgui.document.DocumentState;
 import com.crystalgui.document.EditorInput;
@@ -28,6 +29,7 @@ import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.workbench.editor.EditorService;
 
@@ -386,5 +388,139 @@ public class EditorServiceTest {
         editors.closeAll();
 
         assertEquals(0, editors.restoreUnsavedWork());
+    }
+
+    // ── What an input was opened WITH ───────────────────────────────────────────────────────────
+
+    /**
+     * <b>{@code EditorInput.as} picks the kind.</b>
+     *
+     * <p>It was read by nothing: the service opened {@code input.resource()} and dropped both
+     * modifiers, while {@code EditorInput.equals} kept them — so "Open With…" gave you a SECOND tab
+     * opened as the same kind as the first. A duplicate that behaves identically is worse than an
+     * unimplemented button, because the caller believes the modifier applied.</p>
+     */
+    @Test
+    public void openingAsANamedKindUsesThatKind() {
+        kinds.register(DocumentKind.of("test:notes", "Notes")
+                .files(DocumentKind.FilePatterns.extension("notes"))
+                .model(TextDocumentModel::of));
+
+        Reply<EditorService.Tab> reply = editors.open(EditorInput.of(MAIN).as("test:notes"));
+        pump();
+
+        assertNotNull("it opened: " + reply.error(), reply.result());
+        assertEquals("test:notes", reply.result().document().kind().id());
+    }
+
+    /** ...and the ordinary open still takes the kind the NAME claims, which is the counter-control. */
+    @Test
+    public void openingWithoutAKindTakesTheOneTheNameClaims() {
+        kinds.register(DocumentKind.of("test:notes", "Notes")
+                .files(DocumentKind.FilePatterns.extension("notes"))
+                .model(TextDocumentModel::of));
+
+        assertEquals("test:text", open(MAIN).document().kind().id());
+    }
+
+    @Test
+    public void openingAsAKindNobodyRegisteredSaysSo() {
+        Reply<EditorService.Tab> reply = editors.open(EditorInput.of(MAIN).as("test:nope"));
+        pump();
+
+        assertNull(reply.result());
+        assertEquals(FsError.INVALID_PATH, reply.error().code());
+        assertTrue(reply.error().detail(), reply.error().detail().contains("test:nope"));
+    }
+
+    /**
+     * <b>A file already open under another kind is refused, and the refusal names the kind.</b>
+     *
+     * <p>A {@link DocumentKind} is a model as well as an editor and a document is one per resource, so
+     * this is the one thing "Open With" cannot do here. Quietly joining the open document is the
+     * alternative and is the bug this whole group exists to remove.</p>
+     */
+    @Test
+    public void openingAsAKindAFileIsAlreadyOpenUnderIsRefused() {
+        kinds.register(DocumentKind.of("test:notes", "Notes")
+                .files(DocumentKind.FilePatterns.extension("notes"))
+                .model(TextDocumentModel::of));
+        open(MAIN);
+
+        Reply<EditorService.Tab> reply = editors.open(EditorInput.of(MAIN).as("test:notes"));
+        pump();
+
+        assertNull(reply.result());
+        assertEquals(FsError.CONFLICT, reply.error().code());
+        assertTrue(reply.error().detail(), reply.error().detail().contains("Text"));
+    }
+
+    /**
+     * <b>{@code EditorInput.readOnly} reaches the VIEW.</b>
+     *
+     * <p>Never the model: a read-only opening and an editable one are two tabs over ONE document, which
+     * is what lets a diff's left pane sit beside the live file. Refusing on the model would take the
+     * other tab down with it.</p>
+     */
+    @Test
+    public void aReadOnlyOpeningTellsItsView() {
+        registerViewedKind();
+
+        EditorService.Tab tab = openInput(EditorInput.of(MAIN).readOnly());
+
+        assertTrue("the view was told", ((RecordingView) tab.editor()).readOnly);
+    }
+
+    /** ...and an ordinary opening is not told, which is what makes the assertion above mean anything. */
+    @Test
+    public void anOrdinaryOpeningIsNotReadOnly() {
+        registerViewedKind();
+
+        EditorService.Tab tab = openInput(EditorInput.of(MAIN));
+
+        assertFalse(((RecordingView) tab.editor()).readOnly);
+    }
+
+    /** Two openings, two tabs, one document — the diff-pane case the class javadoc describes. */
+    @Test
+    public void aReadOnlyOpeningAndAnEditableOneAreTwoTabsOverOneDocument() {
+        registerViewedKind();
+
+        EditorService.Tab editable = openInput(EditorInput.of(MAIN));
+        EditorService.Tab locked = openInput(EditorInput.of(MAIN).readOnly());
+
+        assertEquals(2, editors.tabs().size());
+        assertSame("one document, two views", editable.document(), locked.document());
+        assertFalse(((RecordingView) editable.editor()).readOnly);
+        assertTrue(((RecordingView) locked.editor()).readOnly);
+    }
+
+    private void registerViewedKind() {
+        kinds.register(DocumentKind.of("test:viewed", "Viewed")
+                .files(DocumentKind.FilePatterns.extension("java"))
+                .model(TextDocumentModel::of)
+                .editor(document -> new RecordingView()));
+    }
+
+    private EditorService.Tab openInput(EditorInput input) {
+        Reply<EditorService.Tab> reply = editors.open(input);
+        pump();
+        assertNotNull("it opened: " + reply.error(), reply.result());
+        return reply.result();
+    }
+
+    /** A view with nothing in it, so the read-only question can be asked without a font stack. */
+    private static final class RecordingView implements DocumentEditor {
+        boolean readOnly;
+
+        @Override
+        public UIElement view() {
+            return new UIElement();
+        }
+
+        @Override
+        public void setReadOnly(boolean value) {
+            readOnly = value;
+        }
     }
 }
