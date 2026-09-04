@@ -61,7 +61,6 @@ import com.crystalgui.workbench.chrome.problems.ProblemsPanel;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.workbench.diff.ConflictDialog;
 import com.crystalgui.workbench.diff.MergeView;
-import com.crystalgui.workbench.dock.banner.DockBanners;
 import com.crystalgui.workbench.dock.DockArea;
 import com.crystalgui.workbench.dock.DockWindow;
 import com.crystalgui.workbench.dock.drag.DockDropZone;
@@ -144,7 +143,7 @@ import com.crystalgui.text.lang.ProjectSourcesRegistry;
  * layout restore — so it is answered from {@link EditorService}, which holds the tab and its document.
  * Reading the file there instead would discard unsaved edits on every one of those.</p>
  */
-public class Workbench extends UIElement implements DataProvider {
+public class Workbench extends UIElement implements DataProvider, Disposable {
     /** The shell. `ua/workbench.css` names the tag. */
     public static final Name NAME = Name.of("workbench");
 
@@ -839,16 +838,16 @@ public class Workbench extends UIElement implements DataProvider {
         // ONE SIGNAL, BOTH SURFACES. The tree redraws from the decorations' own announcement; the tabs
         // have to be told, because a tab is not a decoration consumer -- it pulls a class when it is
         // built and has no reason to look again on its own.
-        markers.onDidChange.connect(resource -> {
+        lifetime.add(markers.onDidChange.connect(resource -> {
             fileTree.getDecorations().invalidate();
             syncTabDecorations();
-        });
-        fileTree.onFileChosen.connect(this::openFile);
-        fileTree.onFilesDropped.connect(this::dropFiles);
+        }));
+        lifetime.add(fileTree.onFileChosen.connect(this::openFile));
+        lifetime.add(fileTree.onFilesDropped.connect(this::dropFiles));
         // RENDERED FROM THE RESULT, never from the call site. One update path serves this client's own
         // operations and another client's alike -- see Q11 in the chrome plan, and why two paths into
         // one model always end up disagreeing.
-        files.onDidRun.connect(this::refreshAfter);
+        lifetime.add(files.onDidRun.connect(this::refreshAfter));
         // AND THE TABS FOLLOW THE DOCUMENTS. @see #followDocuments
         followDocuments();
         // ANOTHER CLIENT'S CHANGES, through the same path as our own -- which is the whole reason the
@@ -866,7 +865,7 @@ public class Workbench extends UIElement implements DataProvider {
         // roots, on every host, always: the loop that stood here ran over an empty list and watched
         // nothing at all. Nothing failed, and the explorer simply never heard about another client's
         // create, delete or rename outside the files it happened to have open.
-        watchRoots.add(fileTree.source().onDidChangeProjects.connect(this::watchProjectRoots));
+        lifetime.add(fileTree.source().onDidChangeProjects.connect(this::watchProjectRoots));
         fileTree.getDecorations().addProvider(externalChanges);
 
         // A RECONNECT INVALIDATES EVERYTHING AT ONCE, and for a different reason than a change does --
@@ -875,7 +874,7 @@ public class Workbench extends UIElement implements DataProvider {
         // to, and no fs.changed can arrive to say so: nothing was watching, because there was nothing to
         // watch with. Wired here beside the notification above so there is one place the tree learns that
         // the far side has moved under it.
-        workspace.onDidReconnect.connect(fileTree::markListingsStale);
+        lifetime.add(workspace.onDidReconnect.connect(fileTree::markListingsStale));
 
         // How a tab presents itself. Both are PULLED by the strip when it builds a tab rather than pushed
         // in afterwards, which is what makes a rebuilt strip correct on the frame it is rebuilt -- a dock
@@ -991,7 +990,7 @@ public class Workbench extends UIElement implements DataProvider {
         // Two of this widget's per-frame polls, replaced by the announcement they were both watching for.
         // Not registered on a Disposable: the signal belongs to the dock, this workbench owns the dock, so
         // the subscription cannot outlive either -- an ownership registration here would be ceremony.
-        dock.onDidChangeActivePanel.connect(panel -> {
+        lifetime.add(dock.onDidChangeActivePanel.connect(panel -> {
             // THE MOMENT THE REBUILD HAS HAPPENED, which is what a close was waiting for. The frame
             // countdown below is a backstop for the case this signal never comes -- closing a tab that
             // was not the active one leaves the active panel where it was and announces nothing.
@@ -1004,7 +1003,7 @@ public class Workbench extends UIElement implements DataProvider {
             revealActiveFile();
             rebindProblems();
             bindStatusToActiveTab();
-        });
+        }));
         // The rails' :checked state follows the dock's structure and nothing else, so they can subscribe
         // now. Their BUTTONS wait for a window -- see onWindowChanged.
         for (StripeView stripe : stripes()) stripe.listenToLayout(dock);
@@ -1012,13 +1011,13 @@ public class Workbench extends UIElement implements DataProvider {
         // document stayed open, its editor stayed reachable and anything it owned -- a preview pool, a
         // renderer -- lived until the process did. Disposer could not help, because the thing that knew
         // the tab was gone had no way to say so.
-        dock.onDidClosePanel.connect(this::releaseClosedPanel);
+        lifetime.add(dock.onDidClosePanel.connect(this::releaseClosedPanel));
         // ...AND ITS PLACEHOLDER RECORD, which is keyed by a ref and would otherwise outlive the
         // panel and be read against whatever reopened under the same name.
-        dock.onDidClosePanel.connect(placeholders::remove);
+        lifetime.add(dock.onDidClosePanel.connect(placeholders::remove));
         // AND THE EDITOR THAT TOOK OVER GETS THE FOCUS THE CLOSED ONE HAD. Spent a frame later -- see
         // focusActiveEditorPending.
-        dock.onDidClosePanel.connect(panel -> focusActiveEditorPending = FOCUS_AFTER_CLOSE_FRAMES);
+        lifetime.add(dock.onDidClosePanel.connect(panel -> focusActiveEditorPending = FOCUS_AFTER_CLOSE_FRAMES));
         /*
          * A TAB'S VIEW ARRIVING IS A PANEL THAT HAS TO BE BUILT AGAIN.
          *
@@ -1036,18 +1035,18 @@ public class Workbench extends UIElement implements DataProvider {
          * every keystroke, and rebuilding there would detach the editor the user is typing in. It fires
          * only when what is ON SCREEN is not the view the tab now has.
          */
-        editors.onDidChangeState.connect(this::refreshPanelForTab);
+        lifetime.add(editors.onDidChangeState.connect(this::refreshPanelForTab));
         // PRESENCE MOVES WITHOUT THE TAB MOVING. It was refreshed on a tab change alone, which was
         // enough while nothing ever pushed one -- somebody else opening the file you are looking at
         // changes the answer and changes nothing about which tab is in front.
-        workspace.presence().onDidChange.connect(this::refreshPresence);
+        lifetime.add(workspace.presence().onDidChange.connect(this::refreshPresence));
         registerFailureBanner();
         // Tab dirty markers. Was a per-frame refreshDirtyMarkers(), which meant encoding every open
         // document -- a whole shader graph serialised sixty times a second -- to notice a marker that
         // moves when somebody types. The equality guard SURVIVES the move: the announcement means
         // "content changed", which is not the same as "dirtiness flipped", and only the encode can tell
         // the difference. It just runs once per edit now instead of once per frame.
-        documents.onDidChangeState.connect((document, state) -> {
+        lifetime.add(documents.onDidChangeState.connect((document, state) -> {
             CgPath path = document.resource().asPath();
             if (path == null) return;
             refreshDirtyMarkers();
@@ -1055,7 +1054,7 @@ public class Workbench extends UIElement implements DataProvider {
             // snapshot of that content stops being true. Marked rather than re-encoded, so a burst of
             // keystrokes costs one encode on the next frame instead of one each.
             dirtyBuffers.add(path);
-        });
+        }));
         // EVERY FILE FAILURE IS REPORTED FROM ONE PLACE, and this is the whole of the change that made it
         // so. FileOperations already announces each one through onDidFail, carrying the resource --
         // and nothing listened, so all eleven call sites wrote their own `failure -> Notifications.show(...)`
@@ -1065,9 +1064,9 @@ public class Workbench extends UIElement implements DataProvider {
         // Wired here because this is where the workbench's parts are introduced to each other, and because
         // FileOperations must not reach for Notifications itself: it already has an announcement
         // channel, and a service with two would leave a listener unable to tell which was authoritative.
-        files.onDidFail.connect((resource, failure) -> Notifications.show(
+        lifetime.add(files.onDidFail.connect((resource, failure) -> Notifications.show(
                 Notification.error("File operation failed")
-                        .withDetail(resource.name() + " — " + failure.detail())));
+                        .withDetail(resource.name() + " — " + failure.detail()))));
 
         // THE BELL'S BADGE. Routed through the container registry rather than reaching for a rail button,
         // because a badge is a fact about a CONTAINER and both rails already listen for it -- so a tool
@@ -1077,8 +1076,8 @@ public class Workbench extends UIElement implements DataProvider {
         // A DOT, NOT A COUNT. IntelliJ marks the bell and does not say how many, which is the right call:
         // the number is not actionable -- you open the panel either way -- and a two-digit count over a
         // 20px rail icon is unreadable. The exact figure is a scroll away in the history.
-        Notifications.onDidChangeUnread.connect(count -> toolWindowManager.viewContainers().setBadge(
-                NOTIFICATIONS_TYPE, count == null || count <= 0 ? null : ViewContainerRegistry.DOT));
+        lifetime.add(Notifications.onDidChangeUnread.connect(count -> toolWindowManager.viewContainers().setBadge(
+                NOTIFICATIONS_TYPE, count == null || count <= 0 ? null : ViewContainerRegistry.DOT)));
 
         // BEFORE content, which is the whole of what puts it at the top -- see the field.
         append(menuBar);
@@ -1140,7 +1139,7 @@ public class Workbench extends UIElement implements DataProvider {
         // primitive and is already stated once. The four lines they each spell out are the CALLER's
         // business -- which editor, what to do with it -- and spelling them out is what keeps the coupling
         // pointing the right way.
-        problems.onProblemChosen.connect(node -> {
+        lifetime.add(problems.onProblemChosen.connect(node -> {
             if (node.diagnostic() == null || node.resource() == null || !node.resource().isProject()) return;
             TextPoint at = node.diagnostic().start();
             // AS THE CONTINUATION OF THE OPEN, not as the statement after it. openFile is asynchronous for
@@ -1155,7 +1154,7 @@ public class Workbench extends UIElement implements DataProvider {
                 UIDocument window = document();
                 if (window != null) window.focus().requestFocus(editor);
             });
-        });
+        }));
 
         // SHOW QUICK-FIXES IS NAVIGATE PLUS ONE STEP, and it is spelled out here for the same reason the
         // handler above is: which editor and what to do with it is the caller's business. The panel has
@@ -1164,7 +1163,7 @@ public class Workbench extends UIElement implements DataProvider {
         // The list is opened INSIDE the continuation, after the caret has been placed: the actions are
         // resolved from an offset, so asking before the file is open and positioned would ask about
         // wherever the previous editor's caret happened to be.
-        problems.onQuickFixesRequested.connect(node -> {
+        lifetime.add(problems.onQuickFixesRequested.connect(node -> {
             if (node.diagnostic() == null || node.resource() == null || !node.resource().isProject()) return;
             TextPoint at = node.diagnostic().start();
             openFile(node.resource().asPath(), () -> {
@@ -1175,7 +1174,7 @@ public class Workbench extends UIElement implements DataProvider {
                 if (window != null) window.focus().requestFocus(editor);
                 editor.showCodeActionsAt(editor.getCaret());
             });
-        });
+        }));
     }
 
     /**
@@ -1217,11 +1216,50 @@ public class Workbench extends UIElement implements DataProvider {
         return dock;
     }
 
-    /** Listeners that keep {@link #rootWatches} in step with the project list. */
-    private final ConnectionGroup watchRoots = new ConnectionGroup();
+    /**
+     * Everything this workbench subscribed to while it was being built.
+     *
+     * <p>Held rather than dropped because most of it is on something that outlives a workbench: the
+     * {@link Workspace} is per connection, {@code Notifications} is per process, and a listener on
+     * either keeps this whole element tree reachable. {@code capabilityWatch} beside it has said so
+     * since it was written — <i>"a workbench that subscribed from its constructor would stay reachable
+     * for ever"</i> — and was the only subscription anybody had applied it to.</p>
+     */
+    private final ConnectionGroup lifetime = new ConnectionGroup();
 
     /** One recursive watch per project root, keyed by the root it covers. @see #watchProjectRoots */
     private final Map<CgPath, RootWatch> rootWatches = new HashMap<>();
+
+    /**
+     * Lets go of everything: the listeners, the watches, the registry entry, and the open tabs.
+     *
+     * <p>Called by whatever built this — an application — and never by the tree, because a workbench
+     * that is merely detached is a hidden window and must come back working. The rule this closes is
+     * the one {@code CgUiScreen.disposeAll}'s javadoc has always stated and nothing performed.</p>
+     *
+     * <p>Idempotent through its parts: a {@code ConnectionGroup} clears itself, a {@code Watch} counts
+     * its holders, and {@code EditorService.closeAll} is written to be safe twice.</p>
+     */
+    @Override
+    public void dispose() {
+        lifetime.disconnectAll();
+        markerWatch.disconnectAll();
+        capabilityWatch.disconnectAll();
+        for (RootWatch watch : rootWatches.values()) watch.dispose();
+        rootWatches.clear();
+        // WITHDRAWN, not left: this is a process-wide list, and an index kept in it after its workbench
+        // is gone answers questions about a workspace nobody is looking at -- with the whole tree behind
+        // it still reachable.
+        ProjectSourcesRegistry.remove(projectIndex);
+        // The tabs, and with them every DocumentReference they hold: a document is disposed by its LAST
+        // holder, so a workbench that never closed its tabs kept every file it had ever opened.
+        editors.dispose();
+        // AND THE STORE UNDER THEM. It subscribes to the WORKSPACE, which outlives every workbench on
+        // it -- so leaving it connected keeps this workbench's DocumentKinds, and a kind's model factory
+        // captures the workbench. Measured: that is the path a heap walk finds from a process-wide
+        // static to a workbench that has already been disposed.
+        documents.dispose();
+    }
 
     /**
      * A workspace-wide watch and the listener reading it, released together.
@@ -2552,7 +2590,7 @@ public class Workbench extends UIElement implements DataProvider {
      * since it was written, and there was no such affordance.</p>
      */
     private void registerFailureBanner() {
-        DockBanners.register(panel -> {
+        registry.registerBanner(panel -> {
             // A PANEL NEED NOT BE ABOUT A FILE. A tool window has no path state at all, and
             // `Resource.parse("")` THROWS rather than answering null -- so a provider that parses first
             // and asks questions afterwards takes down the build of every panel in the dock, not its

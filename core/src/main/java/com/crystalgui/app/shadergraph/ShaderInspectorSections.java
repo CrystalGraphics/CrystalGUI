@@ -7,6 +7,7 @@ import com.crystalgui.app.shadergraph.node.ShaderPortArity;
 import com.crystalgui.app.shadergraph.node.ShaderPropertyNodes;
 import com.crystalgui.app.shadergraph.preview.MainPreviewPanel;
 import com.crystalgui.core.data.DataContext;
+import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.graph.EdgeData;
@@ -68,12 +69,44 @@ public final class ShaderInspectorSections {
     public static final String GRAPH_TAB = "Graph";
 
     /** Registers all five. Idempotent, like every contribution. */
-    public static void register() {
-        InspectorRegistry.register(new PropertySection());
-        InspectorRegistry.register(new NodeSection());
-        InspectorRegistry.register(new MultiNodeSection());
-        InspectorRegistry.register(new WireSection());
-        InspectorRegistry.register(new GraphSettingsSection());
+    /**
+     * The five sections, as one set.
+     *
+     * <p>Instances rather than a factory: a section reads its subject out of the {@code DataContext}
+     * it is handed and holds nothing of its own, so one instance answers for every graph in every
+     * window. It used to be {@code new PropertySection()} per call, which is per {@code CrystalEditor}
+     * — four editors put twenty sections in the registry and drew four copies of every form.</p>
+     */
+    private static final List<InspectorSection> SECTIONS = List.of(
+            new PropertySection(), new NodeSection(), new MultiNodeSection(),
+            new WireSection(), new GraphSettingsSection());
+
+    /** How many contributions currently want them. @see #register() */
+    private static int holders;
+
+    /**
+     * Puts the graph's sections in the inspector, and hands back the way to take them out again.
+     *
+     * <p>Counted rather than idempotent, because both answers have to be right: a second editor must
+     * not double the forms, and the first editor closing must not empty the inspector under the second
+     * one. The sections are in the registry for exactly as long as at least one contribution holds
+     * them.</p>
+     */
+    public static Disposable register() {
+        if (holders++ == 0) {
+            for (InspectorSection section : SECTIONS) InspectorRegistry.register(section);
+        }
+        return new Disposable() {
+            private boolean released;
+
+            @Override
+            public void dispose() {
+                if (released) return;
+                released = true;
+                if (--holders > 0) return;
+                for (InspectorSection section : SECTIONS) InspectorRegistry.remove(section);
+            }
+        };
     }
 
     // ── Shared resolution ───────────────────────────────────────────────────────────────────────

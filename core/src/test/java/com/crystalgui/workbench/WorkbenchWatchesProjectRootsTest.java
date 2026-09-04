@@ -111,5 +111,13 @@ public class WorkbenchWatchesProjectRootsTest extends UiDocumentTestBase {
         assertEquals("the workbench watches the project root it was just given -- taking the watch in "
                         + "the constructor watched an empty list",
                 1, root.onChanged.connectionCount());
+
+        // AND LETS GO OF IT. A Watch is shared by everything that asked for the same resource, so the
+        // subscription itself survives here -- this test is still holding one -- and what must not
+        // survive is the workbench's listener on it, which is the end that keeps the workbench, its
+        // dock and its documents reachable.
+        workbench.dispose();
+        assertEquals("a disposed workbench has let go of the root it was watching",
+                0, root.onChanged.connectionCount());
     }
 }

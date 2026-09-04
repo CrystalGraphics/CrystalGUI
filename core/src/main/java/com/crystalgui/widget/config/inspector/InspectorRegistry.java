@@ -48,6 +48,21 @@ public final class InspectorRegistry {
     }
 
     /**
+     * Withdraws a section, for a contribution that is being taken down.
+     *
+     * <p>Registration is per class in the sense that matters — a section is a view over whatever the
+     * {@code DataContext} answers and holds nothing of its own — but it is <em>performed</em> by
+     * whoever installs the contribution, and an application that is closing has to be able to undo
+     * what it did. Without this the sections of a package nobody has open any more stay in the list,
+     * and every one of them is asked about every subject for the life of the process.</p>
+     *
+     * @return whether it was registered
+     */
+    public static boolean remove(InspectorSection section) {
+        return SECTIONS.remove(section);
+    }
+
+    /**
      * The sections that apply to {@code context}, in tab then declared order.
      *
      * <p>Asking is the whole mechanism: the inspector never decides what a subject is, it collects

@@ -40,7 +40,6 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.texteditor.TextEditor;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
-import com.crystalgui.workbench.dock.banner.DockBanners;
 import com.crystalgui.workbench.dock.panel.DockInput;
 import com.crystalgui.workbench.editor.EditorService;
 
@@ -235,7 +234,7 @@ public class LoadedTabReplacesItsPlaceholderTest extends UiDocumentTestBase {
         assertEquals(DocumentState.FAILED, tab.state());
         assertTrue("...and so does its panel", inTheDock(ref));
 
-        List<Notification> banners = DockBanners.bannersFor(ref);
+        List<Notification> banners = workbench.panels().bannersFor(ref);
         assertEquals("exactly one thing to say about it", 1, banners.size());
         assertTrue("...and it names the file", banners.get(0).getMessage().contains("locked.java"));
         assertTrue("...and offers a way out", banners.get(0).actions().stream()
@@ -267,7 +266,7 @@ public class LoadedTabReplacesItsPlaceholderTest extends UiDocumentTestBase {
         for (int i = 0; i < 12; i++) frameAndPump();
 
         assertTrue("nothing to say about a file that opened",
-                DockBanners.bannersFor(workbench.refFor(FILE)).isEmpty());
+                workbench.panels().bannersFor(workbench.refFor(FILE)).isEmpty());
     }
 
     /**
@@ -281,7 +280,7 @@ public class LoadedTabReplacesItsPlaceholderTest extends UiDocumentTestBase {
     @Test
     public void aPanelAboutNoFileGetsNoBannerAndDoesNotThrow() {
         assertTrue("a ref with no path state says nothing",
-                DockBanners.bannersFor(new DockPanelRef("workbench.problems")).isEmpty());
+                workbench.panels().bannersFor(new DockPanelRef("workbench.problems")).isEmpty());
     }
 
     /**
@@ -293,11 +292,11 @@ public class LoadedTabReplacesItsPlaceholderTest extends UiDocumentTestBase {
      */
     @Test
     public void aProviderThatThrowsDoesNotTakeThePanelDown() {
-        DockBanners.register(panel -> {
+        workbench.panels().registerBanner(panel -> {
             throw new IllegalStateException("this provider is broken");
         });
         assertTrue("the broken one contributed nothing and the rest still answered",
-                DockBanners.bannersFor(workbench.refFor(FILE)).isEmpty());
+                workbench.panels().bannersFor(workbench.refFor(FILE)).isEmpty());
     }
 
     /** What the dock has built for {@code ref}, reaching through the tab's content host. */

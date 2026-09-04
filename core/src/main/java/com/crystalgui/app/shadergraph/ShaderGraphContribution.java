@@ -1,9 +1,9 @@
 package com.crystalgui.app.shadergraph;
 
+import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.notify.Notification;
-import com.crystalgui.workbench.dock.banner.DockBanners;
 import com.crystalgui.workbench.dock.panel.DockInput;
 import com.crystalgui.workbench.dock.panel.DockOpenOptions;
 import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
@@ -65,7 +65,7 @@ public final class ShaderGraphContribution {
      * {@link com.crystalgui.core.notify.Notifications} instead, and an application displays them or does
      * not.</p>
      */
-    public static void register(Workbench workbench) {
+    public static Disposable register(Workbench workbench) {
         // A GRAPH IS ITS OWN MODEL AND ITS OWN VIEW, and saying so is more honest than splitting it: the
         // canvas holds the GraphDocument, the previews and the Blackboard are bound to that instance at
         // construction, and a load copies into it rather than replacing it (see GraphView.load). A second
@@ -117,7 +117,7 @@ public final class ShaderGraphContribution {
         // does nothing -- which reads as a broken editor rather than as a generated file, and there was
         // nowhere for it to say otherwise. The action is the useful half: the thing you actually wanted
         // was the graph, and the derived resource carries its origin, so this can offer it.
-        DockBanners.register(panel -> {
+        workbench.panels().registerBanner(panel -> {
             if (!SOURCE_TYPE.equals(panel.typeId())) return null;
             ShaderGraphEditor graph = graphFor(workbench, panel.state(DockPanelRef.PATH, ""));
             Notification banner = Notification.info(
@@ -127,7 +127,11 @@ public final class ShaderGraphContribution {
                     () -> workbench.openFile(graph.resource().asPath()));
         });
 
-        ShaderInspectorSections.register();
+        // THE ONE THING THAT OUTLIVES THE WORKBENCH. Everything else above is registered ON the
+        // workbench -- the kind, the panel, the banner provider -- and goes when it does. The inspector
+        // sections are in a process-wide registry, so they are what a caller has to be able to hand
+        // back, and they are the whole of what this returns.
+        return ShaderInspectorSections.register();
     }
 
 

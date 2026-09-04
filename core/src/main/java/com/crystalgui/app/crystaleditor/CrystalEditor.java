@@ -2,6 +2,7 @@ package com.crystalgui.app.crystaleditor;
 
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.dispose.Disposable;
+import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.NotificationEvent;
 import com.crystalgui.core.notify.Notifications;
@@ -222,6 +223,19 @@ public class CrystalEditor extends UIElement implements Disposable, WindowChrome
         ChromeCommands.register();
     }
 
+    /**
+     * What this editor subscribed to while it was being built.
+     *
+     * <p>Three of the six are on process-wide statics ({@code Notifications}, {@code StatusBar},
+     * {@code InspectorRegistry}) and every one of those closures captures {@code this}, so an editor
+     * that dropped them stayed reachable for the life of the process — with its workbench, its dock,
+     * its documents and its tabs behind it.</p>
+     */
+    private final ConnectionGroup lifetime = new ConnectionGroup();
+
+    /** What {@link ShaderGraphContribution} registered outside the workbench. @see #dispose() */
+    private final Disposable shaderGraph;
+
     public CrystalEditor(Workspace workspace) {
         super(NAME);
         setFocusPolicy(FocusPolicy.NONE);
@@ -229,46 +243,46 @@ public class CrystalEditor extends UIElement implements Disposable, WindowChrome
         // BOTH CHANNELS INTO ONE LINE. A notification is an event and wins the line when it arrives; the
         // ambient text is what is left showing between them. Flattening is this application's choice --
         // a host with room for a toast area would connect them separately instead.
-        Notifications.onDidChange.connect(event -> {
+        lifetime.add(Notifications.onDidChange.connect(event -> {
             if (event.kind() == NotificationEvent.Kind.ADDED && event.notification() != null) {
                 onStatus.emit(event.notification().getMessage());
             }
-        });
+        }));
         // READ ON DEMAND, never carried by the signal: composing the line walks every entry, and the caret
         // readout writes on every selection change.
-        StatusBar.onDidChange.connect(() -> {
+        lifetime.add(StatusBar.onDidChange.connect(() -> {
             String text = StatusBar.text();
             if (!text.isEmpty()) onStatus.emit(text);
-        });
+        }));
         // The inspector and the generated source follow the front tab. Was a per-frame poll; the dock
         // announces it now. Subscribed here rather than on attach because the dock exists as soon as the
         // workbench does, and this editor owns the workbench -- there is nothing to wait for and nothing
         // that can outlive it.
-        workbench.dock().onDidChangeActivePanel.connect(panel -> refreshInspector());
+        lifetime.add(workbench.dock().onDidChangeActivePanel.connect(panel -> refreshInspector()));
         // AND WHEN A DOCUMENT LANDS. The active PANEL is announced as soon as the dock has built its
         // tree, which can be before the document behind it exists -- activeDocument() reads the open-file
         // store, and a restored tab's content arrives over the network some frames later. Following only
         // the panel therefore leaves the inspector empty at startup until something else moves, which is
         // exactly what "I have to click something first" is.
-        workbench.onDidOpenDocument.connect(path -> refreshInspector());
+        lifetime.add(workbench.onDidOpenDocument.connect(path -> refreshInspector()));
         // AND ON ANY ANNOUNCED CHANGE. The two above say "a different panel is in front" and "a document
         // arrived"; this says "what is being looked at has moved", which is the one a selection produces.
         // Re-resolving the active document here rather than only re-reading the old one is what makes the
         // panel fill at startup, where the first announcement can arrive before the dock has settled on
         // an active tab.
-        InspectorRegistry.onDidChangeSubject.connect(this::refreshInspector);
+        lifetime.add(InspectorRegistry.onDidChangeSubject.connect(this::refreshInspector));
         // A restore waits on listings, which arrive over several frames -- a folder cannot be expanded
         // before the listing revealing it lands. Retried per LISTING rather than per frame: fewer
         // attempts, and every one of them at a moment when the answer may actually have changed.
-        workbench.fileTree().source().onDidLoadListing.connect(directory -> {
+        lifetime.add(workbench.fileTree().source().onDidLoadListing.connect(directory -> {
             if (session != null) session.tick();
-        });
+        }));
 
         // ONE CALL, NAMING ONE PACKAGE. Which extension opens as a graph, how to build one, what its
         // generated source is and what it tells the inspector are all that package's statements about
         // itself -- see ShaderGraphContribution. This class chooses which contributions to enable, which
         // is the only decision about file types an application should be making.
-        ShaderGraphContribution.register(workbench);
+        shaderGraph = ShaderGraphContribution.register(workbench);
 
         // BESIDE the canvas, not in its strip. A tab in the same group would hide the graph, and the whole
         // point of the emitted source is watching it change as you wire -- a panel you have to switch away
@@ -533,10 +547,16 @@ public class CrystalEditor extends UIElement implements Disposable, WindowChrome
      */
     @Override
     public void dispose() {
-        // Nothing of its own: every graph is registered as a child when it is built, so the tree
-        // releases them. The list this replaced was never pruned -- every graph ever opened stayed
-        // reachable for the session, and that retention was the only reason its GL pool was freed at
-        // exit at all.
+        // The GRAPHS need nothing of their own: every one is registered as a child when it is built, so
+        // the tree releases them. The list this replaced was never pruned -- every graph ever opened
+        // stayed reachable for the session, and that retention was the only reason its GL pool was
+        // freed at exit at all.
+        //
+        // What DOES need saying is everything below, which is why this body was a comment: an editor
+        // wrote itself into six signals and a contribution, and took none of it back.
+        lifetime.disconnectAll();
+        shaderGraph.dispose();
+        workbench.dispose();
     }
 
 }

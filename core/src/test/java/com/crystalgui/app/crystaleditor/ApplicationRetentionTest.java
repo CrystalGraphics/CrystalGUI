@@ -2,7 +2,9 @@ package com.crystalgui.app.crystaleditor;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNull;
 
+import java.lang.ref.WeakReference;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -31,7 +33,6 @@ import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.text.lang.ProjectSourcesRegistry;
 import com.crystalgui.widget.config.inspector.InspectorRegistry;
-import com.crystalgui.workbench.dock.banner.DockBanners;
 
 /**
  * <b>Four editors built and disposed leave the process where they found it.</b>
@@ -47,7 +48,11 @@ import com.crystalgui.workbench.dock.banner.DockBanners;
  * <h3>What it counts</h3>
  *
  * <p>Every process-wide holder an editor writes itself into, plus the per-connection ones on the
- * {@link Workspace} — which matter most, because a workspace outlives every workbench on it: a second
+ * {@link Workspace}. Dock banner providers were one of them and are deliberately absent: since W1 they
+ * live on the workbench's own {@code DockPanelRegistry}, so their lifetime is structural and there is
+ * no longer a static list to read — which is the better answer than an assertion about one.</p>
+ *
+ * <p>The workspace's own signals matter most, because a workspace outlives every workbench on it: a second
  * editor on the same wire inherits the first one's listeners for as long as the connection lasts.
  * {@code Disposer.liveCount()} covers the ownership tree, whose javadoc already says a leak assertion
  * reads it.</p>
@@ -111,7 +116,6 @@ public class ApplicationRetentionTest {
         StatusBar.resetForTesting();
         InspectorRegistry.resetForTesting();
         ProjectSourcesRegistry.resetForTesting();
-        DockBanners.resetForTesting();
         Disposer.resetForTesting();
         Protocols.resetForTesting();
     }
@@ -127,7 +131,6 @@ public class ApplicationRetentionTest {
                 InspectorRegistry.onDidChangeSubject.connectionCount());
         counts.put("InspectorRegistry sections", InspectorRegistry.all().size());
         counts.put("ProjectSourcesRegistry", ProjectSourcesRegistry.size());
-        counts.put("DockBanners", DockBanners.size());
         counts.put("Workspace.onDidReconnect", workspace.onDidReconnect.connectionCount());
         counts.put("Workspace.files().onDidRun", workspace.files().onDidRun.connectionCount());
         counts.put("Workspace.files().onDidFail", workspace.files().onDidFail.connectionCount());
@@ -156,6 +159,41 @@ public class ApplicationRetentionTest {
         Map<String, Integer> after = census();
         assertEquals(EDITORS + " editors were built and disposed and something kept them: "
                 + drift(before, after), before, after);
+    }
+
+    /**
+     * <b>...and the strong form: a disposed editor is garbage.</b>
+     *
+     * <p>The census can only see holders it knows the name of, and the last one found was reachable
+     * through none of them: a heap walk from every static in {@code com.crystalgui} traced
+     * {@code ContentProviders.onDidChange} → a {@code Workspace} → its {@code onDidGreet} → the
+     * {@code WorkspaceDocuments} a workbench built → its {@code DocumentKinds} → a {@code DocumentKind}
+     * whose model factory captures the workbench. Not one counter moved for that, and it kept the whole
+     * editor tree.</p>
+     *
+     * <p>So this is the assertion that does not need to know what to look for. It is GC-dependent, which
+     * is why it retries rather than gcs once, and why the census stays beside it: when this fails, the
+     * census is what says whether it is a listener, a registry, or something with no name yet.</p>
+     */
+    @Test
+    public void aDisposedEditorIsCollectable() {
+        CrystalEditor editor = new CrystalEditor(workspace);
+        WeakReference<CrystalEditor> watched = new WeakReference<>(editor);
+        Disposer.dispose(editor);
+        editor = null;
+
+        for (int attempt = 0; attempt < 40 && watched.get() != null; attempt++) {
+            System.gc();
+            try {
+                Thread.sleep(20);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+
+        assertNull("a disposed editor is still reachable from somewhere, so the whole tree behind it "
+                + "-- workbench, dock, documents, tabs -- is still in the heap", watched.get());
     }
 
     /**

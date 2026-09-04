@@ -5,13 +5,11 @@ import com.crystalgui.core.notify.Notification;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.workbench.dock.banner.DockBannerBar;
-import com.crystalgui.workbench.dock.banner.DockBanners;
 import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
 import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import com.crystalgui.workbench.dock.panel.DockPanelRegistry;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -31,16 +29,15 @@ public class DockBannerTest extends UiDocumentTestBase {
 
     private final DockPanelRef alpha = new DockPanelRef("alpha");
 
+    private DockPanelRegistry<UIElement> registry;
     private DockArea area;
     private DockLeaf leaf;
     private UIElement built;
 
     @Before
     public void setUp() {
-        DockBanners.resetForTesting();
-
         built = new UIElement();
-        DockPanelRegistry<UIElement> registry = new DockPanelRegistry<>();
+        registry = new DockPanelRegistry<>();
         registry.register(new DockPanelDescriptor("alpha", "Alpha"), ref -> built);
 
         leaf = new DockLeaf(alpha);
@@ -52,11 +49,6 @@ public class DockBannerTest extends UiDocumentTestBase {
 
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheetRegistry.of("crystalgui:ore"));
-    }
-
-    @After
-    public void tearDown() {
-        DockBanners.resetForTesting();
     }
 
     private UIElement tabContent() {
@@ -83,7 +75,7 @@ public class DockBannerTest extends UiDocumentTestBase {
     /** A provider that answers puts its strip above the panel's own content, in that order. */
     @Test
     public void aProviderPutsItsBannerAboveTheContent() {
-        DockBanners.register(panel -> Notification.warning("this file is generated"));
+        registry.registerBanner(panel -> Notification.warning("this file is generated"));
         frame();
 
         UIElement wrapper = tabContent();
@@ -101,7 +93,7 @@ public class DockBannerTest extends UiDocumentTestBase {
      */
     @Test
     public void aProviderThatDeclinesLeavesThePanelAlone() {
-        DockBanners.register(panel -> "beta".equals(panel.typeId())
+        registry.registerBanner(panel -> "beta".equals(panel.typeId())
                 ? Notification.info("not this one") : null);
         frame();
 

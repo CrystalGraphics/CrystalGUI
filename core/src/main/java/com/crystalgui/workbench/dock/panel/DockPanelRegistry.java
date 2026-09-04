@@ -1,8 +1,11 @@
 package com.crystalgui.workbench.dock.panel;
 
+import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.notify.Notification;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.signal.Signal;
 
+import com.crystalgui.workbench.dock.banner.DockBannerProvider;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import javax.annotation.Nullable;
 import java.util.Collection;
@@ -69,6 +72,48 @@ public final class DockPanelRegistry<C> {
      * arrangements are legitimate and the dock asks for a pane first, falling back to a factory.</p>
      */
     private final List<DockPaneProvider> paneProviders = new ArrayList<>();
+
+    private final List<DockBannerProvider> banners = new ArrayList<>();
+
+    /**
+     * Adds a provider that may put a banner above a panel's content.
+     *
+     * <p><b>Here rather than in a static registry</b>, which is where it was. A provider is a closure
+     * over the workbench it answers for — both of the shipped ones capture one — so a process-wide list
+     * held every workbench that had ever contributed, and a second application would have been asked
+     * the first one's questions about its own tabs. Living on the registry makes the lifetime
+     * structural: the registry belongs to the workbench, so the providers die with it and there is
+     * nothing to withdraw.</p>
+     *
+     * <p>Idempotent per instance, so a contribution that runs twice does not double every banner.</p>
+     */
+    public DockPanelRegistry<C> registerBanner(DockBannerProvider provider) {
+        if (provider == null || banners.contains(provider)) return this;
+        banners.add(provider);
+        return this;
+    }
+
+    /** What every provider had to say about {@code panel}. Empty is the common answer. */
+    public List<Notification> bannersFor(DockPanelRef panel) {
+        if (banners.isEmpty() || panel == null) return List.of();
+        List<Notification> found = new ArrayList<>();
+        for (DockBannerProvider provider : banners) {
+            Notification banner;
+            try {
+                banner = provider.bannerFor(panel);
+            } catch (RuntimeException failed) {
+                // A PROVIDER IS CONTRIBUTED CODE and this runs inside the dock's panel build, so an
+                // exception here does not cost its own banner -- it costs the PANEL, and every other
+                // panel in the same rebuild with it. A workbench where nothing opens because something
+                // wanted to put a message over one tab is the wrong trade in every direction.
+                CrystalGuiCore.LOGGER.error("A dock banner provider failed for {}: {}",
+                        panel, failed.getMessage(), failed);
+                continue;
+            }
+            if (banner != null) found.add(banner);
+        }
+        return found;
+    }
 
     public DockPanelRegistry<C> registerPane(DockPaneProvider provider) {
         Objects.requireNonNull(provider, "provider");
