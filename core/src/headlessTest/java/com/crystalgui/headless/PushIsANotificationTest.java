@@ -1,7 +1,6 @@
 package com.crystalgui.headless;
 
 import com.crystalgui.fs.provider.CgFileEvent;
-import com.crystalgui.fs.provider.CgFileEventSource;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.provider.InMemoryFileSystem;
 import com.crystalgui.fs.Resource;
@@ -48,7 +47,7 @@ import static org.junit.Assert.assertTrue;
 public class PushIsANotificationTest {
 
     /** An event source a test drives by hand. */
-    private static final class Scripted implements CgFileEventSource {
+    private static final class Scripted implements CgFileEvent.Source {
         private final List<CgFileEvent> queued = new ArrayList<>();
 
         @Override

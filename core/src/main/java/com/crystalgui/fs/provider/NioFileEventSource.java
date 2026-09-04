@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * A {@link CgFileEventSource} over Java's {@link WatchService} — Phase 6.2.
+ * A {@link CgFileEvent.Source} over Java's {@link WatchService} — Phase 6.2.
  *
  * <h3>Why this one and not a native library</h3>
  *
@@ -54,11 +54,11 @@ import java.util.Map;
  *
  * <p>{@link #drain()} calls {@code WatchService.poll()}, which returns immediately. No thread is created,
  * so nothing this owns can reach a consumer on a thread the consumer does not expect — see
- * {@link CgFileEventSource}'s note on why that matters here specifically. The cost is that latency is
+ * {@link CgFileEvent.Source}'s note on why that matters here specifically. The cost is that latency is
  * bounded below by the caller's tick, which for a 20 Hz server is 50 ms and far better than the 500 ms
  * the etag poll gives.</p>
  */
-public final class NioFileEventSource implements CgFileEventSource {
+public final class NioFileEventSource implements CgFileEvent.Source {
 
     private final String project;
     private final Path root;
@@ -83,11 +83,11 @@ public final class NioFileEventSource implements CgFileEventSource {
      * @param project  the project id, so events come back as {@link CgPath}s rather than OS paths
      * @param root     the project's directory on disk
      * @param excludes name patterns never to watch — {@link WorkspaceProject#excludes()}
-     * @return a live source, or {@link CgFileEventSource#NONE} if the platform refused. <b>Never
+     * @return a live source, or {@link CgFileEvent.Source#NONE} if the platform refused. <b>Never
      *         throws:</b> a workspace that cannot be watched still works, one poll interval behind, and
      *         failing to open the editor over it would be a far worse answer
      */
-    public static CgFileEventSource open(String project, Path root, List<String> excludes) {
+    public static CgFileEvent.Source open(String project, Path root, List<String> excludes) {
         try {
             WatchService service = root.getFileSystem().newWatchService();
             NioFileEventSource source =
@@ -102,7 +102,7 @@ public final class NioFileEventSource implements CgFileEventSource {
             // somebody edits a file externally and nothing happens, which is a bad moment to find out.
             CrystalGuiCore.LOGGER.warn("[cgui-fs] cannot watch {} ({}) — falling back to the etag poll",
                     root, refused.toString());
-            return CgFileEventSource.NONE;
+            return CgFileEvent.Source.NONE;
         }
     }
 

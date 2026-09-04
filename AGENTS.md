@@ -1933,10 +1933,10 @@ com.crystalgui.fs              FOUR classes, and each is vocabulary every tier b
                                ProjectProvider. The bottom tier.
   .provider                    A FILESYSTEM AND NOTHING ABOUT A WORKSPACE: CgFileSystem (the SPI),
                                LocalFileSystem, InMemoryFileSystem (a complete one, on a monotonic
-                               clock, which is what makes an etag reproducible), CgFileEntry,
-                               CgFileType, CgFileCapability, CgFileEvent + CgFileEventSource +
-                               NioFileEventSource. It names `.project` and NOT the reverse — a project
-                               is a named root and a filesystem is what resolves one to a directory
+                               clock, which is what makes an etag reproducible), CgFileEntry (+Type),
+                               CgFileCapability, CgFileEvent (+Source) + NioFileEventSource. It names
+                               `.project` and NOT the reverse — a project is a named root and a
+                               filesystem is what resolves one to a directory
   .protocol                    THE WIRE, shared by both halves and naming neither: FsMethods (the method
                                names), FsMessages (every payload as a record with a codec, so a field
                                written on one side is provably the field read on the other), FsError (a

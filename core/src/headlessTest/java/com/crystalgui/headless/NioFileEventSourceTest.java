@@ -1,7 +1,6 @@
 package com.crystalgui.headless;
 
 import com.crystalgui.fs.provider.CgFileEvent;
-import com.crystalgui.fs.provider.CgFileEventSource;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.provider.NioFileEventSource;
 
@@ -40,7 +39,7 @@ public class NioFileEventSourceTest {
     private static final long WAIT_MILLIS = 20_000L;
 
     private Path root;
-    private CgFileEventSource source;
+    private CgFileEvent.Source source;
 
     @Before
     public void setUp() throws IOException {
@@ -239,7 +238,7 @@ public class NioFileEventSourceTest {
      */
     @Test
     public void anImpossibleRootFallsBackRatherThanThrowing() {
-        CgFileEventSource missing = NioFileEventSource.open(
+        CgFileEvent.Source missing = NioFileEventSource.open(
                 PROJECT, root.resolve("does-not-exist"), Collections.emptyList());
 
         assertTrue("must answer something usable", missing.drain().isEmpty());

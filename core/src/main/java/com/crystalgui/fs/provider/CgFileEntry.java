@@ -7,11 +7,41 @@ package com.crystalgui.fs.provider;
  * ({@code src/vs/platform/files/common/files.ts}, MIT).</p>
  *
  * @param name  the entry's own name, with no path. Empty only for a project root.
- * @param type  see {@link CgFileType}
+ * @param type  {@link Type#FILE} or {@link Type#DIRECTORY}
  * @param size  bytes, or {@code 0} for a directory
  * @param mtime last modification, in milliseconds since the epoch
  */
-public record CgFileEntry(String name, CgFileType type, long size, long mtime) {
+public record CgFileEntry(String name, Type type, long size, long mtime) {
+
+    /**
+     * What a directory entry is. Ported from VS Code's {@code FileType}
+     * ({@code src/vs/platform/files/common/files.ts}, MIT).
+     *
+     * <p>Nested, because an entry is the only thing that has one: it was its own file and its only
+     * consumers were this record and this record's test.</p>
+     *
+     * <p><b>Two constants, not VS Code's four.</b> Its {@code Unknown} is a socket or a device, which
+     * neither factory below can produce and which both predicates answer false to — an entry no code
+     * could make and every consumer would mishandle. Its {@code SymbolicLink} is a FLAG rather than an
+     * alternative, and that distinction is worth keeping for the day links are supported: even for a
+     * link you still ask whether it is a file or a directory, and the answer describes the TARGET, so a
+     * link to a directory reports both. This enum documented that member for a release without ever
+     * declaring it, which is how a javadoc ends up describing a design nobody built.</p>
+     */
+    public enum Type {
+        FILE,
+        DIRECTORY;
+
+        /** True when this entry can be listed. */
+        public boolean isDirectory() {
+            return this == DIRECTORY;
+        }
+
+        /** True when this entry has contents to read. */
+        public boolean isFile() {
+            return this == FILE;
+        }
+    }
 
     public CgFileEntry {
         if (name == null) throw new IllegalArgumentException("name");
@@ -19,11 +49,11 @@ public record CgFileEntry(String name, CgFileType type, long size, long mtime) {
     }
 
     public static CgFileEntry file(String name, long size, long mtime) {
-        return new CgFileEntry(name, CgFileType.FILE, size, mtime);
+        return new CgFileEntry(name, Type.FILE, size, mtime);
     }
 
     public static CgFileEntry directory(String name, long mtime) {
-        return new CgFileEntry(name, CgFileType.DIRECTORY, 0L, mtime);
+        return new CgFileEntry(name, Type.DIRECTORY, 0L, mtime);
     }
 
     public boolean isDirectory() {
@@ -60,10 +90,16 @@ public record CgFileEntry(String name, CgFileType type, long size, long mtime) {
      * unlikely to line up, so a pair that differs is very unlikely to concatenate into the same string.</p>
      */
     public String etag() {
-        return Long.toString(mtime, 29) + Long.toString(size, 31);
+        return etag(mtime, size);
     }
 
-    /** The etag two raw numbers would produce, for a caller holding a stat rather than an entry. */
+    /**
+     * The etag two raw numbers would produce, for a caller holding a stat rather than an entry.
+     *
+     * <p>The one definition of the format — {@link #etag()} delegates here. It was a second copy of the
+     * same two calls, which is one edit away from two filesystems disagreeing about what an etag IS,
+     * and the disagreement would present as every conditional read missing.</p>
+     */
     public static String etag(long mtime, long size) {
         return Long.toString(mtime, 29) + Long.toString(size, 31);
     }

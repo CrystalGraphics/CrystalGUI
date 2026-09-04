@@ -10,7 +10,6 @@ import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.provider.CgFileCapability;
 import com.crystalgui.fs.provider.CgFileEntry;
 import com.crystalgui.fs.provider.CgFileEvent;
-import com.crystalgui.fs.provider.CgFileEventSource;
 import com.crystalgui.fs.provider.CgFileSystem;
 import com.crystalgui.fs.provider.InMemoryFileSystem;
 
@@ -91,8 +90,8 @@ public final class WorkspaceService {
      * directory. It lives here for the same reason presence does: this is the one object every
      * every connection's binding already shares.</p>
      */
-    public void attachEvents(CgFileEventSource source) {
-        this.events = source == null ? CgFileEventSource.NONE : source;
+    public void attachEvents(CgFileEvent.Source source) {
+        this.events = source == null ? CgFileEvent.Source.NONE : source;
     }
 
     /**
@@ -106,7 +105,7 @@ public final class WorkspaceService {
         return events.drain();
     }
 
-    private CgFileEventSource events = CgFileEventSource.NONE;
+    private CgFileEvent.Source events = CgFileEvent.Source.NONE;
 
     /**
      * Who has what open, across every peer.
