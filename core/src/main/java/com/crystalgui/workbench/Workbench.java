@@ -1,6 +1,8 @@
 package com.crystalgui.workbench;
 
 
+import com.crystalgui.workbench.toolwindow.ToolWindowKind;
+import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.workbench.decoration.FileDecorations;
 import com.crystalgui.fs.client.WorkspaceProjects;
 import com.crystalgui.core.data.DataProvider;
@@ -733,40 +735,6 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // file is undoable and reaches the workspace stack. Same ids the editor and the graph use, so
         // there is one Undo in the palette rather than one per widget.
         UndoCommands.register();
-        registerToolWindowCommands(registry);
-    }
-
-    /**
-     * Revealing a tool window, as a named command.
-     *
-     * <p>Here rather than nowhere because a status bar entry names a <b>command id</b>, not a callback —
-     * which is what keeps a clickable readout reachable from the palette and a keymap as well as from the
-     * bar. VS Code's error counter opens its Problems panel exactly this way; ours had the mechanism and
-     * nothing to point it at.</p>
-     *
-     * <p>Global, taking the workbench from the data context, for the reason {@link #WORKBENCH} exists: a
-     * captured workbench makes a second window's command toggle a panel in the first.</p>
-     */
-    private static void registerToolWindowCommands(CommandRegistry registry) {
-        // REGISTERED ON THE REGISTRY WE WERE HANDED, never through a nested contribute(Workbench.class).
-        // UIElement already calls contribute(getClass(), this::registerCommands) to get here, so
-        // Workbench.class is ALREADY in the contributor set by the time this runs -- a second contribute
-        // under the same key adds nothing and returns, silently, and the commands were never registered
-        // at all. The status entries drew a pointer cursor and did nothing, which is precisely the failure
-        // CommandRegistry.resetForTesting warns about: "a missing command only shows up as a key that
-        // does nothing".
-        registry.register(Command.of(SHOW_PROBLEMS, "Show Problems")
-                .runWithData(data -> {
-                    Workbench workbench = data.get(WORKBENCH);
-                    if (workbench != null) workbench.revealPanel(PROBLEMS_TYPE);
-                })
-                .enabledWhereData(data -> data.get(WORKBENCH) != null));
-        registry.register(Command.of(SHOW_NOTIFICATIONS, "Show Notifications")
-                .runWithData(data -> {
-                    Workbench workbench = data.get(WORKBENCH);
-                    if (workbench != null) workbench.revealPanel(NOTIFICATIONS_TYPE);
-                })
-                .enabledWhereData(data -> data.get(WORKBENCH) != null));
     }
 
     /**
@@ -890,18 +858,6 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         registry.setIconTooltipProvider(this::tabIconTooltipFor);
         registry.setDecorationProvider(this::tabDecorationFor);
 
-        // Anchors match where defaultLayout() puts them, so closing a panel and reopening it from the
-        // activity bar lands it back where it was rather than somewhere merely legal.
-        registry.register(DockPanelDescriptor.singleton(PROJECT_TYPE, "Project")
-                .icon("crystalgui:folder").anchor(DockDropZone.SPLIT_LEFT), ref -> fileTree);
-        registry.register(DockPanelDescriptor.singleton(PROBLEMS_TYPE, "Problems")
-                .icon("crystalgui:toolwindows/problems").anchor(DockDropZone.SPLIT_DOWN), ref -> problems);
-        // THE AUXILIARY RAIL, which is where IntelliJ keeps it and is not an arbitrary choice: the
-        // notification history is something you consult, not something you work in, so it belongs on the
-        // side that holds the things you glance at rather than beside the project tree.
-        registry.register(DockPanelDescriptor.singleton(NOTIFICATIONS_TYPE, "Notifications")
-                .icon("crystalgui:toolwindows/notifications").region(DockRegion.AUXILIARY).side(RegionSide.PRIMARY),
-                ref -> notificationsView);
         // THE FALLBACK KIND: every text file, and every resource in a registered scheme. A decompiled
         // class opens through this one too, which is what makes the viewer lane unnecessary rather than
         // merely shorter -- see EditorService.
@@ -1072,14 +1028,6 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
 
         // THE BELL'S BADGE. Routed through the container registry rather than reaching for a rail button,
         // because a badge is a fact about a CONTAINER and both rails already listen for it -- so a tool
-        // window dragged from one stripe to the other keeps its count with no further wiring.
-        //
-        // Written whether or not the panel has ever been opened: the count is what tells you to open it.
-        // A DOT, NOT A COUNT. IntelliJ marks the bell and does not say how many, which is the right call:
-        // the number is not actionable -- you open the panel either way -- and a two-digit count over a
-        // 20px rail icon is unreadable. The exact figure is a scroll away in the history.
-        lifetime.add(Notifications.onDidChangeUnread.connect(count -> toolWindowManager.viewContainers().setBadge(
-                NOTIFICATIONS_TYPE, count == null || count <= 0 ? null : ViewContainerRegistry.DOT)));
 
         // BEFORE content, which is the whole of what puts it at the top -- see the field.
         append(menuBar);
@@ -1124,11 +1072,42 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // and its own ghost. Wired here because this is where the workbench's parts are introduced to
         // each other -- neither of them goes looking for the other.
         for (StripeView stripe : stripes()) stripe.listenToDrag(dropOverlay);
-        // THE DEFAULT ARRANGEMENT, which used to be three leaves in defaultLayout(). Stated as "show these
-        // two" rather than as a tree, which is the whole difference: a region cannot be collapsed away, so
-        // this says what is on screen rather than where in a structure it sits.
-        toolWindowManager.showPanel(PROJECT_TYPE);
-        toolWindowManager.showPanel(PROBLEMS_TYPE);
+        // THE ENGINE'S OWN THREE, each in ONE declaration -- the descriptor, the icon, where it
+        // lands, what builds it, whether it is open on a fresh workspace, the command that reveals it
+        // and, for notifications, the badge. Anchors match where the default arrangement puts them, so
+        // closing a panel and reopening it from the activity bar lands it back where it was rather than
+        // somewhere merely legal.
+        registerToolWindow(ToolWindowKind.of(PROJECT_TYPE, "Project")
+                .icon("crystalgui:folder")
+                .anchor(DockDropZone.SPLIT_LEFT)
+                .view(ctx -> fileTree)
+                .openByDefault());
+        registerToolWindow(ToolWindowKind.of(PROBLEMS_TYPE, "Problems")
+                .icon("crystalgui:toolwindows/problems")
+                .anchor(DockDropZone.SPLIT_DOWN)
+                .view(ctx -> problems)
+                .toggle(SHOW_PROBLEMS)
+                .openByDefault());
+        // THE AUXILIARY RAIL, which is where IntelliJ keeps it and is not an arbitrary choice: the
+        // notification history is something you consult, not something you work in, so it belongs on the
+        // side that holds the things you glance at rather than beside the project tree.
+        //
+        // A DOT, NOT A COUNT. IntelliJ marks the bell and does not say how many, which is the right call:
+        // the number is not actionable -- you open the panel either way -- and a two-digit count over a
+        // 20px rail icon is unreadable. Written whether or not the panel has ever been opened, because
+        // the count is what tells you to open it; a window dragged from one stripe to the other keeps it
+        // with no further wiring.
+        registerToolWindow(ToolWindowKind.of(NOTIFICATIONS_TYPE, "Notifications")
+                .icon("crystalgui:toolwindows/notifications")
+                .region(DockRegion.AUXILIARY)
+                .side(RegionSide.PRIMARY)
+                .view(ctx -> notificationsView)
+                .toggle(SHOW_NOTIFICATIONS)
+                .badge((ctx, set) -> {
+                    Connection watch = Notifications.onDidChangeUnread.connect(
+                            count -> set.accept(count == null || count <= 0 ? null : ViewContainerRegistry.DOT));
+                    return watch::disconnect;
+                }));
 
         // BOTH HANDLERS ARE INLINE, and deliberately not folded into one openAndReveal(CgPath, TextPoint).
         //
@@ -1256,6 +1235,10 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      */
     @Override
     public void dispose() {
+        // THE TOOL WINDOWS THIS WORKBENCH DECLARED, whose badges are subscriptions on process-wide
+        // signals and whose commands are in the global registry.
+        for (Disposable handle : new ArrayList<>(toolWindowHandles)) handle.dispose();
+        toolWindowHandles.clear();
         // EXTENSIONS FIRST, in reverse activation order -- a later one may have been built from an
         // earlier one's contribution, which is the same argument Disposer makes about children.
         for (int i = activeExtensions.size() - 1; i >= 0; i--) activeExtensions.get(i).dispose();
@@ -1381,6 +1364,98 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     }
 
     /** Adds a host's own panel type — a shader graph, a console, an inspector. */
+    /**
+     * One declaration, and everything a tool window needs derived from it.
+     *
+     * <p>What this replaces, per panel: a {@code DockPanelDescriptor} with its icon and placement, a
+     * factory, an entry per view, a {@code showPanel} for the default arrangement, a command registered
+     * by hand in a method that runs before the fields exist, a key binding, and a badge subscription
+     * wired wherever its source happened to live. Five places, per A6 — and a panel that forgot one of
+     * them failed in a way that named none of the others.</p>
+     *
+     * <p><b>The view is built once, lazily.</b> The dock asks for content whenever it rebuilds a strip,
+     * and a factory that answered a new element each time would hand the user a fresh empty panel every
+     * time they dragged a tab.</p>
+     */
+    @Override
+    public Disposable registerToolWindow(ToolWindowKind kind) {
+        DockPanelDescriptor descriptor = DockPanelDescriptor.singleton(kind.id(), kind.displayName());
+        if (kind.icon() != null) descriptor.icon(kind.icon());
+        if (kind.region() != null) descriptor.region(kind.region());
+        if (kind.side() != null) descriptor.side(kind.side());
+        if (kind.anchor() != null) descriptor.anchor(kind.anchor());
+
+        for (ToolWindowKind.View view : kind.views()) {
+            toolWindowManager.viewContainers().addView(kind.id(), view.viewId(), view.title(),
+                    () -> built(kind, view.viewId(), view.factory()));
+        }
+        Function<WorkbenchContext, UIElement> single = kind.singleView();
+        registry.register(descriptor, ref -> single == null
+                ? new UIElement() : built(kind, kind.id(), single));
+
+        String command = kind.toggleCommand();
+        if (command != null) {
+            // GLOBAL, and resolved from the data context rather than captured: a captured workbench
+            // makes a second window's command toggle a panel in the first.
+            if (!CommandRegistry.global().contains(command)) {
+                CommandRegistry.global().register(Command.of(command, "Show " + kind.displayName())
+                        .runWithData(data -> {
+                            Workbench workbench = data.get(WORKBENCH);
+                            if (workbench != null) workbench.revealPanel(kind.id());
+                        })
+                        .enabledWhereData(data -> data.get(WORKBENCH) != null));
+            }
+            if (kind.accelerator() != null) keymap().bind(kind.accelerator(), command);
+        }
+
+        ToolWindowKind.Badge badge = kind.badgeSource();
+        Disposable badgeWatch = badge == null ? null : badge.install(this,
+                text -> toolWindowManager.viewContainers().setBadge(kind.id(), text));
+
+        // A DEFAULT, never a rule: a placement restored from a session outranks it, which is what makes
+        // dragging a panel to the other rail stick.
+        if (kind.isOpenByDefault()) toolWindowManager.showPanel(kind.id());
+
+        Disposable handle = new Disposable() {
+            private boolean withdrawn;
+
+            @Override
+            public void dispose() {
+                if (withdrawn) return;
+                withdrawn = true;
+                if (badgeWatch != null) badgeWatch.dispose();
+                // THE COMMAND AND ITS KEY, which are process-wide and would otherwise point at a panel
+                // type nothing builds. The panel type and its views stay: the registry holding them
+                // belongs to this workbench and goes when it does.
+                if (command != null) CommandRegistry.global().unregister(command);
+                toolWindowHandles.remove(this);
+            }
+        };
+        // HELD AS WELL AS RETURNED, because a workbench registers three of these itself and there is
+        // nobody else to dispose those. A badge is a subscription on a process-wide signal, so leaving
+        // one behind keeps the whole workbench reachable -- which is exactly what the retention test
+        // caught the moment the notification badge became a kind's rather than a line in the ctor.
+        toolWindowHandles.add(handle);
+        return handle;
+    }
+
+    /** Every {@link #registerToolWindow} handle, so this workbench can withdraw its own. */
+    private final List<Disposable> toolWindowHandles = new ArrayList<>();
+
+    /** One element per view, memoised: the dock asks again on every strip rebuild. */
+    private UIElement built(ToolWindowKind kind, String viewId,
+                            Function<WorkbenchContext, UIElement> factory) {
+        UIElement built = toolWindowViews.get(viewId);
+        if (built != null) return built;
+        built = factory.apply(this);
+        if (kind.isPersistent()) built.set(Attribute.SESSION_PERSISTENT, true);
+        toolWindowViews.put(viewId, built);
+        return built;
+    }
+
+    /** What {@link #registerToolWindow} has built, so a rebuilt strip gets the same panel back. */
+    private final Map<String, UIElement> toolWindowViews = new HashMap<>();
+
     public Workbench registerPanel(DockPanelDescriptor descriptor,
                                    Function<DockPanelRef, UIElement> factory) {
         registry.register(descriptor, factory::apply);

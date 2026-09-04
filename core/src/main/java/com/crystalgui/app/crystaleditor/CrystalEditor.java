@@ -1,5 +1,6 @@
 package com.crystalgui.app.crystaleditor;
 
+import com.crystalgui.workbench.toolwindow.ToolWindowKind;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.signal.ConnectionGroup;
@@ -236,6 +237,9 @@ public class CrystalEditor extends UIElement implements Disposable, WindowChrome
     /** What {@link ShaderGraphContribution} registered outside the workbench. @see #dispose() */
     private final Disposable shaderGraph;
 
+    /** The Inspector's registration, withdrawn with this editor. @see #dispose() */
+    private final Disposable inspectorPanel;
+
     public CrystalEditor(Workspace workspace) {
         super(NAME);
         setFocusPolicy(FocusPolicy.NONE);
@@ -287,19 +291,23 @@ public class CrystalEditor extends UIElement implements Disposable, WindowChrome
         // BESIDE the canvas, not in its strip. A tab in the same group would hide the graph, and the whole
         // point of the emitted source is watching it change as you wire -- a panel you have to switch away
         // from the graph to read is a panel that is never read.
-        workbench.registerPanel(DockPanelDescriptor.singleton(INSPECTOR_TYPE, "Inspector")
-                        .icon("crystalgui:package").region(DockRegion.AUXILIARY),
-                // The inspector IS the panel content, and it exists from the start. No wrapper -- the
-                // one that used to sit between it and the dock existed only to be swapped into -- and no
-                // placeholder, which the dock would have cached in its place forever.
-                ref -> inspector);
-        // The Inspector opens with the workbench; the generated source does not. It is now a document
-        // opened on demand by showCompiled(), so putting one in the default layout would mean a tab for a
-        // graph nobody has opened yet.
-        // A TOOL WINDOW, not a document. It used to be opened into the dock tree with a SPLIT_RIGHT
-        // placement, which made it a leaf the layout could lose -- the whole reason regions exist. It has
-        // a home now: the auxiliary region, which is where IntelliJ and VS Code both put an inspector.
-        workbench.showPanel(INSPECTOR_TYPE);
+        //
+        // ONE DECLARATION, which is the whole of what this application says about the panel: where it
+        // goes, what builds it, and that it is open on a fresh workspace. The registration, the factory
+        // and the showPanel that used to follow were three statements about one panel.
+        //
+        // The inspector IS the panel content and exists from the start. No wrapper -- the one that used
+        // to sit between it and the dock existed only to be swapped into -- and no placeholder, which
+        // the dock would have cached in its place for ever.
+        inspectorPanel = workbench.registerToolWindow(
+                ToolWindowKind.of(INSPECTOR_TYPE, "Inspector")
+                        .icon("crystalgui:package")
+                        .region(DockRegion.AUXILIARY)
+                        .view(ctx -> inspector)
+                        .openByDefault());
+        // The Inspector opens with the workbench (openByDefault above); the generated source does not.
+        // It is a document opened on demand by showCompiled(), so putting one in the default layout
+        // would mean a tab for a graph nobody has opened yet.
 
         content.addClass(CONTENT_CLASS);
         append(content);
@@ -555,6 +563,7 @@ public class CrystalEditor extends UIElement implements Disposable, WindowChrome
         // What DOES need saying is everything below, which is why this body was a comment: an editor
         // wrote itself into six signals and a contribution, and took none of it back.
         lifetime.disconnectAll();
+        inspectorPanel.dispose();
         shaderGraph.dispose();
         workbench.dispose();
     }
