@@ -137,6 +137,18 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
     public final Signal.Value<CgPath> onDidLoadListing = new Signal.Value<>();
 
     /**
+     * The roots changed — a project listing landed, or a re-listing replaced the ones before it.
+     *
+     * <p>Roots are the one thing a listing brings that nothing else can. They arrive after construction
+     * <em>and</em> after attach, over the wire, so anything that must act on all of them has no earlier
+     * moment to do it in: {@code Workbench} takes its recursive watches from here, having taken them in
+     * its constructor over an empty list for as long as they existed.</p>
+     *
+     * <p>Emitted before {@code onLoaded}, so a listener sees the roots the refresh is about to draw.</p>
+     */
+    public final Signal.Action onDidChangeProjects = new Signal.Action();
+
+    /**
      * Bumped whenever anything the PROJECT INDEX derives from changes — a directory listing, or a
      * project's declared source roots.
      *
@@ -217,6 +229,7 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath> {
             }
             indexRevision++;
             dirty = true;
+            onDidChangeProjects.emit();
             onLoaded.run();
         }).onError(error -> {
             failure = "projects failed: " + error.code();

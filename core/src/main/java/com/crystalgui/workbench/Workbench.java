@@ -106,6 +106,7 @@ import java.util.function.Function;
 import javax.annotation.Nullable;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.command.Command;
+import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.core.notify.StatusBar;
 import com.crystalgui.core.notify.StatusBarAlignment;
@@ -858,19 +859,14 @@ public class Workbench extends UIElement implements DataProvider {
         // A WORKSPACE-WIDE WATCH, recursive, so a create or a delete anywhere shows up. The per-document
         // watches WorkspaceDocuments takes are a different subscription for a different question -- what
         // happened to THIS file -- and the tree must not depend on one of them existing.
-        for (CgPath root : fileTree.source().roots()) {
-            workspace.watch(Resource.of(root), true).onChanged.connect(changes -> {
-                for (FsMessages.FileChange change : changes) {
-                    CgPath moved = CgPath.parse(change.path());
-                    fileTree.source().invalidate(moved.parent());
-                    if (!change.from().isEmpty()) {
-                        fileTree.source().invalidate(CgPath.parse(change.from()).parent());
-                    }
-                    externalChange(change);
-                }
-                fileTree.treeView().refresh();
-            });
-        }
+        //
+        // TAKEN WHEN THE ROOTS LAND, and it used to be taken here. Roots come from the project listing,
+        // which is asked for from tickFrame -- after attach, and after a session has opened, because a
+        // call made earlier is discarded by the server with no error. So at THIS moment the tree has no
+        // roots, on every host, always: the loop that stood here ran over an empty list and watched
+        // nothing at all. Nothing failed, and the explorer simply never heard about another client's
+        // create, delete or rename outside the files it happened to have open.
+        watchRoots.add(fileTree.source().onDidChangeProjects.connect(this::watchProjectRoots));
         fileTree.getDecorations().addProvider(externalChanges);
 
         // A RECONNECT INVALIDATES EVERYTHING AT ONCE, and for a different reason than a change does --
@@ -1219,6 +1215,70 @@ public class Workbench extends UIElement implements DataProvider {
 
     public DockArea dock() {
         return dock;
+    }
+
+    /** Listeners that keep {@link #rootWatches} in step with the project list. */
+    private final ConnectionGroup watchRoots = new ConnectionGroup();
+
+    /** One recursive watch per project root, keyed by the root it covers. @see #watchProjectRoots */
+    private final Map<CgPath, RootWatch> rootWatches = new HashMap<>();
+
+    /**
+     * A workspace-wide watch and the listener reading it, released together.
+     *
+     * <p>Both halves are needed: a {@code Watch} is shared by everything that asked for the same
+     * resource, so disposing it only unwatches when the last holder lets go — and until then this
+     * workbench's listener would go on being called on a signal it no longer has any business reading.</p>
+     */
+    private static final class RootWatch implements Disposable {
+        private final Workspace.Watch watch;
+        private final Connection listener;
+
+        RootWatch(Workspace.Watch watch, Connection listener) {
+            this.watch = watch;
+            this.listener = listener;
+        }
+
+        @Override
+        public void dispose() {
+            listener.disconnect();
+            watch.dispose();
+        }
+    }
+
+    /**
+     * Takes a recursive watch on every project root, and drops the ones whose root is gone.
+     *
+     * <p>Runs whenever the listing changes rather than once, because it can change: a reconnect
+     * re-lists, and a project opened or closed on the server moves the set. Re-taking a root already
+     * watched would cost a second subscription — {@code Workspace.watch} would hand back the same
+     * object with its holder count bumped, and this would add a second listener to it — so a root
+     * already in the map is left alone.</p>
+     */
+    private void watchProjectRoots() {
+        List<CgPath> roots = fileTree.source().roots();
+        List<CgPath> gone = new ArrayList<>();
+        for (Map.Entry<CgPath, RootWatch> each : rootWatches.entrySet()) {
+            if (!roots.contains(each.getKey())) gone.add(each.getKey());
+        }
+        for (CgPath root : gone) rootWatches.remove(root).dispose();
+
+        for (CgPath root : roots) {
+            if (rootWatches.containsKey(root)) continue;
+            Workspace.Watch watch = workspace.watch(Resource.of(root), true);
+            Connection listener = watch.onChanged.connect(changes -> {
+                for (FsMessages.FileChange change : changes) {
+                    CgPath moved = CgPath.parse(change.path());
+                    fileTree.source().invalidate(moved.parent());
+                    if (!change.from().isEmpty()) {
+                        fileTree.source().invalidate(CgPath.parse(change.from()).parent());
+                    }
+                    externalChange(change);
+                }
+                fileTree.treeView().refresh();
+            });
+            rootWatches.put(root, new RootWatch(watch, listener));
+        }
     }
 
     public DockPanelRegistry<UIElement> panels() {
