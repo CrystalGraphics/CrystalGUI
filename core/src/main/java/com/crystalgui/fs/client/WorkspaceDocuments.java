@@ -129,7 +129,7 @@ public final class WorkspaceDocuments {
         }
 
         PendingReply<DocumentReference> opened = new PendingReply<>(null);
-        boolean fromServer = Resource.SCHEME_PROJECT.equals(resource.scheme());
+        boolean fromServer = resource.isProject();
         // ONE DOOR. A project resource goes over the wire; a decompiled class or a generated shader goes
         // to whatever registered its scheme. Routing here is what makes this the ONE open lane -- the
         // second lane existed because there was nowhere else to say it.
@@ -138,7 +138,8 @@ public final class WorkspaceDocuments {
                 .then(content -> {
                     Document document;
                     try {
-                        document = new Document(resource, kind, kind.createModel(resource, content));
+                        document = new Document(resource, kind,
+                                kind.createModel(resource, content.bytes()));
                     } catch (RuntimeException undecodable) {
                         // A model that cannot take the bytes must FAIL rather than open empty: an empty
                         // document reports itself modified against the file it could not read, and the
@@ -147,13 +148,17 @@ public final class WorkspaceDocuments {
                                 resource + " could not be opened: " + undecodable));
                         return;
                     }
+                    // THE ETAG THE BYTES CAME WITH, not a second round trip for it. The read
+                    // already knows -- it is in the response the content arrived in -- and asking again
+                    // paid a `stat` per open for an answer that could also have MOVED in between, which
+                    // is an etag quoting a file nobody read.
+                    document.setEtag(content.etag());
                     document.setState(DocumentState.CLEAN);
                     DocumentReference reference = documents.open(resource, ignored -> document);
                     if (fromServer) {
                         // AND ONLY THE SERVER'S FILES ARE WATCHED. Nothing on the far side knows about a
                         // decompiled class, so a watch on one is a subscription to an event that can
                         // never arrive -- and it would cost a real subscription slot to say nothing.
-                        workspace.files().stat(resource).then(stat -> document.setEtag(stat.etag()));
                         attach(document);
                     }
                     opened.resolve(reference);
@@ -235,13 +240,18 @@ public final class WorkspaceDocuments {
                     "there is unsaved work; reloading would discard it", document.etag()));
         }
         PendingReply<Void> done = new PendingReply<>(null);
-        workspace.files().read(document.resource())
+        // THE ONE DOOR, exactly as the open path takes. Read straight through `files().read` this took
+        // the response's `content` and stopped, so a file over the server's inline limit came back
+        // EMPTY: an external change to a big file replaced the document with nothing and marked it
+        // clean, and the next save wrote that over the file. It also could not reload a resource a
+        // PROVIDER serves, having nowhere to ask.
+        workspace.read(document.resource())
                 .onError(error -> {
                     document.setState(DocumentState.FAILED);
                     done.fail(error);
                 })
                 .then(response -> {
-                    document.adopt(response.content(), response.etag());
+                    document.adopt(response.bytes(), response.etag());
                     discardBackup(document);
                     done.resolve(null);
                 });

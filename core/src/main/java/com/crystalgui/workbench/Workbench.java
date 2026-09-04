@@ -811,8 +811,8 @@ public class Workbench extends UIElement implements DataProvider {
                 // loses to whatever is on disk, with nothing to see. The two lines above are lambdas for
                 // exactly this reason.
                 path -> bufferSnapshot.get(path),
-                (path, onText) -> workspace.files().read(Resource.of(path))
-                        .then(read -> onText.accept(new String(read.content(), StandardCharsets.UTF_8)))
+                (path, onText) -> workspace.files().readWhole(Resource.of(path))
+                        .then(read -> onText.accept(new String(read.bytes(), StandardCharsets.UTF_8)))
                         .onError(error -> onText.accept(null)),
                 this::onProjectIndexFilled);
         // REGISTERED HERE, where the field exists. Contributed rather than set, because two workbenches in
@@ -2161,8 +2161,8 @@ public class Workbench extends UIElement implements DataProvider {
      * hand, and only <em>theirs</em> has to come off the wire.</p>
      */
     private void openMerge(CgPath target, byte[] written, byte[] base) {
-        files.read(Resource.of(target))
-                .then(theirs -> showMerge(target, base, written, theirs.content()))
+        files.readWhole(Resource.of(target))
+                .then(theirs -> showMerge(target, base, written, theirs.bytes()))
                 .onError(failure -> Notifications.show(saveFailed(target, failure)));
     }
 
@@ -3154,7 +3154,7 @@ public class Workbench extends UIElement implements DataProvider {
                 if (request.copy()) {
                     Resource from = Resource.of(source);
                     Resource to = Resource.of(target);
-                    files.read(from).then(read -> files.create(to, read.content()));
+                    files.readWhole(from).then(read -> files.create(to, read.bytes()));
                 } else {
                     batch.rename(Resource.of(source), Resource.of(target), false);
                 }

@@ -11,6 +11,7 @@ import com.crystalgui.fs.server.WorkspaceActor;
 import com.crystalgui.fs.server.WorkspacePermission;
 import com.crystalgui.fs.server.WorkspaceService;
 import com.crystalgui.fs.client.FileOperations;
+import com.crystalgui.fs.client.FileOperations;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.project.ProjectInfo;
 import com.crystalgui.fs.project.ProjectRegistry;
@@ -40,6 +41,7 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -144,7 +146,7 @@ public class WorkspaceEndToEndTest {
 
     @Test
     public void aReadAnswersTheBytesAndAnEtag() {
-        Reply<FsMessages.ReadResponse> reply = workspace.files().read(MAIN);
+        Reply<FsMessages.ReadResponse> reply = workspace.files().readResponse(MAIN);
         pump();
 
         assertNotNull(reply.result());
@@ -156,8 +158,8 @@ public class WorkspaceEndToEndTest {
     @Test
     public void twoReadsOfOneFileAreOneRoundTrip() {
         int before = serverSide.router().pendingRequests();
-        Reply<FsMessages.ReadResponse> first = workspace.files().read(MAIN);
-        Reply<FsMessages.ReadResponse> second = workspace.files().read(MAIN);
+        Reply<FsMessages.ReadResponse> first = workspace.files().readResponse(MAIN);
+        Reply<FsMessages.ReadResponse> second = workspace.files().readResponse(MAIN);
 
         assertSame("the second caller joins the first's question", first, second);
         pump();
@@ -167,8 +169,8 @@ public class WorkspaceEndToEndTest {
     /** And two reads of DIFFERENT files are two, which is the counter-control. */
     @Test
     public void twoReadsOfTwoFilesAreTwo() {
-        Reply<FsMessages.ReadResponse> a = workspace.files().read(MAIN);
-        Reply<FsMessages.ReadResponse> b = workspace.files().read(file("README.md"));
+        Reply<FsMessages.ReadResponse> a = workspace.files().readResponse(MAIN);
+        Reply<FsMessages.ReadResponse> b = workspace.files().readResponse(file("README.md"));
 
         assertFalse(a == b);
         pump();
@@ -178,11 +180,11 @@ public class WorkspaceEndToEndTest {
     /** A conditional read that matches sends no bytes — HTTP's If-None-Match, reachable at last. */
     @Test
     public void aConditionalReadThatMatchesSendsNothing() {
-        Reply<FsMessages.ReadResponse> first = workspace.files().read(MAIN);
+        Reply<FsMessages.ReadResponse> first = workspace.files().readResponse(MAIN);
         pump();
         String etag = first.result().etag();
 
-        Reply<FsMessages.ReadResponse> again = workspace.files().read(MAIN, etag);
+        Reply<FsMessages.ReadResponse> again = workspace.files().readResponse(MAIN, etag);
         pump();
 
         assertTrue(again.result().unchanged());
@@ -225,12 +227,73 @@ public class WorkspaceEndToEndTest {
         while (big.length() < WorkspaceBinding.INLINE_LIMIT + 5000) big.append("0123456789");
         files.seed("proj:big.txt", big.toString());
 
-        Reply<byte[]> reply = workspace.read(file("big.txt"));
+        Reply<FileOperations.Content> reply = workspace.read(file("big.txt"));
         pump();
 
         assertNotNull("the read settled", reply.result());
         assertEquals("every byte, not the empty inline field",
-                big.length(), reply.result().length);
+                big.length(), reply.result().bytes().length);
+    }
+
+    /**
+     * <b>A copy of a large file copies all of it.</b>
+     *
+     * <p>{@code copy} is a read and a create, because the server has no copy verb — so it inherited the
+     * truncation whole: the destination was created EMPTY and the operation reported success. Same for
+     * the explorer's copy-drop, which spells the pair out itself.</p>
+     */
+    @Test
+    public void aCopyOfALargeFileCopiesAllOfIt() {
+        String big = bigText();
+        files.seed("proj:big.txt", big);
+
+        workspace.files().copy(file("big.txt"), file("copy.txt"));
+        for (int i = 0; i < 6; i++) pump();
+
+        assertEquals(big.length(),
+                files.read(CgPath.parse("proj:copy.txt")).length);
+    }
+
+    /**
+     * <b>Two readers of one large file are one transfer.</b>
+     *
+     * <p>Not only a saving. A transfer id is handed out once and the server destroys it when a pull
+     * reaches EOF, so two readers sharing one coalesced {@code readResponse} would pull the same id and
+     * whichever finished first would take it out from under the other — the second settling with
+     * {@code no such transfer} on a file that is perfectly readable. Two panes restoring one large file
+     * is exactly that, which is why {@code readWhole} coalesces rather than leaving it to callers.</p>
+     */
+    @Test
+    public void twoWholeReadsOfOneLargeFileAreOneTransfer() {
+        String big = bigText();
+        files.seed("proj:big.txt", big);
+
+        Reply<FileOperations.Content> first = workspace.files().readWhole(file("big.txt"));
+        Reply<FileOperations.Content> second = workspace.files().readWhole(file("big.txt"));
+        assertSame("the second reader joins the first's transfer", first, second);
+        for (int i = 0; i < 6; i++) pump();
+
+        assertNotNull("it settled: " + first.error(), first.result());
+        assertEquals(big.length(), first.result().bytes().length);
+    }
+
+    /** ...and a later read is a NEW one, which is the counter-control for the coalescing above. */
+    @Test
+    public void aWholeReadAfterTheFirstSettlesIsAFreshOne() {
+        files.seed("proj:big.txt", bigText());
+
+        Reply<FileOperations.Content> first = workspace.files().readWhole(file("big.txt"));
+        for (int i = 0; i < 6; i++) pump();
+        Reply<FileOperations.Content> later = workspace.files().readWhole(file("big.txt"));
+
+        assertNotSame("a settled read is not answered again", first, later);
+    }
+
+    /** Comfortably over the server's inline limit, so it is answered as a transfer. */
+    private static String bigText() {
+        StringBuilder big = new StringBuilder();
+        while (big.length() < WorkspaceBinding.INLINE_LIMIT + 5000) big.append("0123456789");
+        return big.toString();
     }
 
     @Test
@@ -259,7 +322,7 @@ public class WorkspaceEndToEndTest {
 
     @Test
     public void aWriteAnswersTheNewEtag() {
-        Reply<FsMessages.ReadResponse> read = workspace.files().read(MAIN);
+        Reply<FsMessages.ReadResponse> read = workspace.files().readResponse(MAIN);
         pump();
 
         Reply<String> write = workspace.files()
@@ -278,7 +341,7 @@ public class WorkspaceEndToEndTest {
      */
     @Test
     public void aConflictIsStructuredAndCarriesTheActualEtag() {
-        Reply<FsMessages.ReadResponse> read = workspace.files().read(MAIN);
+        Reply<FsMessages.ReadResponse> read = workspace.files().readResponse(MAIN);
         pump();
         String stale = read.result().etag();
         service.write(WorkspaceActor.LOCAL, CgPath.parse("proj:src/Main.java"),
@@ -311,7 +374,7 @@ public class WorkspaceEndToEndTest {
     /** <b>D17.</b> A save and a reload of one file must never interleave. */
     @Test
     public void twoOperationsOnOneResourceAreSerialised() {
-        Reply<FsMessages.ReadResponse> read = workspace.files().read(MAIN);
+        Reply<FsMessages.ReadResponse> read = workspace.files().readResponse(MAIN);
         pump();
         String etag = read.result().etag();
 
@@ -416,7 +479,7 @@ public class WorkspaceEndToEndTest {
     @Test
     public void aMissingFileIsNotFound() {
         List<ReplyError> errors = new ArrayList<>();
-        workspace.files().read(file("nope.txt")).onError(errors::add);
+        workspace.files().readResponse(file("nope.txt")).onError(errors::add);
         pump();
 
         assertEquals(FsError.NOT_FOUND, errors.get(0).code());
@@ -424,7 +487,7 @@ public class WorkspaceEndToEndTest {
 
     @Test
     public void aFailedReadCarriesNoValue() {
-        Reply<FsMessages.ReadResponse> reply = workspace.files().read(file("nope.txt"));
+        Reply<FsMessages.ReadResponse> reply = workspace.files().readResponse(file("nope.txt"));
         pump();
 
         assertNull(reply.result());

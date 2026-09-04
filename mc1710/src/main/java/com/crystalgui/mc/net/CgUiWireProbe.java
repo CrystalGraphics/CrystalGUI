@@ -190,7 +190,7 @@ public final class CgUiWireProbe {
                 startedAt = ticks;
                 CrystalGuiCore.LOGGER.info("[wire-probe] downloading {} bytes INLINE (one message)",
                         INLINE_BYTES);
-                files.files().read(Resource.of(small))
+                files.files().readWhole(Resource.of(small))
                         .then(document -> {
                             smallReadTicks = ticks - startedAt;
                             smallRead = true;

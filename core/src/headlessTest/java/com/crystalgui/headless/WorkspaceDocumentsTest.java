@@ -251,6 +251,48 @@ public class WorkspaceDocumentsTest {
         assertFalse("and undo cannot resurrect the replaced text", document.history().canUndo());
     }
 
+    /**
+     * <b>...and a file over the inline limit reloads WHOLE.</b>
+     *
+     * <p>{@code fs/read} answers inline or with a TRANSFER, so a caller that takes {@code content} and
+     * stops is right for every small file and silently wrong for a large one. {@code Workspace.read}
+     * was fixed for the OPEN path; the reload path still read straight through {@code files().read},
+     * so an external change to a big file adopted an EMPTY array and marked the document clean --
+     * and the next save wrote that emptiness over somebody's work.</p>
+     *
+     * <p>The size is the whole test: identical to the one above in every other respect, which is what
+     * makes the pair a statement about the limit rather than about reloading.</p>
+     */
+    @Test
+    public void aChangeUnderACleanDocumentOverTheInlineLimitReloadsAllOfIt() {
+        CgPath big = CgPath.parse("proj:src/Big.java");
+        service.create(WorkspaceActor.LOCAL, big, body('a'));
+        Document document = open(Resource.of(big));
+        assertEquals("the OPEN path already joins the chunks",
+                BIG_BYTES, document.as(TextDocumentModel.class).buffer().toString().length());
+
+        service.write(WorkspaceActor.LOCAL, big, body('b'), null);
+        notifyChange(big, CgFileEvent.Kind.MODIFIED);
+        // A CHUNK IS A ROUND TRIP AND THE PULL IS SERIAL, so a reload of this file is six of them --
+        // where every other test in this class settles in one.
+        pump();
+
+        String reloaded = document.as(TextDocumentModel.class).buffer().toString();
+        assertEquals("every byte of it, not the empty content a transfer carries",
+                BIG_BYTES, reloaded.length());
+        assertEquals('b', reloaded.charAt(0));
+        assertEquals(DocumentState.CLEAN, document.state());
+    }
+
+    /** Comfortably over {@code WorkspaceBinding.INLINE_LIMIT}, so the server answers a transfer. */
+    private static final int BIG_BYTES = 300_000;
+
+    private static byte[] body(char fill) {
+        byte[] bytes = new byte[BIG_BYTES];
+        java.util.Arrays.fill(bytes, (byte) fill);
+        return bytes;
+    }
+
     /** <b>Dirty: it is marked and left alone.</b> Only a person can say what happens to unsaved work. */
     @Test
     public void aChangeUnderADirtyDocumentIsAConflictAndChangesNothing() {

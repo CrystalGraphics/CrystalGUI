@@ -30,7 +30,7 @@ import org.jetbrains.annotations.Nullable;
  * <pre>{@code
  * Workspace workspace = Workspace.of(connection);
  *
- * workspace.files().read(resource).then(content -> …).onError(error -> …);
+ * workspace.read(resource).then(content -> …).onError(error -> …);
  * workspace.watch(folder, true).onChanged.connect(changes -> …);
  * workspace.capabilities().isValidName(typed);
  * }</pre>
@@ -260,45 +260,17 @@ public final class Workspace implements Disposable {
      * <p>A project resource goes over the wire; anything else goes to whatever registered its scheme.
      * The routing lives here so no caller above ever has to ask which kind of thing it is holding.</p>
      */
-    public Reply<byte[]> read(Resource resource) {
+    public Reply<FileOperations.Content> read(Resource resource) {
         // THE SCHEME BEFORE THE TABLE. A project file's bytes are the server's whatever has registered
         // to describe the scheme -- a provider is there to say what the file DECLARES, not to serve it.
-        if (Resource.SCHEME_PROJECT.equals(resource.scheme())) return wholeFile(resource);
+        if (resource.isProject()) return files.readWhole(resource);
         ContentProvider provider = providerFor(resource);
-        if (provider != null) return provider.read(resource);
-        return wholeFile(resource);
-    }
-
-    /**
-     * Every byte of a file, <b>however it arrives</b>.
-     *
-     * <p>{@code fs/read} answers inline or with a TRANSFER, and which one is the server's decision
-     * against its own inline limit — so a caller that reads {@code content} and stops is correct for
-     * every small file and silently wrong for a large one. It was: a file over 256 KB came back with an
-     * empty {@code content} and a transfer id nobody pulled, so the document opened EMPTY and clean,
-     * and the first save wrote that emptiness over the file. The response's own shape is the tell that
-     * a caller must not assume — see {@code CGUI_NETWORKING_PRIMER.md} §13, which says exactly this and
-     * was written before anything above the protocol could act on it.</p>
-     *
-     * <p>{@link FileOperations#readStream} already pulls the chunks; this joins them, because a
-     * document has nothing to do with half a file.</p>
-     */
-    private Reply<byte[]> wholeFile(Resource resource) {
-        return files.readStream(resource).map(Workspace::join);
-    }
-
-    /** The chunks, in order, as one array. */
-    private static byte[] join(List<byte[]> chunks) {
-        if (chunks.size() == 1) return chunks.get(0);
-        int total = 0;
-        for (byte[] chunk : chunks) total += chunk.length;
-        byte[] whole = new byte[total];
-        int at = 0;
-        for (byte[] chunk : chunks) {
-            System.arraycopy(chunk, 0, whole, at, chunk.length);
-            at += chunk.length;
-        }
-        return whole;
+        // A PROVIDER HAS NO ETAG, and the empty string is how it says so rather than a null nobody
+        // remembers to check: an etag is the server's record of a file it holds, and a decompiled class
+        // is not one. Whoever reads this answers "no etag" the same way for both.
+        if (provider != null) return provider.read(resource).map(bytes ->
+                new FileOperations.Content(bytes, ""));
+        return files.readWhole(resource);
     }
 
     /** Whether this resource refuses writes. An unregistered non-project scheme is read-only. */
@@ -306,7 +278,7 @@ public final class Workspace implements Disposable {
         if (resource == null) return true;
         // Same rule as `read`: a project file is the server's, and whether it may be written is the
         // server's answer rather than a provider's.
-        if (Resource.SCHEME_PROJECT.equals(resource.scheme())) return false;
+        if (resource.isProject()) return false;
         ContentProvider provider = providerFor(resource);
         // REFUSING TO WRITE SOMETHING NOBODY CLAIMS is the right default: a scheme with no provider has
         // no storage behind it at all.

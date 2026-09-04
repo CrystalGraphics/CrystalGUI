@@ -150,7 +150,7 @@ public class ResourceTest {
 
         Resource resource = Resource.of("greeting", "x");
         byte[][] got = {null};
-        workspace.read(resource).then(bytes -> got[0] = bytes);
+        workspace.read(resource).then(content -> got[0] = content.bytes());
         assertEquals("hello", new String(got[0]));
         assertTrue("providers are read-only unless they say otherwise", workspace.isReadOnly(resource));
     }
@@ -181,7 +181,7 @@ public class ResourceTest {
         byte[][] got = {null};
         // NO WIRE BEHIND THIS WORKSPACE, so the read never settles -- which is the assertion: it went to
         // the wire rather than to the provider sitting right there with an answer.
-        workspace.read(mine).then(bytes -> got[0] = bytes);
+        workspace.read(mine).then(content -> got[0] = content.bytes());
         assertNull("a project file's bytes come from the server, never a provider", got[0]);
         // AND THE OTHER HALF still resolves, which is the whole reason the guard is where it is.
         assertNotNull("what a project resource IS is still a question somebody can answer",

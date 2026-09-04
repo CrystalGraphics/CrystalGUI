@@ -27,7 +27,7 @@ import org.jetbrains.annotations.Nullable;
  * Reading and writing files — every answer a {@link Reply}, every partial answer a {@link Stream}.
  *
  * <pre>{@code
- * files.read(resource).then(answer -> …).onError(error -> …);
+ * files.readWhole(resource).then(content -> …).onError(error -> …);
  * files.write(resource, bytes, etag).then(newEtag -> …);
  * files.batch("move files", batch -> batch.rename(from, to, false)).then(result -> …);
  * }</pre>
@@ -149,14 +149,20 @@ public final class FileOperations {
     // ── Reading ─────────────────────────────────────────────────────────────────────────────────
 
     /**
-     * A file's bytes.
+     * The server's <b>answer</b> to a read — which may be the bytes, and may be a transfer to pull.
      *
-     * <p>Coalesced: a second read of one resource while the first is in flight is the same reply, not a
-     * second round trip. A file above the inline limit answers a transfer, which {@link #readStream}
-     * pulls through.</p>
+     * <p><b>Named for the shape, because taking {@code content()} from it is a data-loss bug.</b> The
+     * server decides inline-or-transfer against its own limit, so a caller that reads the field and
+     * stops is correct for every small file and silently wrong for a large one: it gets an empty array
+     * and no error. That shipped five times over — a reload, a copy, a drop-copy, a merge and the
+     * project index — each written by somebody who reasonably believed a method called {@code read}
+     * returned what a file holds. {@link #readWhole} is that method; this one is for a caller that
+     * wants the shape (a conditional read's {@code unchanged}, an etag, a size, a probe).</p>
+     *
+     * <p>Coalesced: a second read of one resource while the first is in flight is the same reply.</p>
      */
-    public Reply<FsMessages.ReadResponse> read(Resource resource) {
-        return read(resource, null);
+    public Reply<FsMessages.ReadResponse> readResponse(Resource resource) {
+        return readResponse(resource, null);
     }
 
     /**
@@ -166,7 +172,8 @@ public final class FileOperations {
      * reopening a tab cost one small message. HTTP's {@code If-None-Match}, which the read path already
      * spoke and which nothing above it could reach.</p>
      */
-    public Reply<FsMessages.ReadResponse> read(Resource resource, @Nullable String ifNoneMatch) {
+    public Reply<FsMessages.ReadResponse> readResponse(Resource resource,
+                                                       @Nullable String ifNoneMatch) {
         return calls.coalesced("read:" + resource + ":" + (ifNoneMatch == null ? "" : ifNoneMatch),
                 FsMethods.READ, FsMessages.readRequest(),
                 new FsMessages.ReadRequest(resource.toString(),
@@ -184,17 +191,18 @@ public final class FileOperations {
      */
     public Stream<byte[]> readStream(Resource resource) {
         PendingStream<byte[]> stream = new PendingStream<>(null);
-        read(resource)
-                .onError(stream::fail)
-                .then(response -> {
-                    if (response.transfer().isEmpty()) {
-                        stream.emit(response.content());
-                        stream.finish();
-                        return;
-                    }
-                    pull(stream, response.transfer(), 0L);
-                });
+        readResponse(resource).onError(stream::fail).then(response -> emitFrom(stream, response));
         return stream;
+    }
+
+    /** Inline content is one chunk; a transfer is pulled. The one place that branch is written. */
+    private void emitFrom(PendingStream<byte[]> stream, FsMessages.ReadResponse response) {
+        if (response.transfer().isEmpty()) {
+            stream.emit(response.content());
+            stream.finish();
+            return;
+        }
+        pull(stream, response.transfer(), 0L);
     }
 
     /**
@@ -214,6 +222,58 @@ public final class FileOperations {
                     if (chunk.eof()) stream.finish();
                     else pull(stream, transfer, offset + chunk.content().length);
                 });
+    }
+
+    /**
+     * <b>Every byte of a file, however it arrives</b> — the method to reach for.
+     *
+     * <p>Inline or transfer, joined here, with the etag those bytes were read at. Both of those are
+     * what a caller actually wants: the etag is what a later write quotes back, so answering it here
+     * is what lets a document open in <em>one</em> round trip rather than a read and a {@code stat}
+     * beside it.</p>
+     *
+     * <p><b>Coalesced by resource</b>, which is a correctness property and not only a saving: a
+     * transfer id is answered once and destroyed by the server when a pull reaches EOF, so two readers
+     * sharing one coalesced {@link #readResponse} would pull the same id and whichever finished first
+     * would take it out from under the other. Two panes restoring one large file is exactly that.</p>
+     */
+    public Reply<Content> readWhole(Resource resource) {
+        Reply<Content> inFlight = wholeReads.get(resource);
+        if (inFlight != null && !inFlight.isDone()) return inFlight;
+
+        PendingReply<Content> done = new PendingReply<>(null);
+        wholeReads.put(resource, done);
+        done.always(() -> wholeReads.remove(resource, done));
+        readResponse(resource)
+                .onError(done::fail)
+                .then(response -> {
+                    PendingStream<byte[]> chunks = new PendingStream<>(null);
+                    chunks.onError(done::fail)
+                            .then(pieces -> done.resolve(new Content(join(pieces), response.etag())));
+                    emitFrom(chunks, response);
+                });
+        return done;
+    }
+
+    /** What a file holds, and the etag it held it at. @see #readWhole */
+    public record Content(byte[] bytes, String etag) {
+    }
+
+    /** Per resource, the whole-file read in flight. @see #readWhole */
+    private final Map<Resource, Reply<Content>> wholeReads = new LinkedHashMap<>();
+
+    /** The chunks, in order, as one array. */
+    private static byte[] join(List<byte[]> chunks) {
+        if (chunks.size() == 1) return chunks.get(0);
+        int total = 0;
+        for (byte[] chunk : chunks) total += chunk.length;
+        byte[] whole = new byte[total];
+        int at = 0;
+        for (byte[] chunk : chunks) {
+            System.arraycopy(chunk, 0, whole, at, chunk.length);
+            at += chunk.length;
+        }
+        return whole;
     }
 
     /** A file's metadata, with the etag a write must quote back. */
@@ -357,9 +417,9 @@ public final class FileOperations {
      */
     public Reply<String> copy(Resource from, Resource to) {
         PendingReply<String> done = new PendingReply<>(null);
-        read(from)
+        readWhole(from)
                 .onError(done::fail)
-                .then(content -> create(to, content.content())
+                .then(content -> create(to, content.bytes())
                         .onError(done::fail)
                         .then(done::resolve));
         return done;

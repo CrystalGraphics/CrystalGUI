@@ -168,10 +168,10 @@ public final class CgUiEditorOpenProbe {
             if (!readBack) {
                 if (reading) return;
                 reading = true;
-                workspace.files().read(probe)
+                workspace.files().readWhole(probe)
                         .then(answer -> {
                             readBack = TEXT.equals(
-                                    new String(answer.content(), StandardCharsets.UTF_8));
+                                    new String(answer.bytes(), StandardCharsets.UTF_8));
                             CrystalGuiCore.LOGGER.info("[editor-probe] 3/3 read it back, matches={}",
                                     readBack);
                             if (!readBack) reading = false;
