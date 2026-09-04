@@ -189,6 +189,23 @@ dependencies {
     "headlessTestAnnotationProcessor"("org.projectlombok:lombok:1.18.44")
 }
 
+// -- Test workers ------------------------------------------------------------
+// GRADLE'S DEFAULT WORKER HEAP IS 512 MB, and that was never a decision anybody made here.
+//
+// It became one the moment a test could build a whole application: ApplicationRetentionTest builds
+// and disposes six CrystalEditors and WorkbenchExtensionsTest five workbenches, each of which is a
+// dock, an editor service, a file tree, a shader-graph contribution and a style engine. Every one of
+// them is correctly released -- that is what those tests assert -- but they are allocated in a worker
+// that has already run 175 other classes, and the peak is what runs out, not the retention.
+//
+// The failure is worth naming because it does not look like memory: the worker's uncaught-exception
+// handler dies with an OutOfMemoryError, Gradle reports "Process 'Gradle Test Executor N' finished
+// with non-zero exit value 1", and the class it happened to be running is blamed -- a headless
+// tool-window model test with no allocation in it at all.
+tasks.withType<Test>().configureEach {
+    maxHeapSize = "2g"
+}
+
 val headlessTestTask = tasks.register<Test>("headlessTest") {
     description = "Server-side tests. CrystalGraphics is NOT on the classpath — that is the assertion."
     group = "verification"
