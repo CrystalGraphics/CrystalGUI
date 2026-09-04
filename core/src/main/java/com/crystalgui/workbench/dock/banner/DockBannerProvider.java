@@ -2,7 +2,6 @@ package com.crystalgui.workbench.dock.banner;
 
 import com.crystalgui.core.notify.Notification;
 
-import com.crystalgui.widget.config.inspector.InspectorSection;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import javax.annotation.Nullable;
 

@@ -1,5 +1,7 @@
 package com.crystalgui.fs.client;
 
+import com.crystalgui.core.dispose.Disposable;
+import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.core.async.PendingReply;
 import com.crystalgui.core.async.Reply;
 import com.crystalgui.core.signal.Signal;
@@ -46,7 +48,7 @@ import org.jetbrains.annotations.Nullable;
  * so Ctrl+Z cannot resurrect the replaced text. Dirty, it is marked {@link DocumentState#CONFLICTING}
  * and left alone: there is unsaved work and only a person can say what happens to it.</p>
  */
-public final class WorkspaceDocuments {
+public final class WorkspaceDocuments implements Disposable {
 
     private final Workspace workspace;
     private final DocumentKinds kinds;
@@ -100,8 +102,30 @@ public final class WorkspaceDocuments {
         });
         // THE SERVER'S CASE RULE, asked once it has answered. Until then the conservative assumption
         // holds -- see FsHello.unknown, and why the failure it produces is the one an etag catches.
-        workspace.onDidGreet.connect(hello ->
-                documents.setKeyStrategy(workspace.documentKeyStrategy()));
+        //
+        // HELD, because this is the one subscription that points the WRONG WAY down the lifetimes: a
+        // Workspace is per connection and a store is per workbench, so a dropped connection here keeps
+        // the store, its DocumentKinds, and -- through the kind whose model factory captures it -- the
+        // whole workbench that built them. It is the exact path a heap walk found from
+        // ContentProviders.onDidChange to a workbench that had been disposed.
+        lifetime.add(workspace.onDidGreet.connect(hello ->
+                documents.setKeyStrategy(workspace.documentKeyStrategy())));
+    }
+
+    /** What this store subscribed to on something that outlives it. @see #dispose() */
+    private final ConnectionGroup lifetime = new ConnectionGroup();
+
+    /**
+     * Lets go of the workspace, and of every document this store is still holding open.
+     *
+     * <p>Called by whatever built it — a workbench — and never by the workspace, which does not know
+     * how many stores are reading it.</p>
+     */
+    @Override
+    public void dispose() {
+        lifetime.disconnectAll();
+        for (Workspace.Watch watch : watches.values()) watch.dispose();
+        watches.clear();
     }
 
     // ── Opening ─────────────────────────────────────────────────────────────────────────────────

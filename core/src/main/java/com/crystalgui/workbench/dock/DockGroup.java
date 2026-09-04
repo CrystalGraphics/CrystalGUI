@@ -8,7 +8,6 @@ import com.crystalgui.core.notify.Notification;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.workbench.dock.banner.DockBannerBar;
-import com.crystalgui.workbench.dock.banner.DockBanners;
 import com.crystalgui.workbench.dock.drag.DockDropZone;
 import com.crystalgui.workbench.dock.drag.DockDropZones;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
@@ -720,7 +719,11 @@ public class DockGroup extends UIElement {
     }
 
     /**
-     * Puts whatever {@link DockBanners} had to say above {@code built}.
+     * Puts whatever this dock's banner providers had to say above {@code built}.
+     *
+     * <p>Asked of the panel {@link com.crystalgui.workbench.dock.panel.DockPanelRegistry registry},
+     * which is the workbench's — a provider is a closure over the workbench it answers for, so a
+     * process-wide list of them held every workbench that ever contributed one.</p>
      *
      * <h3>Here, because this is the only place every panel passes through</h3>
      *
@@ -737,7 +740,7 @@ public class DockGroup extends UIElement {
      * panel that states its own layout still wins, exactly as the pane host above does.</p>
      */
     private UIElement withBanners(DockPanelRef ref, UIElement built) {
-        List<Notification> banners = DockBanners.bannersFor(ref);
+        List<Notification> banners = area.registry().bannersFor(ref);
         if (banners.isEmpty()) return built;
 
         UIElement column = new UIElement();
