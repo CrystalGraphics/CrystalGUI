@@ -6,7 +6,6 @@ import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.widget.config.inspector.Inspector;
 import com.crystalgui.widget.config.inspector.InspectorRegistry;
 import com.crystalgui.workbench.WorkbenchContext;
-import com.crystalgui.workbench.WorkbenchExtension;
 import com.crystalgui.workbench.editor.EditorService;
 import com.crystalgui.workbench.region.DockRegion;
 import com.crystalgui.workbench.toolwindow.ToolWindowKind;

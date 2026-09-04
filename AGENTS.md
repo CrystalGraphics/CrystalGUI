@@ -1898,17 +1898,33 @@ com.crystalgui.widget          THE WIDGETS, layered so a build fails when a laye
 com.crystalgui.desktop         CRYSTALOS. Desktop (found with Desktop.of(document), never built by a
                                caller: the engine may not name a compositor, so the compositor names
                                the document), .window, .motion, .taskbar, .switcher, .host.
-com.crystalgui.workbench       The shell: .chrome, .dock, .explorer, .region, .stripe, .toolwindow,
-                               .view, .decoration, .extension (the built-in WorkbenchExtensions),
-                               .editor (EditorService — ONE lane for opening anything, and
-                               TextEditorView, a TextEditor as a DocumentEditor). At the root:
-                               Workbench (the engine, implementing WorkbenchContext — the surface an
-                               extension is written against), WorkbenchApplication (the runtime EVERY
-                               workbench-shaped product shares: the workbench, its window, preferences,
-                               session and initial focus, built from a manifest's list of extension
-                               ids) and WorkbenchApplicationCommands (Save File, Save/Restore Layout —
-                               the ENGINE's, resolved from the data context so two applications on one
-                               desktop each save their own).
+com.crystalgui.workbench       The shell, and THE ROOT IS THE HUB ONLY. Everything whose imports
+                               point at ONE sub-package now lives in it; what is left at the top is
+                               Workbench plus what genuinely coordinates several of them, which is the
+                               honest reading of a hub's own package.
+                               At the root: Workbench (the engine, implementing WorkbenchContext — the
+                               surface an extension is written against, which stays here because it is
+                               the engine's own contract), WorkbenchSession (the arrangement record —
+                               the engine owns the bytes), WorkbenchSettings (the settings the whole
+                               engine resolves), WorkbenchKinds, WorkbenchMenus, and the three that
+                               COORDINATE rather than serve — DocumentTabs (dock+editor+explorer+
+                               decoration), SaveActions (dock+diff+status), NetworkedPanels.
+  .app                         WorkbenchApplication — the runtime EVERY workbench-shaped product
+                               shares: the workbench, its window, preferences, session and initial
+                               focus, built from a manifest's list of extension ids — and
+                               WorkbenchApplicationCommands (Save File, Save/Restore Layout: the
+                               ENGINE's, resolved from the data context so two applications on one
+                               desktop each save their own)
+  .extension                   THE SEAM AND WHAT SHIPS ON IT: WorkbenchExtension, WorkbenchExtensions
+                               (ServiceLoader — a jar on the classpath offers its features) and
+                               InspectorExtension
+  .chrome .dock .explorer .region .stripe .toolwindow .view .decoration .diff .search
+                               ...and each owns the binding that serves it: ProblemsBinding and
+                               PresenceBinding are `.chrome.status` (both produce a STATUS ENTRY, not
+                               a panel, whatever their names suggest), ExplorerBinding and
+                               ProjectSourcesIndex are `.explorer`, WorkbenchOpener is `.dock`
+  .editor                      EditorService — ONE lane for opening anything — TextEditorView (a
+                               TextEditor as a DocumentEditor) and TextFileKind
 com.crystalgui.app             The MANIFESTS, and what each product declares about itself:
                                .crystaleditor (CrystalEditor — an ApplicationKind and three choices,
                                and no longer an element at all), .shadergraph, .machine.

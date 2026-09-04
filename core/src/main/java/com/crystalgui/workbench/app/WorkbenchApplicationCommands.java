@@ -1,4 +1,4 @@
-package com.crystalgui.workbench;
+package com.crystalgui.workbench.app;
 
 import javax.annotation.Nullable;
 

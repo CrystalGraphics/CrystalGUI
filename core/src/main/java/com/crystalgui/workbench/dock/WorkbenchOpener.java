@@ -1,4 +1,4 @@
-package com.crystalgui.workbench;
+package com.crystalgui.workbench.dock;
 
 import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.notify.Notifications;
@@ -13,13 +13,10 @@ import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.ContentProvider;
 import com.crystalgui.text.TextPoint;
-import com.crystalgui.text.syntax.LanguageRegistry;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.texteditor.TextEditor;
-import com.crystalgui.workbench.dock.DockArea;
-import com.crystalgui.workbench.dock.DockGroup;
-import com.crystalgui.workbench.dock.DockWindow;
+import com.crystalgui.workbench.Workbench;
 import com.crystalgui.workbench.dock.drag.DockDropZone;
 import com.crystalgui.workbench.dock.drag.DockPlacement;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
@@ -33,11 +30,11 @@ import javax.annotation.Nullable;
 /**
  * Extracted from {@link Workbench}. See the plan's §4.5 for why this cluster is one thing.
  */
-final class WorkbenchOpener {
+public final class WorkbenchOpener {
 
     private final Workbench workbench;
 
-    WorkbenchOpener(Workbench workbench) {
+    public WorkbenchOpener(Workbench workbench) {
         this.workbench = workbench;
     }
 
@@ -272,7 +269,7 @@ final class WorkbenchOpener {
      * gesture as jumping out of your own file, and a reader drilling through the JDK is doing it
      * repeatedly. Two copies would be two places for the routing rules to drift.</p>
      */
-    void routeDefinitionsOf(TextEditor editor) {
+    public void routeDefinitionsOf(TextEditor editor) {
         editor.onDefinitionChosen.connect(site -> {
             if (site.resource() == null) return;
             // A RESOURCE THE WORKSPACE DOES NOT HOLD goes to a viewer. This used to return here, so
@@ -292,7 +289,7 @@ final class WorkbenchOpener {
      * <p>{@code LanguageRegistry} answers by file name and a library resource has none. Only the
      * provider knows what it produced, so only the provider can say that its output is Java.</p>
      */
-    String languageFileNameOf(Resource resource) {
+    public String languageFileNameOf(Resource resource) {
         if (resource.isProject()) return resource.name();
         ContentProvider provider = workbench.workspace.providerFor(resource);
         return provider == null ? resource.name() : provider.languageFileName(resource);

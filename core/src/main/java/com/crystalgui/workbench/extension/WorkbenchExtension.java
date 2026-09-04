@@ -1,6 +1,7 @@
-package com.crystalgui.workbench;
+package com.crystalgui.workbench.extension;
 
 import com.crystalgui.core.dispose.Disposable;
+import com.crystalgui.workbench.WorkbenchContext;
 
 /**
  * <b>A feature that attaches itself to a workbench</b> — one interface, one moment, one handle back.
@@ -24,7 +25,7 @@ import com.crystalgui.core.dispose.Disposable;
  * }
  * }</pre>
  *
- * <p>plus one line in {@code META-INF/services/com.crystalgui.workbench.WorkbenchExtension}. <b>One
+ * <p>plus one line in {@code META-INF/services/com.crystalgui.workbench.extension.WorkbenchExtension}. <b>One
  * class per feature</b>: a declaration and a separate {@code *Extension} beside it read as a boundary
  * and are a wrapper — one lifetime, one id, and the second file's only real content is the name of the
  * first.</p>

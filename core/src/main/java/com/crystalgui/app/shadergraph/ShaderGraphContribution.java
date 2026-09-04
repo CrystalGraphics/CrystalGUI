@@ -13,7 +13,7 @@ import com.crystalgui.widget.config.inspector.InspectorRegistry;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentKind;
 import com.crystalgui.workbench.WorkbenchContext;
-import com.crystalgui.workbench.WorkbenchExtension;
+import com.crystalgui.workbench.extension.WorkbenchExtension;
 
 import javax.annotation.Nullable;
 
@@ -31,7 +31,7 @@ import javax.annotation.Nullable;
  *
  * <p>So the package that owns the type declares it, and an application's only decision is which
  * contributions to enable — <b>an id in a list</b>. Nothing calls this: one line in
- * {@code META-INF/services/com.crystalgui.workbench.WorkbenchExtension} is how the jar says it has the
+ * {@code META-INF/services/com.crystalgui.workbench.extension.WorkbenchExtension} is how the jar says it has the
  * feature. It used to be contributed by {@code CrystalEditor}, which made a feature's availability a
  * product's responsibility and put it out of reach of every other product.</p>
  */

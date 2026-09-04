@@ -1,7 +1,7 @@
 package com.crystalgui.language;
 
 import com.crystalgui.language.run.view.ScriptWorkbench;
-import com.crystalgui.workbench.WorkbenchExtensions;
+import com.crystalgui.workbench.extension.WorkbenchExtensions;
 import com.crystalgui.language.engine.EngineHost;
 import com.crystalgui.language.grammar.TreeSitterLanguages;
 import com.crystalgui.language.java.JavaLanguage;

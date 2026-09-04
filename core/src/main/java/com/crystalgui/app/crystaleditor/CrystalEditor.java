@@ -2,15 +2,13 @@ package com.crystalgui.app.crystaleditor;
 
 import java.util.List;
 
-import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.window.WindowPolicy;
 import com.crystalgui.desktop.app.ApplicationKind;
-import com.crystalgui.desktop.app.ApplicationRegistry;
 import com.crystalgui.document.DocumentKind;
 import com.crystalgui.example.notes.NotesKind;
 import com.crystalgui.app.shadergraph.ShaderGraphContribution;
-import com.crystalgui.workbench.WorkbenchApplication;
-import com.crystalgui.workbench.WorkbenchExtensions;
+import com.crystalgui.workbench.app.WorkbenchApplication;
+import com.crystalgui.workbench.extension.WorkbenchExtensions;
 import com.crystalgui.workbench.extension.InspectorExtension;
 
 /**

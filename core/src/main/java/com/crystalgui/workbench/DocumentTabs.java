@@ -29,11 +29,11 @@ import javax.annotation.Nullable;
 /**
  * Extracted from {@link Workbench}. See the plan's §4.5 for why this cluster is one thing.
  */
-final class DocumentTabs {
+public final class DocumentTabs {
 
     private final Workbench workbench;
 
-    DocumentTabs(Workbench workbench) {
+    public DocumentTabs(Workbench workbench) {
         this.workbench = workbench;
     }
 
@@ -219,7 +219,7 @@ final class DocumentTabs {
      * to tabs — the walk {@code DockArea} explicitly warns callers off, because it keeps compiling long
      * after the dock changes how a tab is built.</p>
      */
-    void syncTabDecorations() {
+    public void syncTabDecorations() {
         for (DockPanelRef panel : workbench.dock.allPanels()) workbench.dock.refreshPanelPresentation(panel);
     }
 
@@ -425,7 +425,7 @@ final class DocumentTabs {
      * keystroke would tear down the tab the user is typing under — the rule the table header and the file
      * tree both paid for. Setting the text on the tabs that already exist changes nothing structural.</p>
      */
-    void refreshTabTitles() {
+    public void refreshTabTitles() {
         for (DockLeaf leaf : workbench.dock.layout().leaves()) {
             DockGroup group = workbench.dock.groupFor(leaf);
             if (group == null) continue;

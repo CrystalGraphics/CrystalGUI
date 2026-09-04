@@ -46,7 +46,7 @@ import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.text.lang.ProjectSourcesRegistry;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.config.inspector.InspectorRegistry;
-import com.crystalgui.workbench.WorkbenchApplication;
+import com.crystalgui.workbench.app.WorkbenchApplication;
 
 /**
  * <b>Two applications on one desktop</b> — W7's acceptance, stated as the thing the tree could not do.

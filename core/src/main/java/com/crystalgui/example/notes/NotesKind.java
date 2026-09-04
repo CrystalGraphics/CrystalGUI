@@ -3,7 +3,7 @@ package com.crystalgui.example.notes;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.document.DocumentKind;
 import com.crystalgui.workbench.WorkbenchContext;
-import com.crystalgui.workbench.WorkbenchExtension;
+import com.crystalgui.workbench.extension.WorkbenchExtension;
 
 /**
  * A file type in one class — <b>the whole of what a mod writes to own one</b>.
@@ -14,7 +14,7 @@ import com.crystalgui.workbench.WorkbenchExtension;
  * says which file it is.</p>
  *
  * <p>Nothing is registered anywhere else, and <b>nothing calls this</b>: one line in
- * {@code META-INF/services/com.crystalgui.workbench.WorkbenchExtension} is how a jar says it has the
+ * {@code META-INF/services/com.crystalgui.workbench.extension.WorkbenchExtension} is how a jar says it has the
  * feature, and an application's manifest names {@link #ID} to enable it. The harness used to call
  * {@code NotesKind.register(workbench.kinds())} in two scenes and the 1.7.10 loader called it nowhere,
  * so a file type shipped in this repository opened in the harness and not in the game — which is not a

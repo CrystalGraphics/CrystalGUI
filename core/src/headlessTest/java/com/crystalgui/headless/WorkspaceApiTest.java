@@ -60,7 +60,7 @@ public class WorkspaceApiTest {
             // and delegated back, which is a wrapper wearing a boundary's clothes. Naming the two
             // types rather than `com/crystalgui/workbench/` is what keeps the assertion sharp: an
             // author reaches the SEAM, never the engine, and `Workbench` itself is still refused.
-            "com/crystalgui/workbench/WorkbenchExtension",
+            "com/crystalgui/workbench/extension/WorkbenchExtension",
             "com/crystalgui/workbench/WorkbenchContext");
 
     /** The model's own share of it: no workspace either, because a model knows nothing about files. */

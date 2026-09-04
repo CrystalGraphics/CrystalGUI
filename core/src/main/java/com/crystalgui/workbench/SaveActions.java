@@ -29,11 +29,11 @@ import javax.annotation.Nullable;
 /**
  * Extracted from {@link Workbench}. See the plan's §4.5 for why this cluster is one thing.
  */
-final class SaveActions {
+public final class SaveActions {
 
     private final Workbench workbench;
 
-    SaveActions(Workbench workbench) {
+    public SaveActions(Workbench workbench) {
         this.workbench = workbench;
     }
 
@@ -120,7 +120,7 @@ final class SaveActions {
      * saved and was refused. @see Workspace.Presence#whoIsEditing</p>
      */
     @Nullable
-    String othersEditing(@Nullable CgPath target) {
+    public String othersEditing(@Nullable CgPath target) {
         // NOT A FILE, so nobody is editing it. A dock panel need not be about a path at all -- a
         // networked panel a server opened as a tab is the first one that is not, and this threw out of
         // the active-panel signal, which runs inside the click that activated the tab.
@@ -236,7 +236,7 @@ final class SaveActions {
      * <p>Returned rather than shown, so a caller can add the action it knows about — retrying an open
      * means something different from retrying a save.</p>
      */
-    static Notification openFailed(Resource resource, ReplyError failure) {
+    public static Notification openFailed(Resource resource, ReplyError failure) {
         return Notification.error("Open failed")
                 .withDetail(resource.name() + " — " + failure.detail());
     }

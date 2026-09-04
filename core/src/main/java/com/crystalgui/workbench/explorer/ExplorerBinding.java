@@ -1,4 +1,4 @@
-package com.crystalgui.workbench;
+package com.crystalgui.workbench.explorer;
 
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
@@ -8,10 +8,10 @@ import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.FileOperations;
 import com.crystalgui.fs.client.Workspace;
-import com.crystalgui.fs.client.WorkspaceDocuments;
 import com.crystalgui.fs.protocol.FsMessages;
+import com.crystalgui.workbench.Workbench;
 import com.crystalgui.workbench.diff.ConflictDialog;
-import com.crystalgui.workbench.explorer.ProjectFileTree;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -19,11 +19,11 @@ import java.util.Map;
 /**
  * Extracted from {@link Workbench}. See the plan's §4.5 for why this cluster is one thing.
  */
-final class ExplorerBinding {
+public final class ExplorerBinding {
 
     private final Workbench workbench;
 
-    ExplorerBinding(Workbench workbench) {
+    public ExplorerBinding(Workbench workbench) {
         this.workbench = workbench;
     }
 
@@ -36,7 +36,7 @@ final class ExplorerBinding {
      * object with its holder count bumped, and this would add a second listener to it — so a root
      * already in the map is left alone.</p>
      */
-    void watchProjectRoots() {
+    public void watchProjectRoots() {
         List<CgPath> roots = workbench.fileTree.source().roots();
         List<CgPath> gone = new ArrayList<>();
         for (Map.Entry<CgPath, Workbench.RootWatch> each : workbench.rootWatches.entrySet()) {
@@ -132,7 +132,7 @@ final class ExplorerBinding {
      * <p>On a CHANGE only. Revealing every frame would fight the user for the selection — they click a
      * folder, and a frame later the tree jumps back to whatever file is open.</p>
      */
-    void revealActiveFile() {
+    public void revealActiveFile() {
         if (!workbench.autoReveal) return;
         CgPath active = workbench.activeFilePath();
         if (active == null || active.equals(workbench.revealed)) return;
@@ -147,7 +147,7 @@ final class ExplorerBinding {
      * are several operations that can succeed or fail separately, and stopping on the first refusal leaves
      * the user guessing which ones landed.</p>
      */
-    void dropFiles(List<CgPath> sources, ProjectFileTree.DropRequest request) {
+    public void dropFiles(List<CgPath> sources, ProjectFileTree.DropRequest request) {
         // ONE UNDO STEP FOR THE WHOLE DROP, and it settles when its members do -- the batch used to take
         // `track()` runnables the caller had to remember to call, and a forgotten one left the
         // transaction open for good.

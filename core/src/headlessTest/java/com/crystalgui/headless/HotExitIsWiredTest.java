@@ -41,7 +41,7 @@ import static org.junit.Assert.assertTrue;
  */
 public class HotExitIsWiredTest {
 
-    private static final String EDITOR = "com/crystalgui/workbench/WorkbenchApplication.class";
+    private static final String EDITOR = "com/crystalgui/workbench/app/WorkbenchApplication.class";
 
     private Set<String> calls() throws IOException {
         Path editor = ClassReferences.mainClassesRoot(getClass()).resolve(EDITOR);

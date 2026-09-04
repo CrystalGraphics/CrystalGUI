@@ -1,21 +1,20 @@
-package com.crystalgui.workbench;
+package com.crystalgui.workbench.chrome.status;
 
-import com.crystalgui.core.notify.StatusBar;
 import com.crystalgui.core.notify.StatusBarAlignment;
 import com.crystalgui.core.notify.StatusBarEntry;
 import com.crystalgui.document.Document;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
-import com.crystalgui.text.diagnostic.Markers;
+import com.crystalgui.workbench.Workbench;
 
 /**
  * Extracted from {@link Workbench}. See the plan's §4.5 for why this cluster is one thing.
  */
-final class ProblemsBinding {
+public final class ProblemsBinding {
 
     private final Workbench workbench;
 
-    ProblemsBinding(Workbench workbench) {
+    public ProblemsBinding(Workbench workbench) {
         this.workbench = workbench;
     }
 
@@ -26,13 +25,13 @@ final class ProblemsBinding {
      * graph left the Problems panel empty by construction while its compiler produced a dozen attributed
      * errors with nowhere to go. A kind that reports none simply answers null.</p>
      */
-    void indexProblemsOf(Document document) {
+    public void indexProblemsOf(Document document) {
         DiagnosticSet problems = document.diagnostics();
         if (problems != null) workbench.markers.attach(document.resource(), problems);
     }
 
     /** The workspace's error and warning totals, as one status entry. @see Markers */
-    void refreshProblemCount() {
+    public void refreshProblemCount() {
         int errors = workbench.markers.count(DiagnosticSeverity.ERROR);
         int warnings = workbench.markers.count(DiagnosticSeverity.WARNING);
         // WITHDRAWN WHEN THERE IS NOTHING TO SAY, rather than reading "0 errors, 0 warnings". A clean
@@ -63,7 +62,7 @@ final class ProblemsBinding {
      * whole workspace, so switching tabs changes nothing about what it should show. Re-binding would also
      * rebuild the tree and throw away which files you had expanded.</p>
      */
-    void rebindProblems() {
+    public void rebindProblems() {
         if (workbench.problems.source() == null || workbench.problems.source().markers() != workbench.markers) {
             workbench.problems.bindTo(workbench.markers);
         }

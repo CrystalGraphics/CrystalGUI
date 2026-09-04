@@ -1,23 +1,18 @@
 package com.crystalgui.mc.client;
 
-import com.crystalgui.mc.net.CgUiWorkspaceHost;
 import com.crystalgui.desktop.host.DesktopHost;
 import com.crystalgui.desktop.host.HostServices;
 import java.nio.file.Path;
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.desktop.Desktop;
-import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.app.crystaleditor.CrystalEditor;
-import com.crystalgui.workbench.WorkbenchApplication;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.workbench.app.WorkbenchApplication;
 import com.crystalgui.core.storage.LocalConfigStorage;
-import com.crystalgui.language.run.view.RunPanels;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.desktop.window.WindowFrame;
-import com.crystalgui.core.window.WindowPolicy;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.mc.net.CgUiConnections;
 import com.crystalgui.net.protocol.ProtocolConnection;
