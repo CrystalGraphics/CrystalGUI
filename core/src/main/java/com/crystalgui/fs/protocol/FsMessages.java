@@ -586,7 +586,18 @@ public final class FsMessages {
         };
     }
 
-    public record ProjectCapability(String project, boolean mayRead, boolean mayWrite) {
+    /**
+     * What an actor may do with one project.
+     *
+     * <p>{@code scripting} is additive and defaults to {@link ScriptingMode#LIVE} on both ends, so a
+     * client talking to a server that has never heard of it behaves exactly as it did.</p>
+     */
+    public record ProjectCapability(String project, boolean mayRead, boolean mayWrite,
+                                    ScriptingMode scripting) {
+
+        public ProjectCapability(String project, boolean mayRead, boolean mayWrite) {
+            this(project, mayRead, mayWrite, ScriptingMode.LIVE);
+        }
     }
 
     public static final Codec<ProjectCapability> CAPABILITY = new Codec<>() {
@@ -596,6 +607,8 @@ public final class FsMessages {
                     .field("project", Codecs.STRING, value.project())
                     .optional("read", Codecs.BOOL, value.mayRead(), false)
                     .optional("write", Codecs.BOOL, value.mayWrite(), false)
+                    .optional("run", Codecs.STRING, value.scripting().name(),
+                            ScriptingMode.LIVE.name())
                     .build();
         }
 
@@ -604,7 +617,8 @@ public final class FsMessages {
             Codecs.MapCodecReader<U> in = Codecs.read(ops, input);
             return new ProjectCapability(in.field("project", Codecs.STRING),
                     in.optional("read", Codecs.BOOL, false),
-                    in.optional("write", Codecs.BOOL, false));
+                    in.optional("write", Codecs.BOOL, false),
+                    ScriptingMode.parse(in.optional("run", Codecs.STRING, ScriptingMode.LIVE.name())));
         }
     };
 

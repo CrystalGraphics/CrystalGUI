@@ -1,5 +1,6 @@
 package com.crystalgui.core.storage;
 
+import java.nio.file.Path;
 import java.util.List;
 
 import javax.annotation.Nullable;
@@ -47,5 +48,21 @@ public interface ConfigStorage {
     /** False for a store that cannot be written: a config directory that could not be created. */
     default boolean isWritable() {
         return true;
+    }
+
+    /**
+     * Where this store keeps its files, or null when it is not on a disk.
+     *
+     * <p>For the one thing a key/value store cannot serve: derived output that has to be a real
+     * directory — a compiler's cache. Null is an ordinary answer and means "cache nowhere", which is
+     * exactly right for an in-memory store and for a test.</p>
+     *
+     * <p>It is deliberately not a second way to read and write settings. Everything else goes through
+     * {@link #read} and {@link #write}, because a store that is not a directory must be able to serve
+     * every one of them.</p>
+     */
+    @Nullable
+    default Path directory() {
+        return null;
     }
 }

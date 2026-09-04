@@ -1,5 +1,6 @@
 package com.crystalgui.fs.client;
 
+import com.crystalgui.fs.protocol.ScriptingMode;
 import com.crystalgui.core.async.Reply;
 import com.crystalgui.core.async.UiBudget;
 import com.crystalgui.text.TextPoint;
@@ -365,6 +366,28 @@ public final class Workspace implements Disposable {
                     if (answer == null) return;
                     hello = answer;
                     onDidGreet.emit(answer);
+                    askCapabilities();
+                });
+    }
+
+    /**
+     * ...and what this actor may DO here, which nothing ever asked.
+     *
+     * <p>Both halves of this existed and no wire joined them: the server registered a handler for
+     * {@code fs/capabilities} and the client subscribed to a <em>notification</em> of the same name,
+     * which nothing on any host ever sent. So {@code capabilities()} answered out of an empty map for
+     * every project on every host — and an empty map is indistinguishable from a permissive one, which
+     * is why it looked like it worked. The same shape as presence before it was joined up.</p>
+     *
+     * <p>Asked on the greeting, because the two questions have the same lifetime: what this server is,
+     * and what this actor may do on it. Pushed updates still arrive on the subscription — a
+     * promotion, a project opened — and this is what makes the first answer exist to be updated.</p>
+     */
+    public Reply<FsMessages.CapabilitiesNotification> askCapabilities() {
+        return calls.coalesced("capabilities", FsMethods.CAPABILITIES, FsMessages.pathRequest(),
+                        new FsMessages.PathRequest(""), FsMessages.capabilitiesNotification())
+                .then(answer -> {
+                    if (answer != null) capabilities.apply(answer);
                 });
     }
 
@@ -575,6 +598,20 @@ public final class Workspace implements Disposable {
         }
 
         /** Whether this host tells {@code Main.java} from {@code main.java}. */
+        /**
+         * Whether this resource may be RUN here, and how.
+         *
+         * <p>A project nobody has said anything about answers {@link ScriptingMode#LIVE}, which is what
+         * every host meant before the question existed. The one place that is deliberately overridden
+         * is a workspace on a remote server, where the client's own local projects answer
+         * {@link ScriptingMode#NONE}: no server speaks for those files, so nobody can authorise
+         * them.</p>
+         */
+        public ScriptingMode scriptingMode(Resource resource) {
+            FsMessages.ProjectCapability capability = forResource(resource);
+            return capability == null ? ScriptingMode.LIVE : capability.scripting();
+        }
+
         public boolean caseSensitive() {
             return hello.caseSensitive();
         }

@@ -1,12 +1,13 @@
 package com.crystalgui.mc.client;
 
+import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.language.run.ScriptCommands;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.language.java.classpath.HostClasspath;
 import com.crystalgui.language.platform.ScriptService;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.language.platform.ScriptServices;
 import com.crystalgui.language.run.ScriptRuntime;
-import com.crystalgui.language.run.view.ScriptWorkbench;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.lang.CompletionItem;
 import com.crystalgui.text.lang.CompletionList;
@@ -254,53 +255,18 @@ public final class CgUiAutoTest {
      * <p>Every step is logged before it is attempted rather than after, because the failure being chased
      * leaves nothing behind — the last line printed is the answer.</p>
      */
-    static void runScriptOnce(ScriptWorkbench scripting) {
+    static void runScriptOnce() {
         if (!ENABLED || SCRIPT == null || scriptRun) return;
         scriptRun = true;
-        if (scripting == null) {
-            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: no ScriptWorkbench — no engine band opened");
-            return;
-        }
-        try {
-            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST script: resolving a runtime for {}", SCRIPT);
-            ScriptRuntime runtime = scripting.runtimes().forFile(SCRIPT);
-            if (runtime == null) {
-                CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: no runtime for {}", SCRIPT);
-                return;
-            }
-            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST script: runtime is {} for language {}",
-                    runtime.getClass().getName(), runtime.language());
-
-            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST script: compiling [{}]", SCRIPT_SOURCE);
-            ScriptRuntime.Compiled compiled =
-                    runtime.compileScript(SCRIPT, SCRIPT_SOURCE, Collections.emptyMap());
-            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST script: compiled, successful={}",
-                    compiled == null ? "null" : Boolean.valueOf(compiled.successful()));
-            if (compiled == null || !compiled.successful()) {
-                // WITH THE MESSAGES. "compile failed" names nothing a reader can act on, and this probe
-                // exists precisely for the runs nobody is watching -- a failure whose reason is not in
-                // the log costs another whole launch to find out.
-                CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: compile failed, not running: {}",
-                        compiled == null ? "(no result)" : compiled.messages());
-                return;
-            }
-
-            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST script: runAsync");
-            runtime.runAsync(compiled, Collections.<String, Object>emptyMap(),
-                    (ref, thrown) -> CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: threw", thrown));
-            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST script: runAsync returned — the game survived it");
-        } catch (Throwable failed) {
-            // THROWABLE, and it is the point. EcjCompilation catches RuntimeException and lets an Error
-            // through, and JDT is documented here as asserting on its own invariants -- so an Error is
-            // the likely shape and the ordinary catch would miss exactly the case being chased.
-            //
-            // AS A STRING, NEVER AS A THROWABLE. Handing log4j 2.0-beta9 a Throwable makes ThrowableProxy
-            // walk the trace and Class.forName every frame's class on the APP loader to annotate it with
-            // a jar name -- and a frame in a child-side class cannot be DEFINED there, because its
-            // supertype is an engine type that lives only in the band loader. The NoClassDefFoundError
-            // that produces escapes the logging call itself, so the act of reporting the failure destroys
-            // the report and takes the client with it. @see #describe
-            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: FAILED\n{}", describe(failed));
+        // THROUGH THE COMMAND, which is the path a user takes. It used to reach into a ScriptWorkbench
+        // the screen was holding, resolve a runtime and compile by hand -- a second way to start a
+        // script than the button, the keybinding and the palette, and therefore a probe that could pass
+        // while the real one was broken. The screen holds no ScriptWorkbench since W6, and this is the
+        // better question anyway: does pressing Run run it.
+        CrystalGuiCore.LOGGER.info("CGUI AUTOTEST script: running {} through the Run command", SCRIPT);
+        if (!CommandRegistry.global().run(ScriptCommands.RUN)) {
+            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: '{}' did not run -- no engine band, or "
+                    + "nothing in front to run", ScriptCommands.RUN);
         }
     }
 

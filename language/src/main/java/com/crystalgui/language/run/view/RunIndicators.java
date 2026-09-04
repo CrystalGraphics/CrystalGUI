@@ -6,7 +6,7 @@ import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.language.run.RunSessions;
 import com.crystalgui.workbench.view.ViewContainerRegistry;
-import com.crystalgui.workbench.Workbench;
+import com.crystalgui.workbench.WorkbenchContext;
 import com.crystalgui.workbench.decoration.FileDecorations;
 
 import javax.annotation.Nullable;
@@ -71,7 +71,7 @@ public final class RunIndicators {
      *                    asked, and before this nothing ever asked again after it was registered, so a
      *                    script starting coloured no row until something else happened to rebind the tree
      */
-    public static RunIndicators install(Workbench workbench, RunSessions sessions,
+    public static RunIndicators install(WorkbenchContext workbench, RunSessions sessions,
                                         @Nullable FileDecorations decorations) {
         RunIndicators indicators = new RunIndicators(
                 sessions, workbench.toolWindowManager().viewContainers(), decorations);

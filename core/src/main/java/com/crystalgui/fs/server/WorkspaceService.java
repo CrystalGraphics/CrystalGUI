@@ -1,5 +1,6 @@
 package com.crystalgui.fs.server;
 
+import com.crystalgui.fs.protocol.ScriptingMode;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.ProjectInfo;
@@ -139,13 +140,48 @@ public final class WorkspaceService {
             CgPath root = CgPath.ofProject(project.id());
             if (!permission.allows(actor, project, root, WorkspaceOperation.READ)) continue;
             answers.add(new ProjectCapability(project.id(), true,
-                    permission.allows(actor, project, root, WorkspaceOperation.WRITE)));
+                    permission.allows(actor, project, root, WorkspaceOperation.WRITE),
+                    scripting.modeFor(actor, project)));
         }
         return answers;
     }
 
     /** One project's answer. @see #capabilities */
-    public record ProjectCapability(String project, boolean mayRead, boolean mayWrite) {
+    public record ProjectCapability(String project, boolean mayRead, boolean mayWrite,
+                                    ScriptingMode scripting) {
+    }
+
+    /**
+     * Who may run this project's files, and where.
+     *
+     * <p>Separate from {@link WorkspacePermission} because it answers a different question: that one
+     * says what may be done to a FILE, this says what may be done with what is IN one. A server that
+     * lets everybody read and only operators write may still let nobody run anything.</p>
+     */
+    @FunctionalInterface
+    public interface ScriptingPolicy {
+
+        /** Everything runs, which is right when the machine is the player's own. */
+        ScriptingPolicy LIVE = (actor, project) -> ScriptingMode.LIVE;
+
+        /** Nothing runs locally; only what the server sends and has validated. */
+        ScriptingPolicy AUTHORIZED_ONLY = (actor, project) -> ScriptingMode.AUTHORIZED;
+
+        ScriptingMode modeFor(WorkspaceActor actor, WorkspaceProject project);
+    }
+
+    private ScriptingPolicy scripting = ScriptingPolicy.LIVE;
+
+    /**
+     * Says who may run this workspace's files.
+     *
+     * <p>Defaults to {@link ScriptingPolicy#LIVE}, which is what every existing host meant when there
+     * was no such question: an in-process workspace and a single-player world are the player's own
+     * machine. A host serving somebody else's files says otherwise.</p>
+     */
+    public WorkspaceService setScriptingPolicy(ScriptingPolicy policy) {
+        this.scripting = policy == null ? ScriptingPolicy.LIVE : policy;
+        return this;
     }
 
     /**

@@ -1,6 +1,7 @@
 package com.crystalgui.headless;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -23,7 +24,9 @@ import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.protocol.FsMessages;
 import com.crystalgui.fs.server.WorkspaceActor;
 import com.crystalgui.fs.server.WorkspaceHost;
+import com.crystalgui.fs.protocol.ScriptingMode;
 import com.crystalgui.fs.server.WorkspacePermission;
+import com.crystalgui.fs.server.WorkspaceService;
 import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
@@ -66,6 +69,9 @@ public class WorkspaceHostTest {
         Protocols.resetForTesting();
     }
 
+    /** What a host says about running this workspace's files. @see WorkspaceHost.Host#scripting */
+    private WorkspaceService.ScriptingPolicy scripting = WorkspaceService.ScriptingPolicy.LIVE;
+
     /** What only a platform can answer, answered by a temporary directory and a fixed name. */
     private WorkspaceHost.Host hostOver(Path root) {
         return new WorkspaceHost.Host() {
@@ -78,6 +84,11 @@ public class WorkspaceHostTest {
             @Override
             public WorkspacePermission permission() {
                 return WorkspacePermission.ALLOW_ALL;
+            }
+
+            @Override
+            public WorkspaceService.ScriptingPolicy scripting() {
+                return scripting;
             }
 
             @Override
@@ -162,5 +173,48 @@ public class WorkspaceHostTest {
         assertEquals("the peer bound", 1, host.boundPeerCount());
         host.forget("peer");
         assertEquals("and is gone", 0, host.boundPeerCount());
+    }
+
+    /**
+     * <b>A server says whether its files may be run in a client's JVM, and the client hears it.</b>
+     *
+     * <p>The Run command compiles the buffer in front and executes it in the CLIENT's process. On a
+     * dedicated server that is a live scripting environment inside every player's game, reachable from
+     * any project they can edit — so whether it exists is the server's to say, and it says it on the
+     * same notification that carries "may read" and "may write".</p>
+     *
+     * <p>The default is deliberately the permissive one: an in-process workspace and a single-player
+     * world are the player's own machine, and every host that predates the question meant exactly
+     * that.</p>
+     */
+    @Test
+    public void aServerSaysWhetherItsFilesMayBeRunInAClientsJvm() throws IOException {
+        scripting = WorkspaceService.ScriptingPolicy.AUTHORIZED_ONLY;
+        serve(folder.getRoot().toPath().resolve("crystalgui/workspace"));
+
+        Workspace workspace = Workspace.over(clientEnd::call, clientEnd::onNotify, PlainOps.INSTANCE);
+        workspace.greet();
+        pump();
+
+        Resource file = Resource.of(CgPath.of(PROJECT, "Main.java"));
+        assertEquals("the server refused a local run, and said so on the capability",
+                ScriptingMode.AUTHORIZED, workspace.capabilities().scriptingMode(file));
+        assertFalse("...so the Run command must not compile and execute here",
+                workspace.capabilities().scriptingMode(file).allowsLocalRun());
+        assertTrue("...while reading is untouched: this is about what is IN a file, not the file",
+                workspace.capabilities().mayRead(file));
+    }
+
+    /** ...and the default is what every host meant before there was a question to ask. */
+    @Test
+    public void aWorkspaceNobodyHasSpokenForRunsLocally() throws IOException {
+        serve(folder.getRoot().toPath().resolve("crystalgui/workspace"));
+        Workspace workspace = Workspace.over(clientEnd::call, clientEnd::onNotify, PlainOps.INSTANCE);
+        workspace.greet();
+        pump();
+
+        assertTrue("an unspoken-for workspace runs locally",
+                workspace.capabilities().scriptingMode(
+                        Resource.of(CgPath.of(PROJECT, "Main.java"))).allowsLocalRun());
     }
 }

@@ -1,5 +1,7 @@
 package com.crystalgui.mc.net;
 
+import com.crystalgui.fs.server.WorkspaceService;
+import com.crystalgui.fs.protocol.ScriptingMode;
 import java.nio.file.Path;
 
 import javax.annotation.Nullable;
@@ -76,6 +78,28 @@ public final class CgUiWorkspaceHost {
         @Override
         public WorkspacePermission permission() {
             return new OperatorsMayWrite();
+        }
+
+        /**
+         * <b>Single-player runs scripts; a dedicated server does not.</b>
+         *
+         * <p>In single-player the integrated server IS the player's own machine, so a Run compiles and
+         * executes in a JVM they already own — there is nobody to protect them from. On a dedicated
+         * server the same command would be a live scripting environment inside every player's client,
+         * reachable from any project they can edit, which is the surface {@link ScriptingMode} closes.
+         * What is left there is {@code AUTHORIZED}: nothing runs unless the server sends it.</p>
+         *
+         * <p>Per SERVER rather than per actor, for now. An operator is trusted with the files and that
+         * is a different question from whether their client should be running arbitrary code on their
+         * behalf — and a config that grants it is the server owner's decision to make, not a default
+         * to guess at.</p>
+         */
+        @Override
+        public WorkspaceService.ScriptingPolicy scripting() {
+            MinecraftServer server = MinecraftServer.getServer();
+            return server != null && server.isSinglePlayer()
+                    ? WorkspaceService.ScriptingPolicy.LIVE
+                    : WorkspaceService.ScriptingPolicy.AUTHORIZED_ONLY;
         }
 
         /**
