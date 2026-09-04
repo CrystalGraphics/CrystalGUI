@@ -3,11 +3,9 @@ package com.crystalgui.fs.server;
 import java.util.List;
 import java.util.Objects;
 
-import com.crystalgui.fs.CgFileEntry;
+import com.crystalgui.fs.provider.CgFileEntry;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.project.ProjectInfo;
-import com.crystalgui.fs.WorkspaceActor;
-import com.crystalgui.fs.WorkspaceService;
 
 /**
  * A workspace <b>as one actor sees it</b> — the service with the caller already decided.

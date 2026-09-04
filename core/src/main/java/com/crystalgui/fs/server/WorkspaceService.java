@@ -1,9 +1,19 @@
-package com.crystalgui.fs;
+package com.crystalgui.fs.server;
 
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.ProjectInfo;
 import com.crystalgui.fs.project.Excludes;
+import com.crystalgui.fs.CgFileError;
+import com.crystalgui.fs.CgFileSystemException;
+import com.crystalgui.fs.CgPath;
+import com.crystalgui.fs.provider.CgFileCapability;
+import com.crystalgui.fs.provider.CgFileEntry;
+import com.crystalgui.fs.provider.CgFileEvent;
+import com.crystalgui.fs.provider.CgFileEventSource;
+import com.crystalgui.fs.provider.CgFileSystem;
+import com.crystalgui.fs.provider.InMemoryFileSystem;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -212,7 +222,7 @@ public final class WorkspaceService {
      *
      * <p>The provider has always known and the answer could not reach the client, which is why two
      * spellings of one file could be opened as two documents that overwrote each other. It travels in
-     * {@code FsHello} now. @see com.crystalgui.fs.CgFileCapability#PATH_CASE_SENSITIVE
+     * {@code FsHello} now. @see com.crystalgui.fs.provider.CgFileCapability#PATH_CASE_SENSITIVE
      */
     public boolean caseSensitive() {
         return files.has(CgFileCapability.PATH_CASE_SENSITIVE);

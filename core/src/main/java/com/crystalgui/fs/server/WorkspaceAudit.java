@@ -2,8 +2,6 @@ package com.crystalgui.fs.server;
 
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.WorkspaceActor;
-import com.crystalgui.fs.WorkspaceOperation;
 
 import org.jetbrains.annotations.Nullable;
 

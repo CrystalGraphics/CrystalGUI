@@ -1,14 +1,9 @@
 package com.crystalgui.fs.server;
 
-import com.crystalgui.fs.CgFileEntry;
+import com.crystalgui.fs.provider.CgFileEntry;
 import com.crystalgui.fs.CgFileError;
-import com.crystalgui.fs.CgFileEvent;
 import com.crystalgui.fs.CgFileSystemException;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.WorkspaceActor;
-import com.crystalgui.fs.WorkspaceConflictException;
-import com.crystalgui.fs.WorkspaceOperation;
-import com.crystalgui.fs.WorkspaceService;
 import com.crystalgui.fs.project.ProjectInfo;
 import com.crystalgui.fs.protocol.FsError;
 import com.crystalgui.fs.protocol.FsHello;
@@ -19,7 +14,7 @@ import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.serialization.Codec;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.text.TextEncoding;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;

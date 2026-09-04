@@ -1,4 +1,4 @@
-package com.crystalgui.fs;
+package com.crystalgui.fs.provider;
 
 import java.util.Collections;
 import java.util.EnumSet;

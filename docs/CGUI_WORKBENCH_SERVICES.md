@@ -842,8 +842,10 @@ against mutants.
 
 ## Resources
 
-`com.crystalgui.fs` — `Resource`, `CgPath`. `com.crystalgui.fs.client` — `Workspace` and its facades,
-`ContentProvider`, `ContentProviders`.
+`com.crystalgui.fs` — `Resource`, `CgPath`, and the two failure types both halves name.
+`com.crystalgui.fs.client` — `Workspace` and its facades, `ContentProvider`, `ContentProviders`.
+`com.crystalgui.fs.provider` — the filesystem SPI under all of it; `com.crystalgui.fs.server` — the
+workspace over it, where authorisation, etags, trash and presence live.
 
 **A tab's input, whether or not it is a file.** A workbench opens things with no disk presence — a
 generated shader, a diff, an untitled buffer — and both references model that with a *scheme* rather than

@@ -3,6 +3,7 @@ package com.crystalgui.headless;
 import com.crystalgui.fs.protocol.FsError;
 import com.crystalgui.fs.protocol.FsHello;
 import com.crystalgui.fs.protocol.FsMessages;
+import com.crystalgui.fs.CgFileError;
 import com.crystalgui.serialization.Codec;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.JsonOps;
@@ -278,12 +279,12 @@ public class FsProtocolCodecTest {
     @Test
     public void aProviderErrorMapsToACode() {
         assertEquals(FsError.NOT_FOUND,
-                FsError.of(com.crystalgui.fs.CgFileError.FILE_NOT_FOUND, "x").code());
+                FsError.of(CgFileError.FILE_NOT_FOUND, "x").code());
         assertEquals(FsError.NOT_PERMITTED,
-                FsError.of(com.crystalgui.fs.CgFileError.NO_PERMISSIONS, "x").code());
+                FsError.of(CgFileError.NO_PERMISSIONS, "x").code());
         assertEquals(FsError.TOO_LARGE,
-                FsError.of(com.crystalgui.fs.CgFileError.FILE_TOO_LARGE, "x").code());
+                FsError.of(CgFileError.FILE_TOO_LARGE, "x").code());
         assertEquals(FsError.ALREADY_EXISTS,
-                FsError.of(com.crystalgui.fs.CgFileError.FILE_EXISTS, "x").code());
+                FsError.of(CgFileError.FILE_EXISTS, "x").code());
     }
 }

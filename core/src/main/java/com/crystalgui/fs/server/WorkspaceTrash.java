@@ -1,4 +1,10 @@
-package com.crystalgui.fs;
+package com.crystalgui.fs.server;
+
+import com.crystalgui.fs.CgFileError;
+import com.crystalgui.fs.CgFileSystemException;
+import com.crystalgui.fs.CgPath;
+import com.crystalgui.fs.provider.CgFileEntry;
+import com.crystalgui.fs.provider.CgFileSystem;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

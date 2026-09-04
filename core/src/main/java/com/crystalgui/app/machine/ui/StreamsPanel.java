@@ -1,9 +1,6 @@
 package com.crystalgui.app.machine.ui;
 
-import java.util.ArrayList;
 import java.util.List;
-
-import javax.annotation.Nullable;
 
 import com.crystalgui.app.machine.MachineModel;
 import com.crystalgui.fs.CgPath;
@@ -14,7 +11,6 @@ import com.crystalgui.net.window.Networked;
 import com.crystalgui.net.window.RowSource;
 import com.crystalgui.net.window.ServerScope;
 import com.crystalgui.net.window.UiType;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;

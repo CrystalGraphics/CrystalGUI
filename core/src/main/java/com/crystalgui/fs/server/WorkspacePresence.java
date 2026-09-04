@@ -1,4 +1,6 @@
-package com.crystalgui.fs;
+package com.crystalgui.fs.server;
+
+import com.crystalgui.fs.CgPath;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;

@@ -1,8 +1,8 @@
 package com.crystalgui.headless;
 
-import com.crystalgui.fs.CgFileCapability;
-import com.crystalgui.fs.CgFileEntry;
-import com.crystalgui.fs.CgFileType;
+import com.crystalgui.fs.provider.CgFileCapability;
+import com.crystalgui.fs.provider.CgFileEntry;
+import com.crystalgui.fs.provider.CgFileType;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;

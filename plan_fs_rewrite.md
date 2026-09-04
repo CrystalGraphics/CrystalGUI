@@ -330,9 +330,10 @@ Three facts settled on the way, kept because the rewrite still depends on them:
 
 ```
                      SERVER                                    CLIENT                    reference
- fs             CgFileSystem (+ranged read, dir events)         —                         VS Code IFileSystemProvider
+ fs             CgPath, Resource, CgFileSystemException          same                      the vocabulary both name
  fs.project     Project, ProjectRegistry, ProjectInfo,          ProjectInfo               workspace folders
                 SourceRoots, Excludes
+ fs.provider    CgFileSystem (+ranged read, dir events)         —                         VS Code IFileSystemProvider
  fs.server      WorkspaceService: authorise, etag, trash,       —                         VS Code FileService
                 Presence, WatchHub
  fs.protocol    messages + codecs, FsMethods, FsError, hello     same                      LSP-shaped methods
@@ -473,7 +474,8 @@ N21, N23, and the two open questions.*
 |---|---|
 | `fs` | the provider tier, plus the ranged read |
 | `fs.project` | `Project`, `ProjectRegistry` (cached on a provider revision), `ProjectProvider`, `ProjectInfo`, `SourceRoots`, `Excludes` — the one glob matcher |
-| `fs.server` | `WorkspaceService`, `Permission`, `Actor`, `Operation`, `Trash`, `Presence`, `WatchHub`, `WorkspaceBinding` |
+| `fs.provider` | `CgFileSystem` and its two implementations, `CgFileEntry`, the capability set, the event source. Names `fs.project`, because a project is a named root and a filesystem is what resolves one to a directory |
+| `fs.server` | `WorkspaceService`, `Permission`, `Actor`, `Operation`, `Trash`, `Presence`, `WatchHub`, `WorkspaceBinding`, `ServerWorkspace` |
 | `fs.protocol` | messages, codecs, `FsMethods`, `FsError`, `FsHello` |
 | `fs.client` | `Workspace` and its facades, `Document`, `FileOperations`, `Backup`, `LocalHistory`, `Health` |
 | `document` | `DocumentKind`, `DocumentModel`, `AbstractDocumentModel`, `TextDocumentModel`, `BytesDocumentModel`, `DocumentEditor`, `EditorInput`, `RecentFiles` — below `widget` |

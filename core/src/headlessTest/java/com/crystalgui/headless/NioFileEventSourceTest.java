@@ -1,9 +1,9 @@
 package com.crystalgui.headless;
 
-import com.crystalgui.fs.CgFileEvent;
-import com.crystalgui.fs.CgFileEventSource;
+import com.crystalgui.fs.provider.CgFileEvent;
+import com.crystalgui.fs.provider.CgFileEventSource;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.NioFileEventSource;
+import com.crystalgui.fs.provider.NioFileEventSource;
 
 import org.junit.After;
 import org.junit.Before;

@@ -1,4 +1,4 @@
-package com.crystalgui.fs;
+package com.crystalgui.fs.provider;
 
 /**
  * What a directory entry is.

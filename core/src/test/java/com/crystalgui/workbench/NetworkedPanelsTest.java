@@ -10,15 +10,16 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.crystalgui.fs.server.WorkspaceActor;
 import org.jetbrains.annotations.Nullable;
 
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.crystalgui.fs.InMemoryFileSystem;
-import com.crystalgui.fs.WorkspacePermission;
-import com.crystalgui.fs.WorkspaceService;
+import com.crystalgui.fs.provider.InMemoryFileSystem;
+import com.crystalgui.fs.server.WorkspacePermission;
+import com.crystalgui.fs.server.WorkspaceService;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
@@ -93,7 +94,7 @@ public class NetworkedPanelsTest extends UiDocumentTestBase {
                 new InMemoryFileSystem().seed("demo:a.txt", "a"),
                 WorkspacePermission.ALLOW_ALL);
         new WorkspaceBinding<>(service, new WatchHub(service),
-                com.crystalgui.fs.WorkspaceActor.LOCAL, "player", PlainOps.INSTANCE)
+                WorkspaceActor.LOCAL, "player", PlainOps.INSTANCE)
                 .installOn(serverEnd);
 
         workbench = new Workbench(Workspace.of(clientEnd));

@@ -1,4 +1,4 @@
-package com.crystalgui.fs;
+package com.crystalgui.fs.provider;
 
 /**
  * What a listing or a stat says about one entry.
