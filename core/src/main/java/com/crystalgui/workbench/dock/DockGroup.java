@@ -694,6 +694,12 @@ public class DockGroup extends UIElement {
     private UIElement contentFor(DockPanelRef panel) {
         return content.computeIfAbsent(panel, ref -> withBanners(ref, buildContent(ref)));
     }
+
+    /** What has been built for {@code panel}, or null. What is actually on screen for it. */
+    @Nullable
+    public UIElement builtContentFor(DockPanelRef panel) {
+        return content.get(panel);
+    }
     
     /**
      * Drops the built widget for a panel that has been closed, so a reopen builds a fresh one.

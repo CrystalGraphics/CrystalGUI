@@ -207,6 +207,32 @@ public class WorkspaceEndToEndTest {
         assertEquals(big.length(), total);
     }
 
+    /**
+     * <b>...and {@code Workspace.read} gives every byte of it, not the empty inline field.</b>
+     *
+     * <p>The tier above the protocol, which is where this went wrong. {@code fs/read} answers inline or
+     * with a TRANSFER, and which one is the server's decision against its own limit — so a caller that
+     * reads {@code content} and stops is correct for every small file and silently wrong for a large
+     * one. It read {@code ReadResponse::content} and stopped: a file over 256 KB opened as an EMPTY
+     * document, marked CLEAN, and the first save wrote that emptiness over it.</p>
+     *
+     * <p>The test above proves the chunks arrive; this proves the one caller every document goes
+     * through actually joins them. Nothing between the two was checking.</p>
+     */
+    @Test
+    public void aLargeFileIsReadWholeByTheOneCallerDocumentsUse() {
+        StringBuilder big = new StringBuilder();
+        while (big.length() < WorkspaceBinding.INLINE_LIMIT + 5000) big.append("0123456789");
+        files.seed("proj:big.txt", big.toString());
+
+        Reply<byte[]> reply = workspace.read(file("big.txt"));
+        pump();
+
+        assertNotNull("the read settled", reply.result());
+        assertEquals("every byte, not the empty inline field",
+                big.length(), reply.result().length);
+    }
+
     @Test
     public void aListingCarriesItsEntries() {
         Reply<FsMessages.ListResponse> reply = workspace.files().list(file("src"));

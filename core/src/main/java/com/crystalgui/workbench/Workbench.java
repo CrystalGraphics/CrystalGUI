@@ -1018,6 +1018,24 @@ public class Workbench extends UIElement implements DataProvider {
         // AND THE EDITOR THAT TOOK OVER GETS THE FOCUS THE CLOSED ONE HAD. Spent a frame later -- see
         // focusActiveEditorPending.
         dock.onDidClosePanel.connect(panel -> focusActiveEditorPending = FOCUS_AFTER_CLOSE_FRAMES);
+        /*
+         * A TAB'S VIEW ARRIVING IS A PANEL THAT HAS TO BE BUILT AGAIN.
+         *
+         * Opening is asynchronous: a Tab exists immediately in LOADING and is filled when the read
+         * lands. The dock builds on the next frame and asks the tab for its view; while the read is in
+         * flight there is none, so the factory below returns an empty element as the placeholder for
+         * that frame -- and DockGroup MEMOISES what it built, which is right for every other reason and
+         * fatal here. Nothing rebuilt it, so the file was blank for ever.
+         *
+         * `openResource` cannot reach this, because it adds the ref inside the read's own `then`. A
+         * SESSION RESTORE can and does: the record names files nothing has read, the dock builds first,
+         * and the factory is what starts the read. Every tab from the previous session came back empty.
+         *
+         * The guard is not "the state changed". This signal also fires on CLEAN -> DIRTY, which is
+         * every keystroke, and rebuilding there would detach the editor the user is typing in. It fires
+         * only when what is ON SCREEN is not the view the tab now has.
+         */
+        editors.onDidChangeState.connect(this::rebuildPanelIfItsViewArrived);
         // Tab dirty markers. Was a per-frame refreshDirtyMarkers(), which meant encoding every open
         // document -- a whole shader graph serialised sixty times a second -- to notice a marker that
         // moves when somebody types. The equality guard SURVIVES the move: the announcement means
@@ -2338,6 +2356,24 @@ public class Workbench extends UIElement implements DataProvider {
         WindowFrame active = Desktop.of(window).activeWindow();
         if (active instanceof DockWindow torn && torn.area() != null) return torn.area();
         return dock;
+    }
+
+    /**
+     * Rebuilds a panel that is showing something other than its tab's view.
+     *
+     * <p>Contains rather than equals, because {@code DockGroup} may have wrapped the view in a banner
+     * column — comparing identity there would rebuild on every state change, which is every keystroke,
+     * and each rebuild would detach the editor being typed in.</p>
+     *
+     * @see com.crystalgui.workbench.dock.DockArea#rebuildPanel
+     */
+    private void rebuildPanelIfItsViewArrived(EditorService.Tab tab) {
+        DocumentEditor view = tab.editor();
+        if (view == null) return;   // still loading, or it failed and has nothing to show
+        DockPanelRef ref = refForResource(tab.resource());
+        UIElement built = dock.builtContentFor(ref);
+        if (built == null || built.contains(view.view())) return;
+        dock.rebuildPanel(ref);
     }
 
     /**
