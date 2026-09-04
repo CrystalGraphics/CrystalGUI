@@ -1,47 +1,46 @@
-package com.crystalgui.mc.client;
+package com.crystalgui.desktop.host;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.style.Styleable;
-import com.crystalgui.desktop.Desktop;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.signal.Connection;
+import com.crystalgui.core.window.WindowState;
+import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.net.ViewCommand;
-import com.crystalgui.net.window.ClientWindows;
+import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.window.ClientWindowContext;
+import com.crystalgui.net.window.ClientWindows;
 import com.crystalgui.net.window.ScopedSheets;
 import com.crystalgui.net.window.SheetSupply;
 import com.crystalgui.net.window.WindowMount;
-import com.crystalgui.workbench.Workbench;
-import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.serialization.StateMap;
+import com.crystalgui.style.Styleable;
 import com.crystalgui.style.sheet.StyleSheet;
-import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.desktop.window.WindowFrame;
-import com.crystalgui.core.window.WindowState;
+import com.crystalgui.ui.dom.UIElement;
 
 /**
- * <b>Where a server's window lands on 1.7.10</b> — a {@link WindowFrame} on the desktop
- * {@link CgUiScreen} already owns.
+ * <b>Where a server's window lands</b> — a {@link WindowFrame} on the desktop, wherever that desktop is.
  *
- * <p>The entire platform surface for networked UI, and deliberately small: no session, no window id,
- * no close matrix, no dispatch by type, no poll. Those are the engine's, in
- * {@code com.crystalgui.net.window}, written once for every loader. What is genuinely 1.7.10's is a
- * frame, a desktop and a style engine.</p>
+ * <p>This was the 1.7.10 loader's, and it named one Minecraft type: none. Its whole platform content was
+ * a static lookup of the screen's {@code UIDocument}, which is a field here. The rest — opening in the
+ * background, the close matrix, the sheets, the view commands — is the same on any host with a
+ * compositor.</p>
  *
  * <h3>It is a window, not a screen</h3>
  *
- * <p>There is <b>one</b> {@code GuiScreen} in this mod and there is meant to be: a second one is a
- * second claim on the input pump, the GL state handoff, the desktop's persistence and the modal stack,
- * and only one of them can be in front. A panel that needed its own screen could not coexist with the
- * editor, which is the whole thing a compositor is for.</p>
+ * <p>A host has one surface and is meant to: a second is a second claim on the input pump, the GL
+ * handoff, the persistence and the modal stack, and only one of them can be in front. A panel that
+ * needed its own screen could not coexist with an editor, which is the whole thing a compositor is
+ * for.</p>
  *
  * <h3>It opens in the background, deliberately</h3>
  *
- * <p>{@link UIDocument#openWindowInBackground} rather than {@code openWindow}: these windows are opened by
- * a <em>server</em> pushing a UI, not by the user asking for one, and taking the keyboard out from under
+ * <p>{@link Desktop#addWindow(WindowFrame, boolean)} with {@code false}: these windows are opened by a
+ * <em>server</em> pushing a UI, not by the user asking for one, and taking the keyboard out from under
  * whatever is being typed is the one thing every windowing system agreed to stop doing. The frame asks
- * for attention instead, and a user gesture — F8 — is what brings it forward.</p>
+ * for attention instead, and a user gesture is what brings it forward.</p>
  *
  * <h3>The one thing a mount owes back</h3>
  *
@@ -50,96 +49,79 @@ import com.crystalgui.core.window.WindowState;
  * echo. {@code WindowFrame.onDestroyed} is where that comes from, and {@code userClosed} is idempotent
  * precisely so this listener need not work out which of the two happened.</p>
  */
-public final class CgUiWindowMount implements WindowMount {
+public final class DesktopWindowMount implements WindowMount {
 
-    /** The one mount. Stateless, so there is no reason for a second. */
-    private static final CgUiWindowMount INSTANCE = new CgUiWindowMount();
+    private final UIDocument document;
 
     /** The connection currently carrying it, so rebinding to the same one is free. */
-    private static ProtocolConnection<Object> boundTo;
+    @Nullable
+    private ProtocolConnection<Object> boundTo;
 
-    private CgUiWindowMount() {
+    /**
+     * Where a window's own sheets are held, refcounted and scoped.
+     *
+     * <p>Per mount because the style engine they go into is: one document hosts every window on this
+     * host, so "is this sheet already installed" is a question about the host and not about any one
+     * window.</p>
+     */
+    private final ScopedSheets sheets;
+
+    public DesktopWindowMount(UIDocument document) {
+        this.document = document;
+        this.sheets = new ScopedSheets(new ScopedSheets.Host() {
+            @Override
+            public void add(StyleSheet sheet, Styleable root) {
+                document.styles().addStylesheet(sheet, root);
+            }
+
+            @Override
+            public void remove(StyleSheet sheet, Styleable root) {
+                // The ROOT overload: one parse serves every window of a type, so removing it wholesale
+                // would unstyle the others -- silently, and only ever with two of them open.
+                document.styles().removeStylesheet(sheet, root);
+            }
+        });
     }
 
     /**
-     * Makes sure this connection's {@link com.crystalgui.net.window.ClientWindows} knows where windows go.
+     * Makes sure this connection's {@link ClientWindows} knows where windows go.
      *
      * <p>Called from the frame loop, which is free when the wire has not moved and is what makes a
-     * reconnect work at all — the same per-frame re-ask {@code Mc1710Workspace.pump} does, and for the
-     * same reason: a rebind nothing re-asks for is machinery that can never fire.</p>
+     * reconnect work at all: a rebind nothing re-asks for is machinery that can never fire.</p>
      *
      * <p><b>Installed when the desktop exists, not when the connection does</b>, and that ordering is
      * the whole reason {@code ClientWindows} queues. A server can open a window before the player has
      * ever pressed a key to open the screen; the window waits, and lands the moment there is somewhere
      * for it to land.</p>
+     *
+     * @param preferred what should be offered the window first — an application's mount, which honours
+     *                  an editor-tab or tool-window hint and hands everything else straight back here.
+     *                  Null on a host with no application, where every window opens on the desktop,
+     *                  which is the hint working rather than failing
      */
-    public static void bind(@Nullable ProtocolConnection<Object> connection,
-                            @Nullable Workbench workbench) {
+    public void bind(@Nullable ProtocolConnection<Object> connection, @Nullable WindowMount preferred) {
         if (connection == null || connection == boundTo) return;
         boundTo = connection;
-        // THE WORKBENCH FIRST, falling back to this one. A server may ask for an editor tab or a tool
-        // window; only the workbench can honour that, and it hands everything else straight back here --
-        // so a client with no workbench opens every window on the desktop, which is the hint working
-        // rather than failing. @see com.crystalgui.net.window.Presentation
-        WindowMount mount = workbench == null ? INSTANCE : workbench.windowMount(INSTANCE);
+        WindowMount mount = preferred == null ? this : preferred;
         ClientWindows.of(connection)
                 .setSheetSupply(sheetSupply())
                 .setMount(mount);
         CrystalGuiCore.LOGGER.info("[cgui-ui] server windows will open on the {}",
-                workbench == null ? "desktop" : "workbench");
+                preferred == null ? "desktop" : "application");
     }
 
-    /**
-     * Turns the sheets a window names into CSS and applies them to the one style engine.
-     *
-     * <p>Built here rather than in {@code core} because parsing a stylesheet is one of the things a
-     * server-safe class may not do — {@code StyleSheet}'s class initialiser reads {@code default.css}
-     * through {@code CgIO}, so the whole class is unloadable on a dedicated server.</p>
-     */
-    /**
-     * Where a window's own sheets are held, refcounted and scoped.
-     *
-     * <p>Static because the style engine they go into is: one {@code UIDocument} hosts every window on
-     * this client, so "is this sheet already installed" is a question about the client and not about
-     * any one window.</p>
-     */
-    private static final ScopedSheets SHEETS = new ScopedSheets(new ScopedSheets.Host() {
-        @Override
-        public void add(StyleSheet sheet, Styleable root) {
-            UIDocument host = CgUiScreen.window();
-            if (host != null) host.styles().addStylesheet(sheet, root);
-        }
-
-        @Override
-        public void remove(StyleSheet sheet, Styleable root) {
-            UIDocument host = CgUiScreen.window();
-            // The ROOT overload: one parse serves every window of a type, so removing it wholesale
-            // would unstyle the others -- silently, and only ever with two of them open.
-            if (host != null) host.styles().removeStylesheet(sheet, root);
-        }
-    });
-
-    static SheetSupply sheetSupply() {
+    private SheetSupply sheetSupply() {
         return new SheetSupply(
                 (window, css) -> {
-                    for (String sheet : css) SHEETS.acquire(sheet, window.root());
+                    for (String sheet : css) sheets.acquire(sheet, window.root());
                 },
                 (window, css) -> {
-                    for (String sheet : css) SHEETS.release(sheet, window.root());
+                    for (String sheet : css) sheets.release(sheet, window.root());
                 });
     }
 
-
     @Override
     public MountedWindow mount(ClientWindowContext context) {
-        UIDocument host = CgUiScreen.window();
-        if (host == null) {
-            // Should not happen -- the host installs this mount while building the desktop, and the
-            // ClientWindows queues windows until then -- but a mount that threw would take the window
-            // down with it rather than merely failing to draw it.
-            throw new IllegalStateException("no UIDocument to mount <" + context.type() + "> onto");
-        }
-
         WindowFrame frame = new WindowFrame(title(context));
         // WHAT THE SERVER NAMED, so the compositor puts it back where the user left it. Before the key
         // travelled, a client had to invent one, which meant every mod's windows shared a namespace
@@ -151,19 +133,19 @@ public final class CgUiWindowMount implements WindowMount {
         // server -- which asks the very same panels before closing a window itself.
         frame.setDiscardGuard(context::mayClose);
         frame.setContent(context.root());
-        Desktop.of(host).addWindow(frame, false);
+        Desktop.of(document).addWindow(frame, false);
 
         Mounted mounted = new Mounted(frame, context);
 
         frame.onDestroyed.connect(mounted::onFrameDestroyed);
-        // HIDING IS NOT CLOSING. A minimised window is retained and detached, and the server should
-        // stop describing a tree nobody is drawing. @see com.crystalgui.net.protocol.UiMethods#VISIBILITY
+        // HIDING IS NOT CLOSING. A minimised window is retained and detached, and the server should stop
+        // describing a tree nobody is drawing. @see com.crystalgui.net.protocol.UiMethods#VISIBILITY
         frame.onHidden.connect(() -> context.visibilityChanged(false));
         frame.onShown.connect(persisted -> context.visibilityChanged(true));
         // AND THE WHOLE COMPOSITOR going away, which no individual window's onHidden reports: suspending
         // takes the desktop off the tree without touching any window, so a server would otherwise go on
         // describing a tree nobody is drawing for as long as the screen is closed.
-        mounted.desktopWatch = Desktop.of(host).onSuspendedChanged.connect(
+        mounted.desktopWatch = Desktop.of(document).onSuspendedChanged.connect(
                 shown -> context.visibilityChanged(shown && frame.state() == WindowState.VISIBLE));
         return mounted;
     }
@@ -177,13 +159,13 @@ public final class CgUiWindowMount implements WindowMount {
     }
 
     /** One frame, and which side is currently ending it. */
-    private static final class Mounted implements MountedWindow {
+    private final class Mounted implements MountedWindow {
 
         private final WindowFrame frame;
 
         /** Undone when the window goes, or the compositor keeps a dead window's report alive. */
         @Nullable
-        private com.crystalgui.core.signal.Connection desktopWatch;
+        private Connection desktopWatch;
         private final ClientWindowContext context;
 
         /** Set while the SERVER is taking this window down, so the frame's own teardown stays quiet. */
@@ -223,10 +205,9 @@ public final class CgUiWindowMount implements WindowMount {
 
         @Override
         public void focus() {
-            UIDocument host = CgUiScreen.window();
-            if (host == null || frame.state() == WindowState.DESTROYED) return;
+            if (frame.state() == WindowState.DESTROYED) return;
             if (frame.state() == WindowState.HIDDEN) frame.show(false);
-            Desktop.of(host).activate(frame);
+            Desktop.of(document).activate(frame);
         }
 
         /**

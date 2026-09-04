@@ -581,6 +581,31 @@ scratch project, the script policy — today's `HarnessWorkspace` plus twenty li
 wants an editor calls `DesktopHost.create(host)` and `applications().launch(CRYSTAL_EDITOR)`. The three
 scene-specific assemblies in §1.2 go.
 
+> **Shipped at W3, and the measured numbers are not the estimated ones.** What moved: `Connections`
+> (the peer table, `net.protocol`), `WorkspaceHost` (`fs.server`), `DesktopWindowMount` and `DesktopHost`
+> (`desktop.host`). `Mc1710Workspace` and `CgUiWindowMount` are deleted. `CgUiConnections` went 320 → 242
+> and `CgUiWorkspaceHost` 403 → 169, both now naming a Minecraft type in nearly every method.
+>
+> **`CgUiScreen` did not shrink** — 748 → 757. Everything the estimate expected to leave it is the
+> *application* assembly: building the editor, its window, its config, the script workbench, the
+> first-open geometry, and the one ask for the project list. None of that is a host seam and all of it is
+> W7's, so the estimate was really W3+W7's and is reported here as such rather than quietly missed.
+> `LoaderNamesNoProductTest` moves with it for the same reason: it fails today because the screen names
+> `CrystalEditor`, and an assertion that fails is worse than one that waits.
+>
+> Three smaller deviations. **`DesktopWindowMount` lives in `desktop.host`, not `net.window`** — it
+> builds `WindowFrame`s and drives a `Desktop`, so putting it in the protocol package would point that
+> package at the compositor; `net.window` keeps the SPI it defines. **`HostServices` has no
+> `onConnectionChanged`** — nothing on any host emits one, and the engine re-asks per frame anyway, so it
+> would have been a slot declared, wired and never fired; it gains `desktopId()` instead, which two hosts
+> in one installation genuinely need. And the loader classes keep their names (`CgUiConnections`,
+> `CgUiWorkspaceHost`) rather than becoming `Mc1710*`: eight probes name them, and the rename buys a
+> prefix.
+>
+> The dividend is the one the audit predicted: `WorkspaceHostTest` drives a server serving a real
+> directory to a real client over a real connection, headlessly. Before the move the only instrument was
+> booting Minecraft.
+
 ### 4.9 The session — who owns it, and what it is keyed by (A10)
 
 **The engine serialises it and the record does not change shape.** `WorkbenchSession` keeps writing
@@ -956,7 +981,7 @@ move with the rewrite.
 | **W0 — the leak test** | `ApplicationRetentionTest`: build and dispose four `CrystalEditor`s; assert `Disposer.liveCount()`, static signal `connectionCount()`s and `ProjectSourcesRegistry.size()` return to baseline. **It fails on the current tree**, which is the point | the test exists and is red | none |
 | **W1 — disposal** | `Workbench implements Disposable`; every ctor subscription into a `ConnectionGroup`; `Watch`es disposed; `ProjectSourcesRegistry` withdrawn; `CrystalEditor.dispose()` real; `DockBanners` → registry-owned | W0 green | low |
 | **W2 — `WorkbenchContext` + `WorkbenchExtension`** | the interface extracted (no behaviour change), measured from what the outside calls; `WorkspaceProjects` named as an interface over the explorer's model (§4.11, the move deferred to W5); `WorkbenchExtensions` + `activateAll`, activated by the workbench and disposed with it; `NotesExtension` first, and the harness's two `NotesKind.register` calls deleted; `LayeringTest` case for extensions | notes appear on every host with no host code — `aShippedExtensionIsActiveOnAPlainWorkbench` | low |
-| **W3 — the host seam** | `HostServices`, `DesktopHost`, `DesktopWindowMount`, `Connections`, `WorkspaceHost`; `Mc1710Workspace` deleted; `CgUiScreen` shrunk; `HarnessHost` | `:mc1710:compileJava`, `serverSmoke`, `runClient -PcgJoin`, the session probe; `LoaderNamesNoProductTest` | **medium** — crosses the loader seam, so only `serverSmoke` and a client can see it |
+| **W3 — the host seam** | `HostServices`, `DesktopHost`, `DesktopWindowMount` (in `desktop.host`), `net.protocol.Connections`, `fs.server.WorkspaceHost`; `Mc1710Workspace` and `CgUiWindowMount` **deleted**; `CgUiScreen` rewired onto the host (it shrinks at W7, with the application) | `:mc1710:compileJava`, `serverSmoke` — both green; `WorkspaceHostTest` drives the server side headlessly for the first time | **medium** — crosses the loader seam, so only `serverSmoke` and a client can see it |
 | **W3b — projects and sources** | `project.json` + `ScanningProjectProvider`, `fs/createProject`, the client-local source and `Workspace` routing by project, one root per server chosen by `isDedicatedServer()`, `workspaceId`, the explorer's source groups, the creation dialog with the scope choice shown only in single-player (§4.13) | many projects listed from both sources on a dedicated server and in single-player; one created into each; `serverSmoke` + the two-client probe | **medium–high** — the largest fs change since F7, and it crosses the loader seam |
 | **W4 — `ToolWindowKind`** | the declaration; Problems, Notifications, Run, Inspector ported; `registerToolWindowCommands` deleted | every tool window has one declaration; `View ▸ Tool Windows` and the palette rows are derived | medium |
 | **W5 — the `Workbench` split** | `pricesplit.py` rebuilt (D24) and run first; the extraction per §4.5; `StatusBar` per workbench (D4) | `:core:check`; the 1,745+1,749 tests | **high** — the largest move; done after W1–W4 so it moves code that is already disposed and already context-shaped |
