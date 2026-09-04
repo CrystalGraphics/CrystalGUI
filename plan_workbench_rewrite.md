@@ -159,8 +159,18 @@ The reason `HotExitTest` exhausted a JUnit worker's heap with four editors, enum
 | `DockBanners` (static) | `Workbench` ctor, `ShaderGraphContribution.register` | **never** |
 | `Workspace.files().onDidFail`, `.onDidRun` | `Workbench` ctor | **never** — and the `Workspace` is per *connection*, so it outlives every workbench on it |
 | `Workspace.presence().onDidChange`, `onDidReconnect` | `Workbench` ctor | **never** |
-| `Workspace.watch(root, true)` per project root | `Workbench` ctor | **never** — the returned `Watch` is `Disposable` and dropped, so the *server* keeps a recursive subscription per dead workbench |
+| `Workspace.watch(root, true)` per project root | `Workbench` ctor, over an **empty list** — so never at all until it was moved to `onDidChangeProjects`; see the correction below | **never** — the returned `Watch` is `Disposable` and dropped, so the *server* keeps a recursive subscription per dead workbench |
 | `LanguageRegistry.onCapabilityChanged` | `connected()` | ✓ `capabilityWatch` — the one that is right |
+
+> **Corrected while writing W0.** That row described a leak this tree did not have yet. Roots arrive
+> from the project listing, which is asked for from `tickFrame` — after attach, and after a session has
+> opened, because the server discards a call naming a window that does not exist. So the constructor's
+> loop ran over an empty list on **every host, always**: no workspace-wide watch was ever taken, and the
+> explorer never heard about another client's create, delete or rename outside the files it happened to
+> have open. Per-document watches are a separate subscription and still arrived, which is what made it
+> read as the tree being stale rather than as a subscription that was never made. Fixed before W1, since
+> a disposal step that disposes nothing is not a disposal step; `WorkbenchWatchesProjectRootsTest` pins
+> it, and it fails against the line being removed.
 
 And the teardown surface that would drop them:
 
