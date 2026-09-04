@@ -79,7 +79,7 @@ the workbench never asked, because it talks to a widget rather than to a documen
 
 | Concern | Files | Lines |
 |---|---|---|
-| Provider — `CgPath`, `CgFileSystem`, `CgFileEntry`, `CgFileError`, `CgFileCapability`, `CgFileType`, `CgFileSystemException`, `LocalFileSystem`, `InMemoryFileSystem`, `CgFileEvent`, `CgFileEventSource`, `NioFileEventSource` | 12 | ~1,700 |
+| Provider — `CgFileSystem`, `CgFileEntry` (+`Type`), `CgFileCapability`, `CgFileEvent` (+`Source`), `LocalFileSystem`, `InMemoryFileSystem`, `NioFileEventSource` in `fs.provider`; `CgPath`, `CgFileError`, `CgFileSystemException` at `fs`'s root, named by every tier | 10 | ~1,700 |
 | Server workspace — `WorkspaceService`, `WorkspaceProject`, `ProjectRegistry`, `ProjectProvider`, `ProjectInfo`, `WorkspacePermission`, `WorkspaceActor`, `WorkspaceOperation`, `WorkspaceConflictException`, `WorkspaceTrash`, `WorkspaceWatcher`, `WorkspacePresence` | 12 | ~1,500 |
 | Wire binding — `WorkspaceProtocol`, `WorkspaceRpc` | 2 | ~780 |
 | Client — `WorkspaceClient`, `WorkspaceFileService`, `WorkingCopies` | 3 | ~1,340 |
