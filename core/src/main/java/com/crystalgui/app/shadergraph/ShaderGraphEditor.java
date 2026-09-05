@@ -1,8 +1,6 @@
 package com.crystalgui.app.shadergraph;
 import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.core.data.DataContext;
-import com.crystalgui.app.shadergraph.node.ShaderVectorFieldWidget;
-import com.crystalgui.app.shadergraph.node.ShaderColorFieldWidget;
 import com.crystalgui.app.shadergraph.blackboard.BlackboardPanel;
 import com.crystalgui.app.shadergraph.blackboard.PropertyPill;
 import com.crystalgui.app.shadergraph.node.ShaderPropertyNodes;
@@ -245,10 +243,10 @@ public class ShaderGraphEditor extends UIElement
         // rather than a silent one". It was worse than a text field here: with no factory at all a
         // Color node drew nothing but its output port, and a Vector node the same.
         //
-        // Installed at the one place a library is built, and idempotent -- both installers REPLACE
-        // their registration rather than adding to it, so a second graph costs two map writes.
-        ShaderColorFieldWidget.install();
-        ShaderVectorFieldWidget.install();
+        // INSTALLED BY `ShaderNodeLibrary.of`, on the line below, and it used to be done here as well.
+        // Two sites is the shape that leaves a third one out: the helper's whole argument is that
+        // building a library IS the moment the shader domain's vocabulary has to exist, so anything that
+        // builds one gets the widgets and anything that does not needs no line at all.
         library = ShaderNodeLibrary.of(shaderNodes);
         graph.setNodeLibrary(library, propertyAwareFactory(NodeWidgetFactory.of(library).build()),
                 ShaderGraphBridge.GLSL_PROMOTION);

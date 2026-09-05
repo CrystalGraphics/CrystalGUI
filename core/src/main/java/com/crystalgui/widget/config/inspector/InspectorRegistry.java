@@ -6,6 +6,7 @@ import com.crystalgui.core.signal.Signal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Every {@link InspectorSection} anything has contributed.
@@ -22,7 +23,12 @@ public final class InspectorRegistry {
     private InspectorRegistry() {
     }
 
-    private static final List<InspectorSection> SECTIONS = new ArrayList<>();
+    // COPY-ON-WRITE, because the two ends run at different times: an extension registers while a
+    // workbench is being built and withdraws while one is being torn down, and `sectionsFor` walks the
+    // list every time the inspector's subject changes. Both are the frame thread today, so a plain
+    // ArrayList was correct rather than lucky -- but nothing says so, and the cost of the guarantee is a
+    // copy per registration, which happens a handful of times per application.
+    private static final List<InspectorSection> SECTIONS = new CopyOnWriteArrayList<>();
 
     /**
      * Something that is inspected has changed — re-ask.
