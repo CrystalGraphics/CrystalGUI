@@ -10,6 +10,7 @@ import com.crystalgraphics.api.text.CgTextLayout;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataKey;
@@ -502,6 +503,12 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
 
     private int firstRealised = -1;
     private int lastRealised = -1;
+
+    /** Once per editor: a realised window of zero rows is silent otherwise. @see #updateWindow */
+    private boolean warnedDegenerateWindow;
+
+    /** {@code -Dcrystalgui.editor.trace=true} — report the first realised window even when it is fine. */
+    private static final boolean TRACE_WINDOW = Boolean.getBoolean("crystalgui.editor.trace");
 
     /**
      * Every caret in the document, sorted and non-overlapping.
@@ -5851,6 +5858,33 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         int last = viewport <= 0f
                 ? first
                 : Math.min(count - 1, (int) ((scrollTop() + viewport) / height) + OVERSCAN);
+
+        // A DEGENERATE WINDOW IS THE ONE FAILURE HERE THAT LOOKS LIKE A RENDERING BUG.
+        //
+        // With no viewport there is no row range, so nothing is realised and the editor draws its
+        // background and nothing else -- an opaque rectangle where the text should be, with the panel's
+        // own border still around it. Every part of that reads as "the editor did not paint" rather than
+        // "the editor was asked to paint zero rows", and the document is fine throughout: the caret, the
+        // encoding and the line ending all still report correctly in the status bar.
+        //
+        // viewportHeight() reaches it through horizontalBarThickness -> getMaxScrollLeft ->
+        // getScrollWidth, and a scrollbar that is not shown has NO BOX -- so a zero here is a geometry
+        // question, not a text one. Said once per editor rather than per frame.
+        boolean degenerate = viewport <= 0f || !(height > 0f);
+        if (!warnedDegenerateWindow && (degenerate || TRACE_WINDOW)) {
+            warnedDegenerateWindow = true;
+            String state = "viewport=" + viewport + " lineHeight=" + height + " viewLines=" + count
+                    + " rows=[" + first + ".." + last + "] scrollTop=" + scrollTop()
+                    + " box=" + (box() == null ? "<none>"
+                            : box().width() + "x" + box().height()
+                                    + " client=" + box().clientWidth() + "x" + box().clientHeight());
+            if (degenerate) {
+                CrystalGuiCore.LOGGER.warn("[cgui] TextEditor realised no rows -- it will draw its "
+                        + "background and no text. {}", state);
+            } else {
+                CrystalGuiCore.LOGGER.info("[cgui] TextEditor first window: {}", state);
+            }
+        }
 
         if (first != firstRealised || last != lastRealised) {
             // THE REALISE LOOP, which nothing has ever timed. ed:updateWindow measured at 33.2ms on the
