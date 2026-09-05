@@ -31,6 +31,22 @@ public final class ThemeRegistry {
     private static final Map<String, UiTheme> REGISTRY =
             Collections.synchronizedMap(new LinkedHashMap<>());
 
+    /**
+     * Every {@code registerTheme}/{@code registerScheme} call that named a FILE, so {@link #reloadAll}
+     * can replay it — keyed by the namespaced path, valued by the role it was registered as.
+     *
+     * <p>Keyed by the PATH rather than by the theme's id, which is what lets a reload be a replay: an
+     * id is declared inside the file and may disagree with the path it was loaded from, so keying by
+     * id would leave the reload unable to say which file to re-read. Replaying the original call also
+     * means a re-register goes through the ordinary refusal path, so a file that stops parsing
+     * mid-save keeps the entry it already had.</p>
+     *
+     * <p>{@link #registerSource} is deliberately absent from this: it has no file, so there is nothing
+     * to re-read and pretending otherwise would drop the entry on the first reload.</p>
+     */
+    private static final Map<String, UiTheme.Role> ORIGINS =
+            Collections.synchronizedMap(new LinkedHashMap<>());
+
     private ThemeRegistry() {
     }
 
@@ -87,6 +103,42 @@ public final class ThemeRegistry {
 
     public static void resetForTesting() {
         REGISTRY.clear();
+        ORIGINS.clear();
+    }
+
+    /**
+     * Re-reads every theme and scheme that was registered from a file — <b>theme hot reload</b>.
+     *
+     * <p>The counterpart to {@code StyleSheetRegistry.reloadAll()}, and it is a separate call because
+     * a theme is not in that cache: a {@code UiTheme} captures its source text and its variable table
+     * at registration, so re-reading every stylesheet re-substitutes them all against the table the
+     * theme had <em>when it was registered</em>. Editing a token and reloading the sheets therefore
+     * reports "re-read N stylesheets" and changes no colour — the failure this project keeps writing
+     * down, where the mechanism is live and the input is stale.</p>
+     *
+     * <p><b>This only re-registers. It does not re-apply</b> — the active theme is a field on
+     * {@link UiThemeManager} pointing at the object this replaces, so nothing on screen moves until
+     * that field is re-resolved and the table rebound. {@link UiThemeManager#reloadFromDisk()} is the
+     * pair, and is what a host should call.</p>
+     *
+     * @return how many files were re-read and accepted
+     */
+    public static int reloadAll() {
+        Map<String, UiTheme.Role> origins;
+        synchronized (ORIGINS) {
+            origins = new LinkedHashMap<>(ORIGINS);
+        }
+        int reloaded = 0;
+        for (var entry : origins.entrySet()) {
+            if (registerFromPath(entry.getKey(), dirFor(entry.getValue()), entry.getValue())) reloaded++;
+        }
+        CrystalGuiCore.LOGGER.info("ThemeRegistry.reloadAll: re-read {} of {} theme file(s)",
+                reloaded, origins.size());
+        return reloaded;
+    }
+
+    private static String dirFor(UiTheme.Role role) {
+        return role == UiTheme.Role.SCHEME ? "ui/schemes/" : "ui/themes/";
     }
 
     private static List<UiTheme> byRole(UiTheme.Role role) {
@@ -106,7 +158,11 @@ public final class ThemeRegistry {
             CrystalGuiCore.LOGGER.warn("ThemeRegistry: no file at '{}' (from '{}')", resourcePath, namespacedPath);
             return false;
         }
-        return register(css, expected, resourcePath);
+        if (!register(css, expected, resourcePath)) return false;
+        // Recorded only on SUCCESS, so a path that has never once produced a usable theme is not
+        // re-read on every reload for the rest of the process.
+        ORIGINS.put(namespacedPath, expected);
+        return true;
     }
 
     private static boolean register(String css, @Nullable UiTheme.Role expected, String origin) {
