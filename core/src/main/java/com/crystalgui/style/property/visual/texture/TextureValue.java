@@ -3,6 +3,7 @@ package com.crystalgui.style.property.visual.texture;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.texture.CgUiGradient;
+import com.crystalgui.render.texture.CgUiGrid;
 import com.crystalgui.render.texture.CgUiQuad;
 import com.crystalgui.render.texture.CgUiGlass;
 import com.crystalgui.render.texture.CgUiRepeat;
@@ -107,7 +108,50 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
         if (lower.startsWith("linear-gradient(") && value.endsWith(")")) {
             return parseLinearGradient(value.substring("linear-gradient(".length(), value.length() - 1));
         }
+        if (lower.startsWith("grid(") && value.endsWith(")")) {
+            return parseGrid(value.substring("grid(".length(), value.length() - 1));
+        }
         return null;
+    }
+
+    /**
+     * {@code grid(<cell>, <colour>[, <line-width>])} — a ruled grid, drawn analytically.
+     *
+     * <pre>
+     *   grid(16, #6EDCD024)          16px cells, 1px lines
+     *   grid(16, #6EDCD024, 2)       2px lines
+     *   grid(16 24, #6EDCD024)       non-square cells: x then y
+     * </pre>
+     *
+     * <p>Every length is in logical pixels and {@code px} is accepted on any of them. The cell is one
+     * number for a square grid or two separated by a space, which is the only place this grammar
+     * departs from a comma-separated CSS function — a comma there would be ambiguous against the
+     * colour that follows.</p>
+     *
+     * <p>A missing or unparseable cell, colour or width is a parse failure (null), exactly as a
+     * malformed gradient stop is. There is deliberately no default colour: a grid nobody can see is
+     * indistinguishable from one that failed to parse.</p>
+     */
+    private static @Nullable CgUiDrawable parseGrid(String args) {
+        List<String> parts = CssParsingUtil.splitTopLevelCommas(args);
+        if (parts.size() < 2 || parts.size() > 3) return null;
+
+        String[] cells = parts.get(0).trim().split("\s+");
+        if (cells.length < 1 || cells.length > 2) return null;
+        Float cellX = parseFloatOrNull(cells[0]);
+        Float cellY = cells.length == 2 ? parseFloatOrNull(cells[1]) : cellX;
+        if (cellX == null || cellY == null || cellX <= 0f || cellY <= 0f) return null;
+
+        Integer color = ColorValue.parseColor(parts.get(1).trim());
+        if (color == null) return null;
+
+        float lineWidth = 1f;
+        if (parts.size() == 3) {
+            Float parsed = parseFloatOrNull(parts.get(2).trim());
+            if (parsed == null || parsed < 0f) return null;
+            lineWidth = parsed;
+        }
+        return new CgUiGrid(cellX, cellY, lineWidth, color);
     }
 
     /**
