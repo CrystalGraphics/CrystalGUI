@@ -322,7 +322,7 @@ public class StripeView extends UIElement {
         UIElement space = window.focus().scopeOf(this);
         if (space == null) space = window;
         Vector2f local = space.toLocal(pointer.x(), pointer.y());
-        workbench.toolWindowManager().floatPanel(typeId, local.x(), local.y());
+        workbench.toolWindowManager().floatPanelUnder(typeId, local.x(), local.y());
     }
 
     private void onAim(RegionDropOverlay.Aim aim) {
@@ -656,7 +656,51 @@ public class StripeView extends UIElement {
         // shifting every index past the dragged button by one.
         List<ItemButton> targets = slotButtons(region, side);
         targets.removeIf(button -> button.typeId.equals(dragging));
+        // WHERE THIS GROUP SITS AMONG THE RAIL'S OTHER CHILDREN, for the case where it has emptied. The
+        // marker places itself against a neighbour and a group with none has to be told; the rail's own
+        // children include a stretch and a separator, so "the start of the parent" is right for the top
+        // group and puts the bottom group's slot at the wrong end of the rail.
+        if (targets.isEmpty()) prepareEmptySlot(region, side);
         return insertion.showFor(this, targets, screenX, screenY);
+    }
+
+    /**
+     * Tells the marker where a slot goes and how big it is, for a group with nothing left in it.
+     *
+     * <p>Both are things the marker cannot derive and this rail can. The size travels from whichever rail
+     * is <b>carrying</b> the button — this one when the drag started here, another when it did not, and a
+     * button's measurement lives on the marker that withdrew it. The rail's own width is the obvious
+     * substitute and is wrong: it is wider than the buttons in it by the padding that centres them.</p>
+     */
+    private void prepareEmptySlot(DockRegion region, RegionSide side) {
+        insertion.emptySlotAfter(emptyGroupAnchor(region, side));
+        for (StripeView source : workbench.stripes()) {
+            if (source.dragging == null) continue;
+            insertion.emptySlotSize(source.insertion.withdrawnExtent(),
+                    source.insertion.withdrawnThickness());
+            return;
+        }
+        // NOTHING IS BEING CARRIED THROUGH A RAIL AT ALL, so there is no size to state and the marker
+        // draws nothing -- which is right: a drag from somewhere that is not a stripe has no button.
+        insertion.emptySlotSize(0f, 0f);
+    }
+
+    /**
+     * The child a group's first button would follow when the group is currently empty — {@code null} for
+     * the top of the rail.
+     *
+     * <p>Reads straight off {@link #reorder}'s arrangement: primary, separator, secondary, the stretch,
+     * then the bottom group. The stretch is always present, which is what makes it a usable anchor even
+     * while both groups around it are empty.</p>
+     */
+    @Nullable
+    private UIElement emptyGroupAnchor(DockRegion region, RegionSide side) {
+        // The bottom group is everything after the stretch. `topRegion()` is never PANEL, so this is the
+        // whole test.
+        if (region == DockRegion.PANEL) return spacer;
+        if (side == RegionSide.PRIMARY) return null;
+        List<ItemButton> primary = slotButtons(rail.topRegion(), RegionSide.PRIMARY);
+        return primary.isEmpty() ? null : primary.get(primary.size() - 1);
     }
 
     void hideInsertion() {
@@ -734,6 +778,22 @@ public class StripeView extends UIElement {
     public record StripeDrag(String typeId) {
     }
 
+    /**
+     * Whether the pointer is over one of the workbench's rails.
+     *
+     * <p>Asked of the BOX rather than of the hover: a drag holds pointer capture, and capture makes hit
+     * testing answer the captured element for every position — so the hovered element is this button for
+     * the whole gesture and can say nothing about where the pointer actually is.</p>
+     */
+    private boolean overAnyRail(UIDocument window) {
+        ReadOnlyVec2f pointer = window.input().pointer();
+        for (StripeView rail : workbench.stripes()) {
+            Box box = rail.box();
+            if (box != null && box.hitTest(pointer.x(), pointer.y()) != null) return true;
+        }
+        return false;
+    }
+
     private void installButtonDrag(ItemButton button, @Nullable String iconName) {
         String typeId = button.typeId;
         button.events.getGroup(MouseEvent.Down.class).attachListener((element, event) -> {
@@ -759,7 +819,19 @@ public class StripeView extends UIElement {
             // the pointer is on the button and the only honest destination is "where it already is".
             // RegionDropOverlay writes one the moment the pointer resolves to a slot.
             dragGhost.follow(window, iconName, null);
-            Drag.start(button,
+            // THE DRAG ITSELF, HELD, because by the time `onDragEnd` runs it is no longer findable.
+            //
+            // `Drag.end` pops the mode BEFORE it reports the end, so `input.mode(Drag.class)` inside the
+            // callback answers null -- and the guard below read that as "nothing accepted the drop" and
+            // tore the panel out of the region it had just been docked into. The Drop is delivered first,
+            // so the dock genuinely happened and was immediately undone: the snap zone lit up, the panel
+            // landed, and it floated straight back out as a window. The comment on that guard has warned
+            // about exactly this since it was written.
+            //
+            // A one-element array because the listener is built before `start` returns, and the listener
+            // is what needs to reach it.
+            Drag[] gesture = new Drag[1];
+            gesture[0] = Drag.start(button,
                     event.getPosition().x(), event.getPosition().y(),
                     CgMouseCodes.LEFT_BUTTON, new StripeDrag(typeId), Drag.DEFAULT_THRESHOLD_PX,
                     new Drag.Listener() {
@@ -814,8 +886,16 @@ public class StripeView extends UIElement {
                             // region would float it straight back out. onDragCancel deliberately does
                             // neither: Escape means abandon, not tear out.
                             if (!wasDragged) return;
-                            Drag live = window.input().mode(Drag.class);
+                            Drag live = gesture[0];
                             if (live != null && live.isDropAccepted()) return;
+                            // AND NOT WHEN THE POINTER IS STILL ON A RAIL. Tearing out is the answer for
+                            // "anywhere else", and the rails are not anywhere else -- they are where the
+                            // button lives. A rail is not a drop target, so a release over one is refused
+                            // like any other, and this branch read that refusal as the editor area: a
+                            // two-pixel wobble on the stripe floated the panel out. IntelliJ's gesture is
+                            // a drag INTO the editor, which is what the refusal means everywhere but
+                            // here.
+                            if (overAnyRail(window)) return;
                             tearOut(typeId);
                         }
 

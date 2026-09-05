@@ -46,10 +46,18 @@ import org.joml.Vector4f;
 public final class Drag implements InputMode {
 
     /**
-     * How far the pointer must travel before a payload drag begins.
+     * How far the pointer must travel before a payload drag begins — in <b>logical</b> pixels.
      *
-     * <p>Not a CSS value and deliberately not one: the web has no drag-threshold property. In
-     * SURFACE pixels, because the threshold is a physical distance — the hand moves in pixels.</p>
+     * <p>Not a CSS value and deliberately not one: the web has no drag-threshold property. The number is
+     * Windows' {@code SM_CXDRAG}, and like every platform's it is stated in the units the interface is
+     * laid out in rather than in device pixels: Qt's {@code startDragDistance} is 10, GTK's is 8, and all
+     * of them scale with the display.</p>
+     *
+     * <p>It was read as SURFACE pixels, on the argument that a threshold is a physical distance because
+     * the hand moves in pixels. True of the hand and not of the interface: at the default {@code uiScale}
+     * of 2 it made the real threshold <b>two logical pixels</b>, so the lightest movement during an
+     * ordinary click armed a drag — reported as "even the slightest of drags" tearing a tool window off
+     * its rail. Scaled here, once, where the surface distance is compared.</p>
      */
     public static final float DEFAULT_THRESHOLD_PX = 4f;
 
@@ -90,13 +98,21 @@ public final class Drag implements InputMode {
         this.listener = listener;
         this.payload = payload;
         this.button = button;
-        this.threshold = Math.max(0f, threshold);
+        // SCALED TO THE SURFACE, because that is what `pointerMoved` is given. @see #DEFAULT_THRESHOLD_PX
+        this.threshold = Math.max(0f, threshold) * uiScaleOf(source);
         this.pressSurfaceX = surfaceX;
         this.pressSurfaceY = surfaceY;
         float[] local = toLocal(source, surfaceX, surfaceY);
         this.startX = local[0];
         this.startY = local[1];
         this.activated = this.threshold <= 0f;
+    }
+
+    /** What a logical distance is worth on this surface. One, for a source that is in no document yet. */
+    private static float uiScaleOf(UIElement source) {
+        UIDocument window = source.document();
+        float scale = window == null ? 1f : window.boxes().uiScale();
+        return scale > 0f ? scale : 1f;
     }
 
     /** A positional drag: no payload, no threshold, live from the first movement. */
