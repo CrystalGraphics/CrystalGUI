@@ -21,6 +21,12 @@ import javax.annotation.Nullable;
  * ------------------------------------------------
  * </pre>
  *
+ * <h3>A region you are over is the region you mean</h3>
+ *
+ * <p>Each band reaches from the workbench edge to its region's far side, so hovering anywhere over an
+ * open tool window targets it — which is what IntelliJ does and what the halves are for. The bands are
+ * only <em>assumed</em> for a region that is hidden, and then deliberately narrow.</p>
+ *
  * <h3>The whole window is the target, not the rail</h3>
  *
  * <p>This is the correction that mattered, and it is IntelliJ's actual behaviour: you do not have to hit a
@@ -64,13 +70,19 @@ public final class RegionDropZones {
      */
     public static final float DEFAULT_BAND_FRACTION = 0.15f;
 
-    /**
-     * The most of an axis one band may claim.
-     *
-     * <p>Without it a sidebar dragged out to half the window leaves no centre at all, and the editor — the
-     * one place a tool window must <em>not</em> land — becomes unreachable as a "nothing here" answer.</p>
-     */
-    public static final float MAX_BAND_FRACTION = 1f / 3f;
+    // THERE IS NO CAP ON A MEASURED BAND, and there used to be: a third of the axis, so that "a sidebar
+    // dragged out to half the window" could not leave the editor unreachable as a "nothing here" answer.
+    //
+    // The concern is real and the cap was the wrong instrument. A band that is MEASURED is the region --
+    // it reaches from the workbench edge to the region's far side -- so capping it makes part of a region
+    // report the editor: hovering the upper half of a tall Problems panel offered "Float" while pointing
+    // straight at the panel. Reported as the zones only appearing over the rails.
+    //
+    // The centre survives by geometry rather than by arithmetic. A region occupies its own box and the
+    // editor is whatever is left, so the only way to lose the centre entirely is a region covering the
+    // whole workbench -- which cannot happen while the editor is laid out beside it. What still needs a
+    // bound is the band ASSUMED for a hidden region, and that is a fixed small fraction by construction.
+    
 
     /**
      * The slot for a pointer at {@code (x, y)} in the workbench's local space, or {@code null} for none.
@@ -87,6 +99,11 @@ public final class RegionDropZones {
         float left = band(leftBand, width);
         float right = band(rightBand, width);
         float bottom = band(bottomBand, height);
+        // AN ASSUMED BAND MAY NOT REACH INTO A REGION THAT IS ACTUALLY THERE. The stand-in for a hidden
+        // region is a fraction of the whole axis, so beside a large open one it would otherwise claim
+        // points that are plainly inside its neighbour -- and the neighbour is the truthful answer.
+        if (rightBand <= 0f) right = Math.min(right, Math.max(0f, width - left));
+        if (leftBand <= 0f) left = Math.min(left, Math.max(0f, width - right));
 
         // BOTTOM FIRST -- see the class note on corners.
         if (y > height - bottom) {
@@ -104,10 +121,15 @@ public final class RegionDropZones {
         return null;
     }
 
-    /** A band's width: the region's own, defaulted when hidden and capped so the centre survives. */
+    /**
+     * A band's width: <b>the region's own when it has one</b>, and a small fixed fraction when it does not.
+     *
+     * <p>A visible region is its band, uncapped — you are over the region, so you mean the region. Only
+     * the stand-in for a hidden one is a guess, and it is bounded by being small rather than by a
+     * clamp.</p>
+     */
     private static float band(float measured, float axis) {
-        float size = measured > 0f ? measured : axis * DEFAULT_BAND_FRACTION;
-        return Math.min(size, axis * MAX_BAND_FRACTION);
+        return measured > 0f ? measured : axis * DEFAULT_BAND_FRACTION;
     }
 
     /**
