@@ -503,6 +503,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
         pinButton.addClass(PIN_CLASS);
         pinButton.attachListener(() -> setPinned(!isPinned()));
         pinTooltip = Tooltip.attach(pinButton, PIN_TOOLTIP);
+        pinTooltip.addClass(Tooltip.WAIT_CLASS);
         controls.append(pinButton);
 
         // MINIMISE, so the strip reads minimise-then-close left to right as every window manager
@@ -513,7 +514,10 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
         // detached subtree paints nothing, so a window that hid on the press would animate to an empty
         // screen. @see WindowAnimator
         minimizeButton.attachListener(this::minimize);
-        Tooltip.attach(minimizeButton, MINIMIZE_TOOLTIP);
+        // A WAIT ON ALL FOUR. These are the marks every window manager has drawn in this corner since
+        // Windows 95: nobody reads them, they are aimed at, and a label arriving at once lands over the
+        // button already being clicked. The length lives in ua/overlays.css.
+        Tooltip.attach(minimizeButton, MINIMIZE_TOOLTIP).addClass(Tooltip.WAIT_CLASS);
         controls.append(minimizeButton);
 
         maximizeButton = new Button("");
@@ -523,12 +527,13 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
         // rather than replacing one, so calling it again to relabel would leave the first tooltip in
         // place and showing, with the new text on an instance nothing ever hovers.
         maximizeTooltip = Tooltip.attach(maximizeButton, MAXIMIZE_TOOLTIP);
+        maximizeTooltip.addClass(Tooltip.WAIT_CLASS);
         controls.append(maximizeButton);
 
         closeButton = new Button("");
         closeButton.addClass(CLOSE_CLASS);
         closeButton.attachListener(this::requestClose);
-        Tooltip.attach(closeButton, CLOSE_TOOLTIP);
+        Tooltip.attach(closeButton, CLOSE_TOOLTIP).addClass(Tooltip.WAIT_CLASS);
         controls.append(closeButton);
 
         // BUILT NOW AND HIDDEN, rather than created when an icon arrives. Creating an element from a

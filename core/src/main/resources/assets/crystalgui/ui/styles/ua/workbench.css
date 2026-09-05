@@ -2354,9 +2354,10 @@ navigatorview treeview .__row__.__selected__ {
  * tool window shows one or the other depending on whether it is docked. Two presentations of one
  * control that answered at different speeds would read as a bug in whichever you met second.
  * @see ua/desktop.css, where the caption half of this lives. */
-.__panel-header__ .__hide__ tooltip {
-    tooltip-delay: 2;
-}
+/* Dead for the same reason its caption twin was -- see ua/desktop.css. ViewContainer adds
+ * Tooltip.WAIT_CLASS instead, which is what makes the two actually agree.
+ *
+ * .__panel-header__ .__hide__ tooltip { tooltip-delay: 2; } */
 
 
 /* ── THE EDITOR TAB STRIP'S SCROLLBAR ───────────────────────────────────────────────────────────

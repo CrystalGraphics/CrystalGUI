@@ -237,31 +237,34 @@ public class Tooltip extends UIElement {
     }
 
     /**
-     * Opt out of the hover delay — {@code tooltip.__instant__} in the sheets.
+     * Opt IN to a hover delay — {@code tooltip.__wait__} in the sheets.
      *
-     * <p>The delay exists to tell "passed over" from "asked about", which is right for anything the
-     * pointer crosses on its way somewhere else: a toolbar, a rail, a tab strip. It is wrong for a
-     * small target the pointer had to be AIMED at, because arriving there is already the asking — a
-     * chart's data point is the shape of it, and a five-pixel dot is not something you cross by
-     * accident.</p>
+     * <p>A tooltip shows immediately by default, because most of them label something the pointer was
+     * aimed at and a wait there just makes the answer feel broken. The delay is for the opposite case:
+     * a control the pointer CROSSES on its way somewhere else, where showing at once means a box
+     * arriving over the thing you are already clicking. A window caption's minimise, maximise and
+     * close are the standing example — the same three marks in the same corner that every window
+     * manager has drawn since Windows 95, which nobody reads and everybody aims at.
      *
-     * <p>A class rather than a setter because the delay is a cascaded property read off the TOOLTIP,
-     * so a sheet is the only thing that can change it and a caller needs a selector to aim at.</p>
+     * <p><b>A class rather than a selector on the anchor</b>, and that is forced: a tooltip is a child
+     * of the DOCUMENT, not of what it describes, so {@code .__controls__ tooltip} matches nothing at
+     * all. Two rules in the shipped sheets were written that way and had never once applied.</p>
+     *
+     * <p>{@link #setDelay} is the same thing from Java, for a caller who wants a length of its own.</p>
      */
-    public static final String INSTANT_CLASS = "__instant__";
+    public static final String WAIT_CLASS = "__wait__";
 
     /**
      * How long the pointer must rest on the anchor before this tooltip shows, in seconds.
      *
      * <p>The same {@code tooltip-delay} the sheets set, written at INLINE origin — so this is the
-     * easy way to say what {@link #INSTANT_CLASS} says, without a class and a rule for one tooltip.
-     * {@code setDelay(0)} shows immediately.</p>
+     * easy way to say what {@link #WAIT_CLASS} says, without a class and a rule for one tooltip.
+     * Zero is the default; a positive value asks the pointer to rest first.</p>
      *
      * <p><b>It outranks an ordinary sheet rule</b>, which is the engine's meaning of a value a caller
      * set on one object rather than a look a theme chose: INLINE beats both USER_AGENT and
      * STYLESHEET. A theme that must override it anyway says {@code !important}, which is the only
-     * origin above. The reverse arrangement is not available — the user-agent sheet gives every
-     * tooltip a delay, so a setter below STYLESHEET could never fire at all.</p>
+     * origin above.</p>
      *
      * <p>Clamped at zero. A negative wait is not a shorter one; it is the {@code !(delay > 0)} test
      * in {@link #showAfterDelay} deciding it has already elapsed, which is what zero already means.</p>

@@ -960,9 +960,13 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background-color: var(--window-i
  * distinction the delay exists to draw. Dock is the one that is not obvious, and it keeps the same
  * wait as its neighbours: four controls in a strip that answered at different speeds would read as
  * three of them being broken. */
-.__window__ .__title-bar__ .__controls__ tooltip {
-    tooltip-delay: 2;
-}
+/* THIS RULE COULD NEVER MATCH, and is kept as a correction rather than deleted: a tooltip is a child
+ * of the DOCUMENT, not of the control it describes, so a selector naming where the anchor lives
+ * reaches nothing. It asked for two seconds and these controls silently took whatever the blanket
+ * `tooltip` rule said. The wait is now WindowFrame adding Tooltip.WAIT_CLASS, and its length is in
+ * ua/overlays.css -- one place, so the caption and the panel header cannot drift apart.
+ *
+ * .__window__ .__title-bar__ .__controls__ tooltip { tooltip-delay: 2; } */
 
 /* ── A torn-out editor's window (W9) ────────────────────────────────────────────────────────────
  * The dock inside it is the same widget the workbench uses, so it needs no styling of its own. What
