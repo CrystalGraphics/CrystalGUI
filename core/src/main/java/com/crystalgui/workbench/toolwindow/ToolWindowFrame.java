@@ -130,7 +130,9 @@ public class ToolWindowFrame extends WindowFrame {
         Button dock = new Button("");
         dock.addClass(DOCK_CLASS);
         dock.onPressed.connect(onDockRequested::emit);
-        Tooltip.attach(dock, DOCK_TOOLTIP);
+        // Keeps the caption strip's wait: four controls in a row that answered at different speeds would
+        // read as three of them being broken.
+        Tooltip.attach(dock, DOCK_TOOLTIP).addClass(Tooltip.WAIT_CLASS);
         controls().insertAt(0, dock);
 
         setContent(container);

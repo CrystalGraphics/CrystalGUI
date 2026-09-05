@@ -79,14 +79,22 @@ textfield:disabled {
  * A theme that flips a tooltip above its anchor will want margin-bottom instead. */
 
 tooltip {
-    /* A HOVER IS NOT A REQUEST. The pointer crosses a dozen controls on its way somewhere, and a tooltip
-     * that fires on every one of them flickers a box over the thing you were reading. Waiting for the
-     * pointer to STOP is what turns "passed over" into "asked about" -- which is why every desktop
-     * toolkit has this delay and none of them makes it zero. One second is IntelliJ's own initial
-     * delay; a theme that wants a snappier rail can shorten it per selector.
+    /* INSTANT BY DEFAULT, and the wait is opted into by whatever needs it (tooltip.__wait__ below).
+     *
+     * This read 1 for a long time, on the argument that a hover is not a request: the pointer crosses
+     * a dozen controls on its way somewhere, and waiting for it to STOP is what turns "passed over"
+     * into "asked about". That is a real distinction and it is still why __wait__ exists -- but it
+     * describes a MINORITY of the tooltips here. Most label something small and deliberate: a data
+     * point on a chart, a status entry, a swatch, a glyph button that says nothing else about itself.
+     * Reaching one of those IS the question, and answering a second later reads as the label being
+     * broken rather than as restraint.
+     *
+     * So the default is the common case and the wait is stated where it earns itself. Note it can only
+     * be stated as a CLASS: a tooltip is a child of the document, not of its anchor, so no selector
+     * describing where the anchor lives can reach it.
      *
      * The property, not a constant in the widget: this class's own doc asked for it that way. */
-    tooltip-delay: 1;
+    tooltip-delay: 0;
     background: var(--tooltip-bg, #1E1E1EF0);
     outline: 1px var(--tooltip-border, #00000080);
     padding-left: 4px;
@@ -95,11 +103,17 @@ tooltip {
     padding-bottom: 2px;
     margin-top: 3px;
 }
-/* NO WAIT, for a tooltip whose anchor is a small target the pointer had to be aimed at -- see
- * Tooltip.INSTANT_CLASS. Reaching a five-pixel dot IS the question the delay exists to wait for, so
- * waiting again just makes the answer feel broken. */
-tooltip.__instant__ {
-    tooltip-delay: 0;
+/* A WAIT, for a tooltip whose anchor the pointer CROSSES rather than aims at -- see
+ * Tooltip.WAIT_CLASS, which is what puts this class on one. A window caption's controls are the
+ * standing example: three marks in a corner that nobody reads, where a label arriving at once lands
+ * over the button you are already clicking.
+ *
+ * A CLASS, not a selector on the anchor. A tooltip is a child of the DOCUMENT rather than of what it
+ * describes, so `.__window__ .__title-bar__ .__controls__ tooltip` can never match -- and both this
+ * sheet's siblings had been written that way, asking for two seconds and getting whatever the rule
+ * above said. */
+tooltip.__wait__ {
+    tooltip-delay: 1;
 }
 
 

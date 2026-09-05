@@ -122,7 +122,10 @@ public class ViewContainer extends UIElement implements WindowChrome {
         // caption's minimise draws -- and in a panel header, where there is no caption to place it in
         // the corner every window manager uses, that mark is genuinely ambiguous: collapse, minimise
         // and hide are three different verbs and it looks like all of them.
-        Tooltip.attach(hide, HIDE_TOOLTIP);
+        // The same wait a window caption's controls take, because this is the SAME verb its minimise
+        // performs -- a tool window shows one or the other depending on whether it is docked, and two
+        // presentations of one control answering at different speeds reads as a bug in the second.
+        Tooltip.attach(hide, HIDE_TOOLTIP).addClass(Tooltip.WAIT_CLASS);
         header.append(hide);
         append(header);
 
