@@ -209,6 +209,43 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath>, Worksp
         return failure;
     }
 
+    /** Whether an answer is on its way. @see #loadProjects(Runnable, Runnable) */
+    private boolean projectsInFlight;
+
+    /** Whether one arrived. Cleared by {@link #markProjectsStale()} when the wire moves. */
+    private boolean projectsLoaded;
+
+    private final List<Runnable> whenProjectsLoad = new ArrayList<>();
+    private final List<Runnable> whenProjectsRefused = new ArrayList<>();
+
+    /**
+     * Forgets that the projects were ever listed, so the next ask reaches the server.
+     *
+     * <p>For a <b>reconnect</b>, which is the one thing that invalidates the answer rather than merely
+     * ageing it: the roots on the far side belong to whichever workspace this client is now attached to,
+     * and no change notification can arrive to say the previous server's are wrong, because nothing was
+     * watching them. Everything else that goes stale here is a listing, not the project set.</p>
+     */
+    public void markProjectsStale() {
+        projectsLoaded = false;
+    }
+
+    /**
+     * Completes the request: runs one waiting list and drops the other.
+     *
+     * <p><b>Both are cleared, whichever way it went.</b> A refusal ends the call as surely as an answer
+     * does - the caller releases its own latch and asks again, which re-adds its callbacks - so leaving
+     * the other list standing would accumulate one dead entry per caller per refusal, and the retry that
+     * makes a refusal survivable is exactly what would drive that. Copied before running, because a
+     * callback here may legitimately ask again.</p>
+     */
+    private static void settle(List<Runnable> toRun, List<Runnable> toDrop) {
+        List<Runnable> ready = new ArrayList<>(toRun);
+        toRun.clear();
+        toDrop.clear();
+        for (Runnable each : ready) each.run();
+    }
+
     /** @deprecated a caller that cannot hear a refusal cannot retry. @see #loadProjects(Runnable, Runnable) */
     @Deprecated
     public void loadProjects(Runnable onLoaded) {
@@ -228,6 +265,27 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath>, Worksp
      * is what lets the latch be released and the ask retried. @see ProjectFileTree#loadProjects</p>
      */
     public void loadProjects(Runnable onLoaded, Runnable onRefused) {
+        // ONE ASK, HOWEVER MANY CALLERS, AND HOWEVER MANY FRAMES.
+        //
+        // Three things call this and only two of them latched: the application (to restore its session),
+        // the file tree (to fill itself), and `Workbench.tick`, whose comment said the latch was "the
+        // SOURCE's rather than a panel's" -- which was the intent and had never been written. So the
+        // workbench asked the server for the project list on EVERY FRAME, for the life of the screen:
+        // a round trip and two log lines at frame rate, with the answer already in hand.
+        //
+        // The latch is on the CALL and never on the callbacks, which is the part that has to be got
+        // right: swallowing a later caller outright would mean whichever asker lost the race never hears
+        // that the projects arrived, and the one that loses is the application -- so a session restore
+        // would silently never run. A caller that arrives after the answer is served immediately; one
+        // that arrives while it is in flight is queued and told with everybody else.
+        if (projectsLoaded) {
+            onLoaded.run();
+            return;
+        }
+        whenProjectsLoad.add(onLoaded);
+        whenProjectsRefused.add(onRefused);
+        if (projectsInFlight) return;
+        projectsInFlight = true;
         // SEEDED HERE, and for the same reason the comment above gives. What this actor may do is a
         // question about the projects, so the first moment it can be asked is the first moment they can
         // be -- and asking it here rather than at construction means it inherits that timing for free
@@ -258,14 +316,17 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath>, Worksp
             }
             indexRevision++;
             dirty = true;
+            projectsInFlight = false;
+            projectsLoaded = true;
             onDidChangeProjects.emit();
-            onLoaded.run();
+            settle(whenProjectsLoad, whenProjectsRefused);
         }).onError(error -> {
+            projectsInFlight = false;
             failure = "projects failed: " + error.code();
             dirty = true;
             CrystalGuiCore.LOGGER.warn("[cgui-fs] project listing refused: {} — the tree will retry",
                     error.code());
-            onRefused.run();
+            settle(whenProjectsRefused, whenProjectsLoad);
         });
     }
 
