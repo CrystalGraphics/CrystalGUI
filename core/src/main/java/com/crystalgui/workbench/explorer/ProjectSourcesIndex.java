@@ -195,7 +195,15 @@ public final class ProjectSourcesIndex {
         // around, or never. @see ProjectFileTree#requestRefresh
         // THE LISTING ANNOUNCES; whoever is drawing it redraws. This used to call requestRefresh()
         // on the tree, which is engine code reaching for a panel that may not be enabled.
-        workbench.projects().invalidateAll();
+        //
+        // ANNOUNCE, NEVER `invalidateAll()`. What is stale here is what a row DRAWS -- a `.java` row
+        // shows what its file declares, and that answer arrives after the row does. The listing itself
+        // has not changed, so dropping every directory and re-requesting it from the server is both the
+        // wrong instrument and a loop: a re-listing feeds the crawl, the crawl fills the index, filling
+        // the index sets the very flag this method is draining, and round it goes -- once per frame,
+        // for the life of the screen. It did not even redraw anything, because `invalidateAll` re-fetches
+        // without announcing.
+        workbench.projects().announceRowsChanged();
         // AND EVERY TAB, for the same reason and one more: a tab's icon is pulled when the tab is BUILT
         // and never re-read, which was correct while it was a function of the file NAME. It is now a
         // function of what the file declares, and that answer arrives later than the tab does.

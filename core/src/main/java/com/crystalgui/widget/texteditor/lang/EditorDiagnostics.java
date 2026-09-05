@@ -6,6 +6,7 @@ import com.crystalgui.text.decoration.DecorationSet;
 import com.crystalgui.text.decoration.Stickiness;
 import com.crystalgui.text.decoration.TrackedRange;
 import com.crystalgui.text.diagnostic.Diagnostic;
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
 import com.crystalgui.text.lang.Versioned;
 
@@ -66,9 +67,42 @@ public final class EditorDiagnostics {
      */
     public void install(String owner, @Nullable Versioned<List<Diagnostic>> announced) {
         if (announced == null) return;
-        if (!announced.isFresh(editor.buffer().version())) return;
+        int now = editor.buffer().version();
+        if (!announced.isFresh(now)) {
+            // SAID OUT LOUD, ONCE PER RUN OF REFUSALS.
+            //
+            // A refused list and a list that was never announced produce the identical picture: the
+            // panel keeps whatever it last accepted, which is a correct-looking set of problems about
+            // text that no longer exists. Reported as "the Problems aren't updating" on a file whose
+            // warnings described a version several edits old -- and from outside there is no way to tell
+            // which of the two it is, or whether the engine ran at all.
+            //
+            // Logged on the TRANSITION rather than per announcement: a refusal while typing is ordinary
+            // -- the analysis started before the last keystroke and a fresh one is already queued -- and
+            // a line per keystroke would be the console spam this exists to diagnose. What is not
+            // ordinary is refusals that never stop, and one line followed by silence says exactly that.
+            if (lastAccepted != now && !refusing) {
+                refusing = true;
+                CrystalGuiCore.LOGGER.info("[cgui-lang] {} announced problems for v{} but the buffer is "
+                        + "at v{}; dropped, and a fresh analysis should follow", owner,
+                        announced.version(), now);
+            }
+            return;
+        }
+        if (refusing) {
+            refusing = false;
+            CrystalGuiCore.LOGGER.info("[cgui-lang] {} caught up at v{}: {} problem(s)", owner, now,
+                    announced.orElse(List.of()).size());
+        }
+        lastAccepted = now;
         set().changeOne(owner, announced.orElse(List.of()));
     }
+
+    /** The version of the last list that was accepted, so a run of refusals can be reported once. */
+    private int lastAccepted = -1;
+
+    /** Whether the last announcement was refused. @see #install */
+    private boolean refusing;
 
     /**
      * Rebuilds the tracked range behind every diagnostic — §17.1's primitive, applied.
