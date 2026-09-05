@@ -4,7 +4,7 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.async.JobKey;
 import com.crystalgui.core.async.JobLane;
 import com.crystalgui.core.async.JobScheduler;
-import com.crystalgui.language.LanguageStack;
+import com.crystalgui.text.syntax.LanguageRegistry;
 import com.crystalgui.language.map.PlatformMappings;
 import com.crystalgui.language.platform.ScriptService;
 import com.crystalgui.language.platform.ScriptServices;
@@ -129,7 +129,12 @@ public class CrystalGUI {
 
     private void scriptInit() {
         CgPlatform.provide(ScriptServices.SERVICE, new ScriptService1710(configDirectory));
-        LanguageStack.registerAll();
+        // WARMING, NOT WIRING. `language/` declares its grammars and engines as a LanguageKinds
+        // service, so the registry finds them on its own first read -- this only decides WHEN that is
+        // paid. Measured at 443ms, and the first read is otherwise the keystroke that opens an editor;
+        // here a loading screen is already up and nobody is waiting. Dropping this line costs the stall
+        // and not the languages, which is the whole point of the service.
+        LanguageRegistry.bootstrap();
 
         // The service itself is now SIDE-AGNOSTIC (Phase 4 A5): cacheRoot() takes the config
         // directory Forge hands over at preInit instead of reading Minecraft.getMinecraft(), so a
