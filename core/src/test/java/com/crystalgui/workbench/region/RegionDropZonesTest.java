@@ -89,18 +89,49 @@ public class RegionDropZonesTest {
     }
 
     /**
-     * <b>A band cannot eat the centre.</b>
+     * <b>A region you are over is the region you mean, however big it is.</b>
      *
-     * <p>A sidebar dragged out to most of the window would otherwise leave nowhere that means "not a tool
-     * window", and the editor — the one place a tool window must not land — would stop being reachable as
-     * an answer.</p>
+     * <p>A measured band used to be capped at a third of the axis, so that a region dragged out large
+     * could not leave the editor unreachable. The concern was right and the instrument was wrong: the cap
+     * made part of a REGION report the editor, so hovering the upper half of a tall Problems panel offered
+     * to float the window while pointing straight at the panel — which is how it was reported.</p>
      */
     @Test
-    public void anEnormousRegionIsCappedSoTheCentreSurvives() {
-        assertNull("a huge sidebar swallowed the editor area",
-                RegionDropZones.forPoint(W / 2f, H / 2f, W, H, 900f, 0f, 0f));
-        assertTrue("the cap is not being applied at all",
-                RegionDropZones.MAX_BAND_FRACTION < 0.5f);
+    public void aPointInsideALargeRegionTargetsThatRegion() {
+        // A sidebar occupying most of the width. The pointer is inside it, so it is the answer.
+        assertSlot("the middle of a very wide sidebar", DockRegion.SIDEBAR, RegionSide.PRIMARY,
+                RegionDropZones.forPoint(W / 2f, 100f, W, H, 900f, 0f, 0f));
+        // ...and a tall panel, which is the shape that was reported.
+        assertSlot("the upper half of a tall panel", DockRegion.PANEL, RegionSide.PRIMARY,
+                RegionDropZones.forPoint(100f, H - 350f, W, H, 0f, 0f, 400f));
+    }
+
+    /**
+     * The counter-control: the editor is still reachable beside it.
+     *
+     * <p>What the cap was protecting, and it holds by geometry rather than by arithmetic — a region
+     * occupies its own box and the editor is whatever is left. Losing the centre entirely would take a
+     * region covering the whole workbench, which cannot happen while the editor is laid out beside it.</p>
+     */
+    @Test
+    public void theEditorIsStillReachableBesideALargeRegion() {
+        // A sidebar taking half the width. x=700 is past it and short of the hidden auxiliary's band.
+        assertNull("a sidebar half the window wide left nowhere meaning 'not a tool window'",
+                RegionDropZones.forPoint(700f, 100f, W, H, 500f, 0f, 0f));
+    }
+
+    /**
+     * ...and a hidden region's assumed band stops where a visible one begins.
+     *
+     * <p>The stand-in is a fraction of the whole axis, so beside a large open region it would otherwise
+     * claim points plainly inside its neighbour — and the neighbour is the truthful answer. There is no
+     * centre left in this configuration, and that is honest rather than a gap: a hundred-pixel editor is
+     * not somewhere a tool window can go either.</p>
+     */
+    @Test
+    public void anAssumedBandDoesNotReachIntoAVisibleRegion() {
+        assertSlot("a point inside a 900-wide sidebar", DockRegion.SIDEBAR, RegionSide.PRIMARY,
+                RegionDropZones.forPoint(880f, 100f, W, H, 900f, 0f, 0f));
     }
 
     /**
