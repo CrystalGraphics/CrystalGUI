@@ -1,6 +1,7 @@
 package com.crystalgui.workbench.chrome.problems;
 
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.workbench.view.HeaderContributor;
 import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.core.command.ClipboardCommands;
 import com.crystalgui.core.command.CommandRegistry;
@@ -67,19 +68,23 @@ import javax.annotation.Nullable;
  * <p>Because it changes the tree's shape rather than its paint — see {@link ProblemsTreeSource}. A file
  * whose only error is filtered out has to stop being a row.</p>
  */
-public class ProblemsPanel extends UIElement implements DataProvider {
+public class ProblemsPanel extends UIElement implements DataProvider, HeaderContributor {
 
     public static final Name NAME = Name.of("problemspanel");
 
-    /** The scope tabs, placed on the container's title line rather than inside this panel. */
     /**
-     * The controls this panel contributes to its container's header.
+     * The scope tabs — {@code File} and {@code Project Errors} — on the container's title line.
      *
-     * <p>Not an {@code @Override} yet: {@code HeaderContributor} is typed on {@code UIElement} and
-     * its only consumer is {@code ViewContainer}, which is a 6.7 class. The METHOD is what a
-     * container calls, so nothing is lost by the interface arriving with the thing that reads it —
-     * and declaring a second interface now would mean guessing its shape a batch early.</p>
+     * <p>They are about the whole view, so they belong beside its name rather than inside it, which is
+     * where IntelliJ puts them and what {@link HeaderContributor} exists for.</p>
+     *
+     * <p><b>This method existed before the interface did</b>, and said so: it was written during the
+     * port with a note that {@code HeaderContributor} would arrive with the container that reads it. It
+     * did, and nothing came back to declare it here — so the tabs were built, held, and never placed,
+     * and the panel's header was bare. A method that matches an interface it does not implement is
+     * invisible to the compiler and to every test that does not mount the panel in a container.</p>
      */
+    @Override
     public UIElement headerContent() {
         return tabs;
     }
