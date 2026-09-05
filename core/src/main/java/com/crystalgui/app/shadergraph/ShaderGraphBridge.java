@@ -9,6 +9,8 @@ import com.crystalgui.graph.NodeField;
 import com.crystalgui.graph.NodeType;
 import com.crystalgui.graph.NodeTypeRegistry;
 import com.crystalgui.graph.PortSpec;
+import com.crystalgui.graph.port.PortType;
+import com.crystalgui.graph.port.PortTypeRegistry;
 import com.crystalgui.graph.TypeCompatibility;
 
 import javax.annotation.Nullable;
@@ -207,15 +209,15 @@ public final class ShaderGraphBridge {
                 case "mat2" -> "2x2";
                 case "mat3" -> "3x3";
                 case "mat4" -> "4x4";
-                default -> com.crystalgui.graph.port.PortType.super.arityLabel();
+                default -> PortType.super.arityLabel();
             };
         }
 
         @Override
         public String cssClass() {
             return DYNAMIC_TYPE.equals(id)
-                    ? com.crystalgui.graph.port.PortType.CSS_CLASS_PREFIX + "float"
-                    : com.crystalgui.graph.port.PortType.super.cssClass();
+                    ? PortType.CSS_CLASS_PREFIX + "float"
+                    : PortType.super.cssClass();
         }
 
         @Override
@@ -262,13 +264,13 @@ public final class ShaderGraphBridge {
     }
 
     private static void register(GlslPortType type) {
-        if (com.crystalgui.graph.port.PortTypeRegistry.get(type.id()) == null) {
-            com.crystalgui.graph.port.PortTypeRegistry.register(type);
+        if (PortTypeRegistry.get(type.id()) == null) {
+            PortTypeRegistry.register(type);
         }
     }
 
     private static String typeIdOf(CgShaderPort port) {
-        return port.type() == com.crystalgraphics.shadergraph.CgShaderType.DYNAMIC
+        return port.type() == CgShaderType.DYNAMIC
                 ? DYNAMIC_TYPE : port.type().glsl();
     }
 
