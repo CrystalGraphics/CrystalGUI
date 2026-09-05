@@ -41,7 +41,7 @@ rootProject.name = "CrystalGUI"
 include("taffy")
 
 include("core")
-include("gl-debug-harness")
+if (!embedded) include("gl-debug-harness")
 
 // The tree-sitter syntax backend. Its jars are checked in under lib/tree-sitter/, so this is an ordinary
 // module rather than one conditional on a local checkout -- see that directory's README for why.
@@ -57,7 +57,7 @@ include("language")
 // file, and mc1710/settings.gradle does not exist and never has (`git log --all` over that path is
 // empty, and it is not gitignored either). `git log -L` finds the configuration that actually launched
 // a client, in 2a10724, and it is a plain subproject. See plan_m12.md 25.2.
-include("mc1710")
+if (!embedded) include("mc1710")
 
 // CrystalGraphics, and the ONE place it is included from.
 //
@@ -66,6 +66,10 @@ include("mc1710")
 // com.crystalgraphics:crystalgraphics -> :mc1710, which is how the loader resolves the CrystalGraphics
 // *mod* rather than its libraries. Two includeBuilds of one path is a configuration error, so the
 // smaller block is gone and this is the survivor: its list is a strict superset, and it is also where
+// Included in another build means a consumer wants the engine, not the loaders: :mc1710 needs a Java
+// 25 daemon and :gl-debug-harness pulls LWJGL3.
+val embedded = gradle.parent != null
+
 // integration.gradle.kts (applied by mc1710/build.gradle.kts) reads its `submoduleMods` data from.
 apply(from = "gradle/module_integration/composite.settings.gradle.kts")
 
@@ -74,3 +78,4 @@ apply(from = "gradle/module_integration/composite.settings.gradle.kts")
 //include(":CrystalGraphics:platform")
 //include(":CrystalGraphics:freetype-msdfgen-harfbuzz-bindings")
 //includeBuild("mc1201")
+// Applied even when embedded: :core takes com.crystalgraphics:core and :platform as compileOnly.
