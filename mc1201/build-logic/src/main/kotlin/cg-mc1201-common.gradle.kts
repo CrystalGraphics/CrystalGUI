@@ -46,3 +46,39 @@ legacyForge {
     // MinecraftForge artifact ID format: "<mcVersion>-<forgeVersion>"
     version = "1.20.1-${property("mc1201.forge")}"
 }
+
+// -- Import guard --------------------------------------------------------------------------------
+// One platform implementation serves Forge, NeoForge and Fabric, so this module may name vanilla
+// (net.minecraft.*, com.mojang.*, org.lwjgl.*) but nothing from a loader. Anything loader-specific
+// goes behind LoaderBridge -- plan_mc1201.md 3.8.
+//
+// The guard is needed because `legacyForge` above puts MinecraftForge on the compileOnly classpath:
+// without it a net.minecraftforge import compiles here and throws NoClassDefFoundError on the other
+// two loaders.
+val loaderPackages = listOf("net.minecraftforge.", "net.neoforged.", "net.fabricmc.", "cpw.mods.fml.")
+
+tasks.named<JavaCompile>("compileJava") {
+    val srcRoot = layout.projectDirectory.dir("src/main/java").asFile
+    doLast {
+        if (!srcRoot.isDirectory) return@doLast
+        val violations = srcRoot.walkTopDown()
+            .filter { it.isFile && it.extension == "java" }
+            .mapNotNull { file ->
+                val hit = file.readLines()
+                    .map { it.trimStart() }
+                    .firstOrNull { line ->
+                        line.startsWith("import ") && loaderPackages.any { line.contains(it) }
+                    }
+                if (hit == null) null else file.relativeTo(srcRoot) to hit
+            }
+            .toList()
+        if (violations.isNotEmpty()) {
+            error(
+                "Loader-specific imports found in mc1201/common -- this module is shared by Forge, " +
+                "NeoForge and Fabric, so it may name net.minecraft.* and com.mojang.* but nothing " +
+                "from a loader. Put it behind LoaderBridge instead (plan_mc1201.md 3.8.3):\n" +
+                violations.joinToString("\n") { (path, line) -> "  $path\n      $line" }
+            )
+        }
+    }
+}
