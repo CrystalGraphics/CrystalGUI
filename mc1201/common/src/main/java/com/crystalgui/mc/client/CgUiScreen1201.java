@@ -14,6 +14,7 @@ import com.crystalgui.desktop.app.Application;
 import com.crystalgui.desktop.host.DesktopHost;
 import com.crystalgui.desktop.host.HostServices;
 import com.crystalgui.desktop.window.WindowFrame;
+import com.crystalgui.mc.net.Connections1201;
 import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.ui.dom.UIDocument;
@@ -130,8 +131,9 @@ public final class CgUiScreen1201 extends Screen {
         @Override
         @Nullable
         public ProtocolConnection<Object> connection() {
-            // L5 wires this to Mc1201Connections. Null is a supported state: no server right now.
-            return null;
+            // Re-asked every frame, so a reconnect is a different object carrying the same workspace and
+            // DesktopHost rebinds rather than rebuilds. Null means no server right now: supported.
+            return Connections1201.client();
         }
     }
 

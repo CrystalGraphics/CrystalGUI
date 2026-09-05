@@ -1,19 +1,24 @@
 package com.crystalgui.mc.forge;
 
-import com.crystalgui.mc.client.CgUiHud1201;
 import com.crystalgui.mc.client.CgUiKeybinds1201;
+import com.crystalgui.mc.platform.Lifecycle1201;
 
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
 import net.minecraftforge.client.event.RenderGuiOverlayEvent;
 import net.minecraftforge.client.event.ScreenEvent;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.player.PlayerEvent;
+import net.minecraftforge.event.server.ServerStartingEvent;
+import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
 import static com.crystalgui.mc.platform.CrystalGUI1201.MODID;
 
-/** Registration only: the keys live in {@code CgUiKeybinds1201}, the screen in {@code CgUiScreen1201}. */
+/** Forge event subscription. Every body is one forward into {@link Lifecycle1201}. */
 public final class CgUiForgeEvents {
 
     private CgUiForgeEvents() {}
@@ -29,50 +34,92 @@ public final class CgUiForgeEvents {
         }
     }
 
+    /**
+     * Both sides, so no {@code Dist}: a dedicated server has to open connections and tick the workspace,
+     * and a client-only subscriber would leave it with neither -- silently.
+     */
+    @Mod.EventBusSubscriber(modid = MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
+    public static final class CommonBus {
+        private CommonBus() {}
+
+        @SubscribeEvent
+        public static void onServerStarting(ServerStartingEvent event) {
+            Lifecycle1201.serverStarting(event.getServer());
+        }
+
+        @SubscribeEvent
+        public static void onServerStopping(ServerStoppingEvent event) {
+            Lifecycle1201.serverStopping();
+        }
+
+        @SubscribeEvent
+        public static void onServerTick(TickEvent.ServerTickEvent event) {
+            if (event.phase == TickEvent.Phase.END) Lifecycle1201.serverTick();
+        }
+
+        @SubscribeEvent
+        public static void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
+            if (event.getEntity() instanceof ServerPlayer player) Lifecycle1201.playerJoined(player);
+        }
+
+        @SubscribeEvent
+        public static void onPlayerLeave(PlayerEvent.PlayerLoggedOutEvent event) {
+            if (event.getEntity() instanceof ServerPlayer player) Lifecycle1201.playerLeft(player);
+        }
+    }
+
     @Mod.EventBusSubscriber(modid = MODID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
-    public static final class ForgeBus {
-        private ForgeBus() {}
+    public static final class ClientBus {
+        private ClientBus() {}
 
         @SubscribeEvent
         public static void onClientTick(TickEvent.ClientTickEvent event) {
-            if (event.phase == TickEvent.Phase.END) CgUiKeybinds1201.tick();
+            if (event.phase == TickEvent.Phase.END) Lifecycle1201.clientTick();
         }
 
-        // ── Pinned windows over the HUD and over a foreign screen ────────────────────────────────
+        @SubscribeEvent
+        public static void onClientLoggedIn(ClientPlayerNetworkEvent.LoggingIn event) {
+            Lifecycle1201.clientConnected();
+        }
+
+        @SubscribeEvent
+        public static void onClientLoggedOut(ClientPlayerNetworkEvent.LoggingOut event) {
+            Lifecycle1201.clientDisconnected();
+        }
 
         @SubscribeEvent
         public static void onRenderGuiOverlay(RenderGuiOverlayEvent.Post event) {
-            CgUiHud1201.paint();
+            Lifecycle1201.paintOverlay();
         }
 
         @SubscribeEvent
         public static void onScreenRender(ScreenEvent.Render.Post event) {
-            CgUiHud1201.paint();
+            Lifecycle1201.paintOverlay();
         }
 
         @SubscribeEvent
         public static void onMousePressed(ScreenEvent.MouseButtonPressed.Pre event) {
-            if (CgUiHud1201.offerMouse(event.getButton(), true, 0f)) event.setCanceled(true);
+            if (Lifecycle1201.offerMouse(event.getButton(), true, 0f)) event.setCanceled(true);
         }
 
         @SubscribeEvent
         public static void onMouseReleased(ScreenEvent.MouseButtonReleased.Pre event) {
-            if (CgUiHud1201.offerMouse(event.getButton(), false, 0f)) event.setCanceled(true);
+            if (Lifecycle1201.offerMouse(event.getButton(), false, 0f)) event.setCanceled(true);
         }
 
         @SubscribeEvent
         public static void onMouseScrolled(ScreenEvent.MouseScrolled.Pre event) {
-            if (CgUiHud1201.offerMouse(-1, false, (float) event.getScrollDelta())) event.setCanceled(true);
+            if (Lifecycle1201.offerMouse(-1, false, (float) event.getScrollDelta())) event.setCanceled(true);
         }
 
         @SubscribeEvent
         public static void onKeyPressed(ScreenEvent.KeyPressed.Pre event) {
-            if (CgUiHud1201.offerKey(event.getKeyCode(), (char) 0, true)) event.setCanceled(true);
+            if (Lifecycle1201.offerKey(event.getKeyCode(), (char) 0, true)) event.setCanceled(true);
         }
 
         @SubscribeEvent
         public static void onCharTyped(ScreenEvent.CharacterTyped.Pre event) {
-            if (CgUiHud1201.offerKey(0, event.getCodePoint(), true)) event.setCanceled(true);
+            if (Lifecycle1201.offerKey(0, event.getCodePoint(), true)) event.setCanceled(true);
         }
     }
 }
