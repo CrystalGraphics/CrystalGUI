@@ -919,11 +919,33 @@ cannot be typed wrong separately.
    sign verified by scrolling (§3.3).
 4. Per-loader: an F6/F7 keybind and a `setScreen` call.
 
-**Accept**: `runClient` on **one** loader (Forge first — ModDevGradle is the least fussy); F6 opens the
-desktop; a window can be dragged by its caption, a `Scroller` scrolls the right way, a `TextField`
-accepts text and Ctrl+C/Ctrl+V move it through the clipboard; Escape inside a dropdown closes the
-dropdown and not the screen; resizing the window re-lays out; F6 after a resize does **not** resurrect a
-closed window.
+**Built 2026-09-05** — `CgUiScreen1201`, `CgUiInput1201`, `CgUiKeybinds1201` in `common`; F6/F7
+registration per loader (`CgUiForgeEvents`, `CgUiNeoForgeEvents`, `CgUiFabricEvents`). All four modules
+compile.
+
+> **The Java version seam, which the plan did not see coming.** `:core` emits **Java 21 bytecode
+> (v65)** — its Jabel processor is commented out, so nothing desugars it — and the mc1201 modules
+> targeted 17 with `options.release.set(17)`, which refuses to *read* anything newer:
+> *"bad class file … class file has wrong version 65.0, should be 61.0"*. Two separate fixes were
+> needed and only together do they work:
+>
+> - **Compiling**: `cg-java17` now uses a **21 toolchain** with `sourceCompatibility`/`targetCompatibility`
+>   17 rather than `release`. `--release` constrains what can be read; source/target does not.
+> - **Loading**: MC 1.20.1 ships a Java 17 runtime, so v65 classes would not load on a player's JVM.
+>   **jvmDowngrader** rewrites the shadow jar's classes to 17 — the same mechanism mc1710 uses to reach
+>   Java 8. Verified the way mc1710's own comment prescribes: `UIDocument` is major **65** in
+>   `-all.jar` and **61** in `-java17.jar`, on all three loaders.
+>
+> Also found here: `:core` declares Taffy and JOML `compileOnly`, so they reach no consumer, and
+> `UIElement` holds a `NodeId` and a `Matrix4f` as **fields** — which resolve at class load. Taffy is
+> now on the mc1201 classpath; **JOML deliberately is not**, because Minecraft ships it and NeoForge
+> pins `{strictly 1.10.5}`, so our 1.10.8 failed resolution exactly as log4j did at L0.
+
+**Accept**: compile — met. The rest needs a client and is unverified: `runClient` on **one** loader
+(Forge first — ModDevGradle is the least fussy); F6 opens the desktop; a window can be dragged by its
+caption, a `Scroller` scrolls the right way, a `TextField` accepts text and Ctrl+C/Ctrl+V move it
+through the clipboard; Escape inside a dropdown closes the dropdown and not the screen; resizing the
+window re-lays out; F6 after a resize does **not** resurrect a closed window.
 
 **Hazards, in the order they will be hit**
 - GUI-scaled callback coordinates (§3.3) — presents as clicks landing at half the distance.

@@ -11,10 +11,11 @@ import static com.crystalgui.mc.platform.CrystalGUI1201.MODID;
 public final class CrystalGUI1201NeoForge {
     private static final Logger LOGGER = LogUtils.getLogger();
 
-    public CrystalGUI1201NeoForge() {
+    public CrystalGUI1201NeoForge(net.neoforged.bus.api.IEventBus modBus) {
         CgPlatformService1201.getInstance();
         CgEngineNeoForgeEvents.register();
         CgDemoNeoForgeEvents.register();
+        CgUiNeoForgeEvents.register(modBus);
         LOGGER.info("[CrystalGUI] NeoForge 1.20.4 platform registered");
     }
 }
