@@ -43,6 +43,13 @@ neoForge {
     runs {
         create("client") {
             client()
+            gameDirectory = project.file("runs/client")
+        }
+        // A server run, so serverSmoke has something to boot here too. Without it this loader is the
+        // one that cannot be checked for the server-side class-loading contract.
+        create("server") {
+            server()
+            gameDirectory = project.file("runs/server")
         }
     }
 

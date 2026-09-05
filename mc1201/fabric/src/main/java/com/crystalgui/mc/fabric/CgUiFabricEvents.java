@@ -24,6 +24,7 @@ final class CgUiFabricEvents {
         NetworkChannel1201.registerServerReceiver();
 
         ServerLifecycleEvents.SERVER_STARTING.register(Lifecycle1201::serverStarting);
+        ServerLifecycleEvents.SERVER_STARTED.register(Lifecycle1201::serverStarted);
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> Lifecycle1201.serverStopping());
         ServerTickEvents.END_SERVER_TICK.register(server -> Lifecycle1201.serverTick());
 

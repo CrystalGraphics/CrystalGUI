@@ -126,3 +126,13 @@ val extractMcSources by tasks.registering(Sync::class) {
 // ideaSyncTask is Loom's dedicated IDE sync hook — the right moment for one-time source gen.
 // CLI users who want sources without IDE sync: ./gradlew :mc1201:fabric:extractMcSources
 tasks.named("ideaSyncTask") { dependsOn(extractMcSources) }
+
+// CrystalGraphics ships as its OWN MOD on this loader, so its classes must not also be on the system
+// classpath. Knot loads a mod jar's classes itself, so a class present in both places exists TWICE --
+// and com.crystalgraphics.platform.CgPlatform holds the platform bundle in a static. CrystalGraphics
+// registered into its copy and CrystalGUI read the other, so a dedicated server reported
+// "CgPlatform not yet registered" one line after the log said it had registered.
+//
+// Only runtimeClasspath: compileOnly still needs them, and forge/neoforge take theirs from a classpath
+// rather than a mod jar, so this is fabric's alone.
+configurations.named("runtimeClasspath") { exclude(group = "com.crystalgraphics") }
