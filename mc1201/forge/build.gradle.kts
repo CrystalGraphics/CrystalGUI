@@ -12,6 +12,8 @@
 // net.neoforged.moddev.repositories:2.0.141 is applied — that settings plugin pins
 // all three net.neoforged.moddev.* plugins to the same version automatically.
 
+import java.io.File
+
 plugins {
     id("cg-mc1201-loader")
     id("net.neoforged.moddev.legacyforge")
@@ -78,6 +80,61 @@ dependencies {
     add("additionalRuntimeClasspath", "com.crystalgraphics:core:1.0.0")
     add("additionalRuntimeClasspath", "com.crystalgraphics:platform:1.0.0")
     add("additionalRuntimeClasspath", "com.crystalgraphics:freetype-msdfgen-harfbuzz-bindings:1.0.0")
+}
+
+// CRYSTALGRAPHICS AS A MOD, not merely as a library.
+//
+// It registers CgPlatform from its own @Mod constructor, and nothing in CrystalGUI does it -- so
+// without this the client boots, every class resolves, and the desktop paints nothing. mods{} above
+// cannot declare it: sourceSet() takes a SourceSet and CrystalGraphics is a separate build.
+//
+// FML's other door is MOD_CLASSES -- `modid%%directory` pairs, which is what ModDevGradle itself fills
+// in from mods{}. Setting it replaces that value rather than adding to it, so the crystalgui half is
+// DERIVED from the same source sets mods{} names: adding one above cannot silently drop it here.
+val crystalGraphics = gradle.includedBuild("CrystalGraphics")
+
+/** Classes and resources are separate roots to FML, and a mod needs both -- mods.toml is a resource. */
+fun modClasses(modId: String, roots: Iterable<File>) = roots.map { "$modId%%$it" }
+
+fun modClasses(modId: String, sourceSet: SourceSet) = modClasses(modId,
+    sourceSet.output.classesDirs.files + listOfNotNull(sourceSet.output.resourcesDir))
+
+/** The same for a module in another build, where only the output LAYOUT is reachable from here. */
+fun modClasses(modId: String, moduleDir: File) = modClasses(modId, listOf(
+    File(moduleDir, "build/classes/java/main"), File(moduleDir, "build/resources/main")))
+
+val modClassesValue = (
+    listOf(sourceSets.main.get(),
+           project(":core").extensions.getByType<SourceSetContainer>()["main"],
+           project(":mc1201:common").extensions.getByType<SourceSetContainer>()["main"])
+        .flatMap { modClasses("crystalgui", it) }
+        + modClasses("crystalgraphics", File(crystalGraphics.projectDir, "mc1201/common"))
+        + modClasses("crystalgraphics", File(crystalGraphics.projectDir, "mc1201/forge"))
+    ).joinToString(";")
+
+// A directory named in MOD_CLASSES is read at launch with nothing in the task graph behind it, so
+// whatever sits there is what runs. prepareClientRun is included because that is the task an IDE
+// launch runs -- it then starts the JVM itself, so a dependency only on runClient never fires for it.
+tasks.matching {
+    it.name in setOf("runClient", "runServer", "prepareClientRun", "prepareServerRun")
+}.configureEach {
+    dependsOn(crystalGraphics.task(":mc1201:common:classes"))
+    dependsOn(crystalGraphics.task(":mc1201:forge:classes"))
+}
+
+tasks.matching { it.name in setOf("runClient", "runServer") }.configureEach {
+    // RunGameTask is ModDevGradle-internal, so its property is reached by reflection, as
+    // integration.gradle.kts reaches RunMinecraftTask's. Loud when the method is gone: a mod that
+    // quietly fails to load is indistinguishable from one that loaded and did nothing.
+    val environmentProperty = javaClass.methods
+        .firstOrNull { it.name == "getEnvironmentProperty" && it.parameterCount == 0 }
+        ?: throw GradleException(
+            "$path is a ${javaClass.name} with no getEnvironmentProperty(); ModDevGradle has moved "
+                + "MOD_CLASSES and CrystalGraphics would launch as a library rather than a mod.")
+
+    @Suppress("UNCHECKED_CAST")
+    (environmentProperty.invoke(this) as MapProperty<String, String>)
+        .put("MOD_CLASSES", modClassesValue)
 }
 
 // Extracts MinecraftForge 1.20.1 sources and resources into build/mc-src for local navigation.
