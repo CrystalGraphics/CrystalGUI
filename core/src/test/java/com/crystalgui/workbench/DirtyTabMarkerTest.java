@@ -11,6 +11,8 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.nio.charset.StandardCharsets;
+import com.crystalgui.core.storage.InMemoryConfigStorage;
 import com.crystalgui.document.Document;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
@@ -217,5 +219,54 @@ public class DirtyTabMarkerTest extends UiDocumentTestBase {
 
         assertTrue("a document holding unsaved text reported itself clean, which is the one answer that "
                 + "loses work", workbench.saveActions.isDirty(FILE));
+    }
+
+    /**
+     * <b>A backup that matches the file is not unsaved work.</b>
+     *
+     * <p>Hot exit restores whatever the backup store holds and {@code adoptUnsaved} marks it DIRTY by
+     * contract — that is what it is for. Nothing compared the backup against the file, so a stale one
+     * whose content the file already holds opened an untouched document with a modified marker, on
+     * every launch, until somebody edited and saved it. Reported as "Main.java opened with the asterisk
+     * and I didn't touch it, and it doesn't happen for all files" — only the ones with a backup.</p>
+     */
+    @Test
+    public void aBackupIdenticalToTheFileRestoresNothing() {
+        workspace.setStorage(new InMemoryConfigStorage());
+
+        // EXACTLY WHAT THE FILE HOLDS. The seeded content, byte for byte.
+        workspace.backup().save(Resource.of(FILE), "class Main { }".getBytes(StandardCharsets.UTF_8),
+                "whatever");
+
+        workbench.editors().restoreUnsavedWork();
+        for (int i = 0; i < 12; i++) frameAndPump();
+
+        assertFalse("a file whose backup says exactly what the file says opened modified",
+                workbench.saveActions.isDirty(FILE));
+        assertTrue("the empty backup was kept, so it will make the same offer on every launch",
+                workspace.backup().restorable().isEmpty());
+    }
+
+    /**
+     * The counter-control: a backup that genuinely differs still comes back, and still comes back dirty.
+     *
+     * <p>Without it a "fix" that restored nothing at all would satisfy the case above perfectly — and
+     * throwing away somebody's unsaved work is the worst outcome available here.</p>
+     */
+    @Test
+    public void aBackupThatDiffersIsRestoredAndIsDirty() {
+        workspace.setStorage(new InMemoryConfigStorage());
+        workspace.backup().save(Resource.of(FILE),
+                "class Main { int unsaved; }".getBytes(StandardCharsets.UTF_8), "whatever");
+
+        workbench.editors().restoreUnsavedWork();
+        for (int i = 0; i < 12; i++) frameAndPump();
+
+        assertTrue("real unsaved work came back clean, so the next save would discard it",
+                workbench.saveActions.isDirty(FILE));
+        TextEditor editor = workbench.editorFor(FILE);
+        assertNotNull("the restored document has no editor", editor);
+        assertTrue("the unsaved text was not the text restored",
+                editor.buffer().document().toString().contains("unsaved"));
     }
 }
