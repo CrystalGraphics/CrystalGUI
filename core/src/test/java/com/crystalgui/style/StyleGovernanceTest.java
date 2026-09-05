@@ -65,7 +65,12 @@ public class StyleGovernanceTest {
             Set.of("--graph-port-label-hover-fg");
     private static final Set<String> FALLBACK_ONLY_EXACT = Set.of(
             "--decoration-added", "--decoration-renamed", "--decoration-untracked",
-            "--decoration-deleted", "--decoration-conflict");
+            "--decoration-deleted", "--decoration-conflict",
+            // An ALPHA rather than a colour: how strongly a radar chart washes its wedges, with the
+            // hue coming from the data. It derives from no system role because it is not a role --
+            // there is no surface or foreground it could be a shade of -- and the same wash suits a
+            // light theme as a dark one, which is the test this set exists to express.
+            "--radar-fill");
 
     /**
      * <b>Offered hooks: defined by no theme, and that is the point.</b> Distinct from a palette —

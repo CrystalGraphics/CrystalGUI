@@ -32,7 +32,7 @@ import com.crystalgui.widget.config.inspector.Inspector;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Checkbox;
 import com.crystalgui.widget.display.ProgressBar;
-import com.crystalgui.widget.display.RadarChart;
+import com.crystalgui.widget.composite.RadarChart;
 import com.crystalgui.widget.control.Slider;
 import com.crystalgui.widget.control.Switch;
 import com.crystalgui.widget.display.SymbolIcon;

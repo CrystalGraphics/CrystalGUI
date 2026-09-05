@@ -554,6 +554,9 @@ theme {
      * light theme needs the opposite end of the ramp, and a fallback-only token would hand it the
      * dark file's grey. The wedges take no token at all; their colours are data. */
     --radar-web: var(--border-base);
+    /* --radar-fill is deliberately absent: it is an ALPHA rather than a colour, derives from no system
+     * role, and is the same wash in every theme -- so it rides its sheet's fallback and is listed in
+     * StyleGovernanceTest's FALLBACK_ONLY_EXACT. */
     /* The Processes popup's dismiss link. --link like every other link in the chrome, rather than
      * --accent: a link is a workbench colour, and the console's hyperlink note explains why. */
     --progress-hide-fg: var(--link);

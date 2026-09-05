@@ -1,4 +1,4 @@
-package com.crystalgui.widget.display;
+package com.crystalgui.widget.composite;
 
 import com.crystalgraphics.gl.render.CgVectorRenderer;
 import com.crystalgui.render.CgUiPaintContext;
@@ -10,8 +10,10 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.ShadowRoot;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.widget.text.UIText;
 import dev.vfyjxf.taffy.style.TaffyPosition;
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -51,6 +53,12 @@ import java.util.List;
  *
  * <h3>What is CSS and what is data</h3>
  *
+ * <h3>Why this is a composite rather than a display widget</h3>
+ *
+ * <p>It composes a {@link Tooltip}, which lives one tier up — the same reason {@code SearchField} sits
+ * here rather than beside the controls it looks like one of. A widget's tier is decided by what it
+ * COMPOSES, not by what it is.</p>
+ *
  * <p>The web (the rings and the spokes) takes the element's computed {@code color}, so a theme draws
  * it. Each axis's colour is DATA and is written inline onto that axis's label: a registry may declare
  * an attribute in any hue, so no stylesheet can enumerate them. Everything else — the label font, the
@@ -77,14 +85,46 @@ public class RadarChart extends UIElement {
     public static final String WEB_PART = "web";
 
     /**
+     * Carries the wedge fill's strength as the ALPHA of its background colour, and draws nothing.
+     *
+     * <p>How strongly a chart fills is a property of the CHART, not of the data: an axis supplies a
+     * hue and the theme decides how much of it to lay down. Encoding it in the caller's colours — the
+     * first arrangement here — put the decision in whatever built the axis list, so every caller had
+     * to remember it and no theme could change it.</p>
+     *
+     * <p>The alpha of a colour rather than {@code opacity}, which is the obvious spelling: an element
+     * with {@code opacity < 1} is composited through a layer FBO, so a part that exists only to carry
+     * a number would allocate a render target for a zero-sized box.</p>
+     */
+    public static final String FILL_PART = "fill";
+
+    /**
+     * The marker sitting on each value vertex, in that axis's colour.
+     *
+     * <p>A real element rather than something {@code paintContent} draws, and the reason is the hover:
+     * hit testing works on BOXES, so a dot painted into the content has nothing to hover. As an element
+     * it gets its size and its round shape from CSS, its colour inline from the data, and it can carry
+     * a {@link Tooltip} — which is what a point is for. Square in the sheet, so a 50% radius is a circle.</p>
+     */
+    public static final String POINT_PART = "point";
+
+    /**
      * One spoke.
      *
      * @param label what it is called
      * @param value how far out it reaches, against the chart's maximum
-     * @param argb  the wedge's colour, <b>ARGB</b> — a palette written as {@code 0xFF0000} is
-     *              transparent here, not red, so a caller holding RGB ors in {@code 0xFF000000}
+     * @param argb   the axis's colour. Its ALPHA IS IGNORED — the rim is drawn opaque and the fill
+     *               takes its strength from {@code ::part(fill)}, so a plain RGB palette works as-is
+     * @param detail what hovering this axis's point says, or {@code null} for no tooltip. The CALLER's
+     *               words: a value's formatting is its owner's business, and a chart that invented one
+     *               would be choosing a precision and a separator for data it knows nothing about
      */
-    public record Axis(String label, double value, int argb) {
+    public record Axis(String label, double value, int argb, @Nullable String detail) {
+
+        /** An axis with no hover text — its point still draws. */
+        public Axis(String label, double value, int argb) {
+            this(label, value, argb, null);
+        }
     }
 
     /** Below three there is no polygon to draw, and two axes are a line. */
@@ -92,8 +132,10 @@ public class RadarChart extends UIElement {
 
     private final ShadowRoot shadow;
     private final UIElement web;
+    private final UIElement fill;
     private final List<Axis> axes = new ArrayList<>();
     private final List<UIText> labels = new ArrayList<>();
+    private final List<UIElement> points = new ArrayList<>();
 
     /** {@code 0} means "the largest value present", which is what a sheet of attributes wants. */
     private double explicitMax;
@@ -113,8 +155,16 @@ public class RadarChart extends UIElement {
         StyleGroup.defaultPipeline(this.web.getStyle().getLayoutGroup(),
                 l -> l.positionType(TaffyPosition.ABSOLUTE));
         shadow.append(this.web);
-        // A readout: never a tab stop, and a press on it means nothing.
-        setHitTest(false);
+        this.fill = new UIElement();
+        this.fill.set(Attribute.PART, FILL_PART);
+        this.fill.setHitTest(false);
+        StyleGroup.defaultPipeline(this.fill.getStyle().getLayoutGroup(),
+                l -> l.positionType(TaffyPosition.ABSOLUTE));
+        shadow.append(this.fill);
+        // NO setHitTest(false) ON THE ROOT, although a readout otherwise wants one: it applies to the
+        // whole SUBTREE, like `pointer-events: none`, so it would make the points unhoverable and the
+        // tooltips dead. The labels and the two carrier parts each refuse the pointer individually
+        // instead, which leaves the points as the only thing in here that can be hit.
     }
 
     /** Replaces the axes, rebuilding one label each. */
@@ -125,6 +175,8 @@ public class RadarChart extends UIElement {
         placedHeight = -1f;
         for (UIText label : labels) shadow.remove(label);
         labels.clear();
+        for (UIElement point : points) shadow.remove(point);
+        points.clear();
 
         for (Axis axis : newAxes) {
             axes.add(axis);
@@ -142,6 +194,22 @@ public class RadarChart extends UIElement {
             StyleGroup.defaultPipeline(label.getStyle().getLayoutGroup(), l -> l.positionType(TaffyPosition.ABSOLUTE));
             labels.add(label);
             shadow.append(label);
+
+            // AFTER the label, so painter's order puts the marker over the fill it sits on. Its colour
+            // is the axis's at full strength -- the fill is washed and a marker washed with it would
+            // disappear into its own wedge.
+            UIElement point = new UIElement();
+            point.set(Attribute.PART, POINT_PART);
+            StyleGroup.inlinePipeline(point.getStyle().getGeneralGroup(),
+                    g -> g.backgroundColor(axis.argb() | 0xFF000000));
+            StyleGroup.defaultPipeline(point.getStyle().getLayoutGroup(),
+                    l -> l.positionType(TaffyPosition.ABSOLUTE));
+            // INSTANT: a point is a target the pointer was aimed at, not one it crossed.
+            if (axis.detail() != null) {
+                Tooltip.attach(point, axis.detail()).addClass(Tooltip.INSTANT_CLASS);
+            }
+            points.add(point);
+            shadow.append(point);
         }
         placeLabelsAfterLayout();
         return this;
@@ -223,8 +291,15 @@ public class RadarChart extends UIElement {
         ctx.flush();
     }
 
+    /** The fill's strength, 0..1 — the alpha of {@link #FILL_PART}'s computed background colour. */
+    private float fillStrength() {
+        int argb = fill.getStyle().computed().get(StylePropertyRegistry.BACKGROUND_COLOR);
+        return ((argb >>> 24) & 0xFF) / 255f;
+    }
+
     private void paintWedges(CgUiPaintContext ctx, float cx, float cy, float radius) {
         int count = axes.size();
+        float strength = fillStrength();
         for (int i = 0; i < count; i++) {
             int next = (i + 1) % count;
             double here = angleOf(i);
@@ -236,7 +311,10 @@ public class RadarChart extends UIElement {
                     .points(cx, cy,
                             cx + (float) Math.cos(here) * rHere, cy + (float) Math.sin(here) * rHere,
                             cx + (float) Math.cos(there) * rThere, cy + (float) Math.sin(there) * rThere)
-                    .color(axes.get(i).argb())
+                    // OPAQUE HUE, then the theme's fill strength. The alpha an axis carries is ignored
+                    // on purpose: how much colour a chart lays down is the chart's decision and the
+                    // same for every axis, so it belongs in one place rather than in six.
+                    .color(scaleAlpha(axes.get(i).argb() | 0xFF000000, strength))
                     // The RIM is the outline; the two spokes are seams against the neighbouring
                     // wedges. Feathering those would draw a soft crack down every one of them.
                     .silhouetteEdge(CgVectorRenderer.EDGE_P1_P2)
@@ -295,9 +373,9 @@ public class RadarChart extends UIElement {
      * The outline along the value points, in each axis's own colour at FULL strength.
      *
      * <p>What separates a radar chart from a pie: the fill states the area and the rim states the
-     * shape, and a translucent fill on its own has no edge to read. The alpha a caller gives belongs
-     * to the FILL — an outline drawn at half alpha is not a lighter outline, it is a blurry one — so
-     * this forces it opaque and keeps the hue.</p>
+     * shape, and a translucent fill on its own has no edge to read. Always opaque — an outline at
+     * half alpha is not a lighter outline, it is a blurry one — so the contrast between a faint fill
+     * and its own saturated rim is the whole effect.</p>
      */
     private void paintRim(CgUiPaintContext ctx, float cx, float cy, float radius, float line) {
         int count = axes.size();
@@ -401,6 +479,28 @@ public class RadarChart extends UIElement {
             float left = x + shiftX;
             float top = y + shiftY;
             StyleGroup.inlinePipeline(label.getStyle().getLayoutGroup(),
+                    l -> l.left(left).top(top));
+        }
+        placePoints(radius, cx, cy);
+    }
+
+    /**
+     * The markers, centred on their VALUE vertices — where the rim turns, not out at the label.
+     *
+     * <p>Centred rather than corner-placed, which the labels are: a label is a block of text that
+     * grows away from the chart, and a point is a dot whose middle IS the datum. Placing one by its
+     * corner would sit it half a marker off the line it is meant to be on.</p>
+     */
+    private void placePoints(float radius, float cx, float cy) {
+        for (int i = 0; i < points.size(); i++) {
+            UIElement point = points.get(i);
+            Box laid = point.box();
+            if (laid == null) continue;
+            double angle = angleOf(i);
+            float r = radius * extent(i);
+            float left = cx + (float) Math.cos(angle) * r - laid.width() / 2f;
+            float top = cy + (float) Math.sin(angle) * r - laid.height() / 2f;
+            StyleGroup.inlinePipeline(point.getStyle().getLayoutGroup(),
                     l -> l.left(left).top(top));
         }
     }

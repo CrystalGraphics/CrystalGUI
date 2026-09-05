@@ -236,6 +236,20 @@ public class Tooltip extends UIElement {
         return anchor;
     }
 
+    /**
+     * Opt out of the hover delay — {@code tooltip.__instant__} in the sheets.
+     *
+     * <p>The delay exists to tell "passed over" from "asked about", which is right for anything the
+     * pointer crosses on its way somewhere else: a toolbar, a rail, a tab strip. It is wrong for a
+     * small target the pointer had to be AIMED at, because arriving there is already the asking — a
+     * chart's data point is the shape of it, and a five-pixel dot is not something you cross by
+     * accident.</p>
+     *
+     * <p>A class rather than a setter because the delay is a cascaded property read off the TOOLTIP,
+     * so a sheet is the only thing that can change it and a caller needs a selector to aim at.</p>
+     */
+    public static final String INSTANT_CLASS = "__instant__";
+
     public static Tooltip attach(UIElement anchor, String text) {
         Objects.requireNonNull(anchor, "anchor");
         Tooltip tooltip = new Tooltip(text);
