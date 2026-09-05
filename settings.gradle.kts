@@ -66,7 +66,14 @@ val embedded = gradle.parent != null
 include("taffy")
 
 include("core")
-if (!embedded) include("gl-debug-harness")
+// A consumer authoring stylesheets wants the harness, and it pulls LWJGL3 -- so it is opt-in rather
+// than on for every embedded build.
+//
+// A SYSTEM property, which is the only channel that crosses into an included build's SETTINGS script:
+// a composite gives each build its own StartParameter, so neither -P nor the parent's gradle.properties
+// reaches here. RPG-Core's settings.gradle sets it; -Dcrystalgui.harness=true works too.
+val harnessRequested = System.getProperty("crystalgui.harness") == "true"
+if (!embedded || harnessRequested) include("gl-debug-harness")
 
 // The tree-sitter syntax backend. Its jars are checked in under lib/tree-sitter/, so this is an ordinary
 // module rather than one conditional on a local checkout -- see that directory's README for why.
