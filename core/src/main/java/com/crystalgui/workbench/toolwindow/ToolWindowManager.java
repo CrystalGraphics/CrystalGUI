@@ -116,8 +116,8 @@ public final class ToolWindowManager {
      * empties leaves the split and takes its divider with it, and neither is readable afterwards.</p>
      */
     private void releaseRegionSlot(String typeId) {
-        DockRegion region = regionOf(typeId);
-        RegionHost host = regions.host(region);
+        DockRegion region = showingRegionOf(typeId);
+        RegionHost host = region == null ? null : regions.host(region);
         RegionSide side = showingSideOf(host, typeId);
         if (host == null || side == null) return;
         float weight = regions.weightOf(region);
@@ -208,10 +208,8 @@ public final class ToolWindowManager {
         // shape a stale watch has.
         pendingWindowedShows.remove(typeId);
         if (typeOf(typeId).isWindowed()) return hideFrame(typeId);
-        DockRegion region = regionOf(typeId);
-        RegionHost host = regions.host(region);
-        // THE HALF THE HOST ACTUALLY HOLDS IT IN, not the half the record names -- and the two can
-        // disagree. The record is written by this class; the host is written by this class AND by a
+        // THE REGION AND THE HALF THE HOSTS ACTUALLY HOLD IT IN, not the ones the record names -- and
+        // the two can disagree. The record is written by this class; the host is written by this class AND by a
         // session restore, so a placement read back from disk naming the other half left the guard
         // below refusing to clear anything. Nothing failed loudly: the panel then went into its frame
         // (setContent reparents it out from under the host), and the region was left recording an
@@ -219,18 +217,27 @@ public final class ToolWindowManager {
         // the split, and its whole width stayed behind as a blank column. "Sometimes undocking leaves
         // the previous dock space empty", which is precisely what a stale record looks like from
         // outside. Asking the host makes the host the truth about where things are, which it already is.
+        DockRegion holding = showingRegionOf(typeId);
+        if (holding == null) return false;
+        RegionHost host = regions.host(holding);
         RegionSide side = showingSideOf(host, typeId);
         if (host == null || side == null) return false;
         // BOTH SHARES ARE READ BEFORE the clear, because a region with nothing in it is about to leave the
         // frame's split and a half that just emptied takes its divider with it -- neither share stays
         // readable. Same shape as the old hidePanel, which captured placement before a close for the same
         // reason; that part of it was always right.
-        float weight = regions.weightOf(region);
-        float sideWeight = regions.sideWeightOf(region);
+        float weight = regions.weightOf(holding);
+        float sideWeight = regions.sideWeightOf(holding);
         host.clear(side);
         regions.sync();
-        toolWindows.put(placementOf(typeId)
-                .withVisible(false).withWeight(weight).withSideWeight(sideWeight));
+        ToolWindowState placement = placementOf(typeId).withVisible(false);
+        // ...AND THEY BELONG TO THE REGION THAT IS LOSING IT. Kept only when that is the region the record
+        // names: a panel taken out of a region it had been MOVED away from would otherwise write one
+        // region's size into another region's record, which is the size the panel comes back at.
+        if (holding == regionOf(typeId)) {
+            placement = placement.withWeight(weight).withSideWeight(sideWeight);
+        }
+        toolWindows.put(placement);
         return false;
     }
 
@@ -263,6 +270,15 @@ public final class ToolWindowManager {
         // INTO ITS OWN HALF. A region holds two, so showing one no longer displaces the other -- which is
         // the whole of "Problems bottom-left, Services bottom-right, both at once".
         RegionSide side = sideOf(typeId);
+        // AND OUT OF WHEREVER ELSE IT IS. Showing a panel in one half does not take it out of another:
+        // `displaced` below clears the half being shown INTO, and nothing cleared the one it came FROM.
+        // A restore that moves a panel between regions therefore left the old region recording an
+        // occupant that had gone, so it kept its whole band on screen with nothing in it.
+        DockRegion holding = showingRegionOf(typeId);
+        if (holding != null
+                && (holding != region || showingSideOf(regions.host(holding), typeId) != side)) {
+            releaseRegionSlot(typeId);
+        }
         // WHATEVER WAS IN THAT HALF IS NOW CLOSED, and it has to be told. A half holds one container, so
         // showing this one displaced the last -- and the displaced record still said `visible`, so a
         // session save wrote several tool windows as visible in the same half and the restore showed them
@@ -330,6 +346,23 @@ public final class ToolWindowManager {
         // Stable, so the ones with no order yet keep registration order behind the ones that have.
         found.sort((a, b) -> Integer.compare(orderOf(a), orderOf(b)));
         return found;
+    }
+
+    /**
+     * The region a type is <b>actually</b> showing in, or null when nothing is holding it.
+     *
+     * <p>The other half of {@link #showingSideOf}, and it was missing for the same reason: the record
+     * names a region and the hosts are the truth, and the two can disagree. A session restore is where
+     * they do — it can move a panel between regions, and every lookup that started from the record then
+     * searched the region the panel is going to rather than the one it is in. The band it left behind
+     * stayed on screen with nothing in it.</p>
+     */
+    @Nullable
+    private DockRegion showingRegionOf(String typeId) {
+        for (DockRegion region : DockRegion.values()) {
+            if (showingSideOf(regions.host(region), typeId) != null) return region;
+        }
+        return null;
     }
 
     /**
@@ -441,7 +474,38 @@ public final class ToolWindowManager {
      * <p>A lookup per entry, which is the point. The old equivalent was replaying drops into a tree and
      * hoping the branches it named were still there.</p>
      */
+    /**
+     * Takes out anything on screen that the record about to be applied says <b>nothing</b> about.
+     *
+     * <p>A session is applied by replacing the store and re-applying every entry in it, so the loop below
+     * can only reach panels the record names. A panel that is open and absent from it is told nothing at
+     * all: it keeps its half, its region keeps its band, and what comes back is the arrangement from
+     * before the restore rather than the one that was saved.</p>
+     *
+     * <p>Ordinary rather than exotic — a record written by a build with a different set of extensions
+     * enabled, or before that panel existed. And the panel is usually opened by whoever contributed it,
+     * <em>before</em> the session is read, so this is the common case rather than the corner one.</p>
+     *
+     * <p>Only the unrecorded ones. Everything the record does name is placed by the loop, which now takes
+     * a panel out of the half it is in on its way to the one it is going to.</p>
+     */
+    private void releaseUnrecordedOccupants() {
+        List<String> orphans = new ArrayList<>();
+        for (DockRegion region : DockRegion.values()) {
+            RegionHost host = regions.host(region);
+            if (host == null) continue;
+            for (RegionSide side : RegionSide.values()) {
+                String typeId = host.showing(side);
+                if (typeId != null && !toolWindows.contains(typeId)) orphans.add(typeId);
+            }
+        }
+        // COLLECTED FIRST: hidePanel clears a half and re-syncs the regions, which is a walk over the
+        // very hosts being iterated.
+        for (String typeId : orphans) hidePanel(typeId);
+    }
+
     public void applyVisibility() {
+        releaseUnrecordedOccupants();
         for (ToolWindowState state : toolWindows.ordered()) {
             // BOTH DIRECTIONS. Showing alone is not a restore: the workbench opens Project and Problems in
             // its constructor and the application opens the Inspector, all BEFORE a session is read -- so
@@ -560,6 +624,31 @@ public final class ToolWindowManager {
                 .withFloatingBounds(new ToolWindowState.Bounds(left, top, width, height)));
         setType(typeId, mode);
         if (!isPanelOpen(typeId)) showPanel(typeId);
+    }
+
+    /**
+     * Where a windowed tool window is <b>right now</b>, or where it was last remembered.
+     *
+     * <p>The record is only written at the two moments the window is not being looked at — when it is
+     * torn out, and when it is hidden — because those are the moments the geometry would otherwise be
+     * lost. Everything in between is invisible to it: the window is moved and resized by dragging it,
+     * which is a {@code WindowFrame}'s own business and reaches nothing here.</p>
+     *
+     * <p>That is fine until something asks the record a question while the window is still on screen, and
+     * a session save is exactly that. It wrote the bounds from the tear-out — the drop point, at the
+     * default size — so a float that had been moved and resized came back where it first appeared and at
+     * a size nobody chose. The window was in the record and its geometry was a session old, which reads
+     * as the placement not being restored at all.</p>
+     *
+     * <p>Asked rather than pushed, deliberately: a listener on every move and resize would write the
+     * record sixty times a second during a drag to answer a question nobody has yet.</p>
+     */
+    @Nullable
+    public ToolWindowState.Bounds floatingGeometryOf(String typeId) {
+        ToolWindowFrame frame = frames.get(typeId);
+        // `bounds()` never answers a zero box -- it falls back to the last measurement it had. @see
+        // ToolWindowFrame#bounds()
+        return frame != null ? frame.bounds() : placementOf(typeId).floatingBounds();
     }
 
     /** Puts a floating or windowed tool window back in the region it never stopped belonging to. */

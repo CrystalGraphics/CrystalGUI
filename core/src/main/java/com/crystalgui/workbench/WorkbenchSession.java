@@ -539,10 +539,20 @@ public final class WorkbenchSession {
             // isPanelOpen's own javadoc warns against precisely this expression, for the split-region
             // reason it was written for. The session then reintroduced it.
             boolean showing = workbench.toolWindowManager().isPanelOpen(state.typeId());
-            workbench.toolWindows().put(state
+            ToolWindowState captured = state
                     .withVisible(showing)
                     .withWeight(workbench.regions().weightOf(region))
-                    .withSideWeight(workbench.regions().sideWeightOf(region)));
+                    .withSideWeight(workbench.regions().sideWeightOf(region));
+            // AND WHERE A FLOAT ACTUALLY IS. The placement record is written when a tool window is torn
+            // out and when it is hidden, and by nothing in between -- moving and resizing one is a
+            // WindowFrame's own business. So a save taken while the window is on screen wrote the bounds
+            // from the tear-out, and the float came back at the drop point at its default size however
+            // carefully it had been placed. Asked of the manager, which answers the live frame when there
+            // is one and the record when there is not.
+            ToolWindowState.Bounds where =
+                    workbench.toolWindowManager().floatingGeometryOf(state.typeId());
+            if (where != null) captured = captured.withFloatingBounds(where);
+            workbench.toolWindows().put(captured);
         }
     }
 
