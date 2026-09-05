@@ -6,10 +6,10 @@ val submoduleData = listOf(
         "name" to "CrystalGraphics",
         "buildPath" to "CrystalGraphics",
 
-        // mc1710 dev dependency — added via integration.gradle.kts to devOnlyNonPublishable.
+        // mc1710 dev dependency â€” added via integration.gradle.kts to devOnlyNonPublishable.
         "devDependencies" to listOf("com.crystalgraphics:crystalgraphics:1.0.0"),
 
-        // mc1201 compile-time dependencies — CrystalGraphics subprojects that mc1201 loader
+        // mc1201 compile-time dependencies â€” CrystalGraphics subprojects that mc1201 loader
         // sources import directly. Added as compileOnly + runtimeOnly by integration.gradle.kts.
         // Substitution rules below resolve these to CrystalGraphics' composite build projects.
         "mc1201CompileDeps" to listOf(
@@ -20,7 +20,7 @@ val submoduleData = listOf(
         ),
 
         // Composite build substitution rules. All are resolved within the CrystalGraphics
-        // includeBuild — projectPath values are relative to that build root.
+        // includeBuild â€” projectPath values are relative to that build root.
         "substitutions" to listOf(
             mapOf("module" to "com.crystalgraphics:crystalgraphics",
                 "projectPath" to ":mc1710"),
@@ -67,12 +67,23 @@ fun Map<String, *>.string(key: String): String = this[key] as String
 fun Map<String, *>.mapList(key: String): List<Map<String, String>> =
     this[key] as? List<Map<String, String>> ?: emptyList()
 
+// Loader substitutions go with the loaders. CrystalGraphics drops its own loaders when neither it nor
+// CrystalGUI is the build being invoked, and a substitution naming a missing project then fails
+// configuration for every task -- "Project with path ':mc1201:common' not found in build
+// ':CrystalGUI:CrystalGraphics'". Matched on the path so a loader added later is covered.
+val embeddedHere = gradle.parent != null
+
+fun isLoaderPath(projectPath: String): Boolean =
+    projectPath == ":mc1710" || projectPath.startsWith(":mc1201")
+
 submoduleData.forEach { mod ->
     includeBuild(mod.string("buildPath")) {
         dependencySubstitution {
-            mod.mapList("substitutions").forEach { substitution ->
-                substitute(module(substitution.getValue("module"))).using(project(substitution.getValue("projectPath")))
-            }
+            mod.mapList("substitutions")
+                .filterNot { embeddedHere && isLoaderPath(it.getValue("projectPath")) }
+                .forEach { substitution ->
+                    substitute(module(substitution.getValue("module"))).using(project(substitution.getValue("projectPath")))
+                }
         }
     }
 }
