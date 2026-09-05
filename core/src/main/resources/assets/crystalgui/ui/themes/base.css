@@ -548,6 +548,12 @@ theme {
      * hover surface moves this with it, which is the whole point of the component tier. */
     --progress-cancel-hover-fg: var(--fg);
     --progress-cancel-hover-bg: var(--hover-bg);
+
+    /* THE RADAR'S WEB -- its rings and spokes. --border-base rather than a fallback-only palette
+     * value, because a line drawn over a chart is exactly as theme-dependent as any other border: a
+     * light theme needs the opposite end of the ramp, and a fallback-only token would hand it the
+     * dark file's grey. The wedges take no token at all; their colours are data. */
+    --radar-web: var(--border-base);
     /* The Processes popup's dismiss link. --link like every other link in the chrome, rather than
      * --accent: a link is a workbench colour, and the console's hyperlink note explains why. */
     --progress-hide-fg: var(--link);

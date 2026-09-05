@@ -1,0 +1,415 @@
+package com.crystalgui.widget.display;
+
+import com.crystalgraphics.gl.render.CgVectorRenderer;
+import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.style.StyleGroup;
+import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.Attribute;
+import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.dom.ShadowRoot;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.text.UIText;
+import dev.vfyjxf.taffy.style.TaffyPosition;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+
+/**
+ * A radar chart — several axes fanned from a centre, each reaching its own value.
+ *
+ * <h3>Geometry ported from Chart.js</h3>
+ *
+ * <p>The angles, the value-to-radius mapping and the label placement are Chart.js's
+ * {@code RadialLinearScale} ({@code src/scales/scale.radialLinear.js}, MIT). They are the
+ * conventional answers and each is easy to get subtly wrong:</p>
+ *
+ * <ul>
+ *   <li><b>Axis 0 points UP.</b> {@code getPointPosition} subtracts a quarter turn from the index
+ *       angle, so the first axis is at twelve o'clock and the rest run clockwise. Without it the
+ *       first axis points right, which no radar chart anywhere does.</li>
+ *   <li><b>A label's alignment comes from its angle</b>, not from its position: at the top and bottom
+ *       it centres, on the right it is left-aligned and on the left right-aligned, so every label
+ *       grows AWAY from the chart. {@code getTextAlignForAngle} and {@code yForAngle} are ported
+ *       whole, including their exact boundary cases at 0/90/180/270 — those four are where a
+ *       hand-rolled version puts a label a few pixels into the polygon it labels.</li>
+ *   <li><b>The plot shrinks to fit its labels.</b> Chart.js measures them and reduces the drawing
+ *       area; the version here reserves the widest label horizontally and the tallest vertically,
+ *       which is the same idea with one measurement instead of a per-angle fit.</li>
+ * </ul>
+ *
+ * <h3>Wedges, not one polygon</h3>
+ *
+ * <p>The fill is one triangle per axis pair, fanned from the centre and taking the axis's own colour,
+ * rather than a single polygon in one colour. That is this chart's own design rather than Chart.js's,
+ * and it is what makes a six-attribute sheet readable at a glance: each attribute owns a wedge.</p>
+ *
+ * <p>Each wedge marks {@link CgVectorRenderer#EDGE_P1_P2} as its silhouette — the rim — so only the
+ * outer edge is antialiased and the two spokes into the centre stay hard. Feathering all three would
+ * put a soft seam between every neighbouring pair, which reads as a hairline crack through the fan.</p>
+ *
+ * <h3>What is CSS and what is data</h3>
+ *
+ * <p>The web (the rings and the spokes) takes the element's computed {@code color}, so a theme draws
+ * it. Each axis's colour is DATA and is written inline onto that axis's label: a registry may declare
+ * an attribute in any hue, so no stylesheet can enumerate them. Everything else — the label font, the
+ * chart's size, its padding — is ordinary CSS on {@code radarchart} and {@code ::part(axis-label)}.</p>
+ */
+public class RadarChart extends UIElement {
+
+    public static final Name NAME = Name.of("radarchart");
+
+    /** Every axis label, so a theme can size and weight them together. */
+    public static final String AXIS_LABEL_PART = "axis-label";
+
+    /**
+     * Carries the web's stroke thickness as its own HEIGHT, and draws nothing.
+     *
+     * <p>A part rather than {@code border-width}, which is the obvious spelling and was tried: the
+     * element paints no background, but a border box is drawn regardless, so the chart came out inside
+     * a rectangle. The web is not the element's border and cannot borrow its properties. Reading a
+     * value back off a styled part is the engine's own idiom for this — {@code NodePort} takes a
+     * wire's colour from its dot's computed border-colour for the same reason.</p>
+     *
+     * <p>Out of flow and zero-width, so it costs no layout.</p>
+     */
+    public static final String WEB_PART = "web";
+
+    /**
+     * One spoke.
+     *
+     * @param label what it is called
+     * @param value how far out it reaches, against the chart's maximum
+     * @param argb  the wedge's colour, <b>ARGB</b> — a palette written as {@code 0xFF0000} is
+     *              transparent here, not red, so a caller holding RGB ors in {@code 0xFF000000}
+     */
+    public record Axis(String label, double value, int argb) {
+    }
+
+    /** Below three there is no polygon to draw, and two axes are a line. */
+    private static final int MIN_AXES = 3;
+
+    private final ShadowRoot shadow;
+    private final UIElement web;
+    private final List<Axis> axes = new ArrayList<>();
+    private final List<UIText> labels = new ArrayList<>();
+
+    /** {@code 0} means "the largest value present", which is what a sheet of attributes wants. */
+    private double explicitMax;
+    private int rings = 4;
+    /** What the labels were last placed against, so the hook below costs two comparisons a frame. */
+    private float placedWidth = -1f;
+    private float placedHeight = -1f;
+
+    public RadarChart() {
+        super(NAME);
+        // Its structure is its own and a caller has no content to put in it.
+        refusePublicChildren();
+        this.shadow = attachShadow();
+        this.web = new UIElement();
+        this.web.set(Attribute.PART, WEB_PART);
+        this.web.setHitTest(false);
+        StyleGroup.defaultPipeline(this.web.getStyle().getLayoutGroup(),
+                l -> l.positionType(TaffyPosition.ABSOLUTE));
+        shadow.append(this.web);
+        // A readout: never a tab stop, and a press on it means nothing.
+        setHitTest(false);
+    }
+
+    /** Replaces the axes, rebuilding one label each. */
+    public RadarChart setAxes(Collection<Axis> newAxes) {
+        axes.clear();
+        // Forces the hook's next pass to place them: the box has not changed, but its contents have.
+        placedWidth = -1f;
+        placedHeight = -1f;
+        for (UIText label : labels) shadow.remove(label);
+        labels.clear();
+
+        for (Axis axis : newAxes) {
+            axes.add(axis);
+            UIText label = new UIText(axis.label());
+            label.set(Attribute.PART, AXIS_LABEL_PART);
+            // DATA, and the one legitimate inline colour write: an axis's hue comes from whatever
+            // registry declared it, so no sheet can name them all.
+            // FULL STRENGTH. The alpha on an axis belongs to its FILL; a label carrying it would fade
+            // with the wedge, and a label is read rather than looked through.
+            StyleGroup.inlinePipeline(label.getStyle().getGeneralGroup(),
+                    g -> g.color(axis.argb() | 0xFF000000));
+            // Decoration on the chart, not a thing in its own right.
+            label.setHitTest(false);
+            // OUT OF FLOW. Placed by their angle after layout, so they must not lay out in a row.
+            StyleGroup.defaultPipeline(label.getStyle().getLayoutGroup(), l -> l.positionType(TaffyPosition.ABSOLUTE));
+            labels.add(label);
+            shadow.append(label);
+        }
+        placeLabelsAfterLayout();
+        return this;
+    }
+
+    public List<Axis> axes() {
+        return List.copyOf(axes);
+    }
+
+    /** The value the outer ring stands for. {@code 0} restores "the largest value present". */
+    public RadarChart setMax(double max) {
+        this.explicitMax = Math.max(0d, max);
+        return this;
+    }
+
+    /** How many rings the web draws, the outermost included. Fewer than one draws no web. */
+    public RadarChart setRings(int rings) {
+        this.rings = Math.max(0, rings);
+        return this;
+    }
+
+    /**
+     * Chart.js's {@code getDistanceFromCenterForValue}, with a floor of zero: a value below the
+     * minimum plots at the centre rather than outside the chart on the opposite spoke.
+     */
+    private float extent(int index) {
+        double max = maxValue();
+        if (max <= 0d) return 0f;
+        return (float) Math.max(0d, Math.min(1d, axes.get(index).value() / max));
+    }
+
+    private double maxValue() {
+        if (explicitMax > 0d) return explicitMax;
+        double max = 0d;
+        for (Axis axis : axes) max = Math.max(max, axis.value());
+        return max;
+    }
+
+    /**
+     * The web's stroke thickness, read off the {@link #WEB_PART}'s laid-out height.
+     *
+     * <p>One pixel until that part has been measured, which is only ever the first frame.</p>
+     */
+    private float lineWidth() {
+        Box laid = web.box();
+        return laid == null ? 1f : Math.max(0.5f, laid.height());
+    }
+
+    /** Chart.js's {@code getIndexAngle} less a quarter turn, so axis 0 is at twelve o'clock. */
+    private double angleOf(int index) {
+        return index * (Math.PI * 2d / axes.size()) - Math.PI / 2d;
+    }
+
+    // ── Painting ────────────────────────────────────────────────────────────────────────────────
+
+    @Override
+    public void paintContent(CgUiPaintContext ctx, Box box) {
+        if (axes.size() < MIN_AXES) return;
+        float radius = radiusIn(box);
+        if (radius <= 0f) return;
+
+        float cx = box.width() / 2f;
+        float cy = box.height() / 2f;
+        // THE WEB IS A SET OF BORDERS, so it takes the border properties rather than inventing its
+        // own. border-width also feeds Taffy, which is harmless here: box-sizing is border-box
+        // engine-wide, so it eats into the content rather than growing the chart, and the element
+        // paints no background so no border box is ever drawn over the plot.
+        int webColor = computedStyle().get(StylePropertyRegistry.BORDER_COLOR);
+        float line = lineWidth();
+
+        // WEB FIRST. It is the reference the values are read against, so it belongs BEHIND them --
+        // drawn last it lays a grid over the data and the chart reads as a wireframe with colour
+        // trapped inside it.
+        paintWeb(ctx, cx, cy, radius, webColor, line);
+        paintWedges(ctx, cx, cy, radius);
+        paintRim(ctx, cx, cy, radius, line);
+        // ONE flush for both paths. curve() and triangle() share a material, so alternating them is
+        // free and only a switch to the quad path costs anything -- which is why neither half flushes.
+        ctx.flush();
+    }
+
+    private void paintWedges(CgUiPaintContext ctx, float cx, float cy, float radius) {
+        int count = axes.size();
+        for (int i = 0; i < count; i++) {
+            int next = (i + 1) % count;
+            double here = angleOf(i);
+            double there = angleOf(next);
+            float rHere = radius * extent(i);
+            float rThere = radius * extent(next);
+
+            ctx.triangle()
+                    .points(cx, cy,
+                            cx + (float) Math.cos(here) * rHere, cy + (float) Math.sin(here) * rHere,
+                            cx + (float) Math.cos(there) * rThere, cy + (float) Math.sin(there) * rThere)
+                    .color(axes.get(i).argb())
+                    // The RIM is the outline; the two spokes are seams against the neighbouring
+                    // wedges. Feathering those would draw a soft crack down every one of them.
+                    .silhouetteEdge(CgVectorRenderer.EDGE_P1_P2)
+                    .submit();
+        }
+    }
+
+    /** The rings and the spokes — Chart.js's {@code pathRadiusLine} with a polygon rather than a circle. */
+    private void paintWeb(CgUiPaintContext ctx, float cx, float cy, float radius, int argb, float line) {
+        if (rings <= 0 || (argb >>> 24) == 0) return;
+        int count = axes.size();
+
+        for (int ring = 1; ring <= rings; ring++) {
+            float r = radius * ring / rings;
+            // THE RIM IS THE SCALE AND THE INNER RINGS ARE TICKS ON IT, so they are not equals: the
+            // outer ring bounds the chart and stays at full strength, and the rest fade inward. Drawn
+            // flat, the web reads as a wireframe cage competing with the data inside it; ramped, it
+            // reads as one boundary with graduations under it. The ramp keeps the innermost at half
+            // rather than fading it to nothing, or the middle of the chart loses its scale entirely.
+            int ringArgb = scaleAlpha(argb, 0.5f + 0.5f * ring / rings);
+            for (int i = 0; i < count; i++) {
+                double here = angleOf(i);
+                double there = angleOf((i + 1) % count);
+                ctx.curve()
+                        .line(cx + (float) Math.cos(here) * r, cy + (float) Math.sin(here) * r,
+                                cx + (float) Math.cos(there) * r, cy + (float) Math.sin(there) * r)
+                        // A HALF width, which is this primitive's convention.
+                        .width(line / 2f)
+                        .color(ringArgb)
+                        .submit();
+            }
+        }
+
+        // The spokes cross every ring, so they take the inner rings' weight rather than the rim's --
+        // at full strength they are the brightest thing in the web and the eye follows them instead
+        // of the shape the data makes.
+        int spokeArgb = scaleAlpha(argb, 0.5f);
+        for (int i = 0; i < count; i++) {
+            double angle = angleOf(i);
+            ctx.curve()
+                    .line(cx, cy,
+                            cx + (float) Math.cos(angle) * radius, cy + (float) Math.sin(angle) * radius)
+                    .width(line / 2f)
+                    .color(spokeArgb)
+                    .submit();
+        }
+    }
+
+    /** {@code argb} with its alpha multiplied — the colour keeps its hue and only its weight moves. */
+    private static int scaleAlpha(int argb, float factor) {
+        int alpha = Math.round(((argb >>> 24) & 0xFF) * Math.max(0f, Math.min(1f, factor)));
+        return (alpha << 24) | (argb & 0x00FFFFFF);
+    }
+
+    /**
+     * The outline along the value points, in each axis's own colour at FULL strength.
+     *
+     * <p>What separates a radar chart from a pie: the fill states the area and the rim states the
+     * shape, and a translucent fill on its own has no edge to read. The alpha a caller gives belongs
+     * to the FILL — an outline drawn at half alpha is not a lighter outline, it is a blurry one — so
+     * this forces it opaque and keeps the hue.</p>
+     */
+    private void paintRim(CgUiPaintContext ctx, float cx, float cy, float radius, float line) {
+        int count = axes.size();
+        for (int i = 0; i < count; i++) {
+            int next = (i + 1) % count;
+            double here = angleOf(i);
+            double there = angleOf(next);
+            float rHere = radius * extent(i);
+            float rThere = radius * extent(next);
+            ctx.curve()
+                    .line(cx + (float) Math.cos(here) * rHere, cy + (float) Math.sin(here) * rHere,
+                            cx + (float) Math.cos(there) * rThere, cy + (float) Math.sin(there) * rThere)
+                    .width(line / 2f)
+                    .color(axes.get(i).argb() | 0xFF000000)
+                    .submit();
+        }
+    }
+
+    // ── Labels ──────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * The plot's radius, after reserving room for the labels.
+     *
+     * <p>Chart.js fits per angle; this reserves the widest label on both sides and the tallest above
+     * and below, which is the same idea with one measurement. Conservative by a few pixels on a chart
+     * whose longest label is horizontal, and never wrong in the direction that clips one.</p>
+     */
+    private float radiusIn(Box box) {
+        float widest = 0f;
+        float tallest = 0f;
+        for (UIText label : labels) {
+            Box laid = label.box();
+            // A label that has never been laid out reserves nothing; the next frame corrects it.
+            if (laid == null) continue;
+            widest = Math.max(widest, laid.width());
+            tallest = Math.max(tallest, laid.height());
+        }
+        float available = Math.min(box.width() - widest * 2f, box.height() - tallest * 2f);
+        return Math.max(0f, available / 2f);
+    }
+
+    /**
+     * Places the labels once this frame's layout has measured them.
+     *
+     * <p>{@code afterLayout} rather than an ordinary per-frame hook: the frame is animation, then
+     * style, then layout, so a hook that runs before layout would place every label against the size
+     * it had last frame — and against zero on the frame the axes were set.</p>
+     */
+    private void placeLabelsAfterLayout() {
+        UIDocument document = document();
+        if (document == null) return;
+        // PERMANENT, and cheap. A label's position depends on the chart's box, which changes on any
+        // resize with nothing to re-register the hook -- so a run-once version left every label where
+        // the first layout put it and only ever looked right at the size it opened at. Staying costs
+        // two float comparisons a frame and the hook dies with the node, which is what an owned hook
+        // is for. A label's SIZE does not depend on the radius, so there is no loop to settle.
+        document.animation().afterLayout(this, delta -> {
+            Box box = box();
+            if (box != null && (box.width() != placedWidth || box.height() != placedHeight)) {
+                placedWidth = box.width();
+                placedHeight = box.height();
+                placeLabels();
+            }
+            return true;
+        });
+    }
+
+    private void placeLabels() {
+        Box box = box();
+        if (box == null || axes.size() < MIN_AXES) return;
+        float radius = radiusIn(box);
+        float cx = box.width() / 2f;
+        float cy = box.height() / 2f;
+
+        for (int i = 0; i < labels.size(); i++) {
+            UIText label = labels.get(i);
+            Box laid = label.box();
+            if (laid == null) continue;
+
+            double angle = angleOf(i);
+            float x = cx + (float) Math.cos(angle) * radius;
+            float y = cy + (float) Math.sin(angle) * radius;
+
+            // Chart.js's own two rules, on its angle convention: degrees clockwise from straight up.
+            float degrees = (float) ((i * 360d / axes.size()) % 360d);
+            float w = laid.width();
+            float h = laid.height();
+
+            // getTextAlignForAngle: centred at top and bottom, and otherwise growing away from the chart.
+            float shiftX;
+            if (degrees == 0f || degrees == 180f) shiftX = -w / 2f;
+            else if (degrees < 180f) shiftX = 0f;
+            else shiftX = -w;
+
+            // yForAngle: vertically centred at the sides, fully above across the top.
+            float shiftY;
+            if (degrees == 90f || degrees == 270f) shiftY = -h / 2f;
+            else if (degrees > 270f || degrees < 90f) shiftY = -h;
+            else shiftY = 0f;
+
+            float left = x + shiftX;
+            float top = y + shiftY;
+            StyleGroup.inlinePipeline(label.getStyle().getLayoutGroup(),
+                    l -> l.left(left).top(top));
+        }
+    }
+
+    @Override
+    public void connected() {
+        super.connected();
+        // The axes may have been set before this joined a document, in which case the hook above
+        // found none to register with. Asked again here, which is the moment one exists.
+        placeLabelsAfterLayout();
+    }
+}
