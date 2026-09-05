@@ -1,5 +1,6 @@
 package com.crystalgui.text;
 
+import java.util.ArrayList;
 import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.undo.Edit;
@@ -382,6 +383,7 @@ public final class TextBuffer {
      */
     private void applied(ChangeSet change) {
         version++;
+        trackAlternativeVersion();
         long timed = FrameProfile.begin();
         decorations.adjust(change);
         FrameProfile.step(timed, "buf.decorations.adjust");
@@ -531,6 +533,57 @@ public final class TextBuffer {
     /** @return false when there was nothing to redo */
     public boolean redo() {
         return history.redo();
+    }
+
+    /**
+     * A version that <b>comes back</b> when undo returns the content to a state it held before.
+     *
+     * <p>{@link #version()} is monotonic and must stay so — everything computed against the document
+     * stamps itself with it, and undo moves the text as surely as typing does, so a version that went
+     * backwards would let a stale analysis look fresh. That is the right answer for "is what I computed
+     * still about this text" and the wrong one for "is this the text that was saved": under it, one
+     * keystroke and its undo leave a document permanently modified.</p>
+     *
+     * <p>So this is the second question, and it is Monaco's {@code alternativeVersionId} — unique per
+     * state, and restored when undo or redo returns to one. Undo back to where you saved and the
+     * document is clean; make a <em>different</em> edit from there and it is not, even though the undo
+     * depth is the same, which is why this cannot simply be the depth.</p>
+     */
+    public int alternativeVersion() {
+        return alternativeVersion;
+    }
+
+    private int alternativeVersion;
+
+    /** The alternative version each undo depth was first reached at. Index IS the depth. */
+    private final List<Integer> alternativeByDepth = new ArrayList<>(List.of(0));
+
+    private int lastDepth;
+
+    /**
+     * Keeps {@link #alternativeVersion} in step with the undo stack. Called by every applied change.
+     *
+     * <p>The depth says which way the document moved: <b>down</b> is an undo, so the state being
+     * returned to already has an identity and it is recalled; anything else is a forward edit — a new
+     * step, a keystroke coalesced into the current one, or a load — which mints a new identity and
+     * <b>drops every identity above it</b>, because the redo branch it just replaced is gone.</p>
+     */
+    private void trackAlternativeVersion() {
+        int depth = history.undoDepth();
+        if (depth < lastDepth && depth < alternativeByDepth.size()) {
+            alternativeVersion = alternativeByDepth.get(depth);
+        } else {
+            alternativeVersion = version;
+            while (alternativeByDepth.size() <= depth) alternativeByDepth.add(version);
+            alternativeByDepth.set(depth, version);
+            // A REDO BRANCH THAT IS NO LONGER REACHABLE, and keeping it would be worse than wasteful:
+            // a later undo down to one of those depths would recall the identity of a state this edit
+            // destroyed, and the document would report itself clean holding text nobody saved.
+            while (alternativeByDepth.size() > depth + 1) {
+                alternativeByDepth.remove(alternativeByDepth.size() - 1);
+            }
+        }
+        lastDepth = depth;
     }
 
     /** Undo history depth — for a history panel, and for tests that assert coalescing happened. */
