@@ -1,0 +1,13 @@
+# THIS JAR HAS SCRIPTING. Being here is availability, never enablement: an application's manifest
+# names `crystalgui:scripting` to turn it on, and an id nothing contributed is a logged absence.
+#
+# It was `WorkbenchExtensions.contribute(ScriptWorkbench.extension())` from LanguageStack.registerAll --
+# the last contribute() call left in the tree. The argument for keeping it was that availability here is
+# a question about an engine BAND rather than about a jar; it does not distinguish the two, because the
+# band is asked at activate() and answers a no-op handle when no runtime is present. Discovery degrades
+# identically and needs nobody to remember a call.
+#
+# ONE CLASS PER FEATURE: ScriptWorkbench IS the extension. A ScriptingExtension beside it was
+# a wrapper wearing a boundary's clothes -- one lifetime, one id, and the second file's only
+# real content was the name of the first.
+com.crystalgui.language.run.view.ScriptWorkbench
