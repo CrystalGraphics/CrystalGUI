@@ -529,6 +529,26 @@ public final class ToolWindowManager {
         floatPanel(typeId, left, top, ToolWindowType.WINDOWED);
     }
 
+    /**
+     * Floats a tool window <b>under the pointer</b> — where a tear-out drops it.
+     *
+     * <p>Centred horizontally on {@code x}, so the pointer ends up in the middle of the window's caption
+     * rather than at its top-left corner. A window that appears with its corner under the hand reads as
+     * having been dropped beside where you let go; one whose title bar is under the hand reads as the
+     * thing you were carrying, which is what it is — and it is where the next drag of that caption starts
+     * from.</p>
+     *
+     * <p>Separate from {@link #floatPanel(String, float, float)} rather than a change to it: that one
+     * takes the window's own top-left, which is what a session restore and a remembered placement mean,
+     * and quietly reinterpreting it as a centre would move every restored window by half its width.</p>
+     */
+    public void floatPanelUnder(String typeId, float x, float y) {
+        ToolWindowState.Bounds remembered = placementOf(typeId).floatingBounds();
+        boolean usable = remembered != null && remembered.width() > 0f;
+        float width = usable ? remembered.width() : ToolWindowFrame.DEFAULT_WIDTH;
+        floatPanel(typeId, x - width / 2f, y, ToolWindowType.WINDOWED);
+    }
+
     /** @see #floatPanel(String, float, float) */
     public void floatPanel(String typeId, float left, float top, ToolWindowType mode) {
         if (typeId == null || mode == null || !mode.isWindowed()) return;
