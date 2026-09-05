@@ -15,36 +15,39 @@ import com.crystalgui.workbench.region.DockRegion;
 import com.crystalgui.workbench.region.RegionSide;
 
 /**
- * <b>A panel in one declaration</b> — what {@code DocumentKind} is to a file type.
+ * <b>A tool window in one declaration</b> - what {@code DocumentKind} is to a file type.
+ *
+ * <p>Describe the panel once and the engine derives everything that used to be spread across five
+ * places: the dock descriptor, the factory, the view-container entries, the stripe button, the toggle
+ * command with its accelerator, whether it is open on a fresh workspace, and the badge subscription.</p>
  *
  * <pre>{@code
- * ToolWindowKind.of("crystalgui:problems", "Problems")
- *         .icon("crystalgui:toolwindows/problems")
- *         .anchor(DockDropZone.SPLIT_DOWN)
- *         .view(ctx -> problemsPanel)
- *         .toggle("workbench.showProblems")
- *         .openByDefault();
+ * Disposable panel = workbench.registerToolWindow(
+ *         ToolWindowKind.of("mymod:problems", "Problems")
+ *                 .icon("mymod:icons/problems")
+ *                 .anchor(DockDropZone.SPLIT_DOWN)
+ *                 .view(ctx -> myPanel)
+ *                 .toggle("mymod.showProblems")
+ *                 .openByDefault());
  * }</pre>
  *
- * <p>From that the engine derives what was spread across five places: the {@code DockPanelDescriptor}
- * (kept as the <em>compiled</em> form), the factory, the {@code ViewContainerRegistry} entries, the
- * stripe button, the toggle command with its accelerator, whether it is open on a fresh workspace, and
- * the badge subscription. Registering one is {@code ctx.registerToolWindow(kind)} and it hands back a
- * {@link Disposable}, so an extension that goes takes its panel with it.</p>
+ * <p>{@code registerToolWindow} hands back a {@link Disposable}, so an extension that goes takes its
+ * panel, its rail button and its command with it. Build the view eagerly and return the same instance:
+ * the dock caches what a factory answers, so a placeholder returned "for this frame" is what it hands
+ * back for the rest of the session.</p>
  *
  * <h3>Where it opens is a DEFAULT, never a rule</h3>
  *
- * <p>{@link #region}, {@link #side} and {@link #anchor} say where a panel goes when nothing else has an
- * opinion. A {@code ToolWindowState} restored from a session outranks all three — a panel the user
- * dragged to the other rail stays there, which is the whole point of persisting a placement.</p>
+ * <p>{@link #region}, {@link #side} and {@link #anchor} say where the panel goes when nothing else has an
+ * opinion. A placement restored from a session outranks all three - a panel the user dragged to the
+ * other rail stays there, which is the whole point of persisting one.</p>
  *
  * <h3>Mapping to the references</h3>
  *
- * <p>IntelliJ's {@code toolWindow} extension point: {@code id}, {@code anchor}→{@link #region},
- * {@code icon}, {@code factoryClass}→{@link #view}, {@code secondary}→{@link #side},
- * {@code doNotActivateOnStart}→ the absence of {@link #openByDefault()}. VS Code:
- * {@code viewsContainers.activitybar} is a kind, {@code views} are {@link #view(String, String,
- * Function)} entries in one container.</p>
+ * <p>IntelliJ's {@code toolWindow} extension point: {@code id}, {@code anchor} to {@link #region},
+ * {@code icon}, {@code factoryClass} to {@link #view}, {@code secondary} to {@link #side},
+ * {@code doNotActivateOnStart} to the absence of {@link #openByDefault()}. VS Code's
+ * {@code viewsContainers} is a kind and its {@code views} are the string-keyed {@link #view} overload.</p>
  */
 public final class ToolWindowKind {
 

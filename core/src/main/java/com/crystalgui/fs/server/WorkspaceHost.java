@@ -30,32 +30,38 @@ import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
 
 /**
- * <b>A server serving its workspace over the wire</b> — one binding per connection, one watcher for the
- * whole server, and a fan-out that tells each peer only about the files it holds.
+ * <b>A server serving its workspace over the wire</b> - bind a connection to it and that peer can list,
+ * read, write and watch files.
  *
- * <p>All of this was written inside the 1.7.10 loader and none of it is about Minecraft. What genuinely
- * is: <em>where</em> the directory is, <em>who</em> a peer is, and <em>what</em> they may do — three
- * questions a platform answers and this class asks, through {@link Host}. Everything else — the
- * per-connection {@link WorkspaceBinding}, the shared {@link WatchHub}, the poll cadence, the change and
- * presence fan-outs, the per-peer cleanup, the seeded README — is the same on any host with a socket.</p>
+ * <p>Answer three questions through {@link Host} - <em>where</em> the directory is, <em>who</em> a peer
+ * is, and <em>what</em> they may do - and this provides the rest: a {@link WorkspaceBinding} per
+ * connection, one shared {@link WatchHub}, the change and presence fan-outs, per-peer cleanup and a
+ * seeded README for an empty workspace.</p>
+ *
+ * <pre>{@code
+ * WorkspaceHost host = new WorkspaceHost(myHost);
+ * host.bind(connection, peerKey);   // when a peer connects
+ * host.tick();                      // every server tick -- polls and fans out changes
+ * host.forget(peerKey);             // when they disconnect
+ * }</pre>
  *
  * <h3>One binding per connection, because an actor is per player</h3>
  *
- * <p>A binding takes its actor at construction and permission is checked per call against that actor, so
- * sharing one across players would authorise every request as whoever connected first. It also holds the
+ * <p>A binding takes its actor at construction and checks permission per call against it, so sharing one
+ * across players would authorise every request as whoever connected first. It also holds that peer's
  * watch list, which is what makes "tell <em>this</em> client what changed" mean anything.</p>
  *
- * <h3>One hub, though — never one per player</h3>
+ * <h3>One watch hub, though - never one per player</h3>
  *
  * <p>A watch costs an OS handle and Linux caps them per user, so N players watching one workspace must
  * not mean N subscriptions on one directory. It also means a path is stat-ed at most once per tick
- * however many peers watch it; the per-connection version did it twice a second per file per peer.</p>
+ * however many peers watch it.</p>
  *
- * <h3>Built on first connection, never at registration</h3>
+ * <h3>The root is asked for repeatedly, on purpose</h3>
  *
- * <p>The root is not knowable when a mod initialises — a server has no world yet — so {@link Host#root()}
- * is asked on the first connection instead, which is always after. It may still answer null, and a
- * connection that arrives before there is anywhere to serve is simply not bound.</p>
+ * <p>{@link Host#root()} may answer null - a server has no world when a mod initialises - so it is asked
+ * on every connection until it answers. A peer that arrives before there is anywhere to serve is simply
+ * not bound, and binds normally on its next attempt.</p>
  */
 public final class WorkspaceHost {
 

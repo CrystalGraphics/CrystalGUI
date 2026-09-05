@@ -17,28 +17,40 @@ import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Workspace;
 
 /**
- * <b>What is installed on this desktop, and what is running</b> — the shell's side of an application.
+ * What is <b>installed</b> on this desktop, and what is <b>running</b> — the shell's side of an
+ * application.
  *
- * <p>Per {@link Desktop}, reached through {@code desktop.applications()}. A launcher lists
- * {@link #installed()}, a taskbar groups by {@link Application#kind()}, "open with" asks
- * {@link #handlerFor}, and a second launch of a single-instance application activates what is already
- * there instead of starting another.</p>
+ * <p>One per {@link Desktop}, reached with {@code desktop.applications()}. It is the answer to every
+ * question a shell asks about products rather than about windows:</p>
  *
- * <h3>Nothing installs these; they are DISCOVERED</h3>
+ * <ul>
+ *   <li>{@link #installed()} — what a launcher lists. Answerable with nothing running.</li>
+ *   <li>{@link #handlerFor} — which product opens this file, and {@link #open} launches it and shows it.</li>
+ *   <li>{@link #launch(ApplicationKind, LaunchContext)} — start one, or activate the instance already
+ *       there when the manifest says {@code singleInstance}.</li>
+ *   <li>{@link #running()} — every live instance, which is what the taskbar groups by and what a
+ *       "quit everything" walks.</li>
+ *   <li>{@link #onDidChange} — fired when either list moves, so a launcher redraws itself.</li>
+ * </ul>
+ *
+ * <h3>Nothing installs these; they are discovered</h3>
  *
  * <p>Every {@link ApplicationKinds} service on the classpath is run once against this registry, lazily,
- * on the first question anybody asks it — the arrangement {@code UIElementRegistry} already uses, and
- * for the same reason: being correct must not depend on a host remembering to call anything. Three
- * hosts each naming {@code CrystalEditor} is a list of products that differs per loader, and it makes a
- * mod's own application need a line in code it does not own.</p>
+ * on the first question anybody asks — so what a desktop offers is a function of the jars present rather
+ * than of which loader started it, and a mod's application arrives through exactly the door ours does.
+ * {@link #install} stays public for a manifest built at run time.</p>
  *
- * <h3>Installing is not launching, and that is the whole point</h3>
+ * <h3>Installing is not launching</h3>
  *
- * <p>A manifest is data. Everything above can be answered with nothing running — which is what the tree
- * could not do before, because an application was a class a host constructed: the only way to know one
- * existed was to build it, and the only way to know what files it opened was to build it and ask its
- * workbench. macOS answers both from {@code Info.plist} without launching anything, and freedesktop
- * from a {@code .desktop} file.</p>
+ * <p>A manifest is data, so everything above can be answered with nothing running. That is what the
+ * shell could not do while an application was a class a host constructed: the only way to know one
+ * existed was to build it, and the only way to know what it opened was to build it and ask.</p>
+ *
+ * <h3>Each instance gets its own corner</h3>
+ *
+ * <p>{@link #launch} scopes the {@link ConfigStorage} it is given by the kind's id before handing over a
+ * {@link LaunchContext}, so two applications on one desktop keep separate sessions and preferences with
+ * neither of them doing anything about it.</p>
  */
 public final class ApplicationRegistry {
 

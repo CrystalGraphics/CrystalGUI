@@ -13,15 +13,17 @@ import com.crystalgui.workbench.Workbench;
 import com.crystalgui.workbench.WorkbenchSettings;
 
 /**
- * The fallback file type — every text file, and every resource in a registered scheme.
+ * <b>The fallback file type</b> - every text file, and every resource in a registered scheme.
  *
- * <p>Declared here rather than inside a constructor, which is where it was: eighty lines of model and
- * editor factory in the middle of a method that was already the largest in the repository. It is the
- * kind every workbench has, because a shell that could not open a text file would not be one — which
- * is why the engine registers it and no application has to.</p>
+ * <p>Registered by the engine itself rather than by an application, because a shell that could not open
+ * a text file would not be one. It supplies the model, the editor view and the settings that every text
+ * document gets, and it is what a file with no more specific kind falls back to.</p>
  *
- * <p>A decompiled class opens through this too, which is what makes a separate viewer lane
- * unnecessary rather than merely shorter. @see com.crystalgui.workbench.editor.EditorService</p>
+ * <p>A decompiled class opens through this too - which is what makes a separate read-only viewer lane
+ * unnecessary rather than merely shorter. If you want a richer editor for one extension, register a
+ * {@code DocumentKind} that claims it; this stays underneath as the answer for everything else.</p>
+ *
+ * @see com.crystalgui.workbench.editor.EditorService
  */
 public final class TextFileKind {
 

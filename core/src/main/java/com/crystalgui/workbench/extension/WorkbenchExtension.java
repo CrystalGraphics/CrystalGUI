@@ -4,13 +4,13 @@ import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.workbench.WorkbenchContext;
 
 /**
- * <b>A feature that attaches itself to a workbench</b> — one interface, one moment, one handle back.
+ * <b>A feature that attaches itself to a workbench</b> - one interface, one moment, one handle back.
  *
- * <p>It replaces three incompatible ways of doing this that had drifted apart: a thing baked into the
- * workbench's own constructor, a {@code static register(Workbench)} somebody has to remember to call,
- * and a {@code static install(...)} that returns something the caller then has to keep. Each was a
- * different answer to "when does this run and who takes it down", and the third answer was usually
- * nobody.</p>
+ * <p>This is how anything optional reaches a workbench: a tool window, a file type, a status entry, a
+ * set of commands. Implement it, ship a services entry, and an application enables it by naming your id
+ * in its manifest. Everything the engine itself offers beyond an editor and a dock - the project tree,
+ * Problems, Notifications, the Inspector - arrives through exactly this door, so a third-party feature
+ * is never second-class.</p>
  *
  * <pre>{@code
  * public final class NotesKind implements WorkbenchExtension {
@@ -25,23 +25,29 @@ import com.crystalgui.workbench.WorkbenchContext;
  * }
  * }</pre>
  *
- * <p>plus one line in {@code META-INF/services/com.crystalgui.workbench.extension.WorkbenchExtension}. <b>One
- * class per feature</b>: a declaration and a separate {@code *Extension} beside it read as a boundary
- * and are a wrapper — one lifetime, one id, and the second file's only real content is the name of the
- * first.</p>
+ * <p>plus one line in {@code META-INF/services/com.crystalgui.workbench.extension.WorkbenchExtension}.
+ * <b>One class per feature</b>: put {@code activate} on the thing itself rather than writing a separate
+ * {@code *Extension} beside it - the two would share one lifetime and one id, and the second file's
+ * only real content would be the first one's name.</p>
  *
  * <h3>The handle is the contract</h3>
  *
- * <p>{@code activate} returns everything it registered, as one {@link Disposable}. That is what makes
- * an extension removable — and, more to the point, what makes a workbench <em>closable</em>: the
- * engine disposes what an extension handed back, so nothing has to enumerate what any of them did.
- * Registering on the workbench itself needs no handle, because those go when it does; what needs one is
- * anything process-wide, which is exactly the class of thing that used to be left behind.</p>
+ * <p>{@link #activate} returns everything it registered, as one {@link Disposable}. That is what makes a
+ * feature removable and a workbench closable: the engine disposes what you hand back, so nothing has to
+ * enumerate what any extension did. Anything registered <em>on the workbench</em> needs no handle,
+ * because it goes when the workbench does; what needs one is anything process-wide - a global command, a
+ * static registry entry - which is exactly the class of thing that otherwise gets left behind.</p>
  *
  * <h3>Written against {@link WorkbenchContext}, never the engine</h3>
  *
- * <p>So an extension may live outside {@code core/} — the language stack's Run panel is one, and it
- * cannot see this module's classes. {@code LayeringTest} keeps it that way.</p>
+ * <p>So an extension can live outside {@code core/} entirely - the language stack's Run shell is one,
+ * and it cannot see this module's classes. {@code LayeringTest} keeps it that way.</p>
+ *
+ * <h3>Available is not enabled</h3>
+ *
+ * <p>Shipping the jar makes your feature <em>available</em>; an {@code ApplicationKind} naming your id
+ * is what turns it <em>on</em>. An id nothing ships is a logged absence rather than an error, which is
+ * what lets one manifest name a feature that is simply not present on some hosts.</p>
  */
 public interface WorkbenchExtension {
 

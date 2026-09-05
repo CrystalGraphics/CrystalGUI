@@ -27,7 +27,23 @@ import java.util.List;
 import javax.annotation.Nullable;
 
 /**
- * Extracted from {@link Workbench}. See the plan's §4.5 for why this cluster is one thing.
+ * <b>Saving, and what happens when somebody else got there first</b> - plus the breadcrumb trail and the
+ * presence phrasing that go with it.
+ *
+ * <p>The workbench's own collaborator behind Ctrl+S and the Save commands. {@link #saveActiveFile()} is
+ * the ordinary path; when the server reports the file has changed since it was read, this is what opens
+ * the three-way merge, and {@link #overwriteActiveFile()} is the deliberate "mine wins" the user can
+ * choose from it.</p>
+ *
+ * <h3>A conflict is a decision, never a failure to report</h3>
+ *
+ * <p>A save that loses a race must not silently discard either side, so the merge view is offered with
+ * the local text, the server's, and the common ancestor from local history. That is the whole reason a
+ * save is more than a write.</p>
+ *
+ * <p>{@link #othersEditing} and {@link #othersViewing} live here for the same subject: they answer who
+ * else is in the file you are about to write, which is what the presence entry shows and what the
+ * conflict dialog names.</p>
  */
 public final class SaveActions {
 

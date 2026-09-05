@@ -42,33 +42,34 @@ import com.crystalgui.language.run.console.RunSummary;
 import com.crystalgui.language.run.exec.ScriptRefusedException;
 
 /**
- * Scripting, attached to a workbench — the engine, the commands, the console, and the indicator.
+ * <b>Scripting, as a workbench feature</b> - the Run command, the console, the indicator and the Run
+ * panel.
  *
- * <h3>This module owns the wiring, not the application</h3>
+ * <p>Enable it by naming {@code crystalgui:scripting} in an application's manifest. It is discovered
+ * from this jar's services entry, so no host wires it up: {@link #activate} opens whatever engines are
+ * available, installs the commands and the panel, and hands back a handle that closes them again.</p>
  *
- * <p>It <b>is</b> the {@link WorkbenchExtension} as well — the feature and its front door are one class,
- * because a {@code ScriptingExtension} beside this one would have shared its lifetime and its id and
- * carried the name of this class as its only real content.</p>
+ * <h3>It names no language</h3>
  *
- * <p>It used to live in the harness, and that was wrong in a way worth naming: the harness is one host
- * among several, and everything it was doing — compile whatever {@code .java} file is in front, run it,
- * route its output, mark it running — is true of <em>any</em> workbench, not of that one. Leaving it
- * there meant a Minecraft loader would have reimplemented all of it, from a class it could not see, and
- * the two would have drifted the first time either changed.</p>
+ * <p>Which file is a script, which runtime compiles it, and what a stack frame looks like in its output
+ * are all asked of {@link ScriptRuntimes}. A mod adds what scripts can reach through
+ * {@link ScriptBindings}; a language adds that it can run by contributing a runtime. The day a second
+ * runtime registers, this class is not edited.</p>
  *
- * <p>So the host supplies the two things only it knows — which workbench, and where to cache — and this
- * supplies the rest. A mod adds what scripts can reach through {@link ScriptBindings}, which is a
- * registry precisely so no host has to know which mods are present; a language adds that it can run
- * through {@link ScriptRuntimes}, which is a registry for the same reason. <b>Nothing here names a
- * language.</b> Which file is a script, which runtime compiles it, what a stack frame looks like in its
- * output — every one of those is asked of the runtimes, so the day a second one registers, this class
- * is not edited.</p>
+ * <h3>Everything degrades</h3>
  *
- * <h3>Everything is optional except the workbench</h3>
+ * <p>With no engine band there is no runtime, so {@link #install} answers null and {@code activate}
+ * hands back a no-op: the editor still colours and simply offers no Run. That is better than a menu row
+ * and an accelerator that do nothing, which teach people the feature is broken rather than unavailable.
+ * The same is true one level up - a server may refuse local execution, and then the command is present
+ * and disabled with its reason.</p>
  *
- * <p>{@link #install} answers null when no runtime is available rather than wiring a dead Run command.
- * A menu row and an accelerator that do nothing teach people the feature is broken, which is worse than
- * their absence teaching them it is unavailable.</p>
+ * <h3>Two roles, one class</h3>
+ *
+ * <p>The public no-argument constructor exists for {@code ServiceLoader} and builds a shell that can
+ * answer {@link #id()} and {@link #activate} and nothing else; a <em>running</em> one comes from
+ * {@link #install}. Keeping them together is deliberate - a separate {@code ScriptingExtension} beside
+ * this would share its lifetime and its id and carry this class's name as its only real content.</p>
  */
 public final class ScriptWorkbench implements WorkbenchExtension, Closeable {
 

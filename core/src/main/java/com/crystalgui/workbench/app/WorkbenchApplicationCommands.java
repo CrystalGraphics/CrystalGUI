@@ -14,32 +14,35 @@ import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.workbench.chrome.palette.CommandPalette;
 
 /**
- * What every workbench application offers — saving the active file, and saving or restoring the pane
- * arrangement.
+ * <b>What every workbench application offers</b> - saving the active file, and saving or restoring the
+ * pane arrangement.
  *
- * <h3>Commands, not key handling</h3>
+ * <p>Registered once by {@link WorkbenchApplication}, so any product built on it has Save without
+ * declaring anything. Each resolves its subject from the data context rather than from a captured
+ * object, which is what lets two applications on one desktop each save their own.</p>
  *
- * <p>These were a {@code switch} on raw scan codes in a harness scene. As commands they are rebindable,
- * they appear in the palette with their accelerators, and they can be greyed out when they do not apply —
- * none of which a scan-code switch can offer.</p>
+ * <ul>
+ *   <li>{@code workbench.saveFile} - {@code Mod+S}</li>
+ *   <li>{@code workbench.saveLayout} - {@code Mod+Shift+S}</li>
+ *   <li>{@code workbench.restoreLayout}</li>
+ * </ul>
  *
- * <h3>{@code Mod+S} is the FILE; the layout is {@code Mod+Shift+S}</h3>
+ * <h3>Commands rather than key handling</h3>
  *
- * <p>The layout had {@code Mod+S} first, back when there were no files behind the editor. Once there
- * were, {@code Mod+S} had exactly one obvious meaning and it was not "serialise the pane arrangement" — a
- * key that writes the wrong thing is worse than one that does nothing.</p>
+ * <p>As commands they are rebindable, they appear in the palette with their accelerators, and they grey
+ * out when they do not apply - none of which a scan-code switch can offer.</p>
  *
- * <h3>They belong to the ENGINE, not to one product</h3>
+ * <h3>{@code Mod+S} is the FILE</h3>
  *
- * <p>They were {@code CrystalEditorCommands} and keyed on a {@code CrystalEditor}, which made "Save
- * File" a thing the editor happened to have rather than a thing a workbench does. A second workbench
- * application would have had to call the editor's registration to get its own Save.</p>
+ * <p>The layout had it first, back when there were no files behind the editor. Once there were,
+ * {@code Mod+S} had exactly one obvious meaning and it was not "serialise the pane arrangement": a key
+ * that writes the wrong thing is worse than one that does nothing.</p>
  *
  * <h3>The {@code workbench.} prefix, deliberately</h3>
  *
- * <p>Not {@code editor.}, which {@code EditorCommands} already owns for the text editor's own actions.
- * Two command sets sharing a namespace collide on the first name they both want, and ids are what every
- * binding, sheet and user remapping refers to. The ids are unchanged, so no keymap moves.</p>
+ * <p>Not {@code editor.}, which the text editor's own actions own. Two command sets sharing a namespace
+ * collide on the first name they both want, and ids are what every binding and user remapping refers
+ * to.</p>
  */
 public final class WorkbenchApplicationCommands {
 

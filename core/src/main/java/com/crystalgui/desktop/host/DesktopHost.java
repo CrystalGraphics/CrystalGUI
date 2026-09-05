@@ -16,26 +16,37 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.dom.UIDocument;
 
 /**
- * <b>The one object a loader talks to.</b> A surface, a compositor, a workspace that follows the wire,
- * and somewhere for a server's windows to land.
+ * <b>The one object a loader talks to</b> - build it from {@link HostServices} and you have a working
+ * desktop.
  *
- * <p>What a host writes after this is its own: turning its events into {@link #shown()},
- * {@link #hidden()} and {@link #frame}, pumping its input, and handing over a GL context. What it no
- * longer writes is the assembly — the document, the scale, the user-agent sheet, the arrangement
- * record, the workspace's rebind-on-reconnect, and the mount's re-ask. Every one of those was in the
- * 1.7.10 screen and is the same answer on every host.</p>
+ * <p>It owns the four things every host would otherwise assemble identically: the {@link UIDocument} and
+ * its scale, the user-agent stylesheet, the {@link Desktop} compositor with its arrangement record, and
+ * a {@link Workspace} that follows the connection. A host writes none of that.</p>
  *
- * <h3>The workspace follows the connection, and is rebound rather than rebuilt</h3>
+ * <pre>{@code
+ * host = DesktopHost.create(myServices);      // once, when a GL context exists
+ * host.shown();                               // the screen opened
+ * host.frame(delta, width, height);           // every frame: pumps the wire, ticks, paints
+ * host.hidden();                              // the screen closed -- the desktop stays alive
+ * host.dispose();                             // at shutdown
+ * }</pre>
  *
- * <p>A reconnect is a different wire carrying the same workspace. Replacing the client would fix the
- * routing and lose something else: a window retained across the disconnect still holds the OLD one in a
- * final field, with every callback registered on it. {@link Workspace#rebind} swaps the wire and keeps
- * the object, so a retained window comes back working without knowing a reconnect happened.</p>
+ * <p>What a host still writes is its own: turning its events into {@link #shown()}, {@link #hidden()}
+ * and {@link #frame}, feeding input, and having a GL context when it calls {@code create}. Reach the
+ * pieces with {@link #desktop()}, {@link #document()}, {@link #workspace()} and {@link #config()}.</p>
  *
- * <p>And it is re-asked every frame, which is not belt-and-braces: nothing else calls the accessor
- * again. An application takes its workspace once at construction and holds it, so without a per-frame
- * re-ask the rebind is machinery that can never fire and a retained window stays pointed at a dead
- * router for good.</p>
+ * <h3>Hidden is not destroyed</h3>
+ *
+ * <p>{@link #hidden()} means the surface went away; the desktop, its windows and every application on it
+ * are still alive and come back exactly as they were. Only {@link #dispose()} takes them down. That is
+ * what lets a game screen be closed and reopened without losing a single unsaved document.</p>
+ *
+ * <h3>The workspace follows the wire, and is rebound rather than rebuilt</h3>
+ *
+ * <p>A reconnect is a different connection carrying the same workspace, so {@link #frame} re-asks
+ * {@link HostServices#connection()} and rebinds the workspace when it has moved - keeping the object
+ * every window already holds. Rebuilding it instead would fix the routing and leave every retained
+ * window pointing at the old client, with all its callbacks on the wrong object.</p>
  */
 public final class DesktopHost implements Disposable {
 

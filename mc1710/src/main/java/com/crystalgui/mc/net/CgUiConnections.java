@@ -20,12 +20,11 @@ import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
 
 /**
- * FML's lifecycle, turned into {@link Connections} calls — <b>and nothing else</b>.
+ * <b>FML's lifecycle, turned into {@link Connections} calls</b> - and nothing else.
  *
- * <p>This class held the peer table, the multiplexers, the routing, the close semantics and the
- * tick isolation; all of that is {@code net.protocol.Connections} now, because none of it is about
- * Minecraft. What is left is the four events, the channel, and the one translation only this platform
- * can do: an entity into an identity.</p>
+ * <p>Four events, the channel, and the one translation only this platform can do: an entity into a
+ * stable identity. The peer table, the multiplexers, the routing, the close semantics and the tick
+ * isolation are all the engine's.</p>
  *
  * <table>
  *   <tr><th></th><th>Opens</th><th>Closes</th><th>Ticks on</th></tr>
@@ -37,21 +36,22 @@ import net.minecraft.entity.player.EntityPlayerMP;
  *       <td>{@code ClientTickEvent}</td></tr>
  * </table>
  *
- * <p>A kick and a disconnect are the same event as a quit — FML does not distinguish them at this level,
- * and neither should this: what matters is that the peer is gone and every caller waiting on a reply is
+ * <p>A kick and a disconnect are the same event as a quit - FML does not distinguish them here, and
+ * neither should this: what matters is that the peer is gone and every caller waiting on a reply is
  * told, rather than waiting out a ten-second timeout for something that is never coming.</p>
+ *
+ * <h3>Keyed by profile UUID, never by the entity</h3>
+ *
+ * <p>1.7.10 builds a new player entity on every respawn and every dimension change. An entity-keyed
+ * table is orphaned by the first death - inbound frames name the new body and are dropped for the rest
+ * of the session, while outbound keeps working, so it reads as an input bug rather than an identity
+ * one.</p>
  *
  * <h3>Two tables, because this process can be both ends</h3>
  *
  * <p>Single-player runs an integrated server, so the client's connection and a player's connection exist
  * in one JVM and are ticked by different events. One table would tick the client's peer on the server's
  * tick as well.</p>
- *
- * <h3>Ticked before anything else in the frame</h3>
- *
- * <p>On {@code Phase.START}, so a message that arrived since the last tick is applied <em>before</em> the
- * world runs on it rather than a tick later. The UI's own style-before-layout ordering is the same rule
- * one layer up: state that arrived this frame must reach its consumer before the consumer runs.</p>
  */
 public final class CgUiConnections {
 

@@ -19,26 +19,30 @@ import com.crystalgui.workbench.dock.drag.DockDropZone;
 import com.crystalgui.workbench.toolwindow.ToolWindowKind;
 
 /**
- * The Problems panel and its status count, as a feature a manifest can enable.
+ * The <b>Problems</b> panel and its status-bar count - every diagnostic in the workspace, in one list.
  *
- * <p>The panel, the marker indexing that fills it and the status-bar entry that summarises it are one
- * feature and were three places: a registration in {@code Workbench}, a {@code ProblemsBinding} beside
- * it, and a {@code problemCountEntry} field on the engine. A product that has no use for a Problems
- * panel got all three.</p>
+ * <p>Enable it by naming {@link #ID} in an application's manifest. Three things arrive together, which
+ * is why they are one extension: the tool window, the indexing that fills it, and the error/warning
+ * readout in the status bar. A product with no use for any of them gets none of them.</p>
  *
- * <h3>Every kind of document, not every open TEXT document</h3>
+ * <h3>Every kind of document, not just text</h3>
  *
- * <p>{@link #index} attaches whatever a document reports. It used to index the open text documents'
- * sets, so a graph left the panel empty by construction while its compiler produced a dozen attributed
- * errors with nowhere to go; a kind that reports none simply answers null.</p>
+ * <p>It attaches whatever a {@code Document} reports as its diagnostics, so a shader graph's compile
+ * errors land here beside a Java file's. A kind that reports none simply answers null and contributes
+ * nothing - there is no per-language wiring to add.</p>
  *
- * <h3>Subscribing from {@code activate} is now correct, and was not</h3>
+ * <h3>What it does when you click a row</h3>
  *
- * <p>The engine did this on ATTACH, with a comment explaining that a workbench subscribing from its
- * constructor "stayed subscribed and kept writing its own entry into the one static bar — one per test
- * in the suite". Both halves of that have since gone: the status bar is per workbench (D4), and an
- * extension's handle is disposed with the workbench, so there is nothing left to accumulate. What
- * remains is one subscription per live feature, released when the feature is.</p>
+ * <p>Opens the file and puts the caret on the problem, or opens it and shows the quick fixes. Both go
+ * through {@code openFile}'s continuation rather than the statement after it: opening a file that is not
+ * already on screen is asynchronous, so positioning on the next line would act on the editor from
+ * <em>before</em> the click - correct for a problem in the file you are already looking at, and wrong
+ * for every other, which is what makes that failure read as intermittent.</p>
+ *
+ * <h3>Withdrawn when there is nothing to say</h3>
+ *
+ * <p>The status entry disappears at zero rather than reading "0 errors, 0 warnings". A clean workspace
+ * is the normal state, and a permanent zero is a readout people stop seeing.</p>
  */
 public final class ProblemsExtension implements WorkbenchExtension {
 

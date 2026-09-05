@@ -17,16 +17,19 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * <b>What a change on the server means to this workbench</b> — the engine's half of what used to be
- * "the explorer's binding".
+ * <b>What a change on the server means to this workbench</b> - the watch on each project root, and what
+ * happens when a file moves under you.
  *
- * <p>The recursive watch per project root and the external-change handling stayed here when the tree
- * became {@code ProjectExtension}: they are true whether or not anybody is looking at a tree, and what
- * they touch — the listing, the open documents, the tab titles — is the engine's. What went with the
- * panel was reveal-on-tab-change, the auto-reveal preference and drag-and-drop, none of which mean
- * anything without a view.</p>
+ * <p>The workbench's own collaborator. It keeps a recursive watch per project root and turns each
+ * notification into the right local consequence: the listing is invalidated, a clean open document is
+ * reloaded, a dirty one is marked stale rather than overwritten, and a renamed file's tab follows it.</p>
  *
- * <p>Extracted from {@link Workbench}. See the plan's §4.5 for why this cluster is one thing.
+ * <h3>It has nothing to do with the panel</h3>
+ *
+ * <p>Despite the name, all of this is true whether or not anybody is looking at a file tree - which is
+ * why it stayed with the engine when the tree became {@code ProjectExtension}. What went with the panel
+ * is what only means something with a view on screen: reveal-on-tab-change, the auto-reveal preference,
+ * and drag-and-drop between folders.</p>
  */
 public final class ExplorerBinding {
 

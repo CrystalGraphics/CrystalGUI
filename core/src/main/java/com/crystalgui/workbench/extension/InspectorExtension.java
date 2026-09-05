@@ -11,17 +11,17 @@ import com.crystalgui.workbench.region.DockRegion;
 import com.crystalgui.workbench.toolwindow.ToolWindowKind;
 
 /**
- * The Inspector, as a feature a manifest can enable.
+ * The <b>Inspector</b> panel - a properties view of whatever currently has focus.
  *
- * <p>It was four subscriptions and a tool-window registration in {@code CrystalEditor}'s constructor,
- * which made "does this product have an inspector" a property of the product's <em>class</em>. Here it
- * is an id in a list, which is the difference the whole rewrite is for.</p>
+ * <p>Enable it by naming {@link #ID} in an application's manifest. It registers the tool window and
+ * keeps its subject in step with the focus owner, the active dock panel and the open document.</p>
  *
- * <h3>A general inspector, which is why it names no type</h3>
+ * <h3>It knows about no particular type, which is the point</h3>
  *
- * <p>The subject is the <b>focus owner</b>, and {@link Inspector} resolves that itself — latching it,
- * ignoring focus that lands inside itself, and keeping the last describable one. A package makes
- * something inspectable by registering an {@code InspectorSection}; nothing here knows about graphs.</p>
+ * <p>The subject is the focus owner, and {@link Inspector} resolves that itself - latching it, ignoring
+ * focus that lands inside the panel, and keeping the last describable one. A package makes something
+ * inspectable by registering an {@code InspectorSection}, which is asked whether it applies to the
+ * current {@code DataContext}. Nothing here knows what a shader graph is.</p>
  */
 public final class InspectorExtension implements WorkbenchExtension {
 

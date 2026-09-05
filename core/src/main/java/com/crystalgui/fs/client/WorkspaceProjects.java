@@ -8,28 +8,33 @@ import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.CgPath;
 
 /**
- * <b>What the workspace holds, listing by listing</b> — the projects, their roots, and what is under them.
+ * <b>What the workspace holds</b> - the projects, their roots, and what is under each directory.
  *
- * <p>The model half of the explorer, named so that everything else can stop reaching through the
- * explorer to get at it. It is read today by the workbench (the crawl, the roots, the captions), by the
- * session (the expansion retry), by the settings, by Go to File and by the editor — five consumers
- * outside the tree that owns it, which is what makes it a service rather than a widget's field.</p>
+ * <p>The listing model, separate from any view of it, so a panel is not the only way to reach it. Read
+ * today by the workbench's crawl, the session's expansion restore, the settings, Go to File and the
+ * editor - five consumers outside the file tree, which is why it is a service rather than a widget's
+ * field. Get one from {@code WorkbenchContext.projectListing()}.</p>
  *
- * <h3>Everything arrives</h3>
+ * <pre>{@code
+ * projects.onDidChangeProjects().connect(() -> redrawRoots());
+ * projects.onDidLoadListing().connect(dir -> redrawChildrenOf(dir));
+ * projects.loadProjects(() -> {}, () -> {});   // asks the server; safe to call again
+ * for (CgPath root : projects.roots()) { ... }
+ * }</pre>
  *
- * <p>Nothing here answers on construction. Roots come from the project listing, which cannot be asked
- * for until a session has opened; a directory's children come from a listing of their own. So a
- * consumer renders its empty state, subscribes, and is told — {@link #onDidChangeProjects()} when the
- * set of roots moves and {@link #onDidLoadListing()} per directory. Polling for them is what this
- * interface exists to stop: it is one round trip per answer, and a caller that asks before the wire is
- * ready gets nothing back and no error either.</p>
+ * <h3>Everything arrives; nothing is ready at construction</h3>
  *
- * <h3>Signals as accessors, which is the one thing an interface costs here</h3>
+ * <p>Roots come from a project listing that cannot be asked for until a session has opened, and a
+ * directory's children come from a listing of their own. So render your empty state, subscribe, and be
+ * told. Asking and then reading immediately is the one thing that does not work - a call made too early
+ * is discarded with no error at all, which is why {@link #loadProjects} takes an {@code onRefused} and
+ * is safe to retry.</p>
  *
- * <p>The engine's idiom is a {@code public final Signal} field, and an interface cannot carry one. So
- * these are methods, and they are the only place in this stack where a signal is reached through a
- * call. It is worth the trade for the same reason the interface exists at all: a consumer written
- * against it does not name the widget that happens to implement it.</p>
+ * <h3>Signals are methods here</h3>
+ *
+ * <p>The engine's idiom is a {@code public final Signal} field and an interface cannot carry one, so
+ * these are the one place in this stack where a signal is reached through a call. The trade buys the
+ * interface itself: a consumer written against this names no widget.</p>
  */
 public interface WorkspaceProjects {
 

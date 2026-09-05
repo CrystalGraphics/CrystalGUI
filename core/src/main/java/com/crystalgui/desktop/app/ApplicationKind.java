@@ -10,29 +10,38 @@ import com.crystalgui.document.DocumentKind;
 import com.crystalgui.fs.Resource;
 
 /**
- * <b>What an installed application IS</b> — freedesktop's {@code .desktop} entry, macOS's
- * {@code Info.plist}, Windows' AppUserModelID.
+ * An installed application's <b>manifest</b> — what it is called, what it opens, and how to start it.
+ *
+ * <p>The same job as freedesktop's {@code .desktop} entry, macOS's {@code Info.plist} or Windows'
+ * AppUserModelID: everything about a product that can be answered <b>without launching it</b>. Declare
+ * one as a {@code static final} beside your application and hand it to the desktop through an
+ * {@link ApplicationKinds} service.</p>
  *
  * <pre>{@code
- * ApplicationKind.of("crystalgui:editor", "Crystal Editor")
- *         .icon("crystalgui:logo")
+ * public static final ApplicationKind KIND = ApplicationKind.of("mymod:editor", "My Editor")
+ *         .icon("mymod:logo")
  *         .opens(DocumentKind.FilePatterns.extension("java"))
- *         .launch(ctx -> WorkbenchApplication.of(ctx, CRYSTAL_EDITOR)
- *                 .with("crystalgui:notes", "crystalgui:scripting")
- *                 .title("Crystal Editor").key("editor:main"));
+ *         .singleInstance()
+ *         .launch(ctx -> WorkbenchApplication.of(ctx)
+ *                 .with("crystalgui:explorer", "crystalgui:problems")
+ *                 .title("My Editor")
+ *                 .key("myeditor:main")
+ *                 .start());
  * }</pre>
  *
- * <p>The point of a manifest is that it is <b>data</b>: a launcher can list what is installed, a search
- * can match it, and "open with" can answer, all without launching anything. That is what the tree had
- * no way to express — an application was a class a host constructed, so the only way to know it existed
- * was to build it.</p>
+ * <h3>Who reads it</h3>
  *
- * <h3>What a second application costs</h3>
+ * <p>{@link ApplicationRegistry#installed()} lists it for a launcher; {@link ApplicationRegistry#handlerFor}
+ * matches {@link #opens} to answer "open with"; {@link ApplicationRegistry#launch} checks
+ * {@link #isSingleInstance()} before starting a second one and {@link #requiresConnection()} before
+ * starting one at all. The builder is frozen the first time any of them asks, so a manifest cannot
+ * change under a desktop that has already listed it.</p>
  *
- * <p>A different list of extensions and a different title. Not a class: the engine is
- * {@code WorkbenchApplication} and the difference between an editor and a graph-only product is which
- * ids each names. That is the whole claim the rewrite was for, and it is why {@link #launch} takes a
- * factory rather than a subclass.</p>
+ * <h3>A second product is a list, not a subclass</h3>
+ *
+ * <p>The engine behind a workbench-shaped application is always {@code WorkbenchApplication}; what makes
+ * an editor different from a graph-only tool is which extension ids it names and what it calls itself.
+ * That is why {@link #launch} takes a factory rather than a class to extend.</p>
  */
 public final class ApplicationKind {
 

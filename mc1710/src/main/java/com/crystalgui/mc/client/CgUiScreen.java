@@ -29,26 +29,35 @@ import org.lwjgl.input.Mouse;
 import java.io.File;
 
 /**
- * The Minecraft host for {@link CrystalEditor}.
+ * <b>The Minecraft screen CrystalGUI draws into</b> - a {@code GuiScreen} wrapped around a
+ * {@link DesktopHost}.
  *
- * <p>{@code CrystalEditor}'s own javadoc states the contract this implements: <i>"A host supplies a
- * {@link com.crystalgui.fs.client.Workspace} and a window; everything else is decided here."</i> So this
- * class is deliberately small — it owns a {@link UIDocument}, drives one frame, and saves on close.
- * Which panels exist, what the layout is, which commands answer to which keys and where focus starts
- * are all the editor's, and none of them appear below.</p>
+ * <p>Deliberately small. It answers the host's three questions, forwards Minecraft's screen lifecycle
+ * ({@code initGui} to {@code shown}, {@code drawScreen} to {@code frame}, {@code onGuiClosed} to
+ * {@code hidden}), and does nothing else. Which applications exist, what the layout is, which commands
+ * answer to which keys and where focus starts are all decided above it.</p>
  *
- * <p>The reference host is the harness's {@code CgUiDockScene}; this is the same sequence with
- * Minecraft's clock and screen size substituted.</p>
+ * <h3>Closing this screen does not close anything</h3>
+ *
+ * <p>The desktop, its windows and every running application outlive it - the screen is a viewport onto
+ * them, so pressing Escape and reopening gets the same unsaved documents back. Only game shutdown
+ * disposes the host.</p>
  *
  * <h3>Real device pixels, never {@code ScaledResolution}</h3>
  *
- * <p>{@link #drawScreen}'s {@code mouseX}/{@code mouseY} arrive already divided by Minecraft's GUI
- * scale, and {@code GuiScreen.width}/{@code height} are the scaled size. <b>None of them are
- * used here.</b> {@code UIDocument} takes raw pixels and applies its own scale through
- * {@code getRootTransform()}, which {@code AGENTS.md} names as <i>the single definition of what
- * uiScale means</i> — feeding it pre-scaled numbers creates a second definition, and the two disagree
- * by exactly the scale factor. The symptom is the nasty one: everything draws correctly and every
- * click lands somewhere else.</p>
+ * <p>{@code drawScreen}'s {@code mouseX}/{@code mouseY} arrive already divided by Minecraft's GUI scale,
+ * and {@code GuiScreen.width}/{@code height} are the scaled size. <b>None of them are used here.</b> The
+ * engine takes raw pixels and applies its own scale on the box tree's root transform, which is the
+ * single definition of what {@code uiScale} means - feeding it pre-scaled numbers creates a second one,
+ * and the two disagree by exactly the scale factor. The symptom is the nasty one: everything draws
+ * correctly and every click lands somewhere else.</p>
+ *
+ * <h3>It must not pause the game</h3>
+ *
+ * <p>{@code doesGuiPauseGame()} is false, and that is load-bearing rather than a preference: pausing
+ * stops the integrated server ticking, so the connection is never pumped and every request this screen
+ * makes dies at its timeout. A workspace that appears empty in single-player and works in multiplayer is
+ * this line.</p>
  *
  * @see CgUiInput for why input does not arrive through this class at all
  */
@@ -129,10 +138,10 @@ public final class CgUiScreen extends GuiScreen {
     /**
      * The surface, the compositor, the workspace and the window mount — everything a host is handed.
      *
-     * <p>Four static fields and a class of its own, until W3. What this screen used to hold: a
-     * {@code UIDocument} it built and styled, a {@code Mc1710Workspace} that lazily opened a client and
-     * rebound it, a config storage, and a mount it re-asked per frame. None of that was about Minecraft,
-     * and all of it is {@link DesktopHost} now.</p>
+     * <p><b>Static, and that is the point:</b> Minecraft builds a fresh {@code GuiScreen} every time the
+     * screen is displayed, so a per-instance host would mean a new desktop — and a new set of windows and
+     * unsaved documents — on every open. This one outlives every screen and is disposed at game
+     * shutdown.</p>
      */
     private static DesktopHost host;
 

@@ -20,9 +20,9 @@ import net.minecraft.client.settings.KeyBinding;
  * The worked example's <b>client half</b>: a key binding. <b>Press F8.</b>
  *
  * <p>There is nothing to register — the window arrives naming
- * {@link com.crystalgui.app.machine.ui.MachinePanel}, and the engine initialises the class and
- * runs its client half. Where the window <em>goes</em> is {@code CgUiWindowMount}'s answer, once, for
- * every mod.</p>
+ * {@link com.crystalgui.app.machine.ui.MachinePanel}, and the engine initialises the class and runs its
+ * client half. Where the window <em>goes</em> is the host's window mount's answer, given once for every
+ * mod, from the presentation the server asked for.</p>
  */
 public final class MachineExampleClient {
 

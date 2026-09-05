@@ -45,37 +45,39 @@ import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLayoutCodec;
 
 /**
- * <b>The runtime every workbench-shaped application shares</b> — a {@link Workbench}, the window it
+ * <b>The runtime every workbench-shaped application shares</b> - a {@link Workbench}, the window it
  * lives in, its preferences, its session, and the extensions its manifest named.
  *
- * <p>Which is everything {@code CrystalEditor} used to be. What is left in a product is a
- * {@link ApplicationKind manifest} and its own choices, which is the whole claim: <b>a second
- * application is a different list of extension ids and a different title, not a second class.</b></p>
+ * <p>Build one from a manifest's launch factory. What is left in a product after this is a name, an
+ * icon, a list of extension ids and a window title, which is the point: <b>a second application is a
+ * different list, not a second class.</b></p>
  *
  * <pre>{@code
  * .launch(ctx -> WorkbenchApplication.of(ctx)
- *         .with("crystalgui:inspector", "crystalgui:shadergraph", "crystalgui:scripting")
+ *         .with("crystalgui:explorer", "crystalgui:problems", "crystalgui:scripting")
  *         .title("Crystal Editor")
  *         .key("editor:main")
  *         .policy(WindowPolicy.HIDE_ON_CLOSE)
  *         .start())
  * }</pre>
  *
+ * <p>The chain ends in {@code start()} on purpose: the workbench and its window are built once the
+ * declaration is complete, so nothing is constructed before the extension list is known and nothing is
+ * mutated after the window is on screen.</p>
+ *
  * <h3>Closing is not quitting</h3>
  *
  * <p>Under {@link WindowPolicy#HIDE_ON_CLOSE} the window goes away and the application is still running:
  * every document, the dock arrangement and the undo history are intact, and the taskbar entry is how it
- * comes back. {@link #dispose()} is the other verb — and it is why an application's main window is
- * exempt from eviction (D17), because a cap on hidden windows must never quit a product nobody asked to
- * quit.</p>
+ * comes back. {@link #dispose()} is the other verb. It is also why a main window is exempt from
+ * hidden-window eviction - a cap on hidden windows must never quit a product nobody asked to quit.</p>
  *
- * <h3>Restoring waits for the workspace to answer, and nothing polls</h3>
+ * <h3>Restoring waits to be told, and nothing polls</h3>
  *
- * <p>A session record describes a workbench over a <em>workspace</em>, so it cannot be read until there
- * is one to key it by. The greeting says which server this is; the project listing says what is on it.
- * Both arrive as signals, so the restore hangs off them — which is the ordering every host used to
- * enforce for itself with a static "have I asked yet" latch that was per PROCESS and therefore asked at
- * most once per game session, however many worlds were joined afterwards.</p>
+ * <p>A session describes a workbench over a <em>workspace</em>, so it cannot be read until there is one
+ * to key it by: the server's greeting says which workspace this is and the project listing says what is
+ * on it. Both arrive as signals and the restore hangs off them, so a host does not have to know when to
+ * ask - and a workspace that never connects simply leaves the workbench empty rather than hanging.</p>
  */
 public class WorkbenchApplication extends UIElement
         implements Application, WindowChrome, DataProvider {

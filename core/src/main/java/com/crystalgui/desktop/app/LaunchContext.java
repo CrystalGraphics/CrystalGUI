@@ -10,19 +10,28 @@ import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Workspace;
 
 /**
- * <b>What a launch is handed</b> — the {@code Exec} line's arguments, and the intent's extras.
+ * The arguments a launch receives — what {@link ApplicationKind#launch}'s factory is handed.
  *
- * <p>Everything an application needs that is not in its own manifest: the compositor to open onto, the
- * file client, somewhere private to write, and whatever was asked for at the moment of launching (a
- * file to open).</p>
+ * <p>Everything an application needs that is not already in its own manifest: which compositor to open
+ * onto, the file client to work against, somewhere private to write, and whatever was asked for at the
+ * moment of launching. You do not build one; {@link ApplicationRegistry} does, and passes it in.</p>
  *
- * <h3>The storage is already scoped</h3>
+ * <ul>
+ *   <li>{@code kind} — the manifest being launched, so a factory can read its own id and title.</li>
+ *   <li>{@code desktop} — the shell to open windows onto.</li>
+ *   <li>{@code workspace} — the file client, or {@code null} when there is no connection. A manifest
+ *       that cannot work without one declares {@link ApplicationKind#standalone()}'s opposite and is
+ *       refused before the factory runs.</li>
+ *   <li>{@code storage} — see below.</li>
+ *   <li>{@code open} — files to show once it is up; {@link #first()} is the usual read.</li>
+ * </ul>
  *
- * <p>{@link #storage()} is the application's own corner of the desktop's config directory, not the
- * directory itself — {@link ApplicationRegistry} scopes it by the kind's id before the factory runs
- * (D20). Two applications on one desktop therefore keep separate sessions and separate preferences
- * without either of them having to know the other exists, which is exactly the collision two status
- * bars were.</p>
+ * <h3>The storage is already scoped to you</h3>
+ *
+ * <p>{@link #storage()} is <em>this application's own corner</em> of the desktop's config directory,
+ * not the directory itself — the registry scopes it by the kind's id before your factory runs. So two
+ * applications on one desktop keep separate sessions and separate preferences without either having to
+ * know the other exists, and neither can read or overwrite the other's record by accident.</p>
  */
 public record LaunchContext(ApplicationKind kind,
                             Desktop desktop,

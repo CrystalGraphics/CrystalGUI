@@ -7,18 +7,17 @@ import java.util.List;
 import javax.annotation.Nullable;
 
 /**
- * One named corner of another store — <b>a key prefix, not a second store</b>.
+ * One named corner of another config store - <b>a key prefix, not a second store</b>.
  *
- * <p>The general answer to {@link ConfigStorage#scoped}: names are written as {@code <scope>/<name>},
- * {@link #list()} answers only this scope's and strips the prefix back off, and everything else is the
- * delegate's. A store that is a real directory overrides {@code scoped} with a real subdirectory
- * instead ({@link LocalConfigStorage}), because {@link #directory()} has to be somewhere a compiler can
- * write.</p>
+ * <p>What {@link ConfigStorage#scoped} answers by default: names are written as {@code <scope>/<name>},
+ * {@link #list()} returns only this scope's and strips the prefix back off, and everything else is the
+ * delegate's. A store backed by a real directory overrides {@code scoped} with a real subdirectory
+ * instead, because {@link #directory()} has to be somewhere a compiler can write.</p>
  *
- * <p>Why it exists: two applications on one desktop share one config directory, and both write
- * {@code settings.json} and a session record. Unscoped, the second to save wins and the user's two
- * products quietly become one — the same collision two status bars were, and the reason D20 scopes by
- * application id.</p>
+ * <p>Why you meet it: two applications on one desktop share one config directory and both want to write
+ * {@code settings.json} and a session record. The registry scopes each launch's storage by the
+ * application's id, so neither can read or overwrite the other's - unscoped, the second to save simply
+ * wins and the user's two products quietly become one.</p>
  */
 public final class ScopedConfigStorage implements ConfigStorage {
 

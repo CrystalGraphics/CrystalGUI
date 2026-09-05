@@ -21,19 +21,19 @@ import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.server.MinecraftServer;
 
 /**
- * The three questions {@link WorkspaceHost} cannot answer on its own — <b>where, who, and may they</b>.
+ * <b>The three questions {@link WorkspaceHost} cannot answer on its own</b> - where the workspace is,
+ * who a peer is, and what they may do.
  *
- * <p>This class was 403 lines and served the workspace itself: the per-connection bindings, the shared
- * watcher, the poll cadence, both fan-outs, the per-peer cleanup and the seeded README. None of that is
- * about Minecraft, and all of it now lives in {@code fs.server.WorkspaceHost}. What is left is what
- * genuinely needs a {@code MinecraftServer} to answer, and every method below names one.</p>
+ * <p>Minecraft's answers, and nothing else: every method below needs a {@code MinecraftServer} to
+ * answer. The workspace itself - the per-connection bindings, the watcher, the poll cadence, the change
+ * and presence fan-outs, the cleanup, the seeded README - is the engine's and is not repeated here.</p>
  *
  * <h3>Files live on the server's machine, and single-player is not a special case</h3>
  *
- * <p>The root is {@code <serverdir>/crystalgui/workspace} through
- * {@link MinecraftServer#getFile(String)} — which on a dedicated server is the server directory and in
- * single-player is the game directory, because <b>the integrated server is a server</b>. So there is one
- * code path, and single-player is the remote case with a very short wire.</p>
+ * <p>The root is {@code <serverdir>/crystalgui/workspace}, which on a dedicated server is the server
+ * directory and in single-player is the game directory, because <b>the integrated server is a
+ * server</b>. So there is one code path and single-player is the remote case with a very short wire -
+ * which is also what makes single-player a real test of the protocol rather than a bypass of it.</p>
  */
 public final class CgUiWorkspaceHost {
 

@@ -107,26 +107,45 @@ import com.crystalgui.text.lang.ProjectSources;
 import com.crystalgui.text.lang.ProjectSourcesRegistry;
 
 /**
- * A project editor: a dock, a file tree, one editor per open file, and a Problems panel — the shell.
+ * <b>The workbench engine</b> - a dock, the documents open in it, and the services an extension builds on.
  *
- * <h3>It owns its panel registry and requires a workspace</h3>
+ * <p>What it is <em>not</em> is a product. It ships no tool windows and no panels of its own: the project
+ * tree, Problems, Notifications and the Inspector are all {@link WorkbenchExtension}s, and
+ * {@code new Workbench(workspace, List.of())} is a perfectly good workbench with none of them that will
+ * still open a file. An {@link com.crystalgui.desktop.app.ApplicationKind} names the ids it wants and
+ * gets those.</p>
  *
- * <p>Owning the registry is what lets it guarantee its own panel types exist; {@link #registerPanel} is
- * there for a host's extras, which is how a shader graph or a console gets a tab. Requiring a
- * {@link Workspace} is the sharper line: "open a file" is the verb this widget exists for, and a
- * project editor with no project is a different widget rather than a degraded one.</p>
+ * <p>You normally get one from {@code WorkbenchApplication}. Extensions never name this class - they are
+ * written against {@link WorkbenchContext}, which is the surface below.</p>
+ *
+ * <h3>What it owns</h3>
+ *
+ * <ul>
+ *   <li>the dock and its tabs, and the one lane for opening anything into them;</li>
+ *   <li>the open documents, their save path and their conflict handling;</li>
+ *   <li>the project listing, the file decorations and the root watches - true whether or not any panel
+ *       is showing them;</li>
+ *   <li>the status bar, the menu bar, the command context and the settings scope;</li>
+ *   <li>the session record, and each extension's slice of it.</li>
+ * </ul>
+ *
+ * <h3>It requires a workspace</h3>
+ *
+ * <p>"Open a file" is the verb this exists for, so a workbench with no project is a different widget
+ * rather than a degraded one.</p>
  *
  * <h3>The dock is asked, not remembered</h3>
  *
- * <p>Which file {@link #saveActiveFile()} writes is derived from the dock's active tab, never from a field
- * updated on open. A remembered path saves the last file <em>opened</em>, which is the wrong one the moment
- * you switch tabs — and silently, because it reports success.</p>
+ * <p>Which file a save writes is derived from the dock's active tab, never from a field updated on open.
+ * A remembered path saves the last file <em>opened</em>, which is the wrong one the moment you switch
+ * tabs - and silently, because it reports success. The same rule is why a panel's content comes from the
+ * open tab rather than a fresh read: the dock rebuilds panels on every split, drag and layout restore,
+ * and re-reading there would discard unsaved edits each time.</p>
  *
- * <h3>A panel's content comes from the open tab, never from a fresh read</h3>
+ * <h3>Disposing it is final</h3>
  *
- * <p>{@code DockArea} asks the registry for a panel's content on every rebuild — a split, a drag, a
- * layout restore — so it is answered from {@link EditorService}, which holds the tab and its document.
- * Reading the file there instead would discard unsaved edits on every one of those.</p>
+ * <p>It takes down every extension in reverse activation order, its tool windows, its watches, its
+ * documents and everything it registered process-wide. A workbench is not reusable afterwards.</p>
  */
 public class Workbench extends UIElement implements WorkbenchContext, DataProvider, Disposable {
     /** The shell. `ua/workbench.css` names the tag. */
