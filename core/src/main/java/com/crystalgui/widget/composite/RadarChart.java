@@ -204,10 +204,9 @@ public class RadarChart extends UIElement {
                     g -> g.backgroundColor(axis.argb() | 0xFF000000));
             StyleGroup.defaultPipeline(point.getStyle().getLayoutGroup(),
                     l -> l.positionType(TaffyPosition.ABSOLUTE));
-            // INSTANT: a point is a target the pointer was aimed at, not one it crossed.
-            if (axis.detail() != null) {
-                Tooltip.attach(point, axis.detail()).addClass(Tooltip.INSTANT_CLASS);
-            }
+            // INSTANT: a point is a target the pointer was aimed at, not one it crossed on the way
+            // somewhere else, and reaching it IS the question the delay exists to wait for.
+            if (axis.detail() != null) Tooltip.attach(point, axis.detail()).setDelay(0f);
             points.add(point);
             shadow.append(point);
         }
