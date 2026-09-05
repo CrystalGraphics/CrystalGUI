@@ -16,7 +16,10 @@ import com.crystalgui.core.settings.Settings;
 import com.crystalgui.core.settings.SettingsCodec;
 import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.core.settings.SettingsModel;
+import com.crystalgui.core.notify.Notification;
+import com.crystalgui.document.Document;
 import com.crystalgui.core.signal.ConnectionGroup;
+import com.crystalgui.workbench.editor.EditorService;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.core.window.WindowPolicy;
@@ -512,7 +515,50 @@ public class WorkbenchApplication extends UIElement
         // UNSAVED WORK IS NOT PART OF "the last arrangement", and is not gated on wanting it back.
         // "Do not reopen my tabs" is a preference about a layout; "throw away what I never saved" is
         // not the same sentence, and reading one as the other loses somebody's work silently.
+        // SUBSCRIBED BEFORE THE RESTORE, or the first document is put back before anything is
+        // listening -- the restore is asynchronous per file but the subscription is not.
+        lifetime.add(workbench.editors().onDidRestoreUnsavedWork.connect(this::announceRestored));
         workbench.editors().restoreUnsavedWork();
+    }
+
+    /**
+     * Says that a file came back modified, and offers the way out.
+     *
+     * <p>Without this a restore is silent: the file opens with a marker the author did not put there,
+     * and "my editor thinks this file is modified and it isn't" is indistinguishable from a bug in the
+     * dirty state — which is exactly how it was reported. VS Code can be silent about it because you
+     * left the file dirty yourself and remember doing so.</p>
+     *
+     * <p><b>Discard is a real action, not a dismissal.</b> Telling somebody their file holds changes
+     * they do not recognise, and leaving them to work out that the way back is to close the tab without
+     * saving, is worse than saying nothing: it names a problem and hides the remedy. This reverts to
+     * what is on disk and drops the backup, so the next launch is clean.</p>
+     */
+    private void announceRestored(EditorService.Restored restored) {
+        Resource resource = restored.resource();
+        if (restored.fileAlsoChanged()) {
+            // A WARNING, and it names the consequence rather than the mechanism. Saving is not blocked
+            // and must not be -- the work is the author's to keep -- but it will be refused and turned
+            // into a merge, and learning that at the moment of saving is learning it too late.
+            Notifications.show(Notification.warning("Restored unsaved changes")
+                    .withDetail(resource.name() + " has changes from a previous session, and the file "
+                            + "itself has changed since. Saving will ask you to merge.")
+                    .withAction("Discard", () -> discardRestored(resource)));
+            return;
+        }
+        Notifications.show(Notification.info("Restored unsaved changes")
+                .withDetail(resource.name() + " has changes from a previous session that were never "
+                        + "saved. Save it to keep them.")
+                .withAction("Discard", () -> discardRestored(resource)));
+    }
+
+    /** Back to the file on disk, and the backup with it. @see #announceRestored */
+    private void discardRestored(Resource resource) {
+        Document document = workbench.documents().get(resource);
+        // BOTH, and in this order. Reverting alone leaves the backup on disk, so the same work is
+        // offered again on the next launch and the notification comes back with it.
+        if (document != null) workbench.documents().revert(document);
+        workbench.documents().discardBackup(resource);
     }
 
     /**

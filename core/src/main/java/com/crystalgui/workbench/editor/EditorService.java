@@ -65,6 +65,32 @@ public final class EditorService implements Disposable {
     /** A tab's state moved — what a tab strip redraws its decoration from. */
     public final Signal.Value<Tab> onDidChangeState = new Signal.Value<>();
 
+    /**
+     * Unsaved work from a previous session was just put back into this document.
+     *
+     * <p><b>A restore has to be announced, because nothing else says it happened.</b> In an editor you
+     * left dirty on purpose the marker needs no explanation — you know why it is there. A restore from a
+     * <em>previous run</em> is the opposite: the file opens modified, the author did not modify it in
+     * this session, and there is no way to tell that from a bug in the dirty state. That is precisely
+     * how it was reported, twice, about a backup this application had written itself.</p>
+     *
+     * <p>Emitted only when a backup is genuinely adopted — one that matched the file is discarded in
+     * silence, because nothing happened worth telling anyone about.</p>
+     */
+    public final Signal.Value<Restored> onDidRestoreUnsavedWork = new Signal.Value<>();
+
+    /**
+     * What came back, and whether the file underneath it moved while this client was away.
+     *
+     * <p>{@code fileAlsoChanged} is worth carrying because the author cannot see it and it changes what
+     * saving means: the restored document holds the <em>backup's</em> etag, so a write is refused as a
+     * conflict rather than overwriting whatever happened in the meantime. Without it that arrives as a
+     * surprise at the moment of saving, which is the worst moment to learn that the file is not the one
+     * this work was based on.</p>
+     */
+    public record Restored(Resource resource, boolean fileAlsoChanged) {
+    }
+
     /** Which tab is in front, or null. */
     @Nullable
     private Tab active;
@@ -223,7 +249,14 @@ public final class EditorService implements Disposable {
                     documents.discardBackup(entry.resource());
                     return;
                 }
+                // READ BEFORE THE ADOPT, which replaces it with the backup's. This is the etag the
+                // file has right now, and comparing the two is the only way to know the file moved while
+                // this client was away -- the read has just been done, so it costs nothing.
+                String fileEtag = document.etag();
                 document.adoptUnsaved(entry.content(), entry.etag());
+                boolean moved = fileEtag != null && entry.etag() != null
+                        && !fileEtag.equals(entry.etag());
+                onDidRestoreUnsavedWork.emit(new Restored(entry.resource(), moved));
             });
             restored++;
         }
