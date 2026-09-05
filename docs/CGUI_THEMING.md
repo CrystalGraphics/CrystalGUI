@@ -464,6 +464,7 @@ editor scheme's.
 | `--prompt-caption-fg` | `var(--fg)` | base.css |
 | `--prompt-field-bg` | `var(--surface-recessed)` | base.css |
 | `--prompt-field-fg` | `var(--fg)` | base.css |
+| `--radar-web` | `var(--border-base)` | base.css |
 | `--radius-control` | `4px` | crystal-dark.css |
 | `--radius-panel` | `8px` | crystal-dark.css |
 | `--region-drop-bg` | `#3574F055` | crystal-dark.css |

@@ -1223,6 +1223,35 @@ progressbar::part(fill) {
     border-radius: 2px;
 }
 
+/* ── RadarChart ─────────────────────────────────────────────────────────────────────────────────
+ * A size, because a chart has no content to be sized by: its labels are out of flow, so an unsized
+ * one measures zero and draws nothing. Square, since the plot is a circle inscribed in the box.
+ *
+ * `color` IS THE WEB. The rings and the spokes read the element's computed colour, which is the one
+ * property a chart-shaped widget can carry without inventing a part that exists only to hold a
+ * value -- and it inherits, so a panel setting a colour dims its charts with it. Each axis's own
+ * colour is DATA and arrives inline on its label, which is why nothing here names one.
+ *
+ * `--radar-web` is defined in no theme on purpose: it is the same neutral line in every one shipped,
+ * so it rides this fallback and a theme that wants otherwise simply defines it. */
+radarchart {
+    width: 160px;
+    height: 160px;
+    /* THE WEB'S COLOUR, and only its colour. border-WIDTH is deliberately not set: a border box is
+     * drawn whether or not the element has a background, so any width here puts a rectangle around
+     * the plot. The stroke thickness is the `web` part's height instead. */
+    border-color: var(--radar-web, #3C3F41);
+}
+/* Not drawn. It carries the web's stroke thickness as its height, which is the one way to state that
+ * in CSS for a widget whose lines are not its border. Absolute and zero-width, so it costs nothing. */
+radarchart::part(web) {
+    height: 1px;
+    width: 0;
+}
+radarchart::part(axis-label) {
+    font-weight: bold;
+}
+
 /* THE GLYPH GOES IN `overlay`, NOT `background` — which is what lets it have a hover chip at all.
  *
  * `background` and `background-color` are separate properties and the drawable wins the paint, so an

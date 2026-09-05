@@ -32,6 +32,7 @@ import com.crystalgui.widget.config.inspector.Inspector;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Checkbox;
 import com.crystalgui.widget.display.ProgressBar;
+import com.crystalgui.widget.display.RadarChart;
 import com.crystalgui.widget.control.Slider;
 import com.crystalgui.widget.control.Switch;
 import com.crystalgui.widget.display.SymbolIcon;
@@ -104,6 +105,8 @@ public final class Widgets implements NodeKinds {
         // engine answered the lowercased class name instead, which is the fallback that left 32 tags
         // matching by accident and ToolWindowFrame matching nothing at all.
         UIElementRegistry.register(SymbolIcon.NAME, SymbolIcon::new, NodeContract.INERT);
+        // INERT: a chart is a readout, so it reports no events and carries no wire state of its own.
+        UIElementRegistry.register(RadarChart.NAME, RadarChart::new, NodeContract.INERT);
 
         // ── text ─────────────────────────────────────────────────────────────
         // The engine's one text leaf AND the widget layer's label -- D15 merged `ui.box.TextNode` into
