@@ -64,6 +64,14 @@ public interface WorkspaceProjects {
     /** Forgets {@code directory}'s listing, so the next reader re-asks. */
     void invalidate(CgPath directory);
 
+    /**
+     * Redraw the rows; the listing has not changed.
+     *
+     * <p>What a row shows can move without the directory moving — a file's declared type name arrives
+     * after the row was built. Use this rather than {@link #invalidate}, which goes back to the server.</p>
+     */
+    void announceRowsChanged();
+
     /** Forgets every listing — what a reconnect does, because none of them describes this server. */
     void invalidateAll();
 

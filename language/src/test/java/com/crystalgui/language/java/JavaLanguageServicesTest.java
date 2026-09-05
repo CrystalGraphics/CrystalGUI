@@ -6,6 +6,9 @@ import com.crystalgui.language.engine.EngineBand;
 import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.engine.JavaEngine;
 import com.crystalgui.text.TextBuffer;
+import com.crystalgui.text.diagnostic.DiagnosticSeverity;
+import com.crystalgui.text.ChangeSet;
+import com.crystalgui.text.Change;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.lang.SemanticTokenProvider;
 import com.crystalgui.text.lang.SymbolInfo;
@@ -497,6 +500,87 @@ public class JavaLanguageServicesTest {
             assertTrue("the fixture is meant to have an unresolved name: " + now, errorsIn(now) > 0);
             assertEquals("a parsing file's answer is complete — retention must not add to it: " + now,
                     0, warningsIn(now));
+        } finally {
+            services.close();
+        }
+    }
+
+    /**
+     * <b>A file that stops PARSING still reports its error.</b>
+     *
+     * <p>The sibling above breaks the source semantically — a call to a method that does not exist —
+     * which still parses, so the analysis produces both its errors and its optional warnings. This one
+     * breaks it so it cannot parse at all, which is a different branch: ECJ marks such a unit
+     * {@code ignoreFurtherInvestigation} and skips the passes that produce unused-import and unused-local
+     * warnings, so the services fall back to the retained lane for those.</p>
+     *
+     * <p>Reported from the desktop scene as <em>0 errors, 2 warnings</em> on a file that plainly did not
+     * compile, with both warnings describing a version of the text that no longer existed. That is what
+     * this branch looks like when the analysis's own errors do not survive the merge.</p>
+     */
+    private static final String N = System.lineSeparator();
+
+    @Test
+    public void sourceThatCannotParseStillAnnouncesItsError() {
+        // ONE LINE, like its siblings: what matters is that the edit below leaves a declaration the
+        // parser cannot finish, not how many lines the file has.
+        TextBuffer buffer = new TextBuffer("public class Script { void f() { int a = 1; } }" + N);
+        JavaLanguageServices services = servicesFor(buffer);
+        try {
+            List<List<Diagnostic>> announced = new ArrayList<>();
+            services.onDiagnostics(v -> announced.add(v.orElse(List.of())));
+            settle();
+            announced.clear();
+
+            // A COMMENT THAT SWALLOWS THE REST OF THE DECLARATION, which is exactly how it was reported:
+            // `CgTextRenderer REN//DER = ...` leaves a declaration with no terminator and no initialiser.
+            int at = buffer.document().toString().indexOf("int a = 1;") + 5;
+            buffer.edit(ChangeSet.of(buffer.length(), new Change(at, at + 1, "//")));
+            settle();
+
+            assertFalse("the edit produced no announcement at all", announced.isEmpty());
+            List<Diagnostic> latest = announced.get(announced.size() - 1);
+            assertTrue("a file that cannot parse announced no error -- announced: " + latest,
+                    latest.stream().anyMatch(d -> d.severity() == DiagnosticSeverity.ERROR));
+        } finally {
+            services.close();
+        }
+    }
+
+    /**
+     * <b>An environment change must not be able to starve the analysis.</b>
+     *
+     * <p>The scheduler's debounce restarts on every submit, so a trigger that fires faster than the
+     * window is a job that never runs. The workbench announces "the world outside this document moved"
+     * to every open editor, and a feedback loop had it announcing every frame: measured in the desktop
+     * scene at <b>937 schedules and zero completions</b>, so the Problems panel kept the analysis from
+     * the moment the file was opened and nothing typed afterwards was ever looked at.</p>
+     *
+     * <p>The loop is fixed at its source; this is the guard that makes the starvation unreachable
+     * whatever announces. Safe because an environment change does not alter the source: the job already
+     * queued reads the new environment when it runs. An <em>edit</em> still always re-submits, which is
+     * the case the sibling above covers.</p>
+     */
+    @Test
+    public void repeatedEnvironmentChangesStillLetAnAnalysisLand() {
+        TextBuffer buffer = new TextBuffer("public class Script { int run() { return nope(); } }" + N);
+        JavaLanguageServices services = servicesFor(buffer);
+        try {
+            List<List<Diagnostic>> announced = new ArrayList<>();
+            services.onDiagnostics(v -> announced.add(v.orElse(List.of())));
+            settle();
+            announced.clear();
+
+            // FASTER THAN THE WINDOW, which is the whole point: each step advances the clock by less
+            // than DEBOUNCE_MILLIS, so a trigger that re-submits every time can never come due.
+            for (int i = 0; i < 20; i++) {
+                services.environmentChanged();
+                clock.addAndGet(100);
+                scheduler.drain();
+            }
+
+            assertFalse("twenty environment changes produced no analysis at all -- the debounce was "
+                    + "being reset faster than it could elapse", announced.isEmpty());
         } finally {
             services.close();
         }

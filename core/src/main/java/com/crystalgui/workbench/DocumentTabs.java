@@ -190,11 +190,17 @@ public final class DocumentTabs {
     @Nullable
     String tabTitleFor(DockPanelRef panel) {
         Resource viewed = viewedResource(panel);
-        if (viewed != null) return viewerDisplayName(viewed);
-        String path = panel.state(Workbench.PATH_STATE, "");
-        if (path.isEmpty()) return null;
-        String title = panel.state(DockPanelRef.TITLE, CgPath.parse(path).name());
-        return workbench.saveActions.isDirty(CgPath.parse(path)) ? title + Workbench.DIRTY_MARKER : title;
+        if (viewed == null) return null;
+        // A VIEWER IS A RESOURCE WITH NO PROJECT PATH -- a decompiled class, a generated file -- and that
+        // is the question this branch means. It used to ask `viewedResource(panel) != null`, which was a
+        // real discriminator while a viewer carried a state key of its own; unifying the two keys made it
+        // answer for EVERY tab, so the viewer branch was taken always and the marker below it became
+        // unreachable code. Nothing looked wrong: the name a viewer shows is the file name, so every tab
+        // drew the right title and no file was ever marked modified.
+        CgPath path = viewed.asPath();
+        if (path == null) return viewerDisplayName(viewed);
+        String title = panel.state(DockPanelRef.TITLE, path.name());
+        return workbench.saveActions.isDirty(path) ? title + Workbench.DIRTY_MARKER : title;
     }
 
     /**
@@ -447,14 +453,6 @@ public final class DocumentTabs {
     }
 
     /**
-     * Keeps the dirty markers current.
-     *
-     * <p>Polled rather than pushed, because a document goes dirty by being <em>typed into</em> and there is
-     * no edit event to hang this on that would not also mean routing every keystroke through the workbench.
-     * The cost is one string comparison per open document per frame, and it is only when the answer changes
-     * that any element is touched.</p>
-     */
-    /**
      * Releases the document behind a panel that has just been closed.
      *
      * <h3>Only when nothing else is showing it</h3>
@@ -498,6 +496,14 @@ public final class DocumentTabs {
                 + workbench.onDidCloseDocument.connectionCount() + " listeners");
     }
 
+    /**
+     * Keeps the dirty markers current.
+     *
+     * <p>Driven by {@code Documents.onDidChangeState} rather than by the frame: a document goes dirty by
+     * being typed into, and that transition is announced. The comparison against the last set is what
+     * makes it cheap to call on every announcement — only a change in <em>which</em> files are unsaved
+     * touches an element.</p>
+     */
     void refreshDirtyMarkers() {
         List<CgPath> dirty = workbench.saveActions.unsavedFiles();
         if (!dirty.equals(workbench.lastDirty)) {

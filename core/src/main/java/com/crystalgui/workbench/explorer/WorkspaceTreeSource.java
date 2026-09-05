@@ -438,6 +438,19 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath>, Worksp
      * listed are re-listed, so a collapsed tree costs one call and nothing walks the disk. Expanded state
      * and selection are untouched, because the listings are replaced rather than dropped.</p>
      */
+    /**
+     * Says the rows should be redrawn, without re-fetching anything.
+     *
+     * <p>For when what a row <em>displays</em> has changed while the listing behind it has not — a file's
+     * declared symbol arriving after its row was built is the case this exists for. {@link #invalidateAll}
+     * is the other verb and is a network operation: it drops every listing and asks the server again,
+     * which is right for "the directory itself may have changed" and wrong for a decoration.</p>
+     */
+    public void announceRowsChanged() {
+        dirty = true;
+        onDidInvalidate.emit();
+    }
+
     public void invalidateAll() {
         // COPIED before iterating: request() completes synchronously against an in-memory transport, and
         // its handler writes straight back into `children`.
