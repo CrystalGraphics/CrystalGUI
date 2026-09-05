@@ -5,33 +5,31 @@ import com.google.gson.JsonElement;
 import com.crystalgui.serialization.StateMap;
 
 /**
- * <b>An extension's own corner of the session record</b> — its share of what a workbench remembers
- * between runs.
+ * <b>An extension's own corner of the session record</b> - what your feature remembers between runs.
  *
- * <p>The engine serialises what it owns: the dock layout, every tool window's placement, per-tab view
- * state, the active file. What it cannot serialise is what a FEATURE remembers, because once the
- * explorer is an extension {@code WorkbenchSession} has no way to reach it — and reaching for it was
- * the arrangement being removed. IntelliJ's {@code PersistentStateComponent} draws the line in the same
- * place: one component, one corner, one file.</p>
+ * <p>The engine already serialises what it owns: the dock layout, each tool window's placement, per-tab
+ * view state, the active file. This is for what a <em>feature</em> remembers, which the engine cannot
+ * reach - the explorer's expanded folders are the first one. Register it in {@code activate} and dispose
+ * the handle with the rest.</p>
  *
  * <pre>{@code
- * workbench.registerSessionSlice(new SessionSlice() {
+ * Disposable slice = workbench.registerSessionSlice(new SessionSlice() {
  *     public String id() { return "crystalgui:explorer"; }
- *     public void write(StateMap<JsonElement> into) { ... }
- *     public void read(StateMap<JsonElement> from) { ... }
+ *     public void write(StateMap<JsonElement> into) { into.putList("expanded", ...); }
+ *     public void read(StateMap<JsonElement> from)  { ... }
  * });
  * }</pre>
  *
- * <p>Written under {@code "extensions": { "<id>": {...} }} in the same record, so no version bump: the
- * key is additive and a reader that has never heard of a slice ignores it.</p>
+ * <p>It is written under {@code "extensions": { "<id>": {...} }} inside the same record, so adding one
+ * needs no version bump: the key is additive, and a reader that has never heard of your slice ignores
+ * it. Same line IntelliJ's {@code PersistentStateComponent} draws - one component, one corner.</p>
  *
  * <h3>Reading is not the same moment as restoring</h3>
  *
- * <p>{@link #read} hands over the bytes and nothing more. Anything an extension wants that is not there
- * <em>yet</em> — a folder it cannot expand until the listing revealing it lands — is its own retry, and
- * {@code WorkspaceProjects.onDidLoadListing()} is what it hangs that on: per listing, which is the only
- * moment the answer can have changed. The session used to run that loop itself, per frame, with an
- * attempt counter, for the one feature that needed it.</p>
+ * <p>{@link #read} hands over the bytes and nothing more. Anything you cannot apply <em>yet</em> - a
+ * folder you cannot expand until the listing revealing it arrives - is your own retry, and
+ * {@code WorkspaceProjects.onDidLoadListing()} is the signal to hang it on: it fires per listing, which
+ * is the only moment the answer can have changed. Do not poll for it in a frame hook.</p>
  */
 public interface SessionSlice {
 

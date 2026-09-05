@@ -12,33 +12,36 @@ import com.crystalgui.net.wire.WireTransport;
 import com.crystalgui.serialization.PlainOps;
 
 /**
- * <b>One {@link ProtocolConnection} per peer</b> — opened when they arrive, closed when they leave, and
+ * <b>One {@link ProtocolConnection} per peer</b> - opened when they arrive, closed when they leave,
  * ticked together.
  *
- * <p>The table and its rules, with nothing about how a platform learns that somebody arrived. A loader
- * turns its own events into {@link #open}, {@link #close} and {@link #tick}; everything between those
- * calls — the multiplexer per peer, the transport, the pump, dropping a frame for a peer that has gone,
- * failing outstanding calls on a close, and one peer's exception not stopping the rest — is the same
- * wherever the events come from.</p>
+ * <p>The table every networked host needs and none should write twice. A loader turns its own platform
+ * events into a few calls and gets the rest for free:</p>
  *
- * <h3>Keyed by what is stable, never by what is convenient</h3>
+ * <pre>{@code
+ * connections.open(playerUuid, frame -> sendToThatPlayer(frame), player);  // they joined
+ * connections.receive(playerUuid, incomingFrame);                          // a frame arrived
+ * connections.tick();                                                      // every server tick
+ * connections.close(playerUuid, "logged out");                             // they left
+ * }</pre>
  *
- * <p>The key is the caller's, and the caller is expected to have thought about it. 1.7.10 pays for this
- * exactly: it constructs a new player entity on every respawn and every dimension change, so an
- * entity-keyed table is orphaned by the first death — inbound frames name the new body, the lookup
- * misses, and every frame from that client is dropped for the rest of the session, while outbound keeps
- * working. That reads as an input bug and is an identity one. Its key is the profile UUID.</p>
+ * <p>Between those, this owns the multiplexer per peer, the transport, the pump, dropping a frame for a
+ * peer that has gone, failing outstanding calls on close, and making sure one peer's exception does not
+ * stop the rest.</p>
  *
- * <h3>One table, one side</h3>
+ * <h3>Key it on what is stable, never on what is convenient</h3>
  *
- * <p>A process that is both — single-player is — holds two of these, because the two sides are ticked by
- * different events and closed by different ones. Sharing a table would tick the client's peer on the
- * server's tick, which is a timing change nobody asked for.</p>
+ * <p>The key is yours to choose, and choosing badly fails in a way that is hard to see. Minecraft 1.7.10
+ * builds a <em>new</em> player entity on every respawn and every dimension change, so an entity-keyed
+ * table is orphaned by the first death: inbound frames name the new body, the lookup misses, and every
+ * frame from that client is dropped for the rest of the session - while outbound keeps working, so it
+ * reads as an input bug. Use the profile UUID, or whatever your platform's stable identity is.</p>
  *
- * <h3>Threads</h3>
+ * <h3>One table per side</h3>
  *
- * <p>Frames arrive on the network's thread; connections open, close and tick on the thread that owns
- * whatever the handlers touch. So the map is a {@link ConcurrentHashMap} and nothing else is shared:
+ * <p>A process that is both client and server - single-player is - holds two, because the two sides are
+ * ticked and closed by different events. Frames arrive on the network thread while connections open,
+ * close and tick on the thread that owns whatever the handlers touch, so the map is concurrent and
  * {@link ProtocolConnection#tick()} is the only thing that dispatches.</p>
  */
 public final class Connections {

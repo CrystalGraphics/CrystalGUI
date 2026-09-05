@@ -27,7 +27,19 @@ import java.util.List;
 import javax.annotation.Nullable;
 
 /**
- * Extracted from {@link Workbench}. See the plan's §4.5 for why this cluster is one thing.
+ * <b>What an editor tab looks like</b> - its title, its dirty mark, its icon and its failure banner.
+ *
+ * <p>The workbench's own collaborator, not an extension point: it keeps every open tab's presentation in
+ * step with the document behind it, so a rename retitles the tab, a save clears the asterisk, a decoration
+ * recolours the label, and a file that could not be read shows a banner with a Retry rather than an empty
+ * pane. Reached through {@code Workbench}; you should not need to name it.</p>
+ *
+ * <h3>A tab is a view of a document, and the two can disagree</h3>
+ *
+ * <p>Every method here exists because the tab and its document move at different moments: the tab is
+ * built before the read lands, survives splits and drags that rebuild the panel around it, and outlives
+ * a file being deleted underneath it. So presentation is recomputed from the document rather than
+ * captured when the tab was made.</p>
  */
 public final class DocumentTabs {
 

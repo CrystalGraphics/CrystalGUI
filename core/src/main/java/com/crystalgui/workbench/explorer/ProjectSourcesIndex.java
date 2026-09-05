@@ -15,7 +15,23 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Extracted from {@link Workbench}. See the plan's §4.5 for why this cluster is one thing.
+ * <b>What the language engines are allowed to see of this workspace</b> - the project's own sources, as
+ * a snapshot an analysis thread can read.
+ *
+ * <p>The workbench's own collaborator. It keeps a {@code ProjectIndex} pointed at the crawled file list,
+ * each project's source roots and the text of every open buffer, contributes it to the process-wide
+ * {@code ProjectSourcesRegistry} while this workbench is alive, and withdraws it when it is disposed -
+ * so two workbenches are two projects rather than a fight over one slot.</p>
+ *
+ * <h3>Snapshots, because the reader is not the frame thread</h3>
+ *
+ * <p>Everything it hands the index is a snapshot taken on the UI thread and read from inside a compile.
+ * That is the whole reason this is a class rather than a few fields: the listing maps and the
+ * open-document map are being mutated while the analysis reads, so what crosses is a copy taken at a
+ * known moment and re-taken when it moves.</p>
+ *
+ * <p>It also announces when an unsaved buffer changes what a name resolves to, which is what makes a
+ * cross-file reference in an unsaved file resolve at all.</p>
  */
 public final class ProjectSourcesIndex {
 

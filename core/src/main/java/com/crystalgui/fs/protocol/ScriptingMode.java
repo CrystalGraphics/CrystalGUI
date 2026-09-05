@@ -1,25 +1,25 @@
 package com.crystalgui.fs.protocol;
 
 /**
- * <b>Whether a project's files may be run, and by whom</b> — a capability a server grants, never a
+ * <b>Whether a project's files may be run, and by whom</b> - a capability a server grants, never a
  * feature a client has.
  *
- * <p>The Run command compiles the buffer in front and executes it <em>in the client's JVM</em>, whatever
- * project the file came from. On a dedicated server that is a live scripting environment inside every
- * player's client, reachable from any project they can edit — including their own local ones, which
- * nobody but they control. This is the surface that closes.</p>
+ * <p>It travels beside {@code mayRead} and {@code mayWrite} in a project's capabilities, because it is
+ * the same kind of statement made at the same moment: what this actor may do with this project, said
+ * once by whoever owns the files. The Run shell reads it and disables the command with its reason when
+ * the answer is {@link #SERVER_ONLY}.</p>
  *
- * <p>It travels beside {@code mayRead} and {@code mayWrite} because it is the same kind of statement and
- * arrives at the same moment: what this actor may do with this project, said once by whoever owns the
- * files.</p>
+ * <h3>Why it exists</h3>
+ *
+ * <p>Run compiles the buffer in front and executes it <b>in the client's JVM</b>, whatever project the
+ * file came from. On a dedicated server, ungoverned, that is a live scripting environment inside every
+ * player's client reachable from any project they can edit. This is the switch that closes it.</p>
  *
  * <h3>What it buys, stated so it is not oversold</h3>
  *
- * <p>No client-side check stops a modified client, and nothing can — {@code ScriptPolicy}'s own javadoc
- * already says the trust model is the answer. What this buys is exact: a <b>stock</b> client offers no
- * live-scripting surface while connected to a server that has not granted one. That is what an
- * administrator can rely on, and it is the same guarantee every anti-cheat that is not a rootkit
- * offers.</p>
+ * <p>No client-side check stops a modified client, and nothing can. What this buys is exact: a
+ * <b>stock</b> client offers no live-scripting surface while connected to a server that has not granted
+ * one - the same guarantee any anti-cheat that is not a rootkit offers.</p>
  */
 public enum ScriptingMode {
 

@@ -28,7 +28,20 @@ import com.crystalgui.workbench.editor.EditorService;
 import javax.annotation.Nullable;
 
 /**
- * Extracted from {@link Workbench}. See the plan's §4.5 for why this cluster is one thing.
+ * <b>Opening things</b> - the one lane from "show me this" to a tab with a live editor in it.
+ *
+ * <p>The workbench's own collaborator behind {@code openFile}, {@code openResource} and the dock's
+ * {@code open}. It decides which document kind claims the resource, builds or reuses the panel, places
+ * it, activates it, and focuses what it opened.</p>
+ *
+ * <h3>Opening is asynchronous, and the continuation is the API</h3>
+ *
+ * <p>A file that is not already on screen has to be read before there is anything to point a caret at,
+ * so {@link #openFile(CgPath, Runnable)} takes an {@code onOpened}. Positioning on the statement
+ * <em>after</em> an open acts on the editor from before the call - which is correct for a file that
+ * happened to be open already and wrong for every other, so it fails intermittently. The
+ * {@code openFileAt}/{@code openResourceAt} pair exists so a caller with a target position never has to
+ * write that continuation itself.</p>
  */
 public final class WorkbenchOpener {
 

@@ -57,6 +57,15 @@ import javax.annotation.Nullable;
  * today and silently corrupt every open file the moment such a backend is registered — one document's
  * edits applied to another's tree. A supplier costs nothing and closes that door now.</p>
  *
+ * <h3>A jar's languages arrive on the first question</h3>
+ *
+ * <p>Nothing has to be switched on. The first time anything asks what a file is, every
+ * {@link LanguageKinds} service on the classpath is run - so a module that ships grammars and engines
+ * puts them in front of the built-in lexers by being present, and a process that never classifies a
+ * file (a dedicated server) never loads one. A host may call {@link #bootstrap()} itself to pay that
+ * cost at a moment of its choosing; skipping it costs a pause on the first editor, never the
+ * languages.</p>
+ *
  * <h3>It is process-global, and that is a trap worth naming</h3>
  *
  * <p>Registration is static, because what language a file is written in is a fact about the world

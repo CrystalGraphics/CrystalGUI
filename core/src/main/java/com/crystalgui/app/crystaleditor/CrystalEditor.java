@@ -16,36 +16,36 @@ import com.crystalgui.workbench.extension.ProblemsExtension;
 import com.crystalgui.workbench.extension.ProjectExtension;
 
 /**
- * <b>The editor — as a manifest.</b>
+ * <b>Crystal Editor, as a manifest</b> - the IDE-shaped product this repository ships.
  *
  * <p>Which is all a product is once there is an engine underneath it: an id, a name, an icon, the files
- * it opens, and the list of features it enables. Everything that used to be here — the workbench, the
- * window, the preferences, the session, the status line, the initial focus, the menu bar in the caption
- * — is {@link WorkbenchApplication}, and every one of those was shared behaviour that happened to live
- * in one product because there was only one.</p>
+ * it opens, and the list of features it enables. The workbench, the window, the preferences, the
+ * session, the status line and the initial focus are all {@link WorkbenchApplication}'s.</p>
  *
- * <p>The measure of it: <b>a second application on this desktop is a second constant in a file like this
- * one.</b> A graph-only product names {@code shadergraph} and {@code inspector} and stops; a notes
- * product names {@code notes}. Neither is a class, neither is a second dock, and neither has to be
- * remembered by a host.</p>
+ * <p>Nothing installs this - {@link com.crystalgui.app.Applications} declares it as a service, and a
+ * desktop lists it. To launch it by hand: {@code desktop.applications().launch(CrystalEditor.KIND,
+ * workspace, storage)}.</p>
  *
- * <h3>What is still a decision here, and it is three things</h3>
+ * <h3>What is actually decided here, and it is three things</h3>
  *
  * <ol>
- *   <li>which extensions are on — {@link #EXTENSIONS};</li>
- *   <li>what the window is called, keyed and what closing it means — a workbench is not a dialog, so
+ *   <li>which extensions are on - {@link #EXTENSIONS};</li>
+ *   <li>what the window is called, keyed, and what closing it means - a workbench is not a dialog, so
  *       {@link WindowPolicy#HIDE_ON_CLOSE}: every document, the arrangement and the undo history survive
  *       it, and the taskbar entry is how it comes back;</li>
  *   <li>which files it declares itself the handler for, so "open with" can answer with nothing
  *       running.</li>
  * </ol>
  *
+ * <p><b>A second product is a second constant in a file like this one.</b> A graph-only application
+ * names {@code shadergraph} and {@code inspector} and stops; a notes product names {@code notes}.
+ * Neither is a class, neither is a second dock, and neither has to be remembered by a host.</p>
+ *
  * <h3>One instance</h3>
  *
- * <p>{@link ApplicationKind#singleInstance()}, because a workbench's whole promise is that closing it
- * keeps everything — a second one would be a second dock over the same documents and the same session
- * record. A second launch activates the one that is running and hands it whatever file it was carrying,
- * exactly as a second {@code open} on macOS does.</p>
+ * <p>Because a workbench's whole promise is that closing it keeps everything - a second one would be a
+ * second dock over the same documents and the same session record. A second launch activates the one
+ * running and hands it whatever file it was carrying, exactly as a second {@code open} on macOS does.</p>
  */
 public final class CrystalEditor {
 

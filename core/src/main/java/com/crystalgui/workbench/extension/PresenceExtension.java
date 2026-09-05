@@ -11,23 +11,22 @@ import com.crystalgui.fs.CgPath;
 import com.crystalgui.workbench.WorkbenchContext;
 
 /**
- * Who else is in this file — one status entry, as a feature a manifest can enable.
+ * <b>Who else is in this file</b> - one status-bar entry, on a shared workspace.
  *
- * <p>The data has existed since Phase 4 and nothing showed it: {@code fs.watch} is sent for every file
- * a client reads, so the server has always known. What was missing was a view <em>across</em> peers — a
- * watcher belongs to one connection — and anywhere to put the answer.</p>
+ * <p>Enable it by naming {@link #ID} in an application's manifest. The server already knows who has each
+ * file open and who is editing it; this is the view of it. On a single-player workspace it is silent by
+ * construction, because there is nobody else to report.</p>
  *
- * <h3>Removed rather than emptied when nobody is there</h3>
+ * <h3>Editing leads, viewing is the tooltip</h3>
  *
- * <p>A permanent "1 person" slot that usually reads zero is a thing the eye learns to skip, which is the
- * one failure a presence indicator cannot afford. Same shape as the problem count, and for the same
- * reason.</p>
+ * <p>Editing is the half that can cost somebody their work, so it is what the entry says. Who merely has
+ * the file open is the fuller picture and belongs in the tooltip.</p>
  *
- * <h3>Editing leads; viewing is the tooltip</h3>
+ * <h3>Removed rather than emptied</h3>
  *
- * <p>Editing is the half that costs somebody their work. Who merely has it open is the fuller picture
- * and belongs in the tooltip — which is what this entry's tooltip always CLAIMED to say ("also has this
- * file open") while its text said who was editing.</p>
+ * <p>With nobody else in the file the entry is withdrawn, not left reading zero. A permanent slot that
+ * usually says "nobody" is a slot the eye learns to skip, which is the one failure a presence indicator
+ * cannot afford.</p>
  */
 public final class PresenceExtension implements WorkbenchExtension {
 

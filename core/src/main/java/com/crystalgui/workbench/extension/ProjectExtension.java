@@ -26,21 +26,26 @@ import com.crystalgui.workbench.explorer.ProjectFileTree;
 import com.crystalgui.workbench.toolwindow.ToolWindowKind;
 
 /**
- * The project tree, as a feature a manifest can enable.
+ * The <b>Project</b> tree - the file explorer, and everything that is about looking at the workspace.
  *
- * <p>The last of the engine's own panels to leave, and the one that made the others possible to see
- * clearly: {@code WorkbenchContext.projects()} and {@code decorations()} used to be reads <em>through</em>
- * this widget, because {@code ProjectFileTree} constructed both. So a workbench with no explorer had no
- * project listing and no file decorations either — the engine's own model was a panel's field. The model
- * belongs to the workbench now and the view to the feature.</p>
+ * <p>Enable it by naming {@link #ID} in an application's manifest. It builds the tree from the
+ * workbench's own listing model, gives it a context menu and an undo scope, registers its tool window,
+ * and remembers which folders were open between runs.</p>
  *
- * <h3>What it owns</h3>
+ * <h3>The view is here; the model is the workbench's</h3>
  *
- * <p>The tree, its tool window, its context menu and undo scope, following the active tab
- * ({@code explorer.autoReveal}), drag-and-drop between folders, and the expanded folders in the session
- * record. Everything that is about the LISTING rather than the view — the root watches, an external
- * change reaching a document, the sort order — stayed with the engine, because they are true whether or
- * not anybody is looking at a tree.</p>
+ * <p>The listing itself ({@code WorkbenchContext.projectListing()}), the file decorations and the root
+ * watches stay with the engine, because they are true whether or not anybody is looking at a tree - so a
+ * product with no explorer still has projects, decorations and change notifications. What lives here is
+ * everything that only means something with a tree on screen: revealing the active file, drag-and-drop
+ * between folders, and the expanded-folder record.</p>
+ *
+ * <h3>It listens rather than being pushed</h3>
+ *
+ * <p>The listing announces when it changes and the tree redraws itself; nothing outside this class names
+ * the widget. The same goes for preferences - {@code explorer.autoReveal} is resolved at the moment a
+ * reveal happens rather than written onto the engine, so it cannot go stale and the engine holds no
+ * field for a panel that may not exist.</p>
  */
 public final class ProjectExtension implements WorkbenchExtension {
 

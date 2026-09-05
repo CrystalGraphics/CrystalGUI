@@ -7,23 +7,33 @@ import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.Resource;
 
 /**
- * <b>One running instance</b> — its main window and everything it owns.
+ * One <b>running</b> application — its main window, and everything that window's workbench owns.
  *
- * <p>The thing the tree had no name for. An application was a class a host constructed and then held in
- * a static field, so "which applications are running", "put that one in front" and "open this file with
- * that one" had no answer at all: the loader's own screen was the registry, and there was room in it for
- * exactly one.</p>
+ * <p>You never construct one. {@link ApplicationKind#launch} builds it, {@link ApplicationRegistry}
+ * holds it, and you meet it as the return of {@code applications().launch(...)} or as an entry in
+ * {@code applications().running()}. The taskbar groups its windows, the switcher lists them, and
+ * "open with" routes a file to it through {@link #open}.</p>
  *
- * <h3>Disposing one is quitting it</h3>
+ * <h3>What you can ask one to do</h3>
  *
- * <p>Not closing its window — a workbench under {@code HIDE_ON_CLOSE} is <em>running in the
- * background</em> with every document, the dock arrangement and the undo history intact, which is what
- * its taskbar entry brings back. {@link #dispose()} is the other verb: the window is destroyed, the
- * session written, the workbench taken down and everything it registered withdrawn.</p>
+ * <ul>
+ *   <li>{@link #kind()} — the manifest it was launched from; its id, name and icon.</li>
+ *   <li>{@link #mainWindow()} — the window that <em>is</em> the application, for raising and grouping.</li>
+ *   <li>{@link #open(Resource)} — show this file in the instance already running.</li>
+ *   <li>{@link #activate()} — bring it to the front, which is what a second launch of a
+ *       single-instance application does instead of starting another.</li>
+ * </ul>
  *
- * <p>That distinction is also why an application's main window is exempt from eviction (D17): a hidden
- * main window is the application, and a cap on hidden windows must never quit one nobody asked to
- * quit.</p>
+ * <h3>Closing a window is not quitting</h3>
+ *
+ * <p>The distinction to hold on to. Under {@code WindowPolicy.HIDE_ON_CLOSE} the window goes away and
+ * the application is still <em>running in the background</em>, with every document, the dock
+ * arrangement and the undo history intact — which is what its taskbar entry brings back.
+ * {@link #dispose()} is the other verb: the window is destroyed, the session written, the workbench
+ * taken down and everything it registered withdrawn.</p>
+ *
+ * <p>It is also why a main window is exempt from hidden-window eviction: a hidden main window <em>is</em>
+ * the application, and a cap on hidden windows must never quit one nobody asked to quit.</p>
  */
 public interface Application extends Disposable {
 

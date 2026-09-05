@@ -18,22 +18,30 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The workspace, as a server offers it: projects, authorisation, and the etag rules.
+ * <b>The workspace as a server offers it</b> - projects, authorisation, etags and the trash.
  *
- * <p>The layer VS Code calls {@code FileService} — it sits above a {@link CgFileSystem} and adds the two
- * things a provider has no business knowing: <b>who is asking</b>, and <b>whether the file moved since
- * the caller last looked</b>.</p>
+ * <p>Sits above a {@link CgFileSystem} and adds the two things a filesystem has no business knowing:
+ * <b>who is asking</b>, and <b>whether the file moved since the caller last looked</b>. Every
+ * {@code fs/*} request a client sends ends up here, through a {@link WorkspaceBinding} that has already
+ * decided which actor is speaking.</p>
  *
  * <h3>What each layer owes</h3>
  * <table>
  *   <tr><td>{@link CgPath}</td><td>cannot lexically escape its project</td></tr>
  *   <tr><td>{@link CgFileSystem}</td><td>reads and writes bytes; on a real disk, no symlink escapes</td></tr>
- *   <tr><td><b>this</b></td><td>resolves the project, authorises, and enforces etags</td></tr>
+ *   <tr><td><b>this</b></td><td>resolves the project, authorises, enforces etags, captures deletions</td></tr>
  *   <tr><td>the RPC layer</td><td>carries it to a client</td></tr>
  * </table>
  *
  * <p>Keeping them apart is what makes the whole server side testable with no disk and no network: this
- * class over an {@link InMemoryFileSystem} is a complete, exercisable workspace.</p>
+ * class over an {@code InMemoryFileSystem} is a complete, exercisable workspace, which is how most of
+ * the protocol is covered.</p>
+ *
+ * <h3>An etag is how a write says what it expected</h3>
+ *
+ * <p>A save quotes the etag it read; if the file has moved since, the write is refused with the etag it
+ * actually holds, and the client turns that into a merge the user can act on rather than an overwrite
+ * nobody sees.</p>
  */
 public final class WorkspaceService {
 

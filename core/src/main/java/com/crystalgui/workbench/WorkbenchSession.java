@@ -40,54 +40,38 @@ import java.util.Set;
 import javax.annotation.Nullable;
 
 /**
- * Closing a project and reopening it where you left it — {@code .idea/workspace.xml}'s job.
+ * <b>Closing a project and reopening it where you left it</b> - the job of IntelliJ's
+ * {@code .idea/workspace.xml}.
  *
  * <pre>
- * { version, dock: {…}, active: "proj:a.txt", expanded: ["proj:src"], files: [{path, view:{…}}] }
+ * { version, dock: {...}, active: "proj:a.txt", files: [{path, view:{...}}],
+ *   extensions: { "crystalgui:explorer": {...} } }
  * </pre>
+ *
+ * <p>The engine writes what it owns - the dock layout, which tab was active, each file's caret and
+ * scroll, and every tool window's placement. Anything a <em>feature</em> remembers goes in its own
+ * corner under {@code extensions}, which is what {@link SessionSlice} is for; the explorer's expanded
+ * folders are the first.</p>
  *
  * <h3>Outside the project, keyed by project id</h3>
  *
  * <p>Session state is <b>private and does not travel</b>: nobody wants somebody else's tab arrangement
- * when they open a shared project, which is why {@code workspace.xml} sits in IntelliJ's default
- * {@code .gitignore} and why VS Code keeps this in its own storage rather than in {@code .vscode/}. It is
- * also why it cannot live in the project here at all — a project may be {@code READONLY}, and you still
- * want to reopen it where you left off.</p>
+ * when they open a shared project, which is why {@code workspace.xml} is in IntelliJ's default
+ * {@code .gitignore}. It also cannot live in the project here at all - a project may be read-only, and
+ * you still want to reopen it where you left off.</p>
  *
- * <p>Keyed by <b>project id</b>, which {@code CgPath} deliberately keeps independent of the directory —
- * <i>"moving a project's folder must not invalidate every reference to it"</i>. So moving a project keeps
- * its session, which VS Code cannot manage: it keys workspace storage by folder path and loses your open
+ * <p>Keyed by <b>project id</b>, which is deliberately independent of the directory, so moving a
+ * project's folder keeps its session. VS Code keys workspace storage by folder path and loses your open
  * editors when a folder moves.</p>
  *
  * <p>Shared <em>settings</em> take the opposite route and live in the project, because those must travel
- * when it is copied or committed. Two requirements, two homes; see {@code SettingsLayer}.</p>
+ * when it is copied or committed. Two requirements, two homes.</p>
  *
  * <h3>JSON, concretely, unlike everything else here</h3>
  *
- * <p>{@code DockLayoutCodec} is generic over {@code DynamicOps} because a layout may end up in a document
- * or on a wire. A session record only ever goes to one place — a config file on this machine — and making
- * it generic would push a type parameter through the workbench so that a second format could be used by
- * nobody. The nested layout is still produced by the generic codec and embedded whole.</p>
- *
- * <h3>Two restores that cannot be done at once, and that is the interesting part</h3>
- *
- * <p>Both halves of a restore race something asynchronous, so both are <b>parked and retried</b> rather
- * than applied once and hoped for:</p>
- *
- * <ul>
- *   <li><b>View state</b> — a caret, a scroll offset, a fold set — is applied when the file's content
- *       lands ({@link Workbench#onDidOpenDocument}), never when the panel is built. A caret restored into a
- *       document that is still empty clamps to zero, and the symptom is a caret that looks like it was
- *       never saved.</li>
- *   <li><b>Tree expansion</b> waits for listings. A folder cannot be expanded before its parent's listing
- *       reveals it exists, so {@link #tick()} re-attempts what is left each frame and gives up only once a
- *       whole pass makes no progress and nothing is still in flight.</li>
- * </ul>
- *
- * <p>Restoring the dock does <em>not</em> need reopening the files bolted on: a leaf's
- * {@code DockPanelRef} already carries the path, and the workbench's panel factory reads a file it has not
- * read yet. Storing an open-file list beside the layout would be a second copy of the same fact, and the
- * two would disagree the first time a tab was closed while a restore was pending.</p>
+ * <p>A session record only ever goes to one place - a config file on this machine - so making it generic
+ * over {@code DynamicOps} would push a type parameter through the workbench for a second format nobody
+ * would use. The nested dock layout is still produced by the generic codec and embedded whole.</p>
  */
 public final class WorkbenchSession {
 

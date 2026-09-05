@@ -38,29 +38,34 @@ import com.crystalgui.workbench.toolwindow.ToolWindowKind;
 import com.crystalgui.workbench.toolwindow.ToolWindowManager;
 
 /**
- * <b>What an extension is written against</b> — the engine's surface, without the engine's class.
+ * <b>What an extension is written against</b> - the workbench's surface, without the workbench's class.
  *
- * <p>{@code Workbench} implements it, and everything outside {@code com.crystalgui.workbench} names
- * this instead: the applications in {@code app/}, the language stack's Run shell, a mod's own panel.
- * {@code LayeringTest} enforces it, which is the whole reason this is an interface rather than the
- * class being handed over — an engine that can be named can be reached into, and eleven of these
- * methods are all {@code language/} has ever needed.</p>
+ * <p>Everything outside {@code com.crystalgui.workbench} names this: an application, the language
+ * stack's Run shell, a mod's own panel. It is what {@link WorkbenchExtension#activate} is handed, and it
+ * is the whole API a feature needs.</p>
  *
- * <h3>Measured, not designed</h3>
+ * <pre>{@code
+ * public Disposable activate(WorkbenchContext workbench) {
+ *     Disposable panel = workbench.registerToolWindow(ToolWindowKind.of("mymod:panel", "My Panel")
+ *             .view(ctx -> myView).openByDefault());
+ *     Disposable kind  = workbench.kinds().register(MY_FILE_TYPE);
+ *     workbench.onDidOpenDocument().connect(path -> ...);
+ *     return () -> { kind.dispose(); panel.dispose(); };
+ * }
+ * }</pre>
  *
- * <p>The surface is the union of what the outside actually calls today: seventeen methods from
- * {@code app/}, eleven from {@code language/}, eight from the harness and three from the 1.7.10 loader.
- * Nothing was added on the grounds that an extension might want it. What is deliberately <em>absent</em>
- * is as informative: no {@code getStyleEngine}, no direct dock-tree surgery, no way to ask which host
- * this is.</p>
+ * <p>The main groups: the workspace and its {@link #projectListing()}; documents, tabs and
+ * {@link #openFile}; the {@link #dock()} and {@link #registerToolWindow}; the {@link #statusBar()};
+ * {@link #kinds()} for file types; {@link #registerSessionSlice} for anything to remember between runs;
+ * and settings resolution, since it extends {@code SettingsScope}.</p>
  *
- * <h3>Names are today's, on purpose</h3>
+ * <h3>An interface, so an extension cannot reach past it</h3>
  *
- * <p>It is {@code toolWindowManager()} rather than the narrower {@code toolWindows()} facade the
- * plan calls for, and there is no {@code statusBar()} because a status bar is still a process-wide
- * static. Both are known and both are somebody else's step; declaring the target shape now would mean
- * two spellings of one thing for as long as it took to get there, which is the drift this interface
- * exists to prevent.</p>
+ * <p>{@code Workbench} implements this and {@code LayeringTest} forbids naming the class from outside
+ * the package - an engine that can be named can be reached into. The surface was measured from what the
+ * outside actually calls rather than designed: nothing is here because an extension <em>might</em> want
+ * it. What is absent is as informative as what is present - no style engine, no dock-tree surgery, no
+ * way to ask which host this is.</p>
  */
 public interface WorkbenchContext extends SettingsScope {
 

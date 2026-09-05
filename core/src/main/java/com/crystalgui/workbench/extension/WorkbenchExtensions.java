@@ -14,44 +14,38 @@ import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.workbench.WorkbenchContext;
 
 /**
- * Where a {@link WorkbenchExtension} makes itself available — process-wide, like {@code ContentProviders}.
+ * <b>Where every {@link WorkbenchExtension} on the classpath is found</b> - process-wide, and read by
+ * each workbench as it is built.
  *
- * <p>Contributing is how a module says <em>this exists on this host</em>; it is not what turns it on.
- * An application's manifest names the ids it wants and a workbench activates those.</p>
+ * <p>You rarely call this directly. Ship a services entry and your extension is discovered; name its id
+ * in an {@code ApplicationKind} and that application activates it. This class is what joins the two.</p>
  *
- * <h3>They are DISCOVERED, not listed</h3>
+ * <pre>{@code
+ * WorkbenchExtensions.all();               // everything this jar set offers
+ * WorkbenchExtensions.byId("crystalgui:problems");
+ * }</pre>
  *
- * <p>Every {@code WorkbenchExtension} on the classpath is found through {@link ServiceLoader}, so being
- * available is a fact about the jars present rather than about which module remembered to make a call.
- * {@link #bootstrap()} used to be a method naming what {@code core/} ships, which had two costs and the
- * second is the one that matters: it could not reach a layer above it — the shader graph lives in
- * {@code app/}, so <em>an application had to contribute it</em>, and a mod's extension could never be
- * in that list at all because the list is in code it does not own.</p>
+ * <h3>Available is not enabled</h3>
  *
- * <p>{@link #contribute} stays for what a service cannot serve: an extension built at run time, from
- * something only the running process knows. <b>Nothing in this repository uses it any more.</b> The
- * language stack was the last caller, on the argument that whether the Run shell is available is a
- * question about an engine BAND rather than about a jar — which does not distinguish the two, because
- * the band is asked at {@code activate} and answers a no-op handle when no runtime is present. Kept for a
- * mod that genuinely builds one at run time.</p>
+ * <p>Being on the classpath makes a feature <em>available</em>; a manifest naming its id turns it
+ * <em>on</em>. {@link #activate(WorkbenchContext, List)} takes that list, so two applications on one
+ * desktop enable different sets - which is what makes a second, differently-shaped product possible
+ * without the same panels baked into it. A null list means everything contributed, and that is not a
+ * transitional default: it is what {@code new Workbench(workspace)} still means for a test or a scene
+ * with no application around it.</p>
  *
- * <h3>A manifest names what it wants; a bare workbench takes everything</h3>
+ * <h3>Nothing is fatal</h3>
  *
- * <p>{@link #activate(WorkbenchContext, List)} takes the ids an {@code ApplicationKind} declared, so two
- * applications on one desktop enable different sets — which is what makes a second editor-shaped product
- * possible without the same four panels baked into it. A null list means everything contributed, and
- * that is not a transitional default: it is what {@code new Workbench(workspace)} still means for a test
- * or a scene with no application around it.</p>
+ * <p>An id nothing ships is a logged absence, so a manifest can name a feature that is simply not
+ * present on some hosts - which is how {@code crystalgui:scripting} behaves where there is no engine
+ * band. An extension that throws while activating costs its own feature and nothing else; the workbench
+ * still comes up.</p>
  *
- * <p>What discovery fixed first was the question of <em>which host remembered what</em>: the harness
- * registered the Notes kind and the 1.7.10 loader did not, so a file type shipped in this repository
- * opened in one of them and not the other.</p>
+ * <h3>{@link #contribute} is for what a service cannot serve</h3>
  *
- * <h3>An id nothing contributed is a logged absence, never an error</h3>
- *
- * <p>The same three-tier degradation the language stack already follows. A host with no engine band
- * lists {@code crystalgui:scripting} and gets no Run panel, and that is a fact about the deployment
- * rather than a fault in it.</p>
+ * <p>An extension built at run time, from something only the running process knows. Nothing in this
+ * repository needs it today. Two extensions claiming one id is a packaging mistake and is said out
+ * loud: the second is ignored rather than silently replacing the first.</p>
  */
 public final class WorkbenchExtensions {
 

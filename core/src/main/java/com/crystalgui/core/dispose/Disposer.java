@@ -18,27 +18,34 @@ import java.util.function.Consumer;
 import javax.annotation.Nullable;
 
 /**
- * The ownership tree — a port of IntelliJ's {@code Disposer}.
+ * <b>The ownership tree</b> - register a resource against a parent and it is released when the parent is.
+ *
+ * <p>A port of IntelliJ's {@code Disposer}, and the answer to "who frees this". Use it whenever
+ * something's lifetime is <em>contained</em> by something else's: a panel's subscriptions, a window's
+ * services, an application's workbench.</p>
+ *
+ * <pre>{@code
+ * Disposer.register(parent, child);   // child goes when parent does
+ * Disposer.dispose(parent);           // children first, in reverse order, then parent
+ * }</pre>
  *
  * <h3>The one rule</h3>
  *
- * <p>Everything registers against a parent, and disposing a parent releases its children <b>first, in
- * reverse registration order</b>, before releasing the parent itself. Reverse order is not tidiness: a
- * child registered later may have been built <em>from</em> an earlier one, so releasing forwards frees
- * a dependency out from under its dependent. It is the same argument {@code CompositeEdit} makes about
- * undoing backwards, and the same one {@code CgGraphicsLifecycle} makes about VAOs before VBOs.</p>
+ * <p>Disposing a parent releases its children <b>first, in reverse registration order</b>. Reverse order
+ * is not tidiness: a child registered later may have been built <em>from</em> an earlier one, so
+ * releasing forwards frees a dependency out from under its dependent. Same argument a composite edit
+ * makes about undoing backwards, and the graphics lifecycle makes about VAOs before VBOs.</p>
  *
  * <h3>Identity, not equality</h3>
  *
- * <p>The maps are {@link IdentityHashMap}. A disposable is a <em>thing</em>, not a value, and two
- * equal-but-distinct objects own different resources. Using {@code equals} here would let one release
- * another's memory and leave its own — which is exactly the class of bug this exists to remove.</p>
+ * <p>The maps are identity-based. A disposable is a <em>thing</em>, not a value, and two equal-but-distinct
+ * objects own different resources - using {@code equals} would let one release another's memory and
+ * leave its own.</p>
  *
  * <h3>Iterative, not recursive</h3>
  *
- * <p>The walk is explicit rather than recursive because a disposal tree mirrors a widget tree, and a
- * deep UI is thousands of levels in the pathological case. A {@code StackOverflowError} during teardown
- * is unrecoverable and leaves half the graph freed.</p>
+ * <p>The walk is explicit because a disposal tree mirrors a widget tree, and a {@code StackOverflowError}
+ * during teardown is unrecoverable: it leaves half the graph freed.</p>
  *
  * @see Disposable for what this is for and, more importantly, what it is not
  */
