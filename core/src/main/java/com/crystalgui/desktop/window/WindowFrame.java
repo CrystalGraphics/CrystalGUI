@@ -1078,6 +1078,30 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
         return toolWindow;
     }
 
+    /**
+     * The window this one is <b>represented by</b> on a taskbar — itself, or the owner a tool window
+     * belongs to.
+     *
+     * <p>A tool window has no taskbar entry of its own, which is the whole of what {@link #isToolWindow()}
+     * means. So while one is active there is nothing for the strip to light, and the application it
+     * belongs to reads as unfocused: click into a floating Run panel and the Crystal Editor's entry goes
+     * dark, with the panel plainly in front. It belongs to that window and the strip has to say so.</p>
+     *
+     * <p>The relation is {@link #ownerWindow()}, walked to the first window that is a taskbar citizen —
+     * a tool window may be owned by a tool window. A tool window with no owner answers itself, which is
+     * honest: nothing represents it, so nothing lights up.</p>
+     *
+     * <p>Windows does the same thing for {@code WS_EX_TOOLWINDOW}, and macOS for a panel — activating one
+     * activates its application.</p>
+     */
+    public WindowFrame taskbarSubject() {
+        WindowFrame walk = this;
+        // BOUNDED BY THE CHAIN ITSELF: setOwnerWindow refuses a cycle, so this terminates on the relation
+        // rather than on a counter.
+        while (walk.isToolWindow() && walk.ownerWindow != null) walk = walk.ownerWindow;
+        return walk;
+    }
+
     /** @see #isToolWindow() */
     public WindowFrame setToolWindow(boolean nowToolWindow) {
         if (toolWindow == nowToolWindow) return this;

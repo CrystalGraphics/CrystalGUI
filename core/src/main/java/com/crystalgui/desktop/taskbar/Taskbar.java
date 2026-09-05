@@ -307,7 +307,11 @@ public class Taskbar extends UIElement {
             else detach.run();
         }
 
-        WindowFrame active = desktop.activeWindow();
+        // THE WINDOW THE ACTIVE ONE IS REPRESENTED BY, which for a tool window is its owner: a tool
+        // window has no entry of its own, so comparing against it directly lights nothing and the
+        // application the panel belongs to reads as unfocused while its own panel is in front.
+        WindowFrame focused = desktop.activeWindow();
+        WindowFrame active = focused == null ? null : focused.taskbarSubject();
         int index = 0;
         for (WindowFrame frame : live) {
             // BACK BEFORE IT FINISHED LEAVING. Dropped now rather than revived: the collapse is 150ms and
