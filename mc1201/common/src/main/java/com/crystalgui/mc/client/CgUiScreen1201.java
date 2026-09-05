@@ -177,11 +177,16 @@ public final class CgUiScreen1201 extends Screen {
         desktop().activate(editorWindow);
     }
 
-    /** Device pixels per logical pixel: the player's GUI Scale, so the desktop matches the rest of the game. */
+    /**
+     * Device pixels per logical pixel, and NOT the player's GUI Scale.
+     *
+     * <p>It was that, and GUI Scale is the wrong input: it sizes 16px widgets and a bitmap font, so a
+     * player who wants a readable inventory gets a desktop scaled to match and the two cannot both be
+     * right. It was also only ever read once, at {@code DesktopHost} construction, so it never followed
+     * a change of the setting either.</p>
+     */
     private static float uiScale() {
-        Minecraft mc = Minecraft.getInstance();
-        if (mc == null || mc.getWindow() == null) return 2f;
-        return (float) mc.getWindow().getGuiScale();
+        return HostServices.DEFAULT_UI_SCALE;
     }
 
     private static int surfaceWidth() {

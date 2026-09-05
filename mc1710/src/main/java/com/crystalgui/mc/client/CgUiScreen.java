@@ -108,12 +108,11 @@ public final class CgUiScreen extends GuiScreen {
     /**
      * The scale this host draws at.
      *
-     * <p>A HOST choice, which is why it lives here now rather than on the engine: the old engine
-     * carried a {@code DEFAULT_UI_SCALE} constant because the window it lived on was the only thing
-     * a loader ever built, and the box tree takes whatever a host sets. Minecraft's own GUI scale is
-     * 2 at every default resolution and this matches it.</p>
+     * <p>Still a HOST choice — the box tree takes whatever a host sets and this one could answer
+     * something else. It defers to the seam's default so the two loaders cannot drift apart on a number
+     * every shipped stylesheet was measured against.</p>
      */
-    public static final float DEFAULT_UI_SCALE = 2f;
+    public static final float DEFAULT_UI_SCALE = HostServices.DEFAULT_UI_SCALE;
 
     /** When the last frame was presented, for the delta the engine's motion runs on. */
     private static long lastFrameNanos;
