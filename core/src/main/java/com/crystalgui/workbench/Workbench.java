@@ -849,6 +849,10 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // nothing at all. Nothing failed, and the explorer simply never heard about another client's
         // create, delete or rename outside the files it happened to have open.
         lifetime.add(projectListing.onDidChangeProjects().connect(explorerBinding::watchProjectRoots));
+        // A NEW WIRE IS A NEW ANSWER. The listing latches after it has been answered once, so without
+        // this a reconnect would keep the previous server's projects for the life of the screen -- the
+        // standing rule that a one-shot ask keys its latch on the CONNECTION rather than on a boolean.
+        lifetime.add(workspace.onDidReconnect.connect(projectListing::markProjectsStale));
         fileDecorations.addProvider(externalChanges);
 
         // A RECONNECT INVALIDATES EVERYTHING AT ONCE, and for a different reason than a change does --
@@ -1227,11 +1231,17 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      */
     @Override
     public Disposable registerToolWindow(ToolWindowKind kind) {
+        // REASSIGNED, and it has to be: `DockPanelDescriptor` is half immutable builder and half
+        // mutable one -- `icon` and `anchor` answer a NEW descriptor while `region` and `side` mutate and
+        // return `this`. Written as four bare statements, the two that copy were discarded, so every
+        // panel declared through a ToolWindowKind registered with no icon and no anchor while its
+        // placement worked perfectly. On screen that is a rail of blank buttons beside the Run panel's
+        // correct one -- which chains its own descriptor and was therefore the only one that survived.
         DockPanelDescriptor descriptor = DockPanelDescriptor.singleton(kind.id(), kind.displayName());
-        if (kind.icon() != null) descriptor.icon(kind.icon());
-        if (kind.region() != null) descriptor.region(kind.region());
-        if (kind.side() != null) descriptor.side(kind.side());
-        if (kind.anchor() != null) descriptor.anchor(kind.anchor());
+        if (kind.icon() != null) descriptor = descriptor.icon(kind.icon());
+        if (kind.region() != null) descriptor = descriptor.region(kind.region());
+        if (kind.side() != null) descriptor = descriptor.side(kind.side());
+        if (kind.anchor() != null) descriptor = descriptor.anchor(kind.anchor());
 
         for (ToolWindowKind.View view : kind.views()) {
             toolWindowManager.viewContainers().addView(kind.id(), view.viewId(), view.title(),
@@ -2015,8 +2025,9 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // because the read answers on the client's thread. @see #onProjectIndexFilled
         projectSources.announceProjectSourcesMoved();
         // THE PROJECT LISTING IS ASKED FOR PER FRAME, and the latch is the SOURCE's rather than a
-        // panel's -- which is what let the explorer leave. It looks like a one-shot dressed as a loop and
-        // is really a RETRY: a client's window id is not valid until its session has opened, and the
+        // panel's -- which is what let the explorer leave, and which for a release was an intention
+        // rather than a fact: nothing latched, so this line put a request on the wire every frame for
+        // the life of the screen. It looks like a one-shot dressed as a loop and is really a RETRY: a client's window id is not valid until its session has opened, and the
         // server discards a packet addressed to another window, so a call made too early is thrown away
         // with no error at all. Moving it off the frame needs a session-opened announcement, which is
         // W3b's territory rather than this one's.
