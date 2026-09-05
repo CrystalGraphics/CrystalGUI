@@ -829,25 +829,39 @@ bring-up, and it is available as a flag whenever the noise matters.
 
 **Goal**: nine real services. `CgPlatform.register` on 1.20.x answers every question mc1710 answers.
 
-**Contents**
+**Contents** — **SHIPPED 2026-09-05**
 1. `InputService1201 implements CgInputService` — modifiers from live key state, `isKeyDown` /
-   `isMouseDown` through `InputConstants`, `howManyMouseButtons()` as a constant, and the clipboard
-   through `Minecraft.keyboardHandler.getClipboard()/setClipboard(...)` **[verify]**. Translation is
-   L2's; wire the methods here and delegate.
-2. `SoundService1201 implements CgSoundService` — the UI click, through
-   `Minecraft.getSoundManager().play(...)` **[verify]**.
-3. `PlatformService1201` returns both, still lazily and still interface-typed (§1.3's rule).
-4. **Install `Blaze3DStateProvider`** at registration (§3.6).
-5. **Wire `onResize` and `onFrameRendered`** (§1.3, §3.6).
+   `isMouseDown` through `InputConstants` / `glfwGetMouseButton`, `howManyMouseButtons()` a constant
+   (GLFW has no runtime query), clipboard through `Minecraft.keyboardHandler`. All verified against
+   `research_repos/mc1201_sources/`.
+2. `SoundService1201 implements CgSoundService` — `SimpleSoundInstance.forUI` through
+   `BuiltInRegistries.SOUND_EVENT`, swallowing a bad id like `SoundService1710` does.
+3. `PlatformService1201` returns both, lazily and interface-typed (§1.3's rule).
+4. **`CgGlfwKeyCodes` moved here from L2**, because a translation service that is knowingly wrong is
+   worse than none — L1 could not ship a correct `InputService1201` without it. **It went in
+   `platform`, not `mc1201/common`**: `CgKeyCodes`, `CgMouseCodes` and `CgModifiers` are already there,
+   `platform` has a test source set and `mc1201/common` does not, and writing GLFW's values as literals
+   rather than importing `org.lwjgl.glfw.GLFW` keeps `platform` free of LWJGL. **L2 is now the test.**
+5. `FrameHooks1201.endFrame()`, called by all three loaders after `onTransparentPass` — `tickFrame()`
+   plus a **polled** resize check, since 1.20.1 Forge has no window-resize event and polling two ints
+   beats a mixin per loader. Neither had any caller before.
 
-**Accept**: `:mc1201:*:compileJava` green; a `runClient` that boots and logs the bundle registering.
-Nothing visual yet.
+> **`Blaze3DStateProvider` is NOT reinstated, and the reason in §3.6 was wrong.** That section said the
+> shadow "will elide calls Blaze3D has changed underneath it" without a provider. It will not:
+> `CgGlGetProvider` — the default — reads every domain **from the driver**, which already reflects
+> whatever Blaze3D did. It is correct and slow. A Blaze3D provider is a *performance* optimisation that
+> reads `GlStateManager`'s own tracked state instead, and on 1.20.x that state is private, so it needs
+> reflection (as `AngelicaStateProvider` does). Not worth writing before anything renders. Revisit when
+> there is a frame time to measure.
+
+**Accept**: `:CrystalGraphics:mc1201:*:compileJava` green — met. A `runClient` boot check waits for L3,
+which is the first milestone with anything to look at.
 
 **Hazards**: the eager-construction rule — every field stays interface-typed and lazily built, or a
 dedicated server dies at class load with a `GLCapabilities` field descriptor. `serverSmoke`'s
 1201 equivalent (L7) is what actually catches a regression here; until then, read the diff.
 
-**Size**: ~250 lines.
+**Size**: ~370 lines.
 
 ---
 
@@ -855,24 +869,32 @@ dedicated server dies at class load with a `GLCapabilities` field descriptor. `s
 
 **Goal**: a GLFW key event becomes the right `CgSystemInput.Keyboard.Event`, provably.
 
-**Contents**
-1. `CgGlfwKeyCodes` — the `GLFW_KEY_* ↔ CgKeyCodes.KEY_*` table, both directions (§3.2).
-2. `InputService1201.translateKeyboardCodes` / `isKeyDown` over it.
-3. `translateMouseCodes` — identity, **[verify]**, with `howManyMouseButtons()` returning a constant.
-4. `getCurrentModifiers()` matching `CgModifiers`.
-5. A test in `headlessTest`: round-trip every mapped key; assert a hand-picked sample against literal
-   expected values (`GLFW_KEY_A → 0x1E`, `GLFW_KEY_ESCAPE → 0x01`, `GLFW_KEY_LEFT_CONTROL → 0x1D`);
-   assert every `CgKeyCodes` constant is either mapped or explicitly listed as unmappable.
+**Contents** — **SHIPPED 2026-09-05**. Items 1–4 moved into L1 (see there); L2 is the proof.
 
-**Accept**: the test. **This is the only milestone here with real unit coverage and it should have it** —
-the table is pure arithmetic over two int vocabularies, and a single wrong row is a key that silently
-does something else forever.
+`CgGlfwKeyCodesTest`, in `platform/src/test` — six cases, no Minecraft and no GL:
 
-**Hazards**: the unmappable set is not empty (LWJGL2 has DirectInput keys GLFW does not name); listing
-them explicitly is what stops the test degrading into "whatever the table says". The inverse map must be
-built *from* the forward map, not typed twice.
+1. **Spot checks against literals on both sides** — `GLFW_KEY_A(65) → 0x1E`, `ESCAPE(256) → 0x01`,
+   `LEFT_CONTROL(341) → 0x1D`, and five more. Asserting `CgKeyCodes.KEY_A` alone would pass against a
+   table that had renumbered both.
+2. **Digits are not off by one** — the row most likely to be wrong, because ASCII runs 0–9 and
+   DirectInput runs 1–9 then 0.
+3. **Round trip over every mapped key**, which is also the injectivity check: two GLFW keys sharing one
+   Cg value fail it.
+4. **Every `CgKeyCodes` constant is either mapped or in `UNMAPPED_CG`**, by reflection over the class.
+   This is what stops the table going stale — an unlisted, unmapped key just stops working.
+5. **Counter-control**: nothing is both mapped and declared unmappable, so the exemption list cannot be
+   grown to silence case 4.
+6. Out-of-range and unknown inputs answer `KEY_NONE` / `GLFW_KEY_UNKNOWN` rather than throwing.
 
-**Size**: ~350 lines, most of it the table.
+**Accept**: 6 tests, 0 skipped, 0 failures — met, and **mutation-checked**: changing one row
+(`65 → KEY_B`) fails three of the six (spot check, round trip, completeness). A green run here is
+evidence the table is right, not merely that it parses.
+
+**Hazards, as met**: the unmappable set is not empty — nineteen DirectInput-era constants (Japanese IME,
+OEM, `KEY_NONE`) have no GLFW key. The inverse is built *from* the forward pairs in a static block, so it
+cannot be typed wrong separately.
+
+**Size**: ~130 lines of test.
 
 ---
 
