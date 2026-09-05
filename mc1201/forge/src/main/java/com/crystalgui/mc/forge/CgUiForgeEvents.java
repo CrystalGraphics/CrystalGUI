@@ -11,6 +11,7 @@ import net.minecraftforge.client.event.RenderGuiOverlayEvent;
 import net.minecraftforge.client.event.ScreenEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
+import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -45,6 +46,11 @@ public final class CgUiForgeEvents {
         @SubscribeEvent
         public static void onServerStarting(ServerStartingEvent event) {
             Lifecycle1201.serverStarting(event.getServer());
+        }
+
+        @SubscribeEvent
+        public static void onServerStarted(ServerStartedEvent event) {
+            Lifecycle1201.serverStarted(event.getServer());
         }
 
         @SubscribeEvent

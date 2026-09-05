@@ -1,3 +1,5 @@
+import org.gradle.process.CommandLineArgumentProvider
+import java.io.File
 import xyz.wagyourtail.jvmdg.gradle.task.DowngradeJar
 
 plugins {
@@ -78,10 +80,14 @@ cgbuildlogic.configureShadowJarBundling(project)
 
 // A dev run must BUILD what mods{} makes visible.
 //
-// `mods { sourceSet(project(":mc1201:common")...) }` puts those classes on the run classpath, and that
-// is all it does -- it creates no task dependency. `compileOnly`/`runtimeOnly` create none either that
-// ModDevGradle honours. So a run can launch against a source set that was never compiled, and the
-// symptom is a NoClassDefFoundError for a class that plainly exists on disk:
+// `mods { sourceSet(project(":core")...) }` writes the source set's output DIRECTORY into
+// -Dfml.modFolders and does nothing else -- it adds no task dependency, and neither compileOnly nor
+// runtimeOnly adds one ModDevGradle honours. Verified: with this block removed, neither :core:classes
+// nor :mc1201:common:classes appears in `prepareClientRun --dry-run`.
+//
+// prepareClientRun is the task the IDE runs before launching, so an IDE launch pointed at a directory
+// nothing had compiled into. The symptom is a NoClassDefFoundError for a class that plainly exists on
+// disk, at a call site that plainly compiles:
 //
 //     NoClassDefFoundError: com/crystalgui/mc/platform/Lifecycle1201
 //         at com.crystalgui.mc.forge.CrystalGUI1201Forge.<init>
@@ -108,3 +114,120 @@ val downgradeShadowJar = tasks.register<DowngradeJar>("downgradeShadowJar") {
 }
 
 tasks.named("assemble") { dependsOn(downgradeShadowJar) }
+
+/**
+ * A server run task's game directory.
+ *
+ * ModDevGradle exposes `gameDirectory`. Loom exposes nothing usable: it sets `workingDir` too late for a
+ * doFirst to read, so `workingDir` is still the PROJECT directory there -- which is where an earlier
+ * version wrote eula.txt and server.properties while the server read `runs/server/eula.txt` and quit
+ * with "You need to agree to the EULA", having ignored both files.
+ *
+ * So the fallback is the CONVENTION all three loaders declare rather than a guess: forge and neoforge
+ * set gameDirectory to runs/server, fabric sets runDir to the same. If one ever diverges the EULA guard
+ * names the path it looked at, so it fails visibly rather than writing into the void.
+ */
+fun gameDirOf(task: JavaExec): File = runCatching {
+    (task.javaClass.getMethod("getGameDirectory").invoke(task) as DirectoryProperty).get().asFile
+}.getOrNull() ?: task.project.file("runs/server")
+
+// ── Dedicated-server smoke ────────────────────────────────────────────────────────────────────────
+//
+// Wired to `runServer` rather than being its own JavaExec: reproducing that task's classpath, JVM args
+// and working directory is a copy that goes stale, and the run has to be the real one or it proves
+// nothing. The task name is read out of the start parameters because a Gradle PROPERTY cannot be set by
+// a task dependency -- so `serverSmoke` and `runServer -PcgServerSmoke` are the same run, spelled twice.
+val serverSmokeRequested = gradle.startParameter.taskNames.any {
+    it == "serverSmoke" || it.endsWith(":serverSmoke")
+}
+val serverSmokeReport = layout.buildDirectory.file("serverSmoke/result.txt")
+val classLoadLog = layout.buildDirectory.file("serverSmoke/classload.log")
+val acceptEula = providers.gradleProperty("cgAcceptEula").isPresent
+val smokePort = providers.gradleProperty("cgSmokePort").orNull ?: "25599"
+
+// withType, not named: this plugin is applied BEFORE the loader plugin that creates runServer.
+tasks.withType<JavaExec>().matching { it.name == "runServer" }.configureEach {
+    if (!serverSmokeRequested && !providers.gradleProperty("cgServerSmoke").isPresent) return@configureEach
+
+    val exec = this
+
+    systemProperty("crystalgui.server.smoke", "true")
+    systemProperty("crystalgui.server.smoke.report", serverSmokeReport.get().asFile.absolutePath)
+
+    // The dedicated server otherwise opens a Swing console; a check that needs a window closed is not a
+    // check a pipeline can run. A PROVIDER, not args(): ModDevGradle passes the real program arguments
+    // through one (the @argfile whose first line is the main class), and JavaExec emits getArgs() BEFORE
+    // providers -- so args("nogui") became argv[0] and devlaunch read it as the main class to run.
+    argumentProviders.add(CommandLineArgumentProvider { listOf("nogui") })
+
+    // ASKING THE JVM, because reflection cannot ask here. findLoadedClass is protected, and the mod runs
+    // in FML's named module `crystalgui` -- so --add-opens ...=ALL-UNNAMED cannot reach it, and the module
+    // does not exist at JVM start for a static one to name. Left reflective, the "no client-only class
+    // loaded" assertion cannot run and passes VACUOUSLY, which is the failure its own javadoc warns about.
+    // -Xlog needs no access to anything and is the JVM's own record of every class it defined.
+    jvmArgs("-Xlog:class+load=info:file=" + classLoadLog.get().asFile.absolutePath)
+    systemProperty("crystalgui.server.smoke.classlog", classLoadLog.get().asFile.absolutePath)
+
+    // The code source is a union: URL under FML, so the client package cannot be enumerated from it.
+    // The build knows where those classes are, so it says so.
+    systemProperty("crystalgui.server.smoke.classdir",
+            project(":mc1201:common").extensions.getByType<SourceSetContainer>()["main"]
+                    .output.classesDirs.asPath)
+
+    doFirst {
+        // Deleted BEFORE the run, so a stale report from a previous run cannot pass for this one.
+        serverSmokeReport.get().asFile.delete()
+        classLoadLog.get().asFile.also { it.parentFile.mkdirs(); it.delete() }
+
+        val runDir = gameDirOf(exec)
+        runDir.mkdirs()
+
+        // A PORT OF ITS OWN. On 1.7.10 this check's first run caught it about itself: 25565 was in use,
+        // the bind failed, the started event never fired so not one assertion ran, and the JVM exited 0
+        // -- BUILD SUCCESSFUL having checked nothing. 1.20.x parses no --port, so it goes in the file.
+        val properties = File(runDir, "server.properties")
+        val lines = if (properties.isFile) properties.readLines() else emptyList()
+        properties.writeText(
+            (lines.filterNot { it.startsWith("server-port=") } + "server-port=$smokePort")
+                .joinToString(System.lineSeparator(), postfix = System.lineSeparator()))
+
+        // Accepting Mojang's EULA is the developer's to do, not the build's. Detected rather than
+        // written, so the task never agrees to a licence on someone's behalf.
+        val eula = File(runDir, "eula.txt")
+        val accepted = eula.isFile && eula.readLines().any { it.replace(" ", "") == "eula=true" }
+        if (!accepted) {
+            if (!acceptEula) {
+                throw GradleException(
+                    "The dedicated server needs Mojang's EULA accepted before it will start.\n" +
+                        "Re-run with -PcgAcceptEula to write eula=true to " + eula.absolutePath + ",\n" +
+                        "or write it yourself. https://aka.ms/MinecraftEULA")
+            }
+            eula.writeText("eula=true" + System.lineSeparator())
+        }
+    }
+}
+
+tasks.register("serverSmoke") {
+    group = "crystalgui"
+    description = "Boots a dedicated server, asserts the server-side stack came up, and stops it."
+    dependsOn(tasks.named("runServer"))
+    outputs.upToDateWhen { false }
+
+    // THE HALF THAT MAKES IT SOUND. The mod halts(1) when a check fails, which covers "ran and failed";
+    // nothing covers "never ran", and on 1.7.10 that is the case that actually happened first. An absent
+    // report is a failure with a message, never a pass.
+    doLast {
+        val file = serverSmokeReport.get().asFile
+        if (!file.isFile) {
+            throw GradleException(
+                "The dedicated server produced no smoke report at " + file.absolutePath + ".\n" +
+                    "The server never reached its started event, so NO check ran -- this is not a pass.\n" +
+                    "Look above for the reason: a failed port bind, a mod refusing to load, or a crash\n" +
+                    "during startup. Use -PcgSmokePort=<n> if " + smokePort + " is taken.")
+        }
+        if (file.readLines().firstOrNull()?.trim() != "PASS") {
+            throw GradleException("Dedicated-server smoke FAILED:" + System.lineSeparator() + file.readText())
+        }
+        logger.lifecycle(file.readText())
+    }
+}

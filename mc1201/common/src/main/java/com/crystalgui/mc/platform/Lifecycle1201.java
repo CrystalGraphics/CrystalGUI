@@ -12,6 +12,7 @@ import com.crystalgui.mc.example.MachineExample1201;
 import com.crystalgui.mc.example.MachineExampleClient1201;
 import com.crystalgui.mc.client.CgUiKeybinds1201;
 import com.crystalgui.mc.net.Connections1201;
+import com.crystalgui.mc.net.ServerSmoke1201;
 import com.crystalgui.mc.net.WorkspaceHost1201;
 import com.crystalgui.net.wire.CgNetworkChannel;
 
@@ -59,6 +60,14 @@ public final class Lifecycle1201 {
     public static void serverStarting(MinecraftServer server) {
         WorkspaceHost1201.setServer(server);
         WorkspaceHost1201.register();
+    }
+
+    /**
+     * The server is genuinely up. Late enough that a mod which failed to load has already taken the
+     * process down, which is why the smoke check runs here rather than at {@link #serverStarting}.
+     */
+    public static void serverStarted(MinecraftServer server) {
+        if (ServerSmoke1201.enabled()) ServerSmoke1201.run(server);
     }
 
     public static void serverStopping() {

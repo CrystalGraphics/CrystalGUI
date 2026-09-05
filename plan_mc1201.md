@@ -698,6 +698,27 @@ producing task through an attribute override. Copy both lines.
 `loom.mods { sourceSet(crossProject) }` — Loom 1.16.2 tries to apply `fabric-loom-companion` to the
 cross-project and fails for non-Loom projects.
 
+**And a third declaration is needed, which the standing rule does not mention: the run must BUILD what
+`mods{}` points at.** `mods { sourceSet(…) }` writes the source set's output *directory* into
+`-Dfml.modFolders` and does nothing else — it adds no task dependency, and neither `compileOnly` nor
+`runtimeOnly` adds one ModDevGradle honours. Measured on `:mc1201:forge`: with the `dependsOn` in
+`cg-mc1201-loader.gradle.kts` removed, neither `:core:classes` nor `:mc1201:common:classes` appears in
+`prepareClientRun --dry-run`; with it, both do. **`prepareClientRun` is the task the IDE runs before
+launching**, so an IDE launch pointed `fml.modFolders` at a directory nothing had compiled into.
+
+Every observable said the wiring was correct — the class on disk, `mods{}` naming the project, the
+resolved `fml.modFolders` (in the Gradle task *and* in IntelliJ's `workspace.xml`) listing the
+directory, the run JVM 21 so `:core`'s v65 loads. The failure is a `NoClassDefFoundError` for a class
+that plainly exists, at a call site that plainly compiles:
+
+```
+NoClassDefFoundError: com/crystalgui/mc/platform/Lifecycle1201
+    at com.crystalgui.mc.forge.CrystalGUI1201Forge.<init>
+```
+
+which reads as a packaging or classloader fault rather than as a missing build step — and it only
+appears for a class added since the last full Gradle build, so it looks intermittent.
+
 ### 4.5 Heap, parallelism, configuration cache
 
 - `org.gradle.configuration-cache = false` — already set, mandatory, ModDevGradle does not support it.
@@ -1088,6 +1109,109 @@ not be instantiated" — `:language:clean` after `--stop`, not a code fault.
 assumption is tested. The Fabric IntelliJ `runClient` issue (§4.6).
 
 **Size**: ~500 lines.
+
+#### What building it turned up — **L7 PART 1 (the smoke check) 2026-09-05**
+
+`ServerSmoke1201` + the `serverSmoke` task ship; the probes remain. Four findings, three of them
+defects in things that already looked finished:
+
+1. **NeoForge had no `runServer` task at all.** Its `runs {}` declared only `client`, so the one loader
+   whose Minecraft version differs from `common`'s — the straddle §3.8.6 exists to watch — was also the
+   one that could not be booted headlessly. A server run and explicit `gameDirectory` for both runs are
+   now declared, matching forge.
+2. **The client-only list is enumerated, not written down.** 1.7.10's `NEVER_LOADED_ON_A_SERVER` records
+   its own decay in a comment — three classes added after it was written were never checked, because *a
+   guard that fails to grow reports success*. `ServerSmoke1201` reads `com.crystalgui.mc.client` off the
+   code source (directory or jar, without loading anything) and adds it to the explicit list, so a class
+   added to that package is covered the day it is written. An unreadable container is a WARN and an
+   empty list, never a silent pass.
+3. **`workingDir` is not the game directory.** ModDevGradle leaves `workingDir` at the *project root*
+   and exposes `gameDirectory`; Loom sets `workingDir` late. The first version read `workingDir` in
+   `doFirst` and wrote `eula.txt` and `server.properties` to `mc1201/forge/`. Resolved at execution
+   time via `gameDirectory` with a `workingDir` fallback.
+4. **1.20.x parses no `--port`.** 1.7.10's `MinecraftServer.main` does, which is how that task gets a
+   port of its own; here it has to be written into `server.properties` — the surviving half of the
+   lesson being that the *report file* is what separates "failed" from "never ran".
+
+**The EULA is detected, never written.** A dedicated server refuses to start without it, and accepting
+Mojang's licence is the developer's to do rather than the build's — so the task fails with the path and
+`-PcgAcceptEula` rather than agreeing on someone's behalf.
+
+#### What RUNNING it turned up — **2026-09-05**
+
+**All three PASS**, forge and fabric on MC 1.20.1 and neoforge on **1.20.4** — which is the first
+end-to-end exercise of §3.8.6's straddle, and it holds. Every one of them needed a fix first, and no two
+were the same fix.
+
+5. **The first run found the defect it was written for.** `CgPlatform` was never registered on a
+   dedicated server, because only CrystalGraphics' three loader entrypoints call `register` and none was
+   installed — CrystalGUI's mc1201 integration adds CrystalGraphics as `compileOnly` + `runtimeOnly`
+   *classes*, never as a **mod**, where 1.7.10 stages the CrystalGraphics jar into the run. Fixed
+   independently in CrystalGraphics while this was being written; the check flipped to PASS between two
+   consecutive runs with nothing changed on this side.
+6. **...and it is still true on NeoForge.** Measured: forge's server classpath carries **3**
+   CrystalGraphics jars, neoforge's carries **0**. `legacyforge` writes `runtimeOnly` into its legacy
+   classpath file and plain `moddev` does not — which is this plugin's own documented trap (*ModDevGradle
+   dev runs ignore runtimeClasspath*) firing on the loader that did not get the fix. **NeoForge is the
+   loader on MC 1.20.4**, so it is also the one §3.8.6 exists to watch, and it is currently the one that
+   cannot be booted at all.
+7. **`findLoadedClass` cannot be reached on 1.20.x, so the headline assertion was VACUOUS.** It is
+   protected, and `setAccessible` throws `InaccessibleObjectException: module java.base does not "opens
+   java.lang" to module crystalgui` — the mod runs in FML's **named module**, which
+   `--add-opens ...=ALL-UNNAMED` cannot reach and which no static `--add-opens` can name because the
+   module does not exist at JVM start. The 1.7.10 twin has none of this because it runs on Java 8. It
+   reported "7 checked" while determining **none** of them, which is the exact failure its own javadoc
+   warns about. Replaced with the JVM's own `-Xlog:class+load` record — no access required,
+   authoritative, and 22,126 classes on a real run. **Counter-controlled**: adding a class that *is*
+   loaded turns the PASS into a FAIL naming it.
+8. **`args()` on a ModDevGradle run task becomes `argv[0]`.** MDG passes the real program arguments
+   through an argument provider (an `@argfile` whose first line is the main class) and `JavaExec` emits
+   `getArgs()` *before* providers, so `args("nogui")` was read by `devlaunch.Main` as the class to run:
+   `Could not find main class or main method. Given main class: nogui`. Use an
+   `argumentProviders.add { … }`, which lands after theirs.
+9. **The GL divergence is real on FORGE and not on FABRIC — it is per loader, which nothing predicted.**
+   1.7.10's dev server reports "not installed, matching production", and so does fabric's. **Forge's
+   reports installed**: LWJGL is on its dev server classpath, so `CgPlatform.register` succeeds where
+   production takes its `NoClassDefFoundError` fallback and leaves `CgGL` null — server-side code
+   touching `CgGL` passes on forge and NPEs in production. The WARN was written expecting exactly this,
+   1.7.10 disproved it, and it turns out to be true of one loader in three. A per-loader answer is why
+   the line is a WARN that always prints rather than a check.
+10. **Loom exposes no readable game directory, and `workingDir` lies.** ModDevGradle has
+    `gameDirectory`; Loom sets `workingDir` after a `doFirst` can read it, so it still answers the
+    PROJECT directory. `eula.txt` and `server.properties` were written to `mc1201/fabric/` while the
+    server read `runs/server/eula.txt`, found `eula=false` and quit — *"You need to agree to the EULA"*,
+    from a run the build had just written an acceptance for. The fallback is now the convention all
+    three loaders declare (`runs/server`) rather than `workingDir`.
+11. **NeoForge subscribed its client listeners on a dedicated server — the defect this check exists for,
+    in our own code.** `BootstrapMethodError: Attempted to load class .../ScreenEvent for invalid dist
+    DEDICATED_SERVER`, out of `CgUiNeoForgeEvents.register`, so the mod never constructed. **A guard
+    around the call cannot fix it**: a method reference is an `invokedynamic` in the method that writes
+    it, so its parameter type resolves when that method RUNS, whatever branch it sits in. The references
+    have to live in a class a server never loads — now `ClientBus`, entered behind
+    `FMLEnvironment.dist.isClient()`. Forge's twin gets this free from `@EventBusSubscriber(Dist.CLIENT)`
+    and Fabric's from having separate entrypoints; **NeoForge subscribes by hand and was the only one
+    that had to say it**, which is exactly why nothing else noticed.
+12. **Fabric ran no CrystalGraphics registration at all**, because that mod declared only a `client`
+    entrypoint and a `ClientModInitializer` — neither runs on a dedicated server — under
+    `"environment": "client"`. Split into `CrystalGraphics1201FabricCommon` (`main`, both sides,
+    registers the platform) beside the client one, exactly as `CrystalGUI1201FabricCommon` is to
+    `CrystalGUI1201Fabric`.
+13. **...and then the platform registered and STILL read as unregistered — one class, two copies.**
+    `com.crystalgraphics.platform.CgPlatform` was inside CrystalGraphics' **mod jar** *and* on
+    CrystalGUI's fabric `runtimeClasspath` as `platform.jar`. Knot loads a mod jar's classes itself, so
+    both existed, each with its own static bundle: CrystalGraphics registered into one and CrystalGUI
+    read the other. The log said *"Fabric 1.20.1 platform registered"* one second before the check said
+    *"CgPlatform not yet registered"*, which reads as an ordering bug and is an identity one.
+    `runtimeClasspath` now excludes `com.crystalgraphics` on fabric alone — the mod supplies them, which
+    is the production shape; forge and neoforge take theirs from a classpath rather than a mod jar and
+    are untouched. **The general rule: a class that is both a mod's and the classpath's is two classes,
+    and only static state makes it visible.**
+14. **`:core:compileJava` reported UP-TO-DATE with whole packages missing from its output.**
+    `com/crystalgui/desktop/Desktop.class`, `desktop/app/Application.class` and
+    `net/protocol/ProtocolConnection.class` were absent while their sources were present and the task
+    was green, so every consumer failed with `cannot find symbol` on classes that plainly exist.
+    `--rerun` restored them. Same shape as the recorded stale `language/build/classes` trap: not a code
+    fault, and unreadable as anything but one.
 
 ---
 
