@@ -5,8 +5,11 @@
   "name": "CrystalGUI",
   "description": "UI engine library for Minecraft mods.",
   "license": "LGPL-3.0-or-later",
-  "environment": "client",
+  "environment": "*",
   "entrypoints": {
+    "main": [
+      "com.crystalgui.mc.fabric.CrystalGUI1201FabricCommon"
+    ],
     "client": [
       "com.crystalgui.mc.fabric.CrystalGUI1201Fabric"
     ]

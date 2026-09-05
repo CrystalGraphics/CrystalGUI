@@ -1004,9 +1004,21 @@ without also *delivering* it is the mirror of the 1.7.10 mixin's "cancel without
 
 **Goal**: a 1.20.1 client talks to a 1.20.1 server, and the editor opens a file from it.
 
-**Contents**
-0. **`LoaderBridge`** (§3.8.3) lands here if it has not already — the SPI in `common`, found by
-   `ServiceLoader`, with one implementation per loader. Everything below reaches its loader through it.
+**Contents** — **SHIPPED 2026-09-05**
+
+> **`LoaderBridge` was not built, and §3.8.3 was over-designed.** The SPI existed to let `common` reach
+> a loader, and once written out, L5 needed it for nothing. The transport already has a seam —
+> `CgPlatform.provide(CgNetworkChannel.SERVICE, …)`, the mechanism mc1710 uses — so a loader *provides*
+> its channel rather than being asked for it. The only other loader-specific value is the current
+> `MinecraftServer`, and that is **pushed** from the start/stop events, not pulled. A pull-style SPI
+> would have been three implementations answering one field. The engine's own rule applies: a generic
+> seam nothing generic is written against is not a seam.
+>
+> **What replaced it is the opposite shape and is better**: `Lifecycle1201` in `common` is the one class
+> a loader talks to — one method per lifecycle moment, and `bootstrap(CgNetworkChannel)` takes the one
+> thing only a loader can build. Each loader's event class is now nothing but forwards. The reason is
+> the same as `ScreenOverlay`'s: wired per loader, "what a server tick does" is written three times and
+> drifts, and the drift surfaces as a feature that works on one loader and not another.
 1. `Mc1201NetworkChannel implements CgNetworkChannel`, **per loader**, behind `LoaderBridge.channel()` —
    Forge `SimpleChannel` / NeoForge payload registrar / Fabric `C2S`+`S2C` play networking, all
    **[verify]** against each module's `build/mc-src`. `maxFrameBytes()` from `plan_wire.md`'s ~1 MB
