@@ -36,8 +36,8 @@ final class CgUiFabricEvents {
     static void registerClient() {
         NetworkChannel1201.registerClientReceiver();
 
-        KeyBindingHelper.registerKeyBinding(CgUiKeybinds1201.OPEN_EDITOR);
-        KeyBindingHelper.registerKeyBinding(CgUiKeybinds1201.OPEN_DESKTOP);
+        Lifecycle1201.bootstrapClient();
+        CgUiKeybinds1201.all().forEach(KeyBindingHelper::registerKeyBinding);
         ClientTickEvents.END_CLIENT_TICK.register(client -> Lifecycle1201.clientTick());
 
         ClientPlayConnectionEvents.JOIN.register(

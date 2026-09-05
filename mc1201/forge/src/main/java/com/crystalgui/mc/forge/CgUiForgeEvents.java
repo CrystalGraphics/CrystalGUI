@@ -29,8 +29,8 @@ public final class CgUiForgeEvents {
 
         @SubscribeEvent
         public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
-            event.register(CgUiKeybinds1201.OPEN_EDITOR);
-            event.register(CgUiKeybinds1201.OPEN_DESKTOP);
+            Lifecycle1201.bootstrapClient();
+            CgUiKeybinds1201.all().forEach(event::register);
         }
     }
 
