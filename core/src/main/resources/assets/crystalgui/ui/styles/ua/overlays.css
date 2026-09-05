@@ -95,6 +95,13 @@ tooltip {
     padding-bottom: 2px;
     margin-top: 3px;
 }
+/* NO WAIT, for a tooltip whose anchor is a small target the pointer had to be aimed at -- see
+ * Tooltip.INSTANT_CLASS. Reaching a five-pixel dot IS the question the delay exists to wait for, so
+ * waiting again just makes the answer feel broken. */
+tooltip.__instant__ {
+    tooltip-delay: 0;
+}
+
 
 /* max-width goes on the LABEL, not on the tooltip box. UIText wraps against a width it can see on
  * itself — an ancestor's max-width is not one, because a self-sizing UIText reports its full

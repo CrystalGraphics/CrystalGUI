@@ -1248,8 +1248,31 @@ radarchart::part(web) {
     height: 1px;
     width: 0;
 }
+/* Not drawn either. The ALPHA of this colour is how strongly a wedge fills; its rgb is ignored,
+ * because the hue is the axis's. Faint on purpose: the rim is drawn opaque, and the contrast between
+ * a washed fill and its own saturated outline is what stops a wedge chart reading as a pie. */
+radarchart::part(fill) {
+    height: 0;
+    width: 0;
+    background-color: var(--radar-fill, #FFFFFF6D);
+}
+/* The marker on each value vertex, and the ONE thing in a chart that can be hovered -- which is
+ * why it is an element rather than something the paint pass draws: hit testing works on boxes.
+ * SQUARE, so 50% is a circle, the same reason the slider thumb can use a percentage radius and a
+ * tab cannot. Its colour is the axis's and arrives inline; only the size and the shape are the
+ * theme's. */
+radarchart::part(point) {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+}
 radarchart::part(axis-label) {
     font-weight: bold;
+    /* THE GAP BETWEEN A LABEL AND ITS VERTEX -- Chart.js's pointLabels.padding, and it needs no Java
+     * because the placement already works off the label's OUTER box: whichever edge faces the chart
+     * sits on the vertex, so padding on that edge is the gap. Without it "WIL" touches the bottom
+     * point of the polygon it names. */
+    padding-all: 4px;
 }
 
 /* THE GLYPH GOES IN `overlay`, NOT `background` — which is what lets it have a hover chip at all.
