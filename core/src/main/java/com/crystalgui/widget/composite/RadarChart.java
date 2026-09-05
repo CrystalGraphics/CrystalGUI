@@ -140,6 +140,7 @@ public class RadarChart extends UIElement {
     /** {@code 0} means "the largest value present", which is what a sheet of attributes wants. */
     private double explicitMax;
     private int rings = 4;
+    private boolean axisGradients;
     /** What the labels were last placed against, so the hook below costs two comparisons a frame. */
     private float placedWidth = -1f;
     private float placedHeight = -1f;
@@ -221,6 +222,28 @@ public class RadarChart extends UIElement {
     /** The value the outer ring stands for. {@code 0} restores "the largest value present". */
     public RadarChart setMax(double max) {
         this.explicitMax = Math.max(0d, max);
+        return this;
+    }
+
+    /**
+     * Fades each wedge toward the centre instead of filling it flat. Off by default.
+     *
+     * <p>The ramp runs along the wedge's own bisector, from the axis's hue at zero alpha in the middle
+     * to the full fill strength at the rim — so the colour is where the DATUM is and the middle lets
+     * go. That is worth having for a reason beyond taste: at the centre every wedge converges on one
+     * point, and six saturated colours meeting there is the pinwheel a wedge chart is always about to
+     * become. Fading them out leaves the rim, which is the part that carries the reading.</p>
+     *
+     * <p>No new number. The rim end is the same {@code ::part(fill)} strength a flat fill uses and the
+     * centre end is transparent, so a theme still has exactly one dial. The two ends share their RGB
+     * and differ only in alpha, which is what keeps the ramp from passing through a muddy half-colour
+     * the way a lerp toward transparent BLACK does.</p>
+     *
+     * <p>Neighbouring wedges agree along the edge they share: each measures the same point at the same
+     * angle from its own bisector, so the two ramps meet at the same value and no seam appears.</p>
+     */
+    public RadarChart setAxisGradients(boolean gradients) {
+        this.axisGradients = gradients;
         return this;
     }
 
@@ -306,18 +329,34 @@ public class RadarChart extends UIElement {
             float rHere = radius * extent(i);
             float rThere = radius * extent(next);
 
-            ctx.triangle()
-                    .points(cx, cy,
-                            cx + (float) Math.cos(here) * rHere, cy + (float) Math.sin(here) * rHere,
-                            cx + (float) Math.cos(there) * rThere, cy + (float) Math.sin(there) * rThere)
-                    // OPAQUE HUE, then the theme's fill strength. The alpha an axis carries is ignored
-                    // on purpose: how much colour a chart lays down is the chart's decision and the
-                    // same for every axis, so it belongs in one place rather than in six.
-                    .color(scaleAlpha(axes.get(i).argb() | 0xFF000000, strength))
-                    // The RIM is the outline; the two spokes are seams against the neighbouring
-                    // wedges. Feathering those would draw a soft crack down every one of them.
-                    .silhouetteEdge(CgVectorRenderer.EDGE_P1_P2)
-                    .submit();
+            float x1 = cx + (float) Math.cos(here) * rHere;
+            float y1 = cy + (float) Math.sin(here) * rHere;
+            float x2 = cx + (float) Math.cos(there) * rThere;
+            float y2 = cy + (float) Math.sin(there) * rThere;
+
+            // OPAQUE HUE, then the theme's fill strength. The alpha an axis carries is ignored on
+            // purpose: how much colour a chart lays down is the chart's decision and the same for
+            // every axis, so it belongs in one place rather than in six.
+            int rim = scaleAlpha(axes.get(i).argb() | 0xFF000000, strength);
+
+            CgVectorRenderer.Triangle wedge = ctx.triangle().points(cx, cy, x1, y1, x2, y2);
+            // The ramp's far end is the midpoint of the RIM, which is where this wedge's bisector
+            // actually leaves it -- the rim is a chord rather than an arc, so its own two ends are
+            // nearer the centre than any arc through them would be.
+            float mx = (x1 + x2) / 2f - cx;
+            float my = (y1 + y2) / 2f - cy;
+            float lenSq = mx * mx + my * my;
+            if (axisGradients && lenSq > 0f) {
+                // `dir` carries the SCALE as well as the direction -- the axis divided by its own
+                // length -- so dividing the midpoint vector by its squared length gives t = 1 exactly
+                // at the rim. Same RGB at both ends and only the alpha ramping, so the hue holds.
+                wedge.gradient(rim & 0x00FFFFFF, rim, cx, cy, mx / lenSq, my / lenSq);
+            } else {
+                wedge.color(rim);
+            }
+            // The RIM is the outline; the two spokes are seams against the neighbouring wedges.
+            // Feathering those would draw a soft crack down every one of them.
+            wedge.silhouetteEdge(CgVectorRenderer.EDGE_P1_P2).submit();
         }
     }
 
