@@ -19,3 +19,26 @@ plugins {
     // Only breaks an IDE sync; a CLI build constructs no IDEA model. plan_mc1201.md L0.
     id("org.jetbrains.gradle.plugin.idea-ext")
 }
+
+// ── Everything a consuming mod's dev run reads, built ────────────────────────────────────────────
+//
+// A mod that consumes CrystalGUI as a composite puts these jars on its game classpath, and nothing
+// else in its build asks for them: Gradle compiles against a project's CLASSES variant, so no jar task
+// ever enters the graph, and ModDevGradle's additionalRuntimeClasspath yields jar PATHS without
+// registering the tasks that produce them. The consumer therefore runs whatever is on disk -- which
+// meant a months-old crystalgui-mc1201-common, and a platform.jar predating a fix to CgGL that crashed
+// on a source line that no longer existed.
+//
+// One task rather than a list the consumer maintains, and it lives here because only this build can
+// reach CrystalGraphics: gradle.includedBuild("CrystalGraphics") is not resolvable from a build that
+// includes US. A jar added to the consumer's classpath later is added here, not in every consumer.
+tasks.register("assembleConsumerRuntime") {
+    group = "crystalgui"
+    description = "Builds every jar a consuming mod's dev run puts on its classpath."
+
+    dependsOn(":core:jar", ":taffy:jar", ":mc1201:common:jar", ":mc1201:forge:jar")
+
+    listOf(":core:jar", ":platform:jar", ":freetype-msdfgen-harfbuzz-bindings:jar",
+           ":mc1201:common:jar", ":mc1201:forge:jar")
+        .forEach { dependsOn(gradle.includedBuild("CrystalGraphics").task(it)) }
+}
