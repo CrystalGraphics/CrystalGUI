@@ -250,6 +250,28 @@ public class Tooltip extends UIElement {
      */
     public static final String INSTANT_CLASS = "__instant__";
 
+    /**
+     * How long the pointer must rest on the anchor before this tooltip shows, in seconds.
+     *
+     * <p>The same {@code tooltip-delay} the sheets set, written at INLINE origin — so this is the
+     * easy way to say what {@link #INSTANT_CLASS} says, without a class and a rule for one tooltip.
+     * {@code setDelay(0)} shows immediately.</p>
+     *
+     * <p><b>It outranks an ordinary sheet rule</b>, which is the engine's meaning of a value a caller
+     * set on one object rather than a look a theme chose: INLINE beats both USER_AGENT and
+     * STYLESHEET. A theme that must override it anyway says {@code !important}, which is the only
+     * origin above. The reverse arrangement is not available — the user-agent sheet gives every
+     * tooltip a delay, so a setter below STYLESHEET could never fire at all.</p>
+     *
+     * <p>Clamped at zero. A negative wait is not a shorter one; it is the {@code !(delay > 0)} test
+     * in {@link #showAfterDelay} deciding it has already elapsed, which is what zero already means.</p>
+     */
+    public Tooltip setDelay(float seconds) {
+        StyleGroup.inlinePipeline(getStyle().getGeneralGroup(),
+                g -> g.tooltipDelay(Math.max(0f, seconds)));
+        return this;
+    }
+
     public static Tooltip attach(UIElement anchor, String text) {
         Objects.requireNonNull(anchor, "anchor");
         Tooltip tooltip = new Tooltip(text);
