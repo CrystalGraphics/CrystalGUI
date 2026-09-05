@@ -37,6 +37,16 @@ import com.crystalgui.net.protocol.ProtocolConnection;
 public interface HostServices {
 
     /**
+     * What a host answers {@link #uiScale()} with when it has nothing better to say.
+     *
+     * <p><b>Deliberately not the game's GUI Scale.</b> That setting sizes 16px widgets and an 8px
+     * bitmap font; a desktop carrying an editor, a taskbar and tool windows has far more on it than an
+     * inventory, so scaling the two by one number makes whichever the player did not choose for
+     * unusable. The shipped sheets are authored and measured at this.</p>
+     */
+    float DEFAULT_UI_SCALE = 2f;
+
+    /**
      * Where this host keeps private files — the desktop's arrangement, an application's session, backups.
      *
      * <p>Private, and never inside a workspace: a session record must not become part of a project
