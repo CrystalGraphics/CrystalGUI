@@ -1,0 +1,312 @@
+package com.crystalgui.mc.client;
+
+import java.io.File;
+import java.nio.file.Path;
+
+import javax.annotation.Nullable;
+
+import com.crystalgraphics.platform.gl.state.CgGlState;
+import com.crystalgraphics.api.render.CgRenderPipeline;
+import com.crystalgui.core.window.DesktopPresentation;
+import com.crystalgui.core.window.WindowState;
+import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.app.Application;
+import com.crystalgui.desktop.host.DesktopHost;
+import com.crystalgui.desktop.host.HostServices;
+import com.crystalgui.desktop.window.WindowFrame;
+import com.crystalgui.app.crystaleditor.CrystalEditor;
+import com.crystalgui.net.protocol.ProtocolConnection;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.workbench.app.WorkbenchApplication;
+
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
+
+/**
+ * The CrystalGUI desktop as a 1.20.x {@link Screen}.
+ *
+ * <p>Minecraft builds a fresh {@code Screen} on every display, so the compositor lives in statics and
+ * {@link #init()} either builds it once or reports that it is back on screen. {@link #removed()} is not
+ * a teardown: every window and every unsaved document survives a close and comes back as it was.</p>
+ */
+public final class CgUiScreen1201 extends Screen {
+
+    private static final String ROOT_CLASS = "__mc-host__";
+    private static final String EDITOR_CLASS = "__mc-editor__";
+    private static final String DESKTOP_ID = "client";
+
+    /** Fraction of the surface a first-run editor window takes. */
+    private static final float FIRST_RUN_FRACTION = 0.8f;
+
+    private static DesktopHost host;
+    private static WorkbenchApplication editor;
+    private static WindowFrame editorWindow;
+
+    /**
+     * Consumed by {@link #init()}, never merely read. {@code init()} re-runs on every window resize, so
+     * a flag left standing brings the editor forward again on the next resize -- windows the player
+     * closed reappear, which is what mc1710 shipped and was reported as uncloseable windows.
+     */
+    private static boolean showEditorOnOpen;
+
+    private static long lastFrameNanos;
+
+    public CgUiScreen1201() {
+        super(Component.literal("CrystalGUI"));
+    }
+
+    /** Opens the desktop with the editor brought forward. */
+    public static void openEditor() {
+        showEditorOnOpen = true;
+        open();
+    }
+
+    /** Opens the desktop and touches no window, so one left minimised comes back that way. */
+    public static void openDesktop() {
+        open();
+    }
+
+    private static void open() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc != null) mc.setScreen(new CgUiScreen1201());
+    }
+
+    @Nullable
+    public static UIDocument window() {
+        return host == null ? null : host.document();
+    }
+
+    @Nullable
+    public static Desktop desktop() {
+        return host == null ? null : host.desktop();
+    }
+
+    /** Seconds since the previous frame, clamped so a stall does not complete every animation at once. */
+    static float frameDelta() {
+        long now = System.nanoTime();
+        if (lastFrameNanos == 0L) {
+            lastFrameNanos = now;
+            return 0f;
+        }
+        float delta = (now - lastFrameNanos) / 1_000_000_000f;
+        lastFrameNanos = now;
+        return Math.max(0f, Math.min(delta, 0.25f));
+    }
+
+    @Override
+    protected void init() {
+        if (host == null) buildDesktop();
+        else host.shown();
+        bringEditorForward();
+    }
+
+    private void buildDesktop() {
+        host = DesktopHost.create(new Mc1201Host());
+        host.document().addClass(ROOT_CLASS);
+    }
+
+    /** The three things only this platform can answer. @see HostServices */
+    private static final class Mc1201Host implements HostServices {
+
+        @Override
+        public Path configDirectory() {
+            Minecraft mc = Minecraft.getInstance();
+            File root = mc == null ? new File(".") : mc.gameDirectory;
+            return new File(root, "config/crystalgui").toPath();
+        }
+
+        @Override
+        public float uiScale() {
+            return CgUiScreen1201.uiScale();
+        }
+
+        @Override
+        public String desktopId() {
+            return DESKTOP_ID;
+        }
+
+        @Override
+        @Nullable
+        public ProtocolConnection<Object> connection() {
+            // L5 wires this to Mc1201Connections. Null is a supported state: no server right now.
+            return null;
+        }
+    }
+
+    /**
+     * Builds the editor window on demand. Returns false when it cannot be built -- with no connection
+     * there is no workspace, and the editor refuses one. The desktop does not depend on it.
+     */
+    private boolean ensureEditorWindow() {
+        if (editorWindow != null) return true;
+        Application launched;
+        try {
+            launched = host.desktop().applications()
+                    .launch(CrystalEditor.KIND, host.workspace(), host.config());
+        } catch (RuntimeException failed) {
+            return false;
+        }
+        if (!(launched instanceof WorkbenchApplication)) return false;
+
+        editor = (WorkbenchApplication) launched;
+        editor.addClass(EDITOR_CLASS);
+        editorWindow = editor.mainWindow();
+
+        float scale = uiScale();
+        float logicalWidth = surfaceWidth() / scale;
+        float logicalHeight = surfaceHeight() / scale;
+        editorWindow.resizeTo(Math.round(logicalWidth * FIRST_RUN_FRACTION),
+                Math.round(logicalHeight * FIRST_RUN_FRACTION));
+        editorWindow.moveTo(Math.round(logicalWidth * (1f - FIRST_RUN_FRACTION) / 2f),
+                Math.round(logicalHeight * (1f - FIRST_RUN_FRACTION) / 2f));
+        return true;
+    }
+
+    private void bringEditorForward() {
+        boolean nothingOpen = desktop() != null && desktop().registry().size() == 0;
+        if (!showEditorOnOpen && !nothingOpen) return;
+        if (!ensureEditorWindow()) return;
+        if (!showEditorOnOpen) return;
+
+        showEditorOnOpen = false;
+        if (editorWindow.state() == WindowState.HIDDEN) editorWindow.show(true);
+        desktop().activate(editorWindow);
+    }
+
+    /** Device pixels per logical pixel: the player's GUI Scale, so the desktop matches the rest of the game. */
+    private static float uiScale() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc == null || mc.getWindow() == null) return 2f;
+        return (float) mc.getWindow().getGuiScale();
+    }
+
+    private static int surfaceWidth() {
+        Minecraft mc = Minecraft.getInstance();
+        return mc == null || mc.getWindow() == null ? 0 : mc.getWindow().getWidth();
+    }
+
+    private static int surfaceHeight() {
+        Minecraft mc = Minecraft.getInstance();
+        return mc == null || mc.getWindow() == null ? 0 : mc.getWindow().getHeight();
+    }
+
+    @Override
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        if (host == null) return;
+        float delta = frameDelta();
+
+        // The clock every node preview reads. Nothing else drives it here, so without this CG_TIME is
+        // permanently zero and a Time node's thumbnail renders black.
+        CgRenderPipeline.getInstance().getFrameData().timeSecs =
+                (float) (System.nanoTime() / 1_000_000_000.0);
+
+        host.frame(delta);
+
+        CgGlState.invalidateAllIfPresent();
+        try {
+            host.desktop().paint(DesktopPresentation.DESKTOP, delta, surfaceWidth(), surfaceHeight());
+        } finally {
+            // Minecraft assumes it gets its own state back; CrystalGUI's endFrame restores what IT saved.
+            CgGlState.invalidateAllIfPresent();
+        }
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        UIDocument window = window();
+        return window != null && CgUiInput1201.mouseButton(window, button, true);
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        UIDocument window = window();
+        return window != null && CgUiInput1201.mouseButton(window, button, false);
+    }
+
+    @Override
+    public void mouseMoved(double mouseX, double mouseY) {
+        UIDocument window = window();
+        if (window != null) CgUiInput1201.mouseMoved(window);
+    }
+
+    /**
+     * A drag is a move: the engine tracks the button itself through pointer capture, and reporting a
+     * press here would end the drag on its first pixel.
+     */
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        UIDocument window = window();
+        if (window == null) return false;
+        CgUiInput1201.mouseMoved(window);
+        return true;
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        UIDocument window = window();
+        return window != null && CgUiInput1201.scrolled(window, delta);
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        UIDocument window = window();
+        if (window == null) return false;
+        if (CgUiInput1201.key(window, keyCode, true)) return true;
+
+        // Escape is a cascade -- a live drag eats it, then a popover, then a modal -- so the screen
+        // closes only on one nothing wanted. shouldCloseOnEsc() is false for the same reason.
+        if (keyCode == ESCAPE_KEY) {
+            onClose();
+            return true;
+        }
+        return false;
+    }
+
+    private static final int ESCAPE_KEY = 256;
+
+    @Override
+    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
+        UIDocument window = window();
+        return window != null && CgUiInput1201.key(window, keyCode, false);
+    }
+
+    @Override
+    public boolean charTyped(char codePoint, int modifiers) {
+        UIDocument window = window();
+        return window != null && CgUiInput1201.character(window, codePoint);
+    }
+
+    /** @see #keyPressed */
+    @Override
+    public boolean shouldCloseOnEsc() {
+        return false;
+    }
+
+    /**
+     * <b>Does not pause single-player.</b> A desktop sits over the machine while the machine keeps
+     * working, and pausing also stops {@code MinecraftServer.tick} -- so the integrated server never
+     * pumps the connection and every workspace call dies at its timeout, with nothing in the log.
+     */
+    @Override
+    public boolean isPauseScreen() {
+        return false;
+    }
+
+    @Override
+    public void removed() {
+        // Off screen, not destroyed: the desktop records its arrangement and each application its
+        // session, because each went off screen. Only dispose() takes them down.
+        if (host != null) host.hidden();
+    }
+
+    /** Frees the compositor at game shutdown. Not called on close -- see {@link #removed()}. */
+    public static void disposeAll() {
+        if (editor != null) editor.dispose();
+        if (host != null) host.dispose();
+        editor = null;
+        editorWindow = null;
+        host = null;
+    }
+}

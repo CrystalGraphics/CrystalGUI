@@ -14,6 +14,7 @@ public final class CrystalGUI1201Fabric implements ClientModInitializer {
     public void onInitializeClient() {
         CgPlatformService1201.getInstance();
         CgEngineFabricEvents.register();
+        CgUiFabricEvents.register();
         CgDemoFabricEvents.register();
         LOGGER.info("[CrystalGUI] Fabric 1.20.1 platform registered");
     }

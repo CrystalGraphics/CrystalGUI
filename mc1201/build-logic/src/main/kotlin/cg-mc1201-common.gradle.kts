@@ -22,6 +22,11 @@ repositories {
 dependencies {
     // implementation — core is an internal dependency consumed by common.
     "implementation"(project(":core"))
+
+    // :core declares Taffy and JOML compileOnly, so they reach nobody transitively -- and UIElement
+    // holds a Taffy NodeId and a JOML Matrix4f as FIELDS, which resolve at class load. Without these
+    // javac reports "cannot access UIDocument" rather than a missing dependency. plan_mc1201.md 4.3.
+    "compileOnly"(project(":taffy"))
     // Mixin compileOnly — both loaders bundle it at runtime; never shade it.
     "compileOnly"("org.spongepowered:mixin:${property("mc1201.mixin")}")
     // NOTE: mixin annotationProcessor is intentionally omitted here — legacyForge configures
