@@ -15,6 +15,7 @@ import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
+import com.crystalgui.text.syntax.LanguageRegistry;
 import com.crystalgui.widget.texteditor.TextEditor;
 
 import javax.annotation.Nullable;
@@ -107,6 +108,17 @@ public final class ScriptWorkbench implements WorkbenchExtension, Closeable {
      */
     @Override
     public Disposable activate(WorkbenchContext workbench) {
+        // THE RUNTIMES ARE CONTRIBUTED BY THE LANGUAGES, so this has to make sure they have registered.
+        //
+        // Not belt-and-braces: extensions activate while a workbench is being BUILT, before anything has
+        // opened a document, so the registry's own read-triggered discovery has not run yet. Without this
+        // `ScriptRuntimes.open` answers empty, `install` answers null, and the Run panel is simply absent
+        // -- which is indistinguishable from a host with no engine band, and is the one absence this
+        // class is documented to produce legitimately.
+        //
+        // A UI-side call by construction: `.run.view` is the package that may name `com.crystalgui.ui`,
+        // so nothing headless reaches this line and no dedicated server loads a grammar through it.
+        LanguageRegistry.bootstrap();
         ScriptWorkbench installed = install(CommandRegistry.global(), workbench,
                 workbench.cacheDirectory(CACHE_DIRECTORY));
         if (installed == null) return () -> { };

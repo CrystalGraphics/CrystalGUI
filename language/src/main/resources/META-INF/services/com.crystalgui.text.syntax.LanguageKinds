@@ -1,0 +1,15 @@
+# THIS JAR KNOWS LANGUAGES. LanguageRegistry's first read finds this and switches on six grammars,
+# ECJ and Rhino -- so a host gets them by having the jar, never by remembering a call.
+#
+# It was `LanguageStack.registerAll()` in two hosts, each with a paragraph explaining why, and a third
+# host got no grammars, no ECJ and no Rhino with nothing anywhere to see: an editor that colours from
+# core's word-list lexers and does not analyse is a SUPPORTED configuration, so the absence reads as a
+# deployment rather than as a line somebody forgot.
+#
+# A host may still call registerAll() -- that is now a WARM-UP, and the class javadoc has the measurement
+# that makes it worth doing: 443ms on a Minecraft client, which belongs behind a loading screen rather
+# than on the keystroke that opens the first editor. Skipping it costs that stall and not the languages.
+#
+# ONE CLASS PER FEATURE: LanguageStack IS the service. A LanguageContribution beside it would have shared
+# its lifetime and carried the name of this class as its only real content.
+com.crystalgui.language.LanguageStack

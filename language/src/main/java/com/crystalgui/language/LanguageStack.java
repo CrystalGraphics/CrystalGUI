@@ -4,6 +4,8 @@ import com.crystalgui.language.engine.EngineHost;
 import com.crystalgui.language.grammar.TreeSitterLanguages;
 import com.crystalgui.language.java.JavaLanguage;
 import com.crystalgui.language.js.JsLanguage;
+import com.crystalgui.text.syntax.LanguageKinds;
+import com.crystalgui.text.syntax.LanguageRegistry;
 
 import java.util.concurrent.Callable;
 
@@ -22,6 +24,20 @@ import java.util.concurrent.Callable;
  *
  * <p>So a host now says <em>"turn the languages on"</em> and this decides what that means. A seventh
  * grammar or a third engine is a line here rather than a line in every host.</p>
+ *
+ * <h3>...and a host no longer says even that</h3>
+ *
+ * <p>This <b>is</b> the {@link LanguageKinds} service — one class per feature, so there is no
+ * {@code LanguageContribution} beside it whose only real content would be this class's name — and
+ * {@link LanguageRegistry#bootstrap()} finds it. Two hosts used to call {@link #registerAll()}, each with
+ * a paragraph explaining why, and a third got no grammars, no ECJ and no Rhino with nothing to see: an
+ * editor colouring from the built-in lexers is a supported configuration, so the absence reads as a
+ * deployment rather than as a call somebody forgot.</p>
+ *
+ * <p>The host call survives as a <b>warm-up</b>, which is the honest name for what it always was —
+ * see the timing section below. Skipping it now costs a stall on the first editor open rather than the
+ * languages themselves, and that is the whole change: forgetting became a performance question instead
+ * of a silent feature loss.</p>
  *
  * <h3>Everything degrades, nothing is fatal</h3>
  *
@@ -47,16 +63,26 @@ import java.util.concurrent.Callable;
  * <p>Idempotent: {@code JavaLanguage.register} returns early once an engine is open, and the grammars
  * read-and-add rather than replace.</p>
  */
-public final class LanguageStack {
+public final class LanguageStack implements LanguageKinds {
 
-    private LanguageStack() {
+    /** {@code ServiceLoader} needs a public no-argument constructor. Holds nothing; {@link #registerAll} is static. */
+    public LanguageStack() {
+    }
+
+    /** @see #registerAll() */
+    @Override
+    public void register() {
+        registerAll();
     }
 
     /**
      * Registers the grammars, then the engines, and reports whatever could not be switched on.
      *
      * <p><b>Before anything opens a document.</b> {@code LanguageRegistry} is consulted when an editor is
-     * built, so a file already open keeps whichever tokenizer it was handed.</p>
+     * built, so a file already open keeps whichever tokenizer it was handed. That is now guaranteed
+     * rather than arranged — the registry's first read runs this through {@link LanguageKinds} — so a
+     * host calling it directly is <b>warming</b> it at a moment of its own choosing, which is what the
+     * timing section on this class is about.</p>
      *
      * <p>Order between the grammars and the engines is free — each reads the existing entry and carries
      * the other's contribution over, which is what the two registries were built for. Grammars go first

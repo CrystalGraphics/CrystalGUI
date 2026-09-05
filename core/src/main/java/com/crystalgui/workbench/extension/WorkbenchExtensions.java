@@ -29,8 +29,11 @@ import com.crystalgui.workbench.WorkbenchContext;
  * in that list at all because the list is in code it does not own.</p>
  *
  * <p>{@link #contribute} stays for what a service cannot serve: an extension built at run time, from
- * something only the running process knows. The language stack uses it, because whether the Run shell
- * is available is a question about an engine BAND rather than about a jar.</p>
+ * something only the running process knows. <b>Nothing in this repository uses it any more.</b> The
+ * language stack was the last caller, on the argument that whether the Run shell is available is a
+ * question about an engine BAND rather than about a jar — which does not distinguish the two, because
+ * the band is asked at {@code activate} and answers a no-op handle when no runtime is present. Kept for a
+ * mod that genuinely builds one at run time.</p>
  *
  * <h3>Every contributed extension is activated, for now</h3>
  *

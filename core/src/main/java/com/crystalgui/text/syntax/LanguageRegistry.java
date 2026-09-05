@@ -1,14 +1,19 @@
 package com.crystalgui.text.syntax;
 
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.pattern.FilePatternMap;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.lang.LanguageServices;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.List;
+import java.util.ServiceConfigurationError;
+import java.util.ServiceLoader;
 import java.util.function.Supplier;
 
 import javax.annotation.Nullable;
@@ -251,6 +256,7 @@ public final class LanguageRegistry {
      * value. The name is what both agree on.</p>
      */
     public static synchronized Entry forLanguage(@Nullable Language language) {
+        bootstrap();
         if (language == null) return PLAIN;
         Entry entry = BY_LANGUAGE.get(language.name());
         return entry == null ? PLAIN : entry;
@@ -258,6 +264,7 @@ public final class LanguageRegistry {
 
     /** The language for a file name or path, never null. */
     public static synchronized Entry forFileName(@Nullable String fileName) {
+        bootstrap();
         Entry entry = RULES.get(fileName);
         return entry == null ? PLAIN : entry;
     }
@@ -265,11 +272,101 @@ public final class LanguageRegistry {
     /** True when something has claimed this file — for a caller that wants to say so rather than silently
      * fall back to plain text. */
     public static synchronized boolean isKnown(@Nullable String fileName) {
+        bootstrap();
         return RULES.get(fileName) != null;
     }
 
     /** Every registered pattern, in registration order, as {@code KIND:pattern}. */
     public static synchronized List<String> rules() {
+        bootstrap();
         return RULES.patterns();
+    }
+
+    private static final List<String> CONTRIBUTORS = new ArrayList<>();
+
+    private static boolean bootstrapped;
+
+    /**
+     * Finds every {@link LanguageKinds} on the classpath. Idempotent, and called by every read.
+     *
+     * <p><b>A read rather than a host call is the whole point.</b> {@code LanguageStack.registerAll()}
+     * was a line two hosts had to remember, and the argument for keeping it was that only a host knows
+     * <em>when</em> — the registry is consulted as an editor is built, so a document already open keeps
+     * whichever tokenizer it was handed. Running here answers that better than any host can: the first
+     * read IS the first classification, so registration cannot be late, and a third host cannot forget
+     * it. What it forgot before was silent, because colouring from the built-in lexers with no engine is
+     * a supported configuration rather than a visible fault.</p>
+     *
+     * <p><b>Class loading is not what triggers it.</b> {@code TreeSitterLanguages} may not register from
+     * a static initialiser — merely being on the classpath must not load a native — and that rule is
+     * kept, not bent: this runs on a <em>question about a file</em>. A process that never asks, which is
+     * every dedicated server, never runs a service and never loads a grammar.</p>
+     *
+     * <p><b>Loaded with THIS class's loader, never the context one.</b> On 1.7.10 the context class
+     * loader is whatever the host left there, and LaunchWrapper's is not the one that defined these
+     * classes.</p>
+     */
+    public static synchronized void bootstrap() {
+        if (bootstrapped) return;
+        // SET BEFORE THE LOOP. A service's register() legitimately reads the registry back -- an entry
+        // that carries the previous tokenizer over is the documented way two tiers compose -- and
+        // re-entering here would run every service twice.
+        bootstrapped = true;
+        Iterator<LanguageKinds> services =
+                ServiceLoader.load(LanguageKinds.class, LanguageRegistry.class.getClassLoader()).iterator();
+        while (true) {
+            LanguageKinds kinds;
+            try {
+                if (!services.hasNext()) break;
+                kinds = services.next();
+            } catch (ServiceConfigurationError | RuntimeException | LinkageError broken) {
+                // A SERVICE THAT WILL NOT LOAD COSTS ITS OWN LANGUAGES AND NOT THE EDITOR. The iterator
+                // throws on the ENTRY, so this brackets next(): catching only around the body would let
+                // one jar's missing class stop every contributor after it in the file.
+                CrystalGuiCore.LOGGER.error("[cgui] a LanguageKinds service could not be loaded; its "
+                        + "languages are absent on this host", broken);
+                continue;
+            }
+            try {
+                kinds.register();
+                // SAID OUT LOUD, because live and inert look identical here: a file with no grammar and
+                // no engine colours from the built-in lexer and opens perfectly, so a contributor that
+                // silently did not run is indistinguishable from a deployment that ships none.
+                CONTRIBUTORS.add(kinds.getClass().getName());
+                CrystalGuiCore.LOGGER.info("[cgui] languages contributed by {}", kinds.getClass().getName());
+            } catch (RuntimeException | LinkageError failed) {
+                CrystalGuiCore.LOGGER.error("[cgui] the language contributor {} failed; its languages are "
+                        + "absent on this host", kinds.getClass().getName(), failed);
+            }
+        }
+    }
+
+    /** Which contributors ran, by class name, in discovery order. Diagnostics — and what a test asserts. */
+    public static synchronized List<String> contributors() {
+        bootstrap();
+        return List.copyOf(CONTRIBUTORS);
+    }
+
+    /**
+     * What has run <b>so far</b>, without triggering discovery.
+     *
+     * <p>Tests only, and the one accessor that can tell "the services ran" from "the list is a constant":
+     * every other read here bootstraps, so a test using them cannot observe the before-state at all.</p>
+     */
+    public static synchronized List<String> contributorsSoFarForTesting() {
+        return List.copyOf(CONTRIBUTORS);
+    }
+
+    /**
+     * Forgets that discovery ran, so the next read repeats it.
+     *
+     * <p>Tests only, and it deliberately leaves the RULES alone: registration replaces a rule rather than
+     * adding to it, so re-running a contributor is idempotent, while clearing the rules would take the
+     * built-ins registered by this class's own initialiser with them — and a static initialiser does not
+     * run twice.</p>
+     */
+    public static synchronized void resetBootstrapForTesting() {
+        bootstrapped = false;
+        CONTRIBUTORS.clear();
     }
 }
