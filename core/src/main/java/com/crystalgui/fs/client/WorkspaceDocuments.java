@@ -384,8 +384,19 @@ public final class WorkspaceDocuments implements Disposable {
     }
 
     private void discardBackup(Document document) {
+        discardBackup(document.resource());
+    }
+
+    /**
+     * Throws away the backup held for one resource.
+     *
+     * <p>Public for the restore, which is the one caller that can discover a backup is worth nothing:
+     * a save discards its own as it writes, but a backup whose content turns out to match the file has
+     * to be dropped by whoever compared them, or it is offered again on every launch for ever.</p>
+     */
+    public void discardBackup(Resource resource) {
         Backup store = workspace.backup();
-        if (store != null) store.discard(document.resource());
+        if (store != null) store.discard(resource);
     }
 
     private void recordHistory(Document document, byte[] content) {

@@ -1,5 +1,6 @@
 package com.crystalgui.workbench.editor;
 
+import java.util.Arrays;
 import com.crystalgui.core.async.PendingReply;
 import com.crystalgui.core.async.Reply;
 import com.crystalgui.core.async.ReplyError;
@@ -189,7 +190,12 @@ public final class EditorService implements Disposable {
      * with</b>, so a file that moved while the client was away produces a conflict on the next save
      * rather than a silent overwrite.</p>
      *
-     * @return how many were restored
+     * <p><b>A backup that matches the file is not unsaved work</b> and is discarded rather than
+     * restored — see the comparison below. Without it a stale backup marks an untouched file modified
+     * on every launch.</p>
+     *
+     * @return how many backups were offered. A backup that turns out to match the file is counted here
+     *         and restores nothing: the comparison needs the document, which arrives asynchronously
      */
     public int restoreUnsavedWork() {
         int restored = 0;
@@ -200,7 +206,24 @@ public final class EditorService implements Disposable {
             // thrown away -- and the count is what the covering test asserted, so it passed throughout.
             open(EditorInput.of(entry.resource())).then(tab -> {
                 Document document = tab.document();
-                if (document != null) document.adoptUnsaved(entry.content(), entry.etag());
+                if (document == null) return;
+                // COMPARED AGAINST THE FILE, because a backup is a CLAIM that there is unsaved work and
+                // not proof of it. `adoptUnsaved` marks the document DIRTY by contract -- that is what it
+                // is for -- so restoring a backup whose content is what the file already holds opens a
+                // file the author has not touched with a modified marker on it, on every launch, until
+                // somebody edits and saves it. Reported exactly that way: "Main.java opened with the
+                // asterisk and I didn't touch it, and it doesn't happen for all files" -- only the ones
+                // with a backup.
+                //
+                // The encode is affordable here and nowhere else: once per restored document at launch,
+                // against a document that was just read anyway.
+                if (Arrays.equals(entry.content(), document.model().encode())) {
+                    // AND THE BACKUP GOES. It says nothing the file does not, so keeping it means making
+                    // the same empty offer every launch.
+                    documents.discardBackup(entry.resource());
+                    return;
+                }
+                document.adoptUnsaved(entry.content(), entry.etag());
             });
             restored++;
         }
