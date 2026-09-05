@@ -342,7 +342,9 @@ public final class WorkspaceDocuments implements Disposable {
             participant.accept(document, reason);
         }
         byte[] content = document.model().encode();
-        int savedAt = document.version();
+        // THE CONTENT'S IDENTITY, not the change count: what was written is what this document must
+        // compare itself against afterwards, and undoing back to it must read as clean.
+        int savedAt = document.contentVersion();
 
         PendingReply<Void> done = new PendingReply<>(null);
         workspace.files().write(document.resource(), content, force ? null : document.etag())

@@ -58,7 +58,7 @@ public final class Document {
         this.resource = Objects.requireNonNull(resource, "resource");
         this.kind = Objects.requireNonNull(kind, "kind");
         this.model = Objects.requireNonNull(model, "model");
-        this.savedVersion = model.version();
+        this.savedVersion = model.contentVersion();
         model.onChanged().connect(this::modelChanged);
     }
 
@@ -119,7 +119,7 @@ public final class Document {
      * mean writing a whole shader graph to JSON to decide whether a tab needs an asterisk.</p>
      */
     public boolean isDirty() {
-        return model.version() != savedVersion;
+        return model.contentVersion() != savedVersion;
     }
 
     public int version() {
@@ -127,6 +127,11 @@ public final class Document {
     }
 
     /** The version the file on disk holds. */
+    /** The content version of this document as it stands. @see DocumentModel#contentVersion() */
+    public int contentVersion() {
+        return model.contentVersion();
+    }
+
     public int savedVersion() {
         return savedVersion;
     }

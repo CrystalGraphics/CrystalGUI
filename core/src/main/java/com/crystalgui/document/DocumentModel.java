@@ -56,6 +56,19 @@ public interface DocumentModel {
     Signal.Action onChanged();
 
     /**
+     * A version that identifies the CONTENT rather than the sequence of changes — it comes back when an
+     * undo puts the document back where it was.
+     *
+     * <p>What {@link com.crystalgui.document.Document#isDirty()} compares, so that a keystroke and its
+     * undo leave a document clean rather than modified for ever. Defaults to {@link #version()}, which is
+     * the honest answer for a model with no undo of its own: such a model cannot return to a previous
+     * state, so its two versions are the same question.</p>
+     */
+    default int contentVersion() {
+        return version();
+    }
+
+    /**
      * Whether a three-way merge of this content is meaningful.
      *
      * <p>False by default, and the default is the honest one: a line-based merge of a JSON graph

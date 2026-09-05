@@ -87,6 +87,11 @@ public final class TextDocumentModel implements DocumentModel {
     }
 
     @Override
+    public int contentVersion() {
+        return buffer.alternativeVersion();
+    }
+
+    @Override
     public Signal.Action onChanged() {
         return onChanged;
     }
