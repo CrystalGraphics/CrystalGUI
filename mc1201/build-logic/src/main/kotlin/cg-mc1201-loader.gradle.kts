@@ -16,8 +16,21 @@ dependencies {
     // mods{} sourceSet declarations in each loader's build.gradle.kts.
     "compileOnly"(project(":mc1201:common"))
     "compileOnly"(project(":core"))
-    "runtimeOnly"(project(":mc1201:common"))
-    "runtimeOnly"(project(":core"))
+
+    // Minecraft supplies log4j and gson. :core pins modern ones runtimeOnly for its tests and the
+    // harness, and those reach a loader -- where NeoForge requires {strictly 2.19.0}/{strictly 2.10.1}
+    // and the conflict fails its entire runtime graph.
+    //
+    // Per-dependency, never on the configuration: excluding the groups from runtimeClasspath would
+    // take Minecraft's own log4j with it, which Loom's dev run reads.
+    "runtimeOnly"(project(":mc1201:common")) {
+        exclude(group = "org.apache.logging.log4j")
+        exclude(group = "com.google.code.gson")
+    }
+    "runtimeOnly"(project(":core")) {
+        exclude(group = "org.apache.logging.log4j")
+        exclude(group = "com.google.code.gson")
+    }
     // Mixin compileOnly — loaders bundle it at runtime
     "compileOnly"("org.spongepowered:mixin:${property("mc1201.mixin")}")
     "annotationProcessor"("org.spongepowered:mixin:${property("mc1201.mixin")}:processor")

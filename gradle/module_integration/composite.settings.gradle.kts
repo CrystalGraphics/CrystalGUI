@@ -6,10 +6,10 @@ val submoduleData = listOf(
         "name" to "CrystalGraphics",
         "buildPath" to "CrystalGraphics",
 
-        // mc1710 dev dependency â€” added via integration.gradle.kts to devOnlyNonPublishable.
+        // mc1710 dev dependency — added via integration.gradle.kts to devOnlyNonPublishable.
         "devDependencies" to listOf("com.crystalgraphics:crystalgraphics:1.0.0"),
 
-        // mc1201 compile-time dependencies â€” CrystalGraphics subprojects that mc1201 loader
+        // mc1201 compile-time dependencies — CrystalGraphics subprojects that mc1201 loader
         // sources import directly. Added as compileOnly + runtimeOnly by integration.gradle.kts.
         // Substitution rules below resolve these to CrystalGraphics' composite build projects.
         "mc1201CompileDeps" to listOf(
@@ -20,7 +20,7 @@ val submoduleData = listOf(
         ),
 
         // Composite build substitution rules. All are resolved within the CrystalGraphics
-        // includeBuild â€” projectPath values are relative to that build root.
+        // includeBuild — projectPath values are relative to that build root.
         "substitutions" to listOf(
             mapOf("module" to "com.crystalgraphics:crystalgraphics",
                 "projectPath" to ":mc1710"),
@@ -29,13 +29,12 @@ val submoduleData = listOf(
             mapOf("module" to "com.crystalgraphics:core",
                 "projectPath" to ":core"),
             mapOf("module" to "com.crystalgraphics:platform",
-                "projectPath" to ":platform")
-            // NO mc1201-common substitution. `:mc1201:common` is commented out of CrystalGraphics'
-            // own settings.gradle.kts, and a dependencySubstitution naming a project that does not
-            // exist in the target build fails CONFIGURATION outright -- "Project with path
-            // ':mc1201:common' not found in build ':CrystalGraphics'" -- for every task, including
-            // ones that have nothing to do with Minecraft. Restore it in the same edit that
-            // uncomments mc1201 there.
+                "projectPath" to ":platform"),
+            // Must be added and removed in the same commit as :mc1201:common in CrystalGraphics'
+            // settings.gradle.kts: a substitution naming a project that is not in the target build
+            // fails configuration for every task, and the error names the module, not this file.
+            mapOf("module" to "com.crystalgraphics:crystalgraphics-mc1201-common",
+                "projectPath" to ":mc1201:common")
         ),
 
         // mc1710-specific bootstrap args injected into RunMinecraftTask by integration.gradle.kts.
