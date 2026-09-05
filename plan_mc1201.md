@@ -982,10 +982,15 @@ window re-lays out; F6 after a resize does **not** resurrect a closed window.
 event at all; every version from 1.8 has a cancellable one. `ScreenOverlay` already holds the decision,
 so each row above is *cancel iff `offerMouse`/`offerKey` returned true*.
 
-**Accept**: pin a window, open chat, click into the pinned window and type — chat does not receive it;
-click on chat and type — the window does not. Open the **inventory** and do the same (1.7.10's
-`allowUserInput` trap has no 1.20.x analogue, but the inventory is still the case that exercises a
-screen with its own drag handling).
+**Built 2026-09-05** — `CgUiHud1201` in `common` (the presentation decision, the transition notice, the
+paint bracket with its `exitHudMode` fallback, and the two `offerMouse`/`offerKey` forwards), plus the
+rows above on all three loaders. **No mixin was needed**, as §3.5 predicted: NeoForge's `ScreenEvent`
+family matches Forge's name for name, and Fabric's `allow*` events cancel by returning `false`.
+
+**Accept**: compile — met. The rest needs a client: pin a window, open chat, click into the pinned
+window and type — chat does not receive it; click on chat and type — the window does not. Open the
+**inventory** and do the same (1.7.10's `allowUserInput` trap has no 1.20.x analogue, but the inventory
+is still the case that exercises a screen with its own drag handling).
 
 **Hazards**: `ScreenEvent.Opening` fires for screens that render no world; the transition must be
 noticed on a path every caller runs, or ownership survives into the next screen. Cancelling the event
