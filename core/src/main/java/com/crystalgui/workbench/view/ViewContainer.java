@@ -2,6 +2,10 @@ package com.crystalgui.workbench.view;
 
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Name;
+import javax.annotation.Nullable;
+
+import com.crystalgui.core.signal.Signal;
+
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.desktop.window.WindowChrome;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -86,7 +90,7 @@ public class ViewContainer extends UIElement implements WindowChrome {
     private final Button hide;
 
     /** Fires when the header's hide button is pressed — the region's occupant asking to go away. */
-    public final com.crystalgui.core.signal.Signal.Action onHideRequested =
+    public final Signal.Action onHideRequested =
             new com.crystalgui.core.signal.Signal.Action();
 
     public ViewContainer(String containerId, String titleText) {
@@ -199,7 +203,7 @@ public class ViewContainer extends UIElement implements WindowChrome {
     }
 
     /** The mounted view's header controls, if it offered any. @see HeaderContributor */
-    @javax.annotation.Nullable
+    @Nullable
     private UIElement contributed;
 
     /**
