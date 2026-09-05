@@ -1,6 +1,5 @@
 package com.crystalgui.mc.client;
 
-import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.Desktop;
@@ -61,8 +60,8 @@ public final class CgUiHud1201 {
             // DESKTOP is our own screen's job; painting it from here would draw it twice.
             return;
         }
+        CgUiHostGl1201.enter();
         try {
-            CgGlState.invalidateAllIfPresent();
             desktop.paint(presentation, CgUiScreen1201.frameDelta(), surfaceWidth(), surfaceHeight());
         } catch (RuntimeException | LinkageError failed) {
             // This runs inside Minecraft's own render loop every frame, and unlike a screen there is
@@ -70,7 +69,7 @@ public final class CgUiHud1201 {
             CrystalGuiCore.LOGGER.error("[cgui] overlay paint failed; leaving HUD mode", failed);
             desktop.exitHudMode();
         } finally {
-            CgGlState.invalidateAllIfPresent();
+            CgUiHostGl1201.leave();
         }
     }
 

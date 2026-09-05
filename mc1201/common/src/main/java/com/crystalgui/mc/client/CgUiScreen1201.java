@@ -5,7 +5,6 @@ import java.nio.file.Path;
 
 import javax.annotation.Nullable;
 
-import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.core.window.WindowState;
@@ -211,12 +210,17 @@ public final class CgUiScreen1201 extends Screen {
 
         host.frame(delta);
 
-        CgGlState.invalidateAllIfPresent();
+        // DRAIN MINECRAFT'S OWN BATCH FIRST. GuiGraphics queues its geometry into a BufferSource that is
+        // flushed only after render() returns, so anything Minecraft still had pending would composite ON
+        // TOP of the immediate-mode GL below rather than under it. The symptom is the whole UI reading one
+        // shade darker, with nothing in the UI itself to blame.
+        graphics.flush();
+
+        CgUiHostGl1201.enter();
         try {
             host.desktop().paint(DesktopPresentation.DESKTOP, delta, surfaceWidth(), surfaceHeight());
         } finally {
-            // Minecraft assumes it gets its own state back; CrystalGUI's endFrame restores what IT saved.
-            CgGlState.invalidateAllIfPresent();
+            CgUiHostGl1201.leave();
         }
     }
 
