@@ -1,5 +1,6 @@
 package com.crystalgui.workbench.toolwindow;
 
+import com.crystalgui.core.signal.Signal;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.workbench.region.DockRegion;
 import com.crystalgui.workbench.region.RegionSide;
@@ -79,8 +80,28 @@ public final class ToolWindowLayout {
         return getOrCreate(typeId, region, RegionSide.PRIMARY);
     }
 
+    /**
+     * A placement changed — the rails' cue to re-ask which of them owns a button.
+     *
+     * <p><b>On the store rather than on the manager, because the store is what a restore replaces.</b>
+     * The manager announced from its own three mutators, which covers every gesture and misses the one
+     * writer that does not go through them: a session restore clears this and puts every decoded state
+     * straight in. The panels then moved to the restored record — {@code applyVisibility} re-shows them —
+     * and the buttons did not, because nothing told the rails. Notifications opened bottom-left with its
+     * bell on the top right, and Problems bottom-right with its icon on the bottom left: the arrangement
+     * from the record and the arrangement from before it, on screen at once.</p>
+     *
+     * <p>Announcing where the write happens makes every writer correct without any of them having to
+     * remember — a rule kept by three call sites is a rule the fourth breaks.</p>
+     */
+    public final Signal.Value<String> onDidChange = new Signal.Value<>();
+
     public ToolWindowLayout put(ToolWindowState state) {
-        states.put(state.typeId(), state);
+        ToolWindowState previous = states.put(state.typeId(), state);
+        // ONLY WHEN SOMETHING ACTUALLY MOVED. `put` is how every hide, show and capture records itself,
+        // and most of those write back what was already there -- a rail re-syncing for each of them
+        // would be work with nothing to show for it.
+        if (!state.equals(previous)) onDidChange.emit(state.typeId());
         return this;
     }
 
@@ -103,8 +124,16 @@ public final class ToolWindowLayout {
         return states.isEmpty();
     }
 
+    /**
+     * Forgets every placement — what a restore does before installing the record it read.
+     *
+     * <p>Announced per type rather than as one blanket event, because the signal names a type and every
+     * consumer re-asks about that one. Copied first: a listener is free to write back.</p>
+     */
     public void clear() {
+        List<String> forgotten = new ArrayList<>(states.keySet());
         states.clear();
+        for (String typeId : forgotten) onDidChange.emit(typeId);
     }
 
     // ── Serialisation ───────────────────────────────────────────────────────────────────────────
