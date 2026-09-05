@@ -44,8 +44,8 @@ final class CgUiNeoForgeEvents {
     }
 
     private static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
-        event.register(CgUiKeybinds1201.OPEN_EDITOR);
-        event.register(CgUiKeybinds1201.OPEN_DESKTOP);
+        Lifecycle1201.bootstrapClient();
+        CgUiKeybinds1201.all().forEach(event::register);
     }
 
     private static void onServerStarting(ServerStartingEvent event) {

@@ -1,9 +1,15 @@
 package com.crystalgui.mc.platform;
 
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.mc.client.CgUiHud1201;
+import com.crystalgui.mc.example.MachineExample1201;
+import com.crystalgui.mc.example.MachineExampleClient1201;
 import com.crystalgui.mc.client.CgUiKeybinds1201;
 import com.crystalgui.mc.net.Connections1201;
 import com.crystalgui.mc.net.WorkspaceHost1201;
@@ -36,6 +42,16 @@ public final class Lifecycle1201 {
         CgPlatformService1201.getInstance();
         CgPlatform.provide(CgNetworkChannel.SERVICE, channel);
         Connections1201.register();
+        MachineExample1201.registerCommon();
+    }
+
+    /**
+     * Client init, once. Everything client-side that has to be registered is registered from here, so a
+     * loader never enumerates it -- including the example's key, which is why
+     * {@link CgUiKeybinds1201#all()} must be read AFTER this runs.
+     */
+    public static void bootstrapClient() {
+        MachineExampleClient1201.registerClient();
     }
 
     // ── Server ──────────────────────────────────────────────────────────────────────────────────
@@ -53,6 +69,33 @@ public final class Lifecycle1201 {
     public static void serverTick() {
         Connections1201.onServerTick();
         WorkspaceHost1201.tick(SERVER_TICK_SECONDS);
+        run(serverTickHooks);
+    }
+
+    /**
+     * Content rides the platform's tick rather than subscribing a loader event of its own -- otherwise
+     * a mod's tick is wired three times and only one copy ever gets debugged.
+     */
+    public static void onServerTick(Runnable hook) {
+        serverTickHooks.add(hook);
+    }
+
+    public static void onClientTick(Runnable hook) {
+        clientTickHooks.add(hook);
+    }
+
+    private static final List<Runnable> serverTickHooks = new CopyOnWriteArrayList<>();
+    private static final List<Runnable> clientTickHooks = new CopyOnWriteArrayList<>();
+
+    /** One hook's failure must not stop the others, or a demo takes the platform down with it. */
+    private static void run(List<Runnable> hooks) {
+        for (Runnable hook : hooks) {
+            try {
+                hook.run();
+            } catch (RuntimeException failed) {
+                CrystalGuiCore.LOGGER.error("[cgui-1201] tick hook failed", failed);
+            }
+        }
     }
 
     public static void playerJoined(@Nullable ServerPlayer player) {
@@ -68,6 +111,7 @@ public final class Lifecycle1201 {
     public static void clientTick() {
         CgUiKeybinds1201.tick();
         Connections1201.onClientTick();
+        run(clientTickHooks);
     }
 
     public static void clientConnected() {

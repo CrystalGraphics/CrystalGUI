@@ -1,5 +1,8 @@
 package com.crystalgui.mc.client;
 
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
 import net.minecraft.client.KeyMapping;
 
 import org.lwjgl.glfw.GLFW;
@@ -22,7 +25,22 @@ public final class CgUiKeybinds1201 {
     public static final KeyMapping OPEN_DESKTOP =
             new KeyMapping("key.crystalgui.desktop", GLFW.GLFW_KEY_F7, CATEGORY);
 
+    /**
+     * Every mapping a loader must register. Content adds to it through {@link #add}; a loader only
+     * iterates, so the set is declared once rather than enumerated per loader.
+     */
+    private static final List<KeyMapping> ALL = new CopyOnWriteArrayList<>(
+            java.util.Arrays.asList(OPEN_EDITOR, OPEN_DESKTOP));
+
     private CgUiKeybinds1201() {}
+
+    public static void add(KeyMapping mapping) {
+        if (!ALL.contains(mapping)) ALL.add(mapping);
+    }
+
+    public static List<KeyMapping> all() {
+        return ALL;
+    }
 
     /**
      * Both are asked, never else-if: {@code consumeClick()} CONSUMES the press, so a chain that stops at
