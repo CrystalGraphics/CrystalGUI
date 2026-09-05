@@ -68,6 +68,9 @@ public final class ToolWindowManager {
     public ToolWindowManager(WorkbenchRegions regions, DockPanelRegistry<UIElement> registry) {
         this.regions = regions;
         this.registry = registry;
+        // RELAYED, NOT RAISED HERE. The store is this manager's own and dies with it, so the connection
+        // needs no keeping. @see #onDidChangePlacement
+        toolWindows.onDidChange.connect(onDidChangePlacement::emit);
     }
 
     /**
@@ -413,10 +416,10 @@ public final class ToolWindowManager {
         if (wasOpen) hidePanel(typeId);
         toolWindows.put(placementOf(typeId).withRegion(region).withSide(side));
         if (wasOpen) showPanel(typeId);
-        // EVEN WHEN IT WAS CLOSED. A closed tool window still has a button, and moving that button is the
-        // ordinary way to say where it should open next time -- announcing only on the visible case would
-        // leave the rails showing the placement they had before the drag.
-        onDidChangePlacement.emit(typeId);
+        // NOT ANNOUNCED HERE: the `put` above does it, and it does so EVEN WHEN THE PANEL WAS CLOSED --
+        // which is the property this call site existed for. A closed tool window still has a button, and
+        // moving that button is the ordinary way to say where it should open next time.
+        // @see ToolWindowLayout#onDidChange
     }
 
     /**
@@ -448,7 +451,6 @@ public final class ToolWindowManager {
             // the last button until that button has itself been moved once and earned a real order.
             toolWindows.put(placementOf(group.get(at)).withOrder(at));
         }
-        onDidChangePlacement.emit(typeId);
     }
 
     /**
@@ -457,6 +459,14 @@ public final class ToolWindowManager {
      * <p>Carries the type id rather than nothing, so a listener can be selective; both stripes currently
      * re-sync wholesale, because a move is two rails' business and the sync is a walk over a handful of
      * descriptors.</p>
+     */
+    /**
+     * Raised by {@link ToolWindowLayout#onDidChange}, which this relays.
+     *
+     * <p>The signal stays here because that is what the rails are written against and what they can
+     * reach; what moved is the point it is <em>raised</em> from. A session restore replaces the store
+     * without going through any of this class's mutators, so an announcement owned by those mutators
+     * could not see the one write that rearranges everything at once.</p>
      */
     public final Signal.Value<String> onDidChangePlacement = new Signal.Value<>();
 
@@ -569,7 +579,6 @@ public final class ToolWindowManager {
         if (wasOpen) hidePanel(typeId);
         toolWindows.put(placementOf(typeId).withType(type));
         if (wasOpen) showPanel(typeId);
-        onDidChangePlacement.emit(typeId);
     }
 
     /**
