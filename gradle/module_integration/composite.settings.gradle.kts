@@ -34,7 +34,11 @@ val submoduleData = listOf(
             // settings.gradle.kts: a substitution naming a project that is not in the target build
             // fails configuration for every task, and the error names the module, not this file.
             mapOf("module" to "com.crystalgraphics:crystalgraphics-mc1201-common",
-                "projectPath" to ":mc1201:common")
+                "projectPath" to ":mc1201:common"),
+            // The 1.20.1 Forge MOD, for a consumer that wants CrystalGraphics in its own dev run's mod
+            // list rather than merely on its compile classpath.
+            mapOf("module" to "com.crystalgraphics:crystalgraphics-mc1201-forge",
+                "projectPath" to ":mc1201:forge")
         ),
 
         // mc1710-specific bootstrap args injected into RunMinecraftTask by integration.gradle.kts.
@@ -72,8 +76,7 @@ fun Map<String, *>.mapList(key: String): List<Map<String, String>> =
 // ':CrystalGUI:CrystalGraphics'". Matched on the path so a loader added later is covered.
 val embeddedHere = gradle.parent != null
 
-fun isLoaderPath(projectPath: String): Boolean =
-    projectPath == ":mc1710" || projectPath.startsWith(":mc1201")
+fun isLoaderPath(projectPath: String): Boolean = projectPath == ":mc1710"
 
 submoduleData.forEach { mod ->
     includeBuild(mod.string("buildPath")) {

@@ -51,8 +51,9 @@ pluginManagement {
 
 rootProject.name = "CrystalGUI"
 
-// Included in another build means a consumer wants the engine, not the loaders: :mc1710 needs a Java
-// 25 daemon and :gl-debug-harness pulls LWJGL3.
+// Included in another build means a consumer wants the engine and the loader it can actually run:
+// :mc1710 needs a Java 25 Gradle daemon and :gl-debug-harness pulls LWJGL3, so those stay home. The
+// MC 1.20.1 Forge pair crosses the boundary -- see the :mc1201 block below.
 val embedded = gradle.parent != null
 
 // The layout engine, VENDORED as a fork rather than consumed as `dev.vfyjxf:taffy:1.1.4`.
@@ -108,9 +109,16 @@ apply(from = "gradle/module_integration/composite.settings.gradle.kts")
 //
 // Gated like :mc1710: these download and decompile a Minecraft toolchain, which an embedding consumer
 // has no use for.
+// MC 1.20.1 Forge is included even when embedded: it is what a 1.20.1 Forge mod consumes, and putting
+// its jar on that mod's run classpath is how CrystalGUI appears in the game's mod list at all.
+//
+// The other two do not cross. :mc1201:fabric pulls fabric-loom, which refuses a Gradle daemon below
+// Java 21, and :mc1201:neoforge targets MC 1.20.4 -- neither is a 1.20.1 Forge consumer's business,
+// and configuring them would impose a daemon requirement for a module it never builds.
+include(":mc1201:common")
+include(":mc1201:forge")
+
 if (!embedded) {
-    include(":mc1201:common")
-    include(":mc1201:forge")
     include(":mc1201:neoforge")
     include(":mc1201:fabric")
 }
