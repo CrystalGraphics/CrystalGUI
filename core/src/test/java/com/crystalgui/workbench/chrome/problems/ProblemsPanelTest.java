@@ -1082,4 +1082,65 @@ public class ProblemsPanelTest extends UiDocumentTestBase {
         document.input().endFrame();
     }
 
+
+    /** The files the tree is showing right now, by resource. */
+    private List<Resource> shownFiles() {
+        List<Resource> files = new ArrayList<>();
+        for (ProblemNode root : panel.source().roots()) files.add(root.resource());
+        return files;
+    }
+
+    /**
+     * <b>The scope tabs switch the view.</b>
+     *
+     * <p>Reported from the desktop scene: the tabs were there, the selected one moved, and the list did
+     * not change — {@code File} showed every project's problems exactly as {@code Project Errors} did.</p>
+     *
+     * <p>Walked in the order a user does it, because the order is the bug: the panel opens in FILE scope
+     * by default, so the first click on {@code File} is a no-op that returns before applying anything,
+     * and whether the list was ever narrowed depends on what happened between binding and the first
+     * scope change.</p>
+     */
+    @Test
+    public void theScopeTabsSwitchTheView() {
+        give(shader, error(1, "in the shader"));
+        give(util, error(2, "in the util"));
+        panel.bindTo(markers);
+        panel.setActiveResource(shader);
+        settle();
+
+        assertTrue("the panel does not open in file scope, which is the default the tabs assume",
+                panel.isFileScope());
+        assertEquals("file scope is on and the panel is showing another file's problems",
+                List.of(shader), shownFiles());
+
+        panel.setFileScope(false);
+        settle();
+        assertEquals("Project Errors did not widen to the whole workspace",
+                List.of(shader, util), shownFiles());
+
+        panel.setFileScope(true);
+        settle();
+        assertEquals("File did not narrow back to the file in front", List.of(shader), shownFiles());
+    }
+
+    /**
+     * ...and the file it narrows to is the one that is in front now.
+     *
+     * <p>The counter-control for a panel that narrowed once and kept the answer: switching files while
+     * the scope is on has to follow.</p>
+     */
+    @Test
+    public void fileScopeFollowsTheFileInFront() {
+        give(shader, error(1, "in the shader"));
+        give(util, error(2, "in the util"));
+        panel.bindTo(markers);
+        panel.setActiveResource(shader);
+        settle();
+
+        panel.setActiveResource(util);
+        settle();
+        assertEquals("the panel stayed on the file that was in front when the scope was switched on",
+                List.of(util), shownFiles());
+    }
 }

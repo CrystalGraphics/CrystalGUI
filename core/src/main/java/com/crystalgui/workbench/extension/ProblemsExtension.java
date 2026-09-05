@@ -108,6 +108,15 @@ public final class ProblemsExtension implements WorkbenchExtension {
             // WHICH FILE IS IN FRONT, told on every tab change whether or not the filter is on -- so
             // switching "Show Active File Only" on narrows to what you are looking at NOW rather than to
             // whatever happened to be in front when you last switched it off.
+            //
+            // BOTH SIGNALS, AND THE TAB ONE IS THE ONE THAT WAS MISSING. `onDidOpenDocument` fires when a
+            // file's CONTENT lands, which is not a tab change at all: it says nothing when you click
+            // between two files that are already open, and at the moment it does fire the dock may not
+            // have activated the panel yet -- the groups are built in `tickFrame`, a frame later. So the
+            // panel was told "the file in front is nothing" and never told otherwise: the File tab showed
+            // the whole workspace, and clicking between the tabs changed only which one was highlighted.
+            // The comment above has described the intended behaviour since it was written.
+            lifetime.add(workbench.dock().onDidChangeActivePanel.connect(panelRef -> follow()));
             lifetime.add(workbench.onDidOpenDocument().connect(path -> follow()));
             follow();
             refreshCount();
