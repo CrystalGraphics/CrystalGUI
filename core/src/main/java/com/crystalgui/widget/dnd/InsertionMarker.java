@@ -1,6 +1,7 @@
 package com.crystalgui.widget.dnd;
 
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 
@@ -11,7 +12,6 @@ import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
-import com.crystalgui.ui.box.Box;
 
 /**
  * The placeholder showing where a dragged thing would land in a list — tabs, stripe buttons, rows.
@@ -145,6 +145,48 @@ public class InsertionMarker extends UIElement {
     @Nullable
     private UIElement flowParent;
 
+    /**
+     * Where an {@link Mode#IN_FLOW} gap goes when the list it is inserting into is <b>empty</b> — the
+     * child of the flow parent its first item would follow, or {@code null} for the parent's start.
+     *
+     * <p>The one thing this class genuinely cannot derive. Every other placement is read off a neighbour,
+     * and with no items there is none — but a container's children are not all items: a rail holds a
+     * stretch and a separator too, so its bottom group's first button belongs <em>after</em> the stretch
+     * and its top group's before it. Only the caller knows which of its own children mark that boundary,
+     * so only the caller can say. Ignored whenever the list has anything in it.</p>
+     */
+    @Nullable
+    private UIElement emptyAfter;
+
+    /**
+     * Where an {@link Mode#IN_FLOW} gap is currently parented — the sibling it was placed relative to,
+     * and whether it went before or after it.
+     *
+     * <p><b>An index is not enough to answer "has this moved".</b> One marker serves every list its host
+     * holds — a rail has two groups, and each is a list of its own numbered from zero — so the index alone
+     * is ambiguous across them: dragging from the top group's first slot to the bottom group's first slot
+     * is index 0 to index 0, and a guard comparing indices reads that as "nothing changed" and leaves the
+     * gap in the group you have left. The pointer says <i>Move to Bottom Right</i> while the placeholder
+     * sits at the top of the rail, which is how it was reported.</p>
+     *
+     * <p>The element is unambiguous, so it is what is remembered. The direction travels with it because
+     * the last slot of one group and the first of the next resolve to the same anchor.</p>
+     */
+    @Nullable
+    private UIElement flowAnchor;
+    private boolean flowAfterAnchor;
+
+    /**
+     * The size an empty list's slot takes when this marker did <b>not</b> do the withdrawing.
+     *
+     * <p>A list is reordered by one marker and dragged INTO by every other, so a drag that began on
+     * another rail leaves this one with nothing withdrawn to measure — and an empty list has no
+     * neighbour to measure either. The carried item's size is known where it was picked up, so it
+     * travels from there. Along the axis, then across it; zero for "not stated", which hides.</p>
+     */
+    private float emptyExtent;
+    private float emptyThickness;
+
     /** The item hidden for the duration of a drag. @see #withdraw */
     @Nullable
     private UIElement withdrawn;
@@ -152,6 +194,29 @@ public class InsertionMarker extends UIElement {
     /** Its size when it was withdrawn — along the axis, and across it. @see #withdraw */
     private float withdrawnExtent;
     private float withdrawnThickness;
+
+    /** @see #emptyAfter */
+    public InsertionMarker emptySlotAfter(@Nullable UIElement anchor) {
+        this.emptyAfter = anchor;
+        return this;
+    }
+
+    /** @see #emptyExtent */
+    public InsertionMarker emptySlotSize(float extent, float thickness) {
+        this.emptyExtent = Math.max(0f, extent);
+        this.emptyThickness = Math.max(0f, thickness);
+        return this;
+    }
+
+    /** The carried item's size along the axis, or 0 when nothing is withdrawn here. @see #withdraw */
+    public float withdrawnExtent() {
+        return withdrawnExtent;
+    }
+
+    /** ...and across it. @see #withdraw */
+    public float withdrawnThickness() {
+        return withdrawnThickness;
+    }
 
     /** @see Mode */
     public InsertionMarker mode(Mode value) {
@@ -327,8 +392,10 @@ public class InsertionMarker extends UIElement {
     /**
      * Shows the caret where a drop at this screen point would land, and returns that index.
      *
-     * <p>Hides itself for an empty list rather than drawing a caret in a void — there is nothing to insert
-     * relative to, and a bar floating in an empty rail reads as a rendering fault.</p>
+     * <p>An <b>empty</b> list still shows a slot — see {@link #showAt}. It used to hide, on the reasoning
+     * that a bar floating in an empty rail reads as a rendering fault; that is true of a hairline CARET and
+     * not of a slot the size of what you are carrying, which is the one thing that says an empty rail is a
+     * target at all.</p>
      */
     public int showFor(UIElement host, List<? extends UIElement> items, float screenX, float screenY) {
         int at = indexFor(host, items, screenX, screenY);
@@ -338,12 +405,20 @@ public class InsertionMarker extends UIElement {
 
     /** Draws the slot at the boundary {@code at} would insert at. @see #showFor */
     public void showAt(UIElement host, List<? extends UIElement> items, int at) {
-        if (host == null || items == null || items.isEmpty()) {
+        if (host == null || items == null) {
             hide();
             return;
         }
+        // AN EMPTY LIST IS A PLACE, not a reason to hide. This used to `hide()` here, ahead of the mode
+        // branch, which is what made the empty-host paths below unreachable from the commonest way in:
+        // a caller hands its real list, and a group whose only member is the button being carried arrives
+        // as an empty one.
         int wanted = Math.max(0, Math.min(at, items.size()));
         if (mode == Mode.IN_FLOW) {
+            if (items.isEmpty()) {
+                showInEmptyFlow(host);
+                return;
+            }
             showInFlow(host, items, wanted);
             return;
         }
@@ -353,7 +428,7 @@ public class InsertionMarker extends UIElement {
         // their real list and this class does the removing -- and it has no box to measure or sit beside.
         List<? extends UIElement> visible = ordered(items);
         if (visible.isEmpty()) {
-            hide();
+            showInEmptyHost(host);
             return;
         }
         int before = 0;
@@ -418,6 +493,99 @@ public class InsertionMarker extends UIElement {
     }
 
     /**
+     * The slot on a host with <b>nothing else in it</b> — an empty rail, a strip whose only item is the
+     * one being carried.
+     *
+     * <p>It used to hide here, because everything about the placement is read off a neighbour and there
+     * is none: the size, the cross-axis position and the step past the last item all come from the box
+     * beside the boundary. So dragging a rail's only button offered no marker at all — the one case where
+     * a person most needs telling that the rail is a target, because there is nothing else in it to
+     * suggest that it is one. IntelliJ draws the placeholder on an empty stripe for exactly that
+     * reason.</p>
+     *
+     * <p>What replaces the neighbour is the <b>carried item itself</b>, whose size this already holds from
+     * {@link #withdraw} — the same measurement the gap in its old cell is drawn at. With nothing carried
+     * there is genuinely nothing to describe and hiding is still the answer.</p>
+     */
+    private void showInEmptyHost(UIElement host) {
+        Box hostBox = host.box();
+        if (withdrawn == null || hostBox == null) {
+            hide();
+            return;
+        }
+        index = 0;
+        float slot = Math.max(0f, withdrawnExtent - GAP);
+        // AT THE START OF THE HOST, inset by the same half-gap the neighbour path uses, so a rail that
+        // gains its first button shows the slot exactly where that button will sit.
+        float along = GAP / 2f;
+        float width = axis == Axis.HORIZONTAL ? slot : withdrawnThickness;
+        float height = axis == Axis.HORIZONTAL ? withdrawnThickness : slot;
+        float left = axis == Axis.HORIZONTAL ? along : 0f;
+        float top = axis == Axis.HORIZONTAL ? 0f : along;
+        StyleGroup.inlinePipeline(getStyle().getLayoutGroup(), l -> l
+                .positionType(TaffyPosition.ABSOLUTE)
+                .left(left).top(top).width(width).height(height));
+        StyleGroup.inlinePipeline(getStyle().getGeneralGroup(), g -> g.opacity(1f));
+    }
+
+    /**
+     * The gap on a flow container with <b>nothing in the list</b> — an empty rail, a group whose only
+     * button is the one being carried.
+     *
+     * <p>Placed by {@link #emptyAfter}, because a container's children are not all items and this class
+     * cannot tell which of them mark the group's boundary.</p>
+     *
+     * <p><b>The size is the carried item's</b> — this marker's own {@code withdrawn} measurement when the
+     * drag began here, and {@link #emptySlotSize} when it began somewhere else. The host's own cross size
+     * is the tempting third answer and is wrong: a rail is wider than the buttons in it, so a slot taken
+     * from the container reads as a larger object than the one you are holding.</p>
+     *
+     * <p>Nothing stated means nothing drawn. That is the honest answer rather than a guess — but it is
+     * also the case that matters most, dragging onto an empty rail being where a person most needs
+     * telling that the rail is a target, so a consumer whose lists can empty is expected to state it.</p>
+     */
+    private void showInEmptyFlow(UIElement host) {
+        UIElement slot = flowParent != null ? flowParent : host;
+        float carried = withdrawn != null ? withdrawnExtent : emptyExtent;
+        float across = withdrawn != null ? withdrawnThickness : emptyThickness;
+        if (carried <= 0f || across <= 0f) {
+            hide();
+            return;
+        }
+        // An empty group is placed AFTER whatever its caller named, or at the top of the container when
+        // it named nothing -- which is the same (anchor, direction) pair a populated one is placed by, so
+        // moving between an empty group and a populated one is seen for what it is.
+        UIElement anchor = emptyAfter != null && emptyAfter.parent() == slot ? emptyAfter : null;
+        placeIn(slot, anchor, true);
+        index = 0;
+        float width = axis == Axis.HORIZONTAL ? carried : across;
+        float height = axis == Axis.HORIZONTAL ? across : carried;
+        StyleGroup.inlinePipeline(getStyle().getLayoutGroup(), l -> l
+                .positionType(TaffyPosition.RELATIVE).display(TaffyDisplay.FLEX)
+                .left(0f).top(0f).width(width).height(height));
+        StyleGroup.inlinePipeline(getStyle().getGeneralGroup(), g -> g.opacity(1f));
+    }
+
+    /**
+     * Parents the gap next to {@code anchor}, and only when that is not already where it is.
+     *
+     * <p>Tracked by {@link #flowAnchor} rather than by the insertion index, which cannot tell two of a
+     * host's lists apart. A {@code null} anchor means the container's start, which is what an empty group
+     * at the top of a rail resolves to.</p>
+     */
+    private void placeIn(UIElement slot, @Nullable UIElement anchor, boolean after) {
+        if (parent() == slot && anchor == flowAnchor && after == flowAfterAnchor) return;
+        // REMOVED FIRST, then the anchor's index is read. Sibling indices shift when this leaves the
+        // list, so computing the destination while still in it puts the gap one place off -- and only
+        // when moving downwards, which is the half that looks like a rounding error.
+        slot.remove(this);
+        int at = anchor == null ? 0 : slot.indexOf(anchor) + (after ? 1 : 0);
+        slot.insertAt(Math.max(0, at), this);
+        flowAnchor = anchor;
+        flowAfterAnchor = after;
+    }
+
+    /**
      * Opens a gap at {@code at} by becoming an ordinary child there.
      *
      * <p>Re-parented only when the index actually changes, so a pointer resting between two items costs
@@ -440,18 +608,10 @@ public class InsertionMarker extends UIElement {
         // THE PARKED CONTAINER, not the coordinate host -- see flowParent. A tab strip asks the group
         // about geometry and needs the gap to become a sibling of the tabs, two levels down from it.
         UIElement slot = flowParent != null ? flowParent : host;
-        if (at != index || parent() != slot) {
-            // REMOVED FIRST, then the target index is read. Sibling indices shift when this leaves the
-            // list, so computing the destination while still in it puts the gap one place off -- and only
-            // when moving downwards, which is the half that looks like a rounding error.
-            slot.remove(this);
-            // ASKED OF THE ITEM ITSELF rather than counted, so a hidden one still answers: the withdrawn
-            // item keeps its DOM slot, which is exactly where the gap that replaces it belongs.
-            int dom = at >= items.size()
-                    ? slot.indexOf(items.get(items.size() - 1)) + 1
-                    : slot.indexOf(items.get(at));
-            slot.insertAt(Math.max(0, dom), this);
-        }
+        // ASKED OF AN ITEM rather than counted, so a hidden one still answers: the withdrawn item keeps
+        // its DOM slot, which is exactly where the gap that replaces it belongs.
+        boolean append = at >= items.size();
+        placeIn(slot, items.get(append ? items.size() - 1 : at), append);
         index = at;
         StyleGroup.inlinePipeline(getStyle().getLayoutGroup(), l -> l
                 .positionType(TaffyPosition.RELATIVE).display(TaffyDisplay.FLEX)
@@ -468,6 +628,11 @@ public class InsertionMarker extends UIElement {
      */
     public void hide() {
         index = -1;
+        // FORGOTTEN, so a re-show places itself again. A hidden IN_FLOW gap keeps its DOM slot -- it is
+        // display:none, not detached -- so without this the next show is skipped as already-in-place and
+        // the gap reappears wherever it was last needed.
+        flowAnchor = null;
+        flowAfterAnchor = false;
         if (mode == Mode.IN_FLOW) {
             // DISPLAY NONE, not a zero box: an in-flow child of zero size still occupies a flex slot and
             // still takes the container's gap, so the list stays one item's spacing too long after a drag.
