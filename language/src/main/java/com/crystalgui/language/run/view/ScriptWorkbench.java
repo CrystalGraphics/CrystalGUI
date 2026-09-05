@@ -1,7 +1,6 @@
 package com.crystalgui.language.run.view;
 
 import com.crystalgui.fs.protocol.ScriptingMode;
-import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.workbench.WorkbenchContext;
 import com.crystalgui.workbench.extension.WorkbenchExtension;
 import com.crystalgui.core.async.JobKey;
@@ -9,6 +8,7 @@ import com.crystalgui.core.async.JobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.dispose.Disposable;
 import java.util.List;
 import java.util.Map;
 import com.crystalgui.core.notify.Notification;
@@ -45,6 +45,10 @@ import com.crystalgui.language.run.exec.ScriptRefusedException;
  *
  * <h3>This module owns the wiring, not the application</h3>
  *
+ * <p>It <b>is</b> the {@link WorkbenchExtension} as well — the feature and its front door are one class,
+ * because a {@code ScriptingExtension} beside this one would have shared its lifetime and its id and
+ * carried the name of this class as its only real content.</p>
+ *
  * <p>It used to live in the harness, and that was wrong in a way worth naming: the harness is one host
  * among several, and everything it was doing — compile whatever {@code .java} file is in front, run it,
  * route its output, mark it running — is true of <em>any</em> workbench, not of that one. Leaving it
@@ -65,52 +69,58 @@ import com.crystalgui.language.run.exec.ScriptRefusedException;
  * A menu row and an accelerator that do nothing teach people the feature is broken, which is worse than
  * their absence teaching them it is unavailable.</p>
  */
-public final class ScriptWorkbench implements Closeable {
+public final class ScriptWorkbench implements WorkbenchExtension, Closeable {
 
     /** What an application's manifest names to enable scripting. @see WorkbenchExtensions */
     public static final String ID = "crystalgui:scripting";
 
     /**
-     * Scripting as a {@link WorkbenchExtension} — one per process, activated per workbench.
+     * The SERVICE instance — <b>not a running one</b>.
      *
-     * <p><b>No host installs this any more.</b> Two harness scenes and the 1.7.10 screen each called
-     * {@code install(...)} with a cache root they worked out for themselves, which is the shape that
-     * decides a feature by which host remembered it: the Run panel was in the harness and in the game
-     * and nowhere else, and a fourth host would have had to know to ask. The language module
-     * contributes this from {@code LanguageStack.registerAll}, and an application enables it by id.</p>
+     * <p>{@code ServiceLoader} needs a public no-argument constructor, and what it builds is the thing
+     * that answers {@link #id()} and {@link #activate}. A <em>live</em> shell comes from
+     * {@link #install}, which is private-constructed with everything it holds. Two roles, one class,
+     * because a separate {@code ScriptingExtension} beside this one is a wrapper wearing a boundary's
+     * clothes: one lifetime, one id, and the second file's only real content would be the name of the
+     * first.</p>
+     *
+     * <p>The half-built instance is the cost of that, and it is bounded: nothing but {@code id} and
+     * {@code activate} may be called on it, and both are static in everything but syntax. Folding the
+     * fields below into a nested holder — as {@code ProjectExtension.Live} does — would remove even
+     * that, and is the follow-up worth doing when this file is next open for other reasons.</p>
      */
-    public static WorkbenchExtension extension() {
-        return new WorkbenchExtension() {
-            @Override
-            public String id() {
-                return ID;
-            }
+    public ScriptWorkbench() {
+        this(null, null, null, null, null);
+    }
 
-            /**
-             * Answers a no-op handle when no language has a runtime — which is this stack's three-tier
-             * degradation rather than a failure: a host with no engine band shows the file and offers
-             * no Run, and a menu row that does nothing teaches people the feature is broken rather
-             * than unavailable.
-             */
-            @Override
-            public Disposable activate(WorkbenchContext workbench) {
-                ScriptWorkbench installed = install(CommandRegistry.global(), workbench,
-                        workbench.cacheDirectory(CACHE_DIRECTORY));
-                if (installed == null) return () -> { };
-                return () -> {
-                    try {
-                        installed.close();
-                    } catch (IOException failed) {
-                        // TEARDOWN IS EXACTLY WHEN A HALF-FINISHED JOB IS WORST, and a workbench
-                        // closing must not be stopped by an engine band that will not shut down.
-                        // Said out loud, then dropped.
-                        //
-                        // System.err rather than the engine's logger, which this module cannot see:
-                        // log4j is the host's, and `language/` compiles without it -- the same reason
-                        // LanguageStack reports a grammar that will not load this way.
-                        System.err.println("[crystalgui] scripting did not close cleanly: " + failed);
-                    }
-                };
+    @Override
+    public String id() {
+        return ID;
+    }
+
+    /**
+     * Answers a no-op handle when no language has a runtime.
+     *
+     * <p>This stack's three-tier degradation rather than a failure: a host with no engine band shows
+     * the file and offers no Run, and a menu row that does nothing teaches people the feature is broken
+     * rather than unavailable.</p>
+     */
+    @Override
+    public Disposable activate(WorkbenchContext workbench) {
+        ScriptWorkbench installed = install(CommandRegistry.global(), workbench,
+                workbench.cacheDirectory(CACHE_DIRECTORY));
+        if (installed == null) return () -> { };
+        return () -> {
+            try {
+                installed.close();
+            } catch (IOException failed) {
+                // TEARDOWN IS EXACTLY WHEN A HALF-FINISHED JOB IS WORST, and a workbench closing must
+                // not be stopped by an engine band that will not shut down. Said out loud, then dropped.
+                //
+                // System.err rather than the engine's logger, which this module cannot see: log4j is
+                // the host's and `language/` compiles without it -- the same reason LanguageStack
+                // reports a grammar that will not load this way.
+                System.err.println("[crystalgui] scripting did not close cleanly: " + failed);
             }
         };
     }

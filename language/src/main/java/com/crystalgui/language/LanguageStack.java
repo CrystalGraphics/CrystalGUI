@@ -1,7 +1,5 @@
 package com.crystalgui.language;
 
-import com.crystalgui.language.run.view.ScriptWorkbench;
-import com.crystalgui.workbench.extension.WorkbenchExtensions;
 import com.crystalgui.language.engine.EngineHost;
 import com.crystalgui.language.grammar.TreeSitterLanguages;
 import com.crystalgui.language.java.JavaLanguage;
@@ -76,11 +74,9 @@ public final class LanguageStack {
         }
         registerEngine("Java", JavaLanguage::register);
         registerEngine("JavaScript", JsLanguage::register);
-        // AND THE RUN SHELL OFFERS ITSELF. Contributing is not enabling: an application's manifest
-        // names the ids it wants, and a host with no engine band lists this one and gets no Run panel,
-        // which is the same three-tier degradation the engines above follow. What it replaces is three
-        // hosts each remembering to call install(...) -- and the fourth not.
-        WorkbenchExtensions.contribute(ScriptWorkbench.extension());
+        // THE RUN SHELL IS NOT CONTRIBUTED HERE ANY MORE. It is a ServiceLoader entry in this
+        // module's own META-INF/services, so the jar being present is what offers it -- the same door
+        // the engine's panels and a mod's own extension come through. ScriptWorkbench IS that extension.
     }
 
     /**
