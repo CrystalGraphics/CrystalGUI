@@ -497,15 +497,38 @@ public class Desktop extends UIElement implements DataProvider {
         minimizedByShowDesktop.clear();
         raise(frame);
         if (activeWindow != frame) {
-            if (activeWindow != null) activeWindow.setActive(false);
+            if (activeWindow != null) setGroupActive(activeWindow, false);
             activeWindow = frame;
-            frame.setActive(true);
+            setGroupActive(frame, true);
         }
         // AFTER the assignment above, not before it. This emits, and what listens re-renders the whole
         // model -- so announcing while `activeWindow` still points at the previous window highlights the
         // wrong entry until the next unrelated change happens to correct it.
         registry.activated(frame);
         if (restoreFocus) frame.restoreFocus(programmatic);
+    }
+
+    /**
+     * Marks a window active, <b>and the window it belongs to with it</b>.
+     *
+     * <p>A tool window is part of another window rather than a window of its own — that is the whole of
+     * what {@link WindowFrame#isToolWindow()} means — so focusing one must not take the active look away
+     * from the thing it came out of. Click into a floating Run panel and the editor's caption went grey
+     * with the panel plainly in front of it, which reads as having lost the application.</p>
+     *
+     * <p>Both desktops this borrows from agree: Windows leaves an owner's title bar active while its
+     * {@code WS_EX_TOOLWINDOW} palette has focus, and macOS does not deactivate a document window when a
+     * panel takes the keyboard. {@link WindowFrame#taskbarSubject()} is the same walk the strip uses, so
+     * the caption and the entry cannot disagree about which application is in front.</p>
+     *
+     * <p>Deactivating runs the same walk, which is what keeps it symmetric: the group goes dark together
+     * when something outside it is activated, and the order in {@link #activate} — old group off, then new
+     * group on — is what lets a window and its own panel hand over without a flicker.</p>
+     */
+    private void setGroupActive(WindowFrame frame, boolean active) {
+        frame.setActive(active);
+        WindowFrame subject = frame.taskbarSubject();
+        if (subject != frame) subject.setActive(active);
     }
 
     /**
@@ -517,7 +540,7 @@ public class Desktop extends UIElement implements DataProvider {
      */
     public void deactivate() {
         if (activeWindow == null) return;
-        activeWindow.setActive(false);
+        setGroupActive(activeWindow, false);
         activeWindow = null;
         // AND SAY SO. Everything that renders the registry renders the active window as part of it, and
         // this is the one mutation that used to happen in silence -- so the taskbar went on highlighting
