@@ -35,15 +35,17 @@ import com.crystalgui.workbench.WorkbenchContext;
  * the band is asked at {@code activate} and answers a no-op handle when no runtime is present. Kept for a
  * mod that genuinely builds one at run time.</p>
  *
- * <h3>Every contributed extension is activated, for now</h3>
+ * <h3>A manifest names what it wants; a bare workbench takes everything</h3>
  *
- * <p>The end state is an application manifest naming the ids it wants, so two applications on one
- * desktop can enable different sets — that is what makes a second editor-shaped application possible
- * without the same four panels baked into it. Until an application concept exists there is nothing to
- * ask, so the engine activates everything contributed, which is exactly today's behaviour with the
- * host's {@code register(...)} calls removed. The one thing it already fixes is the question of
- * <em>which host remembered what</em>: the harness registered the Notes kind and the 1.7.10 loader did
- * not, so a file type shipped in this repository opened in one of them and not the other.</p>
+ * <p>{@link #activate(WorkbenchContext, List)} takes the ids an {@code ApplicationKind} declared, so two
+ * applications on one desktop enable different sets — which is what makes a second editor-shaped product
+ * possible without the same four panels baked into it. A null list means everything contributed, and
+ * that is not a transitional default: it is what {@code new Workbench(workspace)} still means for a test
+ * or a scene with no application around it.</p>
+ *
+ * <p>What discovery fixed first was the question of <em>which host remembered what</em>: the harness
+ * registered the Notes kind and the 1.7.10 loader did not, so a file type shipped in this repository
+ * opened in one of them and not the other.</p>
  *
  * <h3>An id nothing contributed is a logged absence, never an error</h3>
  *

@@ -7,9 +7,11 @@ import com.crystalgui.serialization.PlainOps;
 import java.util.function.Consumer;
 
 /**
- * A {@link UITransport} over a real connection — the swap {@code Mc1710Workspace} was built to accept.
+ * A {@link UITransport} over a real connection — the swap the in-memory one was built to be replaced by.
  *
- * <p>That class already says what this is for:</p>
+ * <p>The argument is the 1.7.10 workspace's, kept because it is still the reason this class has the shape
+ * it does. That class was deleted at W3, when the loader stopped assembling a product and started
+ * answering a host seam:</p>
  *
  * <blockquote>
  * <i>Both halves of a real workspace, in the client process … every listing, read and write crosses

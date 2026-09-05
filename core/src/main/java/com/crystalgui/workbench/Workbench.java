@@ -1945,15 +1945,17 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     // ── Lifecycle ───────────────────────────────────────────────────────────────────────────────
 
     /**
-     * Binds Problems to whichever editor is active, and asks the tree for its projects.
+     * Stops ticking, so a workbench that is off screen does nothing.
      *
-     * <p>Both from a ticker, not from {@code onLayoutChanged}: rebinding replaces the panel's rows and
-     * asking for projects eventually refreshes the tree, and neither is safe inside the layout pass.</p>
+     * <p><b>It does not withdraw its own {@code DataProvider}</b>, and the missing line is deliberate:
+     * {@code document()} answers null in here — the callback is queued and the field cleared before the
+     * queue drains — so the {@code if (leaving != null)} that used to sit on this line was dead code on
+     * every node in the engine, and every workbench ever attached stayed in {@code scopeProviders} with
+     * its whole tree behind it. The engine drops a document-level provider at detach now, which is what
+     * {@code removeDataProvider}'s own javadoc always said the rule was.</p>
      */
     @Override
     protected void disconnected() {
-        UIDocument leaving = document();
-        if (leaving != null) leaving.removeDataProvider(this);
         super.disconnected();
         // CLEARED, or the panel never ticks again. `Animation` drops a hook on the first tick after
         // its owner disconnects, so a tool window -- which is hidden and reshown rather than rebuilt
@@ -1965,12 +1967,6 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
 
     @Nullable
     private DiagnosticSet boundTo;
-
-
-
-    @Nullable
-
-
 
     // installExplorerCommands(window) used to live here and be called EVERY FRAME from tick(), behind a
     // commandsInstalled flag, for one reason: registration needed a window to reach a registry. Commands

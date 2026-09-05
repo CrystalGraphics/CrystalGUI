@@ -1,9 +1,7 @@
 package com.crystalgui.desktop.app;
 
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.function.Function;
 
 import javax.annotation.Nullable;
@@ -18,7 +16,6 @@ import com.crystalgui.fs.Resource;
  * <pre>{@code
  * ApplicationKind.of("crystalgui:editor", "Crystal Editor")
  *         .icon("crystalgui:logo")
- *         .keywords("code", "ide", "files")
  *         .opens(DocumentKind.FilePatterns.extension("java"))
  *         .launch(ctx -> WorkbenchApplication.of(ctx, CRYSTAL_EDITOR)
  *                 .with("crystalgui:notes", "crystalgui:scripting")
@@ -45,8 +42,6 @@ public final class ApplicationKind {
     @Nullable
     private String icon;
     @Nullable
-    private String category;
-    private final Set<String> keywords = new LinkedHashSet<>();
     private final List<DocumentKind.Matcher> opens = new ArrayList<>();
     @Nullable
     private Function<LaunchContext, Application> factory;
@@ -70,18 +65,12 @@ public final class ApplicationKind {
         return this;
     }
 
-    /** What a search matches besides the name. A launcher's "code" finding an editor. */
-    public ApplicationKind keywords(String... searchTerms) {
-        check();
-        for (String term : searchTerms) keywords.add(term);
-        return this;
-    }
-
-    public ApplicationKind category(String category) {
-        check();
-        this.category = category;
-        return this;
-    }
+    // `keywords(...)` and `category(...)` ARE NOT HERE, and their absence is the same call as
+    // `action(...)`'s: a slot nothing sets and nothing reads is the write-only failure this repository
+    // documents five times over, and it is worse on a manifest than elsewhere because a manifest READS
+    // like a complete declaration -- an author writing `.keywords("code")` would reasonably conclude the
+    // launcher can find their application by it. Both arrive at W8, with the launcher and the desktop
+    // search that are their only consumers.
 
     /**
      * The files this application opens — its associations.
@@ -152,13 +141,7 @@ public final class ApplicationKind {
     }
 
     @Nullable
-    public String category() {
-        return category;
-    }
 
-    public Set<String> keywords() {
-        return keywords;
-    }
 
     public boolean isSingleInstance() {
         return singleInstance;

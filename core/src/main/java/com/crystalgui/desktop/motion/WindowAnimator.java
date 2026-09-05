@@ -326,7 +326,6 @@ public final class WindowAnimator {
      * is all that is left.</p>
      */
     @Nullable
-
     private Transform towardTaskbar() {
         UIElement entry = taskbarEntry();
         Transform viaEntry = entry == null ? null : toward(entry);

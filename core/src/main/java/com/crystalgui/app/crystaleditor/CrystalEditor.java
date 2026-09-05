@@ -71,11 +71,15 @@ public final class CrystalEditor {
             // no engine band, the same three-tier degradation the language stack already follows.
             SCRIPTING);
 
-    /** The manifest. Data: a launcher lists it, a search matches it, "open with" reads it. */
+    /**
+     * The manifest. Data: {@code handlerFor} reads it, and a launcher will list it.
+     *
+     * <p>It declared a {@code category} and {@code keywords} too, and both are gone with the builder
+     * methods that took them: nothing read either, so the manifest read like a searchable declaration
+     * against a desktop that has no search. They come back at W8 beside the thing that consults them.</p>
+     */
     public static final ApplicationKind KIND = ApplicationKind.of(ID, "Crystal Editor")
             .icon("crystalgui:logo")
-            .category("Development")
-            .keywords("code", "editor", "ide", "files", "shader", "graph")
             // WHAT IT DECLARES ITSELF THE HANDLER FOR. Answerable with nothing running, which is the
             // requirement: "open with" is asked of an application that may never have been launched, so
             // it cannot be derived by building one and asking its workbench which kinds it registered.

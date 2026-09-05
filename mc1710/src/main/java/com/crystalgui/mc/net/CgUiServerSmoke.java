@@ -110,10 +110,17 @@ public final class CgUiServerSmoke {
      * see {@link #reportGlDivergence}.</p>
      */
     private static final List<String> NEVER_LOADED_ON_A_SERVER = Arrays.asList(
-            // Ours. CommonProxy exists so this one is unreachable from common code.
+            // Ours. CommonProxy exists so these are unreachable from common code.
+            //
+            // EVERY CLASS IN `mc.client`, and it is a list that must GROW WITH THAT PACKAGE. It named
+            // `Mc1710Workspace` until W3 deleted that class, and a name nothing can load is a guard that
+            // passes for ever -- while CgUiHud, CgUiOverlayInput and CgUiAutoTest, which arrived after
+            // the list was written, were never checked at all. A shrinking guard reports success.
             "com.crystalgui.mc.client.CgUiScreen",
             "com.crystalgui.mc.client.CgUiInput",
-            "com.crystalgui.mc.client.Mc1710Workspace",
+            "com.crystalgui.mc.client.CgUiHud",
+            "com.crystalgui.mc.client.CgUiOverlayInput",
+            "com.crystalgui.mc.client.CgUiAutoTest",
             "com.crystalgui.mc.ClientProxy",
             // Minecraft's. Naming one from a common path is the commonest spelling of this bug.
             "net.minecraft.client.Minecraft",
