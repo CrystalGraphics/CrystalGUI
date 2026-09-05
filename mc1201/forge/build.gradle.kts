@@ -58,6 +58,28 @@ legacyForge {
     }
 }
 
+// THE LIBRARIES A DEV RUN CANNOT SEE.
+//
+// integration.gradle.kts declares CrystalGraphics as compileOnly + runtimeOnly and says in its own
+// comment that ModDevGradle dev runs ignore runtimeClasspath -- so none of it reached the run, and
+// CgNetworkChannel's clinit died on NoClassDefFoundError: com/crystalgraphics/platform/CgService.
+// build/moddev/clientLegacyClasspath.txt is where to check that: it listed neither CrystalGraphics
+// nor taffy.
+//
+// Real dependencies on a real configuration, because resolving one BUILDS it -- unlike a bare file
+// path, which serves whatever happens to sit on disk.
+//
+// Only MC-FREE modules belong here. crystalgraphics-mc1201-common imports Minecraft, so on this layer
+// it cannot see the game at all; it belongs on the mod layer, which mods{} above cannot name because
+// it lives in another build. Nothing may appear on both layers: the exploded directory and the jar
+// export the same packages and BootstrapLauncher fails the launch over the split package.
+dependencies {
+    add("additionalRuntimeClasspath", project(":taffy"))
+    add("additionalRuntimeClasspath", "com.crystalgraphics:core:1.0.0")
+    add("additionalRuntimeClasspath", "com.crystalgraphics:platform:1.0.0")
+    add("additionalRuntimeClasspath", "com.crystalgraphics:freetype-msdfgen-harfbuzz-bindings:1.0.0")
+}
+
 // Extracts MinecraftForge 1.20.1 sources and resources into build/mc-src for local navigation.
 // Sync (not Copy) removes stale files when the source jar changes between toolchain version bumps.
 val extractMcSources by tasks.registering(Sync::class) {
