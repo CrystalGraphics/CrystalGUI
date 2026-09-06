@@ -29,8 +29,16 @@ public class ChangeWordingTest {
     @Test
     public void aMoveNamesWhereItWentRatherThanRepeatingTheName() {
         FsMessages.FileChange change = renamed("proj:test.shadergraph", "proj:fah/test.shadergraph");
-        assertEquals("moved test.shadergraph to fah", ExplorerBinding.verb(change));
-        assertEquals("moved to fah", ExplorerBinding.past(change));
+        assertEquals("moved test.shadergraph to fah/", ExplorerBinding.verb(change));
+        assertEquals("moved to fah/", ExplorerBinding.past(change));
+    }
+
+    /** Nested, in full: a project has many folders called java and naming one locates nothing. */
+    @Test
+    public void aMoveNamesTheWholePathNotTheLastSegment() {
+        FsMessages.FileChange change =
+                renamed("proj:README.md", "proj:src/main/java/README.md");
+        assertEquals("moved README.md to src/main/java/", ExplorerBinding.verb(change));
     }
 
     /** Out of a folder and up to the root, which has no name of its own. */
@@ -44,7 +52,7 @@ public class ChangeWordingTest {
     @Test
     public void aMoveThatAlsoRenamesSaysBoth() {
         FsMessages.FileChange change = renamed("proj:README.md", "proj:fah/NOTES.md");
-        assertEquals("moved README.md to fah as NOTES.md", ExplorerBinding.verb(change));
-        assertEquals("moved to fah as NOTES.md", ExplorerBinding.past(change));
+        assertEquals("moved README.md to fah/ as NOTES.md", ExplorerBinding.verb(change));
+        assertEquals("moved to fah/ as NOTES.md", ExplorerBinding.past(change));
     }
 }
