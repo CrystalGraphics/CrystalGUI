@@ -63,6 +63,26 @@ public interface HostServices {
      */
     Path installationDirectory();
 
+    /**
+     * The directory of the world this process is <b>itself serving</b>, or null when it serves none.
+     *
+     * <p>Single-player is the case that answers non-null: the client is also the server, so a
+     * workspace's session, backups and history can live beside the save and be deleted with it. A
+     * client connected to someone else's server answers null — it cannot write there — and that
+     * workspace's state goes in this installation's tree instead.</p>
+     *
+     * <pre>{@code
+     * public Path localWorldDirectory() {
+     *     IntegratedServer server = minecraft.getSingleplayerServer();
+     *     return server == null ? null : server.getWorldPath(LevelResource.ROOT);
+     * }
+     * }</pre>
+     *
+     * <p>Re-asked rather than announced, like {@link #connection()}: worlds are joined and left.</p>
+     */
+    @Nullable
+    Path localWorldDirectory();
+
     /** How many device pixels one logical pixel is. Applied once, to the box tree's root transform. */
     float uiScale();
 

@@ -116,9 +116,6 @@ public class WorkbenchApplication extends UIElement
     private final ApplicationKind kind;
     private final Desktop desktop;
     private final Workspace workspace;
-
-    /** The parent of every workspace's store; scoped by identity in {@link #restoreWhenReady}. */
-    private final ConfigStorage workspaces;
     private final ConfigStorage storage;
     private final Workbench workbench;
     private final WindowFrame window;
@@ -242,7 +239,6 @@ public class WorkbenchApplication extends UIElement
         this.desktop = context.desktop();
         this.workspace = context.workspace();
         this.storage = context.storage();
-        this.workspaces = context.workspaces();
         setFocusPolicy(FocusPolicy.NONE);
 
         this.workbench = new Workbench(workspace, builder.extensions);
@@ -515,7 +511,7 @@ public class WorkbenchApplication extends UIElement
         // directory of its own, so a client that has joined ten servers keeps ten sets of unsaved work
         // rather than one shared pile -- and the record inside it is named after the APPLICATION,
         // because the directory has already said which workspace this is.
-        ConfigStorage mine = workspaces.scoped(identityFor(workspace, roots));
+        ConfigStorage mine = desktop.workspaceStore(identityFor(workspace, roots));
         sessionKey = kind.id();
         // BACKUPS AND HISTORY TOO, and not before now: see DesktopHost#frame, which used to set a store
         // here that every workspace shared.

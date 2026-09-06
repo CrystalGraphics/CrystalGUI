@@ -24,8 +24,6 @@ import com.crystalgui.fs.client.Workspace;
  *       that cannot work without one declares {@link ApplicationKind#standalone()}'s opposite and is
  *       refused before the factory runs.</li>
  *   <li>{@code storage} — see below.</li>
- *   <li>{@code workspaces} — the parent of every workspace's own store. Scope it by a workspace
- *       identity to get where that workspace's session, backups and history live; see below.</li>
  *   <li>{@code cache} — a directory for derived output, or {@code null} for none. Scoped to you the
  *       same way {@code storage} is, and <b>disposable</b>: everything under it must be rebuildable,
  *       because the whole tree is deleted without warning.</li>
@@ -42,26 +40,22 @@ import com.crystalgui.fs.client.Workspace;
  * <p>What it is <em>not</em> scoped to is a workspace. Preferences are the application's and are the
  * same on every server; a session, a backup and local history belong to one workspace.</p>
  *
- * <h3>…and {@code workspaces} is where those go</h3>
+ * <h3>…and a workspace's own state is the desktop's to place</h3>
  *
- * <p>Which workspace this is cannot be known at launch — it arrives with the server's greeting — so the
- * registry hands over the <em>parent</em> and the application scopes it when the answer exists:</p>
+ * <p>Which workspace this is cannot be known at launch — it arrives with the server's greeting — and
+ * where its state belongs depends on whether this process is serving it. Ask {@link #desktop()} once
+ * the answer exists:</p>
  *
  * <pre>{@code
- * // once the workspace has greeted and can be named
- * ConfigStorage mine = context.workspaces().scoped(workspaceIdentity);
+ * ConfigStorage mine = context.desktop().workspaceStore(workspaceIdentity);
  * workspace.setStorage(mine);          // backups and local history
  * session.useStorage(mine);            // the arrangement
  * }</pre>
- *
- * <p>Two applications over one workspace share that directory and write differently-named records in
- * it, which is right: it is one workspace's state, not one product's.</p>
  */
 public record LaunchContext(ApplicationKind kind,
                             Desktop desktop,
                             @Nullable Workspace workspace,
                             ConfigStorage storage,
-                            ConfigStorage workspaces,
                             @Nullable Path cache,
                             List<Resource> open) {
 
@@ -72,8 +66,8 @@ public record LaunchContext(ApplicationKind kind,
     /** A launch with nothing asked of it. */
     public static LaunchContext of(ApplicationKind kind, Desktop desktop,
                                    @Nullable Workspace workspace, ConfigStorage storage,
-                                   ConfigStorage workspaces, @Nullable Path cache) {
-        return new LaunchContext(kind, desktop, workspace, storage, workspaces, cache, List.of());
+                                   @Nullable Path cache) {
+        return new LaunchContext(kind, desktop, workspace, storage, cache, List.of());
     }
 
     /** The one resource this launch was asked to open, or null. */

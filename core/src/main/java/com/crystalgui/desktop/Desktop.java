@@ -44,6 +44,7 @@ import dev.vfyjxf.taffy.style.FlexDirection;
 import javax.annotation.Nullable;
 
 import java.nio.file.Path;
+import java.util.function.Supplier;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -1353,6 +1354,40 @@ public class Desktop extends UIElement implements DataProvider {
             return this;
         }
         return persistTo(config, id);
+    }
+
+    /**
+     * Where a workspace served by <b>this process</b> keeps its files, or null when there is none.
+     *
+     * <p>Re-asked, never cached: a client joins and leaves single-player worlds without the desktop
+     * being rebuilt.</p>
+     */
+    @Nullable
+    private Supplier<Path> localWorld;
+
+    /** Tells this desktop how to find the world it is itself serving. @see #workspaceStore */
+    public Desktop useLocalWorld(@Nullable Supplier<Path> worldDirectory) {
+        this.localWorld = worldDirectory;
+        return this;
+    }
+
+    /**
+     * Where one workspace's own state goes — its session, its backups, its local history.
+     *
+     * <p><b>Beside the world when this process is serving it</b>, so deleting the save takes them with
+     * it. Anything remote goes in this installation's tree instead, keyed by the identity the server
+     * greeted with — a client cannot write to a server's disk, and would not want its arrangement
+     * living there.</p>
+     *
+     * <p>Asked once the greeting has supplied an identity, which is the first moment either half of
+     * that answer is known.</p>
+     */
+    public ConfigStorage workspaceStore(String identity) {
+        Path world = localWorld == null ? null : localWorld.get();
+        ConfigStorage root = world == null
+                ? config()
+                : new LocalConfigStorage(StorageLayout.configIn(world));
+        return root.scoped(StorageLayout.PROJECTS).scoped(identity);
     }
 
     /** Where this desktop's private records go, or null when it was never given anywhere. */

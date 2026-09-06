@@ -71,6 +71,35 @@ public class DesktopStorageTest {
     }
 
     /**
+     * A workspace this process serves keeps its state <b>beside the world</b>, so deleting the save
+     * takes the session, the backups and the history with it.
+     */
+    @Test
+    public void aLocallyServedWorkspaceStoresBesideItsWorld() {
+        Path installation = installation("local-host");
+        Path world = installation("a-save").resolve("saves").resolve("New World");
+        Desktop desktop = Desktop.of(new UIDocument())
+                .useStorage(installation)
+                .useLocalWorld(() -> world);
+
+        assertEquals(StorageLayout.configIn(world).resolve("projects").resolve("abc123"),
+                desktop.workspaceStore("abc123").directory());
+    }
+
+    /**
+     * A workspace on somebody else's server cannot store beside it — a client has no write access
+     * there — so it lands in this installation's tree under the identity the server greeted with.
+     */
+    @Test
+    public void aRemoteWorkspaceStoresInThisInstallation() {
+        Path installation = installation("remote-host");
+        Desktop desktop = Desktop.of(new UIDocument()).useStorage(installation);
+
+        assertEquals(StorageLayout.configIn(installation).resolve("projects").resolve("server99"),
+                desktop.workspaceStore("server99").directory());
+    }
+
+    /**
      * <b>No default, and that is the point.</b> A desktop nobody has told has nowhere to write and says
      * so; inventing the working directory would be an answer chosen for a host that never saw the
      * question, which is the same reason {@code HostServices} declares no defaults either.

@@ -247,7 +247,7 @@ public final class ApplicationRegistry {
     public Application launch(ApplicationKind kind, @Nullable Workspace workspace,
                               ConfigStorage storage, @Nullable Path cacheRoot) {
         return launch(kind, LaunchContext.of(kind, desktop, workspace,
-                scoped(kind, storage), workspacesIn(storage), cacheFor(kind, cacheRoot)));
+                scoped(kind, storage), cacheFor(kind, cacheRoot)));
     }
 
     /**
@@ -268,7 +268,7 @@ public final class ApplicationRegistry {
         ApplicationKind kind = handlerFor(resource);
         if (kind == null) return null;
         return launch(kind, new LaunchContext(kind, desktop, workspace, scoped(kind, storage),
-                workspacesIn(storage), cacheFor(kind, cacheRoot), List.of(resource)));
+                cacheFor(kind, cacheRoot), List.of(resource)));
     }
 
     /**
@@ -326,17 +326,6 @@ public final class ApplicationRegistry {
     /** D20: each application's own corner of a shared config directory. */
     private static ConfigStorage scoped(ApplicationKind kind, ConfigStorage storage) {
         return storage.scoped(StorageLayout.APPS).scoped(kind.id());
-    }
-
-    /**
-     * The parent of every workspace's own store — {@code workspace-config/projects/}.
-     *
-     * <p>Handed over unscoped by workspace on purpose: the identity arrives with the greeting, so the
-     * application scopes it. It is still not the config root, so one application cannot reach another's
-     * preferences through it.</p>
-     */
-    private static ConfigStorage workspacesIn(ConfigStorage storage) {
-        return storage.scoped(StorageLayout.PROJECTS);
     }
 
     /**
