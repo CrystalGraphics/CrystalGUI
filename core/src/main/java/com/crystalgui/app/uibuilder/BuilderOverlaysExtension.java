@@ -43,7 +43,7 @@ public final class BuilderOverlaysExtension implements SurfaceExtension {
                 .element(HoverHighlight::new));
         Disposable selection = surface.registerOverlay(OverlayKind.of(SELECTION, "Selection")
                 .visibleByDefault()
-                .element(SelectionOutline::new));
+                .element(ctx -> new SelectionOutline(builder)));
 
         // NOTHING TO HIGHLIGHT IN PREVIEW. The UI is being used rather than designed, and an outline
         // following the pointer over a live screen is the design surface refusing to get out of the way.
