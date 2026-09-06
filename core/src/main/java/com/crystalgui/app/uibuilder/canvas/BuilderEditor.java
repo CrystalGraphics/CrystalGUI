@@ -2,6 +2,7 @@ package com.crystalgui.app.uibuilder.canvas;
 
 import java.util.List;
 
+import com.crystalgui.app.uibuilder.BuilderSelection;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.document.DocumentEditor;
@@ -35,6 +36,14 @@ public final class BuilderEditor implements DocumentEditor {
     public static final DataKey<BuilderEditor> UI_BUILDER =
             DataKey.create("uiBuilder", BuilderEditor.class);
 
+    /** The tree being edited. */
+    public static final DataKey<UiBuilderDocument> UI_DOCUMENT =
+            DataKey.create("uiBuilder.document", UiBuilderDocument.class);
+
+    /** What is pointed at — nodes, and optionally a rule or a token. @see BuilderSelection */
+    public static final DataKey<BuilderSelection> BUILDER_SELECTION =
+            DataKey.create("uiBuilder.selection", BuilderSelection.class);
+
     private static final String ZOOM = "zoom";
     private static final String PAN_X = "panX";
     private static final String PAN_Y = "panY";
@@ -47,6 +56,7 @@ public final class BuilderEditor implements DocumentEditor {
         this.document = document;
         this.artboard = new Artboard(document);
         this.surface = new BuilderSurface(document, artboard, List.of(SelectExtension.ID));
+        surface.ownedBy(this);
         surface.surface().place(artboard, 0f, 0f);
         // The document's own sheets, once there is a window to put them on. Installing them here would
         // reach a file from a constructor that a server also runs.
@@ -64,6 +74,11 @@ public final class BuilderEditor implements DocumentEditor {
     /** The engine underneath, for the builder's own extensions. */
     public BuilderSurface surface() {
         return surface;
+    }
+
+    /** @see BuilderSelection */
+    public BuilderSelection selection() {
+        return surface.builderSelection();
     }
 
     @Override
