@@ -97,12 +97,47 @@ public final class WatchHub {
             try {
                 CgFileEntry entry = service.stat(actor, path);
                 if (!entry.isDirectory()) lastEtag.put(path, entry.etag());
+                else if (recursive) prime(actor, path, 0);
             } catch (CgFileSystemException absent) {
                 // Watching something that is not there yet is legitimate -- a file about to be created.
                 lastEtag.put(path, null);
             }
         }
         return subscription;
+    }
+
+    /** How deep a priming walk goes, and how many files it will hold. */
+    private static final int MAX_PRIME_DEPTH = 16;
+    private static final int MAX_PRIMED_FILES = 10_000;
+
+    /**
+     * Stat-s a watched tree once, so a change to a file nobody has open is something this hub can see.
+     *
+     * <p>Without it {@link #lastEtag} holds only what a client OPENED, and the rescan re-stats exactly
+     * that — which left a recursive watch reporting creations (they need no history) while a rename
+     * could not pair at all, since pairing matches the etag the vanished half <em>used to</em> have and
+     * nobody had ever taken it. So a rename of a file nobody had open arrived as a delete and a create,
+     * and the backup and history filed under it did not follow.</p>
+     *
+     * <p><b>Bounded, and through {@code manifest} rather than the raw filesystem</b>, so the project's
+     * own excludes apply and a walk never descends into a build directory. A tree past the cap is left
+     * to events alone, which is the arrangement the reconcile is a backstop for anyway.</p>
+     */
+    private void prime(WorkspaceActor actor, CgPath directory, int depth) {
+        if (depth > MAX_PRIME_DEPTH || lastEtag.size() >= MAX_PRIMED_FILES) return;
+        List<CgFileEntry> entries;
+        try {
+            entries = service.manifest(actor, directory);
+        } catch (RuntimeException unreadable) {
+            // Priming is an optimisation and never worth failing a watch for: a directory this actor
+            // may not read, or one that went away mid-walk, simply is not primed.
+            return;
+        }
+        for (CgFileEntry entry : entries) {
+            CgPath child = directory.resolve(entry.name());
+            if (entry.isDirectory()) prime(actor, child, depth + 1);
+            else lastEtag.putIfAbsent(child, entry.etag());
+        }
     }
 
     public void unwatch(Object peer, CgPath path) {
