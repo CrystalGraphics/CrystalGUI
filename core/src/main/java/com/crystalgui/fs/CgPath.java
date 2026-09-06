@@ -2,6 +2,8 @@ package com.crystalgui.fs;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import org.jetbrains.annotations.Nullable;
+
 import java.util.List;
 import java.util.Objects;
 
@@ -91,6 +93,32 @@ public final class CgPath {
     /** The individual path components, already normalised. Empty at the project root. */
     public List<String> segments() {
         return segments;
+    }
+
+    /**
+     * Whether {@code candidate} is this path or lies under it.
+     *
+     * <p><b>Compared by segment, never by string prefix.</b> A project root has no segments at all, so
+     * its text ends at the scheme's colon and a prefix test then asks for a {@code /} that is not there
+     * — which made a recursive watch on a project root cover nothing whatsoever, and left every file in
+     * a project invisible to the one subscription that was supposed to see them all. Segments also stop
+     * {@code proj:srcs} reading as a child of {@code proj:src}.</p>
+     *
+     * @param recursive whether a deeper descendant counts, or only a direct child. A folder the explorer
+     *                  has expanded watches its own entries; a project root watches everything
+     */
+    public boolean covers(@Nullable CgPath candidate, boolean recursive) {
+        if (candidate == null) return false;
+        if (candidate.equals(this)) return true;
+        if (!candidate.project().equals(project())) return false;
+
+        List<String> mine = segments();
+        List<String> theirs = candidate.segments();
+        if (theirs.size() <= mine.size()) return false;
+        for (int i = 0; i < mine.size(); i++) {
+            if (!mine.get(i).equals(theirs.get(i))) return false;
+        }
+        return recursive || theirs.size() == mine.size() + 1;
     }
 
     /** The last component, or {@code ""} at the project root. */
