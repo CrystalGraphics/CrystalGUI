@@ -125,10 +125,14 @@ builderpane > buildersurface {
 /* NO SIZE HERE, deliberately. The layer is a zero-sized origin the widget places handles from, and a
  * full-size hittable box over the canvas is the answer to every hit test that lands on background --
  * select once and nothing on the canvas can be clicked again. Box.search names this failure outright. */
+/* ROUND, and lighter than the box that catches the press. The element's size is the hit target -- see
+ * ResizeHandles.SIZE -- so the dot is made smaller here rather than there: a fully rounded 6px box with a
+ * 1px ring reads as a small circle on the line without shrinking what a pointer has to hit. */
 resizehandles > * {
     background-color: var(--builder-handle-bg, #FFFFFF);
     border-width: 1px;
     border-color: var(--builder-selected, #3574F0);
+    border-radius: 3px;
 }
 
 .__handle-top-left__, .__handle-bottom-right__ { cursor: nwse-resize; }
