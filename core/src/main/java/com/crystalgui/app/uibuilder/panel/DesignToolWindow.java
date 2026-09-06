@@ -43,6 +43,11 @@ public final class DesignToolWindow extends UIElement {
         this.workbench = workbench;
         addClass(PANEL_CLASS);
         connections.add(workbench.dock().onDidChangeActivePanel.connect(unused -> follow()));
+        // AND WHEN A DOCUMENT LANDS, which is the Inspector's own note and the same defect: the active
+        // PANEL is announced as soon as the dock has built its tree, which is before the document behind
+        // it exists. Following only the panel left this empty from startup until something else moved --
+        // and for a workspace restored with a .cgui already in front, nothing else ever does.
+        connections.add(workbench.onDidOpenDocument().connect(path -> follow()));
         follow();
     }
 

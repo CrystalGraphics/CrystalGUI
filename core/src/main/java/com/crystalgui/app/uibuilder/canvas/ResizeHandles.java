@@ -96,6 +96,7 @@ public final class ResizeHandles extends UIElement {
         this.ctx = ctx;
         this.document = document;
         addClass(LAYER_CLASS);
+        anchorWithoutCovering(this);
 
         for (Spot spot : Spot.values()) handles.add(buildHandle(spot));
         connections.add(ctx.selection().onChanged.connect(this::followSelection));
@@ -111,6 +112,23 @@ public final class ResizeHandles extends UIElement {
     /** The eight, in {@link Spot} order. For a test, and for a theme that wants to find one. */
     public List<UIElement> handles() {
         return List.copyOf(handles);
+    }
+
+    /**
+     * A zero-sized origin at the viewport's corner, which the handles are placed from.
+     *
+     * <p><b>It must never be the answer to a hit test.</b> A full-size hittable layer over the canvas
+     * eats every click that lands on background — you select one node, the layer appears, and nothing on
+     * the canvas can be clicked again. That is this codebase's most-repeated failure and {@code
+     * Box.search} names it outright.</p>
+     *
+     * <p>Zero-sized and non-clipping is the whole of the fix: a point is never <em>inside</em> this box
+     * so it cannot answer, and {@code search} still descends into children when a box does not clip — so
+     * the eight handles, which sit outside it entirely, are found exactly as before.</p>
+     */
+    private static void anchorWithoutCovering(UIElement layer) {
+        StyleGroup.defaultPipeline(layer.getStyle().getLayoutGroup(),
+                l -> l.positionType(TaffyPosition.ABSOLUTE).left(0f).top(0f).width(0f).height(0f));
     }
 
     private UIElement buildHandle(Spot spot) {

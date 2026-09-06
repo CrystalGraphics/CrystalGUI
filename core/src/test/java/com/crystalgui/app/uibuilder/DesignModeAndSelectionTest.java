@@ -135,6 +135,62 @@ public class DesignModeAndSelectionTest extends UiDocumentTestBase {
                 .anyMatch(mode -> "surface".equals(mode.name())));
     }
 
+    /**
+     * <b>Selecting twice.</b> The regression that made the canvas unusable after one click.
+     *
+     * <p>The handle layer appears as soon as anything is selected. Full-size and hittable, it became the
+     * answer to every hit test that landed on background — so the first click selected and no click
+     * after it did anything at all. It is zero-sized now, and its handles sit outside it.</p>
+     */
+    @Test
+    public void aSecondClickSelectsSomethingElse() {
+        clickOn(first);
+        assertSame(first, editor.selection().node());
+
+        clickOn(second);
+        assertSame("the handles must not stand between the pointer and the canvas",
+                second, editor.selection().node());
+    }
+
+    /** And the handle layer itself is never what a pick answers. */
+    @Test
+    public void theHandleLayerIsNeverTheHitTarget() {
+        clickOn(first);
+        frame();
+
+        Vector2f at = centre(second);
+        assertFalse("a point over the canvas resolved to the handle layer",
+                editor.handles().contains(document.input().hoverTarget()));
+    }
+
+    /**
+     * <b>The outlines are actually up.</b>
+     *
+     * <p>{@code visibleByDefault()} was a declaration nothing acted on — nobody called
+     * {@code OverlayLayer.showDefaults()}, so the overlay was never built and selection happened with
+     * nothing on screen to show it. Which is indistinguishable from selection not happening.</p>
+     */
+    @Test
+    public void theCanvasOverlaysAreShowingFromTheStart() {
+        assertTrue("hover outline", editor.surface().overlays()
+                .isShowing(BuilderOverlaysExtension.HOVER));
+        assertTrue("selection outline", editor.surface().overlays()
+                .isShowing(BuilderOverlaysExtension.SELECTION));
+    }
+
+    /** And preview takes them down, along with the handles — none of it is part of the UI being used. */
+    @Test
+    public void previewTakesTheDesignChromeDown() {
+        clickOn(first);
+        assertTrue(editor.handles().isDisplayed());
+
+        editor.surface().setDesignMode(false);
+
+        assertFalse(editor.surface().overlays().isShowing(BuilderOverlaysExtension.HOVER));
+        assertFalse(editor.surface().overlays().isShowing(BuilderOverlaysExtension.SELECTION));
+        assertFalse("and the handles are not left over a live UI", editor.handles().isDisplayed());
+    }
+
     private void clickOn(UIElement element) {
         Vector2f at = centre(element);
         document.input().consumeMouseEvent(new CgSystemInput.Mouse.Event(

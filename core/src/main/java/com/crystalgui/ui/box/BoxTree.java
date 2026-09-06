@@ -6,6 +6,7 @@ import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.property.visual.transform.Transform;
+import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import dev.vfyjxf.taffy.geometry.FloatSize;
@@ -354,6 +355,12 @@ public final class BoxTree {
         // subtree is hidden or restructured -- so a host written onto one is lost, and a popup
         // hidden and reshown would come back unpromoted.
         Box topLayer = boxes.get(document.topLayerNodeIfPresent());
+        // NOT ONLY THE TOP LAYER. Any node may say it is a holder rather than a surface -- a canvas
+        // overlay is the case that needs it -- so the attribute is read here, where every other
+        // box-shaped fact about a node is.
+        for (Map.Entry<UIElement, Box> entry : boxes.entrySet()) {
+            entry.getValue().stackingOnly = entry.getKey().get(Attribute.HIT_TRANSPARENT);
+        }
         if (topLayer != null) {
             topLayer.setStacksByInsertion(true);
             topLayer.stackingOnly = true;

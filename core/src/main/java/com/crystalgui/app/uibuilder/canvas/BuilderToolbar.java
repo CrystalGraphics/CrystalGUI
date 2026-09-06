@@ -37,6 +37,9 @@ public final class BuilderToolbar extends UIElement {
 
     public static final String BAR_CLASS = "__builder-toolbar__";
 
+    /** On the preview button while preview is on. */
+    public static final String ACTIVE_CLASS = "__active__";
+
     /** The scales Minecraft itself offers, which is what a document will be seen at. */
     private static final int[] UI_SCALES = {1, 2, 3, 4};
 
@@ -103,11 +106,29 @@ public final class BuilderToolbar extends UIElement {
         return preview;
     }
 
-    /** @see #onDidTogglePreview */
+    /**
+     * @see #onDidTogglePreview
+     *
+     * <p>The button carries its own state, and that is not decoration. Preview's visible effect is that
+     * the document's widgets become live — so on a document with nothing to press, a toggle with no
+     * appearance of its own looks like a button that does nothing at all.</p>
+     */
     public void setPreview(boolean previewing) {
         if (host.isDesignMode() != previewing) return;
         host.setDesignMode(!previewing);
+        showPreviewState(previewing);
         onDidTogglePreview.emit(previewing);
+    }
+
+    /** Reads the state back off the host — for a toggle driven from the command rather than the button. */
+    public void syncPreviewState() {
+        showPreviewState(!host.isDesignMode());
+    }
+
+    private void showPreviewState(boolean previewing) {
+        if (previewing) preview.addClass(ACTIVE_CLASS);
+        else preview.removeClass(ACTIVE_CLASS);
+        preview.setText(previewing ? "Previewing" : "Preview");
     }
 
     private void choosePreset(int index) {

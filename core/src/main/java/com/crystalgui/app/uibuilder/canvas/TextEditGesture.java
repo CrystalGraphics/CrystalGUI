@@ -56,6 +56,10 @@ public final class TextEditGesture extends UIElement {
         super(NAME);
         this.document = document;
         addClass(OVERLAY_CLASS);
+        // ZERO-SIZED, for the reason ResizeHandles states: a full-size hittable layer over the canvas is
+        // the answer to every hit test that lands on background. The field is placed from this origin.
+        StyleGroup.defaultPipeline(getStyle().getLayoutGroup(),
+                l -> l.positionType(TaffyPosition.ABSOLUTE).left(0f).top(0f).width(0f).height(0f));
         StyleGroup.defaultPipeline(field.getStyle().getLayoutGroup(),
                 l -> l.positionType(TaffyPosition.ABSOLUTE).left(0f).top(0f));
         append(field);

@@ -90,6 +90,13 @@ public final class BuilderEditor implements DocumentEditor {
         surface.surface().addOverlay(handles);
         this.textEditing = new TextEditGesture(document);
         surface.surface().addOverlay(textEditing);
+        // DESIGN-TIME CHROME, so it goes with the mode. The overlays registered as kinds are hidden by
+        // BuilderOverlaysExtension; the handles are mounted directly and would otherwise stay on screen
+        // over a UI that is being used.
+        surface.onDidChangeDesignMode.connect(design -> {
+            handles.setDisplayed(Boolean.TRUE.equals(design) && handles.target() != null);
+            if (!Boolean.TRUE.equals(design)) textEditing.cancel();
+        });
         this.pane = new BuilderPane(toolbar, surface);
         // The document's own sheets, once there is a window to put them on. Installing them here would
         // reach a file from a constructor that a server also runs.

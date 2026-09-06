@@ -531,6 +531,12 @@ public class SurfaceEditor extends CanvasView
         if (extensionsActivated) return;
         extensionsActivated = true;
         extensions.addAll(SurfaceExtensions.activate(this, wantedExtensions));
+        // AND PUT UP THE ONES THAT SAID THEY START VISIBLE. Nothing called this, so `visibleByDefault()`
+        // was a declaration nothing acted on: the overlay was never even built, and a feature whose whole
+        // output is an overlay looked like a feature that did not work. Here rather than in the
+        // constructor because an overlay is registered BY an extension, so there is nothing to show until
+        // they have run.
+        overlays.showDefaults();
     }
 
     /**

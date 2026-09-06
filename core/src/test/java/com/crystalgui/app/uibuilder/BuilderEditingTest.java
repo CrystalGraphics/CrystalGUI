@@ -12,6 +12,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
+import com.crystalgui.app.uibuilder.canvas.BuilderToolbar;
 import com.crystalgui.app.uibuilder.canvas.ResizeHandles;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.app.uibuilder.panel.HierarchyPanel;
@@ -19,6 +20,7 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
+import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.text.UIText;
 
 /**
@@ -122,6 +124,32 @@ public class BuilderEditingTest extends UiDocumentTestBase {
         editor.selection().selectOnly(editor.document().root());
         assertFalse(editor.editSelectedText());
         assertFalse(editor.textEditing().isEditing());
+    }
+
+    // ── The toolbar ─────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>Pressing Preview toggles, and says so.</b>
+     *
+     * <p>Preview's only visible effect is that the document's widgets become live — so on a document
+     * with nothing to press, a toggle carrying no state of its own is indistinguishable from a button
+     * that does nothing, which is exactly how it was reported.</p>
+     */
+    @Test
+    public void thePreviewButtonTogglesAndShowsIt() {
+        Button preview = editor.toolbar().previewButton();
+        assertTrue(editor.surface().isDesignMode());
+        assertFalse(preview.hasClass(BuilderToolbar.ACTIVE_CLASS));
+
+        preview.onPressed.emit();
+
+        assertFalse("the document is live now", editor.surface().isDesignMode());
+        assertTrue("and the button looks it", preview.hasClass(BuilderToolbar.ACTIVE_CLASS));
+
+        preview.onPressed.emit();
+
+        assertTrue(editor.surface().isDesignMode());
+        assertFalse(preview.hasClass(BuilderToolbar.ACTIVE_CLASS));
     }
 
     // ── L4.7 ────────────────────────────────────────────────────────────────────────────────────

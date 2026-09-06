@@ -67,6 +67,8 @@ public final class BuilderCommands {
                 .run(context -> {
                     BuilderEditor builder = builderOf(context);
                     builder.surface().setDesignMode(!builder.surface().isDesignMode());
+                    // The toolbar shows the state, and the key is the other way of changing it.
+                    builder.toolbar().syncPreviewState();
                 })
                 .enabledWhen(BuilderCommands::hasBuilder));
 
