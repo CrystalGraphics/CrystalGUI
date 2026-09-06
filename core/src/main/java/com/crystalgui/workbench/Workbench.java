@@ -941,6 +941,11 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         lifetime.add(documents.onDidChangeState.connect((document, state) -> {
             CgPath path = document.resource().asPath();
             if (path == null) return;
+            // A FILE THAT IS GONE TAKES ITS TAB, whoever removed it. The document layer only ORPHANS it
+            // -- it may not name a tab -- so the decision is made here, and it is the same one an in-app
+            // delete makes. A tab holding unsaved work is kept: closeDeleted skips it, because that
+            // buffer is the only copy of the text left anywhere its author can see it.
+            if (state == DocumentState.ORPHANED) editors.closeDeleted(document.resource());
             documentTabs.refreshDirtyMarkers();
             // AND THE INDEX'S VIEW OF IT. This signal means "content moved", which is exactly when a
             // snapshot of that content stops being true. Marked rather than re-encoded, so a burst of

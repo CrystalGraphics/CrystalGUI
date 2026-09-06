@@ -545,6 +545,24 @@ public class WorkspaceDocumentsTest {
         assertNull("with nothing stranded behind", workspace.backup().get(closed));
     }
 
+    /**
+     * <b>A delete answers its caller.</b> The explorer closes the deleted file's tab from this reply,
+     * so a delete that succeeds without answering leaves the tab open on a file that is gone.
+     */
+    @Test
+    public void deletingAnswersItsCaller() {
+        open(MAIN);
+        List<String> answered = new ArrayList<>();
+        List<String> failed = new ArrayList<>();
+        workspace.files().delete(MAIN)
+                .onError(error -> failed.add(String.valueOf(error)))
+                .then(trashId -> answered.add(String.valueOf(trashId)));
+        pump();
+
+        assertTrue("the delete did not fail: " + failed, failed.isEmpty());
+        assertEquals("the reply fired, which is what closes the tab", 1, answered.size());
+    }
+
     // ── Lifetime ────────────────────────────────────────────────────────────────────────────────
 
     /** The last reference releases the document AND its watch. */
