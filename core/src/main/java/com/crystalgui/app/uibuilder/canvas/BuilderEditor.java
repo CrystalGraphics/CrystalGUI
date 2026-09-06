@@ -56,6 +56,8 @@ public final class BuilderEditor implements DocumentEditor {
     private final Artboard artboard;
     private final BuilderSurface surface;
     private final BuilderToolbar toolbar;
+    private final ResizeHandles handles;
+    private final TextEditGesture textEditing;
     private final BuilderPane pane;
 
     public BuilderEditor(UiBuilderDocument document) {
@@ -81,6 +83,13 @@ public final class BuilderEditor implements DocumentEditor {
                 surface.setDesignMode(design);
             }
         });
+        this.handles = new ResizeHandles(surface, document);
+        // DIRECTLY, not through OverlayLayer: that path sets `hit-test: false` on whatever it mounts,
+        // which is right for something that only draws and fatal for eight handles that have to take a
+        // press. They are not a toggle in any editor either, so nothing is lost by not being a kind.
+        surface.surface().addOverlay(handles);
+        this.textEditing = new TextEditGesture(document);
+        surface.surface().addOverlay(textEditing);
         this.pane = new BuilderPane(toolbar, surface);
         // The document's own sheets, once there is a window to put them on. Installing them here would
         // reach a file from a constructor that a server also runs.
@@ -103,6 +112,25 @@ public final class BuilderEditor implements DocumentEditor {
     /** @see BuilderSelection */
     public BuilderSelection selection() {
         return surface.builderSelection();
+    }
+
+    /** In-place text editing — the field that opens over a {@code text} node. */
+    public TextEditGesture textEditing() {
+        return textEditing;
+    }
+
+    /**
+     * Opens in-place editing on the selected node.
+     *
+     * @return whether there was a text node selected to edit
+     */
+    public boolean editSelectedText() {
+        return textEditing.begin(selection().node());
+    }
+
+    /** The eight resize handles on the selection. */
+    public ResizeHandles handles() {
+        return handles;
     }
 
     /** The toolbar above the canvas. */
