@@ -22,9 +22,11 @@ import com.crystalgui.ui.service.InputMode;
  * field would focus it. An {@link InputMode} is asked first and says it consumed, which is the whole
  * reason the engine has a mode stack.</p>
  *
- * <p><b>It picks through {@code hit-test: false}.</b> The ordinary hit test deliberately skips those
- * subtrees — that is what the attribute is for — but a picker whose job is to reach anything on screen
- * must not honour it, or the one thing you cannot inspect is the thing you cannot click.</p>
+ * <p><b>It honours {@code hit-test: false}</b>, as DevTools' picker honours {@code pointer-events: none}.
+ * Reaching through it sounds more useful and is not: an application's unhittable layers are mostly
+ * full-window pictures that paint nothing — {@code RegionDropOverlay} covers the whole workbench — so a
+ * picker that reaches through them picks the same invisible sheet wherever you click, and the one thing
+ * you can inspect is the thing you never wanted. What such a layer hides is reachable from the tree.</p>
  */
 public final class PickMode implements InputMode {
 
@@ -113,7 +115,9 @@ public final class PickMode implements InputMode {
 
     @Nullable
     private UIElement elementAt(float x, float y) {
-        Box box = document.boxes().pick(x, y, ignored -> false);
+        // Nothing skipped: inertness is the predicate's business, and a picker must reach INTO a
+        // modal-blocked region -- looking at what a dialog has disabled is half of why you are looking.
+        Box box = document.boxes().hitTest(x, y, ignored -> false);
         return box == null ? null : box.node();
     }
 }

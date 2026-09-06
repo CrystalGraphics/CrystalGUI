@@ -366,12 +366,18 @@ public class ShaderGraphEditor extends UIElement
         StatusBarEntry entry = new StatusBarEntry("Shader graph compilation", lastCompileStatus,
                 lastCompileTooltip, lastCompileFailed ? "workbench.showProblems" : null,
                 lastCompileFailed ? StatusBarEntry.Kind.ERROR : StatusBarEntry.Kind.STANDARD);
-        if (compileEntry == null) {
-            compileEntry = statusBar().addEntry(entry, COMPILE_STATUS, StatusBarAlignment.LEFT,
-                    COMPILE_PRIORITY);
-        } else {
+        if (compileEntry != null) {
             compileEntry.update(entry);
+            return;
         }
+        // THERE MAY BE NO BAR YET, and being asked while there is none is routine rather than an error:
+        // the dock DETACHES a panel's widget to rebuild the strip around it, and announces the active
+        // panel while it is out of the tree -- so statusBar(), which resolves by walking outward, finds
+        // nothing. Writing the entry later is what connected() is for; throwing here took the whole
+        // frame down inside a dock rebuild, which reads as a dock fault rather than a status one.
+        StatusBar bar = statusBar();
+        if (bar == null) return;
+        compileEntry = bar.addEntry(entry, COMPILE_STATUS, StatusBarAlignment.LEFT, COMPILE_PRIORITY);
     }
 
 
@@ -826,12 +832,14 @@ public class ShaderGraphEditor extends UIElement
         var node = graph.getDocument().node(owner);
         StatusBarEntry entry = StatusBarEntry.of("Emitting node", "line " + line + " emitted by "
                 + (node == null ? owner : node.typeId() + "  (" + owner + ")"));
-        if (lineOwnerEntry == null) {
-            lineOwnerEntry = statusBar().addEntry(entry, LINE_OWNER_STATUS, StatusBarAlignment.LEFT,
-                    LINE_OWNER_PRIORITY);
-        } else {
+        if (lineOwnerEntry != null) {
             lineOwnerEntry.update(entry);
+            return;
         }
+        StatusBar bar = statusBar();
+        if (bar == null) return;
+        lineOwnerEntry = bar.addEntry(entry, LINE_OWNER_STATUS, StatusBarAlignment.LEFT,
+                LINE_OWNER_PRIORITY);
     }
 
     // ── Content ─────────────────────────────────────────────────────────────────────────────────
@@ -894,6 +902,10 @@ public class ShaderGraphEditor extends UIElement
     @Override
     protected void connected() {
         super.connected();
+        // THE STATUS THAT COULD NOT BE WRITTEN WHILE DETACHED, first and outside the ticking guard: a
+        // dock rebuild activates a panel whose widget is momentarily out of the tree, so statusBar()
+        // answered null and the summary was dropped rather than deferred.
+        publishCompileStatus();
         UIDocument document = document();
         // The guard is not the old one's: `registerTicker` was HashSet-backed and idempotent, and
         // `Animation.every` is a plain add. `disconnected()` clears it, or an editor that is hidden

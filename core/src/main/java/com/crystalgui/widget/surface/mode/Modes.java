@@ -6,7 +6,10 @@ import java.util.Map;
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.signal.Signal;
+import java.util.function.Supplier;
+
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Input;
 import com.crystalgui.widget.surface.SurfaceContext;
 
@@ -30,6 +33,9 @@ public final class Modes {
     private final SurfaceContext ctx;
     private final SurfaceMode mode;
 
+    @Nullable
+    private final Supplier<UIElement> view;
+
     private final Map<String, Tool> built = new LinkedHashMap<>();
 
     @Nullable
@@ -48,8 +54,23 @@ public final class Modes {
     public final Signal.Action onDidChangeTool = new Signal.Action();
 
     public Modes(SurfaceContext ctx) {
+        this(ctx, null);
+    }
+
+    /**
+     * @param view what a press the surface CLAIMS should focus — the surface widget itself. Handed in
+     *             rather than reached for, so {@link SurfaceContext} does not have to expose the element.
+     */
+    public Modes(SurfaceContext ctx, @Nullable Supplier<UIElement> view) {
         this.ctx = ctx;
+        this.view = view;
         this.mode = new SurfaceMode(ctx, this);
+    }
+
+    /** @see #Modes(SurfaceContext, Supplier) */
+    @Nullable
+    UIElement view() {
+        return view == null ? null : view.get();
     }
 
     @Nullable
