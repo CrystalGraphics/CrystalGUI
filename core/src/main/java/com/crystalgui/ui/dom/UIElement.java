@@ -38,6 +38,8 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
+import java.util.EnumMap;
+import com.crystalgui.style.PseudoClasses;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -518,6 +520,44 @@ public class UIElement extends UINode implements EventTarget, Styleable {
     @Override
     public boolean isInvalid() {
         return false;
+    }
+
+    /** Pseudo-states this element has been forced into. Null while nothing is forced, which is almost
+     * always -- a map per element would cost every element in the tree for a devtools feature. */
+    @Nullable
+    private Map<PseudoClasses, Boolean> forcedStates;
+
+    /**
+     * Forces a pseudo-state on or off, or clears the override with {@code null}.
+     *
+     * <pre>{@code
+     * button.forceState(PseudoClasses.HOVER, true);    // the :hover rules apply, with no pointer
+     * button.forceState(PseudoClasses.HOVER, null);    // and the pointer decides again
+     * }</pre>
+     *
+     * <p><b>FALSE is not the same as null.</b> False forces the state OFF against a real pointer sitting
+     * on the element, which is what makes a hover rule inspectable in both directions.</p>
+     *
+     * <p>Invalidates the match, so the cascade re-runs on the next frame rather than on the next thing
+     * that happens to touch this element.</p>
+     */
+    public UIElement forceState(PseudoClasses pseudo, @Nullable Boolean forced) {
+        if (pseudo == null) return this;
+        if (forced == null) {
+            if (forcedStates == null || forcedStates.remove(pseudo) == null) return this;
+            if (forcedStates.isEmpty()) forcedStates = null;
+        } else {
+            if (forcedStates == null) forcedStates = new EnumMap<>(PseudoClasses.class);
+            if (forced.equals(forcedStates.put(pseudo, forced))) return this;
+        }
+        invalidateStyleMatch();
+        return this;
+    }
+
+    @Override
+    @Nullable
+    public Boolean forcedState(PseudoClasses pseudo) {
+        return forcedStates == null ? null : forcedStates.get(pseudo);
     }
 
     @Override
