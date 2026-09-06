@@ -1,6 +1,7 @@
 package com.crystalgui.app.uibuilder;
 
 import java.util.List;
+import java.util.function.Supplier;
 import dev.vfyjxf.taffy.geometry.FloatRect;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.style.property.StyleProperty;
@@ -23,7 +24,10 @@ import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.Attribute;
+import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.config.Configurator;
+import com.crystalgui.widget.config.control.InfoControl;
 import com.crystalgui.widget.config.inspector.InspectorForm;
 import com.crystalgui.widget.config.inspector.InspectorSection;
 import com.crystalgui.widget.surface.extension.SectionSet;
@@ -399,17 +403,18 @@ public final class BuilderInspectorSections {
                 return;
             }
             form.header("Box");
-            form.row(ConfigDescriptor.info("box.size", "size"),
-                    round(box.width()) + " x " + round(box.height()));
-            form.row(ConfigDescriptor.info("box.margin", "margin"), edges(box.margin()));
-            form.row(ConfigDescriptor.info("box.border", "border"), edges(box.border()));
-            form.row(ConfigDescriptor.info("box.padding", "padding"), edges(box.padding()));
+            live(form, "box.size", "size",
+                    () -> round(node.box().width()) + " x " + round(node.box().height()), node);
+            live(form, "box.margin", "margin", () -> edges(node.box().margin()), node);
+            live(form, "box.border", "border", () -> edges(node.box().border()), node);
+            live(form, "box.padding", "padding", () -> edges(node.box().padding()), node);
             // THE CONTENT BOX, not contentWidth(): those are different questions and this panel is
             // asking the box model's. contentWidth() is the extent of what is INSIDE, which for a leaf
             // that draws its own glyphs is zero -- so a text node reported "0.0 x 0.0" for a row every
             // reader takes to mean the box its text is laid out in.
-            form.row(ConfigDescriptor.info("box.content", "content"),
-                    round(box.contentBoxWidth()) + " x " + round(box.contentBoxHeight()));
+            live(form, "box.content", "content",
+                    () -> round(node.box().contentBoxWidth()) + " x "
+                            + round(node.box().contentBoxHeight()), node);
         }
     }
 
@@ -440,15 +445,42 @@ public final class BuilderInspectorSections {
             // cascade SLOT and is null when no rule declared the property -- true, and not the question:
             // every one of these has an initial the layout actually uses, so three untouched defaults
             // were reported as three nulls.
-            ComputedStyle parentStyle = parent.getStyle().computed();
-            ComputedStyle own = node.getStyle().computed();
-            form.row(ConfigDescriptor.info("flex.direction", "parent direction"),
-                    String.valueOf(parentStyle.get(LayoutProperties.FLEX_DIRECTION)));
-            form.row(ConfigDescriptor.info("flex.grow", "grow"),
-                    String.valueOf(own.get(LayoutProperties.FLEX_GROW)));
-            form.row(ConfigDescriptor.info("flex.shrink", "shrink"),
-                    String.valueOf(own.get(LayoutProperties.FLEX_SHRINK)));
+            live(form, "flex.direction", "parent direction",
+                    () -> String.valueOf(parent.getStyle().computed()
+                            .get(LayoutProperties.FLEX_DIRECTION)), node);
+            live(form, "flex.grow", "grow",
+                    () -> String.valueOf(node.getStyle().computed()
+                            .get(LayoutProperties.FLEX_GROW)), node);
+            live(form, "flex.shrink", "shrink",
+                    () -> String.valueOf(node.getStyle().computed()
+                            .get(LayoutProperties.FLEX_SHRINK)), node);
         }
+    }
+
+    /**
+     * A row that re-reads its own value each frame.
+     *
+     * <p>These describe GEOMETRY, and geometry changes without the subject changing: dragging a resize
+     * handle rewrites the box sixty times a second and never touches which node is selected. The panel
+     * rebuilds on a subject change, so a row written once showed the size the box had when it was last
+     * selected and never moved again — which reads as a number you are supposed to commit somehow.</p>
+     *
+     * <p>Per frame rather than on a signal because nothing announces a box: layout is recomputed for
+     * whatever reason it likes. The read is a field access and the row is only written when the text
+     * actually differs, and the hook is owned by the form's own panel so it goes when the panel does.</p>
+     */
+    private static void live(InspectorForm form, String id, String label,
+                             Supplier<String> value, UIElement node) {
+        Configurator row = form.row(ConfigDescriptor.info(id, label), value.get());
+        if (!(row.control() instanceof InfoControl info)) return;
+        UIDocument window = form.panel().document();
+        if (window == null) return;
+        window.animation().every(form.panel(), delta -> {
+            if (node.box() == null) return true;
+            String now = value.get();
+            if (!now.equals(info.text().getText())) info.text().setText(now);
+            return true;
+        });
     }
 
     private static String edges(FloatRect rect) {

@@ -79,8 +79,15 @@ public final class ResizeHandles extends UIElement {
         }
     }
 
-    /** Never smaller than this on screen, whatever the zoom — a handle you cannot hit is not one. */
-    private static final float SIZE = 8f;
+    /**
+     * The handle's box, which is also its <b>hit target</b>.
+     *
+     * <p>Not a decoration size: this element is what takes the press, so shrinking it shrinks what a
+     * pointer has to land on. Six logical pixels is about as small as a grab target goes before it stops
+     * being reliably hittable, and the sheet rounds it fully so it reads as a small dot on the line
+     * rather than as a block sitting over it.</p>
+     */
+    private static final float SIZE = 6f;
 
     private final BuilderContext ctx;
 
