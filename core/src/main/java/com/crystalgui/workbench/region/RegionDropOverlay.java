@@ -4,6 +4,7 @@ import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.workbench.Workbench;
@@ -112,6 +113,12 @@ public class RegionDropOverlay extends UIElement {
         this.workbench = workbench;
         addClass(OVERLAY_CLASS);
         setHitTest(false);
+        // AND NOT THE ANSWER TO A PICK. `hit-test` keeps this out of ordinary DISPATCH, which is what
+        // stops it swallowing clicks -- but a pick reaches through it deliberately, and this layer covers
+        // the whole application, so anything resolving "what is under the pointer" that way got this and
+        // nothing else. A design surface asks exactly that before deciding whether a press is its own, so
+        // the canvas declined every press in the workbench while working perfectly outside one.
+        set(Attribute.HIT_TRANSPARENT, true);
         // Covers its host exactly. From Java rather than the sheet for the reason every promoted-ish box
         // here does it: the first layout runs before any rule has matched, and an overlay that is briefly
         // in flow shoves the workbench's real content sideways for a frame.
