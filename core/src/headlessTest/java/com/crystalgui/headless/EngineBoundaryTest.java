@@ -85,6 +85,10 @@ public class EngineBoundaryTest {
             // because the old engine still named them and a move into a new-engine package is what
             // this test exists to catch.
             "com/crystalgui/document/",
+            // THE TEMPLATE LOADER, which exists only to build trees of this engine: it names
+            // UIElementMirror and UIElement in every method. Neutral-looking (it is headless and
+            // below `widget`) and not neutral at all, which is what this list is for.
+            "com/crystalgui/template/",
             // THE WORKED EXAMPLES, for the same reason as the applications below: a `DocumentEditor`
             // is made of widgets, so an example classified as old-engine reads as the old engine
             // reaching into the new one -- which is the opposite of what it is.
