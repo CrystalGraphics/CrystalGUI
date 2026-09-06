@@ -142,7 +142,7 @@ public final class CrystalGUI1201FabricCommon implements ModInitializer {
                     (handler, client) -> Lifecycle1201.clientDisconnected());
 
             // Pinned windows. ScreenOverlay decides; Fabric's allow* events cancel by returning false.
-            HudRenderCallback.EVENT.register((graphics, tickDelta) -> Lifecycle1201.paintOverlay());
+            HudRenderCallback.EVENT.register((graphics, tickDelta) -> Lifecycle1201.paintHud());
 
             ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
                 ScreenEvents.afterRender(screen).register((s, g, mx, my, td) -> Lifecycle1201.paintOverlay());
@@ -156,6 +156,8 @@ public final class CrystalGUI1201FabricCommon implements ModInitializer {
 
                 ScreenKeyboardEvents.allowKeyPress(screen).register(
                         (s, key, scancode, modifiers) -> !Lifecycle1201.offerKey(key, (char) 0, true));
+                ScreenKeyboardEvents.allowKeyRelease(screen).register(
+                        (s, key, scancode, modifiers) -> !Lifecycle1201.offerKey(key, (char) 0, false));
             });
         }
     }

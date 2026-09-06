@@ -138,7 +138,12 @@ public final class Lifecycle1201 {
     // ── Pinned windows. ScreenOverlay in core/ makes every decision; these only carry it. ────────
 
     public static void paintOverlay() {
-        CgUiHud1201.paint();
+        CgUiHud1201.paintOverScreen();
+    }
+
+    /** The HUD arm, from a hook that fires ONCE a frame -- not once per vanilla overlay element. */
+    public static void paintHud() {
+        CgUiHud1201.paintHud();
     }
 
     /** @return whether the desktop consumed it and the foreign screen must not see it */
