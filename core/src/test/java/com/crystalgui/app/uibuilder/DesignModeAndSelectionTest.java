@@ -19,6 +19,7 @@ import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 
@@ -189,6 +190,61 @@ public class DesignModeAndSelectionTest extends UiDocumentTestBase {
         assertFalse(editor.surface().overlays().isShowing(BuilderOverlaysExtension.HOVER));
         assertFalse(editor.surface().overlays().isShowing(BuilderOverlaysExtension.SELECTION));
         assertFalse("and the handles are not left over a live UI", editor.handles().isDisplayed());
+    }
+
+    /**
+     * <b>The page is not a node.</b>
+     *
+     * <p>The artboard is placed on the plane like anything else, so a marquee — which is what a press on
+     * empty canvas starts — caught it, and clicking anywhere blank put eight resize handles on the page
+     * frame while the inspector described the frame instead of the document. {@code TreePolicy} has always
+     * answered null for it; the marquee was reading the plane's children directly.</p>
+     */
+    @Test
+    public void clickingEmptyCanvasNeverSelectsTheArtboard() {
+        Box board = editor.artboard().box();
+        // Well inside the page and clear of both text nodes, which sit at its top.
+        Vector2f blank = Transform2D.apply(board.localToWorld(),
+                board.width() * 0.5f, board.height() * 0.8f);
+
+        pressAt(blank);
+        frame();
+        releaseAt(blank);
+        frame();
+
+        assertFalse("the page frame is not something an edit can act on",
+                editor.selection().contains(editor.artboard()));
+        assertFalse(editor.surface().selection().contains(editor.artboard()));
+    }
+
+    /** And a marquee across the whole page catches the document's nodes, not the page. */
+    @Test
+    public void aMarqueeCatchesNodesAndNotTheArtboard() {
+        Box board = editor.artboard().box();
+        Vector2f from = Transform2D.apply(board.localToWorld(), 2f, 2f);
+        Vector2f to = Transform2D.apply(board.localToWorld(),
+                board.width() - 2f, board.height() - 2f);
+
+        pressAt(from);
+        frame();
+        document.input().consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                Math.round(to.x()), Math.round(to.y()), 0, 0, -1, false, 0f, -1L));
+        frame();
+        releaseAt(to);
+        frame();
+
+        assertFalse("the page was caught by its own marquee",
+                editor.surface().selection().contains(editor.artboard()));
+    }
+
+    private void pressAt(Vector2f at) {
+        document.input().consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                Math.round(at.x()), Math.round(at.y()), 0, 0, CgMouseCodes.LEFT_BUTTON, true, 0f, 1L));
+    }
+
+    private void releaseAt(Vector2f at) {
+        document.input().consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                Math.round(at.x()), Math.round(at.y()), 0, 0, CgMouseCodes.LEFT_BUTTON, false, 0f, 2L));
     }
 
     private void clickOn(UIElement element) {
