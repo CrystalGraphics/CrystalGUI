@@ -68,12 +68,73 @@ public final class ExplorerBinding {
                     }
                     externalChange(change);
                 }
+                announce(changes);
                 // NO `treeView().refresh()` HERE any more: invalidating ANNOUNCES, and whoever is
                 // showing the listing subscribes. A watcher reaching for a widget is what kept the
                 // explorer inside the engine. @see WorkspaceTreeSource#onDidInvalidate
             });
             workbench.rootWatches.put(root, new Workbench.RootWatch(watch, listener));
         }
+    }
+
+    /**
+     * Says what changed under a project root, and who did it.
+     *
+     * <p><b>Once per batch, never per file.</b> A tick is already coalesced, so a batch is one thing
+     * somebody did — and a rename of a directory, or a build rewriting a tree, would otherwise be one
+     * notification per file in it.</p>
+     *
+     * <p>Nothing is said about this client's own operations, and not by a filter here: the server does
+     * not send them back at all, because whoever asked already knows. So everything that arrives is
+     * either somebody else on this workspace, named, or something outside it, which no filesystem event
+     * can put a name to — {@code FileChange#byPeer} is the whole of that distinction.</p>
+     */
+    private void announce(List<FsMessages.FileChange> changes) {
+        if (changes.isEmpty()) return;
+        String who = soleAuthor(changes);
+
+        if (changes.size() > 1) {
+            Notifications.info(who.isEmpty()
+                    ? changes.size() + " files changed on disk"
+                    : who + " changed " + changes.size() + " files");
+            return;
+        }
+        FsMessages.FileChange only = changes.get(0);
+        Notifications.info(who.isEmpty()
+                ? nameOf(only.path()) + " was " + past(only) + " on disk"
+                : who + " " + verb(only));
+    }
+
+    /** The one author behind a batch, or empty when it was outside the workspace or was several people. */
+    private static String soleAuthor(List<FsMessages.FileChange> changes) {
+        String who = changes.get(0).author();
+        for (FsMessages.FileChange change : changes) {
+            if (!change.author().equals(who)) return "";
+        }
+        return who;
+    }
+
+    private static String verb(FsMessages.FileChange change) {
+        return switch (change.kind()) {
+            case CREATED -> "added " + nameOf(change.path());
+            case DELETED -> "deleted " + nameOf(change.path());
+            case RENAMED -> "renamed " + nameOf(change.from()) + " to " + nameOf(change.path());
+            case MODIFIED -> "changed " + nameOf(change.path());
+        };
+    }
+
+    private static String past(FsMessages.FileChange change) {
+        return switch (change.kind()) {
+            case CREATED -> "added";
+            case DELETED -> "deleted";
+            case RENAMED -> "renamed to " + nameOf(change.path());
+            case MODIFIED -> "changed";
+        };
+    }
+
+    /** The last segment, which is what somebody reading a notification recognises. */
+    private static String nameOf(String path) {
+        return path.isEmpty() ? path : CgPath.parse(path).name();
     }
 
     /**

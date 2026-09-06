@@ -209,6 +209,16 @@ public final class WatchHub {
         }
 
         pairRenames(coalesced);
+
+        // STATED LAST AND AUTHORITATIVE. The server performed these and knows exactly what happened,
+        // where the watcher infers it from bytes moving -- and only these carry a name.
+        Map<CgPath, Object> originOf = new LinkedHashMap<>();
+        for (Stated said : stated) {
+            CgPath path = CgPath.parse(said.change().path());
+            coalesced.put(path, said.change());
+            if (said.origin() != null) originOf.put(path, said.origin());
+        }
+        stated.clear();
         // Consumed per tick. A deletion whose partner never arrived was a deletion, and holding its
         // etag any longer would let a create minutes later be reported as a rename of it.
         etagBefore.clear();
@@ -218,7 +228,11 @@ public final class WatchHub {
         for (Map.Entry<Object, Map<CgPath, Subscription>> peer : byPeer.entrySet()) {
             List<FsMessages.FileChange> mine = new ArrayList<>();
             for (FsMessages.FileChange change : coalesced.values()) {
-                if (covers(peer.getValue().values(), CgPath.parse(change.path()))) mine.add(change);
+                CgPath path = CgPath.parse(change.path());
+                // NEVER BACK TO WHOEVER ASKED. They already know, and a client told about its own save
+                // reloads the file it has just written.
+                if (peer.getKey().equals(originOf.get(path))) continue;
+                if (covers(peer.getValue().values(), path)) mine.add(change);
             }
             if (!mine.isEmpty()) out.put(peer.getKey(), mine);
         }
@@ -333,6 +347,22 @@ public final class WatchHub {
         }
     }
 
+    /**
+     * What the server itself did, waiting for the next tick to carry it.
+     *
+     * <p>A filesystem event says bytes moved; it cannot say who asked, because the OS was never told.
+     * So an operation the server performed is queued here <b>with a name on it</b> and merged into the
+     * tick, where it also beats the watcher's version of the same path — the server knows exactly what
+     * it did, and the watcher is guessing from what it can see.</p>
+     *
+     * @param origin the peer that asked, so the answer is not sent back to them: they already know, and
+     *               a client told about its own save reloads the file it has just written
+     */
+    private record Stated(FsMessages.FileChange change, @Nullable Object origin) {
+    }
+
+    private final List<Stated> stated = new ArrayList<>();
+
     /** The etag a path held before this tick removed it — the only evidence a rename has of its source. */
     private final Map<String, String> etagBefore = new LinkedHashMap<>();
 
@@ -362,6 +392,32 @@ public final class WatchHub {
         }
         return new FsMessages.FileChange(to.toString(), FsMessages.ChangeKind.RENAMED,
                 etag == null ? "" : etag, from.toString());
+    }
+
+    /**
+     * The server changed this file <b>for somebody</b>, and every other peer should hear so by name.
+     *
+     * @param author what to call them on the far side
+     * @param origin the peer that asked, excluded from the fan-out
+     */
+    public void noteChanged(CgPath path, FsMessages.ChangeKind kind, @Nullable String etag,
+                            String author, @Nullable Object origin) {
+        noteWritten(path, etag);
+        stated.add(new Stated(new FsMessages.FileChange(
+                path.toString(), kind, etag == null ? "" : etag, "", author), origin));
+    }
+
+    /** As {@link #noteRenamed}, and told to everybody but whoever asked for it. */
+    public void noteRenamed(CgPath from, CgPath to, @Nullable String etag,
+                            String author, @Nullable Object origin) {
+        stated.add(new Stated(noteRenamed(from, to, etag).by(author), origin));
+    }
+
+    /** As {@link #noteDeleted}, and told to everybody but whoever asked for it. */
+    public void noteDeleted(CgPath path, String author, @Nullable Object origin) {
+        noteDeleted(path);
+        stated.add(new Stated(new FsMessages.FileChange(
+                path.toString(), FsMessages.ChangeKind.DELETED, "", "", author), origin));
     }
 
     /** The server deleted this file. */
