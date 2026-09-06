@@ -27,6 +27,11 @@ compiles against one loader and is used by three.
   place — see the loader modules' own notes.
 - **The transport is the exception.** Three loaders mean three networking APIs, so each builds its own
   `CgNetworkChannel` and passes it to `Lifecycle1201.bootstrap`.
+- **`RenderGuiOverlayEvent` fires once per vanilla overlay ELEMENT** -- hotbar, crosshair, boss bar, chat and
+  a dozen more. Painting the compositor from it laid it out and drew it about fifteen times a frame and put
+  the game at ten fps. `RenderGuiEvent.Post` fires once; Fabric's `HudRenderCallback` already did.
+- **One arm per hook.** A frame with a screen open fires the HUD hook AND the screen hook, so each paints only
+  its own presentation (`paintHud` / `paintOverScreen`) -- otherwise the compositor is drawn twice.
 - **No GL in constructors or static initialisers.** GL work waits for the first paint.
 - **Mixin AP**: provided by `legacyForge`. Do not add a second `annotationProcessor` for Mixin here —
   it produces duplicate-AP SRG mapping errors.
