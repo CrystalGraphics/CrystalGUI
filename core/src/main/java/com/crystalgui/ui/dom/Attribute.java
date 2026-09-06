@@ -33,6 +33,22 @@ public final class Attribute<T> {
     public static final Attribute<Boolean> INERT = of("inert", Boolean.class, false);
     /** Whether hit-testing may land on this subtree; {@code pointer-events: none} when false. */
     public static final Attribute<Boolean> HIT_TEST = of("hit-test", Boolean.class, true);
+
+    /**
+     * Never the answer to a hit test, though everything inside it still is.
+     *
+     * <p>Distinct from {@link #HIT_TEST}, and the distinction is the whole point: {@code hit-test:
+     * false} is subtree-wide and returns without recursing, so it cannot express "a layer that only
+     * holds things". This is what a full-size overlay wants — the top layer already gets it, and every
+     * canvas layer needs it for the same reason.</p>
+     *
+     * <p>Without it a full-size box over a surface is the answer to every hit that lands on background,
+     * which {@code Box.search} calls this codebase's most-repeated failure. Setting {@code hit-test}
+     * instead is not the alternative: a pick deliberately reaches through that, so a design surface —
+     * which picks rather than hit-tests — sees the layer anyway.</p>
+     */
+    public static final Attribute<Boolean> HIT_TRANSPARENT =
+            of("hit-transparent", Boolean.class, false);
     /** The name of the slot a light child asks to be placed in; empty for the default slot. */
     /**
      * A focus navigation scope: a dialog, a window frame, a pane. Tab is trapped inside whichever

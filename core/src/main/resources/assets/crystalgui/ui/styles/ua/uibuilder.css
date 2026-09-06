@@ -122,11 +122,9 @@ builderpane > buildersurface {
  *
  * The cursors are the eight CSS names, and the pairing is the one every editor uses: a corner resizes
  * both axes and an edge resizes one. */
-resizehandles {
-    width: 100%;
-    height: 100%;
-}
-
+/* NO SIZE HERE, deliberately. The layer is a zero-sized origin the widget places handles from, and a
+ * full-size hittable box over the canvas is the answer to every hit test that lands on background --
+ * select once and nothing on the canvas can be clicked again. Box.search names this failure outright. */
 resizehandles > * {
     background-color: var(--builder-handle-bg, #FFFFFF);
     border-width: 1px;
@@ -144,11 +142,7 @@ resizehandles > * {
  * A field over the node, not typing into the document: in design mode the artboard is `hit-test: false`,
  * so nothing inside it can take a keystroke at all. The widget matches the node's font size and position;
  * this is the ring that says the field is a field. */
-textedit {
-    width: 100%;
-    height: 100%;
-}
-
+/* Zero-sized for the reason above; the field is placed from it. */
 textedit > textfield {
     border-width: 1px;
     border-color: var(--builder-selected, #3574F0);
@@ -172,6 +166,15 @@ designtoolwindow, hierarchypanel {
 }
 
 .__hierarchy-row__.__selected__ {
+    background-color: var(--builder-selected, #3574F0);
+    color: var(--builder-tag-fg, #FFFFFF);
+}
+
+
+/* Preview is a TOGGLE and has to look like one. Its visible effect is that the document's widgets go
+ * live, so on a document with nothing to press an unstyled toggle is indistinguishable from a button
+ * that does nothing. */
+buildertoolbar > button.__active__ {
     background-color: var(--builder-selected, #3574F0);
     color: var(--builder-tag-fg, #FFFFFF);
 }

@@ -50,6 +50,10 @@ public final class HoverHighlight extends UIElement {
         this.ctx = ctx;
         addClass(OVERLAY_CLASS);
         set(Attribute.HIT_TEST, false);
+        // AND NOT THE ANSWER TO A PICK EITHER. hit-test alone is not enough here: a design surface
+        // resolves what is under the pointer with a PICK, which reaches through that attribute on
+        // purpose -- so a full-size overlay was the answer to every click on the canvas.
+        set(Attribute.HIT_TRANSPARENT, true);
 
         attachShadow(false);
         tag.set(Attribute.PART, TAG_PART);
