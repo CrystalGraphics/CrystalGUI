@@ -3,30 +3,22 @@ package com.crystalgui.widget.graph;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.ui.input.keymap.Keymap;
+import com.crystalgui.ui.input.keymap.KeymapScope;
 import com.crystalgui.widget.graph.node.NodeCreationMenu;
-import com.crystalgui.ui.service.Drag;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.core.data.ClipboardActions;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.graph.EdgeData;
-import com.crystalgui.graph.GraphProperty;
-import com.crystalgui.graph.GraphChangeset;
 import com.crystalgui.graph.GraphDocument;
-import com.crystalgui.graph.GraphIds;
 import com.crystalgui.graph.NodeData;
-import com.crystalgui.graph.NodeType;
 import com.crystalgui.graph.PortRef;
-import com.crystalgui.graph.PortSpec;
 import com.crystalgui.graph.NodeTypeRegistry;
 import com.crystalgui.graph.TypeCompatibility;
-import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.undo.UndoCommands;
 import com.crystalgui.core.undo.UndoScope;
-import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.widget.surface.edit.Clipboard;
 import com.crystalgui.widget.surface.edit.Edits;
 import com.crystalgui.render.CgUiPaintContext;
@@ -39,29 +31,20 @@ import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.service.Input;
-import dev.vfyjxf.taffy.style.TaffyDisplay;
-import dev.vfyjxf.taffy.style.TaffyPosition;
 import org.joml.Vector2f;
-import com.crystalgui.core.undo.CompositeEdit;
 import com.crystalgui.widget.canvas.CanvasView;
-import com.crystalgui.widget.surface.Surface;
 import com.crystalgui.widget.surface.SurfaceEditor;
 import com.crystalgui.widget.surface.select.SurfaceSelection;
 import com.crystalgui.widget.surface.SurfacePolicy;
 import com.crystalgui.widget.surface.mode.Marquee;
 import com.crystalgui.widget.surface.mode.MoveGesture;
-import com.crystalgui.widget.surface.select.Picking;
 import com.crystalgui.widget.canvas.WorldRect;
 import lombok.Getter;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 /**
  * A {@link CanvasView} that knows about nodes and wires: it owns the edge set, the wire layer that
@@ -132,19 +115,10 @@ public class GraphView extends SurfaceEditor {
      * so they may only be live while focus is inside a graph. Declaring them on the commands would make
      * them application-wide and cost every text field in the application three letters.</p>
      *
-     * <p>This was missing for one commit and nothing failed: registration had moved to
-     * {@link #registerCommands} while the binding half was still waiting on a host to call
-     * {@code GraphCommands.install(window)} — which by then nothing did. Every graph command existed, was
+     * <p>A node declares its keymap by ANSWERING for one ({@link KeymapScope}) rather than through an
+     * engine hook, so the binding happens once here and {@link #keymapOrNull()} hands it to the resolver.
+     * The commit that lost this on the old engine lost it silently: every graph command existed, was
      * enabled, showed in the palette, and answered no key at all.</p>
-     */
-    /**
-     * This view's own key bindings.
-     *
-     * <p>{@code bindKeys()} was an engine hook on the old element and there is none here — a node
-     * declares its keymap by ANSWERING for one ({@link com.crystalgui.ui.input.keymap.KeymapScope}),
-     * so the binding happens once, in the constructor, and {@link #keymapOrNull()} hands it to the
-     * resolver. The commit that lost this on the old engine lost it silently: every graph command
-     * existed, was enabled, showed in the palette, and answered no key at all.</p>
      */
     private final Keymap keymap = defaultKeymap();
 
@@ -165,63 +139,12 @@ public class GraphView extends SurfaceEditor {
      * <p>{@code super.getData(key)} last, so the generic {@code ELEMENT} answer stays reachable — the
      * rule every override of this method follows.</p>
      */
-    /**
-     * What Cut/Copy/Paste mean in a node graph — nodes and the wires between them.
-     *
-     * <p>Runs the registered graph commands rather than reaching for the clipboard itself, so the one
-     * copy of "what does cutting a selection do" stays in {@code GraphCommands} where its undo grouping
-     * and its paste offset already live. @see com.crystalgui.core.data.ClipboardActions</p>
-     */
-    private final ClipboardActions clipboardActions = new ClipboardActions() {
-        @Override
-        public boolean canCut() {
-            return isEnabled(GraphCommands.CUT);
-        }
-
-        @Override
-        public void cut() {
-            run(GraphCommands.CUT);
-        }
-
-        @Override
-        public boolean canCopy() {
-            return isEnabled(GraphCommands.COPY);
-        }
-
-        @Override
-        public void copy() {
-            run(GraphCommands.COPY);
-        }
-
-        @Override
-        public boolean canPaste() {
-            return isEnabled(GraphCommands.PASTE);
-        }
-
-        @Override
-        public void paste() {
-            run(GraphCommands.PASTE);
-        }
-
-        private boolean isEnabled(String id) {
-            com.crystalgui.core.command.Command command =
-                    com.crystalgui.core.command.CommandRegistry.global().get(id);
-            return command != null && command.isEnabled(
-                    com.crystalgui.core.command.CommandContext.of(GraphView.this));
-        }
-
-        private void run(String id) {
-            com.crystalgui.core.command.CommandRegistry.global().run(id,
-                    com.crystalgui.core.command.CommandContext.of(GraphView.this));
-        }
-    };
-
     @Override
     public Object getData(DataKey<?> key) {
         if (key == GRAPH_VIEW) return this;
-        if (key == UiDataKeys.CLIPBOARD) return clipboardActions;
+        if (key == UiDataKeys.CLIPBOARD) return clipboard.asActions;
         if (key == UiDataKeys.SELECTION) {
-            return new java.util.ArrayList<Object>(getSelection().nodes());
+            return new ArrayList<Object>(getSelection().nodes());
         }
         Object undo = undoScopeData(key);
         // NO super: a UIElement is not a DataProvider, and the walk outward through
@@ -230,16 +153,6 @@ public class GraphView extends SurfaceEditor {
         return undo;
     }
 
-
-    /**
-     * Logical px, before zoom — Unity's wire is a hairline, and this used to be twice it.
-     *
-     * <p>The error was easy to make and worth recording: the reference screenshots are at 100%, while
-     * the harness runs at {@code uiScale} 2, so a "2px" wire drew four physical pixels against Unity's
-     * one and a half. A logical width compared against a physical reference is off by exactly the scale
-     * factor, and looks merely "a bit heavy" rather than obviously wrong.</p>
-     */
-    private static final float DEFAULT_WIRE_WIDTH = 1f;
 
     /**
      * REMOVED — kept here as a record of why. This used to floor a wire's on-screen thickness at 1
@@ -269,9 +182,6 @@ public class GraphView extends SurfaceEditor {
      */
     @Getter
     GraphDocument document = new GraphDocument();
-
-    /** id → widget. The only way back from document data to the thing on screen. */
-    private final Map<String, GraphNode> widgetsById = new LinkedHashMap<>();
 
     private final NodeWireLayer wireLayer;
 
@@ -307,9 +217,6 @@ public class GraphView extends SurfaceEditor {
     @Nullable
     private GraphConnection hoveredWire;
 
-    @Getter
-    private float wireBaseWidth = DEFAULT_WIRE_WIDTH;
-
     /** Fires after any change to the edge set — connect, disconnect, or a node leaving with wires on it. */
     public final Signal.Action onConnectionsChanged = new Signal.Action();
 
@@ -317,7 +224,7 @@ public class GraphView extends SurfaceEditor {
     /** What a graph means by the engine's questions. @see GraphPolicy */
     @Override
     protected SurfacePolicy createPolicy() {
-        return new GraphPolicy();
+        return new GraphPolicy(this);
     }
 
     /** A graph's selection answers two typed questions the engine's does not. @see GraphSelection */
@@ -409,11 +316,10 @@ public class GraphView extends SurfaceEditor {
         return false;
     }
 
-    /** The wire under a viewport-space point, or null. */
+    /** @see GraphWires#at */
     @Nullable
     public GraphConnection wireAt(float rawX, float rawY) {
-        Vector2f world = screenToWorld(rawX, rawY);
-        return wireLayer.pickWire(world.x(), world.y());
+        return wires.at(rawX, rawY);
     }
 
     /** On the rubber band, so a theme owns its look. */
@@ -482,19 +388,21 @@ public class GraphView extends SurfaceEditor {
 
     // ── The document seam ───────────────────────────────────────────────────
 
+    /** The projection between the document and the widgets showing it. @see GraphDocumentSync */
+    private final GraphDocumentSync documents = new GraphDocumentSync(this);
+
     /**
      * Adds a node, binding it to the document.
      *
      * <p>A widget arriving without a {@code nodeId} — anything built by hand rather than from a
-     * {@link NodeData} — gets one here, along with {@link NodeData} <b>derived from its own ports</b>.
-     * That keeps the 6.2.3 API working unchanged while making the document complete either way: there is
-     * no such thing as a node on this canvas the document does not know about, which is the property
-     * every later feature (save, duplicate, a server sending a graph) depends on.</p>
+     * {@link NodeData} — gets one, along with {@link NodeData} <b>derived from its own ports</b>. There
+     * is no such thing as a node on this canvas the document does not know about, which is the property
+     * every later feature depends on.</p>
      */
     @Override
     public GraphView addNode(UIElement node, float worldX, float worldY) {
         if (node instanceof GraphNode graphNode) {
-            attachNode(graphNode, dataFor(graphNode, worldX, worldY));
+            documents.addGraphNode(graphNode, worldX, worldY);
             return this;
         }
         super.addNode(node, worldX, worldY);
@@ -504,35 +412,9 @@ public class GraphView extends SurfaceEditor {
     @Override
     public GraphView moveNode(UIElement node, float worldX, float worldY) {
         super.moveNode(node, worldX, worldY);
-        // Position is document data — a reload has to give a moved node back where it was left.
-        if (node instanceof GraphNode graphNode && graphNode.getNodeId() != null) {
-            document.moveNode(graphNode.getNodeId(), worldX, worldY);
-        }
-        markSynced();
+        if (node instanceof GraphNode graphNode) documents.noteMoved(graphNode, worldX, worldY);
+        else documents.markSynced();
         return this;
-    }
-
-    /** The {@link NodeData} for a widget: its own if it already has one, otherwise derived from it. */
-    private NodeData dataFor(GraphNode widget, float worldX, float worldY) {
-        String existing = widget.getNodeId();
-        if (existing != null) {
-            NodeData known = document.node(existing);
-            if (known != null) return known.movedTo(worldX, worldY);
-        }
-        List<PortSpec> ports = new ArrayList<>();
-        for (NodePort port : widget.getPorts()) {
-            ports.add(new PortSpec(port.getPortId(), port.getDirection(), port.getType().id()));
-        }
-        String typeId = widget.getTypeId() != null ? widget.getTypeId() : WIDGET_AUTHORED_TYPE;
-        // A widget-authored node stores its own title, because there is no library type to take one
-        // from and reloading it as "crystalgui:widget" is true but useless. Its controls and preview
-        // still cannot come back — those are Java the document never saw — which is the honest limit of
-        // building a node as a widget rather than registering a type for it.
-        Map<String, String> properties = widget.getTypeId() != null
-                ? Map.of()
-                : Map.of(NodeWidgetFactory.TITLE_PROPERTY, widget.getTitle());
-        return new NodeData(existing != null ? existing : GraphIds.generate(),
-                typeId, worldX, worldY, ports, properties);
     }
 
     /**
@@ -543,84 +425,66 @@ public class GraphView extends SurfaceEditor {
      */
     public static final String WIDGET_AUTHORED_TYPE = "crystalgui:widget";
 
-    /**
-     * The view has just made this change itself, so the changeset must not report it again.
-     *
-     * <p>Without this the two directions fight, and they fight <em>quietly</em>. A changeset records the
-     * NET change since it was last drained, so an add the view had already applied sat pending — and a
-     * later remove of that same node cancelled the add instead of recording a removal. The changeset
-     * then said "nothing happened" while the view still held the widget, so
-     * {@link #syncFromDocument()} left a node on screen that the document no longer had.</p>
-     */
+    /** {@code super.addNode}, so the sync can place a widget without re-entering this class's override. */
+    void addNodeDirect(GraphNode widget, float worldX, float worldY) {
+        super.addNode(widget, worldX, worldY);
+    }
+
+    /** {@code super.moveNode}, likewise. */
+    void moveNodeDirect(GraphNode widget, float worldX, float worldY) {
+        super.moveNode(widget, worldX, worldY);
+    }
+
+    /** @see GraphPorts#watchAll */
+    void watchPortsOf(GraphNode node) {
+        ports.watchAll(node);
+    }
+
+    /** @see GraphPorts#forget */
+    void forgetPortsOf(GraphNode node) {
+        for (NodePort port : node.getPorts()) ports.forget(port);
+    }
+
+    /** @see GraphWires#refreshCounts */
+    void refreshWireCounts(NodePort... changed) {
+        wires.refreshCounts(changed);
+    }
+
+    /** @see GraphDocumentSync#markSynced */
     void markSynced() {
-        document.changeset().clear();
+        documents.markSynced();
     }
 
-    /** Puts a node into both the document and the tree. The one path; {@link GraphEdits.AddNode} uses it too,
-     * which is what makes an undone delete restore the SAME id rather than a new one. */
+    /** @see GraphDocumentSync#attachNode */
     void attachNode(GraphNode widget, NodeData data) {
-        if (!document.hasNode(data.id())) document.addNode(data);
-        widget.bindToDocument(data.id(), data.typeId());
-        widgetsById.put(data.id(), widget);
-        super.addNode(widget, data.x(), data.y());
-        ports.watchAll(widget);
-        markSynced();
+        documents.attachNode(widget, data);
     }
 
-    /** Removes a node from both. */
+    /** @see GraphDocumentSync#detachNode */
     void detachNode(GraphNode widget) {
-        String id = widget.getNodeId();
-        if (id != null) {
-            document.removeNode(id);
-            widgetsById.remove(id);
-        }
-        // A port's default editor is a SEPARATE plane child, not a descendant of the node — removing the
-        // node does not take it with it. Forgotten explicitly, or a deleted node's floating field is
-        // orphaned on screen forever, pointing at a port that no longer exists anywhere.
-        for (NodePort port : widget.getPorts()) ports.forget(port);
-        content().remove(widget);
-        markSynced();
+        documents.detachNode(widget);
     }
 
-    /**
-     * Re-derives a bound node's declared ports from its widget.
-     *
-     * <p>Called by {@link GraphNode#addPort}, because a node may gain ports after it joins the view.
-     * Only for widget-authored nodes: one built from a library type already has the ports its type
-     * declared, and re-deriving them would throw away anything the type knew that the widget does not.</p>
-     */
+    /** Called by {@link GraphNode#addPort}. @see GraphDocumentSync#syncPorts */
     void syncPorts(GraphNode widget) {
-        String id = widget.getNodeId();
-        if (id == null) return;
-        NodeData current = document.node(id);
-        // The DOCUMENT decides whether this is widget-authored, not the widget. Binding sets the
-        // widget's typeId to WIDGET_AUTHORED_TYPE, so a "typeId == null" test here rejected precisely
-        // the nodes it existed to serve — every one of them, silently.
-        if (current == null || !WIDGET_AUTHORED_TYPE.equals(current.typeId())) return;
-        List<PortSpec> ports = new ArrayList<>();
-        for (NodePort port : widget.getPorts()) {
-            ports.add(new PortSpec(port.getPortId(), port.getDirection(), port.getType().id()));
-        }
-        document.replaceNode(new NodeData(id, current.typeId(), current.x(), current.y(),
-                ports, current.properties()));
-        markSynced();
+        documents.syncPorts(widget);
+    }
+
+    /** @see GraphDocumentSync#linkWidgets */
+    void linkWidgets(EdgeData edge) {
+        documents.linkWidgets(edge);
     }
 
     /** The widget projecting {@code nodeId}, or null. */
     @Nullable
     public GraphNode widgetFor(String nodeId) {
-        return widgetsById.get(nodeId);
+        return documents.widgetFor(nodeId);
     }
 
     /** The port a {@link PortRef} names, or null if the node or the port is not on screen. */
     @Nullable
     public NodePort portFor(PortRef ref) {
-        GraphNode widget = widgetsById.get(ref.nodeId());
-        if (widget == null) return null;
-        for (NodePort port : widget.getPorts()) {
-            if (port.getPortId().equals(ref.portId())) return port;
-        }
-        return null;
+        return documents.portFor(ref);
     }
 
     /** The {@link PortRef} naming a live port, or null before its node has been added. */
@@ -631,157 +495,17 @@ public class GraphView extends SurfaceEditor {
         return new PortRef(owner.getNodeId(), port.getPortId());
     }
 
-    /**
-     * Replaces everything this view is showing with {@code source} — opening a file, or receiving a graph.
-     *
-     * <h3>It copies the CONTENTS in; it does not adopt the object</h3>
-     * <p>This used to end in {@code this.document = source}, and that is the one line that made a
-     * per-file editor impossible. A host wires its panels to {@code getDocument()} once, at construction
-     * — {@code ShaderGraphEditor} hands the same instance to its Main Preview, its Blackboard and its own
-     * {@code onChanged} listener. Swapping the field left every one of them bound to an <b>orphan</b>:
-     * the board would go on listing the previous graph's properties and write its edits into a document
-     * nobody was showing, with both halves individually working and no error anywhere.</p>
-     *
-     * <p>So a view owns one document for its whole life, and loading changes what is in it. The cost is
-     * the mirror-image trap, which is the lesser one and at least has an obvious right answer: a caller
-     * that holds {@code source} afterwards is holding a spent template, and further edits to it reach
-     * nothing. Mutate {@code getDocument()}.</p>
-     *
-     * <h3>Through the changeset, not a second rebuild routine</h3>
-     * <p>Clearing and repopulating produces exactly the changeset {@link #syncFromDocument()} already
-     * consumes, so the widget work is the same path a paste or a server sync takes — retiring floating
-     * port editors, pruning the selection, emitting {@code onConnectionsChanged} once. The hand-rolled
-     * rebuild this replaced had to remember each of those separately, and a fourth thing added to the
-     * view later would have had to be remembered in both places.</p>
-     *
-     * <h3>Loading is not an edit, so the undo stack is CLEARED</h3>
-     * <p>Not appended to, and not left alone. Appending would make the first {@code Ctrl+Z} after an open
-     * unpick the file a node at a time — the file is the starting state, not something the user did.
-     * Leaving the old history is worse: those entries describe a graph that is no longer here, so undoing
-     * one applies an edit to nodes that never existed in this document.</p>
-     *
-     * <p>Edges are <b>restored</b> rather than reconnected, for the reason {@code GraphCodecs} gives:
-     * re-validating on load silently drops every wire whose types this build has no rule for — the
-     * "opened without the plugin" case the whole model is arranged to survive. And nodes whose type is
-     * not in the library still appear, because {@link NodeWidgetFactory} builds them from the ports the
-     * document stored, which is why the document stores them.</p>
-     */
+    /** Replaces everything this view is showing. @see GraphDocumentSync#load */
     public GraphView load(GraphDocument source) {
-        document.clear();
-        // The DOCUMENT layer alone, mirroring what the codec writes — the user and workspace layers come
-        // from other files entirely and are not this graph's to carry.
-        document.settings().replaceLayer(SettingsLayer.DOCUMENT,
-                source.settings().layer(SettingsLayer.DOCUMENT).asMap());
-        for (GraphProperty property : source.properties()) document.addProperty(property);
-        for (NodeData node : source.nodes()) document.addNode(node);
-        for (EdgeData edge : source.edges()) document.restoreEdge(edge);
-
-        syncFromDocument();
-        edits.history().clear();
-        // ONE emit at the end, and it is not belt and braces. `restoreEdge` deliberately only records in
-        // the changeset, and `GraphDocument.clear()` empties the property list AFTER its last removeNode
-        // — so loading a graph with no nodes, or one whose last act is an edge, would tell nothing
-        // downstream that anything had happened and the Blackboard would still be listing the previous
-        // file's properties. Listeners re-read the document rather than taking a payload, so a spare emit
-        // is a no-op and a missing one is a stale panel.
-        document.onChanged.emit();
+        documents.load(source);
         return this;
     }
 
-    /**
-     * Applies the document's pending changes to the widgets <b>in place</b>, and clears them.
-     *
-     * <p>The other direction from everything above: this is how a change made to the document by
-     * something that is not this view — a server, a command, a paste — reaches the screen. Mutations
-     * made <em>through</em> the view already updated both sides, and this is idempotent, so calling it
-     * afterwards is harmless.</p>
-     *
-     * <p><b>In place, never a rebuild</b>, and that is the whole reason a changeset exists rather than a
-     * "something changed" flag. Rebuilding detaches the element under the pointer: a drag's source
-     * would go stale on its first update and every later frame would feed it garbage — the same defect
-     * that froze the table header. Untouched nodes here keep their widget, and therefore their drag,
-     * their focus and their scroll position.</p>
-     *
-     * @return how many individual changes were applied
-     */
+    /** Applies the document's pending changes to the widgets in place, and clears them.
+     * @see GraphDocumentSync#applyPending
+     * @return how many individual changes were applied */
     public int syncFromDocument() {
-        GraphChangeset pending = document.changeset();
-        if (pending.isEmpty()) return 0;
-
-        // Snapshot EVERYTHING, then clear, then apply — because applying re-enters. `CanvasView.addNode`
-        // calls `moveNode` polymorphically, which reaches this class's override, which writes through to
-        // the document and drains the changeset. Reading the lists as it went meant adding the first
-        // node wiped the pending edges, and the wires simply never appeared.
-        List<String> removedNodes = List.copyOf(pending.removedNodes());
-        List<String> addedNodes = List.copyOf(pending.addedNodes());
-        List<String> movedNodes = List.copyOf(pending.movedNodes());
-        List<EdgeData> removedEdges = List.copyOf(pending.removedEdges());
-        List<EdgeData> addedEdges = List.copyOf(pending.addedEdges());
-        pending.clear();
-        int applied = 0;
-
-        for (String id : removedNodes) {
-            GraphNode widget = widgetsById.remove(id);
-            if (widget == null) continue;
-            // Same reason detachNode forgets them: a floating default editor is not a descendant of its
-            // node, so removeChild below never reaches it. Missing here left every port's box/dot
-            // permanently orphaned on the plane whenever a removal arrived through the document's
-            // changeset instead of through removeNode directly — undo of an add, a server sync, or a
-            // delete-then-recreate. Still mounted, still hit-testable, frozen at whatever position it
-            // last had, because its own port and dot went stale with it and never laid out again.
-            for (NodePort port : widget.getPorts()) ports.forget(port);
-            content().remove(widget);
-            applied++;
-        }
-        for (String id : addedNodes) {
-            NodeData data = document.node(id);
-            if (data == null || widgetsById.containsKey(id)) continue;
-            NodeWidgetFactory factory = nodeFactory != null
-                    ? nodeFactory : NodeWidgetFactory.of(nodeLibrary).build();
-            NodeType type = nodeLibrary != null ? nodeLibrary.get(data.typeId()) : null;
-            GraphNode widget = factory.create(type, data);
-            widget.bindToDocument(data.id(), data.typeId());
-            widgetsById.put(id, widget);
-            super.addNode(widget, data.x(), data.y());
-            ports.watchAll(widget);
-            applied++;
-        }
-        for (String id : movedNodes) {
-            GraphNode widget = widgetsById.get(id);
-            NodeData data = document.node(id);
-            // super, not this: the position is already what the document says, and going back through
-            // the override would write it straight back with no effect but a second changeset entry.
-            if (widget != null && data != null) {
-                super.moveNode(widget, data.x(), data.y());
-                applied++;
-            }
-        }
-        for (EdgeData edge : removedEdges) {
-            NodePort from = portFor(edge.from());
-            NodePort to = portFor(edge.to());
-            if (connections.removeIf(c -> c.from() == from && c.to() == to)) applied++;
-            if (from != null && to != null) wires.refreshCounts(from, to);
-        }
-        for (EdgeData edge : addedEdges) {
-            int before = connections.size();
-            linkWidgets(edge);
-            if (connections.size() != before) applied++;
-        }
-
-        getSelection().prune(this);
-        if (applied > 0) onConnectionsChanged.emit();
-        return applied;
-    }
-
-    /** Builds the view-side {@link GraphConnection} for a document edge. Silent when either end is
-     * missing: a document may legitimately outrun its widgets mid-load. */
-    void linkWidgets(EdgeData edge) {
-        NodePort from = portFor(edge.from());
-        NodePort to = portFor(edge.to());
-        if (from == null || to == null) return;
-        GraphConnection connection = new GraphConnection(from, to);
-        if (!connections.contains(connection)) connections.add(connection);
-        wires.refreshCounts(from, to);
+        return documents.applyPending();
     }
 
     // ── Nodes ───────────────────────────────────────────────────────────────
@@ -1026,7 +750,7 @@ public class GraphView extends SurfaceEditor {
         window.focus().requestPointerFocus(this);
 
         Vector2f world = screenToWorld(rawX, rawY);
-        GraphConnection hit = wireLayer.pickWire(world.x(), world.y());
+        GraphConnection hit = wires.pick(world.x(), world.y());
         if (hit != null) {
             getSelection().selectOnly(hit);
             return true;
@@ -1054,66 +778,10 @@ public class GraphView extends SurfaceEditor {
         return moveGesture;
     }
 
-    /**
-     * What a graph means by the engine's questions.
-     *
-     * <p>An item is a node; a press on a node's chrome is the surface's and one inside it is the tree's,
-     * or a port's value editor could not be typed in; and a move writes one position edit per node,
-     * composed into one step.</p>
-     */
-    private final class GraphPolicy implements SurfacePolicy {
-
-        @Override
-        @Nullable
-        public UIElement itemFor(@Nullable UIElement hit) {
-            for (UIElement each = hit; each != null; each = each.parentElement()) {
-                if (each instanceof GraphNode node && node.parent() == content()) return node;
-            }
-            return null;
-        }
-
-        @Override
-        public PressOwner ownerOf(UIElement hit) {
-            // A NODE'S CHROME IS THE SURFACE'S AND WHAT IS INSIDE IT IS NOT. A port's default-value
-            // editor has to keep taking clicks, or a field inside a node cannot be typed in at all.
-            return hit instanceof GraphNode ? PressOwner.SURFACE : PressOwner.TREE;
-        }
-
-        @Override
-        public void markSelected(UIElement item, boolean selected) {
-            if (item instanceof GraphNode node) node.setSelected(selected);
-        }
-
-        /**
-         * Deleting is the graph's own: nodes go with the wires that touched them.
-         *
-         * <p>{@code deleteSelection} already does exactly that as one transaction, so this returns null
-         * and the command path stays where the edge cases already live.</p>
-         */
-        @Override
-        @Nullable
-        public Edit deleteEdit(List<UIElement> items) {
-            return null;
-        }
-
-        @Override
-        @Nullable
-        public Edit moveEdit(List<Move> moves) {
-            List<Edit> each = new ArrayList<>(moves.size());
-            for (Move move : moves) {
-                if (!(move.item() instanceof GraphNode node) || node.getNodeId() == null) continue;
-                each.add(new GraphEdits.MoveNode(GraphView.this, node.getNodeId(),
-                        move.fromX(), move.fromY(), move.toX(), move.toY()));
-            }
-            return each.isEmpty() ? null : CompositeEdit.of("move", each.toArray(new Edit[0]));
-        }
-    }
-
-    /** World point -> the wire under it, or null. Delegates to the layer, which is the only thing that
-     * knows where a wire was drawn. */
+    /** @see GraphWires#pick */
     @Nullable
     public GraphConnection pickWire(float worldX, float worldY) {
-        return wireLayer.pickWire(worldX, worldY);
+        return wires.pick(worldX, worldY);
     }
 
     private static boolean isShiftHeld() {
@@ -1160,7 +828,7 @@ public class GraphView extends SurfaceEditor {
         return this;
     }
 
-    // ── The wire being dragged ──────────────────────────────────────────────
+    // ── The wire being dragged ──────────────────────────────
 
     void beginPendingWire(NodePort from) {
         wireLayer.beginPending(from);
@@ -1172,211 +840,77 @@ public class GraphView extends SurfaceEditor {
 
     /**
      * Ends the wire drag. When it landed on nothing and a library is set, this is where the contextual
-     * create-node menu opens - the path 6.2.3 deliberately left room for.
+     * create-node menu opens.
+     *
+     * <p>The plane-to-world conversion happens HERE rather than in the library: the drag reports plane
+     * space (the port's own), and only the wire layer knows that offset. Two features meet at the hub
+     * instead of one naming the other.</p>
      *
      * @param planeX where the wire was dropped, in the plane's own space
      */
     void endPendingWire(NodePort from, float planeX, float planeY, boolean connected) {
         wireLayer.endPending();
-        if (connected || creationMenu == null) return;
-        offerNodeFor(from, planeX, planeY);
+        if (connected) return;
+        Box layerBox = wireLayer.box();
+        float ox = layerBox == null ? 0f : layerBox.x();
+        float oy = layerBox == null ? 0f : layerBox.y();
+        library.offerFor(from, planeX - ox, planeY - oy);
     }
 
     // -- The node library ----------------------------------------------------
 
-    @Nullable
-    private NodeCreationMenu creationMenu;
+    /** Where new nodes come from. @see GraphNodeLibrary */
+    private final GraphNodeLibrary library = new GraphNodeLibrary(this);
 
-    @Nullable
-    @Getter
-    NodeTypeRegistry nodeLibrary;
-
-    @Nullable
-    @Getter
-    NodeWidgetFactory nodeFactory;
-
-    private TypeCompatibility typeRule = TypeCompatibility.EXACT;
-
-    /** Where the node the menu is about to create will land, and what it should wire to. */
-    private float pendingWorldX, pendingWorldY;
-
-    @Nullable
-    private NodePort pendingFrom;
-
-    /**
-     * Gives this graph a library to create nodes from, and a factory to build their widgets.
-     *
-     * <p>Both belong to the consumer: the library is the thing a shader graph and a dialogue graph
-     * disagree about, and the factory is what turns a type id into the particular box somebody designed.
-     * With neither set the graph still works entirely - you simply cannot add a node from inside it.</p>
-     */
-    public GraphView setNodeLibrary(NodeTypeRegistry library, NodeWidgetFactory factory,
+    /** @see GraphNodeLibrary#set */
+    public GraphView setNodeLibrary(NodeTypeRegistry types, NodeWidgetFactory factory,
                                     TypeCompatibility rule) {
-        this.nodeLibrary = library;
-        this.nodeFactory = factory;
-        this.typeRule = rule == null ? TypeCompatibility.EXACT : rule;
-        NodeCreationMenu menu = new NodeCreationMenu(library);
-        menu.onChosen.connect(this::createFromOffer);
-        append(menu);
-        this.creationMenu = menu;
+        library.set(types, factory, rule);
         return this;
+    }
+
+    /** The type library this graph creates nodes from, or null if none was set. */
+    @Nullable
+    public NodeTypeRegistry getNodeLibrary() {
+        return library.types();
+    }
+
+    /** The factory turning a type into a widget, or null if none was set. */
+    @Nullable
+    public NodeWidgetFactory getNodeFactory() {
+        return library.factory();
     }
 
     /** The create-node menu, once a library has been set. */
     @Nullable
     public NodeCreationMenu creationMenu() {
-        return creationMenu;
+        return library.menu();
     }
 
-    /** Opens the menu unfiltered, at a world position - what Space does. */
+    /** Opens the menu unfiltered, at a world position -- what Space does. @see GraphNodeLibrary#openAt */
     public GraphView openCreationMenu(float worldX, float worldY) {
-        if (creationMenu == null) return this;
-        pendingFrom = null;
-        pendingWorldX = worldX;
-        pendingWorldY = worldY;
-        Vector2f at = rootPositionOfWorld(worldX, worldY);
-        // NO invoker. The invoker is deliberately treated as part of its own popover -- that carve-out
-        // exists so a dropdown button is not dismissed by the very press that opens it -- and naming the
-        // graph as invoker therefore made every press anywhere on the canvas count as a press INSIDE the
-        // menu, so light dismiss never fired. This menu has no invoker: a gesture opened it, not a button.
-        creationMenu.openAll(at.x(), at.y(), null);
+        library.openAt(worldX, worldY);
         return this;
-    }
-
-    private void offerNodeFor(NodePort from, float planeX, float planeY) {
-        if (creationMenu == null) return;
-        pendingFrom = from;
-        // The drag reports PLANE space (the port's own), which is world plus the plane's origin - and the
-        // wire layer sits at world (0,0), so its origin is that offset. The same conversion the layer
-        // itself uses, rather than a second one that could drift from it.
-        Box layerBox = wireLayer.box();
-        float ox = layerBox == null ? 0f : layerBox.x();
-        float oy = layerBox == null ? 0f : layerBox.y();
-        pendingWorldX = planeX - ox;
-        pendingWorldY = planeY - oy;
-
-        Vector2f at = rootPositionOfWorld(pendingWorldX, pendingWorldY);
-        // Invoker null -- see openCreationMenu.
-        if (from.getDirection().isOutput()) {
-            creationMenu.openForOutput(from.getType().id(), typeRule, at.x(), at.y(), null);
-        } else {
-            creationMenu.openForInput(from.getType().id(), typeRule, at.x(), at.y(), null);
-        }
-    }
-
-    /**
-     * World -> the root-relative logical coordinates a promoted popover is positioned in.
-     *
-     * <p>Through {@code worldToViewport}, so the menu opens where the wire was dropped <em>on screen</em>
-     * rather than where it would be at zoom 1. A promoted element's containing block is the root, which
-     * is why the root's own origin comes off at the end.</p>
-     */
-    private Vector2f rootPositionOfWorld(float worldX, float worldY) {
-        Vector2f onScreen = worldToViewport(worldX, worldY);
-        UIDocument window = document();
-        if (window == null) return onScreen;
-        // `worldToViewport` answers in THIS view's local space; a promoted element's containing block
-        // is the root. Two different spaces, so the conversion goes through the world matrix rather
-        // than by subtracting the root's own `x()` -- which is the root's offset in its own parent and
-        // has nothing to do with this view's position.
-        Box self = box();
-        Box rootCache = window.box();
-        if (self == null || rootCache == null) return onScreen;
-        Vector2f origin = Box.originIn(self, rootCache);
-        return new Vector2f(onScreen.x() + origin.x(), onScreen.y() + origin.y());
-    }
-
-    /**
-     * Creates the chosen node and, when the menu was opened by a dropped wire, connects it - as
-     * <b>one</b> undo step.
-     *
-     * <p>Two presses to undo a node you just made is the same failure as forty presses to undo one drag,
-     * and for the same reason: the user did one thing.</p>
-     */
-    private void createFromOffer(NodeTypeRegistry.Offer offer) {
-        if (nodeFactory == null) return;
-        NodeData data = offer.type().create(pendingWorldX, pendingWorldY);
-        GraphNode node = nodeFactory.create(offer.type(), data);
-        // Bound BEFORE it is added, so the node keeps the id and ports the library built rather than
-        // having a second set derived from the widget.
-        node.bindToDocument(data.id(), data.typeId());
-        // Into the document first, so addNode adopts the library's ports and properties instead of
-        // deriving a second set from the widget.
-        document.addNode(data);
-
-        edits.begin("create " + offer.type().label());
-        try {
-            addNode(node, pendingWorldX, pendingWorldY);
-            NodeData placed = document.node(node.getNodeId());
-            if (placed != null) edits.record(new GraphEdits.AddNode(this, node, placed));
-            NodePort source = pendingFrom;
-            if (source != null && offer.port() != null) {
-                for (NodePort port : node.getPorts()) {
-                    if (port.getPortId().equals(offer.port().portId())) {
-                        connect(source, port);
-                        break;
-                    }
-                }
-            }
-        } finally {
-            edits.end();
-        }
-        pendingFrom = null;
-        getSelection().selectOnly(node);
     }
 
     // ── Wire geometry ───────────────────────────────────────────────────────
 
+    /** @see GraphWires#setBaseWidth */
     public GraphView setWireBaseWidth(float width) {
-        this.wireBaseWidth = Math.max(0.1f, width);
+        wires.setBaseWidth(width);
         return this;
     }
 
-    /** The width handed to {@code ctx.curve().width(...)}, in pre-pose units. Unclamped — the pose
-     * (which already includes the plane's own zoom) is what makes this thicker zoomed in and thinner
-     * zoomed out, same as {@link #DEFAULT_WIRE_WIDTH}'s own note about matching a real border's
-     * behaviour under scale. See {@link #getWireFeather()} for why the WIDTH staying unclamped does not
-     * reintroduce the sub-pixel dropout an earlier version of this class floored it against. */
+    /** @see GraphWires#width */
     public float getWireWidth() {
-        return wireBaseWidth;
+        return wires.width();
     }
 
-    /** {@code stroke_coverage}'s edge ramp at zoom 1 — see {@code CgVectorRenderer.Curve#feather} and
-     * {@code stroke.glsl}. Same value {@link NodeWireLayer#WIRE_FEATHER} already used before this
-     * needed to vary with zoom at all. */
-    private static final float BASE_WIRE_FEATHER = 0.5f;
-
-    /** The feather actually handed to {@code ctx.curve().feather(...)}: {@link #BASE_WIRE_FEATHER}
-     * divided by zoom, so the ANTIALIASING RAMP stays a constant width on screen (in device-ish pixels)
-     * regardless of zoom — the opposite of {@link #getWireWidth()}, which is deliberately left to shrink
-     * with zoom unclamped.
-     *
-     * <h3>Why the width shrinking and the feather NOT shrinking is correct, not a contradiction</h3>
-     * <p>{@code stroke_coverage} computes {@code signedDist = dist - halfWidth} and returns {@code 1 -
-     * smoothstep(-ramp/2, ramp/2, signedDist)}. When the ramp was left to shrink alongside the width (an
-     * earlier version), a curve zoomed out below a device pixel wide made the WHOLE transition band
-     * narrower than the space between two sampled pixel centres — every sample fell on one side of that
-     * band or the other, evaluating to a hard 0 or 1 rather than a fraction, which is a per-pixel
-     * dropout: the exact "missing pixels" a side-by-side against Unity's smooth thin line caught.
-     * Flooring the ramp against zoom instead keeps it at least ~1 real screen pixel wide always, so
-     * EVERY sample near the centreline lands inside a genuinely smooth gradient and gets a fractional,
-     * antialiased coverage value — never a coin flip.</p>
-     *
-     * <p>Once the ramp is a real screen pixel and the width keeps shrinking past it, {@code halfWidth}
-     * eventually sits INSIDE the ramp's own span at the centreline itself, so peak coverage there drops
-     * below 1.0 too — the stroke reads as thinner AND fainter, not because anything multiplies its
-     * colour's alpha (an earlier version tried exactly that, which is what desaturated a colour wire
-     * toward the dark canvas behind it into ash-grey rather than a dim but still-hued line — the fade has
-     * to happen in the SAME coverage computation the ramp already drives, or the colour and the
-     * shrinking disagree about what's happening). This is the ordinary analytic-SDF answer to sub-pixel
-     * line antialiasing, and needs no MSAA framebuffer to get right — the curve renderer already draws
-     * every pixel from an exact distance field; it only needed the ramp width to stop shrinking past the
-     * point where the pixel grid can resolve it.</p>
-     */
+    /** @see GraphWires#feather */
     public float getWireFeather() {
-        float zoom = Math.max(1e-4f, getZoom());
-        return BASE_WIRE_FEATHER / zoom;
+        return wires.feather();
     }
+
     @Override
     protected void connected() {
         super.connected();
