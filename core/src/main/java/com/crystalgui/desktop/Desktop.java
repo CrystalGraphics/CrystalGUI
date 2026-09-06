@@ -315,13 +315,19 @@ public class Desktop extends UIElement implements DataProvider {
 
     public static final String LIVE_CLASS = "__live__";
 
+    /** Whether this desktop is being painted as the whole surface rather than over someone's screen. */
+    private boolean wholeSurface;
+
     private void syncPresence() {
         // A CLASS, where the old engine wrote the size at IMPORTANT. Both halves of the geometry are in
         // ua/desktop.css now -- the out-of-flow position on `desktop`, the full size on `desktop.__live__`
         // -- because the new engine may not write into the cascade at all, and because state a widget
         // flips from its own bookkeeping belongs on a class rather than in Java: a theme can then restyle
         // it, and the base rule is the SAFE state (no space) rather than the dangerous one.
-        setClass(this, LIVE_CLASS, isLive());
+        // Or the surface is ours: a desktop that IS the screen is full-size with nothing open, where one
+        // laid over a game must take no space until it holds a window. Without the first case an empty
+        // desktop is 0x0 and paints nothing at all, taskbar included.
+        setClass(this, LIVE_CLASS, wholeSurface || isLive());
     }
 
     private static void setClass(UIElement node, String className, boolean on) {
@@ -1616,6 +1622,13 @@ public class Desktop extends UIElement implements DataProvider {
      */
     public void paint(DesktopPresentation presentation, float deltaSeconds,
                       int surfaceWidth, int surfaceHeight) {
+        // Whether the compositor owns the surface, which is a different question from whether it holds a
+        // window. Asked before the returns below so the answer is never a stale one.
+        boolean whole = presentation != null && presentation.paintsWholeDesktop();
+        if (whole != wholeSurface) {
+            wholeSurface = whole;
+            syncPresence();
+        }
         if (presentation == null || !presentation.paintsAnything()) return;
         UIDocument document = document();
         if (document == null) return;
