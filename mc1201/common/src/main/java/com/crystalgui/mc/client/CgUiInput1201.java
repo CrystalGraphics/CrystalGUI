@@ -32,6 +32,20 @@ public final class CgUiInput1201 {
      */
     private static final float SCROLL_SIGN = -1f;
 
+    /**
+     * A platform wheel delta in the engine's convention.
+     *
+     * <pre>{@code
+     * overlay.offerMouse(x, y, -1, false, CgUiInput1201.wheel(event.getScrollDelta()));
+     * }</pre>
+     *
+     * <p>Shared rather than re-derived: the screen and the HUD overlay are two hosts, and one that
+     * takes the platform's sign at face value scrolls and zooms backwards.</p>
+     */
+    public static float wheel(double platformDelta) {
+        return (float) platformDelta * SCROLL_SIGN;
+    }
+
     /** No button, and the value the engine reads as "this is a move". */
     private static final int NO_BUTTON = -1;
 
@@ -73,8 +87,7 @@ public final class CgUiInput1201 {
 
     /** @return whether the desktop consumed it */
     public static boolean scrolled(UIDocument window, double delta) {
-        return send(window, rawX(), rawY(), 0, 0, NO_BUTTON, false,
-                (float) delta * SCROLL_SIGN, -1L);
+        return send(window, rawX(), rawY(), 0, 0, NO_BUTTON, false, wheel(delta), -1L);
     }
 
     /**

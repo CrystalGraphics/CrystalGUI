@@ -87,10 +87,14 @@ public final class CgUiHud1201 {
     }
 
     /** @return whether the desktop consumed it and the foreign screen must not see it */
-    public static boolean offerMouse(int button, boolean pressed, float wheel) {
+    public static boolean offerMouse(int button, boolean pressed, float platformWheel) {
         ScreenOverlay overlay = overlay();
         if (overlay == null) return false;
-        return overlay.offerMouse(pointerX(), pointerY(), button, pressed, wheel);
+        // Signed here, not by the loaders: this path consumes a scroll over any window and cancels the
+        // screen event, so it -- not CgUiScreen1201.mouseScrolled -- is what a scroll in our own screen
+        // reaches.
+        return overlay.offerMouse(pointerX(), pointerY(), button, pressed,
+                CgUiInput1201.wheel(platformWheel));
     }
 
     /** @return whether the desktop consumed it */
