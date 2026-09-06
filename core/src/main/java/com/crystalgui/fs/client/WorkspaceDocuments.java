@@ -363,7 +363,11 @@ public final class WorkspaceDocuments implements Disposable {
                     // comparison cannot express that.
                     document.markSavedAt(savedAt, etag);
                     recordHistory(document, content);
-                    discardBackup(document);
+                    // WHAT IS LEFT UNSAVED, not "a save happened". An edit made while the write was
+                    // crossing the wire is not in the bytes that were written, so an unconditional
+                    // discard here takes away the only copy of it -- and leaves nothing until the next
+                    // keystroke writes one. Clean discards, dirty re-writes against the new etag.
+                    backup(document);
                     onDidSave.emit(document);
                     done.resolve(null);
                 });

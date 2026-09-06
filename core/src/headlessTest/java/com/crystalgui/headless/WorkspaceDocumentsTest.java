@@ -229,6 +229,25 @@ public class WorkspaceDocumentsTest {
         assertTrue("the second edit is not on disk and the document must say so", document.isDirty());
     }
 
+    /**
+     * <b>A save that does not catch up leaves the backup standing.</b> The bytes written were taken
+     * before the second edit, so the document is still dirty afterwards — and a discard keyed on the
+     * save rather than on what is left unsaved takes away the only copy of that edit.
+     */
+    @Test
+    public void aSaveThatLeavesWorkUnsavedKeepsItsBackup() {
+        Document document = open(MAIN);
+        type(document, "// first\n");
+
+        Reply<Void> saving = documents.save(document);
+        type(document, "// second\n");
+        pump();
+
+        assertNull(saving.error());
+        assertTrue(document.isDirty());
+        assertEquals("the second edit is on disk nowhere else", 1, documents.restorable().size());
+    }
+
     /** A save participant may edit the document before its bytes are taken. */
     @Test
     public void aSaveParticipantRunsBeforeTheBytesAreTaken() {
