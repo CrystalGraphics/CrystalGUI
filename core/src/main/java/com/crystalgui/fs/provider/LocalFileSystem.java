@@ -54,6 +54,23 @@ public final class LocalFileSystem implements CgFileSystem {
      */
     private static final int MAX_DEPTH = 64;
 
+    /**
+     * What an atomic write calls its half-written file, and how everything else knows to ignore one.
+     *
+     * <p>The temp lives in the <b>target's own directory</b>, because a temp elsewhere is often another
+     * filesystem where {@code ATOMIC_MOVE} is unsupported — so it is inside the watched tree by
+     * necessity, and every save creates one, moves it onto the file, and leaves its name behind as a
+     * deletion. It is not workspace content at any point: not a row in the tree, not a file event, and
+     * not something to tell anybody about.</p>
+     */
+    static final String TEMP_PREFIX = ".cgui-";
+    static final String TEMP_SUFFIX = ".tmp";
+
+    /** @see #TEMP_PREFIX */
+    static boolean isWriteTemp(String name) {
+        return name.startsWith(TEMP_PREFIX) && name.endsWith(TEMP_SUFFIX);
+    }
+
     private final ProjectRegistry projects;
     private final long maxFileBytes;
     private final boolean caseSensitive;
@@ -132,9 +149,11 @@ public final class LocalFileSystem implements CgFileSystem {
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(target)) {
             for (Path child : stream) {
                 try {
+                    String name = child.getFileName().toString();
+                    // Somebody's write, caught mid-flight. @see #TEMP_PREFIX
+                    if (isWriteTemp(name)) continue;
                     boolean isDirectory = Files.isDirectory(child);
                     long mtime = Files.getLastModifiedTime(child).toMillis();
-                    String name = child.getFileName().toString();
                     out.add(isDirectory
                             ? CgFileEntry.directory(name, mtime)
                             : CgFileEntry.file(name, Files.size(child), mtime));
@@ -187,7 +206,7 @@ public final class LocalFileSystem implements CgFileSystem {
             // IN THE TARGET'S OWN DIRECTORY. A temp elsewhere is frequently another filesystem, where
             // ATOMIC_MOVE is unsupported and the fallback is copy-then-delete -- i.e. not atomic, which
             // was the entire point.
-            temp = Files.createTempFile(parent, ".cgui-", ".tmp");
+            temp = Files.createTempFile(parent, TEMP_PREFIX, TEMP_SUFFIX);
             Files.write(temp, content);
             try {
                 Files.move(temp, target, StandardCopyOption.ATOMIC_MOVE,

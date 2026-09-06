@@ -125,6 +125,10 @@ public final class NioFileEventSource implements CgFileEvent.Source {
                 Path child = directory.resolve((Path) raw.context());
                 CgPath path = toCgPath(child);
                 if (path == null || isExcluded(child)) continue;
+                // AN ATOMIC WRITE IN FLIGHT, not a file anybody asked for: every save creates one in
+                // the target's own directory and moves it onto the file, so reporting it made a save
+                // announce a stranger appearing and vanishing. @see LocalFileSystem#TEMP_PREFIX
+                if (LocalFileSystem.isWriteTemp(child.getFileName().toString())) continue;
 
                 if (raw.kind() == StandardWatchEventKinds.ENTRY_CREATE) {
                     events.add(CgFileEvent.of(CgFileEvent.Kind.CREATED, path));

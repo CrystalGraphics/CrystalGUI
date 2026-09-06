@@ -32,6 +32,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -165,5 +166,36 @@ public class WatcherReachesTheClientTest {
         // under a name that no longer exists.
         assertTrue("a move under a watched root is ONE rename",
                 await("After.java", FsMessages.ChangeKind.RENAMED));
+    }
+
+    /**
+     * <b>A save announces the file, and nothing else.</b>
+     *
+     * <p>An atomic write puts its half-written copy in the target's OWN directory — a temp elsewhere is
+     * often another filesystem, where the move stops being atomic — so every save creates a file inside
+     * the watched tree, moves it onto the target and leaves its name behind as a deletion. Reported, it
+     * made each save announce a stranger appearing and vanishing, and gave the rename pairing a delete
+     * whose etag matches the created file exactly, because it IS that file.</p>
+     */
+    @Test
+    public void aSaveDoesNotAnnounceItsOwnTempFile() throws IOException {
+        Path target = root.resolve("Saved.java");
+        Files.write(target, "class Saved {}\n".getBytes(StandardCharsets.UTF_8));
+        assertTrue(await("Saved.java", FsMessages.ChangeKind.CREATED));
+        heard.clear();
+
+        // The real write path, which is what creates the temp.
+        service.write(WorkspaceActor.LOCAL, CgPath.parse(PROJECT + ":Saved.java"),
+                "class Saved { int x; }\n".getBytes(StandardCharsets.UTF_8), null);
+
+        long deadline = System.currentTimeMillis() + 2000;
+        while (System.currentTimeMillis() < deadline) {
+            sleep();
+            pump();
+        }
+        for (FsMessages.FileChange change : heard) {
+            assertFalse("a write temp is not workspace content: " + change.path(),
+                    change.path().contains(".cgui-"));
+        }
     }
 }
