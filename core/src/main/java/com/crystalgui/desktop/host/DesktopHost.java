@@ -82,7 +82,7 @@ public final class DesktopHost implements Disposable {
         // THE HOST SAYS WHERE crystalgui/ IS AND NOTHING ELSE. The compositor derives its config
         // store, its cache root and its arrangement record from that one directory -- durable and
         // derived as separate trees, so "delete cache/ and nothing is lost" needs no caveat.
-        Desktop desktop = Desktop.of(document).useStorage(services.storageRoot());
+        Desktop desktop = Desktop.of(document).useStorage(services.installationDirectory());
         this.config = desktop.config();
         this.cacheRoot = desktop.cacheRoot();
         // AND THE ARRANGEMENT, which the compositor owns reading, applying and writing again.

@@ -7,6 +7,7 @@ import org.junit.Test;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.stream.StreamSupport;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -35,6 +36,25 @@ public class DesktopStorageTest {
         assertEquals("the store goes under crystalgui/workspace-config, never beside it",
                 StorageLayout.configIn(installation), desktop.config().directory());
         assertEquals(StorageLayout.cacheIn(installation), desktop.cacheRoot());
+    }
+
+    /**
+     * <b>One {@code crystalgui} segment, not two.</b> A host answers with its INSTALLATION and the
+     * engine adds the segment. A host that helpfully resolved {@code crystalgui/} itself produced
+     * {@code <gameDir>/crystalgui/crystalgui/workspace-config} — which works, and is in the wrong
+     * place for ever.
+     */
+    @Test
+    public void theRootSegmentIsAddedExactlyOnce() {
+        Path installation = installation("once");
+        Desktop desktop = Desktop.of(new UIDocument()).useStorage(installation);
+
+        // Path elements, not a string split: a regex would have to know the platform separator, and
+        // getting that wrong is how this assertion first passed on nothing at all.
+        long roots = StreamSupport.stream(desktop.config().directory().spliterator(), false)
+                .filter(segment -> StorageLayout.ROOT.equals(segment.toString()))
+                .count();
+        assertEquals("exactly one crystalgui segment", 1L, roots);
     }
 
     @Test

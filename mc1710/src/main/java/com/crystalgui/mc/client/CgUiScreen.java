@@ -1,6 +1,5 @@
 package com.crystalgui.mc.client;
 
-import com.crystalgui.core.storage.StorageLayout;
 import com.crystalgui.desktop.host.DesktopHost;
 import com.crystalgui.desktop.host.HostServices;
 import java.nio.file.Path;
@@ -335,11 +334,10 @@ public final class CgUiScreen extends GuiScreen {
     private final class Mc1710Host implements HostServices {
 
         @Override
-        public Path storageRoot() {
-            // ONE ROOT, and the engine owns the tree in it -- workspace-config/, cache/, projects/.
-            // Was config/crystalgui, which put the client's private files a level away from the
-            // workspace directory that already called itself crystalgui/.
-            return StorageLayout.rootIn(mc.mcDataDir.toPath());
+        public Path installationDirectory() {
+            // THE GAME DIRECTORY, not crystalgui/ inside it -- the engine adds that segment, along with
+            // workspace-config/, cache/ and projects/ below it.
+            return mc.mcDataDir.toPath();
         }
 
         @Override
