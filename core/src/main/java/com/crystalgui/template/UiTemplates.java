@@ -18,6 +18,7 @@ import com.crystalgraphics.util.io.CgIO;
 import com.crystalgui.core.signal.Signal;
 
 import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.NodeContract;
 import com.crystalgui.ui.dom.UIElementRegistry;
 
@@ -173,6 +174,18 @@ public final class UiTemplates {
         UIElementRegistry.register(kind, () -> new TemplateInstance(template.origin()),
                 NodeContract.INERT);
         return true;
+    }
+
+    /**
+     * Adds {@code sheets} to {@code window}, in order, skipping any already there.
+     *
+     * <p>Client side only — resolving a sheet id reads a file, which a dedicated server cannot do. For a
+     * caller holding sheet ids rather than a whole template; {@link UiTemplate#installSheets} is the
+     * same call for one.</p>
+     */
+    public static void installSheets(UIDocument window, List<String> sheets) {
+        if (window == null) return;
+        for (String id : sheets) TemplateSheets.install(window, id, null);
     }
 
     // ── Reading ─────────────────────────────────────────────────────────────

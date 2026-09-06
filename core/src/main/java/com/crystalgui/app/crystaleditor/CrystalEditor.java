@@ -7,6 +7,7 @@ import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.document.DocumentKind;
 import com.crystalgui.example.notes.NotesKind;
 import com.crystalgui.app.shadergraph.ShaderGraphContribution;
+import com.crystalgui.app.uibuilder.UiBuilderContribution;
 import com.crystalgui.workbench.app.WorkbenchApplication;
 import com.crystalgui.workbench.extension.WorkbenchExtensions;
 import com.crystalgui.workbench.extension.InspectorExtension;
@@ -65,6 +66,7 @@ public final class CrystalEditor {
             NotificationsExtension.ID,
             PresenceExtension.ID,
             ShaderGraphContribution.ID,
+            UiBuilderContribution.ID,
             NotesKind.ID,
             // LISTED ON EVERY HOST, present on some. An id nothing contributed is a logged absence, not
             // an error -- which is what lets scripting be named here and be simply absent on a host with
@@ -84,6 +86,7 @@ public final class CrystalEditor {
             // requirement: "open with" is asked of an application that may never have been launched, so
             // it cannot be derived by building one and asking its workbench which kinds it registered.
             .opens(DocumentKind.FilePatterns.extension("shadergraph"),
+                    DocumentKind.FilePatterns.extension("cgui"),
                     DocumentKind.FilePatterns.extension("java"),
                     DocumentKind.FilePatterns.extension("js"),
                     DocumentKind.FilePatterns.extension("json"),
