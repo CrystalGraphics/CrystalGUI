@@ -231,3 +231,35 @@ tasks.register("serverSmoke") {
         logger.lifecycle(file.readText())
     }
 }
+
+// Diagnostics reach the GAME's JVM, not Gradle's. A -D on the Gradle command line sets a property on
+// the daemon and the run never sees it, which reads as a flag that does nothing -- so the ones worth
+// turning on from a command line are forwarded explicitly.
+//
+//   ./gradlew :mc1201:forge:runClient -Dcrystalgui.layer.probe=true
+val cgForwardedProperties = listOf(
+    "crystalgui.layer.probe", "crystalgui.editor.trace", "crystalgui.clientProbe")
+tasks.withType<JavaExec>().matching { it.name.startsWith("run") }.configureEach {
+    cgForwardedProperties.forEach { key ->
+        val value = providers.systemProperty(key).orNull
+        if (value != null) systemProperty(key, value)
+    }
+}
+
+// THE SCRIPTED CLIENT RUN JOINS A WORLD BY ITSELF.
+//
+//   ./gradlew :mc1201:forge:runClient -Dcrystalgui.clientProbe=true [-PcgWorld="Some World"]
+//
+// ClientProbe1201 drives the routine and quits, but only once there IS a world -- and nothing in a dev
+// run reaches the title screen on its own. A missing world is not reported usefully by Minecraft (it
+// simply stays on the menu), so the name is a property rather than a constant and the run says which it
+// asked for.
+val cgProbeWorld = (project.findProperty("cgWorld") as String?) ?: "New World"
+tasks.matching { it.name == "runClient" }.configureEach {
+    if (providers.systemProperty("crystalgui.clientProbe").orNull != null) {
+        (this as JavaExec).argumentProviders.add(CommandLineArgumentProvider {
+            logger.lifecycle("[cgui] client probe: auto-joining '{}'", cgProbeWorld)
+            listOf("--quickPlaySingleplayer", cgProbeWorld)
+        })
+    }
+}
