@@ -136,4 +136,21 @@ public final class StateTypes {
             }
         };
     }
+    /** An {@code int[]}, for a per-entry ARGB — a palette, which no sheet can enumerate. */
+    public static StateType<int[]> intArrayUnder(String entryKey) {
+        return new StateType<int[]>() {
+            @Override public <T> void put(StateMap<T> out, String key, int[] value) {
+                List<Integer> boxed = new ArrayList<>(value == null ? 0 : value.length);
+                if (value != null) for (int item : value) boxed.add(item);
+                out.putList(key, boxed, (entry, item) -> entry.putInt(entryKey, item));
+            }
+            @Override public <T> int[] get(StateMap<T> in, String key, int[] fallback) {
+                List<Integer> read = in.getList(key, entry -> entry.getInt(entryKey, 0));
+                if (read.isEmpty()) return fallback;
+                int[] out = new int[read.size()];
+                for (int i = 0; i < out.length; i++) out[i] = read.get(i);
+                return out;
+            }
+        };
+    }
 }

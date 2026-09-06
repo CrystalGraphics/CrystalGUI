@@ -2,8 +2,13 @@ package com.crystalgui.widget.composite;
 
 import com.crystalgraphics.gl.render.CgVectorRenderer;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.texture.ArgbMath;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.ui.contract.State;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
@@ -59,7 +64,10 @@ import java.util.List;
  * here rather than beside the controls it looks like one of. A widget's tier is decided by what it
  * COMPOSES, not by what it is.</p>
  *
- * <p>The web (the rings and the spokes) takes the element's computed {@code color}, so a theme draws
+ * <p>The web (the rings and the spokes) takes the element's computed {@code border-color} for its
+ * colour and {@code ::part(web)}'s laid-out HEIGHT for its thickness -- a border-WIDTH would draw a
+ * rectangle around the plot, since a border box is drawn whether or not there is a background. A theme
+ * draws
  * it. Each axis's colour is DATA and is written inline onto that axis's label: a registry may declare
  * an attribute in any hue, so no stylesheet can enumerate them. Everything else — the label font, the
  * chart's size, its padding — is ordinary CSS on {@code radarchart} and {@code ::part(axis-label)}.</p>
@@ -67,6 +75,62 @@ import java.util.List;
 public class RadarChart extends UIElement {
 
     public static final Name NAME = Name.of("radarchart");
+    
+        /**
+     * The axis NAMES, and with them how many axes there are — so this is the structural slot and every
+     * other per-axis one is read against the count it sets.
+     */
+    public static final State<RadarChart, List<String>> LABELS =
+            State.of("labels", StateTypes.stringListUnder("label"),
+                    RadarChart::axisLabels, RadarChart::setAxisLabels, List.of());
+
+    /** One ARGB per axis. Data rather than theme: a registry declares a stat's colour. */
+    public static final State<RadarChart, int[]> COLORS =
+            State.of("colors", StateTypes.intArrayUnder("argb"),
+                    RadarChart::axisColors, RadarChart::setAxisColors, new int[0]);
+
+    /** What each axis's point says on hover. An empty entry says nothing. */
+    public static final State<RadarChart, List<String>> DETAILS =
+            State.of("details", StateTypes.stringListUnder("detail"),
+                    RadarChart::axisDetails, RadarChart::setAxisDetails, List.of());
+
+    /** The data — the one slot a live chart sends per tick. */
+    public static final State<RadarChart, double[]> VALUES =
+            State.of("values", StateTypes.doubleArrayUnder("value"),
+                    RadarChart::values, RadarChart::setValues, new double[0]);
+
+    /** {@code 0} means "the largest value present", which is why it is also what it is omitted at. */
+    public static final State<RadarChart, Double> MAX =
+            State.of("max", StateTypes.DOUBLE, RadarChart::getMax, RadarChart::setMax, 0d)
+                    .omittedWhen(0d);
+
+    public static final State<RadarChart, AxisGradient> GRADIENT =
+            State.of("gradient", StateTypes.enumOf(AxisGradient.class),
+                    RadarChart::getAxisGradient, RadarChart::setAxisGradient, AxisGradient.NONE)
+                    .omittedWhen(AxisGradient.NONE);
+
+    /**
+     * LABELS BEFORE EVERYTHING PER-AXIS, which is why a contract applies slots in declaration order.
+     *
+     * <p>Slider's range-before-value, one dimension up: the label list is what says how many axes there
+     * are, so colours, details and values arriving first would be written against the count the chart
+     * happened to hold — silently, since every one of them ignores an index past the end. A chart
+     * growing from four attributes to six would take its two new values on the NEXT tick that moved
+     * them, which for a stat nobody is training is never.</p>
+     *
+     * <p>There are no events. Nothing here is a control: a radar reports a model rather than editing
+     * one, and its points carry tooltips rather than gestures.</p>
+     */
+    public static final WidgetContract<RadarChart> CONTRACT = WidgetContracts.register(
+            WidgetContract.of(RadarChart.class, "radarchart")
+                    .state(LABELS)
+                    .state(COLORS)
+                    .state(DETAILS)
+                    .state(VALUES)
+                    .state(MAX)
+                    .state(GRADIENT)
+                    .primary(VALUES)
+                    .build());
 
     /** Every axis label, so a theme can size and weight them together. */
     public static final String AXIS_LABEL_PART = "axis-label";
@@ -151,11 +215,54 @@ public class RadarChart extends UIElement {
          * saturated colours meeting there is the pinwheel a wedge chart is always about to become.
          * The colour ends up where the datum is.</p>
          */
-        TOWARD_CENTRE
+        TOWARD_CENTRE,
+
+        /**
+         * Both: the spoke-to-spoke blend, fading out toward the centre.
+         *
+         * <p>The two answer different halves of the same picture, so they compose -- the hue says which
+         * axis a region belongs to and the fade takes the colour off the point where all of them meet.
+         * The blend is stepped rather than continuous across each slice here (see
+         * {@code paintBlendedWedge}), which is affordable precisely BECAUSE of the fade: the step is
+         * scaled by the alpha it is drawn at, so it is smallest exactly where a fan's error is normally
+         * worst.</p>
+         */
+        BETWEEN_AXES_TOWARD_CENTRE
     }
+
+    /**
+     * Rings when nothing says otherwise. LOCAL, and deliberately not a state slot: how many
+     * graduations a scale draws is a decision the panel makes once when it builds the chart, not
+     * something a model moves, so putting it on the wire would be a slot nothing ever sends.
+     */
+    private static final int DEFAULT_RINGS = 4;
+
+    /** What an axis added by a shorter description than the one before it is coloured. */
+    private static final int DEFAULT_AXIS_COLOR = 0xFFFFFFFF;
+
+
 
     /** Below three there is no polygon to draw, and two axes are a line. */
     private static final int MIN_AXES = 3;
+
+    /**
+     * Sub-triangles per wedge under {@link AxisGradient#BETWEEN_AXES}.
+     *
+     * <p>The residual step across a slice boundary is the wedge's whole colour span divided by this
+     * and fades to nothing at the rim, so sixteen leaves a sixteenth of a red-to-cyan swing over the
+     * few pixels nearest the centre, under a fill that is part transparent anyway.</p>
+     */
+    private static final int WEDGE_SLICES = 16;
+
+    /**
+     * Slices under {@link AxisGradient#BETWEEN_AXES_TOWARD_CENTRE}, where each carries ONE colour and
+     * spends its ramp on the fade instead.
+     *
+     * <p>So the step does not decay with radius the way {@link #WEDGE_SLICES}'s does -- it is scaled by
+     * the fade's own alpha and is therefore largest at the RIM, alongside a stroke that is blending
+     * smoothly. Forty puts it under three levels there.</p>
+     */
+    private static final int WEDGE_SLICES_FADED = 40;
 
     private final ShadowRoot shadow;
     private final UIElement web;
@@ -163,14 +270,19 @@ public class RadarChart extends UIElement {
     private final List<Axis> axes = new ArrayList<>();
     private final List<UIText> labels = new ArrayList<>();
     private final List<UIElement> points = new ArrayList<>();
+    /** One per point, ALWAYS attached: empty text is how a tooltip says nothing, so a detail that
+     *  arrives after the axes were set has something to arrive at. */
+    private final List<Tooltip> tips = new ArrayList<>();
 
     /** {@code 0} means "the largest value present", which is what a sheet of attributes wants. */
     private double explicitMax;
-    private int rings = 4;
+    private int rings = DEFAULT_RINGS;
     private AxisGradient axisGradient = AxisGradient.NONE;
     /** What the labels were last placed against, so the hook below costs two comparisons a frame. */
     private float placedWidth = -1f;
     private float placedHeight = -1f;
+    /** Kept from the last label pass, so the points can be re-placed without re-measuring them. */
+    private float placedRadius;
 
     public RadarChart() {
         super(NAME);
@@ -205,6 +317,8 @@ public class RadarChart extends UIElement {
         labels.clear();
         for (UIElement point : points) shadow.remove(point);
         points.clear();
+        for (Tooltip tip : tips) tip.detach();
+        tips.clear();
 
         for (Axis axis : newAxes) {
             axes.add(axis);
@@ -214,8 +328,7 @@ public class RadarChart extends UIElement {
             // registry declared it, so no sheet can name them all.
             // FULL STRENGTH. The alpha on an axis belongs to its FILL; a label carrying it would fade
             // with the wedge, and a label is read rather than looked through.
-            StyleGroup.inlinePipeline(label.getStyle().getGeneralGroup(),
-                    g -> g.color(axis.argb() | 0xFF000000));
+            // Colour goes on through the shared helper, so setAxisColors writes it in exactly one place.
             // Decoration on the chart, not a thing in its own right.
             label.setHitTest(false);
             // OUT OF FLOW. Placed by their angle after layout, so they must not lay out in a row.
@@ -228,28 +341,215 @@ public class RadarChart extends UIElement {
             // disappear into its own wedge.
             UIElement point = new UIElement();
             point.set(Attribute.PART, POINT_PART);
-            StyleGroup.inlinePipeline(point.getStyle().getGeneralGroup(),
-                    g -> g.backgroundColor(axis.argb() | 0xFF000000));
             StyleGroup.defaultPipeline(point.getStyle().getLayoutGroup(),
                     l -> l.positionType(TaffyPosition.ABSOLUTE));
             // No delay asked for: a point is a target the pointer was AIMED at, so the engine's
             // instant default is already right and stating it again would just be noise.
-            if (axis.detail() != null) Tooltip.attach(point, axis.detail());
+            tips.add(Tooltip.attach(point, axis.detail() == null ? "" : axis.detail()));
             points.add(point);
             shadow.append(point);
+            applyAxisColour(axes.size() - 1, axis.argb());
         }
         placeLabelsAfterLayout();
+        notifyStateChanged();
         return this;
+    }
+
+    /**
+     * An axis's hue onto the two elements that wear it, at FULL strength.
+     *
+     * <p>The one legitimate inline colour write in this widget: a hue comes from whatever registry
+     * declared the stat, so no sheet can name them all. Full strength on both because the alpha an
+     * axis carries belongs to its FILL -- a label carrying it would fade with the wedge and a label is
+     * read rather than looked through, and a marker washed with its own wedge disappears into it.</p>
+     */
+    private void applyAxisColour(int index, int argb) {
+        int opaque = argb | 0xFF000000;
+        StyleGroup.inlinePipeline(labels.get(index).getStyle().getGeneralGroup(), g -> g.color(opaque));
+        StyleGroup.inlinePipeline(points.get(index).getStyle().getGeneralGroup(),
+                g -> g.backgroundColor(opaque));
     }
 
     public List<Axis> axes() {
         return List.copyOf(axes);
     }
 
+    /** @see #LABELS */
+    public List<String> axisLabels() {
+        List<String> out = new ArrayList<>(axes.size());
+        for (Axis axis : axes) out.add(axis.label());
+        return out;
+    }
+
+    /** @see #COLORS */
+    public int[] axisColors() {
+        int[] out = new int[axes.size()];
+        for (int i = 0; i < out.length; i++) out[i] = axes.get(i).argb();
+        return out;
+    }
+
+    /** Empty rather than {@code null} for an axis with nothing to say -- a wire has no third answer. */
+    public List<String> axisDetails() {
+        List<String> out = new ArrayList<>(axes.size());
+        for (Axis axis : axes) out.add(axis.detail() == null ? "" : axis.detail());
+        return out;
+    }
+
+    /** @see #VALUES */
+    public double[] values() {
+        double[] out = new double[axes.size()];
+        for (int i = 0; i < out.length; i++) out[i] = axes.get(i).value();
+        return out;
+    }
+
+    /**
+     * Renames the axes, and their COUNT is what says how many there are.
+     *
+     * <p>Each axis keeps whatever colour, detail and value it already had at that index, so a rename
+     * does not blank the chart and the three per-axis slots can arrive in any order after this one. A
+     * list of a different length rebuilds, which is the only thing here that does.</p>
+     */
+    public RadarChart setAxisLabels(List<String> newLabels) {
+        if (newLabels == null || newLabels.equals(axisLabels())) return this;
+        List<Axis> rebuilt = new ArrayList<>(newLabels.size());
+        for (int i = 0; i < newLabels.size(); i++) {
+            Axis old = i < axes.size() ? axes.get(i) : null;
+            rebuilt.add(old == null
+                    ? new Axis(newLabels.get(i), 0d, DEFAULT_AXIS_COLOR, null)
+                    : new Axis(newLabels.get(i), old.value(), old.argb(), old.detail()));
+        }
+        return setAxes(rebuilt);
+    }
+
+    /** One ARGB per axis, in order. A shorter list leaves the rest alone; extras are ignored. */
+    public RadarChart setAxisColors(int[] colors) {
+        if (colors == null) return this;
+        boolean moved = false;
+        for (int i = 0; i < colors.length && i < axes.size(); i++) {
+            Axis axis = axes.get(i);
+            if (axis.argb() == colors[i]) continue;
+            axes.set(i, new Axis(axis.label(), axis.value(), colors[i], axis.detail()));
+            applyAxisColour(i, colors[i]);
+            moved = true;
+        }
+        if (moved) notifyStateChanged();
+        return this;
+    }
+
+    /** One hover text per axis, in order. @see #setDetail */
+    public RadarChart setAxisDetails(List<String> details) {
+        if (details == null) return this;
+        for (int i = 0; i < details.size() && i < axes.size(); i++) setDetail(i, details.get(i));
+        return this;
+    }
+
+    /**
+     * Where the axis called {@code label} sits, or {@code -1}. First match, if two share a name.
+     *
+     * <p>Public so a caller with a list that may not match this chart can ask before it writes -- the
+     * setters below refuse a name they do not have, and this is how you avoid finding out that way.</p>
+     */
+    public int axisIndex(String label) {
+        for (int i = 0; i < axes.size(); i++) {
+            if (axes.get(i).label().equals(label)) return i;
+        }
+        return -1;
+    }
+
+    /** What the axis called {@code label} currently reaches. @throws IllegalArgumentException if absent */
+    public double value(String label) {
+        return axes.get(require(label)).value();
+    }
+
+    /**
+     * Moves one axis to a new value, leaving its name, its colour and its hover text alone.
+     *
+     * <p>BY NAME, because the name is already the identity: {@link #LABELS} is the structural slot on
+     * the wire and everything else is read against the count it sets, so a chart has exactly one notion
+     * of which axis is which and an API keyed on position would be a second. A caller writing
+     * {@code setValue("SPI", 12)} also cannot be broken by an axis being inserted above it.</p>
+     *
+     * <p>The chart OWNS its data and a caller changes it through here, rather than handing over an
+     * observable for the chart to watch: the fill, the rim and the markers are all read from these
+     * values on the frame they are drawn, so there is nothing to notify and no subscription to outlive
+     * anything.</p>
+     *
+     * @throws IllegalArgumentException if no axis carries that label. A name that is not there is a
+     *         misspelling or a chart that has not been given its axes yet, and both are the kind of
+     *         mistake that is invisible if a setter shrugs: the value simply never appears
+     */
+    public RadarChart setValue(String label, double value) {
+        return setValue(require(label), value);
+    }
+
+    /** @see #setValue(String, double) */
+    public RadarChart setDetail(String label, @Nullable String detail) {
+        return setDetail(require(label), detail);
+    }
+
+    private int require(String label) {
+        int index = axisIndex(label);
+        if (index < 0) {
+            throw new IllegalArgumentException(
+                    "No axis called '" + label + "'. This chart has " + axisLabels());
+        }
+        return index;
+    }
+
+    private RadarChart setValue(int index, double value) {
+        if (index < 0 || index >= axes.size()) return this;
+        Axis axis = axes.get(index);
+        if (axis.value() == value) return this;
+        axes.set(index, new Axis(axis.label(), value, axis.argb(), axis.detail()));
+        notifyStateChanged();
+        return this;
+    }
+
+    /**
+     * Every axis at once, IN ORDER -- the positional form, and the one {@link #VALUES} applies.
+     *
+     * <p>Position is the wire's business: the four per-axis slots are parallel lists whose order is
+     * the label list's, so this is what a description decodes into. A caller with a name should use
+     * {@link #setValue(String, double)}. Extra values are ignored rather than refused, because a
+     * description written by a newer peer may legitimately carry more axes than this build knows.</p>
+     */
+    public RadarChart setValues(double... values) {
+        for (int i = 0; i < values.length; i++) setValue(i, values[i]);
+        return this;
+    }
+
+    /**
+     * Changes what hovering one axis's point says. {@code null} or empty says nothing at all.
+     *
+     * <p>Which is the half of {@link #setValue} that cannot be pulled: a marker's POSITION is read
+     * every frame, but its tooltip's words are text in an element, and a detail that quotes the value
+     * — which is what a detail is for — would otherwise go on quoting the one it was declared with.</p>
+     */
+    private RadarChart setDetail(int index, @Nullable String detail) {
+        if (index < 0 || index >= axes.size()) return this;
+        Axis axis = axes.get(index);
+        String text = detail == null ? "" : detail;
+        // GUARDED, or a panel pushing its model into its controls every tick -- which is the shape
+        // every server-side panel is written in -- sends a delta a tick carrying a value nobody moved.
+        if (text.equals(axis.detail() == null ? "" : axis.detail())) return this;
+        axes.set(index, new Axis(axis.label(), axis.value(), axis.argb(), detail));
+        tips.get(index).setText(text);
+        notifyStateChanged();
+        return this;
+    }
+
     /** The value the outer ring stands for. {@code 0} restores "the largest value present". */
     public RadarChart setMax(double max) {
-        this.explicitMax = Math.max(0d, max);
+        double clamped = Math.max(0d, max);
+        if (clamped == this.explicitMax) return this;
+        this.explicitMax = clamped;
+        notifyStateChanged();
         return this;
+    }
+
+    /** {@code 0} means "the largest value present". @see #setMax */
+    public double getMax() {
+        return explicitMax;
     }
 
     /**
@@ -261,14 +561,25 @@ public class RadarChart extends UIElement {
      * toward transparent BLACK gives.</p>
      */
     public RadarChart setAxisGradient(AxisGradient gradient) {
-        this.axisGradient = gradient == null ? AxisGradient.NONE : gradient;
+        AxisGradient wanted = gradient == null ? AxisGradient.NONE : gradient;
+        if (wanted == this.axisGradient) return this;
+        this.axisGradient = wanted;
+        notifyStateChanged();
         return this;
+    }
+
+    public AxisGradient getAxisGradient() {
+        return axisGradient;
     }
 
     /** How many rings the web draws, the outermost included. Fewer than one draws no web. */
     public RadarChart setRings(int rings) {
         this.rings = Math.max(0, rings);
         return this;
+    }
+
+    public int getRings() {
+        return rings;
     }
 
     /**
@@ -359,38 +670,97 @@ public class RadarChart extends UIElement {
 
             int rimNext = scaleAlpha(axes.get(next).argb() | 0xFF000000, strength);
 
-            CgVectorRenderer.Triangle wedge = ctx.triangle().points(cx, cy, x1, y1, x2, y2);
-            float ux = x1 - cx, uy = y1 - cy;
-            float vx = x2 - cx, vy = y2 - cy;
+            if (blendsAcrossWedge()) {
+                paintBlendedWedge(ctx, cx, cy, x1, y1, x2, y2, rim, rimNext,
+                        axisGradient == AxisGradient.BETWEEN_AXES_TOWARD_CENTRE);
+                continue;
+            }
 
-            switch (axisGradient) {
-                case BETWEEN_AXES -> {
-                    // A ramp that is 0 along the spoke to P1 and 1 along the spoke to P2, which is
-                    // what puts each axis's own hue on its own line. `t = dot(p - C, dir)` is zero on
-                    // the line through C perpendicular to dir, so dir must be perpendicular to u --
-                    // and dividing by the cross product is what makes it reach exactly 1 on v.
-                    float cross = ux * vy - uy * vx;
-                    // Zero when the two spokes are collinear, which includes either value being 0:
-                    // the wedge is a sliver with no width to ramp across, so it takes one colour.
-                    if (Math.abs(cross) > 1e-4f) wedge.gradient(rim, rimNext, cx, cy, -uy / cross, ux / cross);
-                    else wedge.color(rim);
-                }
-                case TOWARD_CENTRE -> {
-                    // The far end is the midpoint of the RIM, which is where this wedge's bisector
-                    // actually leaves it -- the rim is a chord rather than an arc, so its own two ends
-                    // are nearer the centre than any arc through them would be. `dir` carries the SCALE
-                    // as well as the direction, so dividing by the squared length reaches 1 at the rim.
-                    float mx = (ux + vx) / 2f, my = (uy + vy) / 2f;
-                    float lenSq = mx * mx + my * my;
-                    if (lenSq > 0f) wedge.gradient(rim & 0x00FFFFFF, rim, cx, cy, mx / lenSq, my / lenSq);
-                    else wedge.color(rim);
-                }
-                default -> wedge.color(rim);
+            CgVectorRenderer.Triangle wedge = ctx.triangle().points(cx, cy, x1, y1, x2, y2);
+            if (axisGradient == AxisGradient.TOWARD_CENTRE) {
+                // The far end is the midpoint of the RIM, which is where this wedge's bisector actually
+                // leaves it -- the rim is a chord rather than an arc, so its own two ends are nearer the
+                // centre than any arc through them would be. `dir` carries the SCALE as well as the
+                // direction, so dividing by the squared length reaches 1 at the rim.
+                float mx = (x1 + x2) / 2f - cx, my = (y1 + y2) / 2f - cy;
+                float lenSq = mx * mx + my * my;
+                if (lenSq > 0f) wedge.gradient(rim & 0x00FFFFFF, rim, cx, cy, mx / lenSq, my / lenSq);
+                else wedge.color(rim);
+            } else {
+                wedge.color(rim);
             }
             // The RIM is the outline; the two spokes are seams against the neighbouring wedges.
             // Feathering those would draw a soft crack down every one of them.
             wedge.silhouetteEdge(CgVectorRenderer.EDGE_P1_P2).submit();
         }
+    }
+
+    /**
+     * One wedge as an angular FAN, so its colour belongs to the ANGLE rather than to the distance
+     * across it.
+     *
+     * <p>A single linear gradient cannot do that, and the near-miss is what makes it worth stating:
+     * {@code t = dot(p - C, dir)} is constant along lines PARALLEL to the first spoke, never along
+     * rays out of the centre. So the second spoke reaches the next axis's colour only at its tip and
+     * carries this one's near the middle, which puts a step down every spoke where one wedge's start
+     * colour meets its neighbour's -- worst at the centre, gone at the rim. No {@code dir} escapes it:
+     * two iso-lines through the centre would have to be the same line.</p>
+     *
+     * <p>Each slice's own version of that error is a fraction of the wedge's colour span, so it goes
+     * away. The cuts are even steps along the RIM rather than even angles, which is what makes the
+     * fill agree exactly with the stroke drawn over it -- {@code Curve.colors} ramps along the segment,
+     * so the chord is the parameter both of them read.</p>
+     */
+    private void paintBlendedWedge(CgUiPaintContext ctx, float cx, float cy,
+                                   float ax, float ay, float bx, float by,
+                                   int from, int to, boolean fade) {
+        int slices = fade ? WEDGE_SLICES_FADED : WEDGE_SLICES;
+        float px = ax, py = ay, pm = 0f;
+        int pc = from;
+        for (int slice = 1; slice <= slices; slice++) {
+            float m = (float) slice / slices;
+            float qx = ax + (bx - ax) * m;
+            float qy = ay + (by - ay) * m;
+            int qc = ArgbMath.lerp(from, to, m);
+
+            CgVectorRenderer.Triangle wedge = ctx.triangle().points(cx, cy, px, py, qx, qy);
+            if (fade) {
+                // ONE ramp is one axis of variation, and the fade needs it -- so the hue is flat across
+                // the slice and steps at its edges. Iso-lines parallel to the outer edge put t = 0 at
+                // the centre and exactly 1 along the rim, which the bisector reading below only reaches
+                // at the rim's midpoint. Transparency keeps the RGB so the ramp fades rather than
+                // darkening toward transparent BLACK.
+                int mid = ArgbMath.lerp(from, to, (pm + m) / 2f);
+                float ex = qx - px, ey = qy - py;
+                float nx = -ey, ny = ex;
+                float d = (px - cx) * nx + (py - cy) * ny;
+                if (Math.abs(d) > 1e-4f) wedge.gradient(mid & 0x00FFFFFF, mid, cx, cy, nx / d, ny / d);
+                else wedge.color(mid);
+            } else {
+                // Zero when the two edges are collinear, which includes either value being 0: a sliver
+                // with no width to ramp across, so it takes one colour.
+                float cross = (px - cx) * (qy - cy) - (py - cy) * (qx - cx);
+                if (Math.abs(cross) > 1e-4f) {
+                    wedge.gradient(pc, qc, cx, cy, -(py - cy) / cross, (px - cx) / cross);
+                } else {
+                    wedge.color(pc);
+                }
+            }
+            // Only the rim is an outline. Every other edge here is a seam -- against the next slice or
+            // the next wedge -- and feathering those draws a soft crack down each one.
+            wedge.silhouetteEdge(CgVectorRenderer.EDGE_P1_P2).submit();
+
+            px = qx;
+            py = qy;
+            pm = m;
+            pc = qc;
+        }
+    }
+
+    /** Whether the fill and the rim ramp from one axis's hue to the next's, rather than staying flat. */
+    private boolean blendsAcrossWedge() {
+        return axisGradient == AxisGradient.BETWEEN_AXES
+                || axisGradient == AxisGradient.BETWEEN_AXES_TOWARD_CENTRE;
     }
 
     /** The rings and the spokes — Chart.js's {@code pathRadiusLine} with a polygon rather than a circle. */
@@ -460,9 +830,7 @@ public class RadarChart extends UIElement {
             // different hues, so a flat stroke would put axis i's colour hard up against axis i+1's
             // point -- the one place the eye is looking to read that axis off.
             int from = axes.get(i).argb() | 0xFF000000;
-            int to = axisGradient == AxisGradient.BETWEEN_AXES
-                    ? axes.get(next).argb() | 0xFF000000
-                    : from;
+            int to = blendsAcrossWedge() ? axes.get(next).argb() | 0xFF000000 : from;
             ctx.curve()
                     .line(cx + (float) Math.cos(here) * rHere, cy + (float) Math.sin(here) * rHere,
                             cx + (float) Math.cos(there) * rThere, cy + (float) Math.sin(there) * rThere)
@@ -512,11 +880,18 @@ public class RadarChart extends UIElement {
         // is for. A label's SIZE does not depend on the radius, so there is no loop to settle.
         document.animation().afterLayout(this, delta -> {
             Box box = box();
-            if (box != null && (box.width() != placedWidth || box.height() != placedHeight)) {
+            if (box == null) return true;
+            if (box.width() != placedWidth || box.height() != placedHeight) {
                 placedWidth = box.width();
                 placedHeight = box.height();
+                placedRadius = radiusIn(box);
                 placeLabels();
             }
+            // THE MARKERS FOLLOW THE DATA, which moves with no layout behind it -- so unlike the labels
+            // they cannot be placed only when the box changes. Pulled rather than pushed: an unchanged
+            // inset writes no candidate (`replaceOrPutCandidate` no-ops), so a still chart costs six
+            // comparisons a frame and nothing has to be told a value moved.
+            placePoints(placedRadius, box.width() / 2f, box.height() / 2f);
             return true;
         });
     }
@@ -524,7 +899,7 @@ public class RadarChart extends UIElement {
     private void placeLabels() {
         Box box = box();
         if (box == null || axes.size() < MIN_AXES) return;
-        float radius = radiusIn(box);
+        float radius = placedRadius;
         float cx = box.width() / 2f;
         float cy = box.height() / 2f;
 
@@ -559,7 +934,6 @@ public class RadarChart extends UIElement {
             StyleGroup.inlinePipeline(label.getStyle().getLayoutGroup(),
                     l -> l.left(left).top(top));
         }
-        placePoints(radius, cx, cy);
     }
 
     /**
