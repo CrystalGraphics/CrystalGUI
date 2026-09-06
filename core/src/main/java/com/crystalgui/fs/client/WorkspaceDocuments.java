@@ -11,6 +11,7 @@ import com.crystalgui.document.DocumentKinds;
 import com.crystalgui.document.DocumentReference;
 import com.crystalgui.document.DocumentState;
 import com.crystalgui.document.Documents;
+import com.crystalgui.core.signal.Connection;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.protocol.FsError;
 import com.crystalgui.fs.protocol.FsMessages;
@@ -55,7 +56,17 @@ public final class WorkspaceDocuments implements Disposable {
     private final Documents documents = new Documents();
 
     /** Per open document, its watch — released with the document. */
-    private final Map<Resource, Workspace.Watch> watches = new LinkedHashMap<>();
+    /**
+     * What one open document holds on the wire, so closing it lets go of exactly that.
+     *
+     * <p>The listener is kept because a {@link Workspace.Watch} is <b>shared</b> by everything that asked
+     * for the same resource: disposing it need not end it, and a listener left behind on a surviving
+     * watch goes on applying changes to a document that has been disposed.</p>
+     */
+    private record Attachment(Workspace.Watch watch, Connection changes) {
+    }
+
+    private final Map<Resource, Attachment> watches = new LinkedHashMap<>();
 
     /** How often unsaved work is written to the backup store, in milliseconds of edit activity. */
     public static final long BACKUP_DEBOUNCE_MILLIS = 1000L;
@@ -92,8 +103,11 @@ public final class WorkspaceDocuments implements Disposable {
         this.kinds = Objects.requireNonNull(kinds, "kinds");
         documents.onDidOpen.connect(onDidOpen::emit);
         documents.onDidClose.connect(document -> {
-            Workspace.Watch watch = watches.remove(document.resource());
-            if (watch != null) watch.dispose();
+            Attachment held = watches.remove(document.resource());
+            if (held != null) {
+                held.changes().disconnect();
+                held.watch().dispose();
+            }
             // THE UNWATCH TAKES THIS CLIENT OUT OF THE PATH'S PRESENCE, so there is nothing to
             // withdraw -- only the memo of what the server was told, which describes a document that
             // no longer exists.
@@ -124,7 +138,10 @@ public final class WorkspaceDocuments implements Disposable {
     @Override
     public void dispose() {
         lifetime.disconnectAll();
-        for (Workspace.Watch watch : watches.values()) watch.dispose();
+        for (Attachment held : watches.values()) {
+            held.changes().disconnect();
+            held.watch().dispose();
+        }
         watches.clear();
     }
 
@@ -234,8 +251,7 @@ public final class WorkspaceDocuments implements Disposable {
     /** Watches the file and reports this client's dirtiness, so the other side can say who is editing. */
     private void attach(Document document) {
         Workspace.Watch watch = workspace.watch(document.resource(), false);
-        watches.put(document.resource(), watch);
-        watch.onChanged.connect(changes -> {
+        Connection listening = watch.onChanged.connect(changes -> {
             for (FsMessages.FileChange change : changes) {
                 // MATCHED ON EITHER END, for the reason Workspace.deliver records: a rename's `path` is
                 // where the file went, and this document is still sitting at where it came FROM.
@@ -245,6 +261,15 @@ public final class WorkspaceDocuments implements Disposable {
                     applyChange(document, change);
                 }
             }
+        });
+        watches.put(document.resource(), new Attachment(watch, listening));
+        // A RENAME MOVES THE KEY WITH THE DOCUMENT. It is filed under the resource the document had
+        // when it opened and looked up on close by the resource it has NOW, so a renamed document's
+        // watch was disposed by nobody: it stayed subscribed, and the listener on it stayed pointed at
+        // a document that had moved.
+        document.onDidChangeResource.connect((from, to) -> {
+            Attachment held = watches.remove(from);
+            if (held != null) watches.put(to, held);
         });
         document.onDidChangeState.connect(state -> {
             onDidChangeState.emit(document, state);
