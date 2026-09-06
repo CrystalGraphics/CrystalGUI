@@ -72,25 +72,19 @@ public final class DesignToolWindow extends UIElement {
     protected void connected() {
         super.connected();
         UIDocument window = document();
-        // GUARDED, because `every` is a plain add and the dock detaches and re-attaches a panel on every
-        // rebuild -- so an unguarded registration stacks one hook per rebuild. Cleared in disconnected(),
-        // or a panel that is hidden and reshown comes back with the flag set and no hook behind it.
-        if (ticking || window == null) return;
-        ticking = true;
+        if (window == null) return;
+        // UNGUARDED, as the Inspector registers its own and for the same reason. `Animation.tick` drops a
+        // hook the moment its owner is disconnected, and the dock detaches and re-attaches every panel
+        // when it rebuilds -- which switching tabs does. A flag guarding the registration is then wrong
+        // in the one direction that matters: if the detach and the re-attach coalesce into one mutation
+        // the element never observes a `disconnected()`, so the flag stays set while the hook is already
+        // gone, and the panel is dead for the rest of the session. Measured: it came up once and never
+        // again. A duplicate registration costs a second `follow()`, which early-returns.
         window.animation().every(this, delta -> {
             follow();
             return true;
         });
     }
-
-    @Override
-    protected void disconnected() {
-        super.disconnected();
-        ticking = false;
-    }
-
-    /** @see #connected */
-    private boolean ticking;
 
     /** Points the panel at whatever builder is in front, and rebuilds only when that changed. */
     public void follow() {
