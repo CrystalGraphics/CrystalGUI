@@ -162,10 +162,21 @@ public final class ExplorerBinding {
                 CgPath.parse(change.path()).parent());
     }
 
-    /** The folder something landed in, or the project root, which has no name of its own. */
+    /**
+     * The folder something landed in, or the project root, which has no name of its own.
+     *
+     * <p>With its slash, so a destination cannot be read as a file: {@code moved to fah} and
+     * {@code moved to fah/} are the same words and only one of them says which it is.</p>
+     *
+     * <p><b>The whole path within the project, not the last segment.</b> A project has many folders
+     * called {@code java}, and naming one of them locates nothing -- which is the entire question a
+     * reader has when told something moved.</p>
+     */
     private static String folderOf(String path) {
         CgPath parent = CgPath.parse(path).parent();
-        return parent == null || parent.segments().isEmpty() ? "the project root" : parent.name();
+        return parent == null || parent.segments().isEmpty()
+                ? "the project root"
+                : parent.path() + "/";
     }
 
     /** The last segment, which is what somebody reading a notification recognises. */
