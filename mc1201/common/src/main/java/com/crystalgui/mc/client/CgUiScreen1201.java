@@ -51,6 +51,17 @@ public final class CgUiScreen1201 extends Screen {
      */
     private static boolean showEditorOnOpen;
 
+    /**
+     * Set by {@link #openEditor()}, cleared once a window actually exists.
+     *
+     * <p>The launch can fail for a reason that fixes itself — the editor needs a workspace, which needs a
+     * connection, and there may not be one yet. {@code init()} was the only caller and re-runs only on a
+     * resize, so the attempt was never made again and the desktop stayed up and empty. Separate from
+     * {@link #showEditorOnOpen} because the two are consumed on different events, and driven off a flag
+     * rather than "the desktop is empty" so it cannot re-open a window the user just closed.</p>
+     */
+    private static boolean awaitingEditorLaunch;
+
     private static long lastFrameNanos;
 
     public CgUiScreen1201() {
@@ -60,6 +71,7 @@ public final class CgUiScreen1201 extends Screen {
     /** Opens the desktop with the editor brought forward. */
     public static void openEditor() {
         showEditorOnOpen = true;
+        awaitingEditorLaunch = true;
         open();
     }
 
@@ -169,6 +181,9 @@ public final class CgUiScreen1201 extends Screen {
         boolean nothingOpen = desktop() != null && desktop().registry().size() == 0;
         if (!showEditorOnOpen && !nothingOpen) return;
         if (!ensureEditorWindow()) return;
+        // BUILT, which is what this flag is about -- the bring-forward below is a separate question and
+        // may legitimately decline.
+        awaitingEditorLaunch = false;
         if (!showEditorOnOpen) return;
 
         showEditorOnOpen = false;
@@ -200,7 +215,9 @@ public final class CgUiScreen1201 extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        if (host == null) return;
+        if (host == null || !CgUiHostGl1201.contextIsLive()) return;
+        // THE RETRY, and it costs a boolean read once a window exists. @see #awaitingEditorLaunch
+        if (awaitingEditorLaunch) bringEditorForward();
         float delta = frameDelta();
 
         // The clock every node preview reads. Nothing else drives it here, so without this CG_TIME is
@@ -309,6 +326,10 @@ public final class CgUiScreen1201 extends Screen {
     public void removed() {
         // Off screen, not destroyed: the desktop records its arrangement and each application its
         // session, because each went off screen. Only dispose() takes them down.
+        //
+        // AND THE PENDING LAUNCH IS ABANDONED. Closing the screen withdraws the request; carrying it
+        // across would open an editor the next time the desktop is shown for some unrelated reason.
+        awaitingEditorLaunch = false;
         if (host != null) host.hidden();
     }
 
