@@ -1,6 +1,6 @@
 /* ua/desktop.css — one part of StyleSheet.DEFAULT, the user-agent sheet.
  *
- * CrystalOS: the desktop, its work area, and one window frame's chrome (plan_windowing.md, W1).
+ * CrystalOS: the desktop, its work area, and one window frame's chrome (plan/shell-windowing.md, W1).
  *
  * The parts concatenate IN MANIFEST ORDER (StyleSheetRegistry.DEFAULT_SHEET_PARTS) into the one
  * sheet the engine loads, and equal-specificity ties fall to source order. This part is LAST in
@@ -147,7 +147,7 @@ taskbar {
      * floating over the desktop and a bar wants ~88%. It degrades to `fallback` — the flat
      * --taskbar-bg — wherever there is no backdrop to sample, which is what the bar is headless.
      *
-     * THE COST IS THE REGION (plan_glass.md R2): the capture and the blur are sized to what asks for a
+     * THE COST IS THE REGION (plan/style-glass.md R2): the capture and the blur are sized to what asks for a
      * backdrop, so a 34px bar on a 1080p surface is about 6% of it. The first glass captured the whole
      * screen and took a 120fps desktop to 50–70 for one line of CSS. */
     /* A TEMPERATURE, NEVER A COLOUR -- and the mechanism is the LUMINOSITY blend, not desaturation.

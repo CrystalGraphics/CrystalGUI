@@ -24,7 +24,7 @@ public final class StyleSheetRegistry {
      * renamed without both following.
      *
      * <p>default.css was split at its own section boundaries once it passed 6,000 lines
-     * (plan_styling.md step 8) — a pure move, contiguous by construction so rule order across the
+     * (plan/style-overhaul.md step 8) — a pure move, contiguous by construction so rule order across the
      * parts is exactly the old file's order. <b>Order here is load-bearing</b> the same way order
      * within a file is: equal-specificity ties fall to source order, and the concatenation IS the
      * source ({@code :disabled} after {@code :hover} being the classic casualty of a reorder).</p>

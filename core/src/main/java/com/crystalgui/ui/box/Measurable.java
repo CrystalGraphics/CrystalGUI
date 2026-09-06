@@ -8,7 +8,7 @@ package com.crystalgui.ui.box;
  * sized itself <em>after</em> layout instead — re-wrapping against the box it had been given and
  * pushing the result back into the cascade as an {@code IMPORTANT} candidate, which re-dirtied
  * layout, which ran again, until it settled or hit a pass cap. That loop is what the box tree does
- * not have: geometry feedback goes through this, once, inside the pass (plan_m5.md 5.3, D5.10).</p>
+ * not have: geometry feedback goes through this, once, inside the pass (plan/engine-core.md 5.3, D5.10).</p>
  *
  * <p>A node's skin implements this; the box tree wires it to the engine's measure function. The
  * types are the protocol's own rather than the layout engine's so a skin does not import Taffy.</p>

@@ -111,7 +111,7 @@ public class SplitView extends UIElement {
                     new float[0]);
 
     /**
-     * A divider was dragged. {@code plan_ui_rewrite.md} M1.
+     * A divider was dragged. {@code plan/engine-rewrite.md} M1.
      *
      * <p>Reported on the SETTLED weights rather than the raw percentage the signal carries, because
      * a percentage is meaningless without knowing which divider moved and how many there are.

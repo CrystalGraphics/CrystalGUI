@@ -440,7 +440,7 @@ public class UIElement extends UINode implements EventTarget, Styleable {
         return shadowRoot;
     }
 
-    // ── Styleable: what the cascade asks (plan_m5.md D5.2) ───────────────────
+    // ── Styleable: what the cascade asks (plan/engine-core.md D5.2) ───────────────────
 
     @Override
     public final String getId() {

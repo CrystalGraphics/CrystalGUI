@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * it" rather than as an identity error.</p>
  *
  * <p>It is also already known to bite: adding the {@code ICON} state key was a breaking change for saved
- * layouts for this reason, which {@code plan.md} §1.5 records.</p>
+ * layouts for this reason, which {@code plan/shell-architecture-audit.md} §1.5 records.</p>
  *
  * <h3>A view does not know its container</h3>
  *
@@ -70,7 +70,7 @@ public final class ViewId {
      * The panel ref this view is shown as, for as long as views are still dock panels.
      *
      * <p><b>Transitional</b>, and deliberately one-way. The tool-window half is being moved out of the
-     * dock tree (plan.md §23, F2); until it is, a view still has to be findable as a panel. Nothing should
+     * dock tree (plan/shell-architecture-audit.md §23, F2); until it is, a view still has to be findable as a panel. Nothing should
      * grow a {@code fromRef} inverse — a ref carries state, an id does not, and the whole point is that the
      * conversion loses nothing in this direction and could not be faithful in the other.</p>
      */

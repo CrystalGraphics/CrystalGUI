@@ -10,7 +10,7 @@ import static org.junit.Assert.assertTrue;
 /**
  * Band selection — one property read, and every way it can be spelled.
  *
- * <p>No jars and no network: this is the half of {@code plan_syntax.md} §6 that is pure arithmetic, and
+ * <p>No jars and no network: this is the half of {@code plan/lang-stack.md} §6 that is pure arithmetic, and
  * it is worth separating from the half that needs 44MB of engines because it is the half that runs on
  * every machine.</p>
  */

@@ -11,7 +11,7 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 /**
- * Theme-file parsing and the registry's refusal posture ({@code plan_styling.md} §4.4): a file is
+ * Theme-file parsing and the registry's refusal posture ({@code plan/style-overhaul.md} §4.4): a file is
  * either valid and offered, or refused with a log — never half-installed. Theme files arrive from
  * outside eventually, so every malformation here is a real input, not a hypothetical.
  */

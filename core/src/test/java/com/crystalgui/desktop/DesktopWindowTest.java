@@ -15,7 +15,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 /**
- * CrystalOS W1 — the compositor's ownership and its geometry rules ({@code plan_windowing.md}).
+ * CrystalOS W1 — the compositor's ownership and its geometry rules ({@code plan/shell-windowing.md}).
  *
  * <p>Deliberately not a pixel test. What is pinned here is the handful of things that are invisible
  * when broken: who owns the desktop, whether an unused one can swallow input, whether the frame list

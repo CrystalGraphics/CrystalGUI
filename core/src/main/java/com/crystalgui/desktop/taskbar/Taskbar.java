@@ -31,7 +31,7 @@ import java.util.Map;
 
 /**
  * The strip along the bottom of the {@link Desktop} — one entry per live window
- * ({@code plan_windowing.md}, W4).
+ * ({@code plan/shell-windowing.md}, W4).
  *
  * <p><b>It is the {@link WindowRegistry}, rendered.</b> Never a second list: a window joins on open and
  * leaves only on destroy, so the strip shows what <em>exists</em> rather than what is on screen, and a

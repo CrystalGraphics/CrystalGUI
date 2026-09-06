@@ -23,7 +23,7 @@ import static org.junit.Assert.fail;
  *
  * <h3>What this deliberately does not simulate</h3>
  *
- * <p><b>No loss and no reordering.</b> {@code plan_phase5.md} listed loss among the untested conditions;
+ * <p><b>No loss and no reordering.</b> {@code plan/fs-remote-workspace.md} listed loss among the untested conditions;
  * it is not a hazard here. Every supported platform's channel rides the loader's own networking —
  * {@code SimpleNetworkWrapper}, {@code SimpleChannel}, Fabric — which is Minecraft's Netty pipeline,
  * which is TCP. A frame that is sent is delivered, in order. Simulating loss would test something that

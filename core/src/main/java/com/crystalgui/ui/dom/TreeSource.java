@@ -8,7 +8,7 @@ import javax.annotation.Nullable;
 
 /**
  * <b>The seam.</b> A tree, as everything above the engine sees it — identity, structure, contract, and
- * a change stream. {@code plan_ui_rewrite.md} §0.
+ * a change stream. {@code plan/engine-rewrite.md} §0.
  *
  * <h3>Why this exists</h3>
  *

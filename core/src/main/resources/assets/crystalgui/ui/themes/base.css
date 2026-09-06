@@ -1,5 +1,5 @@
 /*
- * base.css — the COMPONENT-TOKEN derivation table (plan_styling.md §3.1, docs/CGUI_THEMING.md).
+ * base.css — the COMPONENT-TOKEN derivation table (plan/style-overhaul.md §3.1, docs/CGUI_THEMING.md).
  *
  * Every component token an engine sheet references resolves here, into the SYSTEM vocabulary a
  * theme supplies. This file is the engine's equivalent of VS Code's colour registry — it is where
@@ -636,7 +636,7 @@ theme {
     --activitybar-item-focused-bg: var(--accent);
     --activitybar-item-focused-fg: var(--fg-on-accent);
 
-    /* CrystalOS — a window on the desktop (plan_windowing.md).
+    /* CrystalOS — a window on the desktop (plan/shell-windowing.md).
      *
      * The BODY is a panel surface, because that is what a window's content is: the same ground an
      * editor or a tool panel would have had docked. The CAPTION is raised above it, which is the whole

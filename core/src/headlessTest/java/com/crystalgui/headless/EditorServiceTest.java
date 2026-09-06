@@ -52,7 +52,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 /**
- * {@code plan_fs_rewrite.md} F5.1, N1 — <b>one open lane, whatever kind of thing it is.</b>
+ * {@code plan/fs-rewrite.md} F5.1, N1 — <b>one open lane, whatever kind of thing it is.</b>
  *
  * <p>These are the workbench-level behaviours the plan says could not be written before: open, edit,
  * save, external change under a clean buffer and under a dirty one, delete under an open tab, rename

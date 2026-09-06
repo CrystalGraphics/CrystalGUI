@@ -94,7 +94,7 @@ public final class WorkbenchSession {
      * <h3>4 — the Parts model, and why it is also a discard</h3>
      *
      * <p><b>Decided in advance rather than discovered</b>, because this is the version where the question
-     * is genuinely arguable and skipping it would mean answering it by accident. See {@code plan.md} §23
+     * is genuinely arguable and skipping it would mean answering it by accident. See {@code plan/shell-architecture-audit.md} §23
      * F4.</p>
      *
      * <p>Parts adds four persisted facts — region visibility, region size, container membership, and view

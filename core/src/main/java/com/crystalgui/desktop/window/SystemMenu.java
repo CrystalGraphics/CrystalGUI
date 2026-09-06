@@ -94,7 +94,7 @@ public final class SystemMenu {
         // without anybody having to know what a caption is.
         // IN THE DOCUMENT'S SPACE, which is what showAt wants and what `Box.x()` no longer is: a
         // caption's box is an offset inside its frame, so the frame's own place on the desktop has to
-        // come back through the conversion. @see plan_m6.md 6.4
+        // come back through the conversion. @see plan/engine-port.md 6.4
         Box bar = frame.titleBar().box();
         Box root = window.box();
         if (bar == null || root == null) return;

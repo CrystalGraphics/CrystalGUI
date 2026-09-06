@@ -59,7 +59,7 @@ import com.crystalgui.workbench.view.ViewContainer;
 import com.crystalgui.workbench.Workbench;
 
 /**
- * <b>Every widget that deliberately does not travel, and why.</b> {@code plan_ui_rewrite.md} M1.
+ * <b>Every widget that deliberately does not travel, and why.</b> {@code plan/engine-rewrite.md} M1.
  *
  * <p>A widget class is either contracted or listed here. There is no third state, and
  * {@code WidgetContractCoverageTest} enumerates the widget packages and fails on a class that is

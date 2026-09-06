@@ -45,7 +45,7 @@ import java.util.function.BooleanSupplier;
  * One window on the {@link Desktop} — chrome around a content slot, moved by its title bar and resized
  * by its eight edges.
  *
- * <p>CrystalOS's unit of stacking ({@code plan_windowing.md}). A window is an <b>element subtree</b>,
+ * <p>CrystalOS's unit of stacking ({@code plan/shell-windowing.md}). A window is an <b>element subtree</b>,
  * not a {@link UIDocument}: that class is the engine's {@code Document} analogue and the display surface
  * every frame here shares. The network layer already models a window as {@code (windowId, UIElement
  * root)}, so this is the visual home that model never had.</p>
@@ -2030,7 +2030,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
         Box self = box();
         // NO SUBTRACTION. A frame IS a child of its containing block, so `Box.x()` -- the offset from
         // the host's border-box origin -- already is the work-area inset the old absolute accessor had
-        // to have the area's origin taken back off. @see plan_m6.md 6.4
+        // to have the area's origin taken back off. @see plan/engine-port.md 6.4
         if (areaBox != null && self != null && animateGeometry(self.x(), self.y(),
                 self.width(), self.height(),
                 restoreLeft, restoreTop, restoreWidth, restoreHeight, this::applyRestoredRect)) {

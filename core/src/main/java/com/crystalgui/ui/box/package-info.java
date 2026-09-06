@@ -6,7 +6,7 @@
  * does not: the layout engine's node and its style, the layout result, the scroll offset, the
  * transform and its origin, opacity, z-index, the paint order of its children, and the world matrices
  * — composed by {@link com.crystalgui.ui.box.BoxTree} when layout completes, never written by paint.
- * plan_engine_core_audit.md §12.3; plan_m5.md 5.3.</p>
+ * plan/engine-audit.md §12.3; plan/engine-core.md 5.3.</p>
  *
  * <h3>Hosting is one operation, and four features are it</h3>
  *

@@ -310,7 +310,7 @@ widget/        the widget layer      desktop/  the compositor      workbench/  t
 ## Further reading
 
 - `AGENTS.md` — the invariants table. The rows are the receipts for most of the above.
-- `plan_m6.md` — the port, milestone by milestone, with the decisions and their reasons.
-- `plan_m5.md` — why three trees, and what each of the four services owns.
+- `plan/engine-port.md` — the port, milestone by milestone, with the decisions and their reasons.
+- `plan/engine-core.md` — why three trees, and what each of the four services owns.
 - `docs/CGUI_WIDGETS.md` — the widget layer.
 - `docs/CGUI_STYLE_RENDER_PIPELINE.md` — the cascade and the render stack.

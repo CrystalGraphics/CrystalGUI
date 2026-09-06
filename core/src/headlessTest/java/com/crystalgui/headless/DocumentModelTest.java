@@ -33,7 +33,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 /**
- * {@code plan_fs_rewrite.md} F1 — the document model, <b>headless</b>.
+ * {@code plan/fs-rewrite.md} F1 — the document model, <b>headless</b>.
  *
  * <p>That it runs here at all is most of the point: the layer this replaces sat above {@code widget}
  * and a text document was a record wrapping a {@code TextEditor}, so nothing about a document could be

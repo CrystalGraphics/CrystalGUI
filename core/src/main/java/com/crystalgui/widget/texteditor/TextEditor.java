@@ -1542,7 +1542,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         // already the offset within the editor -- the old `screenToLocal` did not, which is why
         // the subtraction was here and correct. Keeping it takes the editor's position off a
         // coordinate that never had it, so every click lands at a point offset by however far
-        // down the page the editor sits. @see plan_m6.md 6.1, ColorSelector.withinX
+        // down the page the editor sits. @see plan/engine-port.md 6.1, ColorSelector.withinX
         pointerX = local.x();
         pointerY = local.y();
     }

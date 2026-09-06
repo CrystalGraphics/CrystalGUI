@@ -11,7 +11,7 @@ import com.crystalgui.serialization.StateMap;
 
 /**
  * One interaction a widget can report, declared once as a {@code static final} on the widget class.
- * {@code plan_ui_rewrite.md} M1.
+ * {@code plan/engine-rewrite.md} M1.
  *
  * <h3>The listener lives here, and that is the point</h3>
  *

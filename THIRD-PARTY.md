@@ -80,7 +80,7 @@ a jar cannot do.
 
 ## Engine bands: ECJ and Rhino
 
-Three sets of jars, one per host-JVM band (`plan_syntax.md` §6). Declared in
+Three sets of jars, one per host-JVM band (`plan/lang-stack.md` §6). Declared in
 `language/build.gradle.kts` as resolvable configurations that **nothing consumes** — they are loaded
 reflectively into an isolated classloader at runtime, never onto a compile classpath.
 
@@ -143,7 +143,7 @@ data, taken from MinecraftForge's FML repository at
 needs on first use into its own config directory (`config/crystalgui/mappings/<mc>/<channel>-<version>`)
 and reuses it thereafter. That is not a caching optimisation that happens to have a licensing
 side-effect — it is the licensing position, chosen because MCP's terms have historically permitted use
-while restricting redistribution, and it is why `plan_syntax.md` §22 row 11 asks for the sourcing
+while restricting redistribution, and it is why `plan/lang-stack.md` §22 row 11 asks for the sourcing
 decision rather than for a bundled file.
 
 Three properties follow from it, and all three are enforced in code rather than remembered:
@@ -160,7 +160,7 @@ Three properties follow from it, and all three are enforced in code rather than 
 > **Open, and honest about it:** no digests are pinned, because upstream publishes no `.md5` beside the
 > CSVs. A corrupted download is currently caught by the parse rather than by a digest. The verification
 > machinery exists and is tested (`MappingCacheTest` covers corrupt-then-repair and reject-on-mismatch);
-> it is the reference data that is missing. Recorded here as well as in `plan_m12.md` §26.13a because
+> it is the reference data that is missing. Recorded here as well as in `plan/platform-mc1710.md` §26.13a because
 > this file is where somebody checks before a release.
 
 ## OpenJDK sources (fetched, derived on the user's machine, never redistributed)

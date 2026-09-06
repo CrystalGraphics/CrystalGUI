@@ -21,7 +21,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
- * {@code plan_fs_rewrite.md} F4.3 and F4.4 — backup, local history and connection health.
+ * {@code plan/fs-rewrite.md} F4.3 and F4.4 — backup, local history and connection health.
  *
  * <p>All three are client-local by construction: the server is what may have gone away, so a backup
  * that needed the wire would be unavailable in precisely the situation it exists for.</p>

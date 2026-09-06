@@ -512,7 +512,7 @@ public final class ClientWindows {
              * A re-describe builds FRESH PANEL INSTANCES over the fresh tree. So a client() that ran
              * only on the first mount left every wire handler closed over a panel that is now
              * detached: it runs, it writes widgets nothing draws, and nothing anywhere reports a
-             * problem. That was a known gap, recorded in plan_ui_host.md and worked around here with a
+             * problem. That was a known gap, recorded in plan/net-window-host.md and worked around here with a
              * comment rather than fixed.
              *
              * What blocked the fix was the router refusing a second registration of the same method.

@@ -58,7 +58,7 @@ import java.util.List;
  * application assembled slightly differently.</p>
  *
  * <p>One desktop per {@code UIDocument}, which is the display surface rather than a window
- * ({@code plan_windowing.md}, Design B). Everything a window manager needs already existed at the
+ * ({@code plan/shell-windowing.md}, Design B). Everything a window manager needs already existed at the
  * element layer — stacking that paint and hit-testing agree on, clipping, focus, drag, pointer capture —
  * so what is genuinely new is this: somewhere for frames to live, a work area to bound them, and a
  * placement rule for a window nobody positioned.</p>
@@ -769,7 +769,7 @@ public class Desktop extends UIElement implements DataProvider {
      *
      * <h3>Why this is a setting and not a keymap binding</h3>
      *
-     * <p>{@code plan_windowing.md} asks for the chord to be keymap-resolved, "never a hardcoded Alt",
+     * <p>{@code plan/shell-windowing.md} asks for the chord to be keymap-resolved, "never a hardcoded Alt",
      * and the reason is sound: Alt is contested territory here — {@code TextField} refuses Alt chords and
      * {@code MenuBarView} claims Alt+letter mnemonics, and both of those were paid for.</p>
      *
@@ -967,7 +967,7 @@ public class Desktop extends UIElement implements DataProvider {
         // a child of the work area, so its own x IS the work-area inset -- where the old accessor
         // accumulated through every ancestor and had to have the area's origin taken back off. Keeping
         // the subtraction here would count the work area's own offset twice, and be wrong by whatever
-        // the taskbar and the chrome above it happen to occupy. @see plan_m6.md 6.4
+        // the taskbar and the chrome above it happen to occupy. @see plan/engine-port.md 6.4
         Box box = snapPreview.box();
         return box == null ? null
                 : new float[] {box.x(), box.y(), box.width(), box.height()};

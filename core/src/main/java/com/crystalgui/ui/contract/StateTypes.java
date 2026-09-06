@@ -6,7 +6,7 @@ import java.util.List;
 import com.crystalgui.serialization.StateMap;
 
 /**
- * The value types a {@link State} slot can carry. {@code plan_ui_rewrite.md} M1.
+ * The value types a {@link State} slot can carry. {@code plan/engine-rewrite.md} M1.
  *
  * <p>Deliberately a closed, small set. Every one of these is something {@link StateMap} already knows
  * how to encode, because widget state has to survive a content hash — see

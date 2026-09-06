@@ -16,7 +16,7 @@ import com.crystalgui.testsupport.UiDocumentTestBase;
 import org.junit.Test;
 
 /**
- * The cascade over the node tree — plan_m5.md 5.2's acceptance.
+ * The cascade over the node tree — plan/engine-core.md 5.2's acceptance.
  *
  * <p>The same {@code StyleEngine}, {@code ElementStyle}, selectors and sheets the old engine runs
  * (D5.2: shared, not forked), reached through the {@code Styleable} seam. What is asserted here is

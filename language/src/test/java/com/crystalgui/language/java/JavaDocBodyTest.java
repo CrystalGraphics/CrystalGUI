@@ -39,7 +39,7 @@ import static org.junit.Assert.assertTrue;
  *
  * <p>{@code SymbolInfo.documentation} had never been populated by any engine, so the popup showed a
  * declaration and a location and nothing else — {@code DocumentationPopup}'s own javadoc said so, and
- * `plan_m11.md` §24.1 shipped it that way deliberately, waiting for "the ECJ side to learn to read
+ * `plan/lang-resolver.md` §24.1 shipped it that way deliberately, waiting for "the ECJ side to learn to read
  * {@code Javadoc} nodes off the AST".</p>
  *
  * <p>Two things had to be true and neither was: ECJ's doc-comment support had to be enabled, and

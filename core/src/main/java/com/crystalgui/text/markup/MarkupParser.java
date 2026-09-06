@@ -18,7 +18,7 @@ import java.util.Map;
  * production parser (browsers, jsoup, the one Eclipse's converter uses) implements this machine.</p>
  *
  * <p>Following the specification rather than porting an implementation is also what keeps this free of an
- * obligation the repository has not already taken on — see {@code plan_javadoc.md} §3.4, where the
+ * obligation the repository has not already taken on — see {@code plan/editor-javadoc.md} §3.4, where the
  * licences of the three obvious sources are laid out. The spec is a specification; nobody's code is
  * copied here.</p>
  *

@@ -23,7 +23,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 /**
- * {@code plan_fs_rewrite.md} F0.5, N23 — one exclusion rule, honoured by everything that excludes.
+ * {@code plan/fs-rewrite.md} F0.5, N23 — one exclusion rule, honoured by everything that excludes.
  *
  * <p>There were three matchers with three different semantics. The listing matched {@code *} and
  * {@code ?} anywhere; the watcher matched a <b>leading star only</b> while its javadoc claimed "the same

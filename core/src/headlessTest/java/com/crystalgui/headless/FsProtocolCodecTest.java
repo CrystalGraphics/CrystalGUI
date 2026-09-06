@@ -21,7 +21,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
- * {@code plan_fs_rewrite.md} F2.2, D14 — <b>every payload round-trips, over both ops</b>.
+ * {@code plan/fs-rewrite.md} F2.2, D14 — <b>every payload round-trips, over both ops</b>.
  *
  * <p>What it replaces is 230 lines of hand-packed {@code StateMap} puts at one end and a hand-written
  * reader of forty string keys at the other, with nothing checking that a field written on one side was

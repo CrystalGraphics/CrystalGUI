@@ -425,7 +425,7 @@ one index off — silently, because an index is an int and every one of them sti
 - **No text filter on a row source.** A `SORT` is one event the source answers; a filter is a search
   feature and waits for one.
 - **`TextEditor` and `GraphView` are not on the wire.** A document is the filesystem's business
-  (`plan_fs_rewrite.md`), and shipping one as a described tree would be a second format for it.
+  (`plan/fs-rewrite.md`), and shipping one as a described tree would be a second format for it.
 
 Four entries that used to stand here are gone, and what replaced each is worth knowing:
 

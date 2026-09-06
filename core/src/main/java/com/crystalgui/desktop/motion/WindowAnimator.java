@@ -345,7 +345,7 @@ public final class WindowAnimator {
         // THE WORK AREA'S OWN TOP-LEFT IS (0,0) IN ITS OWN SPACE, so its origin is not in this at all.
         // The old accessor was absolute and had to be subtracted back off; `Box.x()` is the offset from
         // the HOST, and a frame is a child of this layer, so both terms are already in one space.
-        // @see plan_m6.md 6.4
+        // @see plan/engine-port.md 6.4
         return Transform.of(
                 Transform.Op.translate(
                         LengthPercent.px(area.width() / 2f - frame.boxX()),
@@ -362,7 +362,7 @@ public final class WindowAnimator {
      * from the HOST's border-box origin, and an entry lives in the strip while a frame lives in the
      * work area — so the raw subtraction is now two different spaces, and wrong by however far along
      * the desktop the strip happens to sit. {@link Box#originIn} carries the intervening transforms
-     * and scrolls too, which a subtraction never did. @see plan_m6.md 6.4</p>
+     * and scrolls too, which a subtraction never did. @see plan/engine-port.md 6.4</p>
      *
      * <p>Composed translate-then-scale, read against the top-left corner, which
      * {@link WindowAnimation} pins for the animation's whole life.</p>

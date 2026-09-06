@@ -24,7 +24,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
- * {@code plan_fs_rewrite.md} F3 — editing presence, the audit, the rate limit and idempotent retries.
+ * {@code plan/fs-rewrite.md} F3 — editing presence, the audit, the rate limit and idempotent retries.
  *
  * <p>Two actors throughout, because every claim here is about what one peer's action means to another
  * one, and a single-actor fixture agrees with any implementation.</p>

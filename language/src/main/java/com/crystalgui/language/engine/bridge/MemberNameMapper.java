@@ -8,7 +8,7 @@ package com.crystalgui.language.engine.bridge;
  * <p>On an obfuscated Minecraft a method is called {@code func_147439_a}, and its readable name —
  * {@code getBlock} — exists only in a mapping file. A script written against the runtime name breaks on
  * every version bump and is unreadable in between; a script written against the readable name has to be
- * translated at lookup. {@code plan_syntax.md} §16.1 states the consequence plainly: without this the
+ * translated at lookup. {@code plan/lang-stack.md} §16.1 states the consequence plainly: without this the
  * JavaScript engine is a developer's toy rather than something a pack can ship.</p>
  *
  * <h3>Two directions, both needed, and they are not symmetric</h3>

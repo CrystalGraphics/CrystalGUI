@@ -4,7 +4,7 @@ import java.util.Set;
 
 /**
  * What a <b>kind</b> of node is, as the seam sees it: its registered name, what it can report, and
- * whether a description may carry children for it. {@code plan_ui_rewrite.md} M0, filled in at M1.
+ * whether a description may carry children for it. {@code plan/engine-rewrite.md} M0, filled in at M1.
  *
  * <h3>Why this is an interface and {@code WidgetContract} is the implementation</h3>
  *

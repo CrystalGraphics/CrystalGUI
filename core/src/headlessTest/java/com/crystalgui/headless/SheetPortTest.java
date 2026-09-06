@@ -18,7 +18,7 @@ import org.junit.Test;
  * <b>The sheets, against the ledger and against the selector engine</b> — the single highest-value
  * guard in M6, because a dropped rule does not throw.
  *
- * <p>{@code plan_m6.md} §2.4. Of 1,048 part selectors, 401 select a part UNDER a part and 99 reach
+ * <p>{@code plan/engine-port.md} §2.4. Of 1,048 part selectors, 401 select a part UNDER a part and 99 reach
  * THROUGH a part into a tag; {@code ::part()} can express neither, so the sheet work is a
  * classification (D1) rather than a rewrite. A misclassification produces a rule that silently stops
  * matching: no error, no warning, a widget that looks slightly wrong in one state, discovered by

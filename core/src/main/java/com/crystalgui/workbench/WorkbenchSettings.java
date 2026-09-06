@@ -108,7 +108,7 @@ public final class WorkbenchSettings {
     // ── Appearance ──────────────────────────────────────────────────────────────────────────────
 
     /**
-     * The two axes of {@code plan_styling.md} §3.7, side by side on one page exactly as IntelliJ
+     * The two axes of {@code plan/style-overhaul.md} §3.7, side by side on one page exactly as IntelliJ
      * shows them: the UI theme restyles the chrome, the editor colour scheme the document — and
      * Crystal Dark plus any scheme is a legal pair.
      *

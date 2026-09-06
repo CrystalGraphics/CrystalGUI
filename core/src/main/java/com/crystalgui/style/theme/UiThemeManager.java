@@ -25,7 +25,7 @@ import java.util.Set;
  *
  * <h3>The canonical stack</h3>
  * <p>{@link StyleSheet#DEFAULT} → {@code themeSheet} → {@code schemeSheet} → the app's own sheets
- * ({@code plan_styling.md} §3.3). The two sheets this class owns are <b>stable instances whose
+ * ({@code plan/style-overhaul.md} §3.3). The two sheets this class owns are <b>stable instances whose
  * rules are swapped in place</b> ({@link StyleSheet#refillFrom}), never removed and re-added — the
  * sheet <em>list</em> of an installed engine does not change across a swap, which is what keeps
  * "re-adding appends at highest priority" out of the picture by construction.</p>
@@ -69,7 +69,7 @@ public final class UiThemeManager {
      * {@code workbench.colorCustomizations}, and the reason its users never have to fork a theme to
      * change one colour.
      *
-     * <p>Last in the merge (plan_styling.md §3.3), so it survives a theme swap and re-applies on top
+     * <p>Last in the merge (plan/style-overhaul.md §3.3), so it survives a theme swap and re-applies on top
      * of the new one: "I always want my accent pink" is a statement about the user, not about the
      * theme they happen to be running. Keys are token names with or without the {@code --} prefix —
      * a settings file written by hand should not fail on a detail that carries no information.</p>
@@ -263,7 +263,7 @@ public final class UiThemeManager {
         List<UiTheme> chain = inheritanceChain(activeTheme);
 
         // Merge order (later wins): base ← root ancestor ← … ← theme ← scheme ← the user's own
-        // overrides (plan_styling.md §3.3). With NOTHING active the table stays empty — pristine
+        // overrides (plan/style-overhaul.md §3.3). With NOTHING active the table stays empty — pristine
         // sheets on their fallbacks, not a half-bound base.
         LinkedHashMap<String, String> merged = new LinkedHashMap<>();
         boolean anything = !chain.isEmpty() || activeScheme != null || !overrides.isEmpty();

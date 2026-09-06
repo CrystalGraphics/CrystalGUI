@@ -1,7 +1,7 @@
 package com.crystalgui.ui.contract;
 
 /**
- * How often an {@link Event} may reach the far side. {@code plan_ui_rewrite.md} M1.
+ * How often an {@link Event} may reach the far side. {@code plan/engine-rewrite.md} M1.
  *
  * <h3>Why a widget declares this rather than a handler doing it</h3>
  *

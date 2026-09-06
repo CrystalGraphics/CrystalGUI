@@ -19,7 +19,7 @@ import org.junit.After;
 import org.junit.Test;
 
 /**
- * The node tree on its own terms — plan_m5.md 5.1's acceptance beyond the seam suite.
+ * The node tree on its own terms — plan/engine-core.md 5.1's acceptance beyond the seam suite.
  *
  * <p>What the seam cannot see: the composed tree through slots, retargeting across nested shadow
  * roots, lifecycle order and timing, the two refusals (a mutation from inside an observer

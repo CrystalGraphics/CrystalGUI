@@ -171,7 +171,7 @@ public final class ToolWindowLayout {
             // The path, the strip-mates and the neighbour are GONE, with the four-tier restoration
             // heuristic that consumed them. All three described a position in the dock tree, which a tool
             // window no longer occupies: it belongs to a REGION, and a region is not destroyed by hiding
-            // the thing in it. See ToolWindowManager and plan.md §23 F2b.
+            // the thing in it. See ToolWindowManager and plan/shell-architecture-audit.md §23 F2b.
         });
     }
 

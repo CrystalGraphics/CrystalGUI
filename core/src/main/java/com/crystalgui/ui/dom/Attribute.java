@@ -14,7 +14,7 @@ import javax.annotation.Nullable;
  * what that grew into: focus policy, hit-test, inert, popover invoker, keymap, settings, scroll
  * exemption, user-sized axes, resize mode. A typed key is one map, one {@code set}, one observer
  * signal, and one place for a lookup through the tree the way {@code DataContext} already walks —
- * which is what retires the keymap and settings fields (plan_m5.md D5.4).</p>
+ * which is what retires the keymap and settings fields (plan/engine-core.md D5.4).</p>
  *
  * <p>Every key registers itself by name so the codec can carry a value it has never seen the key of:
  * {@link #named(String)} finds it and {@link #parse(String)} reads it back by type. A value that is not

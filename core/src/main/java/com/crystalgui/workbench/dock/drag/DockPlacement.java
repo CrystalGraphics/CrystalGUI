@@ -70,7 +70,7 @@ public sealed interface DockPlacement {
      * region survives the splits, drags and collapses that invalidate a position. See {@link DockRegion}.</p>
      *
      * <p>Added now, before there are regions to resolve it against, precisely so it is designed rather
-     * than retrofitted through every call site later — plan.md §23 F5.</p>
+     * than retrofitted through every call site later — plan/shell-architecture-audit.md §23 F5.</p>
      */
     static DockPlacement in(DockRegion region) {
         return new InRegion(Objects.requireNonNull(region, "region"));

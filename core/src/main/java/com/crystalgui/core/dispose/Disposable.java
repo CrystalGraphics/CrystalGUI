@@ -13,7 +13,7 @@ package com.crystalgui.core.dispose;
  *   <li><b>Release on close rather than on exit.</b> A registry knows what exists, never what is still
  *       <em>wanted</em>. Closing a shader graph still frees nothing: the dock tells a closed panel
  *       nothing, so twenty open-and-close cycles hold twenty preview pools until the process ends.
- *       Closing that gap needs the dock to announce a close — see {@code plan.md} step 3.</li>
+ *       Closing that gap needs the dock to announce a close — see {@code plan/shell-architecture-audit.md} step 3.</li>
  *   <li><b>Reach what no registry can see.</b> {@code CgPreviewRenderer.delete()} says it outright —
  *       <i>"the pool's targets are {@code createOwned}, so no registry sweeps them"</i> — and
  *       {@code CgUiPaintContext}'s layer pool is the same. For that class, release depends on somebody

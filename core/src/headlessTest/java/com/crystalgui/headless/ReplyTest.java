@@ -26,7 +26,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 /**
- * {@code plan_fs_rewrite.md} F0.3, D15 — the one asynchronous shape.
+ * {@code plan/fs-rewrite.md} F0.3, D15 — the one asynchronous shape.
  *
  * <p>Headless because {@code core.async} is: a reply is settled by a job on a worker or by a connection
  * on its tick, and neither needs a window.</p>

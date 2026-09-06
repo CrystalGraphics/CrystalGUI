@@ -25,7 +25,7 @@ dependencies {
 
     // :core declares Taffy and JOML compileOnly, so they reach nobody transitively -- and UIElement
     // holds a Taffy NodeId and a JOML Matrix4f as FIELDS, which resolve at class load. Without these
-    // javac reports "cannot access UIDocument" rather than a missing dependency. plan_mc1201.md 4.3.
+    // javac reports "cannot access UIDocument" rather than a missing dependency. plan/platform-mc1201.md 4.3.
     "compileOnly"(project(":taffy"))
     // Mixin compileOnly — both loaders bundle it at runtime; never shade it.
     "compileOnly"("org.spongepowered:mixin:${property("mc1201.mixin")}")
@@ -55,7 +55,7 @@ legacyForge {
 // -- Import guard --------------------------------------------------------------------------------
 // One platform implementation serves Forge, NeoForge and Fabric, so this module may name vanilla
 // (net.minecraft.*, com.mojang.*, org.lwjgl.*) but nothing from a loader. Anything loader-specific
-// goes behind LoaderBridge -- plan_mc1201.md 3.8.
+// goes behind LoaderBridge -- plan/platform-mc1201.md 3.8.
 //
 // The guard is needed because `legacyForge` above puts MinecraftForge on the compileOnly classpath:
 // without it a net.minecraftforge import compiles here and throws NoClassDefFoundError on the other
@@ -81,7 +81,7 @@ tasks.named<JavaCompile>("compileJava") {
             error(
                 "Loader-specific imports found in mc1201/common -- this module is shared by Forge, " +
                 "NeoForge and Fabric, so it may name net.minecraft.* and com.mojang.* but nothing " +
-                "from a loader. Put it behind LoaderBridge instead (plan_mc1201.md 3.8.3):\n" +
+                "from a loader. Put it behind LoaderBridge instead (plan/platform-mc1201.md 3.8.3):\n" +
                 violations.joinToString("\n") { (path, line) -> "  $path\n      $line" }
             )
         }

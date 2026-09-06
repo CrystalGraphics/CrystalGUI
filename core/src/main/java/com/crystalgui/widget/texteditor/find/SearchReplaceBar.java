@@ -424,7 +424,7 @@ public class SearchReplaceBar extends UIElement {
         // `setDisplayed`, the engine's own attribute, where the old engine wrote `display` at
         // IMPORTANT. This selector engine has no attribute selectors, so HTML's `[hidden]` rule
         // cannot be written -- the box tree gives a hidden node no box instead, which is exactly
-        // what the IMPORTANT write effectively did. @see plan_m6.md M6.0
+        // what the IMPORTANT write effectively did. @see plan/engine-port.md M6.0
         replaceRow.setDisplayed(shown);
         // The glyph is the sheet's business; this only says which state it is in, as a class rather than a
         // pseudo-class -- the engine does not re-evaluate one flipped from a listener.
