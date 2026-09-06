@@ -6,6 +6,7 @@ import java.util.Map;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.ui.dom.Attribute;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -55,6 +56,8 @@ public final class UiTemplate {
     @Nullable
     private final Name kindName;
 
+    private final Map<String, TemplateParams.Param> params;
+
     @Nullable
     private final JsonObject preview;
 
@@ -64,14 +67,15 @@ public final class UiTemplate {
     private String contentHash;
 
     UiTemplate(String origin, int formatVersion, List<String> stylesheets, @Nullable String modelClass,
-            @Nullable String packageName, @Nullable Name kindName, @Nullable JsonObject preview,
-            JsonObject root) {
+            @Nullable String packageName, @Nullable Name kindName,
+            Map<String, TemplateParams.Param> params, @Nullable JsonObject preview, JsonObject root) {
         this.origin = origin;
         this.formatVersion = formatVersion;
         this.stylesheets = List.copyOf(stylesheets);
         this.modelClass = modelClass;
         this.packageName = packageName;
         this.kindName = kindName;
+        this.params = Map.copyOf(params);
         this.preview = preview;
         this.root = root;
     }
@@ -110,6 +114,17 @@ public final class UiTemplate {
         return kindName;
     }
 
+    /**
+     * What this document takes from whoever places it — {@code $name} in any value.
+     *
+     * <pre>{@code
+     * "params": { "title": { "type": "string", "default": "Untitled" } }
+     * }</pre>
+     */
+    public Map<String, TemplateParams.Param> params() {
+        return params;
+    }
+
     /** Canvas sizes, {@code uiScale}, theme, locale — the builder's, ignored at runtime. */
     @Nullable
     public JsonObject preview() {
@@ -145,7 +160,7 @@ public final class UiTemplate {
      * builds a panel by hand.</p>
      */
     public UIElement inflate() {
-        return mirror().decode(root, null);
+        return inflate(Map.of(), Map.of());
     }
 
     /**
@@ -158,9 +173,55 @@ public final class UiTemplate {
      * @param overridesById element id to state key to value; an id the tree has not got is refused
      */
     public UIElement inflate(Map<String, Map<String, Object>> overridesById) {
-        UIElement tree = inflate();
+        return inflate(Map.of(), overridesById);
+    }
+
+    /**
+     * A fresh tree with parameters filled in and per-id state applied.
+     *
+     * @param parameters      values for what {@link #params} declares; a declared default fills the rest
+     * @param overridesById   element id to state key to value; an id the tree has not got is refused
+     */
+    public UIElement inflate(Map<String, Object> parameters,
+            Map<String, Map<String, Object>> overridesById) {
+        JsonObject filled = TemplateParams.substitute(this, root, parameters);
+        DocumentExtras<JsonElement> extras = new DocumentExtras<>();
+        UIElement tree;
+        try {
+            // WITH a table, and then thrown away: params and overrides on an instance node are the
+            // loader's, and design, bind and on are stripped by simply not being applied.
+            tree = mirror().decode(filled, extras);
+        } catch (UiTemplateException already) {
+            throw already;
+        } catch (RuntimeException refused) {
+            throw new UiTemplateException(origin, null, refused.getMessage(), refused);
+        }
+        configureInstances(tree, extras);
         TemplateOverrides.apply(this, tree, overridesById);
         return tree;
+    }
+
+    /** Hands each placed instance the {@code params} and {@code overrides} the document wrote for it. */
+    private void configureInstances(UIElement node, DocumentExtras<JsonElement> extras) {
+        if (node instanceof TemplateInstance instance) {
+            instance.configureFrom(extras.get(node, DocumentExtras.PARAMS),
+                    extras.get(node, DocumentExtras.OVERRIDES));
+            checkSlots(instance);
+        }
+        for (UIElement child : node.children()) configureInstances(child, extras);
+    }
+
+    /** A slotted child with nowhere to land is in no composed tree at all, and says nothing about it. */
+    private void checkSlots(TemplateInstance instance) {
+        List<String> offered = instance.slotNames();
+        for (UIElement child : instance.children()) {
+            String wanted = child.get(Attribute.SLOT);
+            if (wanted == null || wanted.isEmpty() ? offered.contains("") : offered.contains(wanted)) {
+                continue;
+            }
+            throw new UiTemplateException(origin, null, "<" + child.tagName() + "> asks for the slot \""
+                    + wanted + "\", and " + instance.templateId() + " offers " + offered);
+        }
     }
 
     /**
@@ -169,6 +230,11 @@ public final class UiTemplate {
      */
     public UIElement inflateForEditing(DocumentExtras<JsonElement> extras) {
         return mirror().decode(root, extras);
+    }
+
+    /** Refuses anything the document says that could not be built. Run once, at parse. */
+    void validate() {
+        TemplateValidation.check(this);
     }
 
     /**

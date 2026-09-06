@@ -9,8 +9,8 @@ import javax.annotation.Nullable;
 import com.crystalgui.ui.dom.UIElement;
 
 /**
- * The three things a {@code .cgui} document carries about a node that the node itself cannot hold:
- * design-time values, model bindings and event hooks.
+ * What a {@code .cgui} document carries about a node that the node itself cannot hold: design-time
+ * values, model bindings, event hooks, and an instance's parameters and overrides.
  *
  * <p>An {@code Attribute} is written as a string, so a map-valued one has no encoding — and none of
  * these three is a runtime property anyway. They live beside the tree instead, keyed by node identity,
@@ -41,8 +41,19 @@ public final class DocumentExtras<T> {
     /** Per event kind, the name of a hook the generated class declares. */
     public static final String ON = "on";
 
-    /** Written in this order, so a document diffs predictably. */
-    static final String[] KEYS = {BIND, ON, DESIGN};
+    /** On an instance node: values for the placed template's declared parameters. */
+    public static final String PARAMS = "params";
+
+    /** On an instance node: per internal id, state to apply after the template is inflated. */
+    public static final String OVERRIDES = "overrides";
+
+    /**
+     * Written in this order, so a document diffs predictably.
+     *
+     * <p>The last two are not the builder's: {@link #PARAMS} and {@link #OVERRIDES} are read by the
+     * loader, so {@code UiTemplate.inflate} collects them even though it strips the first three.</p>
+     */
+    static final String[] KEYS = {PARAMS, OVERRIDES, BIND, ON, DESIGN};
 
     private final Map<UIElement, Map<String, T>> byNode = new IdentityHashMap<>();
 

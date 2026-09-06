@@ -1,0 +1,20 @@
+{
+  "cgui": 1,
+
+  "root": {
+    "kind": "element",
+    "id": "page",
+    "children": [
+      {
+        "kind": "instance",
+        "id": "frame",
+        "attrs": { "template": "cguitest:ui/parts/plate" },
+        "params": { "title": "Status" },
+        "overrides": { "lamp": { "state": { "text": "on" } } },
+        "children": [
+          { "kind": "text", "id": "body", "attrs": { "slot": "content" }, "state": { "text": "body" } }
+        ]
+      }
+    ]
+  }
+}
