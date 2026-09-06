@@ -40,7 +40,6 @@ public final class Lifecycle1201 {
      * APIs -- so it is passed in; everything else is the same on all three.
      */
     public static void bootstrap(CgNetworkChannel channel) {
-        CgPlatformService1201.getInstance();
         CgPlatform.provide(CgNetworkChannel.SERVICE, channel);
         Connections1201.register();
         MachineExample1201.registerCommon();
