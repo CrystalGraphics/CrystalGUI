@@ -53,13 +53,12 @@ public final class CgUiScreen1201 extends Screen {
     private static boolean showEditorOnOpen;
 
     /**
-     * Set by {@link #openEditor()}, cleared once a window actually exists.
+     * Set by {@link #openEditor()}, cleared once a window exists.
      *
-     * <p>The launch can fail for a reason that fixes itself — the editor needs a workspace, which needs a
-     * connection, and there may not be one yet. {@code init()} was the only caller and re-runs only on a
-     * resize, so the attempt was never made again and the desktop stayed up and empty. Separate from
-     * {@link #showEditorOnOpen} because the two are consumed on different events, and driven off a flag
-     * rather than "the desktop is empty" so it cannot re-open a window the user just closed.</p>
+     * <p>The editor needs a workspace, which needs a connection, and there may not be one on the frame
+     * the screen opens. {@code init()} re-runs only on a resize, so a failed attempt was never retried.
+     * Separate from {@link #showEditorOnOpen}, which is consumed on a different event, and driven off a
+     * flag rather than "the desktop is empty" so it cannot re-open a window the user closed.</p>
      */
     private static boolean awaitingEditorLaunch;
 

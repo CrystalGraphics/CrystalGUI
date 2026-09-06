@@ -595,10 +595,9 @@ public final class CgUiPaintContext {
         // anything of ours draws. @see #disableFixedFunctionAlphaTest
         disableFixedFunctionAlphaTest();
 
-        // A UI FRAME OWNS THE WHOLE SURFACE, so anything the host left in GL_SCISSOR_TEST would clip
-        // the full-screen clear below and every draw after it. SCISSOR is in the save list above for the
-        // other direction: popScissor DISABLES the test once the stack empties, so without it a host that
-        // was clipping gets handed back a state where it is not.
+        // A frame owns the whole surface, so a clip the host left enabled would clip the clear below and
+        // every draw after it. SCISSOR is in the save list above for the other direction: popScissor
+        // disables the test once the stack empties, and the host may have wanted it on.
         scissorStack.reset();
         CgGL.glDisable(CgGL.GL_SCISSOR_TEST);
 
@@ -1521,9 +1520,8 @@ public final class CgUiPaintContext {
             fbo.bind();
             CgGL.glViewport(0, 0, fbo.getWidth(), fbo.getHeight());
             fbo.clearColor(0f, 0f, 0f, 0f);
-            // AND THE MATERIAL RESTS ON A TEXTURE THAT IS NEVER DELETED. A sampler property is retained
-            // and re-bound later, so a pooled layer left named here outlives its pool slot. This runs when
-            // a layer is created, wants white anyway, and every real composite declares its own first.
+            // Rest the material on a texture that is never deleted: a sampler property is retained and
+            // re-bound later, so a pooled layer left named here outlives its slot.
             layerBlitMaterial.applyProperties(b -> b.sampler("_MainTex", 0, whitePixel));
             withMaterial(layerBlitMaterial, () -> {
                 bindTexture(whitePixel);
@@ -1591,10 +1589,9 @@ public final class CgUiPaintContext {
 
         fbo.bind();
         CgGL.glViewport(0, 0, fbo.getWidth(), fbo.getHeight());
-        // THE CLEAR MUST NOT BE CLIPPED. A scissored clear wipes only the clipped region, so the rest
-        // of a POOLED layer keeps the previous user's pixels -- and blitLayer composites the whole layer
-        // full-screen, on the assumption that everything the subtree did not draw is transparent. The
-        // clip is re-applied straight after, so it still governs the drawing.
+        // The clear must reach the whole buffer: layers are pooled, and blitLayer composites all of one
+        // full-screen assuming everything the subtree did not draw is transparent. The clip is
+        // re-applied below, so it still governs the drawing.
         if (clear) {
             int[] suspended = scissorStack.suspend();
             scissorStack.clearScissorIfNeeded();
@@ -1735,10 +1732,9 @@ public final class CgUiPaintContext {
 
     public void blitLayer(CgFrameBuffer fbo, float opacity) {
         CgTexture2D colorTex = (CgTexture2D) fbo.getColorTexture(0);
-        // THE SAMPLER IS DECLARED, NOT BOUND BY HAND. _MainTex is a Properties-block sampler with a
-        // "white" default, so a raw bindTexture() is ignored: the material binds the fallback to a unit
-        // of its own choosing and points the uniform there. gui_layer_blit composites premultiplied, so
-        // that is not a missing image -- it floods the destination white. CgUiGlass declares its the same way.
+        // Declared rather than bound by hand: _MainTex has a "white" default, so a raw bindTexture() is
+        // ignored -- the material binds the fallback and points the uniform at it. Composited
+        // premultiplied, that floods the destination rather than missing an image.
         layerBlitMaterial.applyProperties(b -> b.sampler("_MainTex", 0, colorTex));
         withMaterial(layerBlitMaterial, () -> withLayerOpacity(opacity, () -> {
             poseStack.pushPose();
@@ -1777,9 +1773,8 @@ public final class CgUiPaintContext {
         try (CgGlScope scope = CgGlState.save(CgGlSlot.FBO, CgGlSlot.VIEWPORT, CgGlSlot.BLEND)) {
             subtreeFbo.bind();
             CgGL.glViewport(0, 0, subtreeFbo.getWidth(), subtreeFbo.getHeight());
-            // AND THE MULTIPLY IS NOT CLIPPED EITHER. Its job is to zero the subtree everywhere the
-            // mask does not cover; clipped, whatever lies outside the clip is left unmasked -- the one
-            // thing a mask exists to prevent.
+            // The multiply must reach the whole buffer too: its job is to zero the subtree everywhere the
+            // mask does not cover, so clipped it leaves what lies outside the clip unmasked.
             int[] suspendedMask = scissorStack.suspend();
             scissorStack.clearScissorIfNeeded();
             // AND THE PROJECTION, which the viewport alone does not cover. This runs after the
@@ -1802,14 +1797,10 @@ public final class CgUiPaintContext {
             CgRenderPipeline.getInstance().prepareFrame();
             try {
                 CgTexture2D maskTex = (CgTexture2D) maskFbo.getColorTexture(0);
-                // DECLARED, because a raw bind is ignored: _MainTex is a Properties-block sampler with
-                // a "white" default, so the material binds THAT and multiplies the subtree by an alpha
-                // of 1 everywhere -- no mask at all, and the layer survives full-bleed. @see blitLayer
-                //
-                // On a material of ours, never the caller's: a sampler property is retained, so setting
-                // it on the enclosing material rewrites what every later draw through it samples. This
-                // one is gui_quad like boxModelMaterial, so the manual MASK_ALPHA_MULTIPLY below still
-                // survives the bind exactly as it did when the caller's material was borrowed.
+                // Declared, or the "white" default is multiplied in and every alpha is 1 -- no mask at
+                // all. @see blitLayer. On a material of ours rather than the caller's: a sampler property
+                // is retained, so setting it on the enclosing material rewrites what every later draw
+                // through it samples. gui_quad like boxModelMaterial, so MASK_ALPHA_MULTIPLY survives.
                 maskMaterial.applyProperties(b -> b.sampler("_MainTex", 0, maskTex));
                 bindQuadPath(maskMaterial);
                 currentTexture = null;
@@ -1825,9 +1816,8 @@ public final class CgUiPaintContext {
                 flush();
                 poseStack.popPose();
             } finally {
-                // PARKED, because the mask attachment is POOLED: a resize deletes it and the next bind
-                // of a material still naming it throws. Safe here in a way it never was on the caller's
-                // material — nothing but this multiply ever binds this one.
+                // Parked: the mask attachment is pooled, so a resize deletes it and the next bind of a
+                // material still naming it throws. Safe here because nothing else binds this material.
                 maskMaterial.applyProperties(b -> b.sampler("_MainTex", 0, whitePixel));
                 bindQuadPath(masked != null ? masked : boxModelMaterial);
                 currentTexture = null;

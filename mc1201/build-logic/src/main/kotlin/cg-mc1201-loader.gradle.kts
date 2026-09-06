@@ -246,14 +246,13 @@ tasks.withType<JavaExec>().matching { it.name.startsWith("run") }.configureEach 
     }
 }
 
-// THE SCRIPTED CLIENT RUN JOINS A WORLD BY ITSELF.
+// The scripted client run joins a world by itself:
 //
 //   ./gradlew :mc1201:forge:runClient -Dcrystalgui.clientProbe=true [-PcgWorld="Some World"]
 //
-// ClientProbe1201 drives the routine and quits, but only once there IS a world -- and nothing in a dev
-// run reaches the title screen on its own. A missing world is not reported usefully by Minecraft (it
-// simply stays on the menu), so the name is a property rather than a constant and the run says which it
-// asked for.
+// ClientProbe1201 can only start once there is a world, and nothing in a dev run reaches the title
+// screen on its own. A missing world is not reported usefully -- the client just sits on the menu --
+// so the name is a property and the run logs which one it asked for.
 val cgProbeWorld = (project.findProperty("cgWorld") as String?) ?: "New World"
 tasks.matching { it.name == "runClient" }.configureEach {
     if (providers.systemProperty("crystalgui.clientProbe").orNull != null) {

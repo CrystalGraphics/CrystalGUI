@@ -63,11 +63,9 @@ tasks.matching {
     dependsOn(crystalGraphics.task(":mc1201:common:classes"))
     dependsOn(crystalGraphics.task(":mc1201:$loader:classes"))
 
-    // AND THE JARS THE RUNTIME CLASSPATH IS MADE OF. These arrive as the `com.crystalgraphics:*`
-    // coordinates above, substituted to this composite -- which ModDevGradle resolves with nothing in the
-    // task graph putting them ahead of the launch, so a jar could still be mid-rewrite when the JVM read
-    // it. Presents as a NoClassDefFoundError for a class that is plainly in the jar, and only on the run
-    // right after a CrystalGraphics edit. Same defect the mods{} note above records, one build over.
+    // And the jars the runtime classpath is made of. These arrive as substituted coordinates, which
+    // ModDevGradle resolves with nothing ordering them before the launch -- so a jar could still be
+    // mid-rewrite when the JVM reads it, presenting as a NoClassDefFoundError for a class that is in it.
     dependsOn(crystalGraphics.task(":core:jar"))
     dependsOn(crystalGraphics.task(":platform:jar"))
     dependsOn(crystalGraphics.task(":freetype-msdfgen-harfbuzz-bindings:jar"))
