@@ -70,7 +70,7 @@ import java.util.List;
  * {@code graphview} too; the viewport's structural styling is written from Java at DEFAULT origin
  * precisely so this class inherits it for real.</p>
  */
-public class GraphView extends SurfaceEditor {
+public class GraphView extends SurfaceEditor implements GraphContext {
 
     /**
      * This widget's kind.
@@ -219,6 +219,17 @@ public class GraphView extends SurfaceEditor {
 
     /** Fires after any change to the edge set — connect, disconnect, or a node leaving with wires on it. */
     public final Signal.Action onConnectionsChanged = new Signal.Action();
+
+    @Override
+    public Signal.Action connectionsChanged() {
+        return onConnectionsChanged;
+    }
+
+    /** @see GraphContext#mountOverlay */
+    @Override
+    public void mountOverlay(UIElement panel) {
+        addOverlay(panel);
+    }
 
 
     /** What a graph means by the engine's questions. @see GraphPolicy */
@@ -473,6 +484,21 @@ public class GraphView extends SurfaceEditor {
     /** @see GraphDocumentSync#linkWidgets */
     void linkWidgets(EdgeData edge) {
         documents.linkWidgets(edge);
+    }
+
+    /** @see GraphDocumentSync#addNodeData */
+    void addNodeData(NodeData data) {
+        documents.addNodeData(data);
+    }
+
+    /** @see GraphDocumentSync#restoreEdge */
+    void restoreEdge(EdgeData edge) {
+        documents.restoreEdge(edge);
+    }
+
+    /** @see GraphDocumentSync#removeEdge */
+    void removeEdgeFromDocument(EdgeData edge) {
+        documents.removeEdge(edge);
     }
 
     /** The widget projecting {@code nodeId}, or null. */

@@ -90,20 +90,17 @@ final class GraphWires {
 
     /** The raw add both {@link GraphEdits.Connect} and {@link GraphEdits.Disconnect} share. */
     void addEdge(EdgeData edge) {
-        view.document.restoreEdge(edge);
-        view.linkWidgets(edge);
-        view.markSynced();
+        view.restoreEdge(edge);
         view.onConnectionsChanged.emit();
     }
 
     /** The raw removal, likewise. */
     void removeEdge(EdgeData edge) {
-        view.document.disconnect(edge);
         NodePort from = view.portFor(edge.from());
         NodePort to = view.portFor(edge.to());
+        view.removeEdgeFromDocument(edge);
         view.connections.removeIf(c -> c.from() == from && c.to() == to);
         if (from != null && to != null) refreshCounts(from, to);
-        view.markSynced();
         view.onConnectionsChanged.emit();
     }
 
