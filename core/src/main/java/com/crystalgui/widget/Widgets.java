@@ -51,6 +51,7 @@ import com.crystalgui.widget.graph.GraphView;
 import com.crystalgui.widget.graph.NodePort;
 import com.crystalgui.widget.graph.NodeWireLayer;
 import com.crystalgui.widget.graph.node.NodeCreationMenu;
+import com.crystalgui.widget.surface.SurfaceEditor;
 import com.crystalgui.widget.layout.PageStack;
 import com.crystalgui.widget.layout.SplitView;
 import com.crystalgui.widget.layout.Tab;
@@ -177,30 +178,11 @@ public final class Widgets implements NodeKinds {
         // inherits one and is indistinguishable from a widget that forgot to declare its own.
         UIElementRegistry.register(NodeWireLayer.NAME, NodeWireLayer::new, NodeContract.INERT);
 
-        // ── 6.4: the canvas and the graph ───────────────────────────────────────────
-        //
-        // ALL INERT, and for the graph the reason is stronger than "no wire form yet": a graph's
-        // state IS its GraphDocument, which has its own codec and its own edits, so a description
-        // that carried the widgets would be a second, worse copy of the model. What the kinds buy is
-        // the cascade -- graph.css names `graphview`, `graphnode`, `nodeport`, `nodecreationmenu`
-        // and `canvasview`, and without a kind each would report `crystalgui:element` and match none
-        // of them.
-        //
-        // NodeWireLayer has no entry: its only constructor takes the view it draws for, so there is
-        // nothing a registry could build, and no sheet names it -- the wires are styled through the
-        // view. A kind for the cascade would be a kind for nobody.
-        UIElementRegistry.register(CanvasView.NAME, CanvasView::new, NodeContract.INERT);
-        UIElementRegistry.register(GraphView.NAME, GraphView::new, NodeContract.INERT);
-        UIElementRegistry.register(GraphNode.NAME, () -> new GraphNode(""), NodeContract.INERT);
-        UIElementRegistry.register(NodePort.NAME,
-                () -> new NodePort(PortDirection.INPUT, new BasicPortType("any"), ""),
-                NodeContract.INERT);
-        UIElementRegistry.register(NodeCreationMenu.NAME,
-                () -> new NodeCreationMenu(new NodeTypeRegistry()), NodeContract.INERT);
-        // No sheet names `nodewirelayer` -- the wires take their look from the view that owns them --
-        // so this kind is for the RULE rather than the cascade: a concrete node declaring no NAME
-        // inherits one and is indistinguishable from a widget that forgot to declare its own.
-        UIElementRegistry.register(NodeWireLayer.NAME, NodeWireLayer::new, NodeContract.INERT);
+        // THE SURFACE, and it registers here rather than in a service of its own: a LAYER speaks for
+        // itself, and `widget.surface` is a tier inside `widget`, not a layer beside it. INERT for the
+        // graph's reason -- a surface's state is its consumer's document -- and the kind is what lets a
+        // sheet name `surface` at all.
+        UIElementRegistry.registerTag(SurfaceEditor.NAME, NodeContract.INERT);
 
         // ── 6.2: the config kit ─────────────────────────────────────────────────────
         //
