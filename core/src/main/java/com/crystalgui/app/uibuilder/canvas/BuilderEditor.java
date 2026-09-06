@@ -41,12 +41,12 @@ public final class BuilderEditor implements DocumentEditor {
 
     private final UiBuilderDocument document;
     private final Artboard artboard;
-    private final SurfaceEditor surface;
+    private final BuilderSurface surface;
 
     public BuilderEditor(UiBuilderDocument document) {
         this.document = document;
         this.artboard = new Artboard(document);
-        this.surface = new SurfaceEditor(new TreePolicy(artboard), List.of(SelectExtension.ID));
+        this.surface = new BuilderSurface(document, artboard, List.of(SelectExtension.ID));
         surface.surface().place(artboard, 0f, 0f);
         // The document's own sheets, once there is a window to put them on. Installing them here would
         // reach a file from a constructor that a server also runs.
@@ -62,7 +62,7 @@ public final class BuilderEditor implements DocumentEditor {
     }
 
     /** The engine underneath, for the builder's own extensions. */
-    public SurfaceEditor surface() {
+    public BuilderSurface surface() {
         return surface;
     }
 
