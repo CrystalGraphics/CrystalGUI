@@ -1,5 +1,6 @@
 package com.crystalgui.mc.client;
 
+import com.crystalgraphics.gl.lifecycle.CgGraphicsLifecycle;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 
 import com.mojang.blaze3d.platform.GlStateManager;
@@ -22,6 +23,18 @@ import org.lwjgl.opengl.GL13;
 public final class CgUiHostGl1201 {
 
     private CgUiHostGl1201() {}
+
+    /**
+     * Whether there is a GL context to paint into at all.
+     *
+     * <p>Shutdown is the case: {@code GameShuttingDownEvent} runs {@code destroyContext()} and the render
+     * thread then draws the save-progress screen, so {@code beginFrame} bound a deleted material and
+     * turned a clean quit into a crash report. Asked here rather than guarded in the engine — a deleted
+     * material genuinely cannot be bound; what is wrong is asking it to.</p>
+     */
+    public static boolean contextIsLive() {
+        return CgGraphicsLifecycle.isInitialized();
+    }
 
     /**
      * Minecraft writes GL state behind CrystalGraphics' back every frame, so our shadow must be dropped
