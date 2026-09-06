@@ -104,9 +104,16 @@ public final class WorkspaceHost {
      * <p>Version-control metadata and build output: large, uninteresting, and on Linux the reason a
      * watcher runs out of inotify handles. A default rather than a rule — a host serving somewhere else
      * says what its own project excludes.</p>
+     *
+     * <p><b>And what other editors leave lying about.</b> A backup or swap file is written beside the
+     * real one and taken away again moments later, so watching it makes one edit two events and tells
+     * somebody about a file that was never theirs. Unlike an atomic write's own temp — which is ours,
+     * is never content, and is filtered where it is created — these are genuinely somebody's files, so
+     * they are a default a project can override rather than a rule it cannot.</p>
      */
-    public static final List<String> DEFAULT_EXCLUDES =
-            Arrays.asList(".git", ".gradle", ".crystalgui", "build", "out", "node_modules", "*.class");
+    public static final List<String> DEFAULT_EXCLUDES = Arrays.asList(
+            ".git", ".gradle", ".crystalgui", "build", "out", "node_modules", "*.class",
+            "*~", "*.swp", "*.swo", ".#*", ".DS_Store", "Thumbs.db");
 
     /** Seconds between watcher polls. */
     private static final float POLL_SECONDS = 0.5f;
