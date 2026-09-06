@@ -2,6 +2,8 @@ package com.crystalgui.app.uibuilder.canvas;
 
 import java.util.List;
 
+import javax.annotation.Nullable;
+
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.box.Box;
@@ -60,12 +62,41 @@ public final class SelectionOutline extends UIElement {
         // THE PARENT FIRST, so the selection's own stroke wins where they touch -- a child flush against
         // its parent's padding box shares an edge, and the one you are moving is the one to see.
         for (UIElement node : selected) {
-            UIElement parent = node.parentElement();
-            if (parent != null) CanvasRects.outline(paint, CanvasRects.of(parent, this),
-                    THICKNESS, parentStroke);
+            float[] parent = parentRectWorthDrawing(node);
+            if (parent != null) CanvasRects.outline(paint, parent, THICKNESS, parentStroke);
         }
         for (UIElement node : selected) {
             CanvasRects.outline(paint, CanvasRects.of(node, this), THICKNESS, accent);
         }
+    }
+
+    /**
+     * The parent's rectangle, or null when drawing it would say nothing.
+     *
+     * <p>Two cases, and both were reported as the outlines looking arbitrary:</p>
+     *
+     * <ul>
+     *   <li><b>The parent is the artboard.</b> The page already draws its own edge, so a second stroke
+     *       on top of it is a line that means "this is inside the page" — which is true of everything.</li>
+     *   <li><b>The parent is the same rectangle as the selection.</b> A root that is {@code height: auto}
+     *       around a single child is exactly its child's box, so the context stroke lands under the accent
+     *       one and reads as a stray grey edge rather than as context.</li>
+     * </ul>
+     */
+    @Nullable
+    private float[] parentRectWorthDrawing(UIElement node) {
+        UIElement parent = node.parentElement();
+        if (parent == null || parent == builder.artboard()) return null;
+        float[] rect = CanvasRects.of(parent, this);
+        float[] own = CanvasRects.of(node, this);
+        if (rect == null || own == null) return rect;
+        return sameRect(rect, own) ? null : rect;
+    }
+
+    private static boolean sameRect(float[] a, float[] b) {
+        for (int i = 0; i < 4; i++) {
+            if (Math.abs(a[i] - b[i]) > 0.5f) return false;
+        }
+        return true;
     }
 }
