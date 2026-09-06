@@ -315,7 +315,7 @@ final class CgUiBackdrop {
         // Seed from the previous frame's union so a settled UI captures ONCE for every consumer, and
         // widen to whatever is being asked for now so the answer is never stale.
         int x0 = Math.max(0, Math.min(needX0, lastX0 == 0 && lastX1 == 0 ? needX0 : lastX0));
-        int y0 = Math.max(0, Math.min(needY0, lastX1 == 0 && lastY1 == 0 ? needY0 : lastY0));
+        int y0 = Math.max(0, Math.min(needY0, lastY0 == 0 && lastY1 == 0 ? needY0 : lastY0));
         int x1 = Math.min(w, Math.max(needX1, lastX1));
         int y1 = Math.min(h, Math.max(needY1, lastY1));
         if (sameTarget) {   // widening mid-frame: keep what the earlier consumers already needed
