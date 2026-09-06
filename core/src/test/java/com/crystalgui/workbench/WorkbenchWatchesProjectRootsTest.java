@@ -1,6 +1,9 @@
 package com.crystalgui.workbench;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertNotNull;
 
 import java.nio.file.Paths;
 import java.util.List;
@@ -14,6 +17,9 @@ import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
+import com.crystalgui.document.DocumentState;
+import com.crystalgui.document.EditorInput;
+import com.crystalgui.workbench.editor.EditorService;
 import com.crystalgui.fs.provider.InMemoryFileSystem;
 import com.crystalgui.fs.server.WatchHub;
 import com.crystalgui.fs.server.WorkspaceActor;
@@ -119,5 +125,31 @@ public class WorkbenchWatchesProjectRootsTest extends UiDocumentTestBase {
         workbench.dispose();
         assertEquals("a disposed workbench has let go of the root it was watching",
                 0, root.onChanged.connectionCount());
+    }
+
+    /**
+     * <b>A file that goes away takes its tab.</b> A delete from outside only ORPHANS the document — the
+     * document layer may not name a tab — so the workbench is where that becomes a closed editor, and
+     * the answer has to be the one an in-app delete already gives. A tab holding unsaved work is kept:
+     * that buffer is the only copy of the text left anywhere its author can see it.
+     */
+    @Test
+    public void anOrphanedDocumentLosesItsTab() {
+        for (int i = 0; i < 8; i++) frameAndPump();
+
+        Resource main = Resource.of(CgPath.of(PROJECT, "Main.java"));
+        workbench.editors.open(main);
+        for (int i = 0; i < 8; i++) frameAndPump();
+
+        EditorService.Tab tab = workbench.editors.tabFor(EditorInput.of(main));
+        assertNotNull("the file opened", tab);
+        assertNotNull("and its document is there", tab.document());
+        assertFalse("nothing unsaved, so nothing to protect", tab.document().isDirty());
+
+        tab.document().setState(DocumentState.ORPHANED);
+        for (int i = 0; i < 4; i++) frameAndPump();
+
+        assertNull("the tab went with the file",
+                workbench.editors.tabFor(EditorInput.of(main)));
     }
 }
