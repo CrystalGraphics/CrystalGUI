@@ -1,5 +1,7 @@
 package com.crystalgui.widget.surface;
 
+import javax.annotation.Nullable;
+
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.widget.config.inspector.InspectorSection;
@@ -7,6 +9,18 @@ import com.crystalgui.widget.surface.insert.InsertSource;
 import com.crystalgui.widget.surface.mode.ToolKind;
 import com.crystalgui.widget.surface.overlay.OverlayKind;
 import com.crystalgui.widget.surface.overlay.ViewModeKind;
+import java.util.List;
+
+import com.crystalgui.widget.surface.edit.Clipboard;
+import com.crystalgui.widget.surface.edit.Edits;
+import com.crystalgui.widget.surface.mode.Cursors;
+import com.crystalgui.widget.surface.mode.Modes;
+import com.crystalgui.widget.surface.mode.ToolKind;
+import com.crystalgui.widget.surface.overlay.Geometry;
+import com.crystalgui.widget.surface.overlay.OverlayKind;
+import com.crystalgui.widget.surface.overlay.OverlayLayer;
+import com.crystalgui.widget.surface.overlay.Snapping;
+import com.crystalgui.widget.surface.select.Picking;
 import com.crystalgui.widget.surface.select.SurfaceSelection;
 
 /**
@@ -40,6 +54,37 @@ public interface SurfaceContext {
 
     /** What is selected, and the one signal that says it changed. */
     SurfaceSelection selection();
+
+    /** The one door every change goes through, and the transactions that make a gesture one step. */
+    Edits edits();
+
+    /** Cut, copy and paste, as this consumer means them. Null when it has no notion of a fragment. */
+    @Nullable
+    Clipboard<?> clipboard();
+
+    /** What is under a point, and what a band touches. */
+    Picking picking();
+
+    /** Which tool is current, and the input mode that feeds it. */
+    Modes modes();
+
+    /** Rectangles to draw from, read after layout. */
+    Geometry geometry();
+
+    /** What is drawn over the plane, and whether each is showing. */
+    OverlayLayer overlays();
+
+    /** Where a dragged value settles. */
+    Snapping snapping();
+
+    /** What the pointer looks like while a gesture owns it. */
+    Cursors cursors();
+
+    /** Every tool registered here, in registration order — what a tool strip lists. */
+    List<ToolKind> tools();
+
+    /** Every overlay registered here, in registration order — what a View menu lists. */
+    List<OverlayKind> overlayKinds();
 
     Disposable registerTool(ToolKind kind);
 

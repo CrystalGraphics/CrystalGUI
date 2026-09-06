@@ -223,6 +223,9 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         return defaultChords;
     }
     private @Nullable CursorSink cursors;
+
+    /** Beats the CSS answer while a gesture owns the pointer. @see #setCursorOverride */
+    private @Nullable CgCursor cursorOverride;
     private CgCursor lastCursor = CgCursor.DEFAULT;
 
     /**
@@ -294,6 +297,23 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
      * comes from anyway. A host installs one to take it somewhere else — a test that asserts on the
      * cursor, or a loader presenting it through its own screen.</p>
      */
+    /**
+     * Forces a cursor for as long as it is set, over whatever the cascade resolves.
+     *
+     * <pre>{@code
+     * input.setCursorOverride(CgCursor.GRABBING);   // a drag begins
+     * input.setCursorOverride(null);                // and ends
+     * }</pre>
+     *
+     * <p>For a live gesture, and nothing else: a marquee is not over any one element, and a resize drag
+     * must keep its arrow after the pointer has left the handle. Null restores the CSS answer — a
+     * gesture that forgets to clear it leaves the whole window pointing the wrong way.</p>
+     */
+    public Input setCursorOverride(@Nullable CgCursor cursor) {
+        this.cursorOverride = cursor;
+        return this;
+    }
+
     public Input setCursorSink(@Nullable CursorSink cursors) {
         this.cursors = cursors;
         return this;
@@ -347,7 +367,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
      * cursor because the node under it changed.</p>
      */
     private void presentCursor(@Nullable UIElement hovered) {
-        CgCursor resolved = resolveCursor(hovered);
+        CgCursor resolved = cursorOverride != null ? cursorOverride : resolveCursor(hovered);
         if (resolved == lastCursor) return;
         lastCursor = resolved;
         if (cursors != null) {

@@ -134,8 +134,6 @@ public class GraphNode extends UIElement {
     private boolean movable = true;
 
     @Getter
-    private boolean moving;
-
     /** @see #preview() */
     private boolean hasPreview;
 
@@ -307,66 +305,17 @@ public class GraphNode extends UIElement {
      */
     private boolean beginMoveDrag(float rawX, float rawY) {
         GraphView view = graphView();
-        UIDocument window = document();
-        if (view == null || window == null) return false;
+        if (view == null || document() == null) return false;
 
-        // Everything selected moves, not just the node under the cursor — and if this node is not in
+        // EVERYTHING SELECTED MOVES, not just the node under the cursor -- and if this node is not in
         // the selection, the press already made it the selection (see GraphView.selectNode).
-        final List<GraphNode> moving = new ArrayList<>();
-        final List<float[]> origins = new ArrayList<>();
-        for (GraphNode node : view.getSelection().contains(this) ? view.selectedNodes() : List.of(this)) {
-            WorldRect at = view.worldBoundsOf(node);
-            moving.add(node);
-            origins.add(new float[]{at.x(), at.y()});
-        }
-        // The drag's own delta, not a re-read of the layout at the end.
-        //
-        // worldBoundsOf() reports the LAST COMPUTED layout, and the final moveNode of a drag writes
-        // left/top that Taffy has not resolved yet — so asking at drag end returns the position from
-        // before the last move, and a short drag reports a delta of zero and records nothing at all.
-        // The listener is handed the delta directly; keeping it is both simpler and the only thing
-        // here that is not one frame stale.
-        final float[] delta = {0f, 0f};
-        this.moving = true;
-        addClass(MOVING_CLASS);
-        Drag.start(this, rawX, rawY,
-                new Drag.Listener() {
-                    @Override
-                    public void onDragUpdate(float mx, float my, float sx, float sy, float dx, float dy) {
-                        // Moved in place: left/top are rewritten, nothing is rebuilt. Rebuilding here
-                        // would detach the very element the drag is anchored to — the failure that
-                        // froze the table header, and the reason that trap is in the plan for this item.
-                        //
-                        // Every node moves by the SAME delta from its own origin, rather than each
-                        // tracking the pointer: a selection dragged by one member must keep its shape.
-                        delta[0] = dx;
-                        delta[1] = dy;
-                        for (int i = 0; i < moving.size(); i++) {
-                            float[] origin = origins.get(i);
-                            view.moveNode(moving.get(i), origin[0] + dx, origin[1] + dy);
-                        }
-                    }
-
-                    @Override
-                    public void onDragEnd(float mx, float my) {
-                        // One step for the whole drag, however many nodes it moved — the case
-                        // transactions exist for. Forty nodes is one Ctrl+Z.
-                        view.recordMoves(moving, origins, delta[0], delta[1]);
-                        endMove();
-                    }
-
-                    @Override
-                    public void onDragCancel() {
-                        endMove();
-                    }
-                });
-        return true;
+        List<UIElement> moving = new ArrayList<>(
+                view.getSelection().contains(this) ? view.selectedNodes() : List.of(this));
+        // The gesture is the engine's: same delta from each origin, the class while it runs, one undo
+        // step at the end through the graph's own move edit. @see MoveGesture
+        return view.moveGesture().begin(rawX, rawY, moving);
     }
 
-    private void endMove() {
-        moving = false;
-        removeClass(MOVING_CLASS);
-    }
 
     @Nullable
     private GraphView graphView() {

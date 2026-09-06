@@ -120,6 +120,7 @@ public class LayeringTest {
             // and the order inside it is SurfaceLayeringTest's.
             "com/crystalgui/widget/surface/",
             "com/crystalgui/widget/surface/select/",
+            "com/crystalgui/widget/surface/edit/",
             "com/crystalgui/widget/surface/mode/",
             "com/crystalgui/widget/surface/overlay/",
             "com/crystalgui/widget/surface/insert/",

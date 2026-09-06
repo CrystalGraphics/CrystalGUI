@@ -10,6 +10,7 @@ import com.crystalgui.template.UiTemplates;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.surface.SurfaceEditor;
+import com.crystalgui.widget.surface.mode.SelectExtension;
 
 /**
  * The view onto a {@code .cgui}: one artboard on a pan-and-zoom surface, holding the document's real
@@ -45,7 +46,7 @@ public final class BuilderEditor implements DocumentEditor {
     public BuilderEditor(UiBuilderDocument document) {
         this.document = document;
         this.artboard = new Artboard(document);
-        this.surface = new SurfaceEditor(new TreePolicy(artboard), List.of());
+        this.surface = new SurfaceEditor(new TreePolicy(artboard), List.of(SelectExtension.ID));
         surface.surface().place(artboard, 0f, 0f);
         // The document's own sheets, once there is a window to put them on. Installing them here would
         // reach a file from a constructor that a server also runs.

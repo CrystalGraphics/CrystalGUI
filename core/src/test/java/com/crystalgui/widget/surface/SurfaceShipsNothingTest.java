@@ -34,7 +34,7 @@ public class SurfaceShipsNothingTest {
         SurfaceEditor surface = new SurfaceEditor(TestSurface.policy(), List.of());
 
         assertEquals("tools", List.of(), surface.tools());
-        assertEquals("overlays", List.of(), surface.overlays());
+        assertEquals("overlays", List.of(), surface.overlayKinds());
         assertEquals("view modes", List.of(), surface.viewModes());
         assertEquals("insert sources", List.of(), surface.insertSources());
         assertEquals("drop handlers", List.of(), surface.dropHandlers());

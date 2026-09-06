@@ -43,7 +43,7 @@ public class ContributionRoundTripTest {
         SurfaceEditor surface = openWithEverything();
 
         assertEquals(1, surface.tools().size());
-        assertEquals(1, surface.overlays().size());
+        assertEquals(1, surface.overlayKinds().size());
         assertEquals(1, surface.viewModes().size());
         assertEquals(1, surface.insertSources().size());
         assertEquals(1, surface.dropHandlers().size());
@@ -59,7 +59,7 @@ public class ContributionRoundTripTest {
         surface.dispose();
 
         assertEquals(List.of(), surface.tools());
-        assertEquals(List.of(), surface.overlays());
+        assertEquals(List.of(), surface.overlayKinds());
         assertEquals(List.of(), surface.viewModes());
         assertEquals(List.of(), surface.insertSources());
         assertEquals(List.of(), surface.dropHandlers());
@@ -138,7 +138,10 @@ public class ContributionRoundTripTest {
         SurfaceExtensions.contribute(new TestSurface.Everything());
         SurfaceExtensions.contribute(new TestSurface.Everything());
 
-        assertEquals(1, SurfaceExtensions.all().size());
+        // Counted by id, not by total: the classpath also carries the engine's own Select extension.
+        long claiming = SurfaceExtensions.all().stream()
+                .filter(each -> TestSurface.Everything.ID.equals(each.id())).count();
+        assertEquals(1, claiming);
     }
 
     /** The consumer's policy is reachable by type, and only by the right type. */

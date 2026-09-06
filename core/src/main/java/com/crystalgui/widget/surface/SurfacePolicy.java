@@ -5,6 +5,7 @@ import java.util.List;
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.undo.Edit;
+import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.ui.dom.UIElement;
 
 /**
@@ -42,6 +43,13 @@ public interface SurfacePolicy {
     }
 
     /**
+     * Where this surface's undo history lives — the consumer's document owns it, not the engine.
+     *
+     * <p>Asked once, at construction. A surface with nothing to undo answers a stack of its own.</p>
+     */
+    UndoStack history();
+
+    /**
      * The item {@code hit} belongs to — usually an ancestor walk — or null when it belongs to none.
      *
      * <p>What "an item" is: the thing selection, move and delete operate on. A graph answers the
@@ -60,6 +68,17 @@ public interface SurfacePolicy {
      * from a pseudo-class, a described element gets handles. Called once per item that changed.</p>
      */
     void markSelected(UIElement item, boolean selected);
+
+    /**
+     * The undoable record of removing {@code items}, or null when this surface deletes nothing.
+     *
+     * <p>What deleting <em>means</em> is the consumer's: a graph takes the nodes and the wires that
+     * touched them; a tree takes the subtree. The engine only knows that Delete acts on the selection.</p>
+     */
+    @Nullable
+    default Edit deleteEdit(List<UIElement> items) {
+        return null;
+    }
 
     /**
      * The undoable record of a completed move, or null when moves are not undoable here.

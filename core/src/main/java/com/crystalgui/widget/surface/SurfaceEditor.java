@@ -8,17 +8,32 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.undo.UndoCommands;
+import com.crystalgui.core.undo.UndoScope;
+import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.input.keymap.Keymap;
+import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.canvas.CanvasView;
 import com.crystalgui.widget.config.inspector.InspectorRegistry;
 import com.crystalgui.widget.config.inspector.InspectorSection;
+import com.crystalgui.widget.surface.edit.Clipboard;
+import com.crystalgui.widget.surface.edit.Edits;
+import com.crystalgui.widget.canvas.WorldRect;
 import com.crystalgui.widget.surface.extension.SurfaceExtensions;
+import com.crystalgui.widget.surface.mode.Cursors;
+import com.crystalgui.widget.surface.mode.Modes;
+import com.crystalgui.widget.surface.overlay.Geometry;
+import com.crystalgui.widget.surface.overlay.OverlayLayer;
+import com.crystalgui.widget.surface.overlay.Snapping;
+import com.crystalgui.widget.surface.select.Picking;
 import com.crystalgui.widget.surface.insert.InsertSource;
 import com.crystalgui.widget.surface.mode.ToolKind;
 import com.crystalgui.widget.surface.overlay.OverlayKind;
@@ -48,7 +63,8 @@ import com.crystalgui.widget.surface.select.SurfaceSelection;
  * <p>Extensions never name this class. They are written against {@link SurfaceContext}, which this
  * implements: an engine that can be named can be reached into.</p>
  */
-public class SurfaceEditor extends UIElement implements SurfaceContext, DataProvider, Disposable {
+public class SurfaceEditor extends UIElement
+        implements SurfaceContext, DataProvider, UndoScope, Disposable {
 
     /**
      * This widget's kind.
@@ -73,9 +89,19 @@ public class SurfaceEditor extends UIElement implements SurfaceContext, DataProv
     private final CanvasView canvas = new CanvasView();
     private final Surface surface;
     private final SurfaceSelection selection;
+    private final Edits edits;
+    private final Picking picking;
+    private final Geometry geometry;
+    private final OverlayLayer overlays;
+    private final Snapping snapping = new Snapping();
+    private final Cursors cursors;
+    private final Modes modes;
+
+    @Nullable
+    private Clipboard<?> clipboard;
 
     private final List<ToolKind> tools = new ArrayList<>();
-    private final List<OverlayKind> overlays = new ArrayList<>();
+    private final List<OverlayKind> overlayKinds = new ArrayList<>();
     private final List<ViewModeKind> viewModes = new ArrayList<>();
     private final List<InsertSource> insertSources = new ArrayList<>();
     private final List<DropHandler> dropHandlers = new ArrayList<>();
@@ -118,7 +144,73 @@ public class SurfaceEditor extends UIElement implements SurfaceContext, DataProv
         appendStructural(canvas);
         this.surface = new Surface(canvas);
         this.selection = new SurfaceSelection(policy::markSelected);
+        this.edits = new Edits(policy.history());
+        this.picking = new Picking(new Picking.Surfaces() {
+            @Override
+            public UIDocument window() {
+                return document();
+            }
+
+            @Override
+            public List<UIElement> items() {
+                return surface.items();
+            }
+
+            @Override
+            public WorldRect boundsOf(UIElement item) {
+                return surface.boundsOf(item);
+            }
+
+            @Override
+            public UIElement itemFor(UIElement hit) {
+                return policy.itemFor(hit);
+            }
+        });
+        this.geometry = new Geometry(surface);
+        this.overlays = new OverlayLayer(this);
+        this.cursors = new Cursors(this::document);
+        this.modes = new Modes(this);
         this.extensions = SurfaceExtensions.activate(this, enabled);
+    }
+
+    /**
+     * Every surface gets the engine's commands, with nothing installing them.
+     *
+     * <p>Called once for this class by the engine. Before a hook like this existed, a host had to install
+     * them and a surface dropped into a scene that forgot had no Delete and no Select All, silently.</p>
+     */
+    @Override
+    protected void registerCommands(CommandRegistry registry) {
+        SurfaceCommands.register();
+        // Undo comes with any surface, because a surface IS an undo scope -- the stack is resolved from
+        // focus, so this needs no element and binds to nothing.
+        UndoCommands.register();
+    }
+
+    /**
+     * The engine's chords, on this surface.
+     *
+     * <p>Per instance, and it has to be: {@code F} and {@code A} are <b>bare letters</b>, so they may
+     * only be live while focus is inside a surface. Declaring them on the commands would make them
+     * application-wide and cost every text field three letters.</p>
+     */
+    private final Keymap keymap = defaultKeymap();
+
+    private static Keymap defaultKeymap() {
+        Keymap keymap = new Keymap();
+        SurfaceCommands.bindDefaults(keymap);
+        return keymap;
+    }
+
+    @Override
+    public Keymap keymapOrNull() {
+        return keymap;
+    }
+
+    /** The consumer's history, so Ctrl+Z resolved from focus finds the right one. */
+    @Override
+    public UndoStack undoStack() {
+        return edits.history();
     }
 
     // ── The seam ────────────────────────────────────────────────────────────
@@ -131,6 +223,58 @@ public class SurfaceEditor extends UIElement implements SurfaceContext, DataProv
     @Override
     public SurfaceSelection selection() {
         return selection;
+    }
+
+    @Override
+    public Edits edits() {
+        return edits;
+    }
+
+    @Override
+    public Picking picking() {
+        return picking;
+    }
+
+    @Override
+    public Modes modes() {
+        return modes;
+    }
+
+    @Override
+    public Geometry geometry() {
+        return geometry;
+    }
+
+    @Override
+    public OverlayLayer overlays() {
+        return overlays;
+    }
+
+    @Override
+    public Snapping snapping() {
+        return snapping;
+    }
+
+    @Override
+    public Cursors cursors() {
+        return cursors;
+    }
+
+    @Override
+    @Nullable
+    public Clipboard<?> clipboard() {
+        return clipboard;
+    }
+
+    /**
+     * Says what a fragment is here, so cut, copy and paste work.
+     *
+     * <p>The consumer sets this once; a surface with no notion of a fragment leaves it unset and the
+     * clipboard commands stay disabled.</p>
+     */
+    public SurfaceEditor setClipboard(@Nullable Clipboard<?> clipboard) {
+        this.clipboard = clipboard;
+        return this;
     }
 
     @Override
@@ -148,7 +292,7 @@ public class SurfaceEditor extends UIElement implements SurfaceContext, DataProv
             throw new IllegalArgumentException("the overlay " + kind.id() + " has nothing to draw -- "
                     + "call OverlayKind.element(...)");
         }
-        return add(overlays, kind);
+        return add(overlayKinds, kind);
     }
 
     @Override
@@ -209,8 +353,9 @@ public class SurfaceEditor extends UIElement implements SurfaceContext, DataProv
         return List.copyOf(tools);
     }
 
-    public List<OverlayKind> overlays() {
-        return List.copyOf(overlays);
+    @Override
+    public List<OverlayKind> overlayKinds() {
+        return List.copyOf(overlayKinds);
     }
 
     public List<ViewModeKind> viewModes() {
@@ -235,9 +380,14 @@ public class SurfaceEditor extends UIElement implements SurfaceContext, DataProv
 
     @Override
     public Object getData(DataKey<?> key) {
-        // No super: a UIElement is not a DataProvider, and the walk outward through commandParent()
-        // is what reaches the next one.
-        return key == SURFACE ? this : null;
+        if (key == SURFACE) return this;
+        // CUT/COPY/PASTE FOR THE SHELL, derived rather than hand-written: a surface says what a fragment
+        // is through its Clipboard and gets the Edit menu's four for nothing.
+        if (key == UiDataKeys.CLIPBOARD) return clipboard == null ? null : SurfaceCommands.actionsFor(this);
+        if (key == UiDataKeys.SELECTION) return new ArrayList<Object>(selection.items());
+        // No super: a UIElement is not a DataProvider, and the walk outward through commandParent() is
+        // what reaches the next one.
+        return undoScopeData(key);
     }
 
     /** Releases every extension handle. Idempotent. */
@@ -246,6 +396,7 @@ public class SurfaceEditor extends UIElement implements SurfaceContext, DataProv
         if (disposed) return;
         disposed = true;
         // Backwards, so a feature registered later goes before what it was registered against.
+        modes.detach();
         for (int i = extensions.size() - 1; i >= 0; i--) {
             extensions.get(i).dispose();
         }
@@ -255,7 +406,16 @@ public class SurfaceEditor extends UIElement implements SurfaceContext, DataProv
     @Override
     protected void connected() {
         super.connected();
+        // The mode joins the window's input stack here rather than at construction: a surface with no
+        // window has nothing to push onto, and a tool must not be live before the tree it acts on is.
+        modes.attach(document());
         onDidConnect.emit();
+    }
+
+    @Override
+    protected void disconnected() {
+        super.disconnected();
+        modes.detach();
     }
 
     private <T> Disposable add(List<T> into, T what) {

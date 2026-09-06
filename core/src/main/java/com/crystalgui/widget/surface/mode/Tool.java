@@ -23,9 +23,12 @@ package com.crystalgui.widget.surface.mode;
  * }
  * }</pre>
  *
- * <p>Coordinates are the plane's — world units, already through the pan and the zoom. Return
- * {@code true} only when the tool acted on the event: anything left unclaimed reaches the tree below,
- * which is what keeps an editor inside an item alive while a tool is current.</p>
+ * <p>Coordinates are <b>raw surface pixels</b>, exactly as {@code InputMode} delivers them — call
+ * {@code ctx.surface().toWorld(x, y)} for world units. Raw is what the picker wants, and one convention
+ * beats converting twice in opposite directions.</p>
+ *
+ * <p>Return {@code true} only when the tool acted on the event: anything left unclaimed reaches the tree
+ * below, which is what keeps an editor inside an item alive while a tool is current.</p>
  */
 public interface Tool {
 
@@ -38,17 +41,17 @@ public interface Tool {
     }
 
     /** @return whether this tool consumed the press. */
-    default boolean pointerDown(float worldX, float worldY, int button, int modifiers) {
+    default boolean pointerDown(float rawX, float rawY, int button, int modifiers) {
         return false;
     }
 
     /** @return whether this tool consumed the movement. */
-    default boolean pointerMoved(float worldX, float worldY, int modifiers) {
+    default boolean pointerMoved(float rawX, float rawY, int modifiers) {
         return false;
     }
 
     /** @return whether this tool consumed the release. */
-    default boolean pointerUp(float worldX, float worldY, int button, int modifiers) {
+    default boolean pointerUp(float rawX, float rawY, int button, int modifiers) {
         return false;
     }
 

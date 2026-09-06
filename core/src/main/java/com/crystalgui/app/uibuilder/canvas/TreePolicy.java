@@ -5,6 +5,7 @@ import java.util.List;
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.undo.Edit;
+import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.surface.SurfacePolicy;
 
@@ -24,6 +25,12 @@ public final class TreePolicy implements SurfacePolicy {
 
     public TreePolicy(Artboard artboard) {
         this.artboard = artboard;
+    }
+
+    /** The document's, so an edit made on the canvas and one made in the inspector share one history. */
+    @Override
+    public UndoStack history() {
+        return artboard.model().history();
     }
 
     /** Anything inside the artboard is an item; the artboard itself and the plane are not. */

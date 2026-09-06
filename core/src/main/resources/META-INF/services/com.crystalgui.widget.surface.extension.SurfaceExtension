@@ -1,0 +1,5 @@
+# Every surface extension on the classpath is FOUND; a consumer enables the ids it wants.
+#
+# Being here is availability, never enablement: `new SurfaceEditor(policy, List.of())` activates none of
+# them, which is what SurfaceShipsNothingTest holds the engine to.
+com.crystalgui.widget.surface.mode.SelectExtension
