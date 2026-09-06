@@ -16,6 +16,7 @@ import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.MouseEvent;
@@ -115,20 +116,22 @@ public final class ResizeHandles extends UIElement {
     }
 
     /**
-     * A zero-sized origin at the viewport's corner, which the handles are placed from.
+     * The layer the handles are placed inside — full size, and never a hit target.
      *
      * <p><b>It must never be the answer to a hit test.</b> A full-size hittable layer over the canvas
      * eats every click that lands on background — you select one node, the layer appears, and nothing on
      * the canvas can be clicked again. That is this codebase's most-repeated failure and {@code
      * Box.search} names it outright.</p>
      *
-     * <p>Zero-sized and non-clipping is the whole of the fix: a point is never <em>inside</em> this box
-     * so it cannot answer, and {@code search} still descends into children when a box does not clip — so
-     * the eight handles, which sit outside it entirely, are found exactly as before.</p>
+     * <p>{@code HIT_TRANSPARENT} says exactly that and nothing else: never the answer, children still
+     * searched. It was briefly a zero-sized box instead, which achieves the same thing for hit testing by
+     * accident and leaves the layer with no area to paint its handles in.</p>
      */
     private static void anchorWithoutCovering(UIElement layer) {
         StyleGroup.defaultPipeline(layer.getStyle().getLayoutGroup(),
-                l -> l.positionType(TaffyPosition.ABSOLUTE).left(0f).top(0f).width(0f).height(0f));
+                l -> l.positionType(TaffyPosition.ABSOLUTE).left(0f).top(0f)
+                        .widthPercent(100f).heightPercent(100f));
+        layer.set(Attribute.HIT_TRANSPARENT, true);
     }
 
     private UIElement buildHandle(Spot spot) {
