@@ -38,15 +38,14 @@ import com.crystalgui.workbench.dock.panel.DockInput;
  * <b>The Design panel shows the hierarchy of the {@code .cgui} in front.</b>
  *
  * <p>Written against the real path rather than by constructing a {@code HierarchyPanel} — which is why
- * two attempts at this missed. A panel is fed by <em>signals</em>, and the question is not whether it can
- * build rows but whether anything ever tells it to: opening a file is asynchronous, so the dock builds
- * its panels and announces its active one while the read is still in flight, and a panel that listens
- * only to the dock hears that one useless announcement and nothing afterwards.</p>
+ * three attempts at this missed, each fixing something true and none of it the cause. What a panel can
+ * build was never the question; what it is told, and whether what it is told is current, was.</p>
  */
 public class DesignPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase {
 
     private static final String PROJECT = "scratch";
     private static final CgPath FILE = CgPath.parse(PROJECT + ":page.cgui");
+    private static final CgPath OTHER = CgPath.parse(PROJECT + ":notes.md");
 
     private static final String SOURCE = "{\n"
             + "  \"cgui\": 1,\n"
@@ -65,7 +64,9 @@ public class DesignPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase {
         Protocols.resetForTesting();
         UIElementRegistry.bootstrap();
 
-        InMemoryFileSystem files = new InMemoryFileSystem().seed(FILE.toString(), SOURCE);
+        InMemoryFileSystem files = new InMemoryFileSystem()
+                .seed(FILE.toString(), SOURCE)
+                .seed(OTHER.toString(), "notes\n");
         WorkspaceService service = new WorkspaceService(
                 new ProjectRegistry().register(() -> List.of(
                         new WorkspaceProject(PROJECT, "Scratch", Paths.get("/srv/scratch")))),
@@ -90,6 +91,10 @@ public class DesignPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase {
 
     @After
     public void closeWorkbench() {
+        // THE WORKBENCH TOO, not just the wire. Its extensions register into process-wide registries --
+        // the inspector's section set is one -- so a fixture that walks away leaves them registered and
+        // the next test in the JVM counts them.
+        workbench.dispose();
         Protocols.resetForTesting();
     }
 
@@ -135,6 +140,30 @@ public class DesignPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase {
         assertTrue("the tree has no height, so its rows cannot be seen: " + treeBox.height(),
                 treeBox.height() > 1f);
         assertTrue("...nor any width: " + treeBox.width(), treeBox.width() > 1f);
+    }
+
+    /**
+     * <b>Away to another tab and back.</b>
+     *
+     * <p>The panel came up once and never again, and the cause was not in the panel at all:
+     * {@code EditorService.active} was set in exactly one place — when a document is <b>opened</b> — so
+     * clicking a tab, which is a selection rather than an open, never moved it. Everything derived from
+     * the dock stayed right and everything asking the editor service kept naming the last file opened.
+     * </p>
+     */
+    @Test
+    public void theHierarchyComesBackAfterSwitchingTabs() {
+        workbench.open(DockInput.of(workbench.refFor(FILE)));
+        for (int i = 0; i < 16; i++) frameAndPump();
+        assertNotNull("never came up at all", panel().hierarchy());
+
+        workbench.open(DockInput.of(workbench.refFor(OTHER)));
+        for (int i = 0; i < 12; i++) frameAndPump();
+        assertNull("a text file is not a builder", panel().hierarchy());
+
+        workbench.open(DockInput.of(workbench.refFor(FILE)));
+        for (int i = 0; i < 12; i++) frameAndPump();
+        assertNotNull("came back to the .cgui and the panel stayed empty", panel().hierarchy());
     }
 
     /** With nothing open it is empty, which is the state it must not be stuck in. */

@@ -1689,6 +1689,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * answerable for a document that has no content to report at all.</p>
      */
     private void bindStatusToActiveTab() {
+        syncActiveTab();
         statusBar.breadcrumbs().setCrumbs(saveActions.trailFor(activeFilePath()));
 
         Document active = activeDocument();
@@ -1698,6 +1699,26 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         setViewActive(activeStatusDocument, false);
         activeStatusDocument = active;
         setViewActive(active, true);
+    }
+
+    /**
+     * Keeps {@code EditorService.active} in step with the tab the dock is showing.
+     *
+     * <p>It was set in exactly one place — when a document is <b>opened</b> — so clicking a tab, which is
+     * a selection rather than an open, never moved it. Everything derived from the dock stayed right and
+     * everything asking the editor service kept naming the last file opened: the Inspector seeded from a
+     * document that was no longer in front, and the Design panel emptied on a tab switch and never came
+     * back, because the tab it was told about was still the other one.</p>
+     *
+     * <p>Left alone when the front panel is not a document. A tool window taking focus does not mean
+     * there is no active editor, and answering null there would blank every consumer each time somebody
+     * clicked the file tree.</p>
+     */
+    private void syncActiveTab() {
+        Resource shown = activeResource();
+        if (shown == null) return;
+        EditorService.Tab tab = editors.tabFor(EditorInput.of(shown));
+        if (tab != null) editors.activate(tab);
     }
 
     private void setViewActive(@Nullable Document document, boolean active) {
