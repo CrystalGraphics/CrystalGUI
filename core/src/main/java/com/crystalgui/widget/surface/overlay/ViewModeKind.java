@@ -1,10 +1,10 @@
-package com.crystalgui.widget.surface;
+package com.crystalgui.widget.surface.overlay;
 
 import java.util.function.Function;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.widget.surface.overlay.ViewMode;
+import com.crystalgui.widget.surface.SurfaceContext;
 
 /**
  * <b>A view mode in one declaration</b> — a lens over the whole surface: outline only, isolate the

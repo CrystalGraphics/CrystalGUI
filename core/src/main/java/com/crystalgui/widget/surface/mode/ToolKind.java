@@ -1,10 +1,10 @@
-package com.crystalgui.widget.surface;
+package com.crystalgui.widget.surface.mode;
 
 import java.util.function.Function;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.widget.surface.mode.Tool;
+import com.crystalgui.widget.surface.SurfaceContext;
 
 /**
  * <b>A tool in one declaration</b> — what {@code ToolWindowKind} is to a panel.
