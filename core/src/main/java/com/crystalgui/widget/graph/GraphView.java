@@ -245,11 +245,26 @@ public class GraphView extends SurfaceEditor implements GraphContext {
         addNode(node, worldX, worldY);
     }
 
-    /** @see GraphContext#everyFrame */
+    /** Hooks asked for before this graph joined a document. @see #everyFrame */
+    private final List<Animation.Hook> pendingFrameHooks = new ArrayList<>();
+
+    /**
+     * @see GraphContext#everyFrame
+     *
+     * <p><b>Held rather than dropped when there is no document yet.</b> Extensions come up at the end of
+     * the constructor, which is before this graph is attached to anything — so registering straight
+     * through would silently discard the hook of every feature that schedules work, and the symptom is
+     * not "a ticker did not run": it is whatever that ticker was the only path to. The previews' node
+     * discovery is one, and losing it left a Color node drawing nothing but its output port.</p>
+     */
     @Override
     public void everyFrame(Animation.Hook hook) {
         UIDocument window = document();
-        if (window != null) window.animation().every(this, hook);
+        if (window == null) {
+            pendingFrameHooks.add(hook);
+            return;
+        }
+        window.animation().every(this, hook);
     }
 
     /** @see GraphContext#viewportBox */
@@ -987,6 +1002,10 @@ public class GraphView extends SurfaceEditor implements GraphContext {
             onLayoutSettled();
             return true;
         });
+        // @see #everyFrame. Drained rather than replayed: `every` is owned by this node, so a re-attach
+        // would otherwise register each hook a second time.
+        for (Animation.Hook hook : pendingFrameHooks) document().animation().every(this, hook);
+        pendingFrameHooks.clear();
     }
 
 }
