@@ -163,7 +163,7 @@ designtoolwindow, hierarchypanel {
 /* THE TREE NEEDS THE FILL IDIOM, not a percentage -- `height: 100%` inside a parent that is still
  * distributing gives it nothing, and the panel then looks empty while its rows exist. The project tree
  * states exactly these three for the same reason. */
-hierarchypanel > treeview {
+.__hierarchy-content__, .__hierarchy-content__ > treeview {
     width: 100%;
     flex-basis: 0;
     flex-grow: 1;

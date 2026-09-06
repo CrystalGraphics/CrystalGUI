@@ -2,6 +2,7 @@ package com.crystalgui.widget.canvas;
 
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.service.Input;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.ui.box.Box;
 import com.crystalgraphics.platform.CgPlatform;
@@ -172,6 +173,16 @@ public class CanvasView extends UIElement {
         // i.e. everywhere except where you actually want to grab.
         this.events.getGroup(MouseEvent.Down.class).attachListener((el, event) -> {
             if (!panEnabled || !isEnabled()) return;
+            // NOT A REAL POINTER PRESS. Space on a FOCUSED element synthesizes a mouse press so Button
+            // and friends get keyboard activation for free -- and a pan's trigger is "left button while
+            // Space is held", which that synthesized press satisfies by construction. So merely focusing
+            // a canvas and pressing Space began a pan at wherever the cursor happened to be, and it could
+            // not be ended: a pan is a Drag on the mode stack and ends through the real pointer-up path,
+            // which a synthesized Up never reaches. It ran until the next real click.
+            //
+            // GraphView guards its marquee against the same press for the same reason; this became
+            // reachable for every canvas the moment a surface took a focus policy.
+            if (event.getDetail() == Input.KEYBOARD_DETAIL) return;
             if (isBackgroundGestureExempt(((UIElement) event.getTarget()))) return;
             if (!isPanTrigger(event)) return;
             event.stopPropagation();

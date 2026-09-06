@@ -48,6 +48,9 @@ public final class HierarchyPanel extends UIElement {
 
     public static final String ROW_CLASS = "__hierarchy-row__";
 
+    /** The ordinary child the tree lives in. @see #HierarchyPanel */
+    public static final String CONTENT_CLASS = "__hierarchy-content__";
+
     /** On the row whose node is selected. */
     public static final String SELECTED_CLASS = "__selected__";
 
@@ -57,6 +60,9 @@ public final class HierarchyPanel extends UIElement {
 
     private final TreeView<UIElement> tree;
 
+    /** @see #CONTENT_CLASS */
+    private final UIElement content = new UIElement();
+
     /** Guards the two directions against answering each other. */
     private boolean syncing;
 
@@ -64,6 +70,7 @@ public final class HierarchyPanel extends UIElement {
         super(NAME);
         this.builder = builder;
         addClass(PANEL_CLASS);
+        content.addClass(CONTENT_CLASS);
 
         tree = new TreeView<>(new TreeDataSource<UIElement>() {
             @Override
@@ -91,7 +98,20 @@ public final class HierarchyPanel extends UIElement {
                 l -> l.widthPercent(100f).heightPercent(100f).flexDirection(FlexDirection.COLUMN));
         StyleGroup.defaultPipeline(tree.getStyle().getLayoutGroup(),
                 l -> l.widthPercent(100f).flexBasis(0f).flexGrow(1f));
-        append(tree);
+        StyleGroup.defaultPipeline(content.getStyle().getLayoutGroup(),
+                l -> l.widthPercent(100f).flexBasis(0f).flexGrow(1f)
+                        .flexDirection(FlexDirection.COLUMN));
+        // THE WRAPPER GOES IN WHILE EMPTY; the tree is an ordinary child of it afterwards.
+        //
+        // append(tree) is the obvious line and it is wrong, because markAsInternal() RECURSES. A
+        // TreeView is a ListView: it builds its own viewport and recycles rows through
+        // addInternalChild/removeInternalChild, and those removals SILENTLY REFUSE an internal child.
+        // Stamping the whole subtree turns every removal into a no-op, so the realised window only ever
+        // grows and layout takes longer every frame until the window stops responding -- which is what
+        // "clicking a row breaks it until I restart" is. ProjectFileTree, QuickPick, ProblemsPanel and
+        // ShaderGraphEditor all carry this wrapper; it is the pattern, not a workaround.
+        append(content);
+        content.append(tree);
 
         // SELECTION, not activation: a single click on a row is choosing that node, and activation is
         // the double-click that will open a template. The two are separate signals for exactly this.
