@@ -16,7 +16,7 @@ import com.crystalgui.net.protocol.ProtocolConnection;
  *
  * <pre>{@code
  * DesktopHost host = DesktopHost.create(new HostServices() {
- *     public Path storageRoot()     { return gameDir.resolve("crystalgui"); }
+ *     public Path installationDirectory() { return gameDir; }
  *     public float uiScale()        { return currentGuiScale(); }
  *     public String desktopId()     { return "client"; }
  *     public ProtocolConnection<Object> connection() { return liveConnectionOrNull(); }
@@ -47,21 +47,21 @@ public interface HostServices {
     float DEFAULT_UI_SCALE = 2f;
 
     /**
-     * Where this host's {@code crystalgui/} directory is — the one root for everything it stores.
+     * This installation's directory — {@code .minecraft}, a server directory, wherever the host lives.
      *
-     * <p>The engine owns the tree inside it: {@code workspace-config/} for what must survive,
-     * {@code cache/} for what can be rebuilt, {@code projects/} for a workspace's own files. A host
-     * answers <em>where</em>, never <em>what goes where</em>, so two hosts cannot drift into two
-     * layouts.</p>
+     * <p><b>Not the {@code crystalgui/} directory itself.</b> The engine owns every segment below this,
+     * {@code crystalgui/} included: {@code workspace-config/} for what must survive, {@code cache/} for
+     * what can be rebuilt, {@code projects/} for a workspace's own files. A host answers <em>where it
+     * is</em>, never <em>what goes where</em>, so two hosts cannot drift into two layouts.</p>
      *
      * <pre>{@code
-     * public Path storageRoot() { return gameDir.resolve("crystalgui"); }
+     * public Path installationDirectory() { return gameDir; }   // -> gameDir/crystalgui/...
      * }</pre>
      *
      * <p>Private, and never inside a workspace: a session record must not become part of a project
      * somebody ships.</p>
      */
-    Path storageRoot();
+    Path installationDirectory();
 
     /** How many device pixels one logical pixel is. Applied once, to the box tree's root transform. */
     float uiScale();

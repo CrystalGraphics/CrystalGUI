@@ -128,11 +128,10 @@ public final class CgUiScreen1201 extends Screen {
     private static final class Mc1201Host implements HostServices {
 
         @Override
-        public Path storageRoot() {
+        public Path installationDirectory() {
             Minecraft mc = Minecraft.getInstance();
-            File root = mc == null ? new File(".") : mc.gameDirectory;
-            // ONE ROOT; the engine owns workspace-config/, cache/ and projects/ inside it.
-            return StorageLayout.rootIn(root.toPath());
+            // THE GAME DIRECTORY, not crystalgui/ inside it -- the engine adds that segment.
+            return (mc == null ? new File(".") : mc.gameDirectory).toPath();
         }
 
         @Override

@@ -1315,7 +1315,7 @@ public class Desktop extends UIElement implements DataProvider {
 
     /**
      * <b>Where this desktop keeps everything</b> — the client-side twin of
-     * {@code HostServices.storageRoot()}.
+     * {@code HostServices.installationDirectory()}.
      *
      * <p>One call, before anything is launched onto this desktop: it derives the config store and the
      * cache root from {@link StorageLayout}, so nothing else spells those segments. Applications
