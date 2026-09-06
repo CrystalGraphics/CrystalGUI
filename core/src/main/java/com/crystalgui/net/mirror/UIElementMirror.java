@@ -38,86 +38,157 @@ import javax.annotation.Nullable;
  */
 public final class UIElementMirror<T> implements NodeMirror<UIElement, T> {
 
-    private static final String NAME = "n";
-    private static final String ID = "i";
-    private static final String CLASSES = "c";
-    private static final String ATTRIBUTES = "a";
-    private static final String STYLE = "s";
-    private static final String STATE = "v";
-    private static final String CHILDREN = "k";
-    private static final String NID = "nid";
+    /**
+     * What a node's fields are called — one encoder, two dialects.
+     *
+     * <p>{@link #WIRE} is short because every packet pays for it and nobody reads it;
+     * {@link #DOCUMENT} is readable because a {@code .cgui} file is edited by hand as often as by the
+     * builder. Nothing else differs: the same encoder writes both, so a document IS a description and a
+     * window built from one hashes to the file on disk.</p>
+     *
+     * <pre>{@code
+     * new UIElementMirror<>(JsonOps.INSTANCE)                        // the wire
+     * new UIElementMirror<>(JsonOps.INSTANCE, Keys.DOCUMENT)         // a .cgui file
+     * }</pre>
+     *
+     * <p><b>The content hash is computed over {@link #WIRE} only.</b> A description is content-addressed
+     * and the key table is not part of what it says, so re-spelling the keys must never move a hash.</p>
+     */
+    public record Keys(String name, String id, String classes, String attributes, String style,
+                       String state, String children, String nid, boolean bareNames) {
+
+        /** What travels. Short by design, and always fully qualified. */
+        public static final Keys WIRE = new Keys("n", "i", "c", "a", "s", "v", "k", "nid", false);
+
+        /**
+         * What a {@code .cgui} file is written in.
+         *
+         * <p>{@code bareNames}: a kind in the engine's own namespace is written {@code text} rather than
+         * {@code crystalgui:text}, which is what a hand-author types. {@code Name.parse} reads either, so
+         * both dialects decode to the same tree and therefore to the same hash.</p>
+         */
+        public static final Keys DOCUMENT = new Keys(
+                "kind", "id", "class", "attrs", "style", "state", "children", "nid", true);
+    }
 
     private final DynamicOps<T> ops;
+    private final Keys keys;
 
+    /** The wire dialect. */
     public UIElementMirror(DynamicOps<T> ops) {
+        this(ops, Keys.WIRE);
+    }
+
+    public UIElementMirror(DynamicOps<T> ops, Keys keys) {
         this.ops = ops;
+        this.keys = keys;
+    }
+
+    /** Which dialect this instance reads and writes. */
+    public Keys keys() {
+        return keys;
     }
 
     // ── Descriptions ─────────────────────────────────────────────────────────
 
     @Override
     public T describe(UIElement node) {
-        return write(node, null);
+        return write(node, null, null);
+    }
+
+    /**
+     * Describes {@code node} and everything under it, writing what {@code extras} holds about each.
+     *
+     * <p>{@link Keys#DOCUMENT} only — the wire dialect carries no design or binding data, and being
+     * handed some means a document encoder was pointed at a packet.</p>
+     */
+    public T describe(UIElement node, @Nullable DocumentExtras<T> extras) {
+        requireDocumentDialect(extras);
+        return write(node, null, extras);
     }
 
     @Override
     public T describeLive(UIElement node, ToIntFunction<UIElement> idOf) {
-        return write(node, idOf);
+        return write(node, idOf, null);
     }
 
-    private T write(UIElement node, @Nullable ToIntFunction<UIElement> idOf) {
+    private T write(UIElement node, @Nullable ToIntFunction<UIElement> idOf,
+            @Nullable DocumentExtras<T> extras) {
         Map<T, T> fields = new LinkedHashMap<>();
-        fields.put(key(NAME), ops.createString(node.name().toString()));
-        if (!node.id().isEmpty()) fields.put(key(ID), ops.createString(node.id()));
-        if (!node.classes().isEmpty()) fields.put(key(CLASSES), ops.createString(String.join(" ", node.classes())));
+        fields.put(key(keys.name()), ops.createString(spell(node.name())));
+        if (!node.id().isEmpty()) fields.put(key(keys.id()), ops.createString(node.id()));
+        if (!node.classes().isEmpty()) fields.put(key(keys.classes()), ops.createString(String.join(" ", node.classes())));
         T attributes = attributesOf(node);
-        if (attributes != null) fields.put(key(ATTRIBUTES), attributes);
+        if (attributes != null) fields.put(key(keys.attributes()), attributes);
         // A description carries the whole node, not merely its shape. The order here is FIXED and the
         // optionals are OMITTED rather than written empty, because a description is content-addressed:
         // the same tree must encode byte-identically or its hash stops naming it.
         T style = InlineStyleCodec.encode(ops, node);
-        if (style != null) fields.put(key(STYLE), style);
+        if (style != null) fields.put(key(keys.style()), style);
         T state = encodeState(node);
-        if (state != null && !ops.getMapValue(state).isEmpty()) fields.put(key(STATE), state);
-        if (idOf != null) fields.put(key(NID), ops.createNumber(idOf.applyAsInt(node)));
+        if (state != null && !ops.getMapValue(state).isEmpty()) fields.put(key(keys.state()), state);
+        if (idOf != null) fields.put(key(keys.nid()), ops.createNumber(idOf.applyAsInt(node)));
+        if (extras != null) {
+            for (String extra : DocumentExtras.KEYS) {
+                T value = extras.get(node, extra);
+                if (value != null) fields.put(key(extra), value);
+            }
+        }
         List<UIElement> described = node.describedChildren();
         if (!described.isEmpty()) {
             List<T> children = new ArrayList<>(described.size());
-            for (UIElement child : described) children.add(write(child, idOf));
-            fields.put(key(CHILDREN), ops.createList(children));
+            for (UIElement child : described) children.add(write(child, idOf, extras));
+            fields.put(key(keys.children()), ops.createList(children));
         }
         return ops.createMap(fields);
     }
 
     @Override
     public UIElement decode(T described) {
-        return read(described, null);
+        return read(described, null, null);
+    }
+
+    /**
+     * Decodes a document, collecting each node's design, binding and hook data into {@code extras}.
+     *
+     * <p>Pass null to <b>strip</b> them, which is what {@code UiTemplate.inflate} does: the runtime has
+     * no use for any of the three, and a tree built without them is the tree a player sees.</p>
+     */
+    public UIElement decode(T described, @Nullable DocumentExtras<T> extras) {
+        requireDocumentDialect(extras);
+        return read(described, null, extras);
     }
 
     @Override
     public UIElement decodeLive(T described, ObjIntConsumer<UIElement> idSink) {
-        return read(described, idSink);
+        return read(described, idSink, null);
     }
 
-    private UIElement read(T described, @Nullable ObjIntConsumer<UIElement> idSink) {
+    private UIElement read(T described, @Nullable ObjIntConsumer<UIElement> idSink,
+            @Nullable DocumentExtras<T> extras) {
         Map<T, T> fields = ops.getMapValue(described);
-        T name = fields.get(key(NAME));
+        T name = fields.get(key(keys.name()));
         if (name == null) throw new IllegalArgumentException("A described node names its kind");
         UIElement node = UIElementRegistry.create(Name.parse(ops.getStringValue(name)));
         applyIdentity(fields, node);
-        T style = fields.get(key(STYLE));
+        T style = fields.get(key(keys.style()));
         if (style != null) applyInlineStyle(style, node);
-        T nid = fields.get(key(NID));
+        T nid = fields.get(key(keys.nid()));
         if (nid != null && idSink != null) idSink.accept(node, ops.getNumberValue(nid).intValue());
-        T children = fields.get(key(CHILDREN));
+        if (extras != null) {
+            for (String extra : DocumentExtras.KEYS) extras.put(node, extra, fields.get(key(extra)));
+        }
+        T children = fields.get(key(keys.children()));
         if (children != null) {
-            for (T child : ops.getListValue(children)) node.adoptDescribedChild(read(child, idSink));
+            for (T child : ops.getListValue(children)) {
+                node.adoptDescribedChild(read(child, idSink, extras));
+            }
         }
         // STATE LAST, because some of it INDEXES INTO THE CHILDREN. A TabView's selection is an index
         // and a Dropdown's is an index into its options, so applied to an empty widget it clamps to
         // nothing and the widget arrives showing its first entry with the description perfectly
         // correct. Encode order is fixed for the content hash and is a separate question from this.
-        T state = fields.get(key(STATE));
+        T state = fields.get(key(keys.state()));
         if (state != null) applyState(state, node);
         return node;
     }
@@ -163,10 +234,10 @@ public final class UIElementMirror<T> implements NodeMirror<UIElement, T> {
     @Nullable
     public T encodeAttributes(UIElement node) {
         Map<T, T> fields = new LinkedHashMap<>();
-        fields.put(key(ID), ops.createString(node.id()));
-        fields.put(key(CLASSES), ops.createString(String.join(" ", node.classes())));
+        fields.put(key(keys.id()), ops.createString(node.id()));
+        fields.put(key(keys.classes()), ops.createString(String.join(" ", node.classes())));
         T attributes = attributesOf(node);
-        fields.put(key(ATTRIBUTES), attributes != null ? attributes : ops.createMap(Map.of()));
+        fields.put(key(keys.attributes()), attributes != null ? attributes : ops.createMap(Map.of()));
         return ops.createMap(fields);
     }
 
@@ -193,9 +264,9 @@ public final class UIElementMirror<T> implements NodeMirror<UIElement, T> {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void applyIdentity(Map<T, T> fields, UIElement node) {
-        T id = fields.get(key(ID));
+        T id = fields.get(key(keys.id()));
         if (id != null) node.setId(ops.getStringValue(id));
-        T classes = fields.get(key(CLASSES));
+        T classes = fields.get(key(keys.classes()));
         if (classes != null) {
             List<String> wanted = new ArrayList<>();
             for (String c : ops.getStringValue(classes).split(" ")) if (!c.isEmpty()) wanted.add(c);
@@ -204,7 +275,7 @@ public final class UIElementMirror<T> implements NodeMirror<UIElement, T> {
             }
             for (String c : wanted) node.addClass(c);
         }
-        T attributes = fields.get(key(ATTRIBUTES));
+        T attributes = fields.get(key(keys.attributes()));
         if (attributes != null) {
             Map<T, T> entries = ops.getMapValue(attributes);
             // What arrived is the whole set of carried attributes; a carried one that is absent went
@@ -262,6 +333,19 @@ public final class UIElementMirror<T> implements NodeMirror<UIElement, T> {
 
     private T key(String name) {
         return ops.createString(name);
+    }
+
+    /** A kind, as this dialect writes it. @see Keys#DOCUMENT */
+    private String spell(Name name) {
+        return keys.bareNames() && Name.DEFAULT_NAMESPACE.equals(name.namespace())
+                ? name.local() : name.toString();
+    }
+
+    private void requireDocumentDialect(@Nullable DocumentExtras<T> extras) {
+        if (extras != null && keys == Keys.WIRE) {
+            throw new IllegalArgumentException("design, bind and on are document-only -- build this "
+                    + "mirror with Keys.DOCUMENT, or pass no extras");
+        }
     }
 
     /**
