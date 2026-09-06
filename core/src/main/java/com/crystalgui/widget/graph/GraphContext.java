@@ -7,8 +7,12 @@ import javax.annotation.Nullable;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.graph.GraphDocument;
+import com.crystalgui.graph.NodeTypeRegistry;
+import com.crystalgui.graph.TypeCompatibility;
 import com.crystalgui.graph.PortRef;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.service.Animation;
 import com.crystalgui.widget.surface.SurfaceContext;
 
 /**
@@ -70,6 +74,49 @@ public interface GraphContext extends SurfaceContext {
      * @return how many individual changes were applied
      */
     int syncFromDocument();
+
+    /** The type library this graph creates nodes from, or null if the consumer set none. */
+    @Nullable
+    NodeTypeRegistry getNodeLibrary();
+
+    /** The factory turning a type into a widget, or null if the consumer set none. */
+    @Nullable
+    NodeWidgetFactory getNodeFactory();
+
+    /**
+     * Gives this graph a library to create nodes from and a factory to build their widgets.
+     *
+     * <p>Both belong to the consumer: the library is what a shader graph and a dialogue graph disagree
+     * about. With neither set the graph still works — you simply cannot add a node from inside it.</p>
+     */
+    void useNodeLibrary(NodeTypeRegistry types, NodeWidgetFactory factory, TypeCompatibility rule);
+
+    /**
+     * Puts an already-built node on the plane at a world point, binding it to the document.
+     *
+     * <p>What a feature that MAKES a node calls — a property dropped from a blackboard, a node arriving
+     * from a server. Record a {@link GraphEdits.AddNode} alongside it, or the node cannot be undone.</p>
+     */
+    void placeNode(GraphNode node, float worldX, float worldY);
+
+    /**
+     * Runs {@code hook} every frame, <b>owned by the surface</b>.
+     *
+     * <p>Which is what stops it outliving the surface: a hook registered against a one-way ticker goes
+     * on running invisibly after the graph is closed. A feature that schedules work uses this rather
+     * than reaching for the window.</p>
+     */
+    void everyFrame(Animation.Hook hook);
+
+    /**
+     * The surface's own box, or <b>null</b> when it has not been laid out yet.
+     *
+     * <p>Null is not an error and is the common case on the frame a graph is built — a feature that culls
+     * against the viewport asks, gets null, and skips that frame. There is no other way to ask: a box is
+     * destroyed and rebuilt whenever its subtree is hidden or restructured.</p>
+     */
+    @Nullable
+    Box viewportBox();
 
     /**
      * Puts a panel in the <b>viewport</b> rather than on the plane, so it does not pan or zoom with the

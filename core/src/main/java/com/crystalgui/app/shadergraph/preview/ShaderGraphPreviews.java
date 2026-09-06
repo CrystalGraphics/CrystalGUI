@@ -10,7 +10,7 @@ import com.crystalgraphics.shadergraph.CgShaderGraph;
 import com.crystalgraphics.shadergraph.CgShaderNodeRegistry;
 import com.crystalgui.ui.service.Animation;
 import com.crystalgui.widget.graph.GraphNode;
-import com.crystalgui.widget.graph.GraphView;
+import com.crystalgui.widget.graph.GraphContext;
 
 import javax.annotation.Nullable;
 import java.util.HashSet;
@@ -22,7 +22,7 @@ import java.util.Set;
  * <h3>What this class is actually for</h3>
  * <p>The renderer knows how to draw <em>one</em> preview and the pool knows how many may exist. Neither
  * knows when a graph changed or which nodes are on screen — both of which are the editor's business. This
- * is that seam, and keeping it out of {@link GraphView} is deliberate: a graph view is a general widget
+ * is that seam, and keeping it out of {@link GraphContext} is deliberate: a graph view is a general widget
  * that must stay usable for a dialogue tree or a state machine, and it should not acquire a dependency on
  * a GLSL compiler because one consumer renders shaders.</p>
  *
@@ -38,7 +38,7 @@ import java.util.Set;
  */
 public final class ShaderGraphPreviews  {
 
-    private final GraphView view;
+    private final GraphContext view;
     private final CgShaderNodeRegistry shaderNodes;
     private final CgMasterNode master;
     private final CgPreviewRenderer renderer;
@@ -78,11 +78,11 @@ public final class ShaderGraphPreviews  {
         sinceRecompileRequest = 0f;
     }
 
-    public ShaderGraphPreviews(GraphView view, CgShaderNodeRegistry shaderNodes, CgMasterNode master) {
+    public ShaderGraphPreviews(GraphContext view, CgShaderNodeRegistry shaderNodes, CgMasterNode master) {
         this(view, shaderNodes, master, new CgPreviewRenderer());
     }
 
-    public ShaderGraphPreviews(GraphView view, CgShaderNodeRegistry shaderNodes, CgMasterNode master,
+    public ShaderGraphPreviews(GraphContext view, CgShaderNodeRegistry shaderNodes, CgMasterNode master,
                                CgPreviewRenderer renderer) {
         this.view = view;
         this.shaderNodes = shaderNodes;
@@ -90,7 +90,7 @@ public final class ShaderGraphPreviews  {
         this.renderer = renderer;
         // Any structural change invalidates every emitted source downstream of it, and working out
         // exactly which is more expensive than letting the source comparison decide per node.
-        view.onConnectionsChanged.connect(this::invalidate);
+        view.connectionsChanged().connect(this::invalidate);
     }
 
     public CgPreviewRenderer renderer() {
@@ -112,10 +112,9 @@ public final class ShaderGraphPreviews  {
      */
     public ShaderGraphPreviews attach() {
         for (GraphNode node : view.nodes()) attachTo(node);
-        var window = view.document();
         // NOT `this`: ShaderGraphPreviews is a scheduler rather than a node, so the hook is OWNED
-        // by the view it drives -- which is also what stops it outliving that view.
-        if (window != null) window.animation().every(view, this::tickFrame);
+        // by the surface it drives -- which is also what stops it outliving that surface.
+        view.everyFrame(this::tickFrame);
         // Dynamic port widths, colours and inline-editor shapes. Installed from here rather than left to
         // the caller because this class is what owns the "a field changed, recompile" hook a rebuilt
         // editor has to write through — the same one NodeFieldBinder is given below.
@@ -221,7 +220,7 @@ public final class ShaderGraphPreviews  {
         // NULL IS "NOT LAID OUT YET", which the paragraph above already counts as a reason to skip --
         // it simply could not be asked that way. A node has no box at all until it has been laid out,
         // and this ticker runs on the frame the graph is built.
-        Box box = view.box();
+        Box box = view.viewportBox();
         if (box == null || box.width() <= 0f || box.height() <= 0f) return true;
 
         // Newly added nodes get their slot here rather than through a second signal: the set is small,

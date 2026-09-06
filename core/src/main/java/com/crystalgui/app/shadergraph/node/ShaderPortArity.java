@@ -8,7 +8,7 @@ import com.crystalgui.graph.NodeField;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.graph.node.NodeFieldBinder;
 import com.crystalgui.widget.graph.GraphNode;
-import com.crystalgui.widget.graph.GraphView;
+import com.crystalgui.widget.graph.GraphContext;
 import com.crystalgui.widget.graph.NodePort;
 import com.crystalgui.graph.port.PortType;
 
@@ -66,28 +66,28 @@ public final class ShaderPortArity {
      * <p>Resolves once immediately — a graph loaded with edges already in it must read correctly before
      * anything is touched — then again on every connection change.</p>
      */
-    public static void install(GraphView view) {
+    public static void install(GraphContext view) {
         install(view, null);
     }
 
     /**
-     * As {@link #install(GraphView)}, but also rebuilding a dynamic port's inline editor to match the
+     * As {@link #install(GraphContext)}, but also rebuilding a dynamic port's inline editor to match the
      * width it resolves to — {@code B} becoming three boxes when a vec3 lands on {@code A}.
      *
      * @param onChange run after a rebuilt editor writes a value, for a caller that needs to recompile
      */
-    public static void install(GraphView view, @Nullable Runnable onChange) {
-        view.onConnectionsChanged.connect(() -> resolve(view, onChange));
+    public static void install(GraphContext view, @Nullable Runnable onChange) {
+        view.connectionsChanged().connect(() -> resolve(view, onChange));
         resolve(view, onChange);
     }
 
     /** Recomputes every dynamic port's displayed width. Cheap and idempotent; safe to call at any time. */
-    public static void resolve(GraphView view) {
+    public static void resolve(GraphContext view) {
         resolve(view, null);
     }
 
     /** @param onChange run after a rebuilt inline editor writes a value; null to leave editors alone */
-    public static void resolve(GraphView view, @Nullable Runnable onChange) {
+    public static void resolve(GraphContext view, @Nullable Runnable onChange) {
         GraphDocument document = view.getDocument();
         Map<String, GraphNode> byId = new HashMap<>();
         for (GraphNode node : view.nodes()) {
@@ -177,7 +177,7 @@ public final class ShaderPortArity {
      * keeping the value the user typed on every axis is what makes the widening feel like a change of
      * shape rather than a reset.</p>
      */
-    private static void rebuildInlineEditor(GraphView view, String nodeId, NodePort port, int arity,
+    private static void rebuildInlineEditor(GraphContext view, String nodeId, NodePort port, int arity,
                                             Runnable onChange) {
         if (!port.getDirection().isInput()) return;
         // No editor means the port never had a document-declared field — nothing to re-shape.

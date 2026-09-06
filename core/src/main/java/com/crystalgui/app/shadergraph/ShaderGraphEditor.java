@@ -2,7 +2,11 @@ package com.crystalgui.app.shadergraph;
 import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.app.shadergraph.blackboard.BlackboardPanel;
-import com.crystalgui.app.shadergraph.blackboard.PropertyPill;
+import com.crystalgui.app.shadergraph.extension.BlackboardExtension;
+import com.crystalgui.app.shadergraph.extension.GeneratedShaderExtension;
+import com.crystalgui.app.shadergraph.extension.NodeLibraryExtension;
+import com.crystalgui.app.shadergraph.extension.PreviewsExtension;
+import com.crystalgui.app.shadergraph.extension.ShaderSectionsExtension;
 import com.crystalgui.app.shadergraph.node.ShaderPropertyNodes;
 import com.crystalgui.app.shadergraph.preview.MainPreviewPanel;
 import com.crystalgui.app.shadergraph.preview.ShaderGraphPreviews;
@@ -23,18 +27,15 @@ import com.google.gson.JsonParser;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.graph.GraphCodecs;
-import com.crystalgui.core.settings.SettingsLayer;
 
 import com.crystalgraphics.shadergraph.CgMasterNode;
 import com.crystalgraphics.shadergraph.CgShaderEmitter;
-import com.crystalgraphics.shadergraph.CgShaderNodeRegistry;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.dispose.Disposer;
-import com.crystalgui.core.signal.Connection;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.core.notify.StatusBar;
 import com.crystalgui.core.notify.StatusBarAlignment;
@@ -43,7 +44,6 @@ import com.crystalgui.core.notify.StatusBarEntryAccessor;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.graph.NodeType;
 import com.crystalgui.graph.NodeTypeRegistry;
-import com.crystalgui.widget.graph.NodeWidgetFactory;
 import com.crystalgui.text.syntax.Language;
 import com.crystalgui.text.syntax.KeywordTokenizer;
 import com.crystalgui.style.sheet.StyleSheet;
@@ -54,7 +54,6 @@ import com.crystalgui.widget.graph.GraphCommands;
 import com.crystalgui.graph.GraphProperty;
 import com.crystalgui.graph.NodeData;
 import com.crystalgui.widget.graph.GraphNode;
-import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.widget.graph.GraphView;
 
 import com.crystalgraphics.shadergraph.CgShaderProblem;
@@ -69,14 +68,14 @@ import java.util.Map;
 import javax.annotation.Nullable;
 
 /**
- * A whole shader graph editor — the node canvas, the GLSL it emits, and the previews — as one widget.
+ * A whole shader graph editor — the node canvas, the GLSL it emits, and the shader().previews() — as one widget.
  *
  * <h3>Why this is a widget and not a scene</h3>
  *
  * <p>All of it lived in a harness scene, which meant the <b>only</b> assembled shader graph in existence
  * was owned by a debug tool. Everything here is application behaviour rather than demonstration: which
- * node library the canvas offers, that the emitted source is GLSL and read-only, that a connection change
- * recompiles, that previews attach once there is a window to tick them. A second consumer would have had
+ * node graph.getNodeLibrary() the canvas offers, that the emitted source is GLSL and read-only, that a connection change
+ * recompiles, that shader().previews() attach once there is a window to tick them. A second consumer would have had
  * to copy all of it, and the copy is where the two start disagreeing about what a shader graph is.</p>
  *
  * <p>What stays with a scene is genuinely scene-shaped: buttons, hint text, and where the status line is
@@ -198,10 +197,35 @@ public class ShaderGraphEditor extends UIElement
     private static final String OWNER_PREVIEW = "shadergraph.preview";
     private static final String OWNER_GRAPH = "shadergraph.graph";
 
-    private final CgShaderNodeRegistry shaderNodes = CgShaderNodeRegistry.builtins();
-    private final CgMasterNode master = new CgMasterNode();
+    /**
+     * The five features that make a node graph a SHADER graph, by id.
+     *
+     * <p>A {@code GraphView} enabling none of them is a plain node editor — which is the whole point of
+     * the seam. Each one is discovered on the classpath and reaches the graph through
+     * {@link com.crystalgui.widget.graph.GraphContext}, never through this editor.</p>
+     */
+    private static final List<String> SHADER_EXTENSIONS = List.of(
+            NodeLibraryExtension.ID,
+            GeneratedShaderExtension.ID,
+            PreviewsExtension.ID,
+            BlackboardExtension.ID,
+            ShaderSectionsExtension.ID);
 
-    private final GraphView graph = new GraphView();
+    /** The last view state read, held until the panels exist. @see #applyPendingViewState */
+    private boolean previewsAttached;
+
+    private boolean mainPreviewAttached;
+
+    private String pendingPreviewRect = "";
+
+    private String pendingBoardRect = "";
+
+    /** The shader domain's shared state, per document. @see ShaderGraphServices */
+    private ShaderGraphServices shader() {
+        return ShaderGraphServices.of(graph.getDocument());
+    }
+
+    private final GraphView graph = new GraphView(SHADER_EXTENSIONS);
 
     /** Kept compiled and never parented — see the class note on why this widget does not contain it. */
     private final TextEditor source = new TextEditor();
@@ -209,14 +233,8 @@ public class ShaderGraphEditor extends UIElement
     /** Marked internal exactly ONCE, while empty -- see the constructor for what stamping a populated
      * subtree cost. */
     private final UIElement content = new UIElement();
-    private final NodeTypeRegistry library;
 
-    private final ShaderGraphPreviews previews;
-    private final MainPreviewPanel mainPreview;
-    private final BlackboardPanel blackboard;
 
-    private boolean previewsAttached;
-    private boolean mainPreviewAttached;
 
     @Nullable
     private CgShaderEmitter.Result lastCompile;
@@ -232,7 +250,7 @@ public class ShaderGraphEditor extends UIElement
         graph.addClass(GRAPH_CLASS);
         source.addClass(SOURCE_CLASS);
 
-        // The library IS the shader node set -- the create menu, its search and the widget factory all
+        // The graph.getNodeLibrary() IS the shader node set -- the create menu, its search and the widget factory all
         // come from one bridge call, so there is no shader-specific UI code anywhere below this line.
         // THIS ENGINE'S FIELD WIDGETS, which `ShaderNodeLibrary.of` cannot install.
         //
@@ -245,12 +263,8 @@ public class ShaderGraphEditor extends UIElement
         //
         // INSTALLED BY `ShaderNodeLibrary.of`, on the line below, and it used to be done here as well.
         // Two sites is the shape that leaves a third one out: the helper's whole argument is that
-        // building a library IS the moment the shader domain's vocabulary has to exist, so anything that
+        // building a graph.getNodeLibrary() IS the moment the shader domain's vocabulary has to exist, so anything that
         // builds one gets the widgets and anything that does not needs no line at all.
-        library = ShaderNodeLibrary.of(shaderNodes);
-        graph.setNodeLibrary(library, propertyAwareFactory(NodeWidgetFactory.of(library).build()),
-                ShaderGraphBridge.GLSL_PROMOTION);
-
         source.setReadOnly(true);
         // The generated file IS GLSL, so it gets the GLSL language and tokenizer rather than being shown
         // as plain text. Colours come from the user-agent sheet, which styles what a tokenizer publishes.
@@ -262,7 +276,7 @@ public class ShaderGraphEditor extends UIElement
         //
         // append(graph) would be the obvious line and it is what hung both scenes.
         // markAsInternal() RECURSES, so it stamps the GraphView, its canvas and every node and preview
-        // under them -- and removeChild/clearAllChildren SILENTLY REFUSE internal children. The previews
+        // under them -- and removeChild/clearAllChildren SILENTLY REFUSE internal children. The shader().previews()
         // add and retire a thumbnail per node as the graph changes, so every retirement was declined, the
         // tree grew without bound, and layout took longer every frame until the window stopped
         // responding. The thread dump was pure Taffy, which reads as a layout cycle and is really an
@@ -274,69 +288,15 @@ public class ShaderGraphEditor extends UIElement
         append(content);
         content.append(graph);
 
-        // A connection is a discrete user action, so this needs no debouncing; a per-keystroke trigger
-        // would (6.3.8).
-        graph.onConnectionsChanged.connect(this::recompile);
-
-        previews = new ShaderGraphPreviews(graph, shaderNodes, master);
-        // A dropdown on a node changes the emitted GLSL but not the graph's SHAPE, so
-        // onConnectionsChanged never fires for it -- without this the source pane silently shows the
-        // previous variant.
-        previews.onPropertyChanged.connect(this::recompile);
-
-        // Over the canvas, not beside it: addOverlay puts it in the viewport rather than on the plane, so
-        // it stays put while the graph pans underneath -- which is what "floating preview" means.
-        // Deliberately NOT promoted to the top layer, which would put it above every dialog too.
-        mainPreview = new MainPreviewPanel(graph.getDocument(), shaderNodes, master);
-        graph.addOverlay(mainPreview);
-
-        // The Blackboard is the SECOND consumer of the overlay seam, which is what makes it worth
-        // having been a seam. Same viewport placement, same clamp -- see CanvasOverlayMove.
-        blackboard = new BlackboardPanel(graph.getDocument(), "shader_graph", graph.undoStack());
-        // THE PILL AND THE NODE ARE TWO VIEWS OF ONE PROPERTY, so selecting either lights both. Unity
-        // does the same, and it is what makes a board of a dozen properties navigable: click a pill to
-        // find its nodes, click a node to find its pill.
-        //
-        // The loop this obviously risks closes itself: both GraphSelection.replaceWith and
-        // BlackboardPanel.select return early when handed what they already hold, so the second hop is
-        // a no-op rather than a bounce.
-        blackboard.onPropertySelected.connect(this::highlightNodesForProperty);
-        graph.getSelection().onChanged.connect(this::syncBoardToGraphSelection);
-        // A rename, a retype or an Exposed toggle has to reach the nodes reading that property -- they
-        // show what it IS, not a copy taken when they were made.
-        graph.getDocument().onChanged.connect(this::syncPropertyNodes);
-        graph.addOverlay(blackboard);
-        installPropertyDrop();
+        // WHAT THE EXTENSIONS BUILT, shown. The compile itself is GeneratedShaderExtension's and
+        // reaches every viewer of this document, so a second pane onto one graph costs no second
+        // compile -- this editor is a listener like any other.
+        shader().compiled.connect(this::showCompiled);
+        // A session can be restored before the surface is attached, which is when the extensions come
+        // up. Applied when the panels arrive rather than dropped.
+        shader().panelsReady.connect(this::applyPendingViewState);
 
         recompile();
-    }
-
-    /**
-     * The widget factory, taught about property nodes.
-     *
-     * <p><b>A property node's type is synthesised per property and never registered</b>, which is
-     * deliberate — a type per declared property would put the Blackboard's contents in the create menu.
-     * The consequence is that {@code GraphView} cannot look one up: {@code nodeLibrary.get("cg:property")}
-     * is null, so it built a plain node from the ports the document stored and a property came back from a
-     * file as an ordinary two-row box with the capsule styling gone.</p>
-     *
-     * <p>Fixed at the factory rather than after the fact, because every path that makes a widget goes
-     * through it — loading a file, undoing a delete, a server sync, the create menu — and patching them up
-     * afterwards would mean finding all of them, and finding each new one.</p>
-     */
-    private NodeWidgetFactory propertyAwareFactory(NodeWidgetFactory base) {
-        return (type, data) -> {
-            if (!ShaderPropertyNodes.isPropertyNode(data)) return base.create(type, data);
-            // Resolved from the DOCUMENT, not from the stored type: the node holds a property id, and what
-            // that property currently is -- its name, its type, whether it is exposed -- lives on the
-            // Blackboard. A property deleted while the file was closed resolves to null, which typeFor
-            // turns into the "Missing Property" node rather than a crash.
-            GraphProperty property = ShaderPropertyNodes.resolve(graph.getDocument(), data);
-            GraphNode node = base.create(ShaderPropertyNodes.typeFor(property), data);
-            node.addClass(ShaderPropertyNodes.NODE_CLASS);
-            ShaderPropertyNodes.sync(node, property);
-            return node;
-        };
     }
 
     public GraphView graph() {
@@ -354,117 +314,24 @@ public class ShaderGraphEditor extends UIElement
     }
 
     public NodeTypeRegistry library() {
-        return library;
+        return graph.getNodeLibrary();
     }
 
     /** The floating preview, so a second host can share its view state rather than keep a copy. */
     public MainPreviewPanel mainPreview() {
-        return mainPreview;
+        return shader().mainPreview();
     }
 
     /**
      * Lets a property pill be dropped on the canvas, where it becomes a node reading that property.
      *
      * <p>Wired HERE rather than in {@code GraphView}, which knows nothing about shaders and should not:
-     * a graph view drops whatever its host teaches it to. This is the same seam the node library and the
+     * a graph view drops whatever its host teaches it to. This is the same seam the node graph.getNodeLibrary() and the
      * type-promotion rules already come through.</p>
      *
      * <p><b>Rejection is the default</b>, so accepting is an explicit {@code preventDefault()} on every
      * {@code DragOver} — re-read per frame and never latched, which is HTML5 drag-and-drop's one good
      * idea. Without it the drop never arrives and the gesture silently does nothing.</p>
-     */
-    private void installPropertyDrop() {
-        graph.events.getGroup(DragEvent.Over.class).attachListener((element, event) -> {
-            if (event.getPayload() instanceof PropertyPill.Payload) event.preventDefault();
-        }, false, true);
-
-        graph.events.getGroup(DragEvent.Drop.class).attachListener((element, event) -> {
-            if (!(event.getPayload() instanceof PropertyPill.Payload dropped)) return;
-            GraphProperty property = graph.getDocument().property(dropped.propertyId());
-            // Gone between the press and the release -- deleted from the board mid-drag. Dropping a node
-            // that references nothing would create an error node for no reason the user could see.
-            if (property == null) return;
-
-            var world = graph.screenToWorld(event.getPosition().x(), event.getPosition().y());
-            NodeData data = ShaderPropertyNodes.create(property, world.x(), world.y());
-
-            // ADDED TO THE DOCUMENT FIRST, and that order is load-bearing.
-            //
-            // GraphView.addNode derives a node's data from the WIDGET when the document does not already
-            // know the id -- and for a library-typed widget it derives `properties = Map.of()`, on the
-            // reasonable assumption that a type's defaults can be rebuilt from the type. A property
-            // node's `propertyId` is instance state and its type is synthesised per property and never
-            // registered, so there is nothing to rebuild it from: the reference was dropped on the way
-            // in and every node came back as "Missing Property" the moment anything re-read it.
-            //
-            // Pre-adding makes dataFor find the real record and keep it. attachNode skips an id it
-            // already has, so this is idempotent rather than a double insert.
-            graph.getDocument().addNode(data);
-
-            GraphNode node = graph.getNodeFactory().create(
-                    ShaderPropertyNodes.typeFor(property), data);
-            ShaderPropertyNodes.decorate(node, property);
-            graph.addNode(node, world.x(), world.y());
-            recompile();
-            event.stopPropagation();
-        }, false, true);
-    }
-
-    /**
-     * Marks every node reading {@code propertyId}, so picking a pill shows where it is used.
-     *
-     * <p>A HIGHLIGHT, never the graph selection. Selecting them was the first implementation and it made
-     * dragging one node drag every other node reading the same property — because a selection is exactly
-     * "the things a drag moves". Answering "where is this used?" must not also answer "what am I about
-     * to move?".</p>
-     */
-    private void highlightNodesForProperty(@Nullable String propertyId) {
-        for (GraphNode node : graph.nodes()) {
-            String id = ShaderPropertyNodes.propertyIdOf(graph.getDocument().node(node.getNodeId()));
-            boolean linked = propertyId != null && propertyId.equals(id);
-            if (linked == node.hasClass(ShaderPropertyNodes.LINKED_CLASS)) continue;
-            // addClass/removeClass invalidate the style match themselves, so nothing else is needed.
-            if (linked) node.addClass(ShaderPropertyNodes.LINKED_CLASS);
-            else node.removeClass(ShaderPropertyNodes.LINKED_CLASS);
-        }
-    }
-
-    /**
-     * Points the board at the selected node's property, or clears it.
-     *
-     * <p>Only for a property node. Selecting an ordinary node clears the board, because the inspector
-     * then has a node to show and a lit pill would claim otherwise.</p>
-     */
-    private void syncBoardToGraphSelection() {
-        String property = null;
-        for (GraphNode node : graph.getSelection().nodes()) {
-            String id = ShaderPropertyNodes.propertyIdOf(graph.getDocument().node(node.getNodeId()));
-            if (id == null) continue;
-            property = id;
-            break;
-        }
-        blackboard.select(property);
-    }
-
-    /** Re-reads every property node from the document. @see ShaderPropertyNodes#sync */
-    private void syncPropertyNodes() {
-        for (GraphNode node : graph.nodes()) {
-            NodeData data = graph.getDocument().node(node.getNodeId());
-            if (!ShaderPropertyNodes.isPropertyNode(data)) continue;
-            ShaderPropertyNodes.sync(node, ShaderPropertyNodes.resolve(graph.getDocument(), data));
-        }
-    }
-
-    /**
-     * Publishes this graph's ambient state while its tab is in front, and withdraws it when it is not.
-     *
-     * <p>The bug this fixes was visible and easy to misread: the compile summary sat on the status bar
-     * while a plain text file was open, because a status item is written once and stays until somebody
-     * takes it away. Nobody did — a graph goes on compiling in the background, so it kept re-asserting a
-     * fact about a document you were not looking at.</p>
-     *
-     * <p>The line-owner readout is not restored on activation, deliberately: it describes where the caret
-     * is in the generated source, and there is no caret in it until you look at it again.</p>
      */
     @Override
     public void activated(boolean active) {
@@ -597,7 +464,9 @@ public class ShaderGraphEditor extends UIElement
      * and until now its only consumer was the caret readout in the status bar.</p>
      */
     private void addDriverProblems(List<Diagnostic> into, CgShaderEmitter.Result result) {
-        String driver = mainPreview.lastDriverError();
+        MainPreviewPanel panel = shader().mainPreview();
+        if (panel == null) return;
+        String driver = panel.lastDriverError();
         publishedDriverError = driver;
         if (driver == null) return;
         int line = glslLineOf(driver);
@@ -646,7 +515,9 @@ public class ShaderGraphEditor extends UIElement
      * no explanation is indistinguishable from one that has not rendered yet.</p>
      */
     private void addPreviewProblems(List<Diagnostic> into) {
-        previews.renderer().failures().forEach((nodeId, reasons) -> {
+        ShaderGraphPreviews built = shader().previews();
+        if (built == null) return;
+        built.renderer().failures().forEach((nodeId, reasons) -> {
             for (CgShaderProblem reason : reasons) {
                 into.add(new Diagnostic(Diagnostic.NO_POSITION, Diagnostic.NO_POSITION,
                         DiagnosticSeverity.WARNING,
@@ -694,12 +565,12 @@ public class ShaderGraphEditor extends UIElement
     private void addUnknownNodeProblems(List<Diagnostic> into) {
         for (NodeData data : graph.getDocument().nodes()) {
             String typeId = data.typeId();
-            // The two the registry legitimately does not hold: the master is the compiler's own object, and
+            // The two the registry legitimately does not hold: the shader().master() is the compiler's own object, and
             // a property node is synthesised from the document's declarations rather than registered.
             if (ShaderGraphBridge.MASTER_TYPE.equals(typeId) || ShaderPropertyNodes.isPropertyNode(data)) {
                 continue;
             }
-            if (shaderNodes.get(typeId) != null) continue;
+            if (shader().nodes().get(typeId) != null) continue;
             into.add(new Diagnostic(Diagnostic.NO_POSITION, Diagnostic.NO_POSITION,
                     DiagnosticSeverity.ERROR,
                     "No definition for node type '" + typeId + "' in this build — it is kept in the"
@@ -806,8 +677,9 @@ public class ShaderGraphEditor extends UIElement
         // preview was marked, so a restored Blackboard ignored the canvas shrinking until it had been
         // grabbed once -- at which point it started tracking correctly and looked like a redraw problem
         // rather than a flag that nothing but a drag ever set.
-        if (applyRect(mainPreview, settings.raw(VIEW_PREVIEW_RECT))) mainPreview.markPlaced();
-        if (applyRect(blackboard, settings.raw(VIEW_BLACKBOARD_RECT))) blackboard.markPlaced();
+        pendingPreviewRect = String.valueOf(settings.raw(VIEW_PREVIEW_RECT));
+        pendingBoardRect = String.valueOf(settings.raw(VIEW_BLACKBOARD_RECT));
+        applyPendingViewState();
     }
 
     /**
@@ -826,9 +698,9 @@ public class ShaderGraphEditor extends UIElement
         out.putFloat(VIEW_PAN_Y, graph.getPanY());
         // ONLY WHEN THERE IS A BOX TO RECORD. An unmeasured panel yields "", and writing that would
         // erase a good rect rather than leave the one already stored.
-        String preview = rectOf(mainPreview);
+        String preview = rectOf(shader().mainPreview());
         if (!preview.isEmpty()) out.putString(VIEW_PREVIEW_RECT, preview);
-        String board = rectOf(blackboard);
+        String board = rectOf(shader().blackboard());
         if (!board.isEmpty()) out.putString(VIEW_BLACKBOARD_RECT, board);
     }
 
@@ -844,8 +716,9 @@ public class ShaderGraphEditor extends UIElement
         }
         // A RESTORED POSITION IS A DELIBERATE ONE, and each panel has to be TOLD -- the re-clamp that
         // tracks a resizing canvas is gated on having been placed, which only a drag otherwise sets.
-        if (applyRect(mainPreview, in.getString(VIEW_PREVIEW_RECT, ""))) mainPreview.markPlaced();
-        if (applyRect(blackboard, in.getString(VIEW_BLACKBOARD_RECT, ""))) blackboard.markPlaced();
+        pendingPreviewRect = in.getString(VIEW_PREVIEW_RECT, "");
+        pendingBoardRect = in.getString(VIEW_BLACKBOARD_RECT, "");
+        applyPendingViewState();
     }
 
     @Nullable
@@ -862,12 +735,12 @@ public class ShaderGraphEditor extends UIElement
 
     /** The floating property board. @see BlackboardPanel */
     public BlackboardPanel blackboard() {
-        return blackboard;
+        return shader().blackboard();
     }
 
-    /** The compiler-side master. Written only at compile time — see {@link ShaderGraphSettings}. */
+    /** The compiler-side shader().master(). Written only at compile time — see {@link ShaderGraphSettings}. */
     public CgMasterNode master() {
-        return master;
+        return shader().master();
     }
 
     /** The last emit, or null before the first compile. */
@@ -884,24 +757,33 @@ public class ShaderGraphEditor extends UIElement
      * <p>Errors are reported rather than swallowed: a graph that cannot compile is the <b>normal</b> state
      * while one is being built, so this is a status message and not an error path.</p>
      */
-    public void recompile() {
-        // THE THUMBNAILS TOO. A property node bakes its default into the preview shader as a literal --
-        // it has to, since a preview has no Properties block and no material to set a uniform -- so
-        // editing a property's Default leaves every thumbnail downstream showing the OLD value until the
-        // preview graph is rebuilt. The previews rebuild themselves for a node field and for a resolved
-        // port width, but a property is edited through a different path and told them nothing: a Float
-        // changed from 0 to 1 left its Multiply thumbnail black while the Main Preview went white.
-        //
-        // Cheap: requestRecompile is debounced, and this already runs only on real changes.
-        // Null-guarded because `graph.onConnectionsChanged` is wired BEFORE the previews are built, so a
-        // connection change raised during their construction would reach this with the field still unset.
-        if (previews != null) {
-            previews.invalidate();
-            previews.requestRecompile();
-        }
+    /**
+     * Puts the last-read panel rectangles back, once there are panels to put them on.
+     *
+     * <p>A session is restored before the surface is attached, and the extensions that build these come
+     * up on attach — so this runs twice: once optimistically, once when the panels announce themselves.
+     * <b>A restored position is a deliberate one and each panel has to be TOLD</b>, or the re-clamp that
+     * tracks a resizing canvas stays gated on a drag that never happened.</p>
+     */
+    private void applyPendingViewState() {
+        MainPreviewPanel panel = shader().mainPreview();
+        if (panel != null && applyRect(panel, pendingPreviewRect)) panel.markPlaced();
+        BlackboardPanel board = shader().blackboard();
+        if (board != null && applyRect(board, pendingBoardRect)) board.markPlaced();
+    }
 
-        CgShaderEmitter.Result result =
-                ShaderGraphBridge.compile(graph.getDocument(), shaderNodes, master);
+    public void recompile() {
+        shader().requestRecompile();
+    }
+
+    /**
+     * Shows a finished compile: the source pane, the status entry and the problems.
+     *
+     * <p>A listener rather than the tail of {@code recompile}, because the compile belongs to
+     * {@code GeneratedShaderExtension} and reaches every viewer of this document — a second pane onto
+     * one graph shows the same result without a second compile.</p>
+     */
+    private void showCompiled(CgShaderEmitter.Result result) {
         lastCompile = result;
 
         source.setText(result.source().isEmpty()
@@ -953,7 +835,7 @@ public class ShaderGraphEditor extends UIElement
     // ── Content ─────────────────────────────────────────────────────────────────────────────────
 
     /**
-     * Seeds the canvas with a small working graph: {@code Color * Time} into the master, plus the three
+     * Seeds the canvas with a small working graph: {@code Color * Time} into the shader().master(), plus the three
      * geometry inputs left unwired.
      *
      * <p>Opt-in rather than automatic, because an editor opening a saved document must not have anything
@@ -963,24 +845,24 @@ public class ShaderGraphEditor extends UIElement
      * to be the point.</p>
      */
     public ShaderGraphEditor addStarterGraph() {
-        GraphNode colour = addNode(library.get("cg:Input/Basic/color"), 20f, 30f);
-        GraphNode time = addNode(library.get("cg:Input/Basic/time"), 20f, 150f);
-        GraphNode multiply = addNode(library.get("cg:Math/Basic/multiply"), 240f, 60f);
-        GraphNode output = addNode(library.get(ShaderGraphBridge.MASTER_TYPE), 470f, 60f);
+        GraphNode colour = addNode(graph.getNodeLibrary().get("cg:Input/Basic/color"), 20f, 30f);
+        GraphNode time = addNode(graph.getNodeLibrary().get("cg:Input/Basic/time"), 20f, 150f);
+        GraphNode multiply = addNode(graph.getNodeLibrary().get("cg:Math/Basic/multiply"), 240f, 60f);
+        GraphNode output = addNode(graph.getNodeLibrary().get(ShaderGraphBridge.MASTER_TYPE), 470f, 60f);
 
         graph.connect(colour.getOutputPorts().get(0), multiply.getInputPorts().get(0));
         graph.connect(time.getOutputPorts().get(0), multiply.getInputPorts().get(1));
         graph.connect(multiply.getOutputPorts().get(0), output.getInputPorts().get(1));
 
-        addNode(library.get("cg:Input/Geometry/uv"), 20f, 330f);
-        addNode(library.get("cg:Input/Geometry/position"), 240f, 330f);
-        addNode(library.get("cg:Input/Geometry/normal"), 460f, 330f);
+        addNode(graph.getNodeLibrary().get("cg:Input/Geometry/uv"), 20f, 330f);
+        addNode(graph.getNodeLibrary().get("cg:Input/Geometry/position"), 240f, 330f);
+        addNode(graph.getNodeLibrary().get("cg:Input/Geometry/normal"), 460f, 330f);
 
         recompile();
         return this;
     }
 
-    /** Builds a widget for a library type and places it, keeping the document binding the factory does. */
+    /** Builds a widget for a graph.getNodeLibrary() type and places it, keeping the document binding the factory does. */
     public GraphNode addNode(NodeType type, float x, float y) {
         GraphNode node = graph.getNodeFactory().create(type, type.create(x, y));
         graph.addNode(node, x, y);
@@ -998,7 +880,7 @@ public class ShaderGraphEditor extends UIElement
      * Registers the attach ticker once there is a window. <b>Registration only — never the attach.</b>
      *
      * <p>{@code onLayoutChanged} runs <em>inside</em> {@code calculateLayout()}'s
-     * {@code while (isLayoutDirty())} loop, and attaching the previews adds elements. Doing it here
+     * {@code while (isLayoutDirty())} loop, and attaching the shader().previews() adds elements. Doing it here
      * re-dirties the tree on every pass, so the loop never terminates and the window hangs before it
      * paints a frame. It is not a slow frame — it is an infinite one.</p>
      *
@@ -1046,7 +928,7 @@ public class ShaderGraphEditor extends UIElement
      * against a value that changes about once a minute.</p>
      */
     private boolean watchDriverError(float deltaSeconds) {
-        String current = mainPreview.lastDriverError();
+        String current = shader().mainPreview().lastDriverError();
         if (!java.util.Objects.equals(current, publishedDriverError) && lastCompile != null) {
             publishProblems(lastCompile);
         }
@@ -1147,15 +1029,20 @@ public class ShaderGraphEditor extends UIElement
         ensureGraphTheme();
         // Commands are NOT installed here: GraphView installs its own, so a bare graph anywhere gets
         // Delete, Space, F and Ctrl+Z without a host remembering to ask for them.
+        ShaderGraphPreviews built = shader().previews();
+        MainPreviewPanel panel = shader().mainPreview();
+        // Null until the surface is attached and PreviewsExtension has run, which can be later than the
+        // first tick of this ticker -- so it keeps itself alive rather than giving up.
+        if (built == null || panel == null) return true;
         if (!previewsAttached) {
-            previews.attach();
+            built.attach();
             previewsAttached = true;
         }
         if (!mainPreviewAttached) {
-            mainPreviewAttached = mainPreview.attach();
+            mainPreviewAttached = panel.attach();
             if (mainPreviewAttached) ownGlParts();
         }
-        // NOTHING PER-FRAME BELONGS HERE. This ticker drops itself the moment both previews are up, so a
+        // NOTHING PER-FRAME BELONGS HERE. This ticker drops itself the moment both shader().previews() are up, so a
         // standing job parked in it runs for two frames and then stops -- which is exactly what happened to
         // the Blackboard's re-clamp. It ticks itself now; see BlackboardPanel.tickFrame.
         return !(previewsAttached && mainPreviewAttached);
@@ -1194,8 +1081,9 @@ public class ShaderGraphEditor extends UIElement
      */
     @Override
     public void dispose() {
-        if (previewsAttached) {
-            previews.delete();
+        ShaderGraphPreviews built = shader().previews();
+        if (previewsAttached && built != null) {
+            built.delete();
             previewsAttached = false;
         }
         mainPreviewAttached = false;
@@ -1209,7 +1097,7 @@ public class ShaderGraphEditor extends UIElement
      * Registration is how that stops being something somebody has to remember.</p>
      */
     private void ownGlParts() {
-        Disposer.register(this, mainPreview);
+        Disposer.register(this, shader().mainPreview());
     }
     
 
@@ -1279,7 +1167,8 @@ public class ShaderGraphEditor extends UIElement
         //
         // Without the extension, like Unity's asset name and like the graph itself: the tab beside it
         // already carries "new.shadergraph", so repeating the suffix here says nothing twice.
-        blackboard.setDocumentName(resource == null ? "" : stripExtension(resource.name()));
+        BlackboardPanel board = shader().blackboard();
+        if (board != null) board.setDocumentName(resource == null ? "" : stripExtension(resource.name()));
         return this;
     }
 
@@ -1368,7 +1257,7 @@ public class ShaderGraphEditor extends UIElement
      * would leave every one of them driving a document nobody was showing.</p>
      *
      * <p>Not undoable, and the view clears the stack: a file is the starting state, not something the
-     * user did. The previews are invalidated and the source pane recompiled, because nothing else fires
+     * user did. The shader().previews() are invalidated and the source pane recompiled, because nothing else fires
      * for a wholesale replacement — {@code onConnectionsChanged} covers the wires, but a graph loaded
      * with no edges at all would otherwise show the previous file's generated GLSL.</p>
      *
@@ -1423,12 +1312,14 @@ public class ShaderGraphEditor extends UIElement
             graph.undoStack().clear();
         }
         // The property nodes carry a title and an exposed dot read back out of the properties they
-        // reference, and nothing re-derives those for a load: syncPropertyNodes runs on document change,
-        // and the emit that load ends with arrives before these widgets have been rebuilt.
-        syncPropertyNodes();
-        if (previews != null) {
-            previews.invalidate();
-            previews.requestRecompile();
+        // reference, and nothing re-derives those for a load: the blackboard re-syncs them on document
+        // change, and the emit that load ends with arrives BEFORE these widgets have been rebuilt. A
+        // second emit is a no-op for every listener -- they re-read the document rather than taking a
+        // payload -- and a missing one is a graph of blank property nodes.
+        graph.getDocument().onChanged.emit();
+        if (shader().previews() != null) {
+            shader().previews().invalidate();
+            shader().previews().requestRecompile();
         }
         recompile();
     }
