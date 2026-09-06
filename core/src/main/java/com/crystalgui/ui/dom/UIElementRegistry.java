@@ -35,7 +35,8 @@ public final class UIElementRegistry {
     private static final Map<Name, Entry> ENTRIES = new ConcurrentHashMap<>();
 
     /** {@code factory} is null for a cascade-only kind — see {@link #registerTag}. */
-    private record Entry(@Nullable Supplier<? extends UIElement> factory, NodeContract contract) {
+    private record Entry(@Nullable Supplier<? extends UIElement> factory, NodeContract contract,
+                        KindInfo info) {
     }
 
     /**
@@ -103,10 +104,26 @@ public final class UIElementRegistry {
     }
 
     public static void register(Name name, Supplier<? extends UIElement> factory, NodeContract contract) {
+        register(name, factory, contract, KindInfo.derived());
+    }
+
+    /**
+     * As above, saying where the kind files and what else it is called.
+     *
+     * <pre>{@code
+     * register(Button.NAME, Button::new, CONTRACT,
+     *         KindInfo.of("Controls").synonyms("press", "click"));
+     * }</pre>
+     *
+     * <p>Read by anything that LISTS kinds — an Insert menu, a Library panel — so both file and search
+     * them identically. A kind registered without one gets {@link KindInfo#derived}.</p>
+     */
+    public static void register(Name name, Supplier<? extends UIElement> factory, NodeContract contract,
+            KindInfo info) {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(factory, "factory");
         Objects.requireNonNull(contract, "contract");
-        ENTRIES.put(name, new Entry(factory, contract));
+        ENTRIES.put(name, new Entry(factory, contract, info == null ? KindInfo.derived() : info));
     }
 
     /**
@@ -129,7 +146,18 @@ public final class UIElementRegistry {
     public static void registerTag(Name name, NodeContract contract) {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(contract, "contract");
-        ENTRIES.put(name, new Entry(null, contract));
+        ENTRIES.put(name, new Entry(null, contract, KindInfo.derived()));
+    }
+
+    /**
+     * Where a kind files and what else it is called — {@link KindInfo#derived} for one that said nothing.
+     *
+     * <p>Never null, so a picker needs no branch for a kind that declared nothing about itself.</p>
+     */
+    public static KindInfo infoOf(Name name) {
+        bootstrap();
+        Entry entry = ENTRIES.get(name);
+        return entry == null ? KindInfo.derived() : entry.info();
     }
 
     /** Whether this kind can be BUILT, as opposed to merely existing for the cascade. */

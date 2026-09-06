@@ -51,7 +51,9 @@ import com.crystalgui.widget.graph.GraphView;
 import com.crystalgui.widget.graph.NodePort;
 import com.crystalgui.widget.graph.NodeWireLayer;
 import com.crystalgui.widget.graph.node.NodeCreationMenu;
+import com.crystalgui.widget.composite.CreateMenu;
 import com.crystalgui.widget.surface.SurfaceEditor;
+import com.crystalgui.widget.surface.insert.InsertMenu;
 import com.crystalgui.widget.layout.PageStack;
 import com.crystalgui.widget.layout.SplitView;
 import com.crystalgui.widget.layout.Tab;
@@ -183,6 +185,11 @@ public final class Widgets implements NodeKinds {
         // graph's reason -- a surface's state is its consumer's document -- and the kind is what lets a
         // sheet name `surface` at all.
         UIElementRegistry.registerTag(SurfaceEditor.NAME, NodeContract.INERT);
+        // THE SEARCH MENU and the engine's Add menu over it. INERT: what a menu lists is its consumer's
+        // library, which is not something a description could carry. InsertMenu is cascade-only -- it is
+        // built with the surface it belongs to, so a registry has no way to make one.
+        UIElementRegistry.register(CreateMenu.NAME, () -> new CreateMenu<>("Create"), NodeContract.INERT);
+        UIElementRegistry.registerTag(InsertMenu.NAME, NodeContract.INERT);
 
         // ── 6.2: the config kit ─────────────────────────────────────────────────────
         //

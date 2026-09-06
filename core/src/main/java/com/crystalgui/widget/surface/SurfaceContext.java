@@ -13,6 +13,7 @@ import java.util.List;
 
 import com.crystalgui.widget.surface.edit.Clipboard;
 import com.crystalgui.widget.surface.edit.Edits;
+import com.crystalgui.widget.surface.insert.InsertSource;
 import com.crystalgui.widget.surface.mode.Cursors;
 import com.crystalgui.widget.surface.mode.Modes;
 import com.crystalgui.widget.surface.mode.ToolKind;
@@ -85,6 +86,9 @@ public interface SurfaceContext {
 
     /** Every overlay registered here, in registration order — what a View menu lists. */
     List<OverlayKind> overlayKinds();
+
+    /** Every source of things to insert, in registration order — what the Add menu merges. */
+    List<InsertSource> insertSources();
 
     Disposable registerTool(ToolKind kind);
 

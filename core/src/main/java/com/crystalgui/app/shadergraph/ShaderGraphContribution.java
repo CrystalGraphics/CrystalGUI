@@ -13,6 +13,7 @@ import com.crystalgui.widget.config.inspector.InspectorRegistry;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentKind;
 import com.crystalgui.workbench.WorkbenchContext;
+import com.crystalgui.workbench.editor.DerivedView;
 import com.crystalgui.workbench.extension.WorkbenchExtension;
 
 import javax.annotation.Nullable;
@@ -165,15 +166,18 @@ public final class ShaderGraphContribution implements WorkbenchExtension {
         return (dot < 0 ? name : name.substring(0, dot)) + "_compiled.shader";
     }
 
+    /**
+     * The generated shader as a derived tab: one per graph, beside it, read-only.
+     *
+     * <p>What a tab is <em>of</em> lives in its own resource, which is what makes the way back a parse
+     * rather than a map kept beside the document store. @see DerivedView</p>
+     */
+    private static final DerivedView GENERATED =
+            DerivedView.of(SOURCE_TYPE, SOURCE_SCHEME).titled(ShaderGraphContribution::titleFor);
+
     /** Opens the generated shader for {@code graph}, beside it. */
     public static boolean showGenerated(WorkbenchContext workbench, @Nullable ShaderGraphEditor graph) {
-        if (graph == null || graph.resource() == null) return false;
-        Resource generated = Resource.derived(SOURCE_SCHEME, graph.resource());
-        DockPanelRef ref = new DockPanelRef(SOURCE_TYPE)
-                .withState(DockPanelRef.PATH, generated.toString())
-                .withState(DockPanelRef.TITLE, titleFor(generated));
-        workbench.open(DockInput.of(ref), DockPlacement.with(graph), DockOpenOptions.ACTIVATE);
-        return true;
+        return graph != null && GENERATED.open(workbench, graph.resource(), graph);
     }
 
     /**
@@ -184,18 +188,8 @@ public final class ShaderGraphContribution implements WorkbenchExtension {
      */
     @Nullable
     private static ShaderGraphEditor graphFor(WorkbenchContext workbench, String rawResource) {
-        if (rawResource.isEmpty()) return null;
-        Resource parsed;
-        try {
-            parsed = Resource.parse(rawResource);
-        } catch (RuntimeException unparseable) {
-            return null;
-        }
-        // A session saved before this panel's state became a derived resource stored the graph's bare
-        // path, which parses as a project resource with no origin. Reading it as the origin itself costs
-        // one line against invalidating every saved layout that had the tab open.
-        Resource origin = parsed.origin() != null ? parsed.origin() : parsed;
-        if (!origin.isProject()) return null;
+        Resource origin = GENERATED.originOf(rawResource);
+        if (origin == null || !origin.isProject()) return null;
         Document document = workbench.documentFor(origin.asPath());
         return document != null && document.model() instanceof ShaderGraphEditor graph ? graph : null;
     }
