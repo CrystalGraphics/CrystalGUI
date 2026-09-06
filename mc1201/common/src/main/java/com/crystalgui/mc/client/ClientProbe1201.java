@@ -7,10 +7,16 @@ import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.window.SystemMenu;
 import com.crystalgui.desktop.window.WindowFrame;
+import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
+
+import com.crystalgui.mc.platform.Lifecycle1201;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
+import net.minecraft.client.gui.screens.ChatScreen;
+
+import org.lwjgl.glfw.GLFW;
 
 /**
  * A scripted client run: join a world, drive a fixed routine, photograph each step, quit.
@@ -48,6 +54,7 @@ public final class ClientProbe1201 {
         MINIMISE, SHOOT_MINIMISE_MID, SHOOT_MINIMISED,
         RESTORE, SHOOT_RESTORE_MID, SHOOT_RESTORED,
         JUMP_LIST, SHOOT_JUMP_LIST,
+        PIN, OPEN_CHAT, OVERLAY_CLICK, SHOOT_OVERLAY,
         QUIT, DONE
     }
 
@@ -116,6 +123,7 @@ public final class ClientProbe1201 {
                 }
                 break;
             case SHOOT_EDITOR:
+                say("fps on the desktop = " + mc.getFps());
                 shoot("editor-open");
                 step = Step.MINIMISE;
                 break;
@@ -182,6 +190,52 @@ public final class ClientProbe1201 {
             }
             case SHOOT_JUMP_LIST:
                 shoot("jump-list");
+                step = Step.PIN;
+                waitTicks = SETTLE;
+                break;
+            case PIN: {
+                WindowFrame frame = mainWindow();
+                if (frame == null) {
+                    say("no window to pin");
+                    step = Step.QUIT;
+                    return;
+                }
+                frame.setPinned(true);
+                // The jump list from the previous step is still promoted over the middle of the window,
+                // and a press there hits the menu rather than the editor under it.
+                UIDocument doc = CgUiScreen1201.window();
+                if (doc != null) doc.dismiss().lightDismiss(null);
+                // The pointer, parked over the window's middle: overlayHitTest reads the REAL cursor,
+                // so a synthesised press with the cursor elsewhere would answer about somewhere else.
+                parkPointerOver(frame);
+                say("pinned, pointer parked");
+                step = Step.OPEN_CHAT;
+                waitTicks = SETTLE;
+                break;
+            }
+            case OPEN_CHAT:
+                // A foreign screen, which is what turns the presentation into OVERLAY.
+                mc.setScreen(new ChatScreen(""));
+                step = Step.OVERLAY_CLICK;
+                waitTicks = SETTLE;
+                break;
+            case OVERLAY_CLICK:
+                // The loader's own entry points, so this exercises the chain a real click takes from
+                // ScreenEvent inward -- the hit test, the keyboard handover, the dispatch.
+                say("offering a press, a release and a key");
+                Lifecycle1201.offerMouse(0, true, 0f);
+                Lifecycle1201.offerMouse(0, false, 0f);
+                Lifecycle1201.offerKey(GLFW.GLFW_KEY_Z, (char) 0, true);
+                // A visible character: whether it lands in the buffer is the whole question, and the
+                // screenshot is the only place the answer shows.
+                Lifecycle1201.offerKey(0, 'Z', true);
+                Lifecycle1201.offerKey(GLFW.GLFW_KEY_Z, (char) 0, false);
+                step = Step.SHOOT_OVERLAY;
+                waitTicks = SETTLE;
+                break;
+            case SHOOT_OVERLAY:
+                say("fps in " + CgUiHud1201.presentation() + " = " + mc.getFps());
+                shoot("overlay");
                 step = Step.QUIT;
                 waitTicks = SETTLE;
                 break;
@@ -191,6 +245,17 @@ public final class ClientProbe1201 {
             default:
                 break;
         }
+    }
+
+    /** Puts the OS cursor over the middle of {@code frame}, in surface pixels. */
+    private static void parkPointerOver(WindowFrame frame) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc == null || mc.getWindow() == null || frame.box() == null) return;
+        float scale = CgUiScreen1201.uiScale();
+        double x = (frame.box().x() + frame.box().width() / 2f) * scale;
+        double y = (frame.box().y() + frame.box().height() / 2f) * scale;
+        GLFW.glfwSetCursorPos(mc.getWindow().getWindow(), x, y);
+        say("pointer at " + Math.round(x) + "," + Math.round(y));
     }
 
     /** The first window with a taskbar entry -- the editor, on every routine this drives. */

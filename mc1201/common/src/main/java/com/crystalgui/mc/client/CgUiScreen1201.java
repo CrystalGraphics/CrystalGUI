@@ -225,7 +225,7 @@ public final class CgUiScreen1201 extends Screen {
      * right. It was also only ever read once, at {@code DesktopHost} construction, so it never followed
      * a change of the setting either.</p>
      */
-    private static float uiScale() {
+    static float uiScale() {
         return HostServices.DEFAULT_UI_SCALE;
     }
 
