@@ -10,7 +10,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 /**
- * {@code plan_fs_rewrite.md} F1.6, D4 — <b>an editor is a view of a document, not the document</b>.
+ * {@code plan/fs-rewrite.md} F1.6, D4 — <b>an editor is a view of a document, not the document</b>.
  *
  * <p>It was constructed around one buffer it built itself and could never be pointed at another, which
  * is why the workbench's store held a {@code TextEditor} per file rather than a document per file: the

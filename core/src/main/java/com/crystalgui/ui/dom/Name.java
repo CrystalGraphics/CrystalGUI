@@ -7,7 +7,7 @@ import java.util.Objects;
  *
  * <p>The old engine names a widget by the lowercased simple name of its Java class, looked up
  * exactly, so a subclass that declared nothing matched none of its supertype's rules and two mods'
- * {@code EnginePanel}s collided (plan_ui_rewrite.md D5; audit §11). A name here is a value the class
+ * {@code EnginePanel}s collided (plan/engine-rewrite.md D5; audit §11). A name here is a value the class
  * declares and registers once, in the shape Minecraft's own registries use; custom elements require
  * a hyphen for the same reason — to force a namespace. Selector type matching, the codec and the
  * contract registry all key on it. A node class inherits its supertype's name unless it declares its

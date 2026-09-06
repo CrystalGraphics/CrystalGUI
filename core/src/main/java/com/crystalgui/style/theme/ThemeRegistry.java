@@ -13,7 +13,7 @@ import java.util.Map;
 /**
  * Every theme and editor colour scheme the process knows about, keyed by declared {@code @id}.
  *
- * <p>Registration is <b>validation or refusal, never degradation</b> ({@code plan_styling.md}
+ * <p>Registration is <b>validation or refusal, never degradation</b> ({@code plan/style-overhaul.md}
  * §4.4): a file whose header is malformed or whose CSS would not survive parsing (the
  * {@code :focus-within} poison) is refused with a log and simply not offered — a broken downloaded
  * theme must never become a blank window. {@link UiTheme#parse} does the judging; this class only

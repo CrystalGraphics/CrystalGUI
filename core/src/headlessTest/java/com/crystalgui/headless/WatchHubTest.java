@@ -30,7 +30,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 /**
- * {@code plan_fs_rewrite.md} F3.2, D19 — the watch hub, with <b>two peers</b>.
+ * {@code plan/fs-rewrite.md} F3.2, D19 — the watch hub, with <b>two peers</b>.
  *
  * <p>Every claim here is a multi-client one, which is the plan's testing rule: one service, two peers,
  * and the interesting behaviour is what one peer's action does to the other's view. A one-peer fixture

@@ -97,7 +97,7 @@ public final class ServerUiSession<N extends Styleable, T> {
     private final Deque<T> mailbox = new ArrayDeque<>();
 
     /**
-     * The seam this session addresses elements through -- {@code plan_ui_rewrite.md} M0.
+     * The seam this session addresses elements through -- {@code plan/engine-rewrite.md} M0.
      *
      * <p>It holds the id table that used to be a field on every element, and it is what the mirror
      * (M2) is written against. Per-session rather than per-tree, which is the point: two sessions over

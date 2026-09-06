@@ -16,7 +16,7 @@ plugins {
     // extension collides. The root buildscript scope is the parent of every subproject's, so
     // parent-first loading gives both plugins the same class.
     //
-    // Only breaks an IDE sync; a CLI build constructs no IDEA model. plan_mc1201.md L0.
+    // Only breaks an IDE sync; a CLI build constructs no IDEA model. plan/platform-mc1201.md L0.
     id("org.jetbrains.gradle.plugin.idea-ext")
 }
 

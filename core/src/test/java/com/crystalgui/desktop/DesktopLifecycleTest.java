@@ -26,7 +26,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 /**
- * CrystalOS W3 — the document lifecycle ({@code plan_windowing.md}).
+ * CrystalOS W3 — the document lifecycle ({@code plan/shell-windowing.md}).
  *
  * <p><b>Hide, close and destroy are three different verbs</b>, and every test here is about keeping
  * them apart. The one that matters most is the freeze: a hidden document that goes on working is

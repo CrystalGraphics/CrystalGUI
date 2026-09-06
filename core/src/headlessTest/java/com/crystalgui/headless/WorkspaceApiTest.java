@@ -40,7 +40,7 @@ public class WorkspaceApiTest {
     /**
      * What an author's own code is allowed to reach.
      *
-     * <p>Three packages plus the JDK, which is the surface {@code plan_fs_rewrite.md} §6 set out to
+     * <p>Three packages plus the JDK, which is the surface {@code plan/fs-rewrite.md} §6 set out to
      * make sufficient: {@code document} says what a kind is, {@code fs.client} is the workspace, and
      * {@code core.async} carries every answer that is not ready yet. {@code core.signal},
      * {@code core.undo} and {@code core.dispose} come with them — an edit, a signal and a handle are

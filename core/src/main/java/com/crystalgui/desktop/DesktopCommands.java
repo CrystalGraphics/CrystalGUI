@@ -17,7 +17,7 @@ import javax.annotation.Nullable;
  *
  * <h3>The chord, resolved against the live keymap rather than assumed</h3>
  *
- * <p>{@code plan_windowing.md} left this open deliberately: {@code Ctrl+Tab} is the OS-conventional pick
+ * <p>{@code plan/shell-windowing.md} left this open deliberately: {@code Ctrl+Tab} is the OS-conventional pick
  * and is "plausibly claimed" by a recent-files list, so the plan refused to name it in a document and
  * deferred to whatever the keymap actually held when the switcher was built. It holds nothing on
  * {@code Tab} at all — the dock's Next/Previous Tab are on {@code Mod+PageDown}/{@code Mod+PageUp}, and

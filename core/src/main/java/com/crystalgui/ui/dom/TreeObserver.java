@@ -4,7 +4,7 @@ import javax.annotation.Nullable;
 
 /**
  * The change stream a {@link TreeSource} produces — <b>an edit script, not a dirty set</b>.
- * {@code plan_ui_rewrite.md} M0.
+ * {@code plan/engine-rewrite.md} M0.
  *
  * <h3>What changed from {@code UITreeObserver}, and why</h3>
  *

@@ -1,7 +1,7 @@
 # CGUI Theming — Themes, Schemes, and the Token Vocabulary
 
 *The reference for CrystalGUI's appearance layer. Architecture and rationale live in
-`plan_styling.md`; this is the working guide: how to author a theme, how to author an editor
+`plan/style-overhaul.md`; this is the working guide: how to author a theme, how to author an editor
 colour scheme, what every token means, and the rules that keep the system from rotting. The token
 table at the bottom is GENERATED and machine-checked — see §6.*
 

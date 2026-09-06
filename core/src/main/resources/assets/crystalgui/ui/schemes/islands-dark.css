@@ -9,7 +9,7 @@
  * was painted in VS Code's Dark+. Both are good palettes and the combination is neither: Dark+'s blues and
  * IntelliJ's warm keyword orange are recognisably from different products, and the seam is most visible
  * exactly where the eye spends its time. This is the second axis doing its job — the theme decides the
- * frame, the scheme decides the document, and they are chosen independently (plan_styling.md §3.6).
+ * frame, the scheme decides the document, and they are chosen independently (plan/style-overhaul.md §3.6).
  *
  * WHAT IS DIFFERENT ABOUT INTELLIJ'S PALETTE, and it is not a colour choice. IntelliJ colours by
  * RESOLUTION, not by grammar: a field is purple because the IDE knows it is a field, and a class name is

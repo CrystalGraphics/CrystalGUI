@@ -56,7 +56,7 @@ public enum DockRegion {
      * lets placement be <em>stated</em> as a region before there is a region to put it in, which is what
      * makes the change land in pieces rather than all at once.</p>
      *
-     * <p>Deleted when the regions become real elements (plan.md §23 step 7). Nothing new should read it.</p>
+     * <p>Deleted when the regions become real elements (plan/shell-architecture-audit.md §23 step 7). Nothing new should read it.</p>
      */
     public DockDropZone wall() {
         return wall;

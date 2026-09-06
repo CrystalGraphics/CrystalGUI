@@ -13,7 +13,7 @@ import org.junit.Test;
 /**
  * <b>Nothing references upward.</b> The layering M6 ports into, read out of the constant pool.
  *
- * <p>{@code plan_m6.md} §2.6: the widget layer is being re-homed by KIND and by LAYER while it is
+ * <p>{@code plan/engine-port.md} §2.6: the widget layer is being re-homed by KIND and by LAYER while it is
  * copied, and a layering nothing enforces is a layering that lasts until the first hurry. The rule
  * is one line — <b>engine &lt; widget &lt; chrome &lt; desktop &lt; workbench &lt; applications</b>,
  * and inside {@code widget}, {@code control}/{@code text}/{@code scroll} below
@@ -190,7 +190,7 @@ public class LayeringTest {
      * <p>{@code core/} is deliberately NOT on this list. It names {@code ui} six times and every one is
      * decided — {@code CommandRegistry} holds a {@code Keymap}, {@code UndoScope} walks a
      * {@code UIElement}, the clipboard commands resolve through {@code UiDataKeys} — which is
-     * {@code plan_m6.md} D12, not drift.</p>
+     * {@code plan/engine-port.md} D12, not drift.</p>
      */
     @Test
     public void theHeadlessSideNamesNoUi() throws IOException {
@@ -214,7 +214,7 @@ public class LayeringTest {
     }
 
     /**
-     * <b>The filesystem's own tiers</b> — {@code plan_fs_rewrite.md} D23, F0.7.
+     * <b>The filesystem's own tiers</b> — {@code plan/fs-rewrite.md} D23, F0.7.
      *
      * <p>{@code fs} was five concerns in one directory (N35): a provider tier, a server workspace, a
      * wire binding, a client and a pile of client-local config. Nothing stopped the server naming the
@@ -297,7 +297,7 @@ public class LayeringTest {
     }
 
     /**
-     * <b>The document MODEL names no widget</b> — {@code plan_fs_rewrite.md} D4, A6.
+     * <b>The document MODEL names no widget</b> — {@code plan/fs-rewrite.md} D4, A6.
      *
      * <p>The document layer sits above {@code widget} today because {@code FileDocument.view()} answers
      * a node and {@code TextFileDocument} wraps a {@code TextEditor}. That is what left the one headless
@@ -367,7 +367,7 @@ public class LayeringTest {
             }
         }
         assertTrue("a widget package no tier governs -- renamed without updating LayeringTest and "
-                + "plan_m6.md §2.6?\n" + String.join("\n", ungoverned), ungoverned.isEmpty());
+                + "plan/engine-port.md §2.6?\n" + String.join("\n", ungoverned), ungoverned.isEmpty());
     }
 
     /**

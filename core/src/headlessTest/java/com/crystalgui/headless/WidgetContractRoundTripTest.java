@@ -32,7 +32,7 @@ import org.junit.Test;
 
 /**
  * <b>M1</b> — a widget's contract carries what its hand-written {@code writeState}/{@code readState}
- * pair carried, and nothing has been lost in the port. {@code plan_ui_rewrite.md} M1.
+ * pair carried, and nothing has been lost in the port. {@code plan/engine-rewrite.md} M1.
  *
  * <p>Every test here is the same shape: set a widget up, write it through its contract, apply it to a
  * <em>fresh</em> instance, and assert the second is the first. That is the only assertion that cannot
@@ -225,7 +225,7 @@ public class WidgetContractRoundTripTest {
 
     @Test
     public void theFiveWidgetsThatCouldNotReportNowCan() {
-        // plan_ui_rewrite.md M1. Before contracts these five had no kind at all: the client's wiring was
+        // plan/engine-rewrite.md M1. Before contracts these five had no kind at all: the client's wiring was
         // a switch over four kinds with an instanceof chain in each arm, and a widget outside it hit a
         // default that logged and carried on.
         assertTrue(Dropdown.CONTRACT.eventKinds().contains("select"));

@@ -15,7 +15,7 @@ import java.util.List;
 
 /**
  * Every live window on a {@link Desktop}, visible or hidden — the model the taskbar and the switcher
- * both render ({@code plan_windowing.md}).
+ * both render ({@code plan/shell-windowing.md}).
  *
  * <p>A window <b>joins on open and leaves only on destroy</b>, which is Windows' rule and the reason
  * hiding is safe: the strip shows what exists rather than what is on screen, so a minimised window's

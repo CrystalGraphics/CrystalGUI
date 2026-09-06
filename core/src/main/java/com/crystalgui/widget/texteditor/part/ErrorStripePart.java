@@ -163,7 +163,7 @@ public final class ErrorStripePart extends EditorViewPart {
             // NO SUBTRACTION. A mark is appended to the TRACK, so `Box.y()` -- the offset from the
             // host's border-box origin -- is already the position within it, and `toLocal` above puts
             // the track's own origin at zero too. Taking the track's y off again would displace every
-            // mark by however far down the editor the groove happens to sit. @see plan_m6.md 6.4
+            // mark by however far down the editor the groove happens to sit. @see plan/engine-port.md 6.4
             float centre = box.y() + box.height() / 2f;
             float distance = Math.abs(local.y() - centre);
             if (distance <= tolerance && distance < bestDistance) {

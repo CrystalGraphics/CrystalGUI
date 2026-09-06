@@ -1342,7 +1342,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * <p>These four stay on {@code Workbench} as delegates because they are what a command and an activity
      * bar button call, and moving the <em>call sites</em> is a separate change from moving the logic. The
      * 220 lines behind them — the four-tier restoration heuristic, placement capture, the outer-edge
-     * derivation — are gone from this class. See {@code plan.md} §23 F1.</p>
+     * derivation — are gone from this class. See {@code plan/shell-architecture-audit.md} §23 F1.</p>
      */
     public boolean isPanelOpen(String typeId) {
         return toolWindowManager.isPanelOpen(typeId);

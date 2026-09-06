@@ -4,7 +4,7 @@
  * <p><b>Each is a service the document owns rather than a method on a node</b>, and that is this
  * package's membership rule. One 962-line input handler became five objects with one job each, and a
  * live interaction became a mode pushed onto a stack rather than another {@code if} at the top of the
- * key handler. plan_engine_core_audit.md §12.4; plan_m5.md 5.5.</p>
+ * key handler. plan/engine-audit.md §12.4; plan/engine-core.md 5.5.</p>
  *
  * <ul>
  *   <li>{@link com.crystalgui.ui.service.Input} — the platform sink. Hit-tests the box tree and

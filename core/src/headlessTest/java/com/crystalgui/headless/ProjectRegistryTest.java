@@ -67,7 +67,7 @@ public class ProjectRegistryTest {
      *
      * <p>This used to assert enumeration was live <em>unconditionally</em>, which is what
      * {@code all()} rebuilding on every call bought — and what it cost is in
-     * {@code plan_fs_rewrite.md} N20: one file read rebuilt the registry three times, and the watcher's
+     * {@code plan/fs-rewrite.md} N20: one file read rebuilt the registry three times, and the watcher's
      * poll twice per file per peer per half second. The bargain is now explicit
      * ({@link ProjectProvider#revision()}), and both halves of it are asserted: this, and
      * {@link #aProviderThatDoesNotReportAChangeIsNotAskedAgain} below.</p>

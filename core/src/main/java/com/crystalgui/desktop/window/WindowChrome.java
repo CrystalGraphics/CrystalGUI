@@ -31,7 +31,7 @@ import javax.annotation.Nullable;
  * A flag that told the content to hide its header would leave a second, invisible one — and every
  * listener, command and piece of state on it would then exist twice or in the wrong place.</p>
  *
- * <p>It is the rule {@code plan_windowing.md} already states for the dock↔window bridge, arriving one
+ * <p>It is the rule {@code plan/shell-windowing.md} already states for the dock↔window bridge, arriving one
  * level up: <i>"the instance is the same element in all three presentations; a presentation change is
  * a reparent of that instance"</i>.</p>
  *

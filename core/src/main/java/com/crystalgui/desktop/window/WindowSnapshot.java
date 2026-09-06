@@ -16,7 +16,7 @@ import javax.annotation.Nullable;
  *
  * <h3>Why this is allowed to exist, when the plan said it was not</h3>
  *
- * <p>{@code plan_windowing.md} deferred hover thumbnails on the grounds that <em>"a preview of a frozen
+ * <p>{@code plan/shell-windowing.md} deferred hover thumbnails on the grounds that <em>"a preview of a frozen
  * window means keeping its last frame, which fights the freeze contract"</em>. That reasoning does not
  * survive being written down next to what the freeze contract actually says. Hiding is DETACHING so that
  * a hidden window <b>stops running</b> — no layout, no paint, no selectors, no input references. A

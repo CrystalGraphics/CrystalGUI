@@ -36,7 +36,7 @@ import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.text.UIText;
 
 /**
- * <b>A control the viewer added, on a tree the server owns</b> — {@code plan_ui_rewrite.md} 7.2.
+ * <b>A control the viewer added, on a tree the server owns</b> — {@code plan/engine-rewrite.md} 7.2.
  *
  * <p>{@code client(io)} runs over every build of the tree, and its whole job is local extras. What it
  * could not do is <em>add</em> one: an appended child is an ordinary described child, so the next

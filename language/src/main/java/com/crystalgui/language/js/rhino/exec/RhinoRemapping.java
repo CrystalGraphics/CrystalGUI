@@ -21,7 +21,7 @@ import java.util.List;
  *
  * <h3>Not a patched {@code JavaMembers}, and not a {@code NativeJavaObject} subclass either</h3>
  *
- * <p>{@code plan_m10.md} §11 proposed shading a patched {@code org.mozilla.javascript.JavaMembers} into each
+ * <p>{@code plan/lang-javascript.md} §11 proposed shading a patched {@code org.mozilla.javascript.JavaMembers} into each
  * band's jar. That would work and it is the wrong trade: {@code JavaMembers} is <b>internal</b>, it differs
  * between the two Rhinos we ship, and a patched copy of an internal class is a fork to re-derive every time a
  * band moves — the plan names KubeJS's Rhino fork as the fallback, which is the same admission further on.</p>

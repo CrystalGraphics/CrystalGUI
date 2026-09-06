@@ -45,7 +45,7 @@ public class PortMachineryTest {
      * A hidden node has NO BOX, which is what {@code display: none} means and what
      * {@code setDisplayed(false)} meant on the old engine.
      *
-     * <p>Structural rather than a {@code [hidden]} stylesheet rule — plan_m6.md D5 assumed HTML's
+     * <p>Structural rather than a {@code [hidden]} stylesheet rule — plan/engine-port.md D5 assumed HTML's
      * own, and this selector engine has no attribute selectors to write it with. The old engine's
      * {@code display} at IMPORTANT origin was equally un-overridable, so nothing is lost.</p>
      */

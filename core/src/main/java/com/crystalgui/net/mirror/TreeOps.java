@@ -2,7 +2,7 @@ package com.crystalgui.net.mirror;
 
 /**
  * The vocabulary of {@code ui/treeOps} — an <b>edit script</b> for a described tree.
- * {@code plan_ui_rewrite.md} M2, network audit Appendix A.
+ * {@code plan/engine-rewrite.md} M2, network audit Appendix A.
  *
  * <h3>What this replaces, and why the old one could not be fixed in place</h3>
  *

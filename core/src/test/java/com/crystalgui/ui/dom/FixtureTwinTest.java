@@ -12,7 +12,7 @@ import java.util.List;
 import org.junit.Test;
 
 /**
- * <b>The fixture twin, proven against the verbs a ported test will use</b> — {@code plan_m6.md} §2.3.
+ * <b>The fixture twin, proven against the verbs a ported test will use</b> — {@code plan/engine-port.md} §2.3.
  *
  * <p>A fixture nobody has driven is a fixture that compiles. 164 test files are going to move onto
  * this one, so what it can actually do is asserted here rather than discovered at widget #3.</p>

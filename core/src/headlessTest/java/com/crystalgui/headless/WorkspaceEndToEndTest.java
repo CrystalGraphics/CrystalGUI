@@ -47,7 +47,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 /**
- * {@code plan_fs_rewrite.md} F4 — <b>the new client against the new binding, over a real transport.</b>
+ * {@code plan/fs-rewrite.md} F4 — <b>the new client against the new binding, over a real transport.</b>
  *
  * <p>Both ends together, because a protocol tested from one side is a protocol tested against a mock
  * of the other. Everything asserted here is what a caller sees: a {@code Reply} that settles, a

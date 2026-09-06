@@ -35,7 +35,7 @@ import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.app.WidgetCensus;
 
 /**
- * <b>Every contracted widget, over a loopback wire, at once.</b> {@code plan_ui_rewrite.md} M8.
+ * <b>Every contracted widget, over a loopback wire, at once.</b> {@code plan/engine-rewrite.md} M8.
  *
  * <p>One tree holding one of every widget that declares a {@link WidgetContract}, served to a client
  * over an in-memory transport. Each widget's slots are set on the server, flushed, and read back off

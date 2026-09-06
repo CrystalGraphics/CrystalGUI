@@ -62,7 +62,7 @@ val embedded = gradle.parent != null
 // CONTAINER's inner main size rather than its own flex-resolved one, so it reports a height for a
 // width it was never given and the last line is clipped. One line inside the flexbox algorithm, so
 // it is only fixable here. MIT, so forking is permitted; taffy/MODIFICATIONS.md is the statement of
-// changes MIT requires, and plan_ui_rewrite.md D3 is the decision.
+// changes MIT requires, and plan/engine-rewrite.md D3 is the decision.
 include("taffy")
 
 include("core")
@@ -88,7 +88,7 @@ include("language")
 // have worked: includeBuild needs the directory to be a standalone Gradle build with its own settings
 // file, and mc1710/settings.gradle does not exist and never has (`git log --all` over that path is
 // empty, and it is not gitignored either). `git log -L` finds the configuration that actually launched
-// a client, in 2a10724, and it is a plain subproject. See plan_m12.md 25.2.
+// a client, in 2a10724, and it is a plain subproject. See plan/platform-mc1710.md 25.2.
 if (!embedded) include("mc1710")
 
 // CrystalGraphics, and the ONE place it is included from.
@@ -108,11 +108,11 @@ apply(from = "gradle/module_integration/composite.settings.gradle.kts")
 //include(":CrystalGraphics:freetype-msdfgen-harfbuzz-bindings")
 
 // The MC 1.20.x loaders. `include`, not `includeBuild` -- there is no mc1201/settings.gradle.kts, and
-// the loader scripts already say project(":mc1201:common"). Same trap as mc1710; see plan_m12.md 25.2.
+// the loader scripts already say project(":mc1201:common"). Same trap as mc1710; see plan/platform-mc1710.md 25.2.
 //
 // :mc1201:common holds everything vanilla and the three loaders are registration only, reaching it
 // through LoaderBridge. :mc1201:neoforge targets MC 1.20.4 -- NeoForge published no 20.1.x series
-// (plan_mc1201.md 3.8).
+// (plan/platform-mc1201.md 3.8).
 //
 // Gated like :mc1710: these download and decompile a Minecraft toolchain, which an embedding consumer
 // has no use for.

@@ -375,7 +375,7 @@ problemspanel > .__find-bar__ {
  *
  * THE FIELD IS THE ONLY THING IN THE ROW THAT MAY SHRINK. flex-shrink defaults to 0 here (not 1, as on the
  * web), so everything is rigid unless it says so -- and a rigid text box would push the toggles out of the
- * border instead of scrolling inside it. Same trap the find bar hit one level up (plan.md 29.12).
+ * border instead of scrolling inside it. Same trap the find bar hit one level up (plan/shell-architecture-audit.md 29.12).
  *
  * `.__focused__` rather than `:focus-within`: this engine has no such pseudo-class, and an unknown one
  * POISONS THE SHEET rather than being ignored -- see SearchField.FOCUSED_CLASS. */

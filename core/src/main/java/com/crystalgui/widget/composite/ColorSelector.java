@@ -84,7 +84,7 @@ public class ColorSelector extends UIElement {
             State.of("color", StateTypes.INT, ColorSelector::getColor, ColorSelector::setColor, 0xFFFFFFFF);
 
     /**
-     * The colour moved. {@code plan_ui_rewrite.md} M1: a ColorSelector could not report at all, so a
+     * The colour moved. {@code plan/engine-rewrite.md} M1: a ColorSelector could not report at all, so a
      * server-side colour picker was a control that showed a colour and could never be told one.
      *
      * <p>{@link EventKind#CHANGE} rather than {@link EventKind#VALUE}: there is a drag here, but what

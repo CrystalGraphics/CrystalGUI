@@ -9,7 +9,7 @@ import javax.annotation.Nullable;
  * What the cascade asks of the thing it styles — and nothing else.
  *
  * <p>The style engine was written against {@code UIElement} and named it in seven files and
- * fifty-four places (plan_m5.md D5.2). Read one at a time, those places ask for exactly this: an
+ * fifty-four places (plan/engine-core.md D5.2). Read one at a time, those places ask for exactly this: an
  * identity for the rule index and the selectors, a parent for combinators and another for
  * inheritance, nine state predicates for the pseudo-classes, a shadow host and a part name for
  * {@code ::part()}, the candidate store, and three callbacks. So this is the seam, and the cascade —

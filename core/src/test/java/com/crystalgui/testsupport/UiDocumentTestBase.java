@@ -21,7 +21,7 @@ import org.junit.After;
 import org.junit.Before;
 
 /**
- * <b>The new engine's fixture, with the old one's verbs</b> — {@code plan_m6.md} §2.3.
+ * <b>The new engine's fixture, with the old one's verbs</b> — {@code plan/engine-port.md} §2.3.
  *
  * <p>164 of the 214 widget test files construct a {@code UIWindow}, 127 drive frames and 102 read
  * {@code getRuntimeCache()}. Those tests are the net the port is held to, so they move with the

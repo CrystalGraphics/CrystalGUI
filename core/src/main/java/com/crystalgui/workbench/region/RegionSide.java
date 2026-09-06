@@ -8,7 +8,7 @@ package com.crystalgui.workbench.region;
  * <p>IntelliJ splits a stripe: Project top-left, Structure bottom-left, one region divided along its cross
  * axis. §23.5 ruled that out on the grounds that stacking two tool windows on one wall is <i>"a feature of
  * IntelliJ's tool-window host rather than of a dock tree"</i> — true, and irrelevant once we are building a
- * tool-window host. plan.md §24.5 records the reversal.</p>
+ * tool-window host. plan/shell-architecture-audit.md §24.5 records the reversal.</p>
  *
  * <p><b>The axis is the region's cross axis</b>, which is what lets one field cover both cases:</p>
  *

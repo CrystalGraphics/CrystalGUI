@@ -11,7 +11,7 @@ import com.crystalgui.serialization.StateMap;
 
 /**
  * One piece of a widget's <b>authored</b> state, declared once as a {@code static final} on the widget
- * class. {@code plan_ui_rewrite.md} M1.
+ * class. {@code plan/engine-rewrite.md} M1.
  *
  * <h3>What this replaces</h3>
  *

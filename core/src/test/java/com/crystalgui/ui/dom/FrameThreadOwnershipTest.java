@@ -8,7 +8,7 @@ import com.crystalgui.testsupport.UiDocumentTestBase;
 import org.junit.Test;
 
 /**
- * <b>The frame thread owns the tree, and the engine now says so.</b> {@code plan_ui_rewrite.md} M0,
+ * <b>The frame thread owns the tree, and the engine now says so.</b> {@code plan/engine-rewrite.md} M0,
  * engine audit §9.
  *
  * <p>{@code UiThread} was a marker: it recorded which thread ran frames and <em>asserted nothing</em>,

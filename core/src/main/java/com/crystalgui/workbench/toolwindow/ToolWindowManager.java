@@ -38,7 +38,7 @@ import java.util.Map;
  * so restoration is a lookup. Tiers 1–3 had nothing left to be about and are gone with the fields that fed
  * them ({@code path}, {@code groupedWith}, {@code relativeTo}).</p>
  *
- * <p>This is plan.md §23 F2b, deliberately held until §24 step 2 — a fallback cannot be deleted before the
+ * <p>This is plan/shell-architecture-audit.md §23 F2b, deliberately held until §24 step 2 — a fallback cannot be deleted before the
  * thing that replaces it exists, and regions did not exist until now.</p>
  *
  * <h3>Content is built once per type, not per show</h3>
@@ -396,7 +396,7 @@ public final class ToolWindowManager {
      *
      * <h3>The whole of dragging a stripe button</h3>
      *
-     * <p>One write of two fields, which is what {@code plan.md} §24.5 meant by <i>"dragging a container
+     * <p>One write of two fields, which is what {@code plan/shell-architecture-audit.md} §24.5 meant by <i>"dragging a container
      * from one stripe to another <b>is</b> changing its region"</i>. There is no second model to keep in
      * step: {@link StripeRail} derives the rail and the group from the pair this stores, so the button
      * arrives in the right place by being asked again rather than by being moved.</p>

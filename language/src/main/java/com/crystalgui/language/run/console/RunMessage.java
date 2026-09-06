@@ -47,6 +47,6 @@ public record RunMessage(String script, @Nullable String origin, @Nullable Resou
     // nowhere to put a badge without becoming a list again, and the ring measures the document rather
     // than guessing at a message's cost. They outlived their only caller by a release -- which is how a
     // method nobody calls becomes a thing the next person reads and reasons about. The argument for
-    // keying on origin AND text is not lost with them: it is in `plan_m9_5.md` §9.5.4, where a decision
+    // keying on origin AND text is not lost with them: it is in `plan/lang-run-panel.md` §9.5.4, where a decision
     // belongs.
 }

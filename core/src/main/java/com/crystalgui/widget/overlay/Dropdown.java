@@ -70,7 +70,7 @@ public class Dropdown extends Button {
             State.of("selected", StateTypes.INT, Dropdown::getSelectedIndex, Dropdown::select, -1);
 
     /**
-     * What was chosen. {@code plan_ui_rewrite.md} M1 -- a dropdown could not tell a server ANYTHING
+     * What was chosen. {@code plan/engine-rewrite.md} M1 -- a dropdown could not tell a server ANYTHING
      * before this, which is the sharpest of the E-series findings: the one widget whose entire purpose
      * is to answer a question had no way to give the answer.
      */

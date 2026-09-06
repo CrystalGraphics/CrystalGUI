@@ -14,7 +14,7 @@ import com.crystalgui.ui.dom.NodeContract;
 
 /**
  * <b>What a kind of widget is</b>, as far as anything outside it needs to know: its name, the state it
- * carries, and the interactions it can report. {@code plan_ui_rewrite.md} M1, D7.
+ * carries, and the interactions it can report. {@code plan/engine-rewrite.md} M1, D7.
  *
  * <h3>One declaration, four readers</h3>
  *

@@ -6,11 +6,11 @@ The service layer under the dock, the workbench and the editor: the things a wid
 **Read this before adding anything to `ui/elements/dock/`, `ui/elements/workbench/` or `editor/`.**
 Most of what looks like a missing feature there is a service that already exists, and most of what
 looks like a needed helper is the symptom of one that does not — see
-[`plan.md`](../plan.md) for the architecture review this layer is being built from.
+[`plan/shell-architecture-audit.md`](../plan.md) for the architecture review this layer is being built from.
 
 > **This document is the index of that layer. Every new service API lands here in the same commit
 > that introduces it.** A capability nobody knows about gets re-implemented locally, which is exactly
-> the accumulation `plan.md` exists to stop.
+> the accumulation `plan/shell-architecture-audit.md` exists to stop.
 
 ---
 
@@ -65,7 +65,7 @@ also what keeps the concurrency surface to exactly one object (the completion qu
 touched by two threads, so no widget ever needs a lock.
 
 The cost is that a job starts on a frame boundary, up to ~16ms at 60fps. That is inside every budget in
-`plan_syntax.md` §7.3, and it buys determinism.
+`plan/lang-stack.md` §7.3, and it buys determinism.
 
 `drain()` is **deliver → promote → deliver**. The second delivery catches a job that finished *during*
 promotion (always, on a same-thread executor; sometimes, on a real pool with short work) which would
@@ -111,7 +111,7 @@ without logging.
 **Document versions.** `TextBuffer.version()` is a monotonic counter bumped by every applied edit —
 *including undo and redo*, which move the text as surely as typing does. Staleness policy belongs to the
 consumer, because there are three legitimate answers (discard / keep-and-adjust / keep-per-line, see
-`plan_syntax.md` §8) and a scheduler deciding centrally would have to understand every consumer. It
+`plan/lang-stack.md` §8) and a scheduler deciding centrally would have to understand every consumer. It
 guarantees only that a superseded job's result never lands; comparing the stamp is the caller's job.
 
 ### Rules
@@ -346,7 +346,7 @@ preview or something not yet written can participate in a command written today.
 
 The `when`-expression parser (`editorFocus && resourceExtname == .java`). Predicates over
 `DataContext` cover commands today; the parser is only needed when keymaps want conditions, and it is
-~1000 lines in VS Code with most of that being parsing. See `plan.md` §15.6.
+~1000 lines in VS Code with most of that being parsing. See `plan/shell-architecture-audit.md` §15.6.
 
 ---
 
@@ -1050,7 +1050,7 @@ The service layer under the two rails. Everything here is reached from `Workbenc
 ### Placement is `(region, side)`, and nothing else
 
 `ToolWindowState` stores a `DockRegion` and a `RegionSide`. That pair is IntelliJ's `anchor` +
-`isSplit`, and it is the **whole** of where a tool window lives — see `plan.md` §24.10, which quotes
+`isSplit`, and it is the **whole** of where a tool window lives — see `plan/shell-architecture-audit.md` §24.10, which quotes
 the platform source. An anchor's two halves share one stripe, separated by a rule.
 
 | Ask | Method |

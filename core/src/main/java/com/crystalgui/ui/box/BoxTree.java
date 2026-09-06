@@ -34,7 +34,7 @@ import org.joml.Matrix4f;
  * on every {@code UIElement}, created at attach and reparented by hand), settled by a
  * {@code while (isLayoutDirty())} loop, with geometry cached in the element and refreshed by the
  * paint — so "clicks land where things were drawn" was a promise kept by two caches agreeing, and
- * hit-testing an unpainted tree read stale matrices (plan_engine_core_audit.md §1, §2).</p>
+ * hit-testing an unpainted tree read stale matrices (plan/engine-audit.md §1, §2).</p>
  *
  * <h3>The pass</h3>
  *

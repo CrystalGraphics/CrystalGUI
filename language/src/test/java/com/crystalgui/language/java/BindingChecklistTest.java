@@ -27,7 +27,7 @@ import com.crystalgui.language.engine.bridge.Analysis;
  *
  * <h3>Why this file exists at all</h3>
  *
- * <p>{@code plan_syntax.md} §15.1 makes one trade and the whole semantic layer rests on it: generic
+ * <p>{@code plan/lang-stack.md} §15.1 makes one trade and the whole semantic layer rests on it: generic
  * substitution, overload resolution in all three phases, member lookup with bridges filtered and
  * accessibility computed, flow-sensitive pattern bindings and lambda target typing are <b>adopted from
  * the JDT binding model rather than built</b>. v1 planned to build them; the plan retained its list as an

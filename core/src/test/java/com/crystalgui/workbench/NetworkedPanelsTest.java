@@ -50,7 +50,7 @@ import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import com.crystalgui.workbench.dock.panel.DockInput;
 
 /**
- * <b>A server's window as a workbench citizen</b> — {@code plan_ui_rewrite.md} 7.1, and K5.
+ * <b>A server's window as a workbench citizen</b> — {@code plan/engine-rewrite.md} 7.1, and K5.
  *
  * <p>A panel a server opens can be an editor tab beside the files or a tool window on a rail, and once
  * it is, everything the dock does applies to it: it splits, it drags, it tears out, and it is written

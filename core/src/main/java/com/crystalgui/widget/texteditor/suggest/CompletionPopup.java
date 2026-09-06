@@ -594,7 +594,7 @@ public final class CompletionPopup extends Popover {
         // `setDisplayed`, the engine's own attribute, where the old engine wrote `display` at
         // IMPORTANT. This selector engine has no attribute selectors, so HTML's `[hidden]` rule
         // cannot be written -- the box tree gives a hidden node no box instead, which is exactly
-        // what the IMPORTANT write effectively did. @see plan_m6.md M6.0
+        // what the IMPORTANT write effectively did. @see plan/engine-port.md M6.0
         setDisplayed(!session.visibleRows().isEmpty());
         showingRows = !session.visibleRows().isEmpty();
         if (session.visibleRows().isEmpty()) return;

@@ -38,7 +38,7 @@ import java.util.Objects;
  *
  * <h3>{@code sideWeight} — refused once, ported now</h3>
  *
- * <p>{@link #side()} is IntelliJ's {@code isSplit}. §23.5 named it as deliberately not ported; plan.md §24.5
+ * <p>{@link #side()} is IntelliJ's {@code isSplit}. §23.5 named it as deliberately not ported; plan/shell-architecture-audit.md §24.5
  * reverses that, and the reversal is the honest part — the reason given was that stacking two tool windows
  * on one wall belongs to a tool-window host rather than to a dock tree, which stopped being an argument the
  * moment we started building a tool-window host.</p>

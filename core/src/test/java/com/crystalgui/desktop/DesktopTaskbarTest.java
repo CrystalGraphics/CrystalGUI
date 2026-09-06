@@ -20,7 +20,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 /**
- * CrystalOS W4 — the taskbar ({@code plan_windowing.md}).
+ * CrystalOS W4 — the taskbar ({@code plan/shell-windowing.md}).
  *
  * <p>W3 and W4 ship together or not at all: <b>minimise with no discoverable way back is worse than no
  * minimise</b>, and this is the way back. So the assertions here are mostly about the strip being an

@@ -14,7 +14,7 @@ import java.util.regex.Pattern;
  * A parsed theme or editor-colour-scheme file: header metadata, the raw variable table, and the CSS
  * source its override rules will be re-parsed from at apply time.
  *
- * <p>A theme file is ordinary CSS (see {@code plan_styling.md} §3.2): a {@code theme { }} block of
+ * <p>A theme file is ordinary CSS (see {@code plan/style-overhaul.md} §3.2): a {@code theme { }} block of
  * variable definitions by convention, plus optional real override rules for what variables cannot
  * express — an {@code asset()} sprite skin being the historical extreme. The metadata rides in a
  * fixed-shape header comment:</p>

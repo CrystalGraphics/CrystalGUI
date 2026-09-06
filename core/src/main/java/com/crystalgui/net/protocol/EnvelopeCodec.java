@@ -27,7 +27,7 @@ import com.crystalgui.serialization.DynamicOps;
  *
  * <p>{@code k}/{@code i}/{@code m}/{@code p} rather than {@code kind}/{@code id}/{@code method}/
  * {@code payload}. Every byte here is paid on every message, and the client→server budget is ~32 KB per
- * frame — see {@code plan_wire.md}. The method name stays spelled out, because it is the one field a
+ * frame — see {@code plan/net-wire.md}. The method name stays spelled out, because it is the one field a
  * human reads when a capture is dumped.</p>
  */
 public final class EnvelopeCodec {

@@ -173,7 +173,7 @@ public final class WindowCommands {
                     // so the pin cannot be carried on the frame at all -- it would have to live on the
                     // placement record beside the mode. Left undone rather than half-done; a WINDOWED
                     // tool window is already top-level and pins like any other window, so the route
-                    // exists, it just takes two steps. @see plan_windowing.md W14
+                    // exists, it just takes two steps. @see plan/shell-windowing.md W14
                     return frame != null && frame.state() == WindowState.VISIBLE
                             && frame.desktop() != null
                             && frame.desktop().registry().windows().contains(frame);

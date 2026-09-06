@@ -49,7 +49,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 /**
- * {@code plan_fs_rewrite.md} F4.2, D10 — <b>the save is the synchronisation point</b>.
+ * {@code plan/fs-rewrite.md} F4.2, D10 — <b>the save is the synchronisation point</b>.
  *
  * <p>Documents over the wire, end to end: open, edit, save, and what a change on the server means under
  * a clean buffer and under a dirty one. None of this could be written before — no test constructed a

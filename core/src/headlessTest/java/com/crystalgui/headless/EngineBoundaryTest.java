@@ -12,7 +12,7 @@ import org.junit.Test;
 
 /**
  * <b>The strangler line.</b> The second engine and the first cannot reach each other, and this is
- * the test that says so — {@code plan_m5.md} §2, rule 1.
+ * the test that says so — {@code plan/engine-core.md} §2, rule 1.
  *
  * <p>M5 builds a node tree ({@code ui.dom}), a box tree ({@code ui.box}) and the services over them
  * ({@code ui.service}) beside the old engine, which stays runnable and untouched until M6 ports the
@@ -69,7 +69,7 @@ public class EngineBoundaryTest {
     private static final List<String> NEW_PACKAGES = List.of(
             "com/crystalgui/ui/box/",
             "com/crystalgui/ui/service/",
-            // THE PORT'S DESTINATIONS (plan_m6.md §2.6). Listed from 6.1, before three of the four
+            // THE PORT'S DESTINATIONS (plan/engine-port.md §2.6). Listed from 6.1, before three of the four
             // exist: they only ever hold ported code, so admitting them early costs nothing and
             // means the first class to land in one is not also the commit that discovers the list
             // needed updating. The OLD widget layer keeps its own prefix
@@ -199,7 +199,7 @@ public class EngineBoundaryTest {
     }
 
     /**
-     * <b>The document layer's MODEL half is neutral</b> — {@code plan_fs_rewrite.md} F1, D4.
+     * <b>The document layer's MODEL half is neutral</b> — {@code plan/fs-rewrite.md} F1, D4.
      *
      * <p>{@code document/} is listed as a new-engine package above because {@code FileDocument.view()}
      * answers a node, and there was no supertype the two engines' element classes shared. F1 split that:
@@ -248,7 +248,7 @@ public class EngineBoundaryTest {
             "com/crystalgui/style/StyleGroup.importantPipeline");
 
     /**
-     * <b>The engine writes nothing into the cascade</b> — plan_m5.md §2, rule 3. Placement, stacking,
+     * <b>The engine writes nothing into the cascade</b> — plan/engine-core.md §2, rule 3. Placement, stacking,
      * visibility, opacity and animation are box properties; an {@code IMPORTANT} write from engine
      * code is how the old cascade became the only mutable box model it had (audit §3: 46 files).
      */

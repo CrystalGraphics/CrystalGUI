@@ -49,7 +49,7 @@ public final class StyleSheet {
     /**
      * The engine's user-agent stylesheet: the {@code assets/crystalgui/ui/styles/ua/*.css} parts,
      * concatenated in {@link StyleSheetRegistry#DEFAULT_SHEET_PARTS} order. (One 6,000-line
-     * {@code default.css} until plan_styling.md step 8 split it at its own section boundaries —
+     * {@code default.css} until plan/style-overhaul.md step 8 split it at its own section boundaries —
      * a pure move; the concatenation is the old file.)
      *
      * <p>Gives every widget functional (deliberately unthemed) geometry, plus a few generic layout

@@ -2,7 +2,7 @@ package com.crystalgui.core.window;
 
 /**
  * What a window <em>is</em> — the three states every windowing system in the survey turned out to have,
- * under different names ({@code plan_windowing.md}).
+ * under different names ({@code plan/shell-windowing.md}).
  *
  * <p>The distinction that matters is between the middle one and the last: <b>hide, close and destroy are
  * three different verbs</b>, and conflating any two of them is the defect this whole plan exists to

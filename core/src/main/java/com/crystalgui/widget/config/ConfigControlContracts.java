@@ -9,7 +9,7 @@ import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.WidgetContracts;
 
 /**
- * One contract shape for every {@link ValueControl}. {@code plan_ui_rewrite.md} M1.
+ * One contract shape for every {@link ValueControl}. {@code plan/engine-rewrite.md} M1.
  *
  * <h3>Why these get contracts at all</h3>
  *

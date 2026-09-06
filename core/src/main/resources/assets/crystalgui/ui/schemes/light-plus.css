@@ -5,7 +5,7 @@
  *
  * VS Code's Light+ values — the scheme crystal-light suggests, and the half of light mode a UI theme
  * cannot supply: a document's ink and paper belong here. The SECOND, independently-selectable
- * axis (plan_styling.md §3.6): a scheme is a variable table over the editor's already-tokenized
+ * axis (plan/style-overhaul.md §3.6): a scheme is a variable table over the editor's already-tokenized
  * rules, exactly as a theme is over the chrome's. The rules themselves stay in default.css — the
  * widget publishes its ranges whether or not anything styles them, and a themeless editor that
  * silently rendered plain text would read as the tokenizer failing, not as an absent scheme; the

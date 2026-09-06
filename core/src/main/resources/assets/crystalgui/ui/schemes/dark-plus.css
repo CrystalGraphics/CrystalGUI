@@ -8,7 +8,7 @@
  * paper they sit on has to agree with whatever theme surrounds it — a document darker than the
  * panels around it inverts the Islands reading, where the editor is the LIGHTEST island rather
  * than a hole in the middle of the frame. The SECOND, independently-selectable
- * axis (plan_styling.md §3.6): a scheme is a variable table over the editor's already-tokenized
+ * axis (plan/style-overhaul.md §3.6): a scheme is a variable table over the editor's already-tokenized
  * rules, exactly as a theme is over the chrome's. The rules themselves stay in default.css — the
  * widget publishes its ranges whether or not anything styles them, and a themeless editor that
  * silently rendered plain text would read as the tokenizer failing, not as an absent scheme; the

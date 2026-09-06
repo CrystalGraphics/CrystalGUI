@@ -63,7 +63,7 @@ public class Tab extends Button {
     /**
      * The close button was pressed.
      *
-     * <p>{@code plan_ui_rewrite.md} M1 asked for {@code Tab.SELECTED} here. A tab has no selection
+     * <p>{@code plan/engine-rewrite.md} M1 asked for {@code Tab.SELECTED} here. A tab has no selection
      * signal of its own -- selection belongs to the strip, and {@code TabView.SELECT} reports it with
      * the index, which is what a server can act on. What a tab genuinely owns is its close REQUEST,
      * and that is the veto path M4 needs, so it is the one declared.</p>

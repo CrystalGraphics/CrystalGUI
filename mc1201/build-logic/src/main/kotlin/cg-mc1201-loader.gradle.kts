@@ -51,7 +51,7 @@ dependencies {
 
     // Taffy and JOML: :core has them compileOnly so they reach nobody transitively, and UIElement holds
     // a NodeId and a Matrix4f as fields. Needed at RUNTIME too -- a field descriptor resolves at class
-    // load, so without them the UI classes do not load at all. plan_mc1201.md 4.3.
+    // load, so without them the UI classes do not load at all. plan/platform-mc1201.md 4.3.
     "compileOnly"(project(":taffy"))
     "runtimeOnly"(project(":taffy"))
 
