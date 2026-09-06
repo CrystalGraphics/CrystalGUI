@@ -7,6 +7,10 @@ import java.util.Map;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.core.command.Command;
+import com.crystalgui.core.command.CommandContext;
+import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.data.ClipboardActions;
 import com.crystalgui.graph.EdgeData;
 import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.graph.GraphIds;
@@ -71,8 +75,8 @@ final class GraphClipboard {
 
         Map<String, String> remap = new LinkedHashMap<>();
         List<GraphNode> pasted = new ArrayList<>();
-        NodeWidgetFactory factory = view.nodeFactory != null
-                ? view.nodeFactory : NodeWidgetFactory.of(view.nodeLibrary).build();
+        NodeWidgetFactory factory = view.getNodeFactory() != null
+                ? view.getNodeFactory() : NodeWidgetFactory.of(view.getNodeLibrary()).build();
 
         view.edits.begin("paste");
         try {
@@ -81,7 +85,8 @@ final class GraphClipboard {
                 remap.put(source.id(), id);
 
                 NodeData placed = source.withId(id).movedTo(source.x() + offsetX, source.y() + offsetY);
-                NodeType type = view.nodeLibrary != null ? view.nodeLibrary.get(placed.typeId()) : null;
+                NodeType type = view.getNodeLibrary() != null
+                        ? view.getNodeLibrary().get(placed.typeId()) : null;
                 GraphNode widget = factory.create(type, placed);
                 // Bound and registered BEFORE the add, so addNode adopts the stored ports and properties
                 // rather than deriving a second set from the widget -- which is how a node's instance
@@ -171,6 +176,36 @@ final class GraphClipboard {
         @Override
         public boolean isEmpty(GraphDocument clip) {
             return clip == null || clip.nodeCount() == 0;
+        }
+    };
+
+    /**
+     * Cut, copy and paste as the engine's own actions.
+     *
+     * <p>Routed through {@link GraphCommands} rather than calling the four methods above directly, so
+     * there is one definition of what cutting a selection means — the undo grouping and the paste offset
+     * already live in the commands.</p>
+     */
+    final ClipboardActions asActions = new ClipboardActions() {
+        @Override public boolean canCut() { return isEnabled(GraphCommands.CUT); }
+
+        @Override public void cut() { run(GraphCommands.CUT); }
+
+        @Override public boolean canCopy() { return isEnabled(GraphCommands.COPY); }
+
+        @Override public void copy() { run(GraphCommands.COPY); }
+
+        @Override public boolean canPaste() { return isEnabled(GraphCommands.PASTE); }
+
+        @Override public void paste() { run(GraphCommands.PASTE); }
+
+        private boolean isEnabled(String id) {
+            Command command = CommandRegistry.global().get(id);
+            return command != null && command.isEnabled(CommandContext.of(view));
+        }
+
+        private void run(String id) {
+            CommandRegistry.global().run(id, CommandContext.of(view));
         }
     };
 }
