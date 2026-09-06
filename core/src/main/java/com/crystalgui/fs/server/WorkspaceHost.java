@@ -199,7 +199,9 @@ public final class WorkspaceHost {
         WorkspaceService live = service;
         if (live != null) {
             List<CgFileEvent> events = live.drainFileEvents();
-            if (!events.isEmpty()) fanOut(events);
+            // OR SOMETHING THE SERVER DID. A tick carries both now, and gating it on the watcher alone
+            // left an operation queued until an unrelated file happened to move.
+            if (!events.isEmpty() || (hub != null && hub.hasStated())) fanOut(events);
         }
 
         // AND WHO IS HERE, on the same tick and for the same reason: presence is what stops two people
