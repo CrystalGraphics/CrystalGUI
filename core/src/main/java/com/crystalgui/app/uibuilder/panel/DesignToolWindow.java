@@ -4,9 +4,9 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.app.uibuilder.canvas.BuilderContext;
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
-import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.workbench.editor.EditorService;
 import com.crystalgui.workbench.WorkbenchContext;
@@ -30,8 +30,6 @@ public final class DesignToolWindow extends UIElement {
 
     private final WorkbenchContext workbench;
 
-    private final ConnectionGroup connections = new ConnectionGroup();
-
     @Nullable
     private HierarchyPanel hierarchy;
 
@@ -42,18 +40,6 @@ public final class DesignToolWindow extends UIElement {
         super(NAME);
         this.workbench = workbench;
         addClass(PANEL_CLASS);
-        connections.add(workbench.dock().onDidChangeActivePanel.connect(unused -> follow()));
-        // AND WHEN A DOCUMENT LANDS, which is the Inspector's own note and the same defect: the active
-        // PANEL is announced as soon as the dock has built its tree, which is before the document behind
-        // it exists. Following only the panel left this empty from startup until something else moved --
-        // and for a workspace restored with a .cgui already in front, nothing else ever does.
-        connections.add(workbench.onDidOpenDocument().connect(path -> follow()));
-        // AND THE EDITOR SERVICE ITSELF, which is the one that knows when a tab has an editor rather than
-        // when the dock has a panel. A restored workspace announces its active panel while the document
-        // behind it is still arriving, and never announces again -- so a workbench that came back with a
-        // .cgui already in front showed an empty panel for the whole session.
-        connections.add(workbench.editors().onDidOpen.connect(tab -> follow()));
-        connections.add(workbench.editors().onDidChangeState.connect(tab -> follow()));
         follow();
     }
 
@@ -62,6 +48,44 @@ public final class DesignToolWindow extends UIElement {
     public HierarchyPanel hierarchy() {
         return hierarchy;
     }
+
+    /**
+     * Asked each frame, because <b>there is no announcement to listen to</b>.
+     *
+     * <p>Three were tried. The dock's {@code onDidChangeActivePanel} fires while the read behind the tab
+     * is still in flight, so the panel is announced before it has an editor; {@code onDidOpenDocument}
+     * and the editor service's own signals fire at moments when {@code editors().active()} is still
+     * null. Measured on the real path, {@code follow()} ran five times before the document arrived and
+     * not once after — which is exactly the empty panel, and why patching the signal list twice fixed
+     * nothing.</p>
+     *
+     * <p>What is actually missing is an <em>active editor changed</em> signal; the Inspector works around
+     * the same gap with three sources of its own. Until that exists this asks, which costs two field
+     * reads and a reference comparison and stops when the panel leaves the tree.</p>
+     */
+    @Override
+    protected void connected() {
+        super.connected();
+        UIDocument window = document();
+        // GUARDED, because `every` is a plain add and the dock detaches and re-attaches a panel on every
+        // rebuild -- so an unguarded registration stacks one hook per rebuild. Cleared in disconnected(),
+        // or a panel that is hidden and reshown comes back with the flag set and no hook behind it.
+        if (ticking || window == null) return;
+        ticking = true;
+        window.animation().every(this, delta -> {
+            follow();
+            return true;
+        });
+    }
+
+    @Override
+    protected void disconnected() {
+        super.disconnected();
+        ticking = false;
+    }
+
+    /** @see #connected */
+    private boolean ticking;
 
     /** Points the panel at whatever builder is in front, and rebuilds only when that changed. */
     public void follow() {
@@ -80,9 +104,4 @@ public final class DesignToolWindow extends UIElement {
         return view instanceof BuilderEditor builder ? builder.surface() : null;
     }
 
-    @Override
-    protected void disconnected() {
-        super.disconnected();
-        connections.disconnectAll();
-    }
 }
