@@ -17,7 +17,10 @@ import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.net.mirror.DocumentExtras;
+import com.crystalgui.style.sheet.StyleSheet;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Attribute;
+import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.text.UIText;
@@ -148,6 +151,46 @@ public class UiBuilderDocumentTest {
     @Test
     public void editsAreNeverMerged() {
         assertFalse(open().mergeable());
+    }
+
+    /**
+     * The page is laid out and has a size — the check for "the tab opened and there is nothing in it".
+     *
+     * <p>{@code update} rather than {@code layout}: the latter is the box tree alone and runs no
+     * cascade, so every rule in the user-agent sheet would appear not to match.</p>
+     */
+    @Test
+    public void theArtboardHasABoxWhenTheTabIsLaidOut() {
+        UIElementRegistry.bootstrap();
+        UIDocument window = new UIDocument();
+        window.styleEngine().addStylesheet(StyleSheet.DEFAULT);
+        BuilderEditor editor = new BuilderEditor(open());
+        window.append(editor.view());
+
+        window.update(1200f, 800f);
+
+        Box surface = editor.view().box();
+        assertNotNull("the surface must have a box, or the tab is empty", surface);
+        assertTrue("the surface fills the tab: " + surface.width(), surface.width() > 100f);
+        assertTrue("and its height: " + surface.height(), surface.height() > 100f);
+
+        Box page = editor.artboard().box();
+        assertNotNull("the artboard must have a box", page);
+        assertEquals(800f, page.width(), 1f);
+        assertEquals(480f, page.height(), 1f);
+
+        editor.disposeView();
+    }
+
+    /** A file that will not parse still opens, and says why in Problems. */
+    @Test
+    public void abrokenFileOpensEmptyAndReportsIt() {
+        UIElementRegistry.bootstrap();
+        UiBuilderDocument document =
+                new UiBuilderDocument("{ not json".getBytes(StandardCharsets.UTF_8), "test:broken");
+
+        assertNotNull(document.root());
+        assertEquals(1, document.diagnostics().all().size());
     }
 
     /** The tab: an artboard on a surface, holding the document's own tree. */

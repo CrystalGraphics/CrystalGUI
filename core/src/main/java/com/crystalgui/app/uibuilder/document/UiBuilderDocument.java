@@ -17,7 +17,10 @@ import com.crystalgui.net.mirror.UIElementMirror;
 import com.crystalgui.serialization.ContentHash;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.template.UiTemplate;
+import com.crystalgui.template.UiTemplateException;
 import com.crystalgui.template.UiTemplates;
+import com.crystalgui.text.diagnostic.Diagnostic;
+import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
 import com.crystalgui.ui.dom.UIElement;
 
@@ -137,15 +140,35 @@ public final class UiBuilderDocument extends AbstractDocumentModel {
                 .getBytes(StandardCharsets.UTF_8);
     }
 
+    /**
+     * Reads the file, or opens empty and says why.
+     *
+     * <p>A document that will not parse still opens: a tab that refuses to appear leaves nowhere to see
+     * what is wrong with the file, and the Problems row is where that belongs. A blank file is a NEW
+     * file — which is what the explorer's New File makes — and is the empty document rather than an
+     * error.</p>
+     */
     @Override
     public void adopt(byte[] bytes) {
         String text = new String(bytes, StandardCharsets.UTF_8);
-        UiTemplate parsed = UiTemplates.parse(text.isEmpty() ? EMPTY : text, origin);
         extras.clear();
-        root = parsed.inflateForEditing(extras);
-        header = headerOf(parsed);
+        try {
+            UiTemplate parsed = UiTemplates.parse(text.trim().isEmpty() ? EMPTY : text, origin);
+            root = parsed.inflateForEditing(extras);
+            header = headerOf(parsed);
+            problems.changeOne(PARSE, List.of());
+        } catch (UiTemplateException broken) {
+            UiTemplate empty = UiTemplates.parse(EMPTY, origin);
+            root = empty.inflateForEditing(extras);
+            header = headerOf(empty);
+            problems.changeOne(PARSE,
+                    List.of(Diagnostic.onRow(0, DiagnosticSeverity.ERROR, broken.getMessage())));
+        }
         adopted();
     }
+
+    /** Who owns the parse diagnostics in {@link #problems}. */
+    private static final String PARSE = "cgui.parse";
 
     /** What a new file is: a format line and an empty root, so a fresh document opens rather than fails. */
     public static final String EMPTY = "{\n  \"cgui\": 1,\n  \"root\": { \"kind\": \"element\" }\n}\n";
