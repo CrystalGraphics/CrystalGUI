@@ -1381,6 +1381,14 @@ public class Desktop extends UIElement implements DataProvider {
      *
      * <p>Asked once the greeting has supplied an identity, which is the first moment either half of
      * that answer is known.</p>
+     *
+     * <p><b>This holds while a client talks to one source, and W3b is where it stops.</b> The rule
+     * wanted is "beside the projects it is about"; what is implemented is "beside the world, when this
+     * process serves one", and the two part as soon as the client also serves its own GLOBAL root.
+     * A global project's state would then be filed under whichever world happened to be open — its
+     * session lost on the next world, and its unsaved backups not offered. Placing by workspace rather
+     * than by process needs the root a workspace belongs to, which only its server knows: the greeting
+     * is where it would arrive.</p>
      */
     public ConfigStorage workspaceStore(String identity) {
         Path world = localWorld == null ? null : localWorld.get();
