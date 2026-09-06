@@ -603,7 +603,7 @@ public final class ExplorerCommands {
         InputDialog.confirm(UIElement.sourceOf(context), "Delete",
                 directory ? "Delete '" + path.name() + "' and everything in it?"
                         : "Delete '" + path.name() + "'?",
-                delete);
+                "Delete", delete);
     }
 
     /**

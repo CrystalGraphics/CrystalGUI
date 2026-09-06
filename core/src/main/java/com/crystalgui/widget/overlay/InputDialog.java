@@ -3,6 +3,7 @@ package com.crystalgui.widget.overlay;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.text.UIText;
 
@@ -33,6 +34,9 @@ public final class InputDialog {
 
     public static final String PROMPT_CLASS = "__prompt__";
     public static final String CAPTION_CLASS = "__prompt-caption__";
+
+    /** The shared dialog button row. @see #confirm */
+    public static final String ACTIONS_CLASS = "__dialog-actions__";
 
     private InputDialog() {
     }
@@ -77,24 +81,58 @@ public final class InputDialog {
      */
     public static void confirm(@Nullable UIElement from, String title, String message,
                                Runnable onConfirm) {
+        confirm(from, title, message, "Confirm", onConfirm);
+    }
+
+    /**
+     * Asks a yes/no question, with both answers as buttons.
+     *
+     * <p><b>The exception to the no-buttons rule above, because there is nothing to type.</b> A name
+     * prompt is a field and Enter commits what you wrote; a confirmation has no field, so one was added
+     * purely to catch the keystroke and the instruction rode in its PLACEHOLDER. That put a destructive
+     * action behind a key nothing the user would read had told them about, on a popup that light-dismisses
+     * on the first click outside — so pressing Delete on a file put up a box that went away again and
+     * deleted nothing.</p>
+     *
+     * <p>Escape and a click outside both cancel, and focus lands on Cancel, so the destructive answer
+     * takes a deliberate press. The same arrangement {@code ConflictDialog} uses, for the same reason.</p>
+     *
+     * @param confirmLabel what the confirming button says. Name the ACTION — "Delete", "Discard" — never
+     *                     "OK": it is the last thing read before something is destroyed
+     */
+    public static void confirm(@Nullable UIElement from, String title, String message,
+                               String confirmLabel, Runnable onConfirm) {
         UIDocument window = from == null ? null : from.document();
         if (window == null) return;
 
-        Popover popup = prompt(window, from, title);
+        Dialog dialog = new Dialog(title);
+        UIText caption = new UIText(message);
+        caption.addClass(CAPTION_CLASS);
+        dialog.getContent().append(caption);
 
-        // A field carries Enter, rather than a key handler on the popover: a popup with nothing focusable
-        // in it cannot receive a key at all, and a second mechanism for what TextField already does is a
-        // second mechanism to keep in step.
-        TextField confirmKey = new TextField();
-        confirmKey.setPlaceholder(message + "  —  Enter to confirm, Escape to cancel");
-        popup.append(confirmKey);
-        confirmKey.onSubmit.connect(value -> {
-            popup.hide();
+        UIElement actions = new UIElement();
+        // THE SHARED ROW, not ConflictDialog's own class: that one is scoped to `dialog.__conflict__`
+        // and borrowing it matches nothing, which the sheet's own comment records as silent and total.
+        actions.addClass(ACTIONS_CLASS);
+        dialog.getContent().append(actions);
+
+        Button confirm = new Button(confirmLabel);
+        actions.append(confirm);
+        Button cancel = new Button("Cancel");
+        actions.append(cancel);
+
+        confirm.onPressed.connect(() -> {
+            dialog.close();
             onConfirm.run();
         });
+        cancel.onPressed.connect(dialog::close);
 
-        centre(window, popup);
-        window.focus().requestFocus(confirmKey);
+        window.addOverlay(dialog, from);
+        dialog.onClosed.connect(dialog::removeSelf);
+        dialog.showModal();
+        // AFTER showModal, per Dialog's own instruction: the focusing steps take the first focusable
+        // descendant, and here that is the button that destroys something.
+        window.focus().requestFocus(cancel);
     }
 
     /** The shared shell: one caption, promoted and light-dismissable. */
