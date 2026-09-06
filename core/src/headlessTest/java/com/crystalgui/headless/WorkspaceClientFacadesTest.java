@@ -120,6 +120,48 @@ public class WorkspaceClientFacadesTest {
 
     // ── Local history ───────────────────────────────────────────────────────────────────────────
 
+    /** History is filed under the resource, so a move has to carry it or the file loses its past. */
+    @Test
+    public void historyFollowsARename() {
+        InMemoryConfigStorage storage = new InMemoryConfigStorage();
+        AtomicLong clock = new AtomicLong(1000);
+        LocalHistory history = new LocalHistory(storage, clock::get, 10, Long.MAX_VALUE);
+        Resource renamed = Resource.of(CgPath.parse("proj:src/Renamed.java"));
+
+        history.record(MAIN, "before the move".getBytes(StandardCharsets.UTF_8));
+        history.rename(MAIN, renamed);
+
+        assertEquals(1, history.entriesOf(renamed).size());
+        assertTrue("nothing stranded under the old name", history.entriesOf(MAIN).isEmpty());
+        assertNotNull("and the merge base moved with it", history.mergeBase(renamed));
+    }
+
+    /**
+     * <b>A rename onto a file that had its own history keeps both.</b> The target's entries are what the
+     * overwritten file held, and the overwrite is the moment that content stops existing anywhere else.
+     */
+    @Test
+    public void renamingOntoAFileMergesBothHistories() {
+        InMemoryConfigStorage storage = new InMemoryConfigStorage();
+        AtomicLong clock = new AtomicLong(1000);
+        LocalHistory history = new LocalHistory(storage, clock::get, 10, Long.MAX_VALUE);
+        Resource target = Resource.of(CgPath.parse("proj:src/Target.java"));
+
+        history.record(target, "the file that got overwritten".getBytes(StandardCharsets.UTF_8));
+        clock.addAndGet(1000);
+        history.record(MAIN, "the file that moved onto it".getBytes(StandardCharsets.UTF_8));
+
+        history.rename(MAIN, target);
+
+        List<LocalHistory.Entry> entries = history.entriesOf(target);
+        assertEquals("both, not one", 2, entries.size());
+        assertArrayEquals("newest first", "the file that moved onto it".getBytes(StandardCharsets.UTF_8),
+                entries.get(0).content());
+        assertArrayEquals("and what the overwrite destroyed is still reachable",
+                "the file that got overwritten".getBytes(StandardCharsets.UTF_8),
+                entries.get(1).content());
+    }
+
     /**
      * <b>D13.</b> A conflict resolved by overwriting is currently the end of the other version, with
      * nowhere it survives.

@@ -128,6 +128,15 @@ public class WorkspaceDocumentsTest {
         pump();
     }
 
+    /** A rename the server states as a fact, delivered to the client. */
+    private void notifyRename(CgPath from, CgPath to, String etag) {
+        FsMessages.FileChange change = hub.noteRenamed(from, to, etag);
+        serverSide.notify(FsMethods.CHANGED, new StateMap<>(PlainOps.INSTANCE,
+                FsMessages.changedNotification().encode(PlainOps.INSTANCE,
+                        new FsMessages.ChangedNotification(List.of(change)))));
+        pump();
+    }
+
     private Document open(Resource resource) {
         Reply<DocumentReference> reply = documents.open(resource);
         pump();
@@ -390,6 +399,26 @@ public class WorkspaceDocumentsTest {
         assertTrue("what is on disk needs no backup", documents.restorable().isEmpty());
     }
 
+    /**
+     * <b>Undoing back to the saved state discards the backup too.</b> A save is not the only way a
+     * document stops holding unsaved work — {@code contentVersion} is the content's identity and comes
+     * back when an undo returns to it — so a backup written on the way out has to be dropped on the way
+     * back, or the next launch offers work the author took back as if it were still pending.
+     */
+    @Test
+    public void undoingBackToCleanDiscardsTheBackup() {
+        Document document = open(MAIN);
+
+        type(document, "// half-typed\n");
+        assertEquals(1, documents.restorable().size());
+
+        assertTrue("the edit is undoable", document.model().history().undo());
+        assertFalse("an undo back to the saved state leaves nothing unsaved", document.isDirty());
+
+        assertTrue("a document holding no unsaved work holds no backup",
+                documents.restorable().isEmpty());
+    }
+
     /** And the history records what was saved, which is where "keep mine" survives. */
     @Test
     public void aSaveIsRecordedInLocalHistory() {
@@ -400,6 +429,65 @@ public class WorkspaceDocumentsTest {
 
         assertEquals(1, workspace.history().entriesOf(MAIN).size());
         assertNotNull(workspace.history().mergeBase(MAIN));
+    }
+
+    /**
+     * <b>A rename takes the backup with it.</b> A backup is filed under its resource, so the one
+     * written before the move is discarded by nothing afterwards: a save discards under the new name
+     * and the orphan is offered on every launch as unsaved work for a path that no longer exists —
+     * which cannot be opened, so the restore cannot compare it away either.
+     */
+    @Test
+    public void aRenameTakesTheBackupWithIt() {
+        Document document = open(MAIN);
+        type(document, "// half-typed\n");
+        assertEquals(1, documents.restorable().size());
+
+        notifyRename(MAIN_PATH, CgPath.parse("proj:src/Renamed.java"), "etag-2");
+
+        assertEquals("still exactly one backup", 1, documents.restorable().size());
+        assertEquals("and it is filed under where the document went",
+                file("src/Renamed.java"), documents.restorable().get(0).resource());
+    }
+
+    /** And the history follows the file, so a renamed document is not one with no past. */
+    @Test
+    public void aRenameTakesTheLocalHistoryWithIt() {
+        Document document = open(MAIN);
+        type(document, "// first\n");
+        documents.save(document);
+        pump();
+        assertEquals(1, workspace.history().entriesOf(MAIN).size());
+
+        notifyRename(MAIN_PATH, CgPath.parse("proj:src/Renamed.java"), "etag-2");
+
+        Resource renamed = file("src/Renamed.java");
+        assertEquals("the history moved with the file", 1,
+                workspace.history().entriesOf(renamed).size());
+        assertTrue("and nothing is stranded under the old name",
+                workspace.history().entriesOf(MAIN).isEmpty());
+        assertNotNull("so a three-way merge still has its base",
+                workspace.history().mergeBase(renamed));
+    }
+
+    /**
+     * <b>And for a file nothing has open</b> — which is how a rename usually happens. There is no
+     * document and no watch on it, so a hand-off hung off the open document cannot see this at all.
+     */
+    @Test
+    public void aRenameMovesTheStoresOfAFileNobodyHasOpen() {
+        Resource closed = file("src/Closed.java");
+        workspace.history().record(closed, "was here\n".getBytes(StandardCharsets.UTF_8));
+        workspace.backup().save(closed, "unsaved\n".getBytes(StandardCharsets.UTF_8), "etag-1");
+
+        notifyRename(CgPath.parse("proj:src/Closed.java"),
+                CgPath.parse("proj:src/Moved.java"), "etag-2");
+
+        Resource moved = file("src/Moved.java");
+        assertEquals("the history came with it", 1, workspace.history().entriesOf(moved).size());
+        assertNotNull("and so did the backup", workspace.backup().get(moved));
+        assertNull("with nothing stranded behind", workspace.backup().get(closed));
+        assertTrue(workspace.history().entriesOf(closed).isEmpty());
     }
 
     // ── Lifetime ────────────────────────────────────────────────────────────────────────────────

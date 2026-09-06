@@ -139,6 +139,31 @@ public final class LocalHistory {
         return entries.isEmpty() ? null : entries.get(0).content();
     }
 
+    /**
+     * Follows a file that moved, so a rename does not leave it looking like a file with no past.
+     *
+     * <p>Entries are filed under the resource, so without this a rename strands them: the renamed file
+     * has no history and no merge base, and what was left behind is reclaimed by {@link #sweepIfOverCap}
+     * as a cold file rather than by anything that knows it was abandoned.</p>
+     *
+     * <p><b>Merged when the target already has entries</b> — what a rename that overwrites produces.
+     * Those entries are what the overwritten file held, and the overwrite is the moment that content
+     * stops existing anywhere else, so dropping them would make the move a second deletion. Both sides
+     * are already in time order and the cap still applies afterwards.</p>
+     */
+    public void rename(Resource from, Resource to) {
+        if (from.equals(to) || !storage.isWritable()) return;
+        String moving = storage.read(ResourceKeys.nameFor(from));
+        if (moving == null || moving.isEmpty()) return;
+        List<Entry> merged = new ArrayList<>(decode(moving));
+        String existing = storage.read(ResourceKeys.nameFor(to));
+        if (existing != null && !existing.isEmpty()) merged.addAll(decode(existing));
+        merged.sort(Comparator.comparingLong(Entry::at));
+        prune(merged);
+        storage.write(ResourceKeys.nameFor(to), encode(merged));
+        storage.delete(ResourceKeys.nameFor(from));
+    }
+
     public void forget(Resource resource) {
         storage.delete(ResourceKeys.nameFor(resource));
     }
