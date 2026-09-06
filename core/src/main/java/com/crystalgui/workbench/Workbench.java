@@ -903,6 +903,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // document stayed open, its editor stayed reachable and anything it owned -- a preview pool, a
         // renderer -- lived until the process did. Disposer could not help, because the thing that knew
         // the tab was gone had no way to say so.
+        lifetime.add(dock.onWillClosePanel.connect(documentTabs::captureClosingPanel));
         lifetime.add(dock.onDidClosePanel.connect(documentTabs::releaseClosedPanel));
         // ...AND ITS PLACEHOLDER RECORD, which is keyed by a ref and would otherwise outlive the
         // panel and be read against whatever reopened under the same name.

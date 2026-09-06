@@ -151,11 +151,14 @@ public final class ShaderGraphContribution implements WorkbenchExtension {
                     () -> workbench.openFile(graph.resource().asPath()));
         });
 
-        // THE ONE THING THAT OUTLIVES THE WORKBENCH. Everything else above is registered ON the
-        // workbench -- the kind, the panel, the banner provider -- and goes when it does. The inspector
-        // sections are in a process-wide registry, so they are what a caller has to be able to hand
-        // back, and they are the whole of what this returns.
-        return ShaderInspectorSections.register();
+        // THE INSPECTOR SECTIONS ARE NOT REGISTERED HERE. They were, and their lifetime was this
+        // workbench's -- so a graph that had been closed went on contributing a Node and a Graph tab,
+        // and the inspector kept the session of a document nobody had open. They belong to a GRAPH, and
+        // ShaderSectionsExtension registers them for exactly as long as one is open.
+        //
+        // Everything above IS this workbench's -- the kind, the panel, the banner provider -- and goes
+        // when it does, which is why there is nothing left to hand back.
+        return () -> { };
     }
 
 

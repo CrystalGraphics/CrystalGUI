@@ -111,6 +111,10 @@ public class Inspector extends UIElement {
         // Blender's notifier: anything that changes what is inspected says so, and every inspector
         // re-asks. Deferred and deduplicated below, so emitting freely is the intended usage.
         subscriptions.add(InspectorRegistry.onDidChangeSubject.connect(this::refresh));
+        // AND A SUBJECT THAT HAS BEEN CLOSED, which the retention rules would otherwise hold forever:
+        // a detached source is kept on purpose, and a source nothing can describe is kept on purpose, so
+        // a document whose editor was released stayed on screen with its tabs intact. @see #forget
+        subscriptions.add(InspectorRegistry.onDidCloseSubject.connect(this::forget));
         // AND THE FOCUS OWNER, which is where the subject actually comes from — see subjectFrom.
         subscriptions.add(current.focus().onDidChangeFocus.connect(this::onFocusChanged));
 
@@ -165,6 +169,42 @@ public class Inspector extends UIElement {
         inspect(focused);
     }
 
+    /**
+     * Drops the subject when {@code closed} is it, or contains it.
+     *
+     * <p>The one case the retention rules must not cover. They exist so the panel changes only when
+     * there is a better answer — but a closed document has no better answer coming, and holding its
+     * tabs over an unrelated file is worse than blanking.</p>
+     *
+     * <p>Contains, not equals: an editor is released as a whole and the subject is usually something
+     * INSIDE it — the graph, a node, a field that had focus.</p>
+     */
+    private void forget(@Nullable UIElement closed) {
+        if (closed == null) return;
+        // THE SUBJECT IS OFTEN NOT THE THING THAT CLOSED, and that is the whole difficulty. Pressing a
+        // tab's X moves focus to the X -- so `inspect(thatButton)` is already queued by the time the
+        // close arrives, and the subject points at the tab strip rather than at anything inside the
+        // editor. Ctrl+W leaves focus in the editor and looks like it works; the two are the same close.
+        //
+        // So the containment test only decides whether to DROP the source. What a close always does is
+        // suspend the retention rules for one pass: the panel is allowed to end up empty, which is the
+        // one thing they exist to prevent and the one thing that is right here.
+        if (pendingSource != null && (pendingSource == closed || closed.contains(pendingSource))) {
+            pendingSource = null;
+        }
+        shownKey = null;
+        forcing = true;
+        pending = true;
+        if (document() == null) {
+            pending = false;
+            rebuild(pendingSource);
+            forcing = false;
+        }
+    }
+
+    /** Set by {@link #forget}: this rebuild may blank the panel. Cleared once it has run. */
+    private boolean forcing;
+
     /** Re-ask about the current subject, next frame. What {@code onDidChangeSubject} calls. */
     public void refresh() {
         pending = true;
@@ -174,6 +214,7 @@ public class Inspector extends UIElement {
         if (pending) {
             pending = false;
             rebuild(pendingSource);
+            forcing = false;
         }
         return true;
     }
@@ -229,7 +270,7 @@ public class Inspector extends UIElement {
         // Only while THIS inspector is live. A headless caller inspects detached elements deliberately --
         // that is the whole of how the contribution tests work -- and there the subject being out of a
         // tree is the normal case rather than a symptom.
-        if (document() != null && source != null && source.document() == null) return;
+        if (!forcing && document() != null && source != null && source.document() == null) return;
 
         DataContext context = source == null ? null : DataContext.from(source);
         List<InspectorSection> sections =
@@ -260,7 +301,7 @@ public class Inspector extends UIElement {
         //
         // So this branch is load-bearing forever rather than until someone writes the missing section,
         // which is why it keeps the last subject rather than naming which subjects are worth keeping.
-        if (sections.isEmpty() && shownKey != null) return;
+        if (!forcing && sections.isEmpty() && shownKey != null) return;
 
         // NOT AN OPTIMISATION. A rebuild replaces every control in the panel, and this engine has a
         // standing rule that a widget must never rebuild the elements it is being clicked or dragged on:

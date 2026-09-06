@@ -216,8 +216,10 @@ public class ShaderGraphEditor extends UIElement
 
     private boolean mainPreviewAttached;
 
+    @Nullable
     private String pendingPreviewRect = "";
 
+    @Nullable
     private String pendingBoardRect = "";
 
     /** The shader domain's shared state, per document. @see ShaderGraphServices */
@@ -677,8 +679,8 @@ public class ShaderGraphEditor extends UIElement
         // preview was marked, so a restored Blackboard ignored the canvas shrinking until it had been
         // grabbed once -- at which point it started tracking correctly and looked like a redraw problem
         // rather than a flag that nothing but a drag ever set.
-        pendingPreviewRect = String.valueOf(settings.raw(VIEW_PREVIEW_RECT));
-        pendingBoardRect = String.valueOf(settings.raw(VIEW_BLACKBOARD_RECT));
+        pendingPreviewRect = settings.raw(VIEW_PREVIEW_RECT);
+        pendingBoardRect = settings.raw(VIEW_BLACKBOARD_RECT);
         applyPendingViewState();
     }
 
@@ -1087,6 +1089,28 @@ public class ShaderGraphEditor extends UIElement
             previewsAttached = false;
         }
         mainPreviewAttached = false;
+        // AND THE SURFACE, which is what retires the five extensions -- the inspector sections among
+        // them. Without it a closed graph went on contributing a Node and a Graph tab, and the inspector
+        // kept the session of a document nobody had open.
+        graph.dispose();
+    }
+
+    /**
+     * <b>The close hook, and the one this editor never implemented.</b>
+     *
+     * <p>{@link DocumentEditor#disposeView()} is what {@code EditorService} calls when a tab closes, and
+     * it is a DEFAULT NO-OP — so an editor that tears down in a {@code dispose()} of its own tears down
+     * never. Nothing about that is visible at the seam: the tab closes, the document is released, and the
+     * widget is dropped, so every symptom is something that OUTLIVED the close rather than something that
+     * failed at it.</p>
+     *
+     * <p>Not a cache. {@code DockGroup.forgetContent} drops the built widget precisely so a reopen builds
+     * a fresh one, and detaches it because leaving it attached keeps a whole editor and its services
+     * alive behind a tab nobody can see.</p>
+     */
+    @Override
+    public void disposeView() {
+        dispose();
     }
 
     /**

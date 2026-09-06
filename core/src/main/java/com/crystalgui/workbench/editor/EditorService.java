@@ -7,7 +7,10 @@ import com.crystalgui.core.async.ReplyError;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.document.Document;
+import com.crystalgui.serialization.PlainOps;
+import com.crystalgui.serialization.StateMap;
 import com.crystalgui.document.DocumentEditor;
+import com.crystalgui.widget.config.inspector.InspectorRegistry;
 import com.crystalgui.document.DocumentKinds;
 import com.crystalgui.document.DocumentReference;
 import com.crystalgui.document.DocumentState;
@@ -55,6 +58,21 @@ public final class EditorService implements Disposable {
 
     /** Open tabs, in the order they were opened. One per {@link EditorInput}. */
     private final Map<EditorInput, Tab> tabs = new LinkedHashMap<>();
+
+    /**
+     * What each closed editor was showing, so reopening a file inside one session puts it back.
+     *
+     * <p>{@code DocumentEditor.writeViewState} was only ever called by {@link
+     * com.crystalgui.workbench.WorkbenchSession} — at SESSION save and restore — so closing a tab and
+     * reopening it lost the camera and every floating panel, while quitting and relaunching kept them.
+     * That is the wrong way round: the shorter the round trip, the more certain a user is that nothing
+     * should have moved.</p>
+     *
+     * <p>Keyed by input rather than by document, because the input is what a reopen names, and it
+     * outlives the document the way the session's own record does. The same shape {@code DockGroup}
+     * already keeps for a retargeted pane.</p>
+     */
+    private final Map<EditorInput, StateMap<?>> viewStates = new LinkedHashMap<>();
 
     /** A tab opened. */
     public final Signal.Value<Tab> onDidOpen = new Signal.Value<>();
@@ -357,7 +375,26 @@ public final class EditorService implements Disposable {
             // over ONE document -- which is what lets a diff's left pane sit beside the live file --
             // so the refusal cannot live on the model without taking the other tab down with it.
             if (input.isReadOnly()) editor.setReadOnly(true);
+            // AND WHAT IT WAS SHOWING LAST TIME, if this file has been closed and reopened in this
+            // session. @see #captureViewState
+            StateMap<?> stored = viewStates.get(input);
+            if (stored != null) editor.readViewState(stored);
             return editor;
+        }
+
+        /**
+         * Remembers what this editor is showing, so a reopen puts it back.
+         *
+         * <p>Called from {@code onWillClosePanel} rather than from {@link #release}, because the dock
+         * detaches the widget first and a detached element has no geometry to ask for: the rects came
+         * back empty and nothing was stored.</p>
+         */
+        public void captureViewState() {
+            DocumentEditor view = editor;
+            if (view == null) return;
+            StateMap<Object> out = new StateMap<>(PlainOps.INSTANCE);
+            view.writeViewState(out);
+            viewStates.put(input, out);
         }
 
         private void bind(DocumentReference held) {
@@ -385,7 +422,13 @@ public final class EditorService implements Disposable {
 
         private void release() {
             DocumentEditor view = editor;
-            if (view != null) view.disposeView();
+            if (view != null) {
+                // BEFORE disposing it, while its element is still worth naming. An inspector RETAINS
+                // a detached subject on purpose, so without this a closed document kept its sections on
+                // screen over whatever was opened next.
+                InspectorRegistry.subjectClosed(view.view());
+                view.disposeView();
+            }
             editor = null;
             if (reference != null) reference.dispose();
             reference = null;
