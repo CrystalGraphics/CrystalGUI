@@ -1,38 +1,42 @@
 # mc1201/fabric — Agent Knowledge Base
 
-> ⚠️ **Not in the build.** `includeBuild("mc1201")` is commented out in the root
-> `settings.gradle.kts`, so the Gradle commands below do not run until it is uncommented.
-
 ## Target Versions
 
-**MC 1.20.1 / Fabric**
+MC 1.20.1 / Fabric
 
-Uses `fabric-loom 1.16.2`. See `build.gradle.kts` for version pins under `mc1201.*` keys.
+## The loader is registration only
+
+**Two entry points, and both are needed.** `fabric.mod.json` names them separately: `main` runs on
+both sides, `client` only on a client, and they are different interfaces.
+
+`CrystalGUI1201FabricCommon` is the `main` one and carries the `Network` transport and the `Events`
+inner class, because a dedicated server needs the channel. `CrystalGUI1201Fabric` is the `client` one
+and does nothing but call `Events.registerClient()` — the half that touches client-only Fabric APIs a
+server must never load.
+
+The engine's own render, reload and shutdown hooks are **not** here: CrystalGraphics ships as its own
+mod and owns them. Everything this loader forwards to lives in `:mc1201:common`'s `Lifecycle1201`.
 
 ## Minecraft Source Location
 
-Decompiled, Parchment-mapped Fabric MC 1.20.1 sources are extracted into two subdirectories:
+Decompiled, Parchment-mapped sources are extracted into two subdirectories:
 
 | Path | Contents |
 |---|---|
 | `build/mc-src/java/` | MC 1.20.1 Java sources, decompiled by Loom via Vineflower, Parchment-mapped |
-| `build/mc-src/resources/` | MC client assets (assets/, data/, *.json, *.mcmeta) from the merged binary jar |
+| `build/mc-src/resources/` | MC client assets (assets/, data/, *.json, *.mcmeta) |
 
-These paths are gitignored and not committed. Generate them with:
+Gitignored, not committed. Generate them with:
 
 ```bash
 ./gradlew :mc1201:fabric:extractMcSources
-# or regenerate all three mc1201 loader modules at once:
+# or all three loader modules at once:
 ./gradlew extractAllMcSources
 ```
 
-**Note**: Generating sources triggers Loom's `genSourcesWithVineflower` task, which runs
-Vineflower decompilation and may take **several minutes on first run**. Subsequent runs use
-Loom's task output cache and are fast.
+Expect several minutes on the first run.
 
-## Key Source Files
-
-After extraction, commonly referenced locations under `build/mc-src/java/`:
+Commonly referenced locations under `build/mc-src/java/`:
 
 - `net/minecraft/client/Minecraft.java` — main game class
 - `net/minecraft/client/renderer/` — rendering pipeline
@@ -44,9 +48,9 @@ After extraction, commonly referenced locations under `build/mc-src/java/`:
 ```bash
 ./gradlew :mc1201:fabric:compileJava
 ./gradlew :mc1201:fabric:shadowJar
+./gradlew :mc1201:fabric:serverSmoke -PcgAcceptEula   # boots a dedicated server, asserts, stops
 ```
 
 ## Plugin
 
-Uses `fabric-loom 1.16.2`. The `genSourcesWithVineflower` task is provided by Loom and
-is what `extractMcSources` depends on to produce the sources jar.
+Uses `fabric-loom 1.16.2`. Version pins live in `build.gradle.kts` under the `mc1201.*` keys.

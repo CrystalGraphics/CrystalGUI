@@ -1,38 +1,39 @@
 # mc1201/neoforge — Agent Knowledge Base
 
-> ⚠️ **Not in the build.** `includeBuild("mc1201")` is commented out in the root
-> `settings.gradle.kts`, so the Gradle commands below do not run until it is uncommented.
-
 ## Target Versions
 
-**IMPORTANT**: Despite the `mc1201/` directory name, this module targets **MC 1.20.4 / NeoForge 20.4.x**.
-NeoForge never published a stable 1.20.1 series — the earliest available stable series is 20.4.x (MC 1.20.4).
-The directory name `mc1201/neoforge/` is retained for continuity. Version pins live in `gradle.properties`
-under `mc1204.*` keys.
+**MC 1.20.4 / NeoForge 20.4.x** — despite the `mc1201/` directory name.
+NeoForge published no stable 1.20.1 series; 20.4.x is the earliest, and the directory name is
+kept so the three loaders sit together.
+
+## The loader is registration only
+
+One `@Mod` class. Its `Events` inner class registers every listener on `NeoForge.EVENT_BUS`
+from the constructor, and its `Network` inner class is the payload-based transport.
+
+The engine's own render, reload and shutdown hooks are **not** here: CrystalGraphics ships as its own
+mod and owns them. Everything this loader forwards to lives in `:mc1201:common`'s `Lifecycle1201`.
 
 ## Minecraft Source Location
 
-Decompiled, Parchment-mapped NeoForge + MC 1.20.4 sources are extracted into two subdirectories:
+Decompiled, Parchment-mapped sources are extracted into two subdirectories:
 
 | Path | Contents |
 |---|---|
 | `build/mc-src/java/` | NeoForge + Mojang Java sources, Parchment-mapped |
-| `build/mc-src/resources/` | MC client assets (assets/, data/, *.json, *.mcmeta) from `client-extra-*.jar` |
+| `build/mc-src/resources/` | MC client assets (assets/, data/, *.json, *.mcmeta) |
 
-These paths are gitignored and not committed. Generate them with:
+Gitignored, not committed. Generate them with:
 
 ```bash
 ./gradlew :mc1201:neoforge:extractMcSources
-# or regenerate all three mc1201 loader modules at once:
+# or all three loader modules at once:
 ./gradlew extractAllMcSources
 ```
 
-Running `extractMcSources` will trigger `createMinecraftArtifacts` (the ModDevGradle task that
-downloads and decompiles sources) if it has not run yet. Expect several minutes on first run.
+Expect several minutes on the first run.
 
-## Key Source Files
-
-After extraction, commonly referenced locations under `build/mc-src/java/`:
+Commonly referenced locations under `build/mc-src/java/`:
 
 - `net/minecraft/client/Minecraft.java` — main game class
 - `net/minecraft/client/renderer/` — rendering pipeline
@@ -44,8 +45,10 @@ After extraction, commonly referenced locations under `build/mc-src/java/`:
 ```bash
 ./gradlew :mc1201:neoforge:compileJava
 ./gradlew :mc1201:neoforge:shadowJar
+./gradlew :mc1201:neoforge:serverSmoke -PcgAcceptEula   # boots a dedicated server, asserts, stops
 ```
 
 ## Plugin
 
-Uses `net.neoforged.moddev` (ModDevGradle). See `build.gradle.kts` for version pins.
+Uses `net.neoforged.moddev` (ModDevGradle). Version pins live in `gradle.properties` under the
+`mc1204.*` keys.
