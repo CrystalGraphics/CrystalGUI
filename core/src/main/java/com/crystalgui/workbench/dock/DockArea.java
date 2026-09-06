@@ -869,6 +869,11 @@ public class DockArea extends UIElement {
         // is the half to keep. The restore then left the loop written TWICE, one above the rebuild and
         // one below, each with its own half of this comment; they are the same loop and one is enough.
         timed = FrameProfile.begin();
+        // BEFORE THE DETACH BELOW, and that is the whole reason this is a second signal. forgetContent
+        // takes the widget out of the tree, and a detached element has no boxes -- so anything that
+        // needs to MEASURE what is closing (an editor saving where its floating panels sat) has to be
+        // told here. onDidClosePanel is too late by construction.
+        onWillClosePanel.emit(panel);
         for (DockGroup group : groups.values()) group.forgetContent(panel);
         FrameProfile.step(timed, "close.forgetContent x" + groups.size());
         // A STRIP RESYNC WHEN ONLY A STRIP CHANGED, and the full rebuild only when the tree did.
@@ -912,6 +917,9 @@ public class DockArea extends UIElement {
      * <p>Not fired by a drag between groups, which removes and re-adds the same panel: that is a move,
      * and disposing there would destroy the thing being dragged mid-gesture.</p>
      */
+    /** A panel that is about to close, while its widget is still in the tree. @see #onDidClosePanel */
+    public final Signal.Value<DockPanelRef> onWillClosePanel = new Signal.Value<>();
+
     public final Signal.Value<DockPanelRef> onDidClosePanel = new Signal.Value<>();
 
     /** Maximizes a group, or restores when it is already the maximized one. */

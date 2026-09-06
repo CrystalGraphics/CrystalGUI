@@ -465,6 +465,26 @@ public final class DocumentTabs {
      * asked before anything got this far, and re-asking at release time would be a second prompt for one
      * decision.</p>
      */
+    /**
+     * Saves what the panel about to close was showing.
+     *
+     * <p>Paired with {@link #releaseClosedPanel}, and deliberately a separate step: that one runs after
+     * the dock has detached the widget, which is too late to measure anything.</p>
+     */
+    void captureClosingPanel(DockPanelRef closing) {
+        String raw = closing.state(DockPanelRef.PATH, "");
+        if (raw.isEmpty()) return;
+        EditorService.Tab tab;
+        try {
+            Resource resource = Resource.parse(raw);
+            if (!resource.isProject()) return;
+            tab = workbench.editors.tabFor(EditorInput.of(Resource.of(resource.asPath())));
+        } catch (RuntimeException unparseable) {
+            return;
+        }
+        if (tab != null) tab.captureViewState();
+    }
+
     void releaseClosedPanel(DockPanelRef closed) {
         String raw = closed.state(DockPanelRef.PATH, "");
         if (raw.isEmpty()) return;

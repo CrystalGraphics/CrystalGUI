@@ -1,6 +1,8 @@
 package com.crystalgui.widget.config.inspector;
 
 import com.crystalgui.core.data.DataContext;
+import com.crystalgui.ui.dom.UIElement;
+import javax.annotation.Nullable;
 import com.crystalgui.core.signal.Signal;
 
 import java.util.ArrayList;
@@ -45,6 +47,22 @@ public final class InspectorRegistry {
     /** Announces that whatever is being inspected may have changed. Cheap; call it freely. */
     public static void subjectChanged() {
         onDidChangeSubject.emit();
+    }
+
+    /**
+     * Fires with a subject that has been <b>closed</b> — its editor released, its document dropped.
+     *
+     * <p>Distinct from {@link #onDidChangeSubject}, and the distinction is the whole point. An inspector
+     * RETAINS what it is showing when the source goes detached or when nothing else can be described,
+     * deliberately: regions re-parent constantly and the panel must not blank because the question was
+     * asked at a bad moment. A closed document is not a bad moment — the subject is gone and will not
+     * come back — so it needs a way to say so that the retention rule does not swallow.</p>
+     */
+    public static final Signal.Value<UIElement> onDidCloseSubject = new Signal.Value<>();
+
+    /** Announces that {@code subject}, and anything inside it, is gone for good. */
+    public static void subjectClosed(@Nullable UIElement subject) {
+        if (subject != null) onDidCloseSubject.emit(subject);
     }
 
     /** Idempotent per instance, so a contribution that runs twice does not double every form. */
