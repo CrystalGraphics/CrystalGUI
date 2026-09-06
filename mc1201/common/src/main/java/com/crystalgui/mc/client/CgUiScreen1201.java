@@ -115,7 +115,12 @@ public final class CgUiScreen1201 extends Screen {
     }
 
     private void buildDesktop() {
-        host = DesktopHost.create(new Mc1201Host());
+        host = DesktopHost.create(new Mc1201Host())
+                // A server's window is offered here first: the workbench honours an editor-tab or
+                // tool-window hint and hands everything else back to the desktop. A supplier because the
+                // editor is built later than this, and on demand.
+                .setWindowMount(() -> editor == null
+                        ? null : editor.workbench().windowMount(host.windowMount()));
         host.document().addClass(ROOT_CLASS);
     }
 
