@@ -108,6 +108,7 @@ PART	Breadcrumbs	crumb-current	B	0	confirmed	leaf in every rule
 PART	Breadcrumbs	crumb-icon	B	0	confirmed	leaf in every rule
 PART	Breadcrumbs	crumb-sep	B	0	confirmed	leaf in every rule
 PART	BuilderPane	builder-pane	A	0	proposed	leaf in every rule
+PART	BuilderToolbar	active	C	3	proposed	state adjective
 PART	BuilderToolbar	builder-toolbar	A	0	proposed	leaf in every rule
 PART	CanvasView	content	B	0	confirmed	leaf in every rule
 PART	CanvasView	panning	C	2	confirmed	state adjective
@@ -256,6 +257,7 @@ PART	GraphView	marquee	B	0	confirmed	leaf in every rule
 PART	HeaderControl	header	B	2	confirmed	a rule selects through it (1)
 PART	HeaderControl	title	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	HierarchyPanel	hierarchy	A	0	proposed	leaf in every rule
+PART	HierarchyPanel	hierarchy-content	B	2	proposed	a rule selects through it (1)
 PART	HierarchyPanel	hierarchy-row	A	2	proposed	leaf in every rule
 PART	HierarchyPanel	selected	C	8	proposed	state adjective
 PART	HoverHighlight	hover-highlight	A	0	proposed	leaf in every rule
