@@ -64,7 +64,7 @@ import com.crystalgui.widget.surface.select.SurfaceSelection;
  * <p>Extensions never name this class. They are written against {@link SurfaceContext}, which this
  * implements: an engine that can be named can be reached into.</p>
  */
-public class SurfaceEditor extends UIElement
+public class SurfaceEditor extends CanvasView
         implements SurfaceContext, DataProvider, UndoScope, Disposable {
 
     /**
@@ -87,7 +87,6 @@ public class SurfaceEditor extends UIElement
             DataKey.create("editingSurface", SurfaceEditor.class);
 
     private final SurfacePolicy policy;
-    private final CanvasView canvas = new CanvasView();
     private final Surface surface;
     private final SurfaceSelection selection;
     private final Edits edits;
@@ -134,21 +133,28 @@ public class SurfaceEditor extends UIElement
         this(NAME, policy, enabled);
     }
 
+    /**
+     * For a subclass that IS a kind of surface and supplies its own policy.
+     *
+     * <p>{@link #createPolicy} is called while this constructor runs, so it must build something that
+     * reads nothing of the subclass yet — a policy answers questions later, and that is the whole of
+     * what it has to promise here.</p>
+     */
+    protected SurfaceEditor(Name name, @Nullable List<String> enabled) {
+        this(name, null, enabled);
+    }
+
     /** For a subclass that declares its own kind. @see #NAME */
-    protected SurfaceEditor(Name name, SurfacePolicy policy, @Nullable List<String> enabled) {
+    protected SurfaceEditor(Name name, @Nullable SurfacePolicy policy, @Nullable List<String> enabled) {
         super(name);
-        this.policy = Objects.requireNonNull(policy, "a surface needs a policy");
-        // Content goes through surface().place(). A child of the editor would sit outside the plane
-        // transform and stay nailed to the screen while everything else panned.
-        refusePublicChildren();
+        this.policy = policy != null ? policy
+                : Objects.requireNonNull(createPolicy(), "a surface needs a policy");
         StyleGroup.defaultPipeline(getStyle().getLayoutGroup(),
                 l -> l.widthPercent(100f).heightPercent(100f));
-        StyleGroup.defaultPipeline(canvas.getStyle().getLayoutGroup(),
-                l -> l.widthPercent(100f).heightPercent(100f));
-        appendStructural(canvas);
-        this.surface = new Surface(canvas);
-        this.selection = new SurfaceSelection(policy::markSelected);
-        this.edits = new Edits(policy.history());
+        this.surface = new Surface(this);
+        this.selection = createSelection(this.policy);
+        UndoStack history = this.policy.history();
+        this.edits = new Edits(history != null ? history : new UndoStack());
         this.picking = new Picking(new Picking.Surfaces() {
             @Override
             public UIDocument window() {
@@ -167,7 +173,7 @@ public class SurfaceEditor extends UIElement
 
             @Override
             public UIElement itemFor(UIElement hit) {
-                return policy.itemFor(hit);
+                return SurfaceEditor.this.policy.itemFor(hit);
             }
         });
         this.geometry = new Geometry(surface);
@@ -175,6 +181,27 @@ public class SurfaceEditor extends UIElement
         this.cursors = new Cursors(this::document);
         this.modes = new Modes(this);
         this.extensions = SurfaceExtensions.activate(this, enabled);
+    }
+
+    /**
+     * The selection model this surface uses.
+     *
+     * <p>Overridden by a consumer whose selection answers typed questions — a graph's answers
+     * {@code nodes()} and {@code wire()}. The engine only ever reads the base type.</p>
+     */
+    /**
+     * The policy this surface runs on, for a subclass that IS one kind of surface.
+     *
+     * <p>Called from the constructor, so it must not read the subclass's own fields — build something
+     * that answers later. A caller passing a policy in never reaches this.</p>
+     */
+    protected SurfacePolicy createPolicy() {
+        throw new IllegalStateException(getClass().getSimpleName() + " was built without a policy and "
+                + "does not override createPolicy()");
+    }
+
+    protected SurfaceSelection createSelection(SurfacePolicy policy) {
+        return new SurfaceSelection(policy::markSelected);
     }
 
     /**
@@ -393,7 +420,7 @@ public class SurfaceEditor extends UIElement
     public InsertMenu openInsertMenu(float worldX, float worldY) {
         if (insertMenu == null) {
             insertMenu = new InsertMenu(this);
-            appendStructural(insertMenu);
+            append(insertMenu);
         }
         insertMenu.openAtWorld(worldX, worldY);
         return insertMenu;
