@@ -420,6 +420,18 @@ public final class WatchHub {
                 path.toString(), FsMessages.ChangeKind.DELETED, "", "", author), origin));
     }
 
+    /**
+     * Whether an operation is waiting to be carried.
+     *
+     * <p>A caller ticks the hub when the WATCHER produced something, which is the wrong question once a
+     * tick also carries what the server itself did: a workspace where nothing else is happening would
+     * hold somebody's rename until an unrelated file moved, and then deliver it out of order with
+     * reality.</p>
+     */
+    public boolean hasStated() {
+        return !stated.isEmpty();
+    }
+
     /** The server deleted this file. */
     public void noteDeleted(CgPath path) {
         if (lastEtag.containsKey(path)) {
