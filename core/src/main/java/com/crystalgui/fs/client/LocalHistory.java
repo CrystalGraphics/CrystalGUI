@@ -8,6 +8,9 @@ import org.jetbrains.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.LongSupplier;
@@ -31,10 +34,14 @@ import java.util.function.LongSupplier;
  */
 public final class LocalHistory {
 
-    private static final String PREFIX = "history.";
-
     /** How many entries are kept per file. VS Code's default is 50; ten covers a working session. */
     public static final int DEFAULT_ENTRIES_PER_FILE = 10;
+
+    /**
+     * How many files the store keeps. The entry cap bounds one file; without this the number of
+     * <em>files</em> grows with every file ever edited and is never swept.
+     */
+    public static final int DEFAULT_MAX_FILES = 200;
 
     /** How old an entry may get. A fortnight, after which it is nobody's working memory. */
     public static final long DEFAULT_MAX_AGE_MILLIS = 14L * 24 * 60 * 60 * 1000;
@@ -46,6 +53,7 @@ public final class LocalHistory {
     private final LongSupplier clockMillis;
     private final int entriesPerFile;
     private final long maxAgeMillis;
+    private final int maxFiles;
 
     public LocalHistory(ConfigStorage storage) {
         this(storage, System::currentTimeMillis, DEFAULT_ENTRIES_PER_FILE, DEFAULT_MAX_AGE_MILLIS);
@@ -53,10 +61,16 @@ public final class LocalHistory {
 
     public LocalHistory(ConfigStorage storage, LongSupplier clockMillis, int entriesPerFile,
                         long maxAgeMillis) {
+        this(storage, clockMillis, entriesPerFile, maxAgeMillis, DEFAULT_MAX_FILES);
+    }
+
+    public LocalHistory(ConfigStorage storage, LongSupplier clockMillis, int entriesPerFile,
+                        long maxAgeMillis, int maxFiles) {
         this.storage = Objects.requireNonNull(storage, "storage");
         this.clockMillis = clockMillis;
         this.entriesPerFile = Math.max(1, entriesPerFile);
         this.maxAgeMillis = maxAgeMillis;
+        this.maxFiles = Math.max(1, maxFiles);
     }
 
     /**
@@ -70,12 +84,40 @@ public final class LocalHistory {
         List<Entry> entries = new ArrayList<>(entriesOf(resource));
         entries.add(new Entry(clockMillis.getAsLong(), content));
         prune(entries);
-        storage.write(nameFor(resource), encode(entries));
+        storage.write(ResourceKeys.nameFor(resource), encode(entries));
+        sweepIfOverCap();
+    }
+
+    /**
+     * Drops the least recently written files once there are more than {@link #maxFiles}.
+     *
+     * <p>Reads rather than stats: {@link ConfigStorage} exposes no modification time, and each file
+     * already carries its newest entry's timestamp on its last line. Only on the write that crosses the
+     * cap, so the read is off the common path — and only correct because this store holds nothing but
+     * history, which is what the per-workspace directory bought.</p>
+     */
+    private void sweepIfOverCap() {
+        List<String> names = new ArrayList<>(storage.list());
+        if (names.size() <= maxFiles) return;
+        // Timestamps FIRST, then sort. A comparator that read the file would be called O(n log n)
+        // times and read each file that often; this reads each exactly once.
+        Map<String, Long> writtenAt = new HashMap<>();
+        for (String name : names) writtenAt.put(name, newestEntryAt(name));
+        names.sort(Comparator.comparingLong(writtenAt::get));
+        for (int i = 0; i < names.size() - maxFiles; i++) storage.delete(names.get(i));
+    }
+
+    /** When this file was last written, from its own last entry. Zero when it cannot be read. */
+    private long newestEntryAt(String name) {
+        String raw = storage.read(name);
+        if (raw == null || raw.isEmpty()) return 0L;
+        List<Entry> entries = decode(raw);
+        return entries.isEmpty() ? 0L : entries.get(entries.size() - 1).at();
     }
 
     /** What this file held at each save, newest first. */
     public List<Entry> entriesOf(Resource resource) {
-        String raw = storage.read(nameFor(resource));
+        String raw = storage.read(ResourceKeys.nameFor(resource));
         if (raw == null || raw.isEmpty()) return List.of();
         List<Entry> entries = decode(raw);
         prune(entries);
@@ -98,7 +140,7 @@ public final class LocalHistory {
     }
 
     public void forget(Resource resource) {
-        storage.delete(nameFor(resource));
+        storage.delete(ResourceKeys.nameFor(resource));
     }
 
     /** One save's worth of content. */
@@ -110,11 +152,6 @@ public final class LocalHistory {
         long now = clockMillis.getAsLong();
         entries.removeIf(entry -> now - entry.at() > maxAgeMillis);
         while (entries.size() > entriesPerFile) entries.remove(0);
-    }
-
-    private static String nameFor(Resource resource) {
-        return PREFIX + Integer.toHexString(resource.toString().hashCode()) + "."
-                + resource.name().replaceAll("[^A-Za-z0-9._-]", "_");
     }
 
     /**

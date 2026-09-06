@@ -438,6 +438,14 @@ For anything on disk that is yours:
 Path cache = workbench.cacheDirectory("mymod");   // per host, yours alone
 ```
 
+That is `crystalgui/cache/apps/<application>/mymod/`, and **it can be deleted at any moment**. Put
+compiled output, an index or a thumbnail there; anything a user would miss is not a cache. It is null on
+a host with nowhere to write, which is an ordinary answer — an extension that caches nowhere still
+works, and a test is exactly that host.
+
+Ask for it while your extension is being activated, not later: extensions activate while the workbench
+is being built, and that is when the root is set.
+
 ---
 
 ## 12. A whole product

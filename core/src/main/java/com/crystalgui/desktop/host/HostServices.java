@@ -16,7 +16,7 @@ import com.crystalgui.net.protocol.ProtocolConnection;
  *
  * <pre>{@code
  * DesktopHost host = DesktopHost.create(new HostServices() {
- *     public Path configDirectory() { return gameDir.resolve("crystalgui"); }
+ *     public Path storageRoot()     { return gameDir.resolve("crystalgui"); }
  *     public float uiScale()        { return currentGuiScale(); }
  *     public String desktopId()     { return "client"; }
  *     public ProtocolConnection<Object> connection() { return liveConnectionOrNull(); }
@@ -47,12 +47,21 @@ public interface HostServices {
     float DEFAULT_UI_SCALE = 2f;
 
     /**
-     * Where this host keeps private files — the desktop's arrangement, an application's session, backups.
+     * Where this host's {@code crystalgui/} directory is — the one root for everything it stores.
+     *
+     * <p>The engine owns the tree inside it: {@code workspace-config/} for what must survive,
+     * {@code cache/} for what can be rebuilt, {@code projects/} for a workspace's own files. A host
+     * answers <em>where</em>, never <em>what goes where</em>, so two hosts cannot drift into two
+     * layouts.</p>
+     *
+     * <pre>{@code
+     * public Path storageRoot() { return gameDir.resolve("crystalgui"); }
+     * }</pre>
      *
      * <p>Private, and never inside a workspace: a session record must not become part of a project
      * somebody ships.</p>
      */
-    Path configDirectory();
+    Path storageRoot();
 
     /** How many device pixels one logical pixel is. Applied once, to the box tree's root transform. */
     float uiScale();

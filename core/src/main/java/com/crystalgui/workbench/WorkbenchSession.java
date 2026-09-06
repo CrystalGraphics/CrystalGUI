@@ -220,7 +220,16 @@ public final class WorkbenchSession {
 
 
     private final Workbench workbench;
-    private final ConfigStorage storage;
+
+    /**
+     * Where the record goes — <b>null until the workspace can be named</b>.
+     *
+     * <p>The record lives in that workspace's own directory, and which workspace this is arrives with
+     * the server's greeting, long after this object is built. Until then {@link #save} and
+     * {@link #restore} do nothing, which is the same answer they already gave on a read-only store.</p>
+     */
+    @Nullable
+    private ConfigStorage storage;
 
     /** View state read from a record, waiting for its file's content to arrive. */
     private final Map<CgPath, JsonElement> pendingViewState = new LinkedHashMap<>();
@@ -229,9 +238,8 @@ public final class WorkbenchSession {
     @Nullable
     private CgPath pendingActive;
 
-    public WorkbenchSession(Workbench workbench, ConfigStorage storage) {
+    public WorkbenchSession(Workbench workbench) {
         this.workbench = workbench;
-        this.storage = storage;
         workbench.onDidOpenDocument.connect(this::applyViewState);
         // The second half of the torn-out-window restore. A record read before the workbench had a
         // UIDocument parked its windows; this is the moment there is somewhere to open them.
@@ -242,6 +250,21 @@ public final class WorkbenchSession {
         // would lose everything closed before the first save. Idempotent, and re-asserted at both entry
         // points below for a workbench attached after this ran.
         installWidgetState();
+    }
+
+    /**
+     * Gives this session the workspace's own store, once the workspace can be named.
+     *
+     * <p>Called from {@code WorkbenchApplication.restoreWhenReady}, which is the moment the greeting
+     * has supplied a workspace identity. Before it, saving and restoring do nothing.</p>
+     *
+     * <pre>{@code
+     * session.useStorage(context.workspaces().scoped(workspaceIdentity));
+     * }</pre>
+     */
+    public WorkbenchSession useStorage(@Nullable ConfigStorage storage) {
+        this.storage = storage;
+        return this;
     }
 
     /**
@@ -257,10 +280,15 @@ public final class WorkbenchSession {
         if (window != null) window.setSessionState(widgetState);
     }
 
-    /** {@code session.harness.scratch.json} — flat, so {@link ConfigStorage#list} can find them to prune. */
-    public static String fileNameFor(String projectId) {
+    /**
+     * {@code session.crystalgui_editor.json} — the record's name inside one workspace's directory.
+     *
+     * <p>Named after the <em>application</em>, because the directory has already said which workspace
+     * this is. Two products over one workspace therefore write two records side by side.</p>
+     */
+    public static String fileNameFor(String name) {
         StringBuilder safe = new StringBuilder("session.");
-        for (char c : projectId.toCharArray()) {
+        for (char c : name.toCharArray()) {
             // Anything that could steer a write out of the config directory becomes an underscore. A
             // project id is validated on construction, but this composes a FILENAME from it, and that is
             // a different question from whether it is a legal id.
@@ -271,10 +299,10 @@ public final class WorkbenchSession {
 
     // ── Saving ──────────────────────────────────────────────────────────────────────────────────
 
-    /** Writes the session record for {@code projectId}. */
-    public void save(String projectId, float viewportWidth, float viewportHeight) {
-        if (!storage.isWritable()) return;
-        storage.write(fileNameFor(projectId), toJson(viewportWidth, viewportHeight));
+    /** Writes the session record under {@code name}. A no-op before {@link #useStorage}. */
+    public void save(String name, float viewportWidth, float viewportHeight) {
+        if (storage == null || !storage.isWritable()) return;
+        storage.write(fileNameFor(name), toJson(viewportWidth, viewportHeight));
     }
 
     /** The record as text, without writing it — what a test asserts on. */
@@ -559,13 +587,14 @@ public final class WorkbenchSession {
     // ── Restoring ───────────────────────────────────────────────────────────────────────────────
 
     /**
-     * Restores the session for {@code projectId}.
+     * Restores the session stored under {@code name}.
      *
      * @return false when there is nothing stored or the record cannot be trusted — a normal outcome on
      *         first run, and the caller already needs a default layout for that case
      */
-    public boolean restore(String projectId) {
-        String json = storage.read(fileNameFor(projectId));
+    public boolean restore(String name) {
+        if (storage == null) return false;
+        String json = storage.read(fileNameFor(name));
         return json != null && fromJson(json);
     }
 

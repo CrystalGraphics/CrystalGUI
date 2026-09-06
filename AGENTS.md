@@ -1147,6 +1147,15 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
                                objects no registry can see. docs/CGUI_WORKBENCH_SERVICES.md
   .property                    Property<T> (binding, equality-suppressing set), ObservableList<T>
   .signal                      Signal.Action/Value/Pair, SignalBase, Connection, ConnectionGroup
+  .storage                     WHERE ANYTHING PRIVATE GOES. ConfigStorage (the key/value SPI),
+                               LocalConfigStorage (one real directory, atomic writes, and `scoped`
+                               answering a real SUBDIRECTORY), ScopedConfigStorage (the default
+                               `scoped` — a key prefix), InMemoryConfigStorage, and StorageLayout —
+                               the `crystalgui/` tree stated ONCE: workspace-config/ (durable),
+                               cache/ (deletable at any moment), projects/ (the user's own files).
+                               A host answers WHERE its installation is and nothing else; nothing
+                               outside StorageLayout may spell those segments.
+                               plan/crystalgui/fs-rewrite/fs-storage-layout.md
   .command                     Command (a named invocable action), CommandContext, CommandRegistry —
                                what a key binding, a menu item and the palette all point at. Plus the
                                MENU MODEL: MenuId (a named place a menu is drawn, interned, with nested

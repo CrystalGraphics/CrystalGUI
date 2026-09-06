@@ -1,5 +1,6 @@
 package com.crystalgui.mc.client;
 
+import com.crystalgui.core.storage.StorageLayout;
 import com.crystalgui.desktop.host.DesktopHost;
 import com.crystalgui.desktop.host.HostServices;
 import java.nio.file.Path;
@@ -334,10 +335,11 @@ public final class CgUiScreen extends GuiScreen {
     private final class Mc1710Host implements HostServices {
 
         @Override
-        public Path configDirectory() {
-            // BESIDE the workspace, never inside it: a session record is private and must not become
-            // part of a project a resource pack could ship.
-            return new File(mc.mcDataDir, "config/crystalgui").toPath();
+        public Path storageRoot() {
+            // ONE ROOT, and the engine owns the tree in it -- workspace-config/, cache/, projects/.
+            // Was config/crystalgui, which put the client's private files a level away from the
+            // workspace directory that already called itself crystalgui/.
+            return StorageLayout.rootIn(mc.mcDataDir.toPath());
         }
 
         @Override
@@ -371,7 +373,7 @@ public final class CgUiScreen extends GuiScreen {
         // What is left below is the two that genuinely are: how big a first-run window is on THIS
         // display, and that the arrangement record is applied over it rather than under it.
         com.crystalgui.desktop.app.Application launched = host.desktop().applications()
-                .launch(CrystalEditor.KIND, host.workspace(), host.config());
+                .launch(CrystalEditor.KIND, host.workspace());
         if (!(launched instanceof WorkbenchApplication)) return false;
         editor = (WorkbenchApplication) launched;
         trace("CrystalEditor launch");

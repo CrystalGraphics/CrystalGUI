@@ -1,5 +1,8 @@
 package com.crystalgui.desktop;
 
+import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.storage.LocalConfigStorage;
+import com.crystalgui.core.storage.StorageLayout;
 import com.crystalgui.desktop.app.ApplicationRegistry;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.box.BoxPainter;
@@ -40,6 +43,7 @@ import dev.vfyjxf.taffy.style.FlexDirection;
 
 import javax.annotation.Nullable;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -1253,6 +1257,14 @@ public class Desktop extends UIElement implements DataProvider {
     @Nullable
     private String persistenceId;
 
+    /** This desktop's own store — preferences, the arrangement, every workspace's state. */
+    @Nullable
+    private ConfigStorage config;
+
+    /** {@code crystalgui/cache}. Disposable in its entirety. @see #useStorage */
+    @Nullable
+    private Path cacheRoot;
+
     /** Recorded placements not yet claimed by a window, by key. @see #persistTo */
     private final Map<String, DesktopSession.Placement> pendingPlacements = new HashMap<>();
     private List<String> pendingMru = List.of();
@@ -1283,6 +1295,10 @@ public class Desktop extends UIElement implements DataProvider {
      * cannot exist.</p>
      */
     public Desktop persistTo(ConfigStorage storage, String id) {
+        // AND IT BECOMES THIS DESKTOP'S STORE, which is what an application launched onto it is given.
+        // A caller that named one place for the arrangement did not mean a second place for everything
+        // else. @see #useStorage
+        this.config = storage;
         persistence = new DesktopSession(this, storage);
         persistenceId = id;
         pendingPlacements.clear();
@@ -1295,6 +1311,60 @@ public class Desktop extends UIElement implements DataProvider {
         for (WindowFrame frame : registry.windows()) applyPersistedGeometry(frame);
         armRestorePass();
         return this;
+    }
+
+    /**
+     * <b>Where this desktop keeps everything</b> — the client-side twin of
+     * {@code HostServices.storageRoot()}.
+     *
+     * <p>One call, before anything is launched onto this desktop: it derives the config store and the
+     * cache root from {@link StorageLayout}, so nothing else spells those segments. Applications
+     * launched afterwards need no storage argument at all.</p>
+     *
+     * <pre>{@code
+     * desktop.useStorage(gameDir);                 // where crystalgui/ goes
+     * desktop.applications().launch(kind, workspace);
+     * desktop.persistAs("client");                 // …and start recording the arrangement
+     * }</pre>
+     *
+     * <p><b>There is no default.</b> A desktop nobody has told simply has nowhere to write, and says so
+     * when asked to launch something — the same reason {@code HostServices} declares no defaults: an
+     * answer chosen for a host that never saw the question is indistinguishable from one it meant.</p>
+     */
+    public Desktop useStorage(Path installation) {
+        this.config = new LocalConfigStorage(StorageLayout.configIn(installation));
+        // A PATH, NOT A STORAGE: LocalConfigStorage creates its directory eagerly, and a cache/ that
+        // exists before anything derived does is a directory nobody can explain.
+        this.cacheRoot = StorageLayout.cacheIn(installation);
+        return this;
+    }
+
+    /**
+     * Starts recording the arrangement under {@code id}, in the store {@link #useStorage} gave.
+     *
+     * <p>Separate from {@code useStorage} because the two want opposite moments: storage has to exist
+     * before anything launches, and the arrangement has to be applied <em>after</em> a host has opened
+     * its windows, or the record loses to whatever was opened next.</p>
+     */
+    public Desktop persistAs(String id) {
+        if (config == null) {
+            CrystalGuiCore.LOGGER.warn("[cgui] the desktop has nowhere to write, so the arrangement "
+                    + "'{}' is not recorded. Call useStorage(installation) first.", id);
+            return this;
+        }
+        return persistTo(config, id);
+    }
+
+    /** Where this desktop's private records go, or null when it was never given anywhere. */
+    @Nullable
+    public ConfigStorage config() {
+        return config;
+    }
+
+    /** Where derived output goes — disposable in its entirety. Null when there is nowhere to write. */
+    @Nullable
+    public Path cacheRoot() {
+        return cacheRoot;
     }
 
     /**

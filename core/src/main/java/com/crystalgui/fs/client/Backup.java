@@ -31,9 +31,6 @@ import java.util.Objects;
  */
 public final class Backup {
 
-    /** Every backup blob's name starts with this, so {@link #restorable} can find them. */
-    private static final String PREFIX = "backup.";
-
     /** The record's own version, so a format change discards rather than misreads. */
     private static final int VERSION = 1;
 
@@ -56,19 +53,23 @@ public final class Backup {
         record.put("resource", resource.toString());
         record.put("etag", etag == null ? "" : etag);
         record.put("content", Base64.getEncoder().encodeToString(content));
-        storage.write(nameFor(resource), encode(record));
+        storage.write(ResourceKeys.nameFor(resource), encode(record));
     }
 
     /** Drops one — what a successful save does. */
     public void discard(Resource resource) {
-        storage.delete(nameFor(resource));
+        storage.delete(ResourceKeys.nameFor(resource));
     }
 
-    /** What is on offer, from a previous session or from this one before a crash. */
+    /**
+     * What is on offer, from a previous session or from this one before a crash.
+     *
+     * <p>Everything in the store, with no name filter: this store is a directory of backups and nothing
+     * else. A record that will not read is dropped by {@link #read} rather than skipped here.</p>
+     */
     public List<Entry> restorable() {
         List<Entry> out = new ArrayList<>();
         for (String name : storage.list()) {
-            if (!name.startsWith(PREFIX)) continue;
             Entry entry = read(name);
             if (entry != null) out.add(entry);
         }
@@ -77,13 +78,11 @@ public final class Backup {
 
     @Nullable
     public Entry get(Resource resource) {
-        return read(nameFor(resource));
+        return read(ResourceKeys.nameFor(resource));
     }
 
     public void discardAll() {
-        for (String name : storage.list()) {
-            if (name.startsWith(PREFIX)) storage.delete(name);
-        }
+        for (String name : storage.list()) storage.delete(name);
     }
 
     /**
@@ -117,18 +116,6 @@ public final class Backup {
             storage.delete(name);
             return null;
         }
-    }
-
-    /**
-     * A name derived from the resource, so one document has one backup however many times it is saved.
-     *
-     * <p>Hashed rather than escaped, because a resource contains {@code /} and {@code :} and a storage
-     * name is a file name on the local disk — and a scheme that escaped them would have to be reversed
-     * to list, which is what the record's own {@code resource} field is for.</p>
-     */
-    private static String nameFor(Resource resource) {
-        return PREFIX + Integer.toHexString(resource.toString().hashCode()) + "."
-                + resource.name().replaceAll("[^A-Za-z0-9._-]", "_");
     }
 
     /** Line-per-field, because a backup must be readable when everything else has failed. */

@@ -4,6 +4,7 @@ import java.nio.file.Path;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.core.storage.StorageLayout;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.server.WorkspaceActor;
@@ -16,6 +17,7 @@ import com.mojang.authlib.GameProfile;
 
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.storage.LevelResource;
 
 /**
  * The server's workspace on MC 1.20.x: where it lives, who may write to it, and who is asking.
@@ -30,7 +32,11 @@ import net.minecraft.server.level.ServerPlayer;
 public final class WorkspaceHost1201 {
 
     private static final String PROJECT_ID = "workspace";
-    private static final String WORKSPACE_DIR = "crystalgui/workspace";
+    /**
+     * The one project a server serves, until W3b makes {@code projects/} a listing rather than a
+     * constant. The leaf keeps the name the directory already had, so the move is one segment deep.
+     */
+    private static final String PROJECT_DIR = "workspace";
 
     private WorkspaceHost1201() {}
 
@@ -73,11 +79,23 @@ public final class WorkspaceHost1201 {
 
     private static final class Host1201 implements WorkspaceHost.Host {
 
+        /**
+         * <b>The world's own directory in single-player, the server's on a dedicated one</b> — the
+         * WORLD and server scopes (D25-D28).
+         *
+         * <p>{@code getServerDirectory} would answer with the data directory, which
+         * {@code IntegratedServer} overrides to {@code minecraft.gameDirectory}: every world on one
+         * installation shared a workspace, and deleting a save left its projects behind.</p>
+         */
         @Override
         @Nullable
         public Path root() {
             MinecraftServer server = currentServer;
-            return server == null ? null : server.getServerDirectory().toPath().resolve(WORKSPACE_DIR);
+            if (server == null) return null;
+            Path base = server.isDedicatedServer()
+                    ? server.getServerDirectory().toPath()
+                    : server.getWorldPath(LevelResource.ROOT);
+            return base == null ? null : StorageLayout.projectsIn(base).resolve(PROJECT_DIR);
         }
 
         @Override

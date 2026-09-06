@@ -116,6 +116,9 @@ public class WorkbenchApplication extends UIElement
     private final ApplicationKind kind;
     private final Desktop desktop;
     private final Workspace workspace;
+
+    /** The parent of every workspace's store; scoped by identity in {@link #restoreWhenReady}. */
+    private final ConfigStorage workspaces;
     private final ConfigStorage storage;
     private final Workbench workbench;
     private final WindowFrame window;
@@ -239,6 +242,7 @@ public class WorkbenchApplication extends UIElement
         this.desktop = context.desktop();
         this.workspace = context.workspace();
         this.storage = context.storage();
+        this.workspaces = context.workspaces();
         setFocusPolicy(FocusPolicy.NONE);
 
         this.workbench = new Workbench(workspace, builder.extensions);
@@ -263,11 +267,14 @@ public class WorkbenchApplication extends UIElement
         // THE STORE, BEFORE THE PREFERENCES ARE READ. Scoped to this application by the registry, so two
         // products on one desktop do not write each other's settings.json (D20).
         workbench.useConfig(storage);
-        // AND THE WORKSPACE'S OWN CLIENT-LOCAL STORE, which is what gives it a Backup and a
-        // LocalHistory -- without it unsaved work is written nowhere and the conflict dialog's
-        // three-way merge has no common ancestor.
-        workspace.setStorage(storage);
-        this.session = new WorkbenchSession(workbench, storage);
+        // AND THE CACHE ROOT IN THE SAME BREATH, because extensions activate while the workbench is
+        // being built and ask for their cache directory as they do -- a root supplied after this line
+        // is a root nobody ever sees. @see Workbench#useCache
+        workbench.useCache(context.cache());
+        // THE WORKSPACE'S OWN STORE IS NOT SET HERE. A backup, a history and a session belong to one
+        // WORKSPACE, and which workspace this is arrives with the server's greeting -- see
+        // restoreWhenReady, which is where all three are given their store.
+        this.session = new WorkbenchSession(workbench);
         loadPreferences();
 
         this.window = desktop.addWindow(new WindowFrame(
@@ -504,7 +511,16 @@ public class WorkbenchApplication extends UIElement
         if (sessionKey != null || disposed) return;
         List<CgPath> roots = workbench.projects().roots();
         if (roots.isEmpty()) return;
-        sessionKey = keyFor(workspace, kind, roots);
+        // THE WORKSPACE CAN BE NAMED, WHICH IS WHAT EVERYTHING BELOW WAS WAITING FOR. Its store is a
+        // directory of its own, so a client that has joined ten servers keeps ten sets of unsaved work
+        // rather than one shared pile -- and the record inside it is named after the APPLICATION,
+        // because the directory has already said which workspace this is.
+        ConfigStorage mine = workspaces.scoped(identityFor(workspace, roots));
+        sessionKey = kind.id();
+        // BACKUPS AND HISTORY TOO, and not before now: see DesktopHost#frame, which used to set a store
+        // here that every workspace shared.
+        workspace.setStorage(mine);
+        session.useStorage(mine);
         // REMEMBERED EVEN WHEN THE RESTORE IS DECLINED. Turning session restore off means "do not put
         // the last arrangement back", never "stop recording this one".
         if (workbench.resolve(WorkbenchSettings.RESTORE_SESSION) && !session.restore(sessionKey)) {
@@ -562,16 +578,15 @@ public class WorkbenchApplication extends UIElement
     }
 
     /**
-     * {@code <application id>.<workspace identity>} — the record's name.
+     * Which workspace this is — the name of the directory its state lives in.
      *
-     * <p>The identity is the {@code workspaceId} the server greets with; a server that has never heard
-     * of the field falls back to a hash of the sorted project ids it listed, which is VS Code's
-     * multi-root workspace id computed the same way for the same reason.</p>
+     * <p>The {@code workspaceId} the server greets with; a server that has never heard of the field
+     * falls back to a hash of the sorted project ids it listed, which is VS Code's multi-root workspace
+     * id computed the same way for the same reason.</p>
      */
-    static String keyFor(Workspace workspace, ApplicationKind kind, List<CgPath> roots) {
+    static String identityFor(Workspace workspace, List<CgPath> roots) {
         String identity = workspace.server().workspaceId();
-        if (identity.isEmpty()) identity = hashOfProjects(roots);
-        return kind.id() + "." + identity;
+        return identity.isEmpty() ? hashOfProjects(roots) : identity;
     }
 
     /** What the record was called when a client named it after the one project it held a constant for. */

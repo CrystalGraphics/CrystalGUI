@@ -8,6 +8,7 @@ import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.storage.ConfigStorage;
+import com.crystalgui.core.storage.StorageLayout;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.protocol.FsHello;
@@ -294,8 +295,11 @@ public final class Workspace implements Disposable {
      * and simply offers no hot exit and no timeline.</p>
      */
     public Workspace setStorage(@Nullable ConfigStorage storage) {
-        this.backup = storage == null ? null : new Backup(storage);
-        this.history = storage == null ? null : new LocalHistory(storage);
+        // A DIRECTORY EACH, and not tidiness: both stores own everything in the store they are given --
+        // Backup#discardAll clears it, LocalHistory sweeps it to a file cap. Sharing one meant a
+        // successful save, which discards backups, deleted the history it had just written.
+        this.backup = storage == null ? null : new Backup(storage.scoped(StorageLayout.BACKUPS));
+        this.history = storage == null ? null : new LocalHistory(storage.scoped(StorageLayout.HISTORY));
         return this;
     }
 

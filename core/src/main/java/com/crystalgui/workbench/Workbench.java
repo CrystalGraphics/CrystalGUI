@@ -1061,6 +1061,10 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     @Nullable
     private ConfigStorage storage;
 
+    /** Where derived output goes — {@code crystalgui/cache/apps/<id>/}. Null means "cache nowhere". */
+    @Nullable
+    private Path cacheRoot;
+
     /**
      * Gives this workbench somewhere private to keep derived output.
      *
@@ -1072,11 +1076,23 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         return this;
     }
 
+    /**
+     * Gives this workbench somewhere to put <b>derived</b> output — a sibling of the config store, not
+     * a corner of it.
+     *
+     * <p>Called beside {@link #useConfig}, and for the same reason it must be: extensions activate while
+     * the workbench is being built and ask for their cache directory then, so a root supplied afterwards
+     * arrives too late and silently gives every one of them nothing.</p>
+     */
+    public Workbench useCache(@Nullable Path root) {
+        this.cacheRoot = root;
+        return this;
+    }
+
     @Override
     @Nullable
     public Path cacheDirectory(String name) {
-        Path root = storage == null ? null : storage.directory();
-        return root == null ? null : root.resolve(name);
+        return cacheRoot == null ? null : cacheRoot.resolve(name);
     }
 
     /** The bar an entry goes on. @see UiDataKeys#STATUS_BAR */
