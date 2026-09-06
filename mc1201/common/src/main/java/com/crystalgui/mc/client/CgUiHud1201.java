@@ -106,6 +106,7 @@ public final class CgUiHud1201 {
 
     /** @return whether the desktop consumed it and the foreign screen must not see it */
     public static boolean offerMouse(int button, boolean pressed, float platformWheel) {
+        if (pointerIsCamera()) return false;
         ScreenOverlay overlay = overlay();
         if (overlay == null) return false;
         // Signed here, not by the loaders: this path consumes a scroll over any window and cancels the
@@ -118,8 +119,25 @@ public final class CgUiHud1201 {
     /** No button, and the value the engine reads as "this is a move". */
     private static final int NO_BUTTON = -1;
 
+    /**
+     * Whether the pointer is the player's camera rather than a cursor.
+     *
+     * <p>With the mouse grabbed there is no cursor to speak of: the position runs with the look
+     * direction and a click is an attack. Hit-testing either against the compositor puts the HUD
+     * wherever the camera happens to point, so breaking a block presses a pinned window.</p>
+     *
+     * <p>A pinned window is a display while the player is playing, and becomes interactive when
+     * something releases the mouse -- which is a screen, and therefore the OVERLAY arm. mc1710 reaches
+     * the same place from the other side: it drains input only for a foreign screen.</p>
+     */
+    private static boolean pointerIsCamera() {
+        Minecraft mc = Minecraft.getInstance();
+        return mc != null && mc.mouseHandler != null && mc.mouseHandler.isMouseGrabbed();
+    }
+
     /** The pointer's position, delivered and never consumed. @see ScreenOverlay#offerMouse */
     public static void offerMove() {
+        if (pointerIsCamera()) return;
         ScreenOverlay overlay = overlay();
         if (overlay == null) return;
         overlay.offerMouse(pointerX(), pointerY(), NO_BUTTON, false, 0f);
