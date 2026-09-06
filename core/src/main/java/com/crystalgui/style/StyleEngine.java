@@ -440,6 +440,34 @@ public final class StyleEngine {
     private static final long SHEET_ORDER_STRIDE = 1_000_000_000_000L;
 
     /**
+     * Which registered sheet a slot's {@code sourceOrder} came from.
+     *
+     * <p>The packing is this class's, so the unpacking is too — an inspector that wanted to name the
+     * sheet a rule came from would otherwise have to know the strides, and two copies of a bit layout is
+     * one copy that goes stale.</p>
+     *
+     * @return an index into {@link #getSheets()}, or -1 for a slot no sheet produced (INLINE, IMPORTANT
+     *         and ANIMATION are written by widgets and carry no sheet)
+     */
+    public static int sheetIndexOf(long sourceOrder) {
+        if (sourceOrder < 0) return -1;
+        return (int) (sourceOrder / SHEET_ORDER_STRIDE);
+    }
+
+    /** Which rule WITHIN that sheet — the number {@code StyleSheet.parse} gave it, and the number a
+     * {@code CssSourceModel.Rule} carries. @see #sheetIndexOf */
+    public static int ruleOrderOf(long sourceOrder) {
+        if (sourceOrder < 0) return -1;
+        return (int) ((sourceOrder % SHEET_ORDER_STRIDE) / DECLARATION_ORDER_MULTIPLIER);
+    }
+
+    /** Which declaration within that rule, so two declarations of one property keep their order. */
+    public static int declarationIndexOf(long sourceOrder) {
+        if (sourceOrder < 0) return -1;
+        return (int) ((sourceOrder % SHEET_ORDER_STRIDE) % DECLARATION_ORDER_MULTIPLIER);
+    }
+
+    /**
      * The resolved style of {@code ::highlight(name)} on {@code element}, or
      * {@link HighlightStyle#EMPTY} when no rule matched.
      *
