@@ -89,6 +89,13 @@ final class GraphDocumentSync {
         view.document.changeset().clear();
     }
 
+    /** Puts node DATA into the document without a widget — what a paste and the create menu do first,
+     * so the widget they build afterwards adopts the stored ports and properties instead of deriving a
+     * second set from itself. */
+    void addNodeData(NodeData data) {
+        view.document.addNode(data);
+    }
+
     /** Puts a node into both the document and the tree. The one path; {@link GraphEdits.AddNode} uses it
      * too, which is what makes an undone delete restore the SAME id rather than a new one. */
     void attachNode(GraphNode widget, NodeData data) {
@@ -292,6 +299,25 @@ final class GraphDocumentSync {
         view.getSelection().prune(view);
         if (applied > 0) view.onConnectionsChanged.emit();
         return applied;
+    }
+
+    /**
+     * Puts an edge back into the document and builds its view-side connection.
+     *
+     * <p>RESTORED rather than reconnected: an undo must put back exactly the edge that was there, and
+     * re-running validation at that point can only ever refuse it — the graph it was legal in is
+     * precisely the graph the undo is restoring.</p>
+     */
+    void restoreEdge(EdgeData edge) {
+        view.document.restoreEdge(edge);
+        linkWidgets(edge);
+        markSynced();
+    }
+
+    /** Takes an edge out of the document. The view-side connection list is the wires' own. */
+    void removeEdge(EdgeData edge) {
+        view.document.disconnect(edge);
+        markSynced();
     }
 
     /** Builds the view-side {@link GraphConnection} for a document edge. Silent when either end is

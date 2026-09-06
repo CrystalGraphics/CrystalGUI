@@ -151,7 +151,7 @@ final class GraphNodeLibrary {
         node.bindToDocument(data.id(), data.typeId());
         // Into the document first, so addNode adopts the library's ports and properties instead of
         // deriving a second set from the widget.
-        view.document.addNode(data);
+        view.addNodeData(data);
 
         view.edits.begin("create " + offer.type().label());
         try {

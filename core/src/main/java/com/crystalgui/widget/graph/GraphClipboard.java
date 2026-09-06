@@ -92,7 +92,7 @@ final class GraphClipboard {
                 // rather than deriving a second set from the widget -- which is how a node's instance
                 // state gets silently dropped. See dataFor.
                 widget.bindToDocument(placed.id(), placed.typeId());
-                view.document.addNode(placed);
+                view.addNodeData(placed);
                 view.addNode(widget, placed.x(), placed.y());
 
                 NodeData stored = view.document.node(id);
