@@ -1294,66 +1294,31 @@ com.crystalgui.ui.contract     WHAT A KIND OF WIDGET IS — one declaration, fou
                                within its own widget's contract, so a third party mints one without
                                editing anything of ours. plan/engine-rewrite.md M1
 
-com.crystalgui.ui              A NAMESPACE, with nothing at its root. It held four files that had
-                               survived the old engine and shared no theme, and each named something
-                               it did not belong to: EventListenerGroup imported ui.event and nothing
-                               else; Transform is a CSS value, so it went to its own family and
-                               dropped the prefix (see `Transform` below); ClipboardActions imports
-                               NOTHING and is a data-context SPI; UiDataKeys names only `core`.
-                               A root with no shared subject is where things land when nobody decides.
-  .dom                         THE NODE TREE, split as the DOM splits it. UINode (Node: the two
-                               trees, lifecycle, the observer wiring, the walks out) and UIElement
-                               extends UINode (Element: attributes, classes, shadow tree, style,
-                               geometry, state, events). UIDocument and UISlot are elements;
-                               ShadowRoot is the only bare node. Plus Name, Attribute,
-                               UIElementRegistry, UIElementTreeSource, and the SEAM both the mirror
-                               and any future engine are written against: TreeSource<N>,
-                               TreeObserver<N>, NodeContract.
-  .box                         THE BOX TREE. Box (geometry, hosts, mirrors, the ONE localToWorld,
-                               hitTest before any paint), BoxTree (one TaffyTree per document,
-                               one-pass layout), BoxStyle (ComputedStyle -> Taffy, and the only place
-                               the project's defaults are stated), Measurable (the engine ASKS instead
-                               of being told), BoxPainter (every box drawn in its own space).
-  .service                     THE FOUR SERVICES. Input (platform sink, hit test, three-phase DOM
-                               dispatch over the composed tree, capture, the cursor's `auto` rule, a
-                               Chords seam a host fills) with InputMode + the mode stack and Drag on
-                               it; Focus (one owner, one traversal, ONE inertness predicate);
-                               Animation (timelines on the host's DELTA, per-frame hooks owned by a
-                               node, afterLayout); Lifecycle (freeze/thaw/destroy); Dismiss (the
-                               popover stack, light dismiss, close watchers); AnchoredPlacement.
-  .data                        UiDataKeys -- the UI layer's DataKey vocabulary. Names only `core`,
-                               which is why the SPI it points at (ClipboardActions) went to
-                               `core.data` beside DataProvider while the KEYS stayed here. Projections (declare a read/write pair once; the engine
-                               compares and writes only on change, runs the set before the flush, and
-                               skips it entirely while no viewer is watching) + `each` for KEYED lists,
-                               where an untouched row keeps its element so an insert is an insert;
-                               AutoProjection (panel field name -> model accessor) and its Report,
-                               which names what it could NOT wire because a convention that skips
-                               silently leaves a widget at a value that usually looks right.
-                               MOVED to `net.projection`: it names only `ui.contract` and `ui.dom`,
-                               and `net.window` is its ONLY consumer -- packaged with what uses it
-                               rather than with what it reads.
-  .contract                    WHAT A KIND OF WIDGET IS -- one declaration, four readers. See its own
+com.crystalgui.ui              A NAMESPACE, with nothing at its root -- a root with no shared subject
+                               is where things land when nobody decides.
+  .dom                         The node tree. -> Stack 1
+  .box                         The box tree. -> Stack 3
+  .service                     Input, Focus, Animation, Lifecycle, Dismiss. -> Stack 4
+  .contract                    What a KIND of widget is: one declaration, four readers. See its own
                                entry above.
-  .event                       UIEvent, PropagationPhase, CloseEvent, DOMEvent, DragEvent, FocusEvent,
-                               KeyboardEvent, MouseEvent -- SHARED, and dispatched by `service.Input`.
-  .input                       FocusPolicy, ButtonState, and the keymap (`.keymap`). What is left of
-                               the old input package once the handler and the drag controller went.
-  .text                        TextRange, HighlightRegistry -- CSS Custom Highlight API (ranges in
-                               Java, styling in CSS via ::highlight(name)).
+  .event                       UIEvent, PropagationPhase, and the concrete Close/DOM/Drag/Focus/
+                               Keyboard/Mouse types -- SHARED, dispatched by `service.Input`.
+  .input                       FocusPolicy, ButtonState, and the keymap (`.keymap`).
+  .text                        TextRange, HighlightRegistry -- the CSS Custom Highlight API: ranges
+                               in Java, styling in CSS through ::highlight(name).
+  .data                        UiDataKeys -- the UI layer's DataKey vocabulary. Names only `core`,
+                               which is why the SPI it points at (ClipboardActions) lives in
+                               `core.data` beside DataProvider while the KEYS stay here.
 
 com.crystalgui.widget          THE WIDGETS, layered so a build fails when a layer reaches upward
-                               (LayeringTest): .control/.display/.text/.scroll < .overlay/.layout/.dnd
-                               < .collection < .composite < .config < .canvas < .graph < .texteditor.
-                               `.display` is ProgressBar and SymbolIcon -- Qt's "Display Widgets", and
-                               a bottom tier not by assertion but because between them they import
-                               `ui` and `style` and NOT ONE widget. `.composite` was `.form`, a name
-                               that recorded a TIER rather than a subject: ColorSelector and
-                               SearchField are controls in every sense and sit above `.overlay` only
-                               because they are assembled from it. And `.scroll` is a SIBLING of
-                               `.layout`, never a child -- nesting it there cannot be expressed at
-                               all, since a prefix rule makes the package fail against its own
-                               parent.
+                               (LayeringTest): .control/.display/.text/.scroll < .overlay/.layout/
+                               .dnd < .collection < .composite < .config < .canvas < .graph <
+                               .texteditor. `.display` is a bottom tier not by assertion but because
+                               between them ProgressBar and SymbolIcon import `ui` and `style` and
+                               NOT ONE widget. `.scroll` is a SIBLING of `.layout`, never a child:
+                               nesting it there cannot be expressed at all, since a prefix rule makes
+                               the package fail against its own parent. -> Widgets
+
 com.crystalgui.desktop         CRYSTALOS. Desktop (found with Desktop.of(document), never built by a
                                caller: the engine may not name a compositor, so the compositor names
                                the document), .window, .motion, .taskbar, .switcher, .host.
@@ -1493,60 +1458,29 @@ com.crystalgui.serialization   Codec<A>, DynamicOps<T>, Codecs, CodecException, 
                                StateMap, UIElementMirror, ContentHash
   .style                       StyleValueCodecs, InlineStyleCodec
 
-com.crystalgui.net             UITransport, InMemoryTransport,
-                               ServerUiSession, ClientUiSession, ClientUiSessions, UiWindowMux,
-                               SheetRef  -- ids live in ui.dom.UIElementTreeSource, not here
-  .mirror                      THE MIRROR, and it names no widget, no session and no transport:
-                               ServerTreeMirror<N,T> (observes a TreeSource, records insert/remove/
-                               move with coalescing, allocates ids, PRODUCES payloads rather than
-                               sending them -- which is what lets one window fan out to viewers with
-                               different visibility without this class knowing viewers exist),
-                               ClientTreeMirror<N,T> (applies them), NodeMirror<N,T> (the per-tree
-                               seam: how a node is described and reconstructed -- BOTH halves on one
-                               interface, because an encode with no matching apply is exactly the
-                               defect that made identity changes silently never travel, and on one
-                               interface that omission is a compile error), UIElementMirror over
-                               today's UINode tree, TreeOps (the wire vocabulary). A second engine
-                               supplies a TreeSource and a NodeMirror and nothing else
-  .window                      A WINDOW'S LIFETIME — the layer above the sessions, and the one a mod
-                               uses. Networked<M> (ONE class per UI: a UINode whose widgets are
-                               FIELDS — the field name becomes the id — with layout/serve/tick/
-                               stillValid/title/key on the server, bound/client on the client, closed
-                               on both; the panel IS the tree's root on both sides, so the mounted
-                               root is the panel and `machinepanel { }` styles it by tag), UiType (the
-                               identity both sides reference AND the engine's customElements.define —
-                               registers the panel's tag so a description decodes into the class;
-                               build() on the server, bind() on the client, nested field types
-                               registered recursively), ServerScope / ClientScope (what serve() and
-                               client() are handed — a VIEW of the window's one session, prefixed by
-                               the panel's element-id path, so a nested panel's "save" is
-                               "engines/save" on both sides with nobody writing the string;
-                               composition is ServerScope.attach(child, slice) — props down, the id
-                               is the namespace, and the child panel is built by the PARENT's layout
-                               with the slice only it knows), ServerWindow<P> (the final HANDLE
-                               open() returns — session, key dedup, close matrix; NOT an authoring
-                               surface any more), ServerWindows.open(TYPE, model) — the WHOLE
-                               wiring: the open names the panel class on the wire
-                               (UiMethods.UI_CLASS) and the client initialises it, GUARDED (loaded
-                               without running anything, must be Networked, only then initialised),
-                               so there is no client registration at all — WindowMount +
-                               ClientWindowContext (the platform seam), SheetSupply (local resolver →
-                               cache → ui/sheet), Presentation (WINDOW | EDITOR_TAB |
-                               TOOL_WINDOW(region) — a HINT on the open, carried on ui/openWindow and
-                               declared beside the resolver so a client cannot name one), RowSource +
-                               RemoteRows (a collection the server holds and a viewer sees a WINDOW
-                               of). ClientScope.workspace() answers fs.client's Workspace and
-                               ServerScope.workspace() answers a ServerWorkspace, both from the
-                               connection — so a panel that shows files reads them through the fs
-                               protocol and never re-ships a listing through the mirror.
-                               plan/net-window-host.md
+com.crystalgui.net             UITransport, InMemoryTransport, ServerUiSession, ClientUiSession,
+                               ClientUiSessions, UiWindowMux, SheetRef. Ids live in
+                               ui.dom.UIElementTreeSource, not here. -> Server layer
+  .mirror                      ServerTreeMirror<N,T>, ClientTreeMirror<N,T>, NodeMirror<N,T> (the
+                               per-tree seam -- BOTH halves on one interface, so an encode with no
+                               matching apply is a compile error), UIElementMirror over today's tree,
+                               TreeOps. It names no widget, no session and no transport: a second
+                               engine supplies a TreeSource and a NodeMirror and nothing else.
+  .protocol                    The four-kind Envelope, EnvelopeCodec, MessageRouter, Call, UiMethods.
+  .wire                        FrameCodec, FrameMultiplexer, WireTransport, over the four-method
+                               CgNetworkChannel platform seam.
+  .window                      A WINDOW'S LIFETIME, and the layer a mod actually uses: Networked<M>
+                               (one class per UI, widgets as FIELDS), UiType, ServerScope/ClientScope,
+                               ServerWindow<P>, ServerWindows/ClientWindows, WindowMount, Presentation,
+                               RowSource/RemoteRows.  -> docs/CGUI_BUILDING_UIS.md
+  .projection                  Declare a read/write pair once; the engine compares and writes only on
+                               change, and skips the set while no viewer is watching. `each` for KEYED
+                               lists; AutoProjection maps a panel field name to a model accessor and
+                               REPORTS what it could not wire.
 
-                               NOTE the three senses of "window", which is why these live in their own
-                               package: UIDocument is the ENGINE for one surface (and is the one genuine
-                               misnomer — it plays the DOM's Document role and would be UIDocument if
-                               it were named today), WindowFrame is the CHROME on a desktop, and
-                               ServerWindow is the NETWORKED UNIT. The protocol has said "window" in
-                               that third sense since windowId existed.
+                               NOTE the three senses of "window": UIDocument is the ENGINE for one
+                               surface, WindowFrame is the CHROME on a desktop, ServerWindow is the
+                               NETWORKED UNIT. The protocol has meant the third since windowId existed.
 ```
 
 **Naming corrections vs. older notes:** `render/` is top-level (`com.crystalgui.render`), *not* nested
@@ -1621,55 +1555,34 @@ three-phase event types are in `ui/event/` — there is no `core/event/` package
 
 # Documentation index
 
-> **Plans live in `plan/`, a separate private repository that is not part of this checkout.** Absent is
-> normal and nothing here depends on it — the build, the tests and every doc below work without it. When
-> it is present, a citation like `plan/engine-port.md` §2.6 resolves inside it at whatever depth the plan
-> sits, and `python plan/tools/verify.py --repo .` checks that every one of them still does.
->
-> **Status is the plan's own**, in its front matter, which is why the table below no longer carries a
-> column for it. Six vocabularies were in use when that column existed and it was the copy that went
-> stale.
+`ls docs/*.md` is the list; this says which one to open. Each is written to be read on its own, so a
+row here says what a doc is **for** and nothing about what it contains — the doc's own header does that
+better and does not go stale when it changes.
 
+| Doc | For |
+|---|---|
+| **`CGUI_BUILDING_UIS.md`** | **Using CrystalGUI rather than building it.** A client-only UI, a networked one, and how to choose. The whole `Networked` authoring surface by example, ending in a symptom→cause table for the failures that are silent |
+| **`CGUI_WORKBENCH_EXTENSIONS.md`** | The other user-facing guide: getting a panel, a file type, a command or a status entry into somebody else's workbench |
+| **`CGUI_INVARIANTS.md`** | What is invisible from any single class and expensive to rediscover, by subsystem. **Read the section for what you are touching** |
+| `CGUI_STYLE_RENDER_PIPELINE.md` | The cascade and the paint path in full — origins, selectors, transitions, drawables, compositing, `background:` grammar, the visual-layer FBO pass |
+| `CGUI_WIDGETS.md` | Per-widget API, `::part()` names, pseudo-classes, and the harness scene that covers each |
+| `CGUI_WORKBENCH_SERVICES.md` | What a widget may *ask* rather than reach through the application for: `Disposer`, `DataContext`, `Resource`, the document layer, `Workspace`, `EditorService`. **New service API is added here in the same commit** |
+| `CGUI_SERVER_AND_SERIALIZATION.md` | Codecs, descriptions, content hashing, sessions and RPC — and the headless contract underneath them |
+| `CGUI_NETWORKING_PRIMER.md` | Networking from the bottom up, ELI5 first: what a frame, a session and a peer each are, how a `ProtocolConnection` is established, and how to define a packet contract on both halves |
+| `CGUI_THEMING.md` | Themes, editor colour schemes, the token vocabulary. Its token table is generated and machine-checked — regenerate it from the failing test, never by hand |
+| `CGUI_NEW_ENGINE.md` | Reading a commit or a comment that still names the old engine: what replaced what, and the six habits that are now wrong |
+| `CGUI_MODERN_UI_RENDERING_RESEARCH.md` | The primary sources behind glass, blur, gradients and the taskbar, with their exact numbers. **Read the relevant section before touching any of them** — each was first built from memory and each was wrong in a way only the source showed |
 
-| Doc | Status | Contents |
-|---|---|---|
-| **`docs/CGUI_BUILDING_UIS.md`** | **current** | **THE USER-FACING GUIDE, and the only doc in this table written for somebody USING CrystalGUI rather than building it.** §4 now carries *Keeping the screen up to date — projections*, written ELI5 from the failure rather than from the API: the per-tick `mirror()` shape it used to teach, why forgetting a field in it looks correct, and the three ways to state a projection instead. How to make a client-only UI and how to make a networked one, which to choose, and the whole `Networked` authoring surface by example — hooks and what runs where, typed events (`io.on(slider, Slider.VALUE_CHANGED, …)`), wire methods and the prefix nobody types, nesting with a model slice, opening and closing, session persistence, and writing a widget with its own contract. Ends with a symptom→cause table for the failures that are silent (no `init` so nothing is styled; a panel at zero height because `flex-shrink` is 0 here; listeners in `client(io)` instead of `bound()`). **Keep the examples compiling in your head against the real API** — three of them were wrong on the first pass (`width(100f, true)`, `session().newMap()`, a `wire` referenced outside its lambda) and were caught only by reading the signatures back |
-| **`docs/CGUI_WORKBENCH_EXTENSIONS.md`** | **current** | **THE SECOND USER-FACING GUIDE**, and the counterpart to `CGUI_BUILDING_UIS.md`: that one is how to make a UI, this is how to get one into somebody else's workbench. `WorkbenchExtension` and the two things a `ServiceLoader` entry and a manifest id mean (available is not enabled); `ToolWindowKind` for an activity-bar panel; `DocumentKind` for a file type; commands, menus and accelerators; a status entry; explorer decorations; diagnostics; `SessionSlice`; which signal actually means "the tab in front changed"; settings; and `ApplicationKind` for a whole product. Ends with the five things that are silent when wrong — a lazily built panel view the dock caches for the session, a process-wide registration with no handle, following `onDidOpenDocument` alone, `activate` asking for a window that does not exist yet, and an id nothing ships. **Every example was checked against the real signatures**, which caught five: `Kind.NORMAL`, `DiagnosticSet.replace`, a five-argument `Diagnostic.onRow`, `Language.JSON` and `TextPoint.of` — none of which exists |
-| **`docs/CGUI_INVARIANTS.md`** | **current** | **298 rows: the things invisible from any single class and expensive to rediscover**, grouped by subsystem — threading, coordinates, the cascade, layout, dispatch, GL, widgets, the workbench, windows, documents and the wire, the editor, the language stack, the build, testing. It was a 560-line section of this file, a quarter of what is read at the start of every session, and 244 rows were cut when it moved: the discriminator was tense rather than subject, so a row stating a constraint stayed and a row narrating one fixed bug in one class went. **Read the section for what you are touching; do not read it front to back** — and add a row only for something TRUE NOW that a stack section above does not already say |
-| `docs/CGUI_STYLE_RENDER_PIPELINE.md` | **current** | Cascade, selectors, stylesheets, transitions, frame lifecycle, drawables & compositing channels, `background:` grammar, border-radius layer, visual layers (opacity + masking), `transform`/`transform-origin`, known gaps vs. the web, file map |
-| `docs/CGUI_WIDGETS.md` | **current** | All thirteen widgets: API, internal-child class hooks, pseudo-classes, covering harness scene |
-| `docs/CGUI_SERVER_AND_SERIALIZATION.md` | **current** | Codecs, `StateMap`, descriptions, content hashing, network ids, `SheetRef`, packets/sessions/RPC, known gaps, the headless contract |
-| **`docs/CGUI_NEW_ENGINE.md`** | **current** | **What replaced what, kept as the record.** The old engine is deleted; this is where its shapes are written down, for reading a commit or a comment that still names one: the lookup table (`Input` → the four services, `UIFrameTicker` → an owned hook, `UIDocument.promote` → `promote`, `UIElementRegistry` → a `NAME` on the class, `UIElementMirror` → `UIElementMirror`, shadow parts → shadow trees), then what each replacement actually offers. Ends with **the habits that are now wrong** — `box()` is nullable, `toLocal`'s origin moved, `Box.x()` is parent-relative, there is no tag fallback, a shadow host never sees its own parts, a hook runs before layout. Those six are where the review time goes |
-| `docs/CGUI_WORKBENCH_SERVICES.md` | **current** | The service layer under the dock/workbench/editor — what a widget may *ask* rather than reach through the application for. `Disposer`, `DataContext`, service events, `Resource` and its providers, the document layer (`DocumentKind`, `Documents`, `DocumentReference`), `Workspace` and `EditorService`. **Every new service API is added here in the same commit**, which is a rule the filesystem cutover broke and then repaired: a section can go from stale to actively misleading in one commit, and this one is loaded every session |
-| `docs/CGUI_THEMING.md` | **current** | Themes, editor colour schemes, the token vocabulary and the anti-rot rules. Its token table is **generated and machine-checked** (`StyleGovernanceTest.theDocumentedTokenTableIsCurrent`) — regenerate from the failing test's output, never hand-edit |
-| `docs/CGUI_MODERN_UI_RENDERING_RESEARCH.md` | **current** | The primary sources behind the taskbar, glass, blur and gradient work, with their exact numbers: WinUI's acrylic effect graph (blur 30, saturation 1.25, luminosity blend, noise 0.02) and brush values, Fluent's fill/text tokens, Windows 11 taskbar geometry, IntelliJ's project-colour header, Apple's Liquid Glass usage rules, Skia's scale-then-blur Gaussian, the CSS backdrop **mirror** edge mode, and gradient dithering. **Read the relevant section before touching `gui_glass`, `gui_blur`, `gui_gradient`, `CgUiBackdrop` or the taskbar sheet** — every one of those was first built from memory and was wrong in a way only the source showed |
-| `docs/CGUI_NETWORKING_PRIMER.md` | **current** | **The lecture** — networking from the bottom up, ELI5 first. What a frame, a message, an envelope, a connection, a session and a peer each are and how they differ; the layer cake from `CgNetworkChannel` to the sessions; **how a `ProtocolConnection` is established** (registration order, the FML events, `open()`, odd/even stream ids, routing, ticking, closing); **how to define a packet contract on both halves**, with `fs.read` shown server-side and client-side together; and the mc1710 wiring — `Mc1710NetworkChannel`, `CgUiConnections`, `CgUiWorkspaceHost`. Read it before `CGUI_SERVER_AND_SERIALIZATION.md`, which is the same ground as a reference |
-| `plan/style-overhaul.md` | — | The styling overhaul plan: audit, reference research, token architecture, governance, the step-by-step migration and its recorded revisions |
-| `plan/shell-architecture-audit.md` | — | The architecture review this layer was rebuilt from: audit, VS Code/IntelliJ research, the six-step port, and what each step deliberately does not do |
-| `plan/shell-windowing.md` | — | CrystalOS — the window compositor: multiple visible, resizable, stacking windows as element subtrees under one `UIDocument` (the desktop), a taskbar, a switcher, and the hide/close/destroy lifecycle with window-scoped modality. Researched against Win32, X11, Cocoa, Swing MDI, the Page Lifecycle API and bfcache — a window is an element, close is a *request* everywhere, and a hidden thing must stop working |
-| `plan/fs-remote-workspace.md` | — | Networking, the workspace and UI over the wire, after Phase 4 shipped and was verified on a real dedicated server. The whole 15-method server surface, what decides a command's side (nothing — the client has no filesystem to misuse), and and the ten items between "served over a socket" and "usable without losing work" — led by a window lifecycle (hide is not close, close is not destroy) and the strip that makes minimise safe |
-| `plan/style-glass.md` | — | Liquid glass — a backdrop material: capture what is behind an element, blur it (separable Gaussian, after a dual-Kawase pyramid was tried and withdrawn — see the plan's revision log), refract it through a surface-height profile (Snell), tint and light it. Researched against Apple's own effect and the reimplementations that picked it apart; the finding that shaped it is that the displacement comes from a HEIGHT PROFILE across the bezel and not from the SDF distance. Written for the taskbar island, opt-in per element because the cost is a mid-frame target switch per frame |
-| `plan/shell-pinned-windows.md` | — | Pinned windows everywhere — the flicker when the desktop closes, and interactive pinned windows over OTHER Minecraft GUIs (click into a pinned window while chat is open). Both have one root: the paint path is chosen by WHICH SCREEN IS OPEN rather than by what state the desktop is in, so every handoff is a frame nobody paints. The reframing is that display-only was never about "not our screen" — it was about the CURSOR being grabbed, and any GuiScreen ungrabs it. Carries the per-version mechanism table (1.7.10 / 1.12.2 / 1.20.1) behind one `CgScreenOverlay` SPI, and the finding that 1.7.10 has NO GuiScreenEvent input events — verified in-tree — so the mixin is that version's exception rather than the pattern |
-| `plan/fs-remote-file.md` | — | The remote file made honest: the wire's speed, external change, and disagreement. A real OS filesystem watcher (and why the etag poll survives as its reconciliation — OVERFLOW loses events by design and macOS's `WatchService` is a poll wearing an interface), the client end of a change nobody wired up, pipelining the serial chunked read, a histogram differ as the substrate under both a diff viewer and delta reads, and a probe that runs with the editor OPEN — argued for by a bug every existing probe missed because they all close the GUI |
-| `plan/net-window-host.md` | — | The UI host — a lifecycle engine for networked windows, from an audit of the Machine example's setup. **Seventeen findings**, of which the sharpest are: per-mod tick polls opening sessions; **no client→server close message at all**, so the shipped example resurrected its own closed window on the next tick; the peer map keyed on a mortal `EntityPlayerMP`, so one respawn silently drops every inbound frame *while outbound keeps working*; no window type or title on the wire, so one mod's behaviour adopted another mod's tree; notifications unscopeable per window, so a second window of one application threw at open; `session.on` silently replacing a duplicate handler; and a **state delta that races the description being dropped permanently**. MC's own `Container`/`openMenu` pipeline and LDLib2's holders are the port sources. Shipped as `com.crystalgui.net.window` — `ServerWindow`/`ServerFragment`/`ServerWindows`/`ClientWindows` + a `WindowMount` SPI — with the full close matrix, and the example collapsed to a window class plus one registration line. **Part VI designed and Part VII shipped the second rewrite (2026-08-28)**: `Networked<M>` — the panel IS the element, one interface per UI, model handed to the server hooks as a parameter so the side boundary is visible in the signatures — with `UiType` (identity + tag registration), `ServerScope`/`ClientScope` (the id-path-prefixed views that make nesting compose), and SIX classes deleted: `Panel`, `PanelType`, `WindowType`, `ClientWindowBehaviour`, `ServerFragment`, `WindowScope`. The rule that settles every "should this be generic" question — does the framework hand it to you, or do you already hold it — decided all of it. **Closed at M8**: VI.7's four open forks were all settled by Part VII (field binding IS the declare-once base class it was leaning away from), and what M7 added on top — `Presentation`, `addLocal`, `stream` — is written up in `plan/engine-rewrite.md` |
-| **`plan/fs-rewrite.md`** | — | **THE FILESYSTEM, RESOURCE AND DOCUMENT MODEL**, interleaved with the UI rewrite's M7 into one flow. `Reply`/`Stream` as the one async shape; a headless document layer where `version() != savedVersion` IS dirtiness and a document is disposed by its LAST holder; the `fs/*` protocol as typed records with paged answers; `WorkspaceBinding` and one `WatchHub` per SERVER; `Workspace` and its facades on the client; `EditorService` as the ONE lane for opening anything. Fifteen classes deleted. Its §9 is the per-milestone deletion ledger |
-| **`plan/engine-rewrite.md`** | — | **THE MASTER PLAN for the networked-UI + engine-core rewrite**, knitting the two audits below into one ordered set of milestones M0–M8 with a deletion ledger checked per milestone. Its §0 is the thing to read first: the two rewrites each wanted to be first and would have written the document mirror twice, and the resolution is a **seam** — the mirror observes a tree CONTRACT (`ui.dom.TreeSource`) rather than a class, so it is authored once and the engine swap underneath it is a port of one file. Decisions D1–D12 were taken as recommended. **M0–M2 are done**: the Taffy fork (S1), the Shadow-DOM prototype (S2) and the seam (M0); contracts on all 87 widget classes (M1); the mirror — stable ids, `insert`/`remove`/`move`, and `net/mirror/` generic over the node type (M2). **§M3.P — projections — SHIPPED 2026-08-30 ahead of the rest of M3**: the model→view direction none of the three plans covered: `mirror()` is hand-written per panel today, so a field nobody remembered to write never updates and the first value is right, which is how a frozen `ProgressBar` shipped. Three tiers over an UNMODIFIED model, prior art weighed against Fabric, Blazor, LiveView, Unreal, NGO and Godot, and the finding that decides the shape: "which fields changed" is automatable and "which widget shows which field" is not, by anyone |
-| **`plan/shell-workbench-rewrite.md`** | — | **THE APPLICATION, THE ENGINE UNDER IT, AND THE HOST UNDER THAT.** What `plan/net-audit.md` was to the wire, this is to the shell — and it supersedes the v1 audit at `6af157ce`, which asked only whether `ScriptWorkbench` should exist. Measured on `rewrite` @ `6af157ce`: `Workbench` is **3,378 lines whose 391-line constructor IS the application** (A4); the product is written three times over, in `CgUiScreen`, the harness and the tests (§1.2); the loader decides the window's title, key, icon, close policy and first-run geometry (§1.3); **125 mutable statics across 76 files** are what a second application would have to share (§1.4); and **the retention chain is nine links long** — six static signals and four `Workspace` signals never disconnected, with `CgUiScreen.disposeAll()` having no caller — so nothing in this tree has ever actually been closed (§1.5, A8). Fifteen findings **A1–A15**; ten steps **W0–W8**; two series, deliberately different letters. The design is **five tiers** (§4.1): a **host** supplying `HostServices` and nothing else, a **shell** (`Desktop`), an **application** (`ApplicationKind` — a manifest shaped like `.desktop`/`Info.plist`), an **engine** (`Workbench implements WorkbenchContext`), and an **extension** seam (`WorkbenchExtension.activate(ctx) → Disposable`), with `ToolWindowKind` declaring a panel exactly as `DocumentKind` declares a file type (§4.4). §4.12 is the rule that settles every ownership question — *if two applications on the same server would disagree about it, it is theirs; if they would merely duplicate it, it is the workspace's*. §4.13 makes projects many-per-source with the GLOBAL/WORLD scope a choice only in single-player; §4.14 makes scripting a capability a **server grants**, never a feature a client has. **W0 is a leak test that is red on the current tree**, written before anything is moved |
-| `plan/engine-core.md` | — | **M5 broken into minor milestones 5.0–5.6**, each with contents, the tests that accept it, what it proves, whether it touches the old engine, and its size. §2 is the ground rules (the strangler line as a bytecode-scan test; the old engine touched in exactly three named seams; the engine writes nothing into the cascade); §3 the ten decisions the M5 row left open, with recommendations; §7 the metrics "done" is measured by (one-pass layout on the gallery's trees, hit-test before paint, one coordinate chain, zero engine writes into the cascade, the seam suite unchanged on the new tree). Read it before touching `ui/dom`, `ui/box` or `ui/service` |
-| **`plan/engine-port.md`** | — | **THE PORT, audited before it starts.** What `plan/engine-audit.md` was to M5, this is to M6: the whole old engine measured on the tree at `5c1fa09a` — 303 files / ~96,500 lines of port scope (a fifth more than the audit counted, because `graph/shader`, `language/…/run/view`, `net/window`, the Machine example and `CrystalEditor` all extend `UINode`), every one of `UINode`'s 166 and `UIDocument`'s 67 members mapped to its counterpart or a named gap (§4), a census of every mechanism the widget layer reaches (210 `appendStructural` sites, 117 IMPORTANT writes classified one by one, 185 geometry reads, 80 `stopPropagation` sites each of which is a READING), and a census of the sheets that changes the plan: of 1,048 part selectors, **401 select a part under a part and 99 reach through a part into a tag — `::part()` cannot express either**, so `__x__` is three kinds (a shadow part, light-tree structure, a state flag) and the master plan's one-line rewrite is a classification first (§1.1, D1). Fourteen seams outside the element layer are typed on `UINode` (§1.2); the networking sessions are on M6's critical path, not M7's (§1.3); 164 test files construct a `UIDocument` and move with the widgets (§1.4); 32 tags a sheet names are unregistered and match by the lowercase fallback (§1.5). §2 is the machinery that must exist before the first widget moves — `Dismiss`, the ghost, `scrollExempt`, `HIDDEN`, `exportparts`, the fixture twin, the governance twins and the ledger; §4.6 the 24 decisions with recommendations; §5 the minor milestones 6.0–6.9, each with the widgets, the scenes and tests that accept it, the invariant rows it owns, and its hazards; §8 what done measures; Appendix A the per-file port matrix for all 303 files. **The unit of work is a closed tree — a scene — never a widget**, because a `UINode` cannot be a child of a `UINode` and no adapter is built; **the port is COPIED and transformed by a codemod, never written** — 2,227 mechanical sites, ≈443 hand-edited, into a new package map by kind and layer (§2.6–2.8: `widget.*` < `chrome` < `desktop` < `workbench`, enforced by `LayeringTest`). Read it before porting anything |
-| `plan/net-audit.md` | — | The WHY for the wire half. A complete audit of `net/`, `net/window/`, `net/protocol/`, `serialization/` and how they meet the widget, desktop and workbench stacks — against Chrome DevTools Protocol, React Native Fabric, Blazor, Phoenix LiveView, Unity NGO, Unreal and Godot. Findings W1–W4, P1–P4, S1–S14, E1–E6, Y1–Y4, N1–N9, K1–K9, Z1–Z5, plus abuse paths, the rewritten authoring surface (§4.11) and the `layout(M)` → `build(M)` argument (§4.12). **Appendix A** is the tear-out diagnosis: a `Detached` prototype was built, measured and reverted, because it taught the client to lie about where a subtree was rather than fixing identity-by-position |
-| `plan/engine-audit.md` | — | The WHY for the layer under it — one tree doing DOM, layout, paint and hit-test at once; the cascade as the engine's only mutable box model; encapsulation by a boolean flag; five motion mechanisms; a thread marker that asserted nothing (fixed at M0). The invariants in `docs/CGUI_INVARIANTS.md` are its receipts — most of that file is this audit's findings, kept as rules. §12 is the three-tree design; §13 the ten-step port |
+## Plans
 
-**The table above is the index; do not count it here.** This paragraph has carried a number three
-times and been wrong all three — it said *four* while five were listed, was corrected to *five*, and
-then grew a second opening sentence saying *six* while the first still said five, with nine files on
-disk. `ls docs/*.md` is the answer and always was; a row is easy to add and a count below it is easy
-to miss, which is the whole reason a derived number does not belong in prose. The first three were
-audited against the code on 2026-07-29, `CGUI_THEMING.md`'s token table is machine-checked against
-the CSS on every test run, and `CGUI_NETWORKING_PRIMER.md` was read out of the source class by class. `CRYSTALGUI_OVERHAUL_V4.md` (the historical decision record for why CrystalGUI stopped
-owning rendering infrastructure) was deleted; its one durable conclusion — CrystalGraphics owns the
-backend, CrystalGUI is a thin immediate-mode paint surface — is recorded in
-[CrystalGraphics ownership boundary](#crystalgraphics-ownership-boundary) above.
+**`plan/README.md` is the index, and it is generated** — by area, by status, nested by parentage, from
+each plan's own front matter. This file used to carry fifteen rows describing plans, which was a second
+copy of a listing that can now regenerate itself, of documents most readers cannot open.
+
+`plan/` is a separate **private** repository and is not part of this checkout. Absent is normal and
+nothing here depends on it. When present, a citation like `plan/engine-port.md` §2.6 resolves inside it
+at whatever depth the plan sits, and `python plan/tools/verify.py --repo .` checks that every one of
+them still does — which `PlanCitationsResolveTest` runs under `:core:check`.
 
 ## External references
 
