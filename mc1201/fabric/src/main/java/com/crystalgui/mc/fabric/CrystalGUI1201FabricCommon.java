@@ -20,7 +20,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 
 import org.lwjgl.glfw.GLFW;
-import org.lwjgl.glfw.GLFWCharCallback;
+import org.lwjgl.glfw.GLFWCharModsCallback;
 import org.lwjgl.glfw.GLFWKeyCallback;
 import org.lwjgl.glfw.GLFWMouseButtonCallback;
 import org.lwjgl.glfw.GLFWScrollCallback;
@@ -193,10 +193,14 @@ public final class CrystalGUI1201FabricCommon implements ModInitializer {
                     if (prevKey != null) prevKey.invoke(win, key, scancode, action, mods);
                 });
 
-                GLFWCharCallback prevChar = GLFW.glfwSetCharCallback(window, null);
-                GLFW.glfwSetCharCallback(window, (win, codepoint) -> {
+                // CHAR_MODS, not CHAR. Minecraft installs its character handler on the mods variant
+                // (InputConstants.setupKeyboardCallbacks) and GLFW fires BOTH for one keystroke, so
+                // hooking CHAR puts us beside its handler rather than in front of it: declining to
+                // forward suppresses nothing and the character lands in chat and in the editor at once.
+                GLFWCharModsCallback prevChar = GLFW.glfwSetCharModsCallback(window, null);
+                GLFW.glfwSetCharModsCallback(window, (win, codepoint, mods) -> {
                     if (Lifecycle1201.offerKey(0, (char) codepoint, true)) return;
-                    if (prevChar != null) prevChar.invoke(win, codepoint);
+                    if (prevChar != null) prevChar.invoke(win, codepoint, mods);
                 });
 
                 GLFWScrollCallback prevScroll = GLFW.glfwSetScrollCallback(window, null);
