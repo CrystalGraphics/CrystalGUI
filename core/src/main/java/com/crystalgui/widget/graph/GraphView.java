@@ -253,8 +253,11 @@ public class GraphView extends SurfaceEditor {
      * the whole job, the same as every other {@code curve()}/{@code quad()} caller in the engine.
      */
 
-    private final List<GraphConnection> connections = new ArrayList<>();
+    final List<GraphConnection> connections = new ArrayList<>();
     private final List<GraphConnection> connectionsView = Collections.unmodifiableList(connections);
+
+    /** Every wire on this graph. @see GraphWires */
+    private final GraphWires wires = new GraphWires(this);
 
     /**
      * The data this view projects. <b>The document is the model; the widgets are the projection.</b>
@@ -265,26 +268,15 @@ public class GraphView extends SurfaceEditor {
      * that list is derived: {@link #load} rebuilds it from the document and nothing else may.</p>
      */
     @Getter
-    private GraphDocument document = new GraphDocument();
+    GraphDocument document = new GraphDocument();
 
     /** id → widget. The only way back from document data to the thing on screen. */
     private final Map<String, GraphNode> widgetsById = new LinkedHashMap<>();
 
     private final NodeWireLayer wireLayer;
 
-    /**
-     * One {@link PortDefaultEditor} per port whose {@link NodePort#getDefaultEditor()} is currently
-     * non-null — rebuilt via {@link #rebuildPortEditor} every time that control is replaced, kept
-     * mounted/unmounted as the port connects and disconnects. See {@link PortDefaultEditor}'s own class
-     * javadoc for what it owns and why it is a class of its own rather than a handful of parallel maps
-     * here.
-     */
-    private final Map<NodePort, PortDefaultEditor> portEditors = new LinkedHashMap<>();
-
-    /** Ports {@link #watchPort} has already wired a listener onto — the once-only guard now
-     * that discovery itself is push-based. See {@link #rebuildPortEditor}'s own javadoc for why a port is
-     * watched from the moment it is first seen, not from the moment it first has a non-null editor. */
-    private final Set<NodePort> watchedPorts = new LinkedHashSet<>();
+    /** Every input port's floating default editor. @see GraphPorts */
+    private final GraphPorts ports = new GraphPorts(this);
 
     /**
      * This document's history.
@@ -307,7 +299,7 @@ public class GraphView extends SurfaceEditor {
      * <p><b>Only document state goes through it.</b> Pan, zoom, selection and collapse are view state
      * and are mutated directly; Ctrl+Z after wiring up a graph must undo the wire, not the scroll.</p>
      */
-    private final Edits edits = edits();
+    final Edits edits = edits();
 
     /** The wire under the pointer, or null. Drives the hover thickening — a wire cannot carry {@code
      * :hover} itself, having no element. */
@@ -442,25 +434,18 @@ public class GraphView extends SurfaceEditor {
         return wireLayer;
     }
 
-    // ── Port default editors ────────────────────────────────────────────────
+    // ── Port default editors ──────────────────────────────────
 
     /**
-     * Repositions the mounted port editors, every frame.
-     *
-     * <p><b>Discovery is not here any more</b> — see {@link #watchPort}. What remains genuinely is
-     * per-frame: a floating editor is positioned in world space off its port's live layout, so it moves
-     * whenever the plane pans, zooms or reflows, and there is no single announcement for "the geometry
-     * under me settled". This is a position sync, not a scan for work.</p>
+     * Repositions the mounted port editors, every frame. @see GraphPorts#reposition
      *
      * <p>Always ticking, regardless of {@link #setCullingEnabled}: a floating editor still has to track
      * its port even in a huge graph where node culling is doing real work, so this cannot piggyback on
      * {@link CanvasView#tickFrame}'s own early-out.</p>
      */
-        public boolean tickFrame(float deltaSeconds) {
+    public boolean tickFrame(float deltaSeconds) {
         super.tickFrame(deltaSeconds);
-        for (PortDefaultEditor editor : portEditors.values()) {
-            if (editor.isMounted()) editor.reposition();
-        }
+        ports.reposition();
         return true;
     }
 
@@ -479,141 +464,20 @@ public class GraphView extends SurfaceEditor {
         if (window != null) document().animation().every(this, this::tickFrame);
     }
 
-    /**
-     * Registers this widget's own commands, bound on <b>itself</b>, once it has a window.
-     *
-     * <p><b>The widget owns them, exactly as {@code TextEditor} owns {@link
-     * com.crystalgui.ui.elements.editor.EditorCommands}.</b> Delete, Space to create a node, F to frame,
-     * Ctrl+Z — those are not a host's choices, they are what a node graph <em>is</em>, and a graph that
-     * does nothing on Delete is broken rather than neutral. Leaving it to the host meant one harness scene
-     * installed them and nothing else did, so the shader graph in the dock took focus, drew a selection,
-     * and answered no key at all. Twice: once for {@code GraphCommands}, once for undo.</p>
-     *
-     * <h3>Bound on this element, never on the window root</h3>
-     *
-     * <p>The defaults include bare {@code A}, {@code F}, {@code Space} and {@code Backspace}. A keymap
-     * resolves from the focused element outward, so at the root those would fire while typing into any
-     * text editor that happens to share the window — which, in a dock, is most of them. Scoped here they
-     * exist exactly while focus is inside the graph.</p>
-     *
-     * <h3>Undo binds {@code edit.undo}; it does not invent {@code graph.undo}</h3>
-     *
-     * <p>{@link UndoCommands}' own rule, and the reason it stays correct: {@link UndoScope#nearest} walks
-     * outward from whatever was focused and finds <em>this</em> view's stack, so one command id serves
-     * every history in the window and the palette shows one Undo rather than one per widget. This is the
-     * same thing {@code TextEditor} does with the same ids.</p>
-     *
-     * <p>Which is also why binding it here does not conflict with a host that installs undo application-
-     * wide: the inner scope wins while focus is inside the graph, and both routes end at the same lookup.</p>
-     */
-
-    /**
-     * Finds input ports that have never been seen before and starts watching them — {@code onBlankChanged}
-     * for mount state, {@code onDefaultEditorChanged} for the control itself — then does one initial
-     * {@link #rebuildPortEditor} in case the port already has an editor.
-     *
-     * <p>A per-tick scan over the (small) node set, the same shape as {@code ShaderGraphPreviews}'s own
-     * new-node discovery — there is no signal for "a node was added" any more than there is one for "a
-     * port exists now", so this is still how a port is FOUND at all. What no longer happens here is
-     * deciding whether it has an editor worth keeping: {@link #rebuildPortEditor} owns that, and it is
-     * reachable from {@code onDefaultEditorChanged} too, not just from this scan.</p>
-     */
-    /**
-     * Gives every input port on {@code node} an editor, once.
-     *
-     * <p>Called when a node <b>joins the view</b> — the two places a widget is registered — rather than
-     * from a frame. See {@link #watchPort}.</p>
-     */
-    private void watchPortsOf(GraphNode node) {
-        for (NodePort port : node.getInputPorts()) watchPort(port);
-    }
-
-    /**
-     * Gives one input port its {@link PortDefaultEditor}, once.
-     *
-     * <h3>Why this is not a per-frame scan any more</h3>
-     *
-     * <p>It was: {@code tickFrame} walked every node and every input port of every node, every frame,
-     * to notice the ones it had not seen — the same shape plan step 3 deleted five times over, and the
-     * last one left in the engine. The cost is not the {@code Set.add} but the walk itself, which is
-     * O(nodes × ports) on a graph where the answer changes a handful of times in a session.</p>
-     *
-     * <p>A port becomes visible to this view at exactly <b>two</b> moments, and both are already known
-     * here: a node is registered with ports already on it, or {@link GraphNode#addPort} adds one to a
-     * node that is already in a view — which was the reason for the scan, since a node built by a factory
-     * gains its ports before it joins anything and {@code graphView()} is null throughout. {@code addPort}
-     * already calls back into this view for {@code syncPorts}; it now says this too.</p>
-     *
-     * <p>Idempotent through {@code watchedPorts}, so overlapping calls cost a set lookup. Ports are never
-     * removed from a node — only whole nodes are, through {@code forgetPortEditor} — so the watch set
-     * needs no pruning beyond that.</p>
-     */
+    /** Called by {@link GraphNode#addPort}. @see GraphPorts#watch */
     void watchPort(NodePort port) {
-        if (port == null || !port.getDirection().isInput()) return;
-        if (!watchedPorts.add(port)) return;
-        PortDefaultEditor editor = new PortDefaultEditor(port, this);
-        portEditors.put(port, editor);
-        port.onBlankChanged.connect(() -> refreshPortEditor(port));
-        port.onDefaultEditorChanged.connect(() -> refreshPortEditor(port));
-        refreshPortEditor(port);
+        ports.watch(port);
     }
 
-    /**
-     * Brings {@code port}'s editor back in step with the port — the control it wraps, and whether it
-     * should be on the plane at all.
-     *
-     * <p><b>One {@link PortDefaultEditor} per port for that port's whole life, never rebuilt.</b> The
-     * control genuinely can arrive after the widget exists: {@code NodeFieldBinder} binds a
-     * document-declared field on whatever tick the owning node is first seen, and for a node added from
-     * the create menu that is a different {@code Animation.Hook} from the one {@link #tickFrame} discovers
-     * the port on, with no ordering between them. Rebuilding on that change is what previously broke a
-     * vector editor: the replacement box adopted a control the old box still held, and two elements
-     * claiming one child put it in two Taffy parents at once — laid out under both, wrong pass winning,
-     * so the X/Y fields drew hundreds of pixels from their own frame. {@link PortDefaultEditor#syncControl}
-     * swaps it in place with an explicit detach instead, so there is only ever one owner.</p>
-     */
-    private void refreshPortEditor(NodePort port) {
-        PortDefaultEditor editor = portEditors.get(port);
-        if (editor == null) return;
-        editor.syncControl();
-        // A port with no control yet has nothing to show — mounting an empty box would draw a stray
-        // frame beside the port until the binder catches up.
-        editor.setMounted(editor.hasControl() && port.isBlank());
-    }
-
-    /**
-     * Draws the stub joining {@code port}'s floating default editor to its own dot — called from
-     * {@link GraphNode#paintDecoration}, never invoked directly by anything on the plane. See
-     * {@link PortDefaultEditor#paintStub} for why the paint call has to originate from the TARGET node
-     * itself: {@code paintOverlay} is the only hook that runs after a node's own children and before its
-     * own outline, which is what makes "over the body, under the ring" possible at all — no sibling
-     * element, however it is z-ordered, can land between two steps of one other element's own atomic
-     * paint call.
-     *
-     * <p>A no-op when {@code port} has no mounted editor (connected, or no default at all) — the common
-     * case for most ports on most nodes, checked once via a map lookup rather than by every node walking
-     * its own ports' state.</p>
-     */
+    /** Called by {@link GraphNode#paintDecoration}. @see GraphPorts#paintStub */
     void paintPortEditorStub(CgUiPaintContext ctx, NodePort port, UIElement space) {
-        PortDefaultEditor editor = portEditors.get(port);
-        if (editor != null && editor.isMounted()) editor.paintStub(ctx, space);
+        ports.paintStub(ctx, port, space);
     }
 
-    /** Drops a port's default editor from the plane and forgets it entirely — called when the port's own
-     * node leaves the view, since {@link #detachNode} and {@link #load} otherwise have no way to reach a
-     * floating box or dot that was never their descendant. */
-    private void forgetPortEditor(NodePort port) {
-        PortDefaultEditor editor = portEditors.remove(port);
-        if (editor != null) editor.setMounted(false);
-        watchedPorts.remove(port);
-    }
-
-    /** The {@link PortDefaultEditor} tracked for {@code port}, or {@code null} if it never had one
-     * (connected output, or a {@link PortType} with no default at all). Package-private: tests are the
-     * only consumer, reaching into the mechanism to assert on it directly rather than through pixels. */
+    /** @see GraphPorts#editorFor */
     @Nullable
     PortDefaultEditor portEditorFor(NodePort port) {
-        return portEditors.get(port);
+        return ports.editorFor(port);
     }
 
     // ── The document seam ───────────────────────────────────────────────────
@@ -688,23 +552,23 @@ public class GraphView extends SurfaceEditor {
      * then said "nothing happened" while the view still held the widget, so
      * {@link #syncFromDocument()} left a node on screen that the document no longer had.</p>
      */
-    private void markSynced() {
+    void markSynced() {
         document.changeset().clear();
     }
 
-    /** Puts a node into both the document and the tree. The one path; {@link AddNodeEdit} uses it too,
+    /** Puts a node into both the document and the tree. The one path; {@link GraphEdits.AddNode} uses it too,
      * which is what makes an undone delete restore the SAME id rather than a new one. */
-    private void attachNode(GraphNode widget, NodeData data) {
+    void attachNode(GraphNode widget, NodeData data) {
         if (!document.hasNode(data.id())) document.addNode(data);
         widget.bindToDocument(data.id(), data.typeId());
         widgetsById.put(data.id(), widget);
         super.addNode(widget, data.x(), data.y());
-        watchPortsOf(widget);
+        ports.watchAll(widget);
         markSynced();
     }
 
     /** Removes a node from both. */
-    private void detachNode(GraphNode widget) {
+    void detachNode(GraphNode widget) {
         String id = widget.getNodeId();
         if (id != null) {
             document.removeNode(id);
@@ -713,7 +577,7 @@ public class GraphView extends SurfaceEditor {
         // A port's default editor is a SEPARATE plane child, not a descendant of the node — removing the
         // node does not take it with it. Forgotten explicitly, or a deleted node's floating field is
         // orphaned on screen forever, pointing at a port that no longer exists anywhere.
-        for (NodePort port : widget.getPorts()) forgetPortEditor(port);
+        for (NodePort port : widget.getPorts()) ports.forget(port);
         content().remove(widget);
         markSynced();
     }
@@ -865,7 +729,7 @@ public class GraphView extends SurfaceEditor {
             // changeset instead of through removeNode directly — undo of an add, a server sync, or a
             // delete-then-recreate. Still mounted, still hit-testable, frozen at whatever position it
             // last had, because its own port and dot went stale with it and never laid out again.
-            for (NodePort port : widget.getPorts()) forgetPortEditor(port);
+            for (NodePort port : widget.getPorts()) ports.forget(port);
             content().remove(widget);
             applied++;
         }
@@ -879,7 +743,7 @@ public class GraphView extends SurfaceEditor {
             widget.bindToDocument(data.id(), data.typeId());
             widgetsById.put(id, widget);
             super.addNode(widget, data.x(), data.y());
-            watchPortsOf(widget);
+            ports.watchAll(widget);
             applied++;
         }
         for (String id : movedNodes) {
@@ -896,7 +760,7 @@ public class GraphView extends SurfaceEditor {
             NodePort from = portFor(edge.from());
             NodePort to = portFor(edge.to());
             if (connections.removeIf(c -> c.from() == from && c.to() == to)) applied++;
-            if (from != null && to != null) refreshCounts(from, to);
+            if (from != null && to != null) wires.refreshCounts(from, to);
         }
         for (EdgeData edge : addedEdges) {
             int before = connections.size();
@@ -911,13 +775,13 @@ public class GraphView extends SurfaceEditor {
 
     /** Builds the view-side {@link GraphConnection} for a document edge. Silent when either end is
      * missing: a document may legitimately outrun its widgets mid-load. */
-    private void linkWidgets(EdgeData edge) {
+    void linkWidgets(EdgeData edge) {
         NodePort from = portFor(edge.from());
         NodePort to = portFor(edge.to());
         if (from == null || to == null) return;
         GraphConnection connection = new GraphConnection(from, to);
         if (!connections.contains(connection)) connections.add(connection);
-        refreshCounts(from, to);
+        wires.refreshCounts(from, to);
     }
 
     // ── Nodes ───────────────────────────────────────────────────────────────
@@ -937,7 +801,7 @@ public class GraphView extends SurfaceEditor {
             // Never bound — nothing for the DOCUMENT to forget, but its ports may still have floating
             // default editors mounted on the plane; see detachNode's own note on why removeChild alone
             // never reaches them.
-            for (NodePort port : node.getPorts()) forgetPortEditor(port);
+            for (NodePort port : node.getPorts()) ports.forget(port);
             content().remove(node);
             getSelection().prune(this);
             return this;
@@ -945,7 +809,7 @@ public class GraphView extends SurfaceEditor {
         edits.begin("delete node");
         try {
             for (NodePort port : node.getPorts()) disconnectAll(port);
-            edits.apply(new AddNodeEdit(this, node, data, false));
+            edits.apply(new GraphEdits.DeleteNode(this, node, data));
         } finally {
             edits.end();
         }
@@ -980,175 +844,33 @@ public class GraphView extends SurfaceEditor {
 
     // ── Copy / paste / duplicate ────────────────────────────────────────────
 
-    /**
-     * The selected nodes and every wire <b>between</b> them, as a detached document.
-     *
-     * <p>Wires to nodes outside the selection are dropped, which is {@link GraphDocument#copyOf}'s own
-     * rule and the right one: an edge needs both ends, and half an edge is not a thing a paste could
-     * restore. Copying two ends of a chain without its middle gives you the two ends.</p>
-     *
-     * @return null when nothing is selected, so a caller can leave the clipboard alone rather than
-     *         emptying it — copying nothing should not lose what you copied a minute ago
-     */
+    /** What copying and pasting mean in a graph. @see GraphClipboard */
+    private final GraphClipboard clipboard = new GraphClipboard(this);
+
+    /** @see GraphClipboard#copySelection */
     @Nullable
     public GraphDocument copySelection() {
-        List<String> ids = new ArrayList<>();
-        for (GraphNode node : getSelection().nodes()) {
-            if (node.getNodeId() != null) ids.add(node.getNodeId());
-        }
-        if (ids.isEmpty()) return null;
-        return document.copyOf(ids, 0f, 0f);
+        return clipboard.copySelection();
     }
 
-    /**
-     * Adds a copy of {@code clip} at an offset, as ONE undo step, and selects what arrived.
-     *
-     * <p>Fresh ids for everything, so pasting the same clipboard repeatedly is legal — the clipboard is
-     * a template, not a handle on the nodes it came from. The edges are remapped through the same table,
-     * which is what keeps a pasted subgraph wired to itself rather than back to the original.</p>
-     *
-     * <p>Selecting the result is what makes paste-then-drag work, and it is also how you can tell what
-     * arrived when it landed on top of something else.</p>
-     */
+    /** @see GraphClipboard#paste */
     public List<GraphNode> paste(@Nullable GraphDocument clip, float offsetX, float offsetY) {
-        if (clip == null || clip.nodeCount() == 0) return List.of();
-
-        Map<String, String> remap = new LinkedHashMap<>();
-        List<GraphNode> pasted = new ArrayList<>();
-        NodeWidgetFactory factory = nodeFactory != null
-                ? nodeFactory : NodeWidgetFactory.of(nodeLibrary).build();
-
-        edits.begin("paste");
-        try {
-            for (NodeData source : clip.nodes()) {
-                String id = GraphIds.generate();
-                remap.put(source.id(), id);
-
-                NodeData placed = source.withId(id).movedTo(source.x() + offsetX, source.y() + offsetY);
-                NodeType type = nodeLibrary != null ? nodeLibrary.get(placed.typeId()) : null;
-                GraphNode widget = factory.create(type, placed);
-                // Bound and registered BEFORE the add, so addNode adopts the stored ports and properties
-                // rather than deriving a second set from the widget -- which is how a node's instance
-                // state gets silently dropped. See dataFor.
-                widget.bindToDocument(placed.id(), placed.typeId());
-                document.addNode(placed);
-                addNode(widget, placed.x(), placed.y());
-
-                NodeData stored = document.node(id);
-                if (stored != null) edits.record(new AddNodeEdit(this, widget, stored, true));
-                pasted.add(widget);
-            }
-            for (EdgeData edge : clip.edges()) {
-                String from = remap.get(edge.from().nodeId());
-                String to = remap.get(edge.to().nodeId());
-                if (from == null || to == null) continue;
-                NodePort out = portFor(new PortRef(from, edge.from().portId()));
-                NodePort in = portFor(new PortRef(to, edge.to().portId()));
-                if (out != null && in != null) connect(out, in);
-            }
-        } finally {
-            edits.end();
-        }
-
-        getSelection().replaceWith(pasted);
-        return pasted;
+        return clipboard.paste(clip, offsetX, offsetY);
     }
 
-    /**
-     * Adds a copy of {@code clip} with its top-left corner at a world point.
-     *
-     * <p>What "paste at the cursor" means, and the anchor is deliberate: the group's <b>bounding box
-     * corner</b> lands on the point, so everything pasted appears down and right of the pointer and the
-     * whole of it is where you were looking. Anchoring on the centre instead scatters half the group
-     * behind the cursor, and anchoring on the first node makes the result depend on which node happened
-     * to be copied first — invisible from the outside, and different every time.</p>
-     *
-     * <p>Relative positions inside the group are preserved, because only one offset is applied to all
-     * of them: a pasted subgraph keeps its shape.</p>
-     */
+    /** @see GraphClipboard#pasteAt */
     public List<GraphNode> pasteAt(@Nullable GraphDocument clip, float worldX, float worldY) {
-        if (clip == null || clip.nodeCount() == 0) return List.of();
-
-        float minX = Float.MAX_VALUE;
-        float minY = Float.MAX_VALUE;
-        for (NodeData data : clip.nodes()) {
-            minX = Math.min(minX, data.x());
-            minY = Math.min(minY, data.y());
-        }
-        return paste(clip, worldX - minX, worldY - minY);
+        return clipboard.pasteAt(clip, worldX, worldY);
     }
 
-    /**
-     * Copies the selection and pastes it at an offset — one gesture, one undo step.
-     *
-     * <p>Deliberately does <b>not</b> touch the clipboard. Duplicating is not copying: a user who
-     * duplicated something would otherwise lose whatever they had copied earlier, which every editor
-     * that gets this right keeps separate.</p>
-     */
+    /** @see GraphClipboard#duplicateSelection */
     public List<GraphNode> duplicateSelection(float offsetX, float offsetY) {
-        return paste(copySelection(), offsetX, offsetY);
+        return clipboard.duplicateSelection(offsetX, offsetY);
     }
 
-    /**
-     * Adding or removing a node, as data: the {@link NodeData} and the widget projecting it.
-     *
-     * <p><b>It carries the NodeData, not a position</b>, and that is what makes delete-then-undo safe.
-     * The id has to come back <em>unchanged</em>, or every edge that referenced the node points at
-     * nothing — and since the edges are restored by the same transaction, one fresh id would silently
-     * drop every wire the node had. Re-adding the stored data restores the id, the ports and the
-     * properties together.</p>
-     */
-    private record AddNodeEdit(GraphView view, GraphNode node, NodeData data,
-                               boolean adding) implements Edit {
-        @Override public void apply() {
-            if (adding) view.attachNode(node, data);
-            else view.detachNode(node);
-        }
-        @Override public void undo() {
-            if (adding) view.detachNode(node);
-            else view.attachNode(node, data);
-        }
-        @Override public String label() { return adding ? "add node" : "delete node"; }
-    }
-
-    /**
-     * What a fragment is here: a detached {@link GraphDocument} of the selected nodes and the wires
-     * between them.
-     *
-     * <p>The engine holds what was copied and owns the commands; this says what copying and pasting
-     * <em>mean</em> in a graph. @see Clipboard</p>
-     */
-    private final Clipboard<GraphDocument> clipboard = new Clipboard<GraphDocument>() {
-        @Override
-        public Class<GraphDocument> type() {
-            return GraphDocument.class;
-        }
-
-        @Override
-        @Nullable
-        public GraphDocument copy() {
-            return copySelection();
-        }
-
-        @Override
-        public void paste(GraphDocument clip, float worldX, float worldY) {
-            pasteAt(clip, worldX, worldY);
-        }
-
-        @Override
-        public void pasteBy(GraphDocument clip, float offsetX, float offsetY) {
-            GraphView.this.paste(clip, offsetX, offsetY);
-        }
-
-        @Override
-        public boolean isEmpty(GraphDocument clip) {
-            return clip == null || clip.nodeCount() == 0;
-        }
-    };
-
-    /** @see #clipboard */
+    /** The engine's clipboard seam onto this graph. @see GraphClipboard */
     public Clipboard<GraphDocument> clipboard() {
-        return clipboard;
+        return clipboard.asClipboard;
     }
 
     /** Every node currently on the plane, in insertion order. */
@@ -1247,203 +969,30 @@ public class GraphView extends SurfaceEditor {
         return connectionsView;
     }
 
-    /**
-     * Whether a wire may join these two ports, in either drag order.
-     *
-     * <p>Re-read every frame by {@code NodePort}'s {@code DragOver} handler rather than latched, so a
-     * target that stops being legal mid-drag stops accepting with no state to unwind. The rules:
-     * one of each direction, not the same node, the source type accepting the target's, and no
-     * duplicate.</p>
-     *
-     * <p>Note what is <b>not</b> here: an occupied input is still connectable. Unity allows one edge per
-     * input and many per output, so dropping onto a taken input is a <em>replace</em>, not a rejection —
-     * refusing it would make rewiring a node mean two deliberate gestures instead of one.</p>
-     */
+    /** @see GraphWires#canConnect */
     public boolean canConnect(@Nullable NodePort a, @Nullable NodePort b) {
-        if (a == null || b == null || a == b) return false;
-        if (a.getDirection() == b.getDirection()) return false;
-        NodePort output = a.getDirection().isOutput() ? a : b;
-        NodePort input = output == a ? b : a;
-        if (output.node() != null && output.node() == input.node()) return false;
-        if (!output.getType().isCompatibleWith(input.getType())) return false;
-        return findConnection(output, input) == null;
+        return wires.canConnect(a, b);
     }
 
-    /**
-     * Connects two ports, in either drag order. Returns the new edge, or {@code null} if the pair is
-     * not connectable.
-     *
-     * <p><b>An occupied input is replaced</b>, and the displaced edge goes out through the same
-     * {@link #disconnect} every other removal uses. That matters more than it looks: when 6.2.4 makes
-     * this a command, the implicit disconnect has to be part of the same undoable step as the connect,
-     * and it will be — because there is only one code path that removes an edge.</p>
-     */
+    /** @see GraphWires#connect */
     @Nullable
     public GraphConnection connect(NodePort a, NodePort b) {
-        if (!canConnect(a, b)) return null;
-        NodePort output = a.getDirection().isOutput() ? a : b;
-        NodePort input = output == a ? b : a;
-
-        GraphConnection connection = new GraphConnection(output, input);
-        EdgeData edge = edgeDataOf(connection);
-        // Unbound ports have no document identity, so there is nothing to record — this is a view built
-        // outside a document, which the tests do and a caller may.
-        if (edge == null) return null;
-
-        GraphConnection existing = firstConnectionTo(input);
-        if (existing == null) {
-            edits.apply(new ConnectEdit(this, edge, true));
-            return connection;
-        }
-        EdgeData existingEdge = edgeDataOf(existing);
-        // The replace is ONE undo step, and that is the whole reason transactions exist: a user who
-        // rewires an input did one thing, and a Ctrl+Z that put the old wire back while leaving the new
-        // one would leave the input holding two edges — a state the model forbids.
-        edits.begin("reconnect");
-        try {
-            if (existingEdge != null) edits.apply(new ConnectEdit(this, existingEdge, false));
-            edits.apply(new ConnectEdit(this, edge, true));
-        } finally {
-            edits.end();
-        }
-        return connection;
+        return wires.connect(a, b);
     }
 
-    /**
-     * Adding or removing one edge.
-     *
-     * <p>Data, not a closure: the two ports and a direction. That is what makes it invertible without
-     * remembering anything, and what would let it be sent to a server if 6.2.5 wants that later — a
-     * captured lambda could be neither.</p>
-     */
-    private record ConnectEdit(GraphView view, EdgeData edge, boolean adding) implements Edit {
-        @Override public void apply() {
-            if (adding) view.addEdge(edge);
-            else view.removeEdge(edge);
-        }
-        @Override public void undo() {
-            if (adding) view.removeEdge(edge);
-            else view.addEdge(edge);
-        }
-        @Override public String label() { return adding ? "connect" : "disconnect"; }
-    }
-
-    /**
-     * The raw mutation both directions of {@link ConnectEdit} share.
-     *
-     * <p>{@code restoreEdge} rather than {@code connect}: an undo must put back exactly the edge that
-     * was there, and re-running validation at that point can only ever refuse it — the graph it was
-     * legal in is precisely the graph the undo is restoring.</p>
-     */
-    private void addEdge(EdgeData edge) {
-        document.restoreEdge(edge);
-        linkWidgets(edge);
-        markSynced();
-        onConnectionsChanged.emit();
-    }
-
-    private void removeEdge(EdgeData edge) {
-        document.disconnect(edge);
-        NodePort from = portFor(edge.from());
-        NodePort to = portFor(edge.to());
-        connections.removeIf(c -> c.from() == from && c.to() == to);
-        if (from != null && to != null) refreshCounts(from, to);
-        markSynced();
-        onConnectionsChanged.emit();
-    }
-
-    /** The document edge a view-side connection stands for, or null before either end is bound. */
-    @Nullable
-    private static EdgeData edgeDataOf(GraphConnection connection) {
-        PortRef from = refFor(connection.from());
-        PortRef to = refFor(connection.to());
-        return from == null || to == null ? null : new EdgeData(from, to);
-    }
-
+    /** @see GraphWires#disconnect */
     public boolean disconnect(GraphConnection connection) {
-        if (!connections.contains(connection)) return false;
-        EdgeData edge = edgeDataOf(connection);
-        if (edge == null) return false;
-        edits.apply(new ConnectEdit(this, edge, false));
-        return true;
+        return wires.disconnect(connection);
     }
 
-    /** Drops every edge touching {@code port}. */
+    /** @see GraphWires#disconnectAll */
     public int disconnectAll(NodePort port) {
-        List<GraphConnection> doomed = new ArrayList<>();
-        for (GraphConnection connection : connections) {
-            if (connection.touches(port)) doomed.add(connection);
-        }
-        if (doomed.isEmpty()) return 0;
-        // One step: pulling a node's wires is one action, and undoing it half way would be a graph the
-        // user never saw.
-        edits.begin("disconnect all");
-        try {
-            for (GraphConnection connection : doomed) {
-                EdgeData edge = edgeDataOf(connection);
-                if (edge != null) edits.apply(new ConnectEdit(this, edge, false));
-            }
-        } finally {
-            edits.end();
-        }
-        return doomed.size();
+        return wires.disconnectAll(port);
     }
 
-    /** Edges touching {@code port}, in insertion order. */
+    /** @see GraphWires#connectionsOf */
     public List<GraphConnection> connectionsOf(NodePort port) {
-        List<GraphConnection> found = new ArrayList<>();
-        for (GraphConnection connection : connections) {
-            if (connection.touches(port)) found.add(connection);
-        }
-        return found;
-    }
-
-    @Nullable
-    private GraphConnection findConnection(NodePort output, NodePort input) {
-        for (GraphConnection connection : connections) {
-            if (connection.from() == output && connection.to() == input) return connection;
-        }
-        return null;
-    }
-
-    @Nullable
-    private GraphConnection firstConnectionTo(NodePort input) {
-        for (GraphConnection connection : connections) {
-            if (connection.to() == input) return connection;
-        }
-        return null;
-    }
-
-    /**
-     * Recounts from the edge list rather than incrementing.
-     *
-     * <p>A counter that is bumped up and down drifts the first time a removal path is added that
-     * forgets to decrement — and the symptom is a port that stays visually connected forever, which
-     * reads as a paint bug. Recomputing is O(edges) on a change no user makes faster than they can
-     * click.</p>
-     */
-    private void refreshCounts(NodePort... ports) {
-        for (NodePort port : ports) {
-            int count = 0;
-            for (GraphConnection connection : connections) {
-                if (connection.touches(port)) count++;
-            }
-            port.setConnectionCount(count);
-        }
-    }
-
-    /** Data, not a closure: two positions and the node's ID. Invertible by swapping them, and it keeps
-     * working across a delete-then-undo because the id is what comes back, not the widget. */
-    private record MoveNodeEdit(GraphView view, String nodeId,
-                                float fromX, float fromY, float toX, float toY) implements Edit {
-        @Override public void apply() { move(toX, toY); }
-        @Override public void undo() { move(fromX, fromY); }
-        private void move(float x, float y) {
-            GraphNode widget = view.widgetFor(nodeId);
-            if (widget != null) view.moveNode(widget, x, y);
-            else view.document.moveNode(nodeId, x, y);
-        }
-        @Override public String label() { return "move"; }
+        return wires.connectionsOf(port);
     }
 
     // ── Marquee ─────────────────────────────────────────────────────────────
@@ -1553,7 +1102,7 @@ public class GraphView extends SurfaceEditor {
             List<Edit> each = new ArrayList<>(moves.size());
             for (Move move : moves) {
                 if (!(move.item() instanceof GraphNode node) || node.getNodeId() == null) continue;
-                each.add(new MoveNodeEdit(GraphView.this, node.getNodeId(),
+                each.add(new GraphEdits.MoveNode(GraphView.this, node.getNodeId(),
                         move.fromX(), move.fromY(), move.toX(), move.toY()));
             }
             return each.isEmpty() ? null : CompositeEdit.of("move", each.toArray(new Edit[0]));
@@ -1640,11 +1189,11 @@ public class GraphView extends SurfaceEditor {
 
     @Nullable
     @Getter
-    private NodeTypeRegistry nodeLibrary;
+    NodeTypeRegistry nodeLibrary;
 
     @Nullable
     @Getter
-    private NodeWidgetFactory nodeFactory;
+    NodeWidgetFactory nodeFactory;
 
     private TypeCompatibility typeRule = TypeCompatibility.EXACT;
 
@@ -1759,7 +1308,7 @@ public class GraphView extends SurfaceEditor {
         try {
             addNode(node, pendingWorldX, pendingWorldY);
             NodeData placed = document.node(node.getNodeId());
-            if (placed != null) edits.record(new AddNodeEdit(this, node, placed, true));
+            if (placed != null) edits.record(new GraphEdits.AddNode(this, node, placed));
             NodePort source = pendingFrom;
             if (source != null && offer.port() != null) {
                 for (NodePort port : node.getPorts()) {
