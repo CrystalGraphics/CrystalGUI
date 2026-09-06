@@ -13,7 +13,6 @@ public final class CrystalGUI1201Fabric implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        CgEngineFabricEvents.register();
         CgUiFabricEvents.registerClient();
         LOGGER.info("[CrystalGUI] Fabric 1.20.1 client registered");
     }

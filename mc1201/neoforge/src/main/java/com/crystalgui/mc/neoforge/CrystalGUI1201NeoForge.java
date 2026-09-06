@@ -16,7 +16,6 @@ public final class CrystalGUI1201NeoForge {
 
     public CrystalGUI1201NeoForge(IEventBus modBus) {
         Lifecycle1201.bootstrap(NetworkChannel1201.get());
-        CgEngineNeoForgeEvents.register();
         CgUiNeoForgeEvents.register(modBus);
         LOGGER.info("[CrystalGUI] NeoForge 1.20.4 platform registered");
     }
