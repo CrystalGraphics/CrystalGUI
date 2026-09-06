@@ -1,5 +1,6 @@
 package com.crystalgui.text;
 
+import java.util.ArrayList;
 import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.undo.Edit;
@@ -115,15 +116,54 @@ public final class TextBuffer {
         return lineEnding.applyTo(document.toString());
     }
 
-    /** Replaces the whole document, re-detecting the line ending — i.e. loading a file. */
+    private TextEncoding encoding = TextEncoding.UTF_8;
+
+    /** The charset and byte-order mark this document arrived with — what a save writes back. */
+    public TextEncoding encoding() {
+        return encoding;
+    }
+
+    public TextBuffer setEncoding(TextEncoding value) {
+        this.encoding = value == null ? TextEncoding.UTF_8 : value;
+        return this;
+    }
+
+    /**
+     * <b>The whole file, as bytes</b> — the ending restored, the charset applied, the mark written back.
+     *
+     * <p>The one method a save calls, and the reason the two facts above are held rather than
+     * re-derived: the buffer is normalised to LF and decoded past its mark the moment it loads, so by
+     * the time anything asks there is nothing left in the text to detect. Both were lost on every save
+     * before this existed — see {@link #textWithOriginalLineEndings}, which had no callers at all.</p>
+     */
+    public byte[] encodeBytes() {
+        return encoding.encode(textWithOriginalLineEndings());
+    }
+
+    /**
+     * Loads from bytes, taking the ending, the charset and the mark from them.
+     *
+     * <p>{@link #load(CharSequence)}'s counterpart for a caller that has a file rather than a String,
+     * which is every caller that reads one. Fenced against the history exactly as the others are.</p>
+     */
+    public void loadBytes(byte[] bytes) {
+        load(prepare(bytes));
+    }
+
     /**
      * A document's text with everything that can be computed from it alone already computed.
      *
      * @param document   the rope, built
      * @param normalised the text with every ending collapsed to {@code \n}
      * @param ending     what the file came with, so a save writes it back
+     * @param encoding   the charset and byte-order mark it came with, for the same reason
      */
-    public record Prepared(Rope document, String normalised, LineEnding ending) {
+    public record Prepared(Rope document, String normalised, LineEnding ending, TextEncoding encoding) {
+
+        /** Text of unknown provenance: UTF-8, no mark. What a caller with a String rather than bytes has. */
+        public Prepared(Rope document, String normalised, LineEnding ending) {
+            this(document, normalised, ending, TextEncoding.UTF_8);
+        }
     }
 
     /**
@@ -144,7 +184,23 @@ public final class TextBuffer {
         String incoming = text == null ? "" : text.toString();
         LineEnding ending = LineEnding.detect(incoming);
         String normalised = LineEnding.normalise(incoming);
-        return new Prepared(Rope.of(normalised), normalised, ending);
+        return new Prepared(Rope.of(normalised), normalised, ending, TextEncoding.UTF_8);
+    }
+
+    /**
+     * The same, <b>from the bytes</b> — which is the only place the charset and the mark can be seen.
+     *
+     * <p>Decoding with {@code new String(bytes, UTF_8)} one layer up is what lost them: a UTF-8 file
+     * with a byte-order mark opened with a stray {@code U+FEFF} as its first character, and saving wrote
+     * that back as content rather than as a mark. Whoever holds the bytes is the only one who can tell
+     * the difference, and this is that moment.</p>
+     */
+    public static Prepared prepare(byte[] bytes) {
+        TextEncoding encoding = TextEncoding.sniff(bytes);
+        String incoming = encoding.decode(bytes);
+        LineEnding ending = LineEnding.detect(incoming);
+        String normalised = LineEnding.normalise(incoming);
+        return new Prepared(Rope.of(normalised), normalised, ending, encoding);
     }
 
     /**
@@ -153,21 +209,47 @@ public final class TextBuffer {
      * <p>Equivalent by construction: a full-document replace applies to exactly {@code Rope.of(normalised)},
      * so handing that rope in rather than recomputing it changes the cost and not the result. Both halves
      * come from one {@code prepare} call, so the rope and the change that describes it cannot disagree.</p>
+     *
+     * <p><b>A load is FENCED against the history</b> — see {@link #load(CharSequence)}.</p>
      */
     public void load(Prepared prepared) {
         this.lineEnding = prepared.ending();
+        this.encoding = prepared.encoding();
         ChangeSet change = ChangeSet.replace(document.length(), 0, document.length(),
                 prepared.normalised());
         if (!change.isEmpty()) {
-            ChangeSet inverse = change.invert(document);
             // THE PREPARED ROPE, instead of change.apply(document) -- the one line this exists for.
             document = prepared.document();
-            history.push(new ChangeSetEdit(this, change, inverse, null));
             applied(change);
         }
-        breakUndoCoalescing();
+        history.clear();
     }
 
+    /**
+     * Replaces the whole document, re-detecting the line ending — i.e. loading a file.
+     *
+     * <h3>A load is not an edit, and must push no undo entry</h3>
+     *
+     * <p>It did, for as long as this method existed, because it was written as
+     * {@code replace(0, length(), text)} and every {@code replace} records. So <b>Ctrl+Z after an
+     * external reload restored the stale text</b>: the file on disk said one thing, the buffer another,
+     * and the undo stack offered to put the second one back as though the user had typed it.
+     * {@code DocumentModel.adopt}'s own contract has said loading must never push a step since it was
+     * written; nothing enforced it.</p>
+     *
+     * <p>The document still MOVES — the version bumps, the decorations adjust, {@link #onChanged} fires —
+     * because every one of those is about the text having changed, which it has. Only the history is
+     * fenced.</p>
+     *
+     * <p><b>And the fence is a CLEAR, not merely a skipped push</b>, which is the half that is easy to
+     * get wrong. An entry recorded before a load holds an inverse taken against the document the load
+     * has just replaced, so applying it afterwards deletes a range of whatever is there now: undoing a
+     * six-character insertion into a file the server has since rewritten removes the first six
+     * characters of the server's text. Not stale — corrupt, and silently, because a {@code ChangeSet}
+     * applies happily to any document long enough to hold it. Both references clear here too:
+     * {@code ITextModel.setValue} resets Monaco's stack and IntelliJ's {@code reloadFromDisk} drops the
+     * document's history.</p>
+     */
     public void load(CharSequence text) {
         String incoming = text == null ? "" : text.toString();
         long timed = FrameProfile.begin();
@@ -177,9 +259,13 @@ public final class TextBuffer {
         String normalised = LineEnding.normalise(incoming);
         FrameProfile.step(timed, "buf.normalise");
         timed = FrameProfile.begin();
-        replace(0, length(), normalised);
+        ChangeSet change = ChangeSet.replace(document.length(), 0, document.length(), normalised);
+        if (!change.isEmpty()) {
+            document = change.apply(document);
+            applied(change);
+        }
         FrameProfile.step(timed, "buf.replace");
-        breakUndoCoalescing();
+        history.clear();
     }
 
     // ── Reading ─────────────────────────────────────────────────────────────────────────────────
@@ -297,6 +383,7 @@ public final class TextBuffer {
      */
     private void applied(ChangeSet change) {
         version++;
+        trackAlternativeVersion();
         long timed = FrameProfile.begin();
         decorations.adjust(change);
         FrameProfile.step(timed, "buf.decorations.adjust");
@@ -446,6 +533,57 @@ public final class TextBuffer {
     /** @return false when there was nothing to redo */
     public boolean redo() {
         return history.redo();
+    }
+
+    /**
+     * A version that <b>comes back</b> when undo returns the content to a state it held before.
+     *
+     * <p>{@link #version()} is monotonic and must stay so — everything computed against the document
+     * stamps itself with it, and undo moves the text as surely as typing does, so a version that went
+     * backwards would let a stale analysis look fresh. That is the right answer for "is what I computed
+     * still about this text" and the wrong one for "is this the text that was saved": under it, one
+     * keystroke and its undo leave a document permanently modified.</p>
+     *
+     * <p>So this is the second question, and it is Monaco's {@code alternativeVersionId} — unique per
+     * state, and restored when undo or redo returns to one. Undo back to where you saved and the
+     * document is clean; make a <em>different</em> edit from there and it is not, even though the undo
+     * depth is the same, which is why this cannot simply be the depth.</p>
+     */
+    public int alternativeVersion() {
+        return alternativeVersion;
+    }
+
+    private int alternativeVersion;
+
+    /** The alternative version each undo depth was first reached at. Index IS the depth. */
+    private final List<Integer> alternativeByDepth = new ArrayList<>(List.of(0));
+
+    private int lastDepth;
+
+    /**
+     * Keeps {@link #alternativeVersion} in step with the undo stack. Called by every applied change.
+     *
+     * <p>The depth says which way the document moved: <b>down</b> is an undo, so the state being
+     * returned to already has an identity and it is recalled; anything else is a forward edit — a new
+     * step, a keystroke coalesced into the current one, or a load — which mints a new identity and
+     * <b>drops every identity above it</b>, because the redo branch it just replaced is gone.</p>
+     */
+    private void trackAlternativeVersion() {
+        int depth = history.undoDepth();
+        if (depth < lastDepth && depth < alternativeByDepth.size()) {
+            alternativeVersion = alternativeByDepth.get(depth);
+        } else {
+            alternativeVersion = version;
+            while (alternativeByDepth.size() <= depth) alternativeByDepth.add(version);
+            alternativeByDepth.set(depth, version);
+            // A REDO BRANCH THAT IS NO LONGER REACHABLE, and keeping it would be worse than wasteful:
+            // a later undo down to one of those depths would recall the identity of a state this edit
+            // destroyed, and the document would report itself clean holding text nobody saved.
+            while (alternativeByDepth.size() > depth + 1) {
+                alternativeByDepth.remove(alternativeByDepth.size() - 1);
+            }
+        }
+        lastDepth = depth;
     }
 
     /** Undo history depth — for a history panel, and for tests that assert coalescing happened. */

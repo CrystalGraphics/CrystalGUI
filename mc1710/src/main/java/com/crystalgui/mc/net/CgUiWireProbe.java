@@ -2,7 +2,8 @@ package com.crystalgui.mc.net;
 
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.WorkspaceClient;
+import com.crystalgui.fs.Resource;
+import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.wire.CgNetworkChannel;
 import com.crystalgui.net.wire.FrameMultiplexer;
@@ -50,7 +51,7 @@ public final class CgUiWireProbe {
     private static final int PAYLOAD_BYTES = 4 * 1024 * 1024;
 
     /**
-     * Under {@code WorkspaceRpc.INLINE_MAX_BYTES}, so its read answers in ONE message.
+     * Under {@code WorkspaceBinding.INLINE_LIMIT}, so its read answers in ONE message.
      *
      * <p>The control. Above that cap a read becomes a chunked <b>pull</b> — the client asks for each
      * 256 KB piece and waits — and comparing the two is the only way to tell a slow wire from a serial
@@ -63,7 +64,7 @@ public final class CgUiWireProbe {
     private static final String PROBE_FILE = "wire-probe.bin";
     private static final String SMALL_FILE = "wire-probe-small.bin";
 
-    private static WorkspaceClient<Object> files;
+    private static Workspace files;
     private static int ticks;
 
     private static volatile boolean writing;
@@ -119,7 +120,7 @@ public final class CgUiWireProbe {
                     if (ticks > DEADLINE_TICKS) finish(false, "joined, but no CrystalGUI connection");
                     return;
                 }
-                files = WorkspaceClient.forConnection(connection);
+                files = Workspace.of(connection);
                 reportCeilings();
             }
 
@@ -139,24 +140,15 @@ public final class CgUiWireProbe {
                 byte[] payload = payload();
                 CrystalGuiCore.LOGGER.info("[wire-probe] uploading {} bytes (client -> server)",
                         payload.length);
-                // CREATE, THEN OVERWRITE ON A SECOND RUN. `overwrite` means "write without an etag
-                // check", NOT "write regardless of whether it is there" -- WorkspaceService.write stats
-                // the path for its etag and answers FILE_NOT_FOUND when it is absent. The first version
-                // of this probe called overwrite on a file that had never existed and failed with
-                // exactly that, over a working socket, which reads as a transport fault and is an API
-                // contract.
-                files.create(probe, payload,
-                        etag -> {
+                // AN UNCONDITIONAL WRITE, which is what a null etag means: this probe measures a rate
+                // and a leftover from a previous run must not make the second run fail for a reason
+                // that has nothing to do with the wire.
+                files.files().write(Resource.of(probe), payload, null)
+                        .then(etag -> {
                             writeTicks = ticks - startedAt;
                             written = true;
-                        },
-                        first -> files.overwrite(probe, payload,
-                                etag -> {
-                                    writeTicks = ticks - startedAt;
-                                    written = true;
-                                },
-                                again -> finish(false, "upload failed: create=" + first.code()
-                                        + " overwrite=" + again.code())));
+                        })
+                        .onError(failure -> finish(false, "upload failed: " + failure.code()));
                 return;
             }
 
@@ -164,16 +156,19 @@ public final class CgUiWireProbe {
                 if (reading) return;
                 reading = true;
                 startedAt = ticks;
-                // FORGOTTEN FIRST, or the client answers out of its own cache and measures nothing.
-                files.forget(probe);
                 CrystalGuiCore.LOGGER.info("[wire-probe] downloading (server -> client)");
-                files.read(probe,
-                        document -> {
+                // STREAMED, because a file this size does not fit in one message: the server answers a
+                // transfer id and the chunks are pulled through it. The bytes are counted as they land,
+                // which is also what makes a stall name the window it stalled in.
+                int[] got = {0};
+                files.files().readStream(Resource.of(probe))
+                        .onPartial(chunk -> got[0] += chunk.length)
+                        .onError(failure -> finish(false, "download failed: " + failure.code()))
+                        .then(chunks -> {
                             readTicks = ticks - startedAt;
-                            readBytes = document.content().length;
+                            readBytes = got[0];
                             readBack = true;
-                        },
-                        failure -> finish(false, "download failed: " + failure.code()));
+                        });
                 return;
             }
 
@@ -183,9 +178,9 @@ public final class CgUiWireProbe {
                 if (smallWriting) return;
                 smallWriting = true;
                 byte[] payload = payload(INLINE_BYTES);
-                files.create(small, payload, etag -> smallWritten = true,
-                        first -> files.overwrite(small, payload, etag -> smallWritten = true,
-                                again -> finish(false, "small upload failed: " + again.code())));
+                files.files().write(Resource.of(small), payload, null)
+                        .then(etag -> smallWritten = true)
+                        .onError(failure -> finish(false, "small upload failed: " + failure.code()));
                 return;
             }
 
@@ -193,15 +188,14 @@ public final class CgUiWireProbe {
                 if (smallReading) return;
                 smallReading = true;
                 startedAt = ticks;
-                files.forget(small);
                 CrystalGuiCore.LOGGER.info("[wire-probe] downloading {} bytes INLINE (one message)",
                         INLINE_BYTES);
-                files.read(small,
-                        document -> {
+                files.files().readWhole(Resource.of(small))
+                        .then(document -> {
                             smallReadTicks = ticks - startedAt;
                             smallRead = true;
-                        },
-                        failure -> finish(false, "small download failed: " + failure.code()));
+                        })
+                        .onError(failure -> finish(false, "small download failed: " + failure.code()));
                 return;
             }
 
@@ -256,7 +250,7 @@ public final class CgUiWireProbe {
             out.append("If the chunked download is nonetheless the slowest, the ceiling is not what "
                             + "binds: a read above")
                     .append(System.getProperty("line.separator"));
-            out.append("WorkspaceRpc.INLINE_MAX_BYTES is a PULL -- the client asks for each 256 KB "
+            out.append("WorkspaceBinding.INLINE_LIMIT is a PULL -- the client asks for each 256 KB "
                             + "piece and waits a round")
                     .append(System.getProperty("line.separator"));
             out.append("trip -- while a write of any size is one streamed message. Compare the two "

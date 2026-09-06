@@ -27,7 +27,7 @@ import com.crystalgui.serialization.DynamicOps;
  *
  * <p>{@code k}/{@code i}/{@code m}/{@code p} rather than {@code kind}/{@code id}/{@code method}/
  * {@code payload}. Every byte here is paid on every message, and the client→server budget is ~32 KB per
- * frame — see {@code plan_wire.md}. The method name stays spelled out, because it is the one field a
+ * frame — see {@code plan/net-wire.md}. The method name stays spelled out, because it is the one field a
  * human reads when a capture is dumped.</p>
  */
 public final class EnvelopeCodec {
@@ -40,7 +40,11 @@ public final class EnvelopeCodec {
      * that does not know a method says so with {@link ProtocolErrors#METHOD_NOT_FOUND}, per message,
      * rather than failing the whole connection over a version integer.</p>
      */
-    public static final int VERSION = 1;
+    // 2: ui/treeDelta became ui/treeOps (an edit script rather than a re-description), ids stopped
+    // being positional, and state deltas gained attribute and inline-style entries. A peer speaking 1
+    // would misread every one of those, so the existing version check refuses it -- which is the whole
+    // reason this number exists.
+    public static final int VERSION = 2;
 
     // Wire tags. Explicit values, never an enum ordinal: reordering the constants must not be able to
     // silently change what a byte means to a peer built yesterday.

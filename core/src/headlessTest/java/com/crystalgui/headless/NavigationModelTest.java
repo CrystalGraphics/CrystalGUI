@@ -2,9 +2,9 @@ package com.crystalgui.headless;
 
 import com.crystalgui.core.nav.NavigationHistory;
 import com.crystalgui.core.settings.SettingsCategory;
-import com.crystalgui.ui.elements.tree.FilteredTreeSource;
-import com.crystalgui.ui.elements.tree.PathTreeSource;
-import com.crystalgui.ui.elements.tree.TreeDataSource;
+import com.crystalgui.core.collection.tree.FilteredTreeSource;
+import com.crystalgui.core.collection.tree.PathTreeSource;
+import com.crystalgui.core.collection.tree.TreeDataSource;
 
 import org.junit.Before;
 import org.junit.Test;

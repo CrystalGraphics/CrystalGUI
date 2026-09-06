@@ -16,7 +16,7 @@ import static org.junit.Assert.fail;
 /**
  * <b>Every band carries the API the single adapter will be written against.</b>
  *
- * <p>This is {@code plan_syntax.md} §23 rows 3 and 8, answered as a test rather than as a one-off
+ * <p>This is {@code plan/lang-stack.md} §23 rows 3 and 8, answered as a test rather than as a one-off
  * check. §6.3's whole design — "one adapter per engine, compiled against the oldest band's API" — rests
  * on an unverified claim that the JDT DOM and {@code org.mozilla.javascript} are source-stable across
  * the range we ship. They are, and now something says so on every build.</p>
@@ -192,7 +192,7 @@ public class EngineApiSurfaceTest {
     /**
      * <b>The surface M10 added, which this test was supposed to gain and did not.</b>
      *
-     * <p>`plan_m10.md` §15 step 11 says step 2 "extends it with the parser and interop surface … so a
+     * <p>`plan/lang-javascript.md` §15 step 11 says step 2 "extends it with the parser and interop surface … so a
      * band bump fails the build rather than the popup". It was never done, and the block above still
      * pins only what M5 needed — seven types about evaluating a string. Everything the editor is built
      * on arrived afterwards and was pinned by nothing.</p>

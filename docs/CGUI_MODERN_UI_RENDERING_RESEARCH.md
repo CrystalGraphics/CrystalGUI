@@ -216,7 +216,7 @@ dithered (§7) or it bands.
   [HIG](https://developer.apple.com/design/human-interface-guidelines/),
   [Liquid Glass guidance for designers](https://designedforhumans.tech/blog/liquid-glass-smart-or-bad-for-accessibility)
 - The lens itself — height profile, refraction, the specular rim — is researched in
-  `plan_glass.md`; this section is only the *usage* guidance.
+  `plan/style-glass.md`; this section is only the *usage* guidance.
 
 **Implications.** The taskbar is exactly a "functional layer above content"; the editor's islands
 are content and must never be glass. The clear variant's dimming-layer rule is the same as Windows'

@@ -37,7 +37,7 @@ import java.util.function.Consumer;
  *
  * <p>A script under the caret is nearly always incomplete — that is what typing looks like. An engine that
  * answers only for well-formed input answers exactly when it is not needed. ECJ's binding recovery is what
- * makes this possible for Java (see {@code plan_syntax.md} §15.1) and the checklist tests hold it to it.</p>
+ * makes this possible for Java (see {@code plan/lang-stack.md} §15.1) and the checklist tests hold it to it.</p>
  */
 public interface Resolver {
 

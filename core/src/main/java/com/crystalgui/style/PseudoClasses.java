@@ -1,20 +1,19 @@
 package com.crystalgui.style;
 
-import com.crystalgui.ui.UIElement;
 
 import java.util.Locale;
 import java.util.function.Predicate;
 
 public enum PseudoClasses {
-    ENABLED(UIElement::isEnabled),
+    ENABLED(Styleable::isEnabled),
     DISABLED(el -> !el.isEnabled()),
-    CHECKED(UIElement::isChecked),
-    BLANK(UIElement::isBlank),
-    INVALID(UIElement::isInvalid),
-    HOVER(UIElement::isHovered),
-    ACTIVE(UIElement::isPressed),
+    CHECKED(Styleable::isChecked),
+    BLANK(Styleable::isBlank),
+    INVALID(Styleable::isInvalid),
+    HOVER(Styleable::isHovered),
+    ACTIVE(Styleable::isPressed),
     /** Focused by any means — click included. */
-    FOCUS(UIElement::isFocused),
+    FOCUS(Styleable::isFocused),
     /**
      * Focused in a way that should show a ring, i.e. the web's {@code :focus-visible}.
      *
@@ -22,7 +21,7 @@ public enum PseudoClasses {
      * the element takes text input, which browsers always ring. See {@code UIInputHandler}'s
      * {@code FocusSource} for where that is decided.</p>
      */
-    FOCUS_VISIBLE(UIElement::isFocusVisible),
+    FOCUS_VISIBLE(Styleable::isFocusVisible),
     /**
      * True for the focused element AND every ancestor of it — the web's {@code :focus-within}.
      *
@@ -38,10 +37,13 @@ public enum PseudoClasses {
      * around it — a {@code :focus-within} rule is exactly what once took six unrelated panels down,
      * because it was not registered here.</p>
      */
-    FOCUS_WITHIN(UIElement::isFocusWithin);
+    FOCUS_WITHIN(Styleable::isFocusWithin),
+    /** The top of a tree: a document, or a detached subtree's root. Where a UA sheet sets its font size. */
+    OPEN(Styleable::isOpen),
+    ROOT(Styleable::isRoot);
 
-    final Predicate<UIElement> elementPredicate;
-    PseudoClasses(Predicate<UIElement> predicate) {
+    final Predicate<Styleable> elementPredicate;
+    PseudoClasses(Predicate<Styleable> predicate) {
         this.elementPredicate = predicate;
     }
 
@@ -60,7 +62,7 @@ public enum PseudoClasses {
         return valueOf(cssName.toUpperCase(Locale.ROOT).replace('-', '_'));
     }
 
-    public boolean applies(UIElement element) {
+    public boolean applies(Styleable element) {
         return elementPredicate.test(element);
     }
 }

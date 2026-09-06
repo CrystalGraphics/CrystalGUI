@@ -1,17 +1,17 @@
 package com.crystalgui.language.run.view;
 
+import com.crystalgui.core.collection.list.SelectionMode;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.language.run.RunSessions;
 import com.crystalgui.language.run.RunState;
 import com.crystalgui.language.run.console.RunElapsed;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.Tooltip;
-import com.crystalgui.ui.elements.UIText;
-import com.crystalgui.ui.elements.list.ListRenderer;
-import com.crystalgui.ui.elements.list.ListView;
-import com.crystalgui.ui.elements.list.SelectionMode;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.overlay.Tooltip;
+import com.crystalgui.widget.text.UIText;
+import com.crystalgui.widget.collection.list.ListRenderer;
+import com.crystalgui.widget.collection.list.ListView;
 
 import javax.annotation.Nullable;
 
@@ -94,7 +94,7 @@ public final class RunRail extends UIElement {
             int index = indices.iterator().next();
             onScriptChosen.emit(index <= 0 ? null : items.get(index));
         });
-        addInternalChild(list);
+        append(list);
     }
 
     public RunRail bindTo(@Nullable RunSessions sessions) {
@@ -322,9 +322,9 @@ public final class RunRail extends UIElement {
             row.time.addClass(ROW_TIME_CLASS);
             row.time.setHitTest(false);
 
-            element.addChild(row.glyph);
-            element.addChild(row.name);
-            element.addChild(row.time);
+            element.append(row.glyph);
+            element.append(row.name);
+            element.append(row.time);
             row.tooltip = Tooltip.attach(element, "");
             rows.put(element, row);
             return element;

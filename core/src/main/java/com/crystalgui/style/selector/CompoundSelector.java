@@ -1,7 +1,7 @@
 package com.crystalgui.style.selector;
 
 import com.crystalgui.style.PseudoClasses;
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.style.Styleable;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
  * One simple-selector group with no combinators, e.g. {@code .foo.bar:hover} or {@code button#id}.
  * A {@link Selector} chains these together with combinators for descendant/child matching.
  *
- * <p>Pseudo-classes are matched by delegating directly to {@link PseudoClasses#applies(UIElement)} —
+ * <p>Pseudo-classes are matched by delegating directly to {@link PseudoClasses#applies(Styleable)} —
  * no synthetic {@code __hovered__}-style classes are added to the element.
  */
 public record CompoundSelector(List<Part> parts) {
@@ -35,14 +35,15 @@ public record CompoundSelector(List<Part> parts) {
                 PseudoClasses.lookup(identity);
             }
             if (type == SelectorType.PSEUDO_ELEMENT) {
-                if (!identity.equals("highlight")) {
+                if (!identity.equals("highlight") && !identity.equals("part")) {
                     throw new IllegalArgumentException("Unsupported pseudo-element '::" + identity
-                            + "'. The only one this engine implements is ::highlight(name) — structural"
+                            + "'. This engine implements ::highlight(name) and ::part(name) — structural"
                             + " pseudo-elements (::before/::after) have no equivalent here; widgets use"
                             + " internal children with __double-underscore__ classes instead.");
                 }
                 if (argument == null || argument.isEmpty()) {
-                    throw new IllegalArgumentException("::highlight() requires a name, e.g. ::highlight(keyword)");
+                    throw new IllegalArgumentException("::" + identity + "() requires a name, e.g. "
+                            + (identity.equals("part") ? "::part(label)" : "::highlight(keyword)"));
                 }
             }
         }
@@ -54,6 +55,21 @@ public record CompoundSelector(List<Part> parts) {
      * <p>Only ever legal on the rightmost compound of a selector — CSS forbids anything after a
      * pseudo-element, since it is not a real element and so has no descendants to select.</p>
      */
+    /**
+     * Whether this compound's pseudo-element selects a <b>real element</b> in a shadow tree
+     * ({@code ::part}) rather than a paint-time overlay on the originating element
+     * ({@code ::highlight}).
+     *
+     * <p>The distinction decides where the declarations go, and it is the whole reason the two cannot
+     * share a code path: a {@code ::highlight} rule is collected into a side table keyed by name and
+     * never touches any element's cascade, while a {@code ::part} rule is an ordinary cascade
+     * contribution to a different element than the one the compound describes.</p>
+     */
+    public boolean selectsShadowPart() {
+        Part pseudo = pseudoElement();
+        return pseudo != null && pseudo.identity().equals("part");
+    }
+
     @Nullable
     public Part pseudoElement() {
         for (var part : parts) {
@@ -70,24 +86,52 @@ public record CompoundSelector(List<Part> parts) {
      * paint the whole paragraph in the highlight colour — the single most likely way to get this
      * wrong.</p>
      */
-    public boolean matches(UIElement element) {
+    public boolean matches(Styleable element) {
         if (pseudoElement() != null) return false;
         return matchesOriginating(element);
     }
 
-    /** Matches ignoring any pseudo-element part — "is this the <em>originating</em> element?" */
-    public boolean matchesOriginating(UIElement element) {
+    /**
+     * Matches the parts BEFORE any pseudo-element — "is this the <em>originating</em> element?"
+     *
+     * <p>Anything after the pseudo-element describes the pseudo-element, not its originator, and is
+     * matched by {@link #matchesAfterPseudoElement}. That split is CSS's and it is load-bearing here:
+     * {@code dropdown::part(menu):open} asks whether the MENU is open, and testing {@code :open} on
+     * the dropdown answers about a node that is never open — so the rule matched nothing, the
+     * dropdown's menu kept the {@code opacity: 0} it inherits while closed, and it opened, promoted,
+     * placed itself and drew at zero alpha.</p>
+     */
+    public boolean matchesOriginating(Styleable element) {
         for (var part : parts) {
-            if (part.type() == SelectorType.PSEUDO_ELEMENT) continue;
+            if (part.type() == SelectorType.PSEUDO_ELEMENT) break;
             if (!partMatches(part, element)) return false;
         }
         return true;
     }
 
-    private static boolean partMatches(Part part, UIElement element) {
+    /**
+     * Matches the parts AFTER the pseudo-element, against the pseudo-element's own element.
+     *
+     * <p>Only meaningful for {@code ::part()}, which selects a REAL node — a {@code ::highlight()} is
+     * a paint-time overlay with no element to test. True when there is nothing after it, which is the
+     * ordinary case.</p>
+     */
+    public boolean matchesAfterPseudoElement(Styleable part) {
+        boolean afterPseudo = false;
+        for (var p : parts) {
+            if (p.type() == SelectorType.PSEUDO_ELEMENT) {
+                afterPseudo = true;
+                continue;
+            }
+            if (afterPseudo && !partMatches(p, part)) return false;
+        }
+        return true;
+    }
+
+    private static boolean partMatches(Part part, Styleable element) {
         return switch (part.type()) {
             case UNIVERSAL -> true;
-            case TYPE -> element.tagName().equals(part.identity());
+            case TYPE -> element.matchesType(part.identity());
             case ID -> element.getId().equals(part.identity());
             case CLASS -> element.hasClass(part.identity());
             case PSEUDO_CLASS -> PseudoClasses.lookup(part.identity()).applies(element);

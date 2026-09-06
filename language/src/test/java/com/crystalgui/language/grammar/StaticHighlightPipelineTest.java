@@ -3,7 +3,7 @@ package com.crystalgui.language.grammar;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.text.syntax.Language;
 import com.crystalgui.text.syntax.SyntaxToken;
-import com.crystalgui.ui.text.SyntaxHighlighting;
+import com.crystalgui.widget.text.SyntaxHighlighting;
 import org.junit.Assume;
 import org.junit.BeforeClass;
 import org.junit.Test;

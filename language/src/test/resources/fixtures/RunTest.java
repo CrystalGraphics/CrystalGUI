@@ -788,7 +788,7 @@ public class RunTest {
 
         // NOTE FOR MINECRAFT HOSTS: the mapping boundary rewrites symbolic references, not strings, so
         // a reflective lookup BY NAME sees runtime names in production. Fine here (the harness mapping
-        // is identity); see plan_syntax.md §15.5 D.1.
+        // is identity); see plan/lang-stack.md §15.5 D.1.
         log("loaded by", RunTest.class.getClassLoader().getClass().getSimpleName());
     }
 

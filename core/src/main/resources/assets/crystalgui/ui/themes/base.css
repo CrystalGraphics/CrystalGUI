@@ -1,5 +1,5 @@
 /*
- * base.css — the COMPONENT-TOKEN derivation table (plan_styling.md §3.1, docs/CGUI_THEMING.md).
+ * base.css — the COMPONENT-TOKEN derivation table (plan/style-overhaul.md §3.1, docs/CGUI_THEMING.md).
  *
  * Every component token an engine sheet references resolves here, into the SYSTEM vocabulary a
  * theme supplies. This file is the engine's equivalent of VS Code's colour registry — it is where
@@ -27,6 +27,12 @@ theme {
     --blackboard-empty-fg: var(--fg-hint);
     --blackboard-subtitle-fg: var(--fg-hint);
     --blackboard-type-fg: var(--fg-hint);
+
+    /* The UI builder. The plane is RECESSED and the page is the editor surface, so a document
+     * reads as a page lying on a workbench rather than as a panel among panels. */
+    --builder-surface-bg: var(--surface-recessed);
+    --builder-page-bg: var(--surface-editor);
+    --builder-page-edge: var(--border-base);
 
     --breadcrumb-current-fg: var(--fg);
     --breadcrumb-link-fg: var(--link);
@@ -184,6 +190,12 @@ theme {
     --graph-control-fg: var(--fg-secondary);
     --graph-dot-bg: var(--surface-base);
     --graph-edge: var(--border-base);
+    /* A node's body text and its title's, derived rather than pinned: the UA sheet's `graphnode` rules
+     * reference these, and a theme that restyles `--fg` should move them with it. `graph.css` names the
+     * same two colours `--node-text`/`--node-text-bright`, which are that THEME's own -- the UA sheet
+     * may not read a theme's private tokens, so the pair exists here as well. */
+    --graph-node-text: var(--fg-secondary);
+    --graph-node-text-bright: var(--fg);
     --graph-editor-dot-ring-bg: var(--surface-panel);
     --graph-field: var(--surface-recessed);
     --graph-hairline: var(--divider);
@@ -542,6 +554,15 @@ theme {
      * hover surface moves this with it, which is the whole point of the component tier. */
     --progress-cancel-hover-fg: var(--fg);
     --progress-cancel-hover-bg: var(--hover-bg);
+
+    /* THE RADAR'S WEB -- its rings and spokes. --border-base rather than a fallback-only palette
+     * value, because a line drawn over a chart is exactly as theme-dependent as any other border: a
+     * light theme needs the opposite end of the ramp, and a fallback-only token would hand it the
+     * dark file's grey. The wedges take no token at all; their colours are data. */
+    --radar-web: var(--border-base);
+    /* --radar-fill is deliberately absent: it is an ALPHA rather than a colour, derives from no system
+     * role, and is the same wash in every theme -- so it rides its sheet's fallback and is listed in
+     * StyleGovernanceTest's FALLBACK_ONLY_EXACT. */
     /* The Processes popup's dismiss link. --link like every other link in the chrome, rather than
      * --accent: a link is a workbench colour, and the console's hyperlink note explains why. */
     --progress-hide-fg: var(--link);
@@ -621,7 +642,7 @@ theme {
     --activitybar-item-focused-bg: var(--accent);
     --activitybar-item-focused-fg: var(--fg-on-accent);
 
-    /* CrystalOS — a window on the desktop (plan_windowing.md).
+    /* CrystalOS — a window on the desktop (plan/shell-windowing.md).
      *
      * The BODY is a panel surface, because that is what a window's content is: the same ground an
      * editor or a tool panel would have had docked. The CAPTION is raised above it, which is the whole

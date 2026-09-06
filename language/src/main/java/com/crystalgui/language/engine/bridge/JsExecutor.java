@@ -130,7 +130,7 @@ public interface JsExecutor {
      * The 1-based line of the script currently executing on the <b>calling</b> thread, or {@code -1}.
      *
      * <p>Asked at every emitted console line, so it must be cheap. What answers it is a per-band
-     * question ({@code plan_m10.md} §9.4): the direct accessor is package-private on all three bands, so
+     * question ({@code plan/lang-javascript.md} §9.4): the direct accessor is package-private on all three bands, so
      * the routes are an {@code EvaluatorException} constructed on the script thread, or a same-package
      * accessor shaded beside Rhino. Answering {@code -1} is legitimate and costs only the column that
      * names a row's origin.</p>

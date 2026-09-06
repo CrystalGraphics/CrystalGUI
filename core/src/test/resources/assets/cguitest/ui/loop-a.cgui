@@ -1,0 +1,4 @@
+{
+  "cgui": 1,
+  "root": { "kind": "instance", "attrs": { "template": "cguitest:ui/loop-b" } }
+}

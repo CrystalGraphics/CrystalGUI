@@ -163,7 +163,7 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
      *
      * <p>Exists for one caller: a <b>runtime</b> that has just run the file and has something to say
      * about it — a thrown exception at a line — and holds nothing but the file's {@code Resource}. The
-     * services belong to the document ({@code TextFileDocument} owns them), and there is exactly one per
+     * services belong to the document ({@code TextDocumentModel} owns them), and there is exactly one per
      * open file, so the file is a valid key. Concurrent because a run reports from its own thread; the
      * lookup is thread-safe and what it answers is then only ever <em>called</em> on the UI thread.</p>
      */
@@ -270,8 +270,29 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
      */
     @Override
     public final void environmentChanged() {
+        // COALESCED AGAINST A JOB THAT IS ALREADY COMING, and this is what stops the analysis being
+        // starved outright.
+        //
+        // The scheduler's debounce restarts on every submit, so a trigger that fires every frame is a
+        // job that never runs -- which is stated a few lines up in `ProjectSourcesIndex` about the crawl
+        // and is just as true here. Measured in the desktop scene: 937 schedules and ZERO completions,
+        // so the Problems panel kept the analysis from the moment the file was opened and nothing the
+        // author typed afterwards was ever looked at.
+        //
+        // Safe to skip, unlike an edit: an environment change does not alter the SOURCE, so the job
+        // already queued reads the new environment when it runs. An edit must always re-submit, because
+        // the text it would analyse has changed -- which is why this guard is here and not in schedule().
+        if (analysisPending) return;
         schedule();
     }
+
+    /**
+     * Whether a scheduled analysis is still coming. @see #environmentChanged
+     *
+     * <p>Set when a job is submitted and cleared when one lands. It cannot stick: an edit re-submits
+     * regardless, and the last job to be submitted always completes.</p>
+     */
+    private boolean analysisPending;
 
     /**
      * Analyses arbitrary text on the calling thread — the completion probe's shape.
@@ -601,6 +622,7 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
         }
         final String source = buffer.document().toString();
         final long version = buffer.version();
+        analysisPending = true;
         scheduler.job(analysisKey, JobLane.LATENCY, context -> {
                     Analysis analysed = analyse(source, version);
                     // AND ITS TOKENS, while this thread still owns it exclusively. @see #semanticTokensOf
@@ -608,6 +630,7 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
                 })
                 .debounce(DEBOUNCE_MILLIS)
                 .onDone(done -> {
+                    analysisPending = false;
                     if (done != null) install(done.analysis(), done.tokens());
                 })
                 .submit();

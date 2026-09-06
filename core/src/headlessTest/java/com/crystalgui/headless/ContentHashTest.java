@@ -1,13 +1,13 @@
 package com.crystalgui.headless;
 
+import com.crystalgui.net.mirror.UIElementMirror;
 import com.crystalgui.serialization.ContentHash;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.UIDescriptionCodec;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.Checkbox;
-import com.crystalgui.ui.elements.Slider;
-import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.control.Checkbox;
+import com.crystalgui.widget.control.Slider;
+import com.crystalgui.widget.text.UIText;
 import com.google.gson.JsonElement;
 import org.junit.Test;
 
@@ -30,19 +30,19 @@ public class ContentHashTest {
             UIElement root = new UIElement();
             root.setId("settings").addClass("panel").addClass("dark");
             root.layout(l -> l.width(200).height(120));
-            root.addChild(new UIText("Title"));
+            root.append(new UIText("Title"));
             Checkbox checkbox = new Checkbox("Enable");
             checkbox.setChecked(true);
-            root.addChild(checkbox);
+            root.append(checkbox);
             Slider slider = new Slider();
             slider.setRange(0f, 10f).setValue(4f);
-            root.addChild(slider);
+            root.append(slider);
             return root;
         };
     }
 
     private String hashOfJson(UIElement element) {
-        return ContentHash.of(JsonOps.INSTANCE, UIDescriptionCodec.CODEC.encode(JsonOps.INSTANCE, element));
+        return ContentHash.of(JsonOps.INSTANCE, new UIElementMirror<>(JsonOps.INSTANCE).describe(element));
     }
 
     // ── Stability ───────────────────────────────────────────────────────────
@@ -56,8 +56,8 @@ public class ContentHashTest {
     /** Encoding twice must be byte-identical too — the payload itself is what gets transferred. */
     @Test
     public void encodingIsByteIdentical() {
-        JsonElement first = UIDescriptionCodec.CODEC.encode(JsonOps.INSTANCE, sampleTree().get());
-        JsonElement second = UIDescriptionCodec.CODEC.encode(JsonOps.INSTANCE, sampleTree().get());
+        JsonElement first = new UIElementMirror<>(JsonOps.INSTANCE).describe(sampleTree().get());
+        JsonElement second = new UIElementMirror<>(JsonOps.INSTANCE).describe(sampleTree().get());
         assertEquals("a HashMap anywhere in the encode path would break this",
                 first.toString(), second.toString());
     }
@@ -70,9 +70,9 @@ public class ContentHashTest {
     public void theSameTreeHashesTheSameThroughDifferentOps() {
         UIElement tree = sampleTree().get();
         String viaJson = ContentHash.of(JsonOps.INSTANCE,
-                UIDescriptionCodec.CODEC.encode(JsonOps.INSTANCE, tree));
+                new UIElementMirror<>(JsonOps.INSTANCE).describe(tree));
         String viaPlain = ContentHash.of(PlainOps.INSTANCE,
-                UIDescriptionCodec.CODEC.encode(PlainOps.INSTANCE, tree));
+                new UIElementMirror<>(PlainOps.INSTANCE).describe(tree));
         assertEquals(viaJson, viaPlain);
     }
 
@@ -83,7 +83,7 @@ public class ContentHashTest {
         String base = hashOfJson(sampleTree().get());
 
         UIElement differentState = sampleTree().get();
-        ((Checkbox) differentState.getChildren().get(1)).setChecked(false);
+        ((Checkbox) differentState.children().get(1)).setChecked(false);
         assertNotEquals("widget state must affect the identity", base, hashOfJson(differentState));
 
         UIElement differentClass = sampleTree().get();
@@ -95,7 +95,7 @@ public class ContentHashTest {
         assertNotEquals(base, hashOfJson(differentStyle));
 
         UIElement differentStructure = sampleTree().get();
-        differentStructure.addChild(new UIText("extra"));
+        differentStructure.append(new UIText("extra"));
         assertNotEquals(base, hashOfJson(differentStructure));
     }
 
@@ -103,12 +103,12 @@ public class ContentHashTest {
     @Test
     public void childOrderAffectsTheHash() {
         UIElement a = new UIElement();
-        a.addChild(new UIText("one"));
-        a.addChild(new UIText("two"));
+        a.append(new UIText("one"));
+        a.append(new UIText("two"));
 
         UIElement b = new UIElement();
-        b.addChild(new UIText("two"));
-        b.addChild(new UIText("one"));
+        b.append(new UIText("two"));
+        b.append(new UIText("one"));
 
         assertNotEquals(hashOfJson(a), hashOfJson(b));
     }

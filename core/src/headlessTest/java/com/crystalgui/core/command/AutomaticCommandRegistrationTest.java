@@ -1,6 +1,7 @@
 package com.crystalgui.core.command;
 
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -29,8 +30,24 @@ public class AutomaticCommandRegistrationTest {
     private static final AtomicInteger REGISTRATIONS = new AtomicInteger();
     private static final AtomicInteger BINDINGS = new AtomicInteger();
 
+    /**
+     * <b>Attached, because registration happens on CONNECT.</b> The old element ran
+     * {@code registerCommands} from an instance initialiser -- so merely constructing a widget was
+     * enough, and a per-instance contribution made there was handed a field that had not been
+     * assigned yet. {@code UIElement} runs it from {@link UIElement#connected()} instead, where the node is
+     * built. A fixture that only constructs therefore registers nothing, which is the shape of every
+     * failure here.
+     */
+    private <N extends UIElement> N attach(N node) {
+        document.append(node);
+        return node;
+    }
+
+    private UIDocument document;
+
     @Before
     public void setUp() {
+        document = new UIDocument();
         CommandRegistry.global().resetForTesting();
         REGISTRATIONS.set(0);
         BINDINGS.set(0);
@@ -62,20 +79,20 @@ public class AutomaticCommandRegistrationTest {
 
     @Test
     public void buildingAWidgetRegistersItsCommands() {
-        new Widget();
+        attach(new Widget());
         assertNotNull(CommandRegistry.global().get("widget.doThing"));
     }
 
     @Test
     public void registrationHappensOncePerClassHoweverManyInstances() {
-        for (int i = 0; i < 50; i++) new Widget();
+        for (int i = 0; i < 50; i++) attach(new Widget());
         assertEquals(1, REGISTRATIONS.get());
     }
 
     @Test
     public void everyInstanceBindsItsOwnKeys() {
-        Widget first = new Widget();
-        Widget second = new Widget();
+        Widget first = attach(new Widget());
+        Widget second = attach(new Widget());
         assertEquals(2, BINDINGS.get());
         // Not merely counted: each carries the binding, which is what scopes the chord to the widget.
         assertNotNull(first.keymap().chordFor("widget.doThing"));
@@ -92,20 +109,20 @@ public class AutomaticCommandRegistrationTest {
      */
     @Test
     public void aResetRegistryIsRepopulatedByTheNextWidget() {
-        new Widget();
+        attach(new Widget());
         assertNotNull(CommandRegistry.global().get("widget.doThing"));
 
         CommandRegistry.global().resetForTesting();
         assertNull(CommandRegistry.global().get("widget.doThing"));
 
-        new Widget();
+        attach(new Widget());
         assertNotNull(CommandRegistry.global().get("widget.doThing"));
     }
 
     @Test
     public void oneWidgetsRegistrationDoesNotSuppressAnothers() {
-        new Widget();
-        new OtherWidget();
+        attach(new Widget());
+        attach(new OtherWidget());
         assertNotNull(CommandRegistry.global().get("widget.doThing"));
         assertNotNull(CommandRegistry.global().get("other.doThing"));
     }

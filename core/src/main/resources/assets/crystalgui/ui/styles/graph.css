@@ -515,7 +515,8 @@ graphview .__editor__ .__vector__ { align-items: center; }
  * make — `--cfg-check` (13px, from the config kit's OWN unscoped rule) would otherwise win here too,
  * same specificity trap `everyKind()` already caught for the control row. */
 graphview .__editor__ checkbox,
-graphview .__editor__ checkbox .__mark__ {
+graphview .__editor__ checkbox .__mark__,
+graphview .__editor__ checkbox::part(mark) {
     width: 11px;
     height: 11px;
     min-height: 11px;
@@ -556,7 +557,7 @@ colorselector .__hex-row__ text     { color: var(--colorpicker-channel-fg, #9A9A
  * white square corner and against a yellow band alike. Without it the handle vanishes exactly where
  * the colour is brightest, which is where it is most often dragged. */
 colorselector .__ring-handle__,
-colorselector .__square-handle__ {
+colorselector .__square-handle__{
     outline: 1px var(--colorpicker-handle-shadow, #00000080);
     outline-offset: 0px;
 }
@@ -592,7 +593,7 @@ colorselector .__channel-row__ slider {
  * properly rounded content — invisible back when the container's own background was close enough in
  * tone to hide the mismatch, and an obvious squared-off corner poking out past the pill the moment
  * that background changed. */
-colorselector .__swatches__ {
+colorselector .__swatches__{
     outline: 1px var(--node-hairline);
     outline-offset: 0px;
     border-radius: 3px;
@@ -618,7 +619,8 @@ graphnode .__config-control__.__color__ .__swatch__ {
  * apparent width — the outline was the whole of what remained after the thumb itself was already a
  * single pixel. A hairline cannot afford one, and it does not need it here: the track carries its own
  * dark edge, so a white mark on it stays legible. */
-colorselector .__channel-row__ slider .__thumb__ {
+colorselector .__channel-row__ slider .__thumb__,
+colorselector .__channel-row__ slider::part(thumb) {
     outline: none;
 }
 

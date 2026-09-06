@@ -2,10 +2,10 @@ package com.crystalgui.headless;
 
 import com.crystalgui.text.diff.DetailedDiff;
 import com.crystalgui.text.diff.LinesDiff;
-import com.crystalgui.ui.elements.editor.DiffDecorations;
-import com.crystalgui.ui.elements.editor.DiffDecorations.Band;
-import com.crystalgui.ui.elements.editor.DiffDecorations.Kind;
-import com.crystalgui.ui.elements.editor.DiffDecorations.Mark;
+import com.crystalgui.widget.texteditor.diff.DiffDecorations;
+import com.crystalgui.widget.texteditor.diff.DiffDecorations.Band;
+import com.crystalgui.widget.texteditor.diff.DiffDecorations.Kind;
+import com.crystalgui.widget.texteditor.diff.DiffDecorations.Mark;
 
 import org.junit.Test;
 

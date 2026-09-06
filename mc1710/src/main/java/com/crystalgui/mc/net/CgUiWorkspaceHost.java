@@ -1,20 +1,19 @@
 package com.crystalgui.mc.net;
 
-import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.storage.StorageLayout;
+import com.crystalgui.fs.server.WorkspaceService;
+import com.crystalgui.fs.protocol.ScriptingMode;
+import java.io.File;
+import java.nio.file.Path;
+
+import javax.annotation.Nullable;
+
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.LocalFileSystem;
-import com.crystalgui.fs.ProjectRegistry;
-import com.crystalgui.fs.WorkspaceActor;
-import com.crystalgui.fs.WorkspaceOperation;
-import com.crystalgui.fs.WorkspacePermission;
-import com.crystalgui.fs.WorkspaceProject;
-import com.crystalgui.fs.WorkspaceRpc;
-import com.crystalgui.fs.CgFileEvent;
-import com.crystalgui.fs.NioFileEventSource;
-import com.crystalgui.fs.WorkspaceService;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.serialization.PlainOps;
+import com.crystalgui.fs.server.WorkspaceActor;
+import com.crystalgui.fs.server.WorkspaceHost;
+import com.crystalgui.fs.server.WorkspaceOperation;
+import com.crystalgui.fs.server.WorkspacePermission;
+import com.crystalgui.fs.project.WorkspaceProject;
 
 import com.mojang.authlib.GameProfile;
 import cpw.mods.fml.common.FMLCommonHandler;
@@ -22,57 +21,36 @@ import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.server.MinecraftServer;
-
-import java.io.IOException;
-import java.nio.charset.Charset;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import net.minecraft.world.WorldServer;
 
 /**
- * Phase 4 <b>B1/B2/B4</b> — the workspace is served <em>by the server</em>, over the real connection.
+ * <b>The three questions {@link WorkspaceHost} cannot answer on its own</b> - where the workspace is,
+ * who a peer is, and what they may do.
  *
- * <p>This is the vision the filesystem layer was built for, and the reason {@code Mc1710Workspace}'s
- * javadoc reserved it as <i>"a transport swap rather than a rewrite"</i>. It turned out to be exactly
- * that: {@link WorkspaceRpc} already installed onto anything with a {@code register(method, handler)},
- * and {@code WorkspaceClient} only ever used its session to call and to register. Neither needed a
- * redesign — they needed somewhere to be plugged in, which is what {@link Protocols} became.</p>
+ * <p>Minecraft's answers, and nothing else: every method below needs a {@code MinecraftServer} to
+ * answer. The workspace itself - the per-connection bindings, the watcher, the poll cadence, the change
+ * and presence fan-outs, the cleanup, the seeded README - is the engine's and is not repeated here.</p>
  *
  * <h3>Files live on the server's machine, and single-player is not a special case</h3>
  *
- * <p>The root is {@code <serverdir>/crystalgui/workspace} through
- * {@link MinecraftServer#getFile(String)} — which on a dedicated server is the server directory and in
- * single-player is the game directory, because <b>the integrated server is a server</b>. So there is one
- * code path, and the single-player case is the remote case with a very short wire. That is what makes it
- * testable at all: a bug that only appears when the two halves are genuinely apart would otherwise wait
- * for a dedicated server to find it.</p>
- *
- * <h3>One {@link WorkspaceRpc} per connection, because an actor is per player</h3>
- *
- * <p>{@code WorkspaceRpc} binds an actor at construction, and permission is checked per call against that
- * actor. Sharing one across players would mean every request was authorised as whoever connected first.
- * It also holds the watcher, so per-connection is what makes "tell <em>this</em> client what changed"
- * meaningful.</p>
+ * <p>The root is {@code <serverdir>/crystalgui/workspace}, which on a dedicated server is the server
+ * directory and in single-player is the game directory, because <b>the integrated server is a
+ * server</b>. So there is one code path and single-player is the remote case with a very short wire -
+ * which is also what makes single-player a real test of the protocol rather than a bypass of it.</p>
  */
 public final class CgUiWorkspaceHost {
 
-    /** Matches {@code Mc1710Workspace.PROJECT_ID}; the id is the client's handle on the project. */
+    /** Matches the client's handle on the project. */
     public static final String PROJECT_ID = "minecraft.workspace";
 
-    /** Seconds between watcher polls, per connection. */
-    private static final float POLL_SECONDS = 0.5f;
+    /**
+     * The one project a server serves, until W3b makes {@code projects/} a listing rather than a
+     * constant. The leaf keeps the name the directory already had, so the move is one segment deep.
+     */
+    private static final String PROJECT_DIR = "workspace";
 
-    private static final Map<Object, WorkspaceRpc<Object>> BY_PEER = new ConcurrentHashMap<>();
-    private static final Map<Object, ProtocolConnection<Object>> CONNECTIONS = new ConcurrentHashMap<>();
-
-    private static volatile WorkspaceService service;
+    private static WorkspaceHost host;
     private static boolean registered;
-    private static float untilPoll = POLL_SECONDS;
 
     private CgUiWorkspaceHost() {
     }
@@ -80,88 +58,105 @@ public final class CgUiWorkspaceHost {
     /**
      * Contributes the workspace to every connection, and starts the watcher poll.
      *
-     * <p>Called from {@code CommonProxy.init()} — this is <b>server-side behaviour that a dedicated
-     * server needs and a client does not</b>, which is what {@code CommonProxy} is for.</p>
+     * <p>Called from {@code CommonProxy.init()} — this is <b>server-side behaviour a dedicated server
+     * needs and a client does not</b>, which is what {@code CommonProxy} is for.</p>
      */
     public static synchronized void register() {
         if (registered) return;
         registered = true;
-        Protocols.contribute("workspace", new Protocols.Contributor() {
-            @Override
-            public <T> void bind(ProtocolConnection<T> connection) {
-                bindWorkspace(connection);
-            }
-        });
+        host = new WorkspaceHost(PROJECT_ID, "Workspace", new Mc1710Host());
+        host.contribute();
         FMLCommonHandler.instance().bus().register(new Handler());
-        CrystalGuiCore.LOGGER.info("[cgui-fs] workspace contributed to the protocol");
     }
 
-    @SuppressWarnings("unchecked")
-    private static <T> void bindWorkspace(ProtocolConnection<T> connection) {
-        // A CLIENT connection has no peer, and must not host a workspace: it is the consumer. Without
-        // this, a single-player process would serve itself from its own client end as well -- both ends
-        // answering fs.* on one wire, with whichever registered first winning.
-        Object peer = connection.peer();
-        if (peer == null) return;
+    /** Where the workspace is, who a peer is, and what they may do. Nothing else is asked of a host. */
+    private static final class Mc1710Host implements WorkspaceHost.Host {
 
-        WorkspaceService live = service();
-        if (live == null) return;
-
-        WorkspaceRpc<T> rpc = new WorkspaceRpc<>(live, actorFor(peer));
-        rpc.installOn(connection::onRequest);
-        BY_PEER.put(peer, (WorkspaceRpc<Object>) rpc);
-        CONNECTIONS.put(peer, (ProtocolConnection<Object>) connection);
-        CrystalGuiCore.LOGGER.info("[cgui-fs] workspace bound for {}", actorFor(peer).id());
-    }
-
-    /**
-     * Built on first use rather than at registration, because the root is not knowable at mod init.
-     *
-     * <p>{@link MinecraftServer#getServer()} is null until a world loads, and contribution happens long
-     * before that — so this is memoised on the first connection instead, which is always after.</p>
-     */
-    private static synchronized WorkspaceService service() {
-        if (service != null) return service;
-        MinecraftServer server = MinecraftServer.getServer();
-        if (server == null) return null;
-
-        Path root = server.getFile("crystalgui/workspace").toPath();
-        seed(root);
-        ProjectRegistry registry = new ProjectRegistry().register(() -> Collections.singletonList(
-                new WorkspaceProject(PROJECT_ID, "Workspace", root)));
-        service = new WorkspaceService(registry, new LocalFileSystem(registry), new OperatorsMayWrite());
-        CrystalGuiCore.LOGGER.info("[cgui-fs] serving {}", root);
-
-        // Phase 6.2. ONE source for the project, not one per player: every watch costs an OS handle and
-        // Linux caps them per USER, so N players sharing a workspace must not mean N watchers on one
-        // directory. Never throws -- a workspace that cannot be watched still works, half a second
-        // behind, and refusing to serve it would be a far worse answer.
-        service.attachEvents(NioFileEventSource.open(PROJECT_ID, root, Collections.<String>emptyList()));
-        return service;
-    }
-
-    /** A player's id, which is what a permission check and an audit line both need. */
-    private static WorkspaceActor actorFor(Object peer) {
-        if (peer instanceof EntityPlayerMP) {
-            final String name = ((EntityPlayerMP) peer).getCommandSenderName();
-            return () -> name;
+        /**
+         * Null until a world loads, which is why {@code WorkspaceHost} asks per connection rather than
+         * once: {@link MinecraftServer#getServer()} answers null at mod init and contribution happens
+         * long before any world.
+         *
+         * <p><b>The world's own directory in single-player, the server's on a dedicated one</b> — the
+         * WORLD and server scopes (D25-D28). {@code getFile} would answer with the data directory,
+         * which {@code IntegratedServer} overrides to {@code mc.mcDataDir}: every world on one
+         * installation shared a workspace, and deleting a save left its projects behind.</p>
+         */
+        @Override
+        @Nullable
+        public Path root() {
+            MinecraftServer server = MinecraftServer.getServer();
+            if (server == null) return null;
+            File base;
+            if (server.isDedicatedServer()) {
+                base = server.getFile("");
+            } else {
+                WorldServer[] worlds = server.worldServers;
+                // The overworld's save handler is where the world's own directory comes from. Null
+                // between "a server exists" and "it has loaded a world", which is the state above.
+                if (worlds == null || worlds.length == 0 || worlds[0] == null) return null;
+                base = worlds[0].getSaveHandler().getWorldDirectory();
+                if (base == null) return null;
+            }
+            return StorageLayout.projectsIn(base.toPath()).resolve(PROJECT_DIR);
         }
-        final String fallback = String.valueOf(peer);
-        return () -> fallback;
-    }
 
-    // ── B4: a real permission ───────────────────────────────────────────────
+        @Override
+        public WorkspacePermission permission() {
+            return new OperatorsMayWrite();
+        }
+
+        /**
+         * <b>Single-player runs scripts; a dedicated server does not.</b>
+         *
+         * <p>In single-player the integrated server IS the player's own machine, so a Run compiles and
+         * executes in a JVM they already own — there is nobody to protect them from. On a dedicated
+         * server the same command would be a live scripting environment inside every player's client,
+         * reachable from any project they can edit, which is the surface {@link ScriptingMode} closes.
+         * What is left there is {@code AUTHORIZED}: nothing runs unless the server sends it.</p>
+         *
+         * <p>Per SERVER rather than per actor, for now. An operator is trusted with the files and that
+         * is a different question from whether their client should be running arbitrary code on their
+         * behalf — and a config that grants it is the server owner's decision to make, not a default
+         * to guess at.</p>
+         */
+        @Override
+        public WorkspaceService.ScriptingPolicy scripting() {
+            MinecraftServer server = MinecraftServer.getServer();
+            return server != null && server.isSinglePlayer()
+                    ? WorkspaceService.ScriptingPolicy.LIVE
+                    : WorkspaceService.ScriptingPolicy.AUTHORIZED_ONLY;
+        }
+
+        /**
+         * A player's id, which is what a permission check and an audit line both need.
+         *
+         * <p>Read off {@link Mc1710Peer}, which is stable for the connection's life — an entity is not.
+         * The name rather than the UUID because that is what {@link OperatorsMayWrite} matches against
+         * the live player list and what a log line has to be readable as.</p>
+         */
+        @Override
+        public WorkspaceActor actorFor(Object peer) {
+            if (peer instanceof Mc1710Peer) {
+                final String name = ((Mc1710Peer) peer).name();
+                return () -> name;
+            }
+            if (peer instanceof EntityPlayerMP) {
+                final String name = ((EntityPlayerMP) peer).getCommandSenderName();
+                return () -> name;
+            }
+            final String fallback = String.valueOf(peer);
+            return () -> fallback;
+        }
+    }
 
     /**
      * <b>Everyone reads; operators write.</b>
      *
-     * <p>{@code ALLOW_ALL} was correct for what {@code Mc1710Workspace} was — one player, local disk, no
-     * one to guard against — and is wrong the moment the files are on somebody else's machine. This is
-     * the smallest policy that is actually defensible, and it deliberately does not invent a permission
-     * model: <b>it reuses Minecraft's own</b>. {@code func_152596_g} is the "may use commands" check, and
-     * it already answers correctly for the case that would otherwise need special handling — in
-     * single-player it is true for the world's owner when cheats are on, so the host of a local world
-     * keeps the access they had.</p>
+     * <p>{@code ALLOW_ALL} was correct when the workspace was one player's local disk and is wrong the
+     * moment the files are on somebody else's machine. This is the smallest policy that is actually
+     * defensible, and it deliberately does not invent a permission model: <b>it reuses Minecraft's
+     * own</b>.</p>
      *
      * <p>A read is allowed to any connected player because the workspace is the server's shared content,
      * like a datapack. If that turns out to be wrong for somebody, the fix is a per-project permission
@@ -197,121 +192,28 @@ public final class CgUiWorkspaceHost {
         }
     }
 
-    // ── The watcher poll ────────────────────────────────────────────────────
-
+    /** The server tick, forwarded. The cadence and everything in it belong to {@link WorkspaceHost}. */
     public static final class Handler {
 
         @SubscribeEvent
         public void onServerTick(TickEvent.ServerTickEvent event) {
             if (event.phase != TickEvent.Phase.END) return;
-
-            // EVERY TICK, and that is the point of 6.2: an external save reaches the client on the next
-            // tick rather than at the next half-second reconcile. Drained ONCE here and handed to every
-            // peer, because draining is destructive and a second caller would steal the first's events.
-            // Costs one non-blocking WatchService.poll() when nothing has happened.
-            WorkspaceService live = service;
-            if (live != null) {
-                List<CgFileEvent> events = live.drainFileEvents();
-                if (!events.isEmpty()) fanOut(events);
-            }
-
-            untilPoll -= 1f / 20f;
-            if (untilPoll > 0f) return;
-            untilPoll = POLL_SECONDS;
-
-            List<Object> gone = new ArrayList<>();
-            for (Map.Entry<Object, WorkspaceRpc<Object>> entry : BY_PEER.entrySet()) {
-                ProtocolConnection<Object> connection = CONNECTIONS.get(entry.getKey());
-                if (connection == null) {
-                    gone.add(entry.getKey());
-                    continue;
-                }
-                try {
-                    entry.getValue().pollAndNotify(
-                            (method, args) -> connection.call(method, args, null, null),
-                            PlainOps.INSTANCE);
-                } catch (RuntimeException failed) {
-                    // One player's watcher must not stop every other player being polled.
-                    CrystalGuiCore.LOGGER.error("[cgui-fs] watcher poll failed: {}", failed.getMessage());
-                }
-            }
-            for (Object key : gone) BY_PEER.remove(key);
+            if (host != null) host.tick(1f / 20f);
         }
     }
 
-    /**
-     * Hands one drained batch to every peer — Phase 6.2.
-     *
-     * <p>Each watcher keeps only the paths its own client has open, so an event about a file nobody here
-     * has open costs a map lookup and is dropped: an event is real and still none of that peer's
-     * business, and telling it would leak which files exist to somebody who never asked.</p>
-     */
-    private static void fanOut(List<CgFileEvent> events) {
-        for (Map.Entry<Object, WorkspaceRpc<Object>> entry : BY_PEER.entrySet()) {
-            ProtocolConnection<Object> connection = CONNECTIONS.get(entry.getKey());
-            if (connection == null) continue;
-            try {
-                entry.getValue().notifyFileEvents(events,
-                        (method, args) -> connection.call(method, args, null, null),
-                        PlainOps.INSTANCE);
-            } catch (RuntimeException failed) {
-                // One player's dispatch must not stop every other player hearing about the change.
-                CrystalGuiCore.LOGGER.error("[cgui-fs] file-event dispatch failed: {}",
-                        failed.getMessage());
-            }
-        }
-    }
-
-    /** Forgets a peer. Called when its connection closes, or the maps grow for the life of the server. */
+    /** Forgets a peer. Called when its connection closes. */
     public static void forget(Object peer) {
-        // PRESENCE FIRST, and it is the half that is visible to other players. A client that logs out
-        // cleanly sends fs.unwatch for each open file; a client that crashes, times out, or loses its
-        // connection sends nothing at all -- so without this it is shown as still holding those files,
-        // to everybody else, for the rest of the server's life. @see WorkspacePresence#left
-        WorkspaceService live = service;
-        if (live != null) live.presence().left(actorFor(peer));
-
-        BY_PEER.remove(peer);
-        CONNECTIONS.remove(peer);
+        if (host != null) host.forget(peer);
     }
 
     /** How many peers hold a workspace. Diagnostics, and what a leak would show up in. */
     public static int boundPeers() {
-        return BY_PEER.size();
-    }
-
-    /**
-     * Creates the workspace directory, and a README the first time.
-     *
-     * <p>An empty file tree and a broken file tree look identical, which is the whole reason for the
-     * README: the first launch needs something in it that proves a listing crossed the wire.</p>
-     */
-    private static void seed(Path root) {
-        try {
-            Files.createDirectories(root);
-            Path readme = root.resolve("README.md");
-            if (!Files.exists(readme)) {
-                List<String> lines = Arrays.asList(
-                        "# CrystalGUI workspace",
-                        "",
-                        "This directory lives on the SERVER. The editor reaches it over the same",
-                        "protocol a remote workspace uses -- the client holds no filesystem handle.",
-                        "",
-                        "In single-player that server is the integrated one, which is why there is only",
-                        "one code path and no special case.");
-                Files.write(readme, lines, Charset.forName("UTF-8"));
-            }
-        } catch (IOException e) {
-            // Not fatal: the tree is empty and the editor still opens. Failing the screen because a
-            // README could not be written would be a worse trade.
-            CrystalGuiCore.LOGGER.warn("Could not seed the workspace at " + root, e);
-        }
+        return host == null ? 0 : host.boundPeerCount();
     }
 
     /** Drops everything. Called on server stop, so a reload-in-place does not inherit the old service. */
     public static synchronized void reset() {
-        BY_PEER.clear();
-        CONNECTIONS.clear();
-        service = null;
+        if (host != null) host.reset();
     }
 }

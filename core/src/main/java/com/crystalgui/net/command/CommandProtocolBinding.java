@@ -2,7 +2,6 @@ package com.crystalgui.net.command;
 
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.command.CommandRegistry;
-import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 
 import javax.annotation.Nullable;
@@ -69,15 +68,12 @@ public final class CommandProtocolBinding {
     public static synchronized void register() {
         if (registered) return;
         registered = true;
-        Protocols.contribute("command", new Protocols.Contributor() {
-            @Override
-            public <T> void bind(ProtocolConnection<T> connection) {
-                if (connection.peer() == null) {
-                    RemoteCommands.install(connection,
-                            target == null ? CommandRegistry.global() : target, policy);
-                } else {
-                    ServerCommands.forConnection(connection);
-                }
+        Protocols.contribute("command", connection -> {
+            if (connection.peer() == null) {
+                RemoteCommands.install(connection,
+                        target == null ? CommandRegistry.global() : target, policy);
+            } else {
+                ServerCommands.forConnection(connection);
             }
         });
         CrystalGuiCore.LOGGER.info("[command] contributed to the protocol");

@@ -37,7 +37,7 @@ import static org.junit.Assert.assertTrue;
  * <h3>Why {@code headlessTest} and not {@code test}</h3>
  *
  * <p>This source set runs with CrystalGraphics core deliberately absent, and the language module is not on
- * its classpath either. So it is the enforcement of {@code plan_syntax.md} §5.3: if anything in
+ * its classpath either. So it is the enforcement of {@code plan/lang-stack.md} §5.3: if anything in
  * {@code com.crystalgui.text.lang} ever reached an engine, a native, or a font, it would fail here with
  * {@code NoClassDefFoundError} rather than on a dedicated server months later. <b>The absence is the
  * assertion</b>, exactly as it is for GL.</p>

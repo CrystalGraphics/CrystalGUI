@@ -171,7 +171,19 @@ public final class JobScheduler implements Disposable {
         return new Job<>(this, key, lane, work);
     }
 
-    /** A job being described. See {@link JobScheduler#job}. */
+    /**
+     * A job being described. See {@link JobScheduler#job}.
+     *
+     * <h3>The builder is not the {@link Reply}; {@link #submit()} answers one</h3>
+     *
+     * <p>This was left open as a risk — "write {@code Reply} first and see whether
+     * {@code Job} can extend it" — and the answer is that it cannot, for a reason worth keeping: a
+     * {@code Job} is a <b>description</b> and nothing runs until {@code submit()}, while a {@code Reply}
+     * is an answer that is already on its way. A type that is both would have a {@code then} that
+     * sometimes registers against work nobody has started. So the lane, the key and the debounce stay on
+     * the builder — where they mean something — and {@code submit()} hands back the pending answer, which
+     * is the thing a caller composes with a wire call.</p>
+     */
     public static final class Job<T> {
         private final JobScheduler scheduler;
         private final JobKey key;
@@ -179,6 +191,7 @@ public final class JobScheduler implements Disposable {
         private final Function<JobContext, T> work;
         private long debounceMillis;
         private Consumer<T> onDone = result -> { };
+        private Consumer<Throwable> onFailure = thrown -> { };
 
         private Job(JobScheduler scheduler, JobKey key, JobLane lane, Function<JobContext, T> work) {
             this.scheduler = scheduler;
@@ -205,14 +218,35 @@ public final class JobScheduler implements Disposable {
             return this;
         }
 
-        /** Queues it. Replaces any waiting job with the same key and supersedes any running one. */
-        public void submit() {
-            scheduler.enqueue(key, lane, debounceMillis, work, onDone);
+        /**
+         * Queues it, and answers the pending result.
+         *
+         * <p>Replaces any waiting job with the same key and supersedes any running one. Cancelling the
+         * returned reply reaches {@link JobScheduler#cancel(JobKey)}, so a caller that stops caring —
+         * a closing tab, an abandoned search — stops the work as well as ignoring it.</p>
+         *
+         * <p>A superseded job never settles its reply: the caller re-submitted, so a newer reply is the
+         * one to wait on and settling the old one would deliver an answer to a question nobody is still
+         * asking. That matches {@code onDone}, which has never been called for a superseded job.</p>
+         */
+        public Reply<T> submit() {
+            PendingReply<T> reply = new PendingReply<>(() -> scheduler.cancel(key));
+            scheduler.enqueue(key, lane, debounceMillis, work,
+                    result -> {
+                        onDone.accept(result);
+                        reply.resolve(result);
+                    },
+                    thrown -> {
+                        onFailure.accept(thrown);
+                        reply.fail(ReplyError.failed(thrown));
+                    });
+            return reply;
         }
     }
 
     private <T> void enqueue(JobKey key, JobLane lane, long debounceMillis,
-                             Function<JobContext, T> work, Consumer<T> onDone) {
+                             Function<JobContext, T> work, Consumer<T> onDone,
+                             Consumer<Throwable> onFailure) {
         if (disposed) return;
 
         int generation = generations.merge(key, 1, Integer::sum);
@@ -225,7 +259,7 @@ public final class JobScheduler implements Disposable {
         long now = clockMillis.getAsLong();
         // put() replaces, which IS the debounce reset: an earlier deadline is discarded with the entry
         // that carried it.
-        waiting.put(key, new Waiting<>(key, lane, generation, now, now + debounceMillis, work, onDone));
+        waiting.put(key, new Waiting<>(key, lane, generation, now, now + debounceMillis, work, onDone, onFailure));
     }
 
     /**
@@ -297,7 +331,10 @@ public final class JobScheduler implements Disposable {
             if (completion.failure != null) {
                 CrystalGuiCore.LOGGER.warn("job {} failed", completion.key, completion.failure);
                 reportFailure(finished, completion.failure);
-                continue;
+                // AND FALL THROUGH to deliver, which routes a failure to its own handler. This used to
+                // `continue`, so a caller could learn that its job had failed only by reading the log --
+                // there was no failure callback to reach. Reporting it to the chrome and telling the
+                // caller are two different jobs and this method owes both.
             }
             try {
                 // NAMED WHILE PROFILING. `drain` is a bucket that can hide anything: an onDone runs on the
@@ -422,7 +459,7 @@ public final class JobScheduler implements Disposable {
             } catch (Throwable thrown) {
                 failure = thrown;
             }
-            completed.add(new Completion<>(job.key, job.generation, result, failure, job.onDone));
+            completed.add(new Completion<>(job.key, job.generation, result, failure, job.onDone, job.onFailure));
         });
     }
 
@@ -549,7 +586,8 @@ public final class JobScheduler implements Disposable {
     // ── Internals ───────────────────────────────────────────────────────────────────────────────
 
     private record Waiting<T>(JobKey key, JobLane lane, int generation, long submittedAt, long dueAt,
-                              Function<JobContext, T> work, Consumer<T> onDone) {
+                              Function<JobContext, T> work, Consumer<T> onDone,
+                              Consumer<Throwable> onFailure) {
     }
 
     /** The lane is carried so {@link #hasSlotFor} can count occupancy without a second map. */
@@ -557,9 +595,19 @@ public final class JobScheduler implements Disposable {
     }
 
     private record Completion<T>(JobKey key, int generation, T result, Throwable failure,
-                                 Consumer<T> onDone) {
+                                 Consumer<T> onDone, Consumer<Throwable> onFailure) {
+        /**
+         * <b>A job that threw runs its failure handler, not its success one.</b>
+         *
+         * <p>This used to call {@code onDone.accept(result)} unconditionally, and on a throw {@code result}
+         * is null — so every {@code onDone} in the application was a null-handling path nobody had
+         * written, and a job that failed looked exactly like a job that succeeded with nothing. Nothing
+         * could have depended on it: a handler that did anything with its result would have thrown a
+         * {@code NullPointerException} out of {@code drain()}.</p>
+         */
         void deliver() {
-            onDone.accept(result);
+            if (failure != null) onFailure.accept(failure);
+            else onDone.accept(result);
         }
     }
 }

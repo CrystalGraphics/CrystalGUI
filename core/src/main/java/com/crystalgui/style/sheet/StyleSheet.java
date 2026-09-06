@@ -5,7 +5,7 @@ import com.crystalgui.style.StyleEngine;
 import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.selector.Selector;
 import com.crystalgui.style.selector.SelectorType;
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.style.Styleable;
 import lombok.Getter;
 
 import java.util.ArrayList;
@@ -49,7 +49,7 @@ public final class StyleSheet {
     /**
      * The engine's user-agent stylesheet: the {@code assets/crystalgui/ui/styles/ua/*.css} parts,
      * concatenated in {@link StyleSheetRegistry#DEFAULT_SHEET_PARTS} order. (One 6,000-line
-     * {@code default.css} until plan_styling.md step 8 split it at its own section boundaries —
+     * {@code default.css} until plan/style-overhaul.md step 8 split it at its own section boundaries —
      * a pure move; the concatenation is the old file.)
      *
      * <p>Gives every widget functional (deliberately unthemed) geometry, plus a few generic layout
@@ -184,7 +184,19 @@ public final class StyleSheet {
             for (String selectorText : selectorList.split(",")) {
                 String trimmed = selectorText.trim();
                 if (trimmed.isEmpty()) continue;
-                rules.add(new StyleRule(Selector.parse(trimmed), declarations, sourceOrder));
+                // A BAD SELECTOR INVALIDATES ITS RULE, NEVER THE SHEET. One :focus-within used to take
+                // six unrelated panels down with it (audit §5 S3); CSS drops the rule and keeps going.
+                try {
+                    // A BAD SELECTOR INVALIDATES ITS RULE, NEVER THE SHEET. One :focus-within used to take
+                // six unrelated panels down with it (audit §5 S3); CSS drops the rule and keeps going.
+                try {
+                    rules.add(new StyleRule(Selector.parse(trimmed), declarations, sourceOrder));
+                } catch (IllegalArgumentException unparseable) {
+                    CrystalGuiCore.LOGGER.warn("Dropping the rule for '{}': {}", trimmed, unparseable.getMessage());
+                }
+                } catch (IllegalArgumentException unparseable) {
+                    CrystalGuiCore.LOGGER.warn("Dropping the rule for '{}': {}", trimmed, unparseable.getMessage());
+                }
             }
             sourceOrder++;
         }
@@ -204,6 +216,25 @@ public final class StyleSheet {
         var rightmost = compounds.get(compounds.size() - 1);
         boolean indexed = false;
         for (var part : rightmost.parts()) {
+            // STOP AT THE PSEUDO-ELEMENT: what follows describes the PART, and the lookup is done with
+            // the HOST.
+            //
+            // `StyleEngine` fetches a `::part()` rule's candidates with `candidatesFor(shadowHost)`,
+            // because a part rule is indexed under the host's own type and classes. So a class written
+            // after the pseudo-element -- which CSS says describes the part, and which
+            // `matchesAfterPseudoElement` correctly tests against the part -- must not choose the
+            // bucket: it files the rule under a class the host does not have, and the host lookup can
+            // never return it. The rule then matches nothing at all, silently.
+            //
+            // Only a HOSTLESS part rule could reach this. `taskbar .__entry__::part(pre-icon).__tile-1__`
+            // is unaffected because its compound also carries `__entry__`, which the host does have, so
+            // the rule lands in a bucket the lookup asks for anyway -- which is why every shipped part
+            // rule worked and hid the gap. `::part(pre-icon).__completion-icon__` has nothing before the
+            // pseudo-element, so with the class filed as its key it was indexed under a bucket nobody
+            // asks the host for; the M6.1 note that `::part(x)` alone is legal was verified on a rule
+            // with no trailing compound. On screen: a `SymbolIcon` in a dock tab drew no icon at all,
+            // while a tab whose symbol had not resolved kept its file-type glyph and looked correct.
+            if (part.type() == SelectorType.PSEUDO_ELEMENT) break;
             switch (part.type()) {
                 case ID -> {
                     byId.computeIfAbsent(part.identity(), k -> new ArrayList<>()).add(rule);
@@ -328,7 +359,7 @@ public final class StyleSheet {
      * All rules whose bucket key could plausibly match {@code element} — a bucket hit only narrows
      * the candidate set, callers must still verify with {@link Selector#matches}.
      */
-    public List<StyleRule> candidatesFor(UIElement element) {
+    public List<StyleRule> candidatesFor(Styleable element) {
         Set<StyleRule> candidates = new LinkedHashSet<>(universal);
         if (!element.getId().isEmpty()) {
             candidates.addAll(byId.getOrDefault(element.getId(), List.of()));
@@ -336,7 +367,9 @@ public final class StyleSheet {
         for (String cls : element.getClasses()) {
             candidates.addAll(byClass.getOrDefault(cls, List.of()));
         }
-        candidates.addAll(byType.getOrDefault(element.tagName(), List.of()));
+        for (String type : element.typeKeys()) {
+            candidates.addAll(byType.getOrDefault(type, List.of()));
+        }
         return new ArrayList<>(candidates);
     }
 

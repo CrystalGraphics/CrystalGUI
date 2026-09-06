@@ -1,0 +1,519 @@
+package com.crystalgui.fs.server;
+
+import com.crystalgui.fs.protocol.ScriptingMode;
+import com.crystalgui.fs.project.WorkspaceProject;
+import com.crystalgui.fs.project.ProjectRegistry;
+import com.crystalgui.fs.project.ProjectInfo;
+import com.crystalgui.fs.project.Excludes;
+import com.crystalgui.fs.CgFileError;
+import com.crystalgui.fs.CgFileSystemException;
+import com.crystalgui.fs.CgPath;
+import com.crystalgui.fs.provider.CgFileCapability;
+import com.crystalgui.fs.provider.CgFileEntry;
+import com.crystalgui.fs.provider.CgFileEvent;
+import com.crystalgui.fs.provider.CgFileSystem;
+import com.crystalgui.fs.provider.InMemoryFileSystem;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * <b>The workspace as a server offers it</b> - projects, authorisation, etags and the trash.
+ *
+ * <p>Sits above a {@link CgFileSystem} and adds the two things a filesystem has no business knowing:
+ * <b>who is asking</b>, and <b>whether the file moved since the caller last looked</b>. Every
+ * {@code fs/*} request a client sends ends up here, through a {@link WorkspaceBinding} that has already
+ * decided which actor is speaking.</p>
+ *
+ * <h3>What each layer owes</h3>
+ * <table>
+ *   <tr><td>{@link CgPath}</td><td>cannot lexically escape its project</td></tr>
+ *   <tr><td>{@link CgFileSystem}</td><td>reads and writes bytes; on a real disk, no symlink escapes</td></tr>
+ *   <tr><td><b>this</b></td><td>resolves the project, authorises, enforces etags, captures deletions</td></tr>
+ *   <tr><td>the RPC layer</td><td>carries it to a client</td></tr>
+ * </table>
+ *
+ * <p>Keeping them apart is what makes the whole server side testable with no disk and no network: this
+ * class over an {@code InMemoryFileSystem} is a complete, exercisable workspace, which is how most of
+ * the protocol is covered.</p>
+ *
+ * <h3>An etag is how a write says what it expected</h3>
+ *
+ * <p>A save quotes the etag it read; if the file has moved since, the write is refused with the etag it
+ * actually holds, and the client turns that into a merge the user can act on rather than an overwrite
+ * nobody sees.</p>
+ */
+public final class WorkspaceService {
+
+    private final ProjectRegistry projects;
+    private final CgFileSystem files;
+    private final WorkspacePermission permission;
+
+    /**
+     * Where deletions go. {@link WorkspaceTrash#NONE} means they do not come back.
+     *
+     * <p>Server-side <b>policy</b>, deliberately invisible to the protocol: a client asks for a deletion
+     * either way, and does not get to choose whether it is recoverable. That is what let {@code fs.delete}
+     * gain a trash without changing shape.</p>
+     */
+    private final WorkspaceTrash trash;
+
+    public WorkspaceService(ProjectRegistry projects, CgFileSystem files, WorkspacePermission permission) {
+        this(projects, files, permission, new WorkspaceTrash.InMemory());
+    }
+
+    public WorkspaceService(ProjectRegistry projects, CgFileSystem files, WorkspacePermission permission,
+                            WorkspaceTrash trash) {
+        if (projects == null || files == null) throw new IllegalArgumentException();
+        this.projects = projects;
+        this.files = files;
+        this.trash = trash == null ? WorkspaceTrash.NONE : trash;
+        // A host that registers projects and forgets the callback gets a workspace nobody can open,
+        // rather than one everybody can.
+        this.permission = permission == null ? WorkspacePermission.DENY_ALL : permission;
+    }
+
+    /**
+     * The projects this actor may see.
+     *
+     * <p>Filtered by a READ check on each project's own root, so "may not read the project" and "the
+     * project is not there" look identical from outside — which is the same reason
+     * {@link ProjectRegistry#require} answers {@code FILE_NOT_FOUND}.</p>
+     */
+    public List<ProjectInfo> projects(WorkspaceActor actor) {
+        List<ProjectInfo> visible = new ArrayList<>();
+        for (WorkspaceProject project : projects.all()) {
+            CgPath root = CgPath.ofProject(project.id());
+            if (permission.allows(actor, project, root, WorkspaceOperation.READ)) {
+                visible.add(project.info());
+            }
+        }
+        return visible;
+    }
+
+    /**
+     * Attaches an OS-level event source — Phase 6.2.
+     *
+     * <p><b>One per project, not one per peer.</b> Every watch costs an OS handle and Linux caps them at
+     * 8,192 per user by default, so N players sharing a workspace must not mean N watchers on the same
+     * directory. It lives here for the same reason presence does: this is the one object every
+     * every connection's binding already shares.</p>
+     */
+    public void attachEvents(CgFileEvent.Source source) {
+        this.events = source == null ? CgFileEvent.Source.NONE : source;
+    }
+
+    /**
+     * Everything the filesystem has done since the last call. <b>Call once per tick, from one place.</b>
+     *
+     * <p>Draining is destructive, so a second caller would silently steal the first one's events — which
+     * is why this is on the shared service and the per-peer watchers are handed the batch rather than
+     * each asking for their own.</p>
+     */
+    public List<CgFileEvent> drainFileEvents() {
+        return events.drain();
+    }
+
+    private CgFileEvent.Source events = CgFileEvent.Source.NONE;
+
+    /**
+     * Who has what open, across every peer.
+     *
+     * <p>Lives here because this is the one object every connection's binding shares — each has its own
+     * actor and its own watcher, so a per-connection home could only ever answer about itself, which is
+     * the opposite of what presence means. @see WorkspacePresence</p>
+     */
+    public WorkspacePresence presence() {
+        return presence;
+    }
+
+    private final WorkspacePresence presence = new WorkspacePresence();
+
+    /**
+     * What this actor may do in each project it can see.
+     *
+     * <p>Asked against the project's own <b>root</b>, so it is a per-project answer to a per-path
+     * question. That is a deliberate coarsening and the reason
+     * {@code fs/capabilities} is documented as a hint: a host may allow writes under
+     * {@code src/} and refuse them under {@code config/}, and no per-project broadcast can say so.
+     * Nothing here relaxes anything — {@link #authorise} still runs on the real path for every
+     * operation, which is where the trust actually lives.</p>
+     *
+     * <p>Projects the actor cannot read are omitted entirely, matching {@link #projects}: "may not read"
+     * and "is not there" look identical from outside.</p>
+     */
+    public List<ProjectCapability> capabilities(WorkspaceActor actor) {
+        List<ProjectCapability> answers = new ArrayList<>();
+        for (WorkspaceProject project : projects.all()) {
+            CgPath root = CgPath.ofProject(project.id());
+            if (!permission.allows(actor, project, root, WorkspaceOperation.READ)) continue;
+            answers.add(new ProjectCapability(project.id(), true,
+                    permission.allows(actor, project, root, WorkspaceOperation.WRITE),
+                    scripting.modeFor(actor, project)));
+        }
+        return answers;
+    }
+
+    /** One project's answer. @see #capabilities */
+    public record ProjectCapability(String project, boolean mayRead, boolean mayWrite,
+                                    ScriptingMode scripting) {
+    }
+
+    /**
+     * Who may run this project's files, and where.
+     *
+     * <p>Separate from {@link WorkspacePermission} because it answers a different question: that one
+     * says what may be done to a FILE, this says what may be done with what is IN one. A server that
+     * lets everybody read and only operators write may still let nobody run anything.</p>
+     */
+    @FunctionalInterface
+    public interface ScriptingPolicy {
+
+        /** Everything runs, which is right when the machine is the player's own. */
+        ScriptingPolicy LIVE = (actor, project) -> ScriptingMode.LIVE;
+
+        /** Nothing runs locally; only what the server sends and has validated. */
+        ScriptingPolicy AUTHORIZED_ONLY = (actor, project) -> ScriptingMode.AUTHORIZED;
+
+        ScriptingMode modeFor(WorkspaceActor actor, WorkspaceProject project);
+    }
+
+    private ScriptingPolicy scripting = ScriptingPolicy.LIVE;
+
+    private String workspaceId = "";
+
+    /**
+     * A stable name for the set of projects this server serves, or empty when nobody named one.
+     *
+     * <p>Travels in the greeting, and is what a client keys its per-workspace records by — chiefly an
+     * application's session arrangement. Empty is an ordinary answer and the client falls back to a hash
+     * of the project ids it was listed; what it must never be is a name that means a different workspace
+     * on the next launch, which is why a host derives it once and writes it down rather than computing
+     * it from the root's path.</p>
+     */
+    public String workspaceId() {
+        return workspaceId;
+    }
+
+    public WorkspaceService setWorkspaceId(String id) {
+        this.workspaceId = id == null ? "" : id;
+        return this;
+    }
+
+    /**
+     * Says who may run this workspace's files.
+     *
+     * <p>Defaults to {@link ScriptingPolicy#LIVE}, which is what every existing host meant when there
+     * was no such question: an in-process workspace and a single-player world are the player's own
+     * machine. A host serving somebody else's files says otherwise.</p>
+     */
+    public WorkspaceService setScriptingPolicy(ScriptingPolicy policy) {
+        this.scripting = policy == null ? ScriptingPolicy.LIVE : policy;
+        return this;
+    }
+
+    /**
+     * One directory's entries — the listing a client caches, {@code etag} and all.
+     *
+     * <p>Per directory and lazy, matching a tree that expands lazily anyway. A whole-project manifest is
+     * a large single response and pays for directories nobody opens.</p>
+     */
+    public List<CgFileEntry> manifest(WorkspaceActor actor, CgPath directory) {
+        authorise(actor, directory, WorkspaceOperation.READ);
+        List<CgFileEntry> entries = files.list(directory);
+        Excludes excludes = Excludes.of(projects.require(directory).excludes());
+        if (excludes.isEmpty()) return entries;
+
+        List<CgFileEntry> kept = new ArrayList<>(entries.size());
+        for (CgFileEntry entry : entries) {
+            if (!excludes.excludes(entry.name())) kept.add(entry);
+        }
+        return kept;
+    }
+
+    /**
+     * The hard ceiling on a single file — P6.1.10 D11's *"chunked with progress; hard cap 100 MB,
+     * refused as file too large to open"*.
+     *
+     * <p>A cap has to exist somewhere and this is the honest place for it: a client asking for a 4 GB
+     * file is not a request to serve slowly, it is one to refuse. Note it is <b>not</b> the same number
+     * as the transport's {@code MAX_REASSEMBLY_BYTES} and must not be confused with it — that bounds one
+     * <em>message</em>, which is precisely why anything approaching this limit has to be chunked at the
+     * protocol level rather than handed over whole.</p>
+     */
+    public static final long MAX_FILE_BYTES = 100L * 1024 * 1024;
+
+    /**
+     * A file's metadata, authorised the same way a read is.
+     *
+     * <p>Exists so a caller can ask "how big, and may I" without paying for the bytes — which is what
+     * lets the cap be enforced before an allocation rather than after one.</p>
+     */
+    public CgFileEntry stat(WorkspaceActor actor, CgPath path) {
+        authorise(actor, path, WorkspaceOperation.READ);
+        return files.stat(path);
+    }
+
+    /** A file, with the etag a later write must quote back. */
+    public FileContent read(WorkspaceActor actor, CgPath path) {
+        authorise(actor, path, WorkspaceOperation.READ);
+        // STAT BEFORE READ, and the etag comes from the stat. Taking it afterwards would describe the
+        // file as it is once the bytes are in hand, which is a different moment.
+        CgFileEntry entry = files.stat(path);
+        if (entry.isDirectory()) throw CgFileSystemException.isADirectory(path);
+        // Before files.read, so the refusal costs a stat rather than the allocation it is refusing.
+        if (entry.size() > MAX_FILE_BYTES) {
+            throw CgFileSystemException.tooLarge(path, entry.size(), MAX_FILE_BYTES);
+        }
+        return new FileContent(path, files.read(path), entry.etag());
+    }
+
+    /**
+     * A window of a file, authorised as a read.
+     *
+     * <p>What a chunked transfer pulls through, and the reason a transfer can hold
+     * {@code (path, etag, size)} rather than the bytes: the server no longer has to have read the file
+     * in order to be sending it.</p>
+     */
+    public byte[] readRange(WorkspaceActor actor, CgPath path, long offset, int length) {
+        authorise(actor, path, WorkspaceOperation.READ);
+        return files.read(path, offset, length);
+    }
+
+    /**
+     * Whether this workspace's filesystem tells {@code Main.java} from {@code main.java}.
+     *
+     * <p>The provider has always known and the answer could not reach the client, which is why two
+     * spellings of one file could be opened as two documents that overwrote each other. It travels in
+     * {@code FsHello} now. @see com.crystalgui.fs.provider.CgFileCapability#PATH_CASE_SENSITIVE
+     */
+    public boolean caseSensitive() {
+        return files.has(CgFileCapability.PATH_CASE_SENSITIVE);
+    }
+
+    /**
+     * Replaces a file, refusing if it moved since {@code expectedEtag} was taken.
+     *
+     * <p><b>The re-stat is the guarantee, and it is here rather than in a watcher.</b> Whatever a
+     * platform's file-watching story is — and on a network mount it is often nothing — a write cannot land
+     * on a file that changed underneath, because this looks immediately before writing. Watching only ever
+     * makes a client find out <em>sooner</em>; correctness never rests on it.</p>
+     *
+     * @param expectedEtag the etag the caller last saw, or {@code null} to write unconditionally
+     * @return the etag the file now has
+     * @throws WorkspaceConflictException if the file moved
+     */
+    public String write(WorkspaceActor actor, CgPath path, byte[] content, String expectedEtag) {
+        authorise(actor, path, WorkspaceOperation.WRITE);
+        requireUnchanged(path, expectedEtag);
+        files.write(path, content, false, true);
+        return files.stat(path).etag();
+    }
+
+    /**
+     * Refuses if {@code path} no longer carries {@code expectedEtag}. A null expectation checks nothing.
+     *
+     * <p>Extracted so {@link #write}, {@link #delete} and {@link #rename} cannot drift. Three copies of a
+     * four-line guard is three chances for one of them to compare the wrong way round, and the one that
+     * got it wrong would be the one nobody wrote a test for.</p>
+     *
+     * <p>A directory has an etag too ({@code mtime + size}), so this is meaningful for a recursive delete
+     * as well — though far weaker there, since a directory's mtime says nothing about its contents.</p>
+     */
+    private void requireUnchanged(CgPath path, String expectedEtag) {
+        if (expectedEtag == null) return;
+        String actual = files.stat(path).etag();   // throws FILE_NOT_FOUND if it vanished
+        if (!expectedEtag.equals(actual)) {
+            throw new WorkspaceConflictException(path, expectedEtag, actual);
+        }
+    }
+
+    /**
+     * Creates a file that is not there.
+     *
+     * <p>Separate from {@link #write} because the failure is different and matters: New File onto an
+     * existing path must refuse, not clobber something that appeared while the user was typing a name.</p>
+     */
+    public String create(WorkspaceActor actor, CgPath path, byte[] content) {
+        authorise(actor, path, WorkspaceOperation.WRITE);
+        files.write(path, content, true, false);
+        return files.stat(path).etag();
+    }
+
+    public void mkdir(WorkspaceActor actor, CgPath path) {
+        authorise(actor, path, WorkspaceOperation.WRITE);
+        files.mkdir(path);
+    }
+
+    public void delete(WorkspaceActor actor, CgPath path, boolean recursive) {
+        delete(actor, path, recursive, null);
+    }
+
+    /**
+     * Removes a file or directory, refusing if it moved since {@code expectedEtag} was taken.
+     *
+     * <p><b>The guard matters more here than it does on {@link #write}.</b> A stale write loses the other
+     * author's edit; a stale delete loses the file. Same re-stat, same {@link WorkspaceConflictException},
+     * and for the same reason: whatever the platform's watching story is, this looks immediately before
+     * acting.</p>
+     *
+     * @param expectedEtag the etag the caller last saw, or {@code null} to delete unconditionally
+     */
+    public void delete(WorkspaceActor actor, CgPath path, boolean recursive, String expectedEtag) {
+        deleteToTrash(actor, path, recursive, expectedEtag);
+    }
+
+    /**
+     * Deletes, keeping a copy, and reports where the copy went.
+     *
+     * <p>The captured id is what makes undo possible: the bytes have to be taken <b>before</b> the delete,
+     * and only the server is in a position to do that. A client-side "read it first, then delete" would be
+     * two round trips with a window in between where another actor can change what it is about to
+     * destroy.</p>
+     *
+     * @return the trash id, or {@code null} when nothing was kept
+     */
+    @javax.annotation.Nullable
+    public String deleteToTrash(WorkspaceActor actor, CgPath path, boolean recursive,
+                                String expectedEtag) {
+        authorise(actor, path, WorkspaceOperation.WRITE);
+        requireUnchanged(path, expectedEtag);
+        // CAPTURE FIRST, and only then delete. The reverse order is a delete that loses the file whenever
+        // the capture throws -- and the capture is the half that reads every byte, so it is the half that
+        // can fail.
+        String id = trash.capture(files, path, actor.id());
+        files.delete(path, recursive);
+        return id;
+    }
+
+    /** Puts a trashed entry back where it came from. Refuses if something has taken its place. */
+    public CgPath restore(WorkspaceActor actor, String trashId) {
+        CgPath target = trashPathOf(trashId);
+        authorise(actor, target, WorkspaceOperation.WRITE);
+        return trash.restore(files, trashId);
+    }
+
+    /** Destroys a trashed entry for good. */
+    public boolean purge(WorkspaceActor actor, String trashId) {
+        authorise(actor, trashPathOf(trashId), WorkspaceOperation.WRITE);
+        return trash.purge(trashId);
+    }
+
+    /** What is recoverable in a project, newest first. */
+    public java.util.List<WorkspaceTrash.Entry> trashList(WorkspaceActor actor, String project) {
+        authorise(actor, CgPath.ofProject(project), WorkspaceOperation.READ);
+        return trash.list(project);
+    }
+
+    /**
+     * The original path behind a trash id, so a restore can be authorised against the place it will land.
+     *
+     * <p>Authorising the <em>destination</em> rather than the id is the point: an id says nothing about
+     * permissions, and a restore is a write to wherever the file used to live.</p>
+     */
+    private CgPath trashPathOf(String trashId) {
+        for (WorkspaceTrash.Entry entry : trash.list("")) {
+            if (entry.id().equals(trashId)) return entry.originalPath();
+        }
+        // list("") matches no project, so scan across everything the trash holds instead.
+        for (WorkspaceProject project : projects.all()) {
+            for (WorkspaceTrash.Entry entry : trash.list(project.id())) {
+                if (entry.id().equals(trashId)) return entry.originalPath();
+            }
+        }
+        throw new CgFileSystemException(CgFileError.FILE_NOT_FOUND, "no such trash entry: " + trashId);
+    }
+
+    /** Both ends are authorised — a move is a write in two places. */
+    public void rename(WorkspaceActor actor, CgPath from, CgPath to, boolean overwrite) {
+        rename(actor, from, to, overwrite, null);
+    }
+
+    /**
+     * Moves a file or directory, refusing if the <em>source</em> moved since {@code expectedEtag}.
+     *
+     * <p>The source, not the destination: what the caller read and is acting on is the thing at
+     * {@code from}. A destination that appeared underneath is what {@code overwrite} is for, and it is a
+     * different question with a different answer.</p>
+     */
+    public void rename(WorkspaceActor actor, CgPath from, CgPath to, boolean overwrite,
+                       String expectedEtag) {
+        authorise(actor, from, WorkspaceOperation.WRITE);
+        authorise(actor, to, WorkspaceOperation.WRITE);
+        requireUnchanged(from, expectedEtag);
+        if (!from.project().equals(to.project())) {
+            throw new CgFileSystemException(CgFileError.INVALID_PATH,
+                    "cannot rename across projects: " + from + " -> " + to);
+        }
+        files.rename(from, to, overwrite);
+    }
+
+    /**
+     * Copies a file, or a whole directory, <b>on the server</b>.
+     *
+     * <p>The bytes never leave the machine they are already on, which is the whole reason this is a
+     * verb rather than a client-side read-and-create: copying a 40 MB file was a 40 MB download
+     * followed by a 40 MB upload, and copying a FOLDER could not be expressed at all.</p>
+     *
+     * <p>Both ends are authorised, and they are different questions: reading the source and writing the
+     * destination. A copy into the source's own subtree is refused rather than recursing forever.</p>
+     */
+    public void copy(WorkspaceActor actor, CgPath from, CgPath to, boolean overwrite) {
+        authorise(actor, from, WorkspaceOperation.READ);
+        authorise(actor, to, WorkspaceOperation.WRITE);
+        if (!from.project().equals(to.project())) {
+            throw new CgFileSystemException(CgFileError.INVALID_PATH,
+                    "cannot copy across projects: " + from + " -> " + to);
+        }
+        // INTO ITSELF is the one shape that does not terminate: each level copied adds a level to walk.
+        if (from.equals(to) || from.contains(to)) {
+            throw new CgFileSystemException(CgFileError.INVALID_PATH,
+                    "cannot copy " + from + " into itself");
+        }
+        copyTree(from, to, overwrite);
+    }
+
+    /** One entry, then whatever is under it. @see #copy */
+    private void copyTree(CgPath from, CgPath to, boolean overwrite) {
+        CgFileEntry entry = files.stat(from);
+        if (!entry.isDirectory()) {
+            // The same cap a read enforces, and before the allocation for the same reason.
+            if (entry.size() > MAX_FILE_BYTES) {
+                throw CgFileSystemException.tooLarge(from, entry.size(), MAX_FILE_BYTES);
+            }
+            files.write(to, files.read(from), true, overwrite);
+            return;
+        }
+        files.mkdir(to);
+        for (CgFileEntry child : files.list(from)) {
+            copyTree(from.resolve(child.name()), to.resolve(child.name()), overwrite);
+        }
+    }
+
+    /** The bytes of a file and the etag they were read at. */
+    public record FileContent(CgPath path, byte[] content, String etag) {
+    }
+
+    // ── Internals ───────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Resolves the project and asks the host, in that order.
+     *
+     * <p>Refusal is {@link CgFileError#NO_PERMISSIONS} with a message that does not say whether the path
+     * exists. Anything more specific is an oracle a client can probe to map a server's disk.</p>
+     */
+    private void authorise(WorkspaceActor actor, CgPath path, WorkspaceOperation operation) {
+        WorkspaceProject project = projects.require(path);
+        if (!permission.allows(actor, project, path, operation)) {
+            throw CgFileSystemException.denied(path);
+        }
+    }
+
+    /**
+     * Glob matching, restricted to what an exclusion list actually needs.
+     *
+     * <p>{@code *} matches within one name and {@code ?} matches one character; there is no {@code **},
+     * because these are applied per directory entry rather than to a whole path. A full glob engine here
+     * would be a lot of surface for {@code node_modules} and {@code .git}.</p>
+     */
+}

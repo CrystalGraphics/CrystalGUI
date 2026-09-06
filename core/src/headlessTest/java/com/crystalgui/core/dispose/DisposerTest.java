@@ -4,12 +4,14 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -252,6 +254,50 @@ public class DisposerTest {
         assertEquals(5001, released.size());
         assertEquals("the deepest node must go first", "n4999", released.get(0));
         assertEquals("root", released.get(released.size() - 1));
+    }
+
+    /**
+     * <b>Releasing something must not be the reason it is kept.</b>
+     *
+     * <p>The record of what has been disposed used to be an {@code IdentityHashMap} with strong keys
+     * that nothing but {@code resetForTesting()} removed from — so every object ever disposed was
+     * retained for the life of the process, with everything it referenced behind it. Four disposed
+     * editors kept four whole editor trees, which came out as an {@code OutOfMemoryError} in a test
+     * worker and read as the editors leaking rather than as the disposer holding them.</p>
+     *
+     * <p>Weak is exactly right rather than a compromise: a question about an object nobody holds cannot
+     * be asked, so the record only has to outlive the object's last holder — which is what
+     * {@link #aDisposedObjectIsStillReportedDisposedWhileAnybodyHoldsIt} beside this asserts.</p>
+     */
+    @Test
+    public void disposingSomethingDoesNotRetainIt() {
+        Disposable one = named("one");
+        WeakReference<Disposable> watched = new WeakReference<>(one);
+        Disposer.dispose(one);
+
+        one = null;
+        for (int attempt = 0; attempt < 40 && watched.get() != null; attempt++) {
+            System.gc();
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+
+        assertNull("the disposer kept a strong reference to something it had already released",
+                watched.get());
+    }
+
+    /** ...and the record still answers for as long as anybody can ask about it. */
+    @Test
+    public void aDisposedObjectIsStillReportedDisposedWhileAnybodyHoldsIt() {
+        Disposable one = named("one");
+        Disposer.dispose(one);
+        for (int attempt = 0; attempt < 5; attempt++) System.gc();
+        assertTrue("a held object's disposal must not be forgotten by a collection",
+                Disposer.isDisposed(one));
     }
 
     /** A dispose() that re-enters must find the work already claimed rather than doing it twice. */

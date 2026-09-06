@@ -24,7 +24,7 @@ import static org.junit.Assert.fail;
 /**
  * <b>What each band's Rhino actually accepts — measured, and written down for the engine to read.</b>
  *
- * <p>M10 §1 (`plan_m10.md`). Two Rhinos ship across three bands — {@code 1.7.15.1} on band 8, because
+ * <p>M10 §1 (`plan/lang-javascript.md`). Two Rhinos ship across three bands — {@code 1.7.15.1} on band 8, because
  * the 1.7.x line is the last that runs on Java 8, and {@code 1.9.1} on 11 and 17 — and they do not
  * accept the same JavaScript. Which constructs each refuses decides four things downstream: which
  * diagnostics are re-titled as "not supported by this engine", which keywords completion may offer,
@@ -38,7 +38,7 @@ import static org.junit.Assert.fail;
  * measured against the real jars through the real {@link EngineClassLoader} and written to
  * {@code build/probe/rhino-<band>.properties}; the engine reads that rather than a literal, and a pin
  * bumped to a Rhino with different behaviour changes the file rather than silently disagreeing with a
- * comment. `plan_m10.md` §13a's table is the <em>expectation</em>; this is the truth, and where they
+ * comment. `plan/lang-javascript.md` §13a's table is the <em>expectation</em>; this is the truth, and where they
  * disagree the table is what gets edited.</p>
  *
  * <h3>What it measures</h3>
@@ -50,7 +50,7 @@ import static org.junit.Assert.fail;
  *   <li><b>Globals</b> — {@code typeof X} in a standard scope, because "does this band have
  *       {@code Symbol}" is a different question from "does it parse {@code class}" and both are in
  *       §13a's table.</li>
- *   <li><b>Behaviour</b> — the few of `plan_m10.md` §15's questions that need only a context: whether a
+ *   <li><b>Behaviour</b> — the few of `plan/lang-javascript.md` §15's questions that need only a context: whether a
  *       sealed scope can still be extended, whether promises drain at the end of an evaluation, and
  *       whether the frame accessor the console's line attribution wants is reachable.</li>
  *   <li><b>API surface</b> — the parser, AST, scope and interop types M10 is written against, pinned the
@@ -62,7 +62,7 @@ import static org.junit.Assert.fail;
  */
 public class RhinoCapabilityProbeTest {
 
-    /** Snippets whose <b>parse</b> is the question. Ordered as `plan_m10.md` §13a's table is. */
+    /** Snippets whose <b>parse</b> is the question. Ordered as `plan/lang-javascript.md` §13a's table is. */
     private static final Map<String, String> SYNTAX = new LinkedHashMap<>();
 
     static {
@@ -102,7 +102,7 @@ public class RhinoCapabilityProbeTest {
             "ArrayBuffer", "Int8Array", "Float64Array", "JSON", "Math", "RegExp", "Error",
             "Object", "Array", "String", "Number", "Boolean", "Date", "Function",
             // Not ES at all -- Rhino's own Java bridge, and the reason `Java.type` has to be installed
-            // by us rather than assumed (`plan_m10.md` §6.4).
+            // by us rather than assumed (`plan/lang-javascript.md` §6.4).
             "Packages", "java", "JavaAdapter", "importClass", "importPackage", "Java",
     };
 
@@ -198,7 +198,7 @@ public class RhinoCapabilityProbeTest {
     }
 
     /**
-     * The four constructs `plan_m10.md` §13a claims no shipped band accepts.
+     * The four constructs `plan/lang-javascript.md` §13a claims no shipped band accepts.
      *
      * <p>Asserted rather than merely recorded, because the whole ES-level story told to authors rests on
      * them: if a band ever accepts {@code class}, the compatibility-band warning, the keyword filter and
@@ -213,7 +213,7 @@ public class RhinoCapabilityProbeTest {
                 for (String construct : new String[] {
                         "class", "moduleImport", "moduleExport", "asyncFunction" }) {
                     String answer = rhino.parses(SYNTAX.get(construct));
-                    assertFalse(band + " now ACCEPTS " + construct + " — plan_m10.md §13a and the "
+                    assertFalse(band + " now ACCEPTS " + construct + " — plan/lang-javascript.md §13a and the "
                                     + "compatibility-band warning both need revising",
                             ACCEPTED.equals(answer));
                 }
@@ -275,7 +275,7 @@ public class RhinoCapabilityProbeTest {
                 requireMethod(environs, "setRecoverFromErrors", boolean.class);
                 requireMethod(environs, "setIdeMode", boolean.class);
                 requireMethod(environs, "setLanguageVersion", int.class);
-                // The compiled-mode opt-in of `plan_m10.md` §13a: the observer only fires in compiled
+                // The compiled-mode opt-in of `plan/lang-javascript.md` §13a: the observer only fires in compiled
                 // mode when the codegen was told to count, so a hot handler cannot be stopped without it.
                 requireMethod(environs, "setGenerateObserverCount", boolean.class);
 
@@ -302,7 +302,7 @@ public class RhinoCapabilityProbeTest {
 
                 require(loader, "org.mozilla.javascript.ast.AstRoot");
                 Class<?> scope = require(loader, "org.mozilla.javascript.ast.Scope");
-                // THE SYMBOL TABLES. `plan_m10.md` §1.2 rests on these: they are why static structure
+                // THE SYMBOL TABLES. `plan/lang-javascript.md` §1.2 rests on these: they are why static structure
                 // comes from Rhino's own parse rather than from a second tree-sitter view of the file.
                 requireMethod(scope, "getSymbolTable");
                 Class<?> symbol = require(loader, "org.mozilla.javascript.ast.Symbol");
@@ -411,7 +411,7 @@ public class RhinoCapabilityProbeTest {
     }
 
     /**
-     * `plan_m10.md` §15.1 — how the console will find which script line is printing.
+     * `plan/lang-javascript.md` §15.1 — how the console will find which script line is printing.
      *
      * <p>Reported rather than asserted, because there are two acceptable answers and the milestone picks
      * one from what it finds: a public {@code getSourcePositionFromStack} is the direct route, and if it
@@ -548,7 +548,7 @@ public class RhinoCapabilityProbeTest {
 
         /**
          * Whether {@code initStandardObjects(null, true)} leaves room to install {@code console} and
-         * {@code Java} afterwards — `plan_m10.md` §15.4. If it refuses, the executor seals *after*
+         * {@code Java} afterwards — `plan/lang-javascript.md` §15.4. If it refuses, the executor seals *after*
          * installing rather than before.
          */
         private String sealedScopeRefusesNewGlobals() {
@@ -572,7 +572,7 @@ public class RhinoCapabilityProbeTest {
 
         /**
          * Whether a resolved promise's continuation has run by the time {@code evaluateString} returns —
-         * `plan_m10.md` §15.8. If not, {@code JsHost} drains the queue itself after a run, or a script's
+         * `plan/lang-javascript.md` §15.8. If not, {@code JsHost} drains the queue itself after a run, or a script's
          * {@code .then} never fires and reads as the engine ignoring promises.
          */
         private String promisesDrainAfterEvaluate() {
@@ -618,7 +618,7 @@ public class RhinoCapabilityProbeTest {
             try {
                 Object cx = context.getMethod("enter").invoke(null);
                 context.getMethod("setLanguageVersion", int.class).invoke(cx, es6);
-                // INTERPRETED, which is what the runtime will use (`plan_m10.md` §9.1) -- and it also
+                // INTERPRETED, which is what the runtime will use (`plan/lang-javascript.md` §9.1) -- and it also
                 // keeps the probe from asking the codegen to emit class files this JVM may not load.
                 context.getMethod("setOptimizationLevel", int.class).invoke(cx, -1);
                 context.getMethod("setApplicationClassLoader", ClassLoader.class).invoke(cx, loader);

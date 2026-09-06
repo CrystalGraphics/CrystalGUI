@@ -44,7 +44,7 @@ public abstract class SignalBase<L> {
      * {@code IndexOutOfBoundsException} raised inside somebody's listener.</p>
      *
      * <p>Re-entrancy is not exotic here: it is the intended shape of the service events in
-     * {@code plan.md} step 3, where a dirty change fires a title refresh which fires a layout change.
+     * {@code plan/shell-architecture-audit.md} step 3, where a dirty change fires a title refresh which fires a layout change.
      * Before those existed every signal was a leaf and the boolean was fine, which is exactly why this
      * would have surfaced as a crash in unrelated code months later.</p>
      */

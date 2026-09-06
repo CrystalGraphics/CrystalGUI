@@ -375,7 +375,7 @@ problemspanel > .__find-bar__ {
  *
  * THE FIELD IS THE ONLY THING IN THE ROW THAT MAY SHRINK. flex-shrink defaults to 0 here (not 1, as on the
  * web), so everything is rigid unless it says so -- and a rigid text box would push the toggles out of the
- * border instead of scrolling inside it. Same trap the find bar hit one level up (plan.md 29.12).
+ * border instead of scrolling inside it. Same trap the find bar hit one level up (plan/shell-architecture-audit.md 29.12).
  *
  * `.__focused__` rather than `:focus-within`: this engine has no such pseudo-class, and an unknown one
  * POISONS THE SHEET rather than being ignored -- see SearchField.FOCUSED_CLASS. */
@@ -399,7 +399,8 @@ problemspanel > .__find-bar__ {
     outline-color: var(--searchfield-focus-border, #4A88C7);
 }
 
-.__search-field__ .__icon__ {
+.__search-field__ .__icon__,
+.__search-field__::part(icon) {
     width: 12px;
     height: 12px;
     flex-shrink: 0;
@@ -408,7 +409,8 @@ problemspanel > .__find-bar__ {
     color: var(--searchfield-icon-fg, #8A8A8A);
 }
 
-.__search-field__ .__field__ {
+.__search-field__ .__field__,
+.__search-field__::part(field) {
     flex-grow: 1;
     flex-shrink: 1;
     min-width: 0px;
@@ -421,7 +423,8 @@ problemspanel > .__find-bar__ {
 
 /* THE QUERY REDS, THE CARET DOES NOT. The red is a statement about the text -- it found nothing -- and a
  * red caret reads as the caret itself being wrong. `caret-color` is the web's answer and exists for this. */
-.__search-field__.__not-found__ .__field__ {
+.__search-field__.__not-found__ .__field__,
+.__search-field__.__not-found__::part(field) {
     color: var(--searchfield-error-fg, #E06C6C);
     caret-color: var(--searchfield-caret, #D0D2D6);
 }
@@ -430,7 +433,8 @@ problemspanel > .__find-bar__ {
  * something you can also undo by selecting and typing -- so it should read as an affordance you can find
  * rather than one competing with the glyphs beside it. IntelliJ draws it dimmer than everything else in the
  * field and tucks it against the option group. */
-.__search-field__ .__clear__ {
+.__search-field__ .__clear__,
+.__search-field__::part(clear) {
     width: 6px;
     height: 6px;
     flex-shrink: 0;
@@ -439,14 +443,16 @@ problemspanel > .__find-bar__ {
     color: var(--searchfield-clear-fg, #5F6265);
 }
 
-.__search-field__ .__clear__:hover {
+.__search-field__ .__clear__:hover,
+.__search-field__::part(clear):hover {
     color: var(--searchfield-clear-hover-fg, #E0E0E0);
     background-color: var(--searchfield-clear-hover-bg, #393b40);
 }
 
 /* ROOM TO BREATHE. At 1px the three glyphs ran together into one shape; IntelliJ spaces them by about a
  * third of their own width, which is what makes them read as three controls. */
-.__search-field__ .__options__ {
+.__search-field__ .__options__,
+.__search-field__::part(options) {
     flex-direction: row;
     align-items: center;
     flex-shrink: 0;

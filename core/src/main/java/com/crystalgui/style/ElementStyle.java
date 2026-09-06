@@ -1,7 +1,6 @@
 package com.crystalgui.style;
 
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.ui.UIElement;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StyleSlot;
 import lombok.Getter;
@@ -16,8 +15,9 @@ import java.util.function.Predicate;
  * Hands out the highest priority ones as values.
  */
 public final class ElementStyle {
+    /** What this store belongs to — an element on the old engine, a node on the new. */
     @Getter
-    public final UIElement element;
+    public final Styleable host;
 
     @Getter
     public final TaffyBridge taffyBridge;
@@ -50,8 +50,8 @@ public final class ElementStyle {
         return this;
     }
 
-    public ElementStyle(UIElement element) {
-        this.element = element;
+    public ElementStyle(Styleable host) {
+        this.host = host;
         this.taffyBridge = new TaffyBridge(this);
         this.layoutGroup = new LayoutGroup(this);
         this.generalGroup = new GeneralGroup(this);
@@ -228,7 +228,8 @@ public final class ElementStyle {
         for (var p : touched) {
             resolveOne(p, oldRealValues.get(p), wasResolved.contains(p));
         }
-        element.onStyleChanged();
+        computedCache = null;
+        host.onStyleChanged();
     }
 
     /**
@@ -244,8 +245,8 @@ public final class ElementStyle {
         T newValue = newRealSlot == null ? null : cast(newRealSlot.value());
         if (Objects.equals(oldValue, newValue)) return;
 
-        var window = element.getAttachedWindow();
-        if (wasResolved && p.isAllowTransition() && window != null) {
+        var engine = host.styleEngine();
+        if (wasResolved && p.isAllowTransition() && engine != null) {
             // "No candidate left at all" (e.g. a :focus-only rule's candidate removed, with no base
             // rule beneath it) resolves to the property's own initial value once actually displayed
             // — see StyleGroup.getValueSave's identical fallback. Substitute it here so reverting to
@@ -254,11 +255,11 @@ public final class ElementStyle {
             // straight to the unset display value.
             T transitionFrom = oldValue != null ? oldValue : p.initialValue;
             T transitionTo = newValue != null ? newValue : p.initialValue;
-            if (window.getStyleEngine().getTransitionEngine().tryStart(element, p, transitionFrom, transitionTo)) {
+            if (engine.getTransitionEngine().tryStart(host, p, transitionFrom, transitionTo)) {
                 return;
             }
         }
-        p.notifyListeners(element, oldValue, newValue);
+        host.computedChanged(p, oldValue, newValue);
     }
 
     // ── Transition-engine-internal write path (style/transition/) ─────────────────────────────
@@ -266,11 +267,13 @@ public final class ElementStyle {
     // report fake diffs or re-enter transition-eligibility checks on their own writes.
 
     public <T> void startAnimationSlot(StyleProperty<T> p, T startValue, int sourceOrder) {
+        computedCache = null;
         replaceAnimationSlot(p, startValue, sourceOrder);
         computedSlots.put(p, StyleSlot.of(p, StyleOrigin.ANIMATION, 0, sourceOrder, startValue));
     }
 
     public <T> void tickAnimationSlot(StyleProperty<T> p, T interpolatedValue, int sourceOrder) {
+        computedCache = null;
         replaceAnimationSlot(p, interpolatedValue, sourceOrder);
         computedSlots.put(p, StyleSlot.of(p, StyleOrigin.ANIMATION, 0, sourceOrder, interpolatedValue));
     }
@@ -283,7 +286,8 @@ public final class ElementStyle {
             if (slots.isEmpty()) candidates.remove(p);
         }
         computedSlots.put(p, computeCandidateSlot(p));
-        element.onStyleChanged();
+        computedCache = null;
+        host.onStyleChanged();
     }
 
     private <T> void replaceAnimationSlot(StyleProperty<T> p, T value, int sourceOrder) {
@@ -336,7 +340,7 @@ public final class ElementStyle {
         var computedSlot = computedSlots.get(p);
         if (computedSlot != null) return (T) computedSlot.value();
         if (p.isInheritable()) {
-            var parent = element.getParent();
+            var parent = host.inheritsFrom();
             if (parent != null) return parent.getStyle().getComputed(p);
         }
         return null;
@@ -348,6 +352,28 @@ public final class ElementStyle {
     private static <T> T cast(Object o) { return (T) o; }
 
     public void markTaffyStyleDirty() {
-        element.markTreeDirty();
+        host.markTreeDirty();
+    }
+
+    // ── The frozen answer ────────────────────────────────────────────────────
+
+    @Nullable
+    private ComputedStyle computedCache;
+    @Nullable
+    private ComputedStyle computedCacheParent;
+
+    /**
+     * The cascade's answer as an immutable value — see {@link ComputedStyle}. Cached until this store
+     * or an ancestor's changes: the parent's own snapshot is part of the key, so an inherited value
+     * that moved above is seen below without anything walking down to say so.
+     */
+    public ComputedStyle computed() {
+        var parent = host.inheritsFrom();
+        ComputedStyle parentNow = parent == null ? null : parent.getStyle().computed();
+        if (computedCache == null || computedCacheParent != parentNow) {
+            computedCache = ComputedStyle.of(this, parentNow);
+            computedCacheParent = parentNow;
+        }
+        return computedCache;
     }
 }

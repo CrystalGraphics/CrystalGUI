@@ -3,13 +3,18 @@ package com.crystalgui.lifecycle;
 import com.crystalgui.core.dispose.Disposer;
 
 import com.crystalgraphics.gl.lifecycle.CgGraphicsLifecycle;
+import com.crystalgraphics.mc.CgAssetReloader;
+import com.crystalgraphics.mc.CgReloadListener;
+
+import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.render.texture.asset.CgUiSpriteRegistry;
+import com.crystalgui.style.StyleEngine;
 import com.crystalgraphics.gl.lifecycle.CgLifecycleListener;
 import com.crystalgraphics.platform.gl.state.CgGlScope;
 import com.crystalgraphics.platform.gl.state.CgGlSlot;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgui.ui.UIWindow;
 
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -45,7 +50,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  * {@code CgGraphicsLifecycle.initContext/tickFrame/destroyContext}; this rides along with those, so
  * no loader module needs to know CrystalGUI has a lifecycle at all.</p>
  */
-public final class CgUiLifecycle implements CgLifecycleListener {
+public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListener {
 
     private static final CgUiLifecycle INSTANCE = new CgUiLifecycle();
 
@@ -68,11 +73,34 @@ public final class CgUiLifecycle implements CgLifecycleListener {
      */
     public static void register() {
         CgGraphicsLifecycle.addListener(INSTANCE);
+        CgAssetReloader.addListener(INSTANCE);
     }
 
     /** Unregisters CrystalGUI from the engine lifecycle. Rarely needed outside tests. */
     public static void unregister() {
         CgGraphicsLifecycle.removeListener(INSTANCE);
+        CgAssetReloader.removeListener(INSTANCE);
+    }
+
+    /**
+     * F3+T, and a resource pack change: re-read what CrystalGUI keeps from disk.
+     *
+     * <p>Two caches, and the order between them is load-bearing. Sprite packs are dropped first so
+     * that the restyle below re-resolves every {@code asset(...)} against the JSON as it is now;
+     * doing it the other way round restyles against the packs the previous reload left behind.</p>
+     *
+     * <p>{@code StyleEngine.reloadStylesheets()} is the whole of the CSS half — it refills the sheets
+     * in place, so existing registrations stay valid, and re-matches every live window. Its own
+     * javadoc named this path before anything called it.</p>
+     *
+     * <p>Font families are deliberately left alone. They are CrystalGraphics' objects, reloaded on
+     * its side, and dropping ours would orphan the shaped paragraphs every {@code UIText} retains.</p>
+     */
+    @Override
+    public void onReload() {
+        CgUiSpriteRegistry.clearCache();
+        int sheets = StyleEngine.reloadStylesheets();
+        CrystalGuiCore.LOGGER.info("CrystalGUI resource reload: {} stylesheet(s) re-read", sheets);
     }
 
     /**
@@ -161,11 +189,14 @@ public final class CgUiLifecycle implements CgLifecycleListener {
      */
     @Override
     public void onDestroy() {
-        try {
-            UIWindow.shutdownAll();
-        } catch (Throwable t) {
-            CrystalGuiCore.LOGGER.warn("CgUiLifecycle: failed to take the windows off screen", t);
-        }
+        // NO DOCUMENT TEARDOWN HERE, and that is not an omission. `UIWindow.shutdownAll()` detached
+        // each window's desktop and cleared an attached-window back-pointer -- tree bookkeeping on a
+        // tree the process is about to stop having. This file's own rule for `onDestroy` says the same
+        // thing about caches: at game shutdown there is no next context to protect, so anything that
+        // only tidies state is ceremony rather than correctness. What genuinely must happen on close
+        // -- writing the session -- is the HOST's, and `CgUiScreen` does it when the screen closes.
+        //
+        // What stays below is the one thing nobody else frees.
         try {
             CgUiPaintContext.destroy();
         } catch (Throwable t) {

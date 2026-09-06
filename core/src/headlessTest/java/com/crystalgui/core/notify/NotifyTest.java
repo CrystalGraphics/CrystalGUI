@@ -21,22 +21,22 @@ import static org.junit.Assert.assertTrue;
  */
 public class NotifyTest {
 
+    private final StatusBar bar = new StatusBar();
+
     @Before
     public void setUp() {
-        StatusBar.resetForTesting();
         Notifications.resetForTesting();
         NotificationGroups.resetForTesting();
     }
 
     @After
     public void tearDown() {
-        StatusBar.resetForTesting();
         Notifications.resetForTesting();
         NotificationGroups.resetForTesting();
     }
 
-    private static StatusBarEntryAccessor add(String name, String text) {
-        return StatusBar.addEntry(StatusBarEntry.of(name, text), name, StatusBarAlignment.LEFT);
+    private StatusBarEntryAccessor add(String name, String text) {
+        return bar.addEntry(StatusBarEntry.of(name, text), name, StatusBarAlignment.LEFT);
     }
 
     // ── Status bar ──────────────────────────────────────────────────────────────────────────────
@@ -57,19 +57,19 @@ public class NotifyTest {
         add("explorer", "created notes.txt");
         StatusBarEntryAccessor owner = add("shadergraph.lineOwner", "line 12 emitted by multiply");
 
-        assertTrue(StatusBar.text().contains("created notes.txt"));
-        assertTrue(StatusBar.text().contains("line 12 emitted by multiply"));
+        assertTrue(bar.text().contains("created notes.txt"));
+        assertTrue(bar.text().contains("line 12 emitted by multiply"));
 
         owner.update(owner.entry().withText("line 13 emitted by combine"));
-        assertTrue("its own entry updates in place", StatusBar.text().contains("line 13"));
-        assertTrue("and the other writer is untouched", StatusBar.text().contains("created notes.txt"));
+        assertTrue("its own entry updates in place", bar.text().contains("line 13"));
+        assertTrue("and the other writer is untouched", bar.text().contains("created notes.txt"));
 
         owner.dispose();
-        assertEquals("created notes.txt", StatusBar.text());
+        assertEquals("created notes.txt", bar.text());
 
-        StatusBar.addEntry(StatusBarEntry.of("Build", "compiling"), "same", StatusBarAlignment.LEFT);
-        StatusBar.addEntry(StatusBarEntry.of("Index", "indexing"), "same", StatusBarAlignment.LEFT);
-        assertEquals("an id is not an identity", 3, StatusBar.size());
+        bar.addEntry(StatusBarEntry.of("Build", "compiling"), "same", StatusBarAlignment.LEFT);
+        bar.addEntry(StatusBarEntry.of("Index", "indexing"), "same", StatusBarAlignment.LEFT);
+        assertEquals("an id is not an identity", 3, bar.size());
     }
 
     /**
@@ -88,7 +88,7 @@ public class NotifyTest {
         StatusBarEntryAccessor compile = add("compile", "compiled 9n/8e");
 
         int[] announced = { 0 };
-        StatusBar.onDidChange.connect(() -> announced[0]++);
+        bar.onDidChange.connect(() -> announced[0]++);
 
         for (int i = 0; i < 10; i++) compile.update(StatusBarEntry.of("compile", "compiled 9n/8e"));
         assertEquals("an unchanged entry announced " + announced[0] + " times", 0, announced[0]);
@@ -110,20 +110,20 @@ public class NotifyTest {
      */
     @Test
     public void entriesReportTheirWritersAlignmentAndOrder() {
-        StatusBar.addEntry(StatusBarEntry.of("explorer", "created notes.txt"), "explorer",
+        bar.addEntry(StatusBarEntry.of("explorer", "created notes.txt"), "explorer",
                 StatusBarAlignment.LEFT);
-        StatusBar.addEntry(StatusBarEntry.of("Encoding", "UTF-8"), "encoding",
+        bar.addEntry(StatusBarEntry.of("Encoding", "UTF-8"), "encoding",
                 StatusBarAlignment.RIGHT, 98);
-        StatusBar.addEntry(StatusBarEntry.of("Cursor position", "51:39"), "caret",
+        bar.addEntry(StatusBarEntry.of("Cursor position", "51:39"), "caret",
                 StatusBarAlignment.RIGHT, 100);
 
-        assertEquals(1, StatusBar.entries(StatusBarAlignment.LEFT).size());
-        List<StatusBarEntryAccessor> right = StatusBar.entries(StatusBarAlignment.RIGHT);
+        assertEquals(1, bar.entries(StatusBarAlignment.LEFT).size());
+        List<StatusBarEntryAccessor> right = bar.entries(StatusBarAlignment.RIGHT);
         assertEquals("51:39", right.get(0).entry().text());
         assertEquals("the lower priority follows it", "UTF-8", right.get(1).entry().text());
 
         assertTrue("text() composes every entry, whatever end it sits at",
-                StatusBar.text().contains("created notes.txt") && StatusBar.text().contains("51:39"));
+                bar.text().contains("created notes.txt") && bar.text().contains("51:39"));
     }
 
     /** An entry says what it is as well as what it shows — the split a hide menu needs. */

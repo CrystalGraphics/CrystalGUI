@@ -1,8 +1,12 @@
 package com.crystalgui.mc.net;
 
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UIElementTreeSource;
+import com.crystalgui.net.mirror.UIElementMirror;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.WorkspaceClient;
+import com.crystalgui.fs.Resource;
+import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
@@ -10,16 +14,14 @@ import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.text.Change;
-import com.crystalgui.ui.ElementRegistry;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.Button;
-import com.crystalgui.ui.elements.Dropdown;
-import com.crystalgui.ui.elements.ProgressBar;
-import com.crystalgui.ui.elements.Slider;
-import com.crystalgui.ui.elements.Tab;
-import com.crystalgui.ui.elements.TabView;
-import com.crystalgui.ui.elements.UIText;
+import com.crystalgui.ui.dom.UIElementRegistry;
+import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.overlay.Dropdown;
+import com.crystalgui.widget.display.ProgressBar;
+import com.crystalgui.widget.control.Slider;
+import com.crystalgui.widget.layout.Tab;
+import com.crystalgui.widget.layout.TabView;
+import com.crystalgui.widget.text.UIText;
 
 import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
@@ -108,8 +110,8 @@ public final class CgUiSessionProbe {
         for (String check : ORDER) CHECKS.put(check, false);
     }
 
-    private static volatile ServerUiSession<Object> server;
-    private static volatile ClientUiSession<Object> client;
+    private static volatile ServerUiSession<UIElement, Object> server;
+    private static volatile ClientUiSession<UIElement, Object> client;
 
     private static Slider serverSlider;
     private static UIText addedLater;
@@ -118,7 +120,7 @@ public final class CgUiSessionProbe {
     private static InMemoryTransport<Object>[] extraLink;
     private static ProtocolConnection<Object> extraServer;
     private static ProtocolConnection<Object> extraClient;
-    private static ClientUiSession<Object> extraViewer;
+    private static ClientUiSession<UIElement, Object> extraViewer;
 
     private static volatile boolean deltaSent;
     private static volatile boolean eventSent;
@@ -129,7 +131,7 @@ public final class CgUiSessionProbe {
     private static volatile boolean deltaWriteStarted;
     private static volatile boolean reported;
 
-    private static WorkspaceClient<Object> files;
+    private static Workspace files;
     private static int clientTicks;
 
     private CgUiSessionProbe() {
@@ -150,50 +152,51 @@ public final class CgUiSessionProbe {
     /** <b>Server thread.</b> A tree that exercises C3 and C4 as well as the basics. */
     private static void openServer(ProtocolConnection<Object> connection) {
         UIElement root = new UIElement();
-        root.addChild(new UIText("hello from the server"));
+        root.append(new UIText("hello from the server"));
 
         Button button = new Button("Press me");
-        root.addChild(button);
+        root.append(button);
 
         serverSlider = new Slider();
         serverSlider.setRange(0f, 1f);
-        root.addChild(serverSlider);
+        root.append(serverSlider);
 
         // C3: tabs are content, and their contents are content too.
         TabView tabs = new TabView();
         Tab first = tabs.addTab("Editor");
-        first.content().addChild(new UIText("inside the first tab"));
+        first.content().append(new UIText("inside the first tab"));
         Tab second = tabs.addTab("Settings");
-        second.content().addChild(new Slider());
+        second.content().append(new Slider());
         tabs.selectIndex(1);
-        root.addChild(tabs);
+        root.append(tabs);
 
         // C4: two widgets whose state had no way of travelling until this phase.
         ProgressBar progress = new ProgressBar();
         progress.setFraction(0.42f);
-        root.addChild(progress);
+        root.append(progress);
 
         Dropdown dropdown = new Dropdown("choose");
         dropdown.addOptions("alpha", "beta", "gamma");
         dropdown.select(2);
-        root.addChild(dropdown);
+        root.append(dropdown);
 
-        ServerUiSession<Object> session = new ServerUiSession<>(WINDOW_ID, root, connection);
-        session.onActivate(button, ctx -> pass("5 event"));
+        ServerUiSession<UIElement, Object> session = new ServerUiSession<>(WINDOW_ID, new UIElementTreeSource(root),
+                new UIElementMirror<>(connection.ops()), connection);
+        session.on(button, Button.ACTIVATE, ctx -> pass("5 event"));
         session.open();
         server = session;
         CrystalGuiCore.LOGGER.info("[session-probe] server session opened on the real connection, "
-                + "{} children, hash={}", root.getChildren().size(), session.descHash());
+                + "{} children, hash={}", root.children().size(), session.descHash());
     }
 
     /** <b>Client thread.</b> */
     private static void openClient(ProtocolConnection<Object> connection) {
-        ElementRegistry.bootstrapBuiltins();
-        ClientUiSession<Object> session = new ClientUiSession<>(connection);
+        UIElementRegistry.bootstrap();
+        ClientUiSession<UIElement, Object> session = new ClientUiSession<>(new UIElementMirror<>(connection.ops()), connection);
         session.onWindowOpened(root -> {
             if (root != null) pass("1 tree");
             CrystalGuiCore.LOGGER.info("[session-probe] tree rebuilt: {} children",
-                    root == null ? -1 : root.getChildren().size());
+                    root == null ? -1 : root.children().size());
         });
         session.onCall("probe/ping", (args, respond) -> {
             StateMap<Object> out = new StateMap<>(PlainOps.INSTANCE);
@@ -257,7 +260,7 @@ public final class CgUiSessionProbe {
             if (!reshapeSent) {
                 reshapeSent = true;
                 addedLater = new UIText("added after open");
-                server.root().addChildAt(addedLater, 0);
+                server.root().insertAt(0, addedLater);
                 CrystalGuiCore.LOGGER.info("[session-probe] inserted a child at index 0 "
                         + "— every id after it shifts");
                 return;
@@ -270,11 +273,11 @@ public final class CgUiSessionProbe {
                 extraLink = InMemoryTransport.pair();
                 extraServer = Protocols.open(extraLink[0], PlainOps.INSTANCE, () -> { }, "probe-viewer");
                 extraClient = Protocols.open(extraLink[1], PlainOps.INSTANCE, () -> { }, null);
-                extraViewer = new ClientUiSession<>(extraClient);
+                extraViewer = new ClientUiSession<>(new UIElementMirror<>(extraClient.ops()), extraClient);
                 extraViewer.onWindowOpened(root -> {
                     if (root != null) pass("8 fan-out (C1)");
                     CrystalGuiCore.LOGGER.info("[session-probe] second viewer rebuilt {} children",
-                            root == null ? -1 : root.getChildren().size());
+                            root == null ? -1 : root.children().size());
                 });
                 server.addViewer(extraServer);
                 CrystalGuiCore.LOGGER.info("[session-probe] added a second viewer; count={}",
@@ -332,7 +335,7 @@ public final class CgUiSessionProbe {
         /** C3 and C4, read off the rebuilt tree. */
         private void checkDescribedState() {
             if (done("2 tabs (C3)") && done("3 widget state (C4)")) return;
-            List<UIElement> children = client.root().getChildren();
+            List<UIElement> children = client.root().children();
             // The reshape inserts at 0, so index off the END -- which is also a small check that the
             // tree really is the one that was described.
             int n = children.size();
@@ -343,7 +346,7 @@ public final class CgUiSessionProbe {
             if (tabsElement instanceof TabView tabs && tabs.getTabs().size() == 2) {
                 boolean labels = "Editor".equals(tabs.getTabs().get(0).getText())
                         && "Settings".equals(tabs.getTabs().get(1).getText());
-                boolean content = !tabs.getTabs().get(0).content().getChildren().isEmpty();
+                boolean content = !tabs.getTabs().get(0).content().children().isEmpty();
                 boolean selection = tabs.getSelectedIndex() == 1;
                 if (labels && content && selection) pass("2 tabs (C3)");
                 else CrystalGuiCore.LOGGER.warn("[session-probe] tabs: labels={} content={} selected={}",
@@ -360,8 +363,8 @@ public final class CgUiSessionProbe {
 
         private void checkDelta() {
             if (done("4 state delta") || !deltaSent) return;
-            int n = client.root().getChildren().size();
-            UIElement mirrored = client.root().getChildren().get(n - 4);
+            int n = client.root().children().size();
+            UIElement mirrored = client.root().children().get(n - 4);
             if (mirrored instanceof Slider slider && Math.abs(slider.getValue() - 0.75f) < 1e-4f) {
                 pass("4 state delta");
             }
@@ -369,8 +372,8 @@ public final class CgUiSessionProbe {
 
         private void pressWhenReady() {
             if (eventSent || !done("4 state delta")) return;
-            int n = client.root().getChildren().size();
-            UIElement mirrored = client.root().getChildren().get(n - 5);
+            int n = client.root().children().size();
+            UIElement mirrored = client.root().children().get(n - 5);
             if (!(mirrored instanceof Button)) return;
             eventSent = true;
             // The REAL widget: what reports is a listener the client attached from the description.
@@ -380,7 +383,7 @@ public final class CgUiSessionProbe {
         /** C2 — the child arrived, and the slider's update still landed after renumbering. */
         private void checkReshape() {
             if (done("7 reshape (C2)") || !reshapeSent) return;
-            List<UIElement> children = client.root().getChildren();
+            List<UIElement> children = client.root().children();
             if (children.size() != 7) return;
             if (!(children.get(0) instanceof UIText text)) return;
             if (!"added after open".equals(text.getText())) return;
@@ -397,57 +400,59 @@ public final class CgUiSessionProbe {
             if (files == null) {
                 ProtocolConnection<Object> connection = CgUiConnections.client();
                 if (connection == null) return;
-                files = WorkspaceClient.forConnection(connection);
+                files = Workspace.of(connection);
             }
 
             if (!filesAsked) {
                 filesAsked = true;
-                files.list(CgPath.ofProject(CgUiWorkspaceHost.PROJECT_ID),
-                        entries -> {
-                            CrystalGuiCore.LOGGER.info("[session-probe] listed {} entries from the server",
-                                    entries.size());
-                            if (!entries.isEmpty()) pass("9 files (B1/B2)");
-                        },
-                        failure -> CrystalGuiCore.LOGGER.error("[session-probe] listing failed: {}",
-                                failure.code()));
+                files.files().list(Resource.of(CgPath.ofProject(CgUiWorkspaceHost.PROJECT_ID)))
+                        .then(listing -> {
+                            CrystalGuiCore.LOGGER.info("[session-probe] listed {} entries from the "
+                                    + "server", listing.entries().size());
+                            if (!listing.entries().isEmpty()) pass("9 files (B1/B2)");
+                        })
+                        .onError(failure -> CrystalGuiCore.LOGGER.error(
+                                "[session-probe] listing failed: {}", failure.code()));
                 return;
             }
             if (!done("9 files (B1/B2)") || deltaWriteStarted) return;
 
-            // C5 -- read, write a CHANGE SET, re-read. The re-read is conditional on the etag, so it
-            // also exercises the cache path rather than merely the write.
+            // Read, write CONDITIONALLY on the etag that read handed back, re-read, put it back. The
+            // etag is the whole point: the server re-stats before it writes, so a file that moved
+            // underneath this client is refused rather than clobbered.
             deltaWriteStarted = true;
-            CgPath readme = CgPath.of(CgUiWorkspaceHost.PROJECT_ID, "README.md");
-            files.read(readme,
-                    first -> {
-                        String before = new String(first.content(), StandardCharsets.UTF_8);
+            Resource readme = Resource.of(CgPath.of(CgUiWorkspaceHost.PROJECT_ID, "README.md"));
+            files.files().readWhole(readme)
+                    .onError(failure -> CrystalGuiCore.LOGGER.error(
+                            "[session-probe] README read failed: {}", failure.code()))
+                    .then(first -> {
+                        String before = new String(first.bytes(), StandardCharsets.UTF_8);
                         CrystalGuiCore.LOGGER.info("[session-probe] README is {} bytes", before.length());
-                        // Replace the first line's "#" with "#!" -- one change, not the whole file.
-                        files.writeDelta(readme, List.of(new Change(0, 1, "#!")),
-                                etag -> files.read(readme,
-                                        second -> {
-                                            String after =
-                                                    new String(second.content(), StandardCharsets.UTF_8);
-                                            boolean applied = after.startsWith("#!");
-                                            CrystalGuiCore.LOGGER.info("[session-probe] after "
-                                                    + "writeDelta the file starts \"{}\"",
+                        String edited = "#!" + before.substring(Math.min(1, before.length()));
+                        files.files()
+                                .write(readme, edited.getBytes(StandardCharsets.UTF_8), first.etag())
+                                .onError(failure -> CrystalGuiCore.LOGGER.error(
+                                        "[session-probe] conditional write failed: {}", failure.code()))
+                                .then(etag -> files.files().readWhole(readme)
+                                        .onError(f -> CrystalGuiCore.LOGGER.error(
+                                                "[session-probe] re-read failed: {}", f.code()))
+                                        .then(second -> {
+                                            String after = new String(second.bytes(),
+                                                    StandardCharsets.UTF_8);
+                                            CrystalGuiCore.LOGGER.info("[session-probe] after the "
+                                                    + "conditional write the file starts \"{}\"",
                                                     after.substring(0, Math.min(12, after.length())));
-                                            if (applied) {
-                                                // Put it back, so a repeat run starts from the same file.
-                                                files.writeDelta(readme, List.of(new Change(0, 2, "#")),
-                                                        e -> pass("10 writeDelta + cache (C5)"),
-                                                        f -> CrystalGuiCore.LOGGER.error(
-                                                                "[session-probe] restore failed: {}",
-                                                                f.code()));
-                                            }
-                                        },
-                                        f -> CrystalGuiCore.LOGGER.error(
-                                                "[session-probe] re-read failed: {}", f.code())),
-                                failure -> CrystalGuiCore.LOGGER.error(
-                                        "[session-probe] writeDelta failed: {}", failure.code()));
-                    },
-                    failure -> CrystalGuiCore.LOGGER.error("[session-probe] README read failed: {}",
-                            failure.code()));
+                                            if (!after.startsWith("#!")) return;
+                                            // Put it back, so a repeat run starts from the same file.
+                                            files.files().write(readme,
+                                                            before.getBytes(StandardCharsets.UTF_8),
+                                                            second.etag())
+                                                    .then(e -> pass("10 conditional write + cache (C5)"))
+                                                    .onError(f -> CrystalGuiCore.LOGGER.error(
+                                                            "[session-probe] restore failed: {}",
+                                                            f.code()));
+                                        }));
+                    });
         }
 
         private void report(String prefix) {

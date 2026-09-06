@@ -1,8 +1,11 @@
 package com.crystalgui.net;
 
+import com.crystalgui.style.Styleable;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.net.protocol.ProtocolConnection;
+import com.crystalgui.net.mirror.NodeMirror;
 import com.crystalgui.net.protocol.UiMethods;
+import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.StateMap;
 
 import javax.annotation.Nullable;
@@ -10,8 +13,8 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.WeakHashMap;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * Every UI window a client is showing over one connection — one {@link ClientUiSession} per window id.
@@ -38,22 +41,41 @@ import java.util.function.Consumer;
  *
  * @param <T> the encoded representation, matching the connection's {@code DynamicOps}
  */
-public final class ClientUiSessions<T> {
-
-    /**
-     * One host per connection, keyed weakly.
-     *
-     * <p>Two would both register {@code ui/openWindow} and the second would throw. Same shape and same
-     * reason as {@link UiWindowMux#of} and {@code WorkspaceClient.forConnection}: "the host for this
-     * connection" has to be a single answer rather than something a caller remembers to share.</p>
-     */
-    private static final Map<ProtocolConnection<?>, ClientUiSessions<?>> BY_CONNECTION = new WeakHashMap<>();
+public final class ClientUiSessions<N extends Styleable, T> {
 
     private final ProtocolConnection<T> connection;
-    private final Map<Integer, ClientUiSession<T>> sessions = new LinkedHashMap<>();
+    private final Map<Integer, ClientUiSession<N, T>> sessions = new LinkedHashMap<>();
 
     @Nullable
-    private Consumer<ClientUiSession<T>> onSession;
+    private Consumer<ClientUiSession<N, T>> onSession;
+
+    /**
+     * Told the panel class an {@code ui/openWindow} names, BEFORE the session sees the message — so
+     * the installer can initialise the class while the description is still in flight (a cache hit
+     * decodes synchronously inside {@code acceptOpenWindow}, so later is too late). Static, because
+     * which classes this installation can show is a fact about the installation, not a connection.
+     */
+    @Nullable
+    private static Consumer<String> uiClassLoader;
+
+    /**
+     * Builds the mirror a session applies deltas through -- installed once, exactly as the UI-class
+     * loader is, and for the same reason: which tree an installation mirrors is a fact about the
+     * installation, not about a connection. It lives here as a factory rather than as a named type
+     * because this package may not name an engine; {@code net.window} installs the one we ship.
+     */
+    @Nullable
+    private static Function<DynamicOps<?>, ? extends NodeMirror<?, ?>> mirrorFactory;
+
+    /** Installs the mirror factory. One factory; the window layer owns it. */
+    public static void setMirrorFactory(@Nullable Function<DynamicOps<?>, ? extends NodeMirror<?, ?>> factory) {
+        mirrorFactory = factory;
+    }
+
+    /** Installs the UI-class loader. One consumer; the window layer owns it. @see UiMethods#UI_CLASS */
+    public static void setUiClassLoader(@Nullable Consumer<String> loader) {
+        uiClassLoader = loader;
+    }
 
     private ClientUiSessions(ProtocolConnection<T> connection) {
         this.connection = connection;
@@ -71,12 +93,11 @@ public final class ClientUiSessions<T> {
      * so keeps one statement of the rule.</p>
      */
     @SuppressWarnings("unchecked")
-    public static synchronized <T> ClientUiSessions<T> forConnection(ProtocolConnection<T> connection) {
-        ClientUiSessions<?> existing = BY_CONNECTION.get(connection);
-        if (existing != null) return (ClientUiSessions<T>) existing;
-        ClientUiSessions<T> created = new ClientUiSessions<>(connection);
-        BY_CONNECTION.put(connection, created);
-        return created;
+    public static <N extends Styleable, T> ClientUiSessions<N, T> forConnection(ProtocolConnection<T> connection) {
+        // Held by the connection rather than in a static WeakHashMap here — one statement of
+        // "the X for this connection", and it dies with the connection. @see ProtocolConnection#attachment
+        return (ClientUiSessions<N, T>) connection.attachment(
+                ClientUiSessions.class, c -> new ClientUiSessions<>(c));
     }
 
     /**
@@ -84,19 +105,19 @@ public final class ClientUiSessions<T> {
      *
      * <p>Set this before the first window opens. A host that installs it late has already missed one.</p>
      */
-    public ClientUiSessions<T> onSession(Consumer<ClientUiSession<T>> handler) {
+    public ClientUiSessions<N, T> onSession(Consumer<ClientUiSession<N, T>> handler) {
         this.onSession = handler;
         return this;
     }
 
     /** The session showing this window, or {@code null}. */
     @Nullable
-    public ClientUiSession<T> session(int windowId) {
+    public ClientUiSession<N, T> session(int windowId) {
         return sessions.get(windowId);
     }
 
     /** Every window currently open, in the order they opened. */
-    public Collection<ClientUiSession<T>> sessions() {
+    public Collection<ClientUiSession<N, T>> sessions() {
         return Collections.unmodifiableCollection(sessions.values());
     }
 
@@ -113,9 +134,22 @@ public final class ClientUiSessions<T> {
             return;
         }
 
-        ClientUiSession<T> session = sessions.get(id);
+        String uiClass = in.getString(UiMethods.UI_CLASS, "");
+        Consumer<String> loader = uiClassLoader;
+        if (!uiClass.isEmpty() && loader != null) loader.accept(uiClass);
+
+        ClientUiSession<N, T> session = sessions.get(id);
         if (session == null) {
-            session = new ClientUiSession<>(connection, id);
+            Function<DynamicOps<?>, ? extends NodeMirror<?, ?>> factory = mirrorFactory;
+            if (factory == null) {
+                CrystalGuiCore.LOGGER.error(
+                        "Ignoring an openWindow: no mirror factory is installed, so there is nothing "
+                                + "to apply this window's deltas to");
+                return;
+            }
+            @SuppressWarnings("unchecked") // The installation supplies one tree; 6.9b collapses N.
+            NodeMirror<N, T> mirror = (NodeMirror<N, T>) factory.apply(connection.ops());
+            session = new ClientUiSession<>(mirror, connection, id);
             // Registered BEFORE the callback and before the description request, so a re-open arriving
             // while the first is still in flight finds the session rather than building a second one
             // that would then throw on a duplicate (method, window) pair.

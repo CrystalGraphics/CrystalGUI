@@ -1,8 +1,7 @@
 package com.crystalgui.headless;
 
-import com.crystalgui.fs.CgFileCapability;
-import com.crystalgui.fs.CgFileEntry;
-import com.crystalgui.fs.CgFileType;
+import com.crystalgui.fs.provider.CgFileCapability;
+import com.crystalgui.fs.provider.CgFileEntry;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -66,13 +65,13 @@ public class CgFileEntryTest {
         assertTrue(dir.isDirectory());
         assertFalse(dir.isFile());
         assertEquals("a directory has no size of its own", 0L, dir.size());
-        assertEquals(CgFileType.DIRECTORY, dir.type());
+        assertEquals(CgFileEntry.Type.DIRECTORY, dir.type());
     }
 
     @Test
     public void nameAndTypeAreRequired() {
         try {
-            new CgFileEntry(null, CgFileType.FILE, 0, 0);
+            new CgFileEntry(null, CgFileEntry.Type.FILE, 0, 0);
             fail("name must be required");
         } catch (IllegalArgumentException expected) {
             // the point

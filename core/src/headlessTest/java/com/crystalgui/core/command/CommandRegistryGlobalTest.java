@@ -1,7 +1,8 @@
 package com.crystalgui.core.command;
 
+import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.data.DataKey;
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.ui.dom.UIElement;
 
 import org.junit.After;
 import org.junit.Before;
@@ -24,17 +25,30 @@ import static org.junit.Assert.assertTrue;
  * this replaces.</p>
  */
 public class CommandRegistryGlobalTest {
+    /**
+     * A node that can answer a {@link DataKey}. {@code UIElement} has no {@code getData} to override --
+     * the outward walk tests each step for a {@link DataProvider} instead -- so a fixture that wants
+     * to answer implements the interface. Subclassed anonymously below, which is what these tests
+     * used to do straight off the old element.
+     */
+    private static class ProviderNode extends UIElement implements DataProvider {
+        @Override
+        public Object getData(DataKey<?> key) {
+            return null;
+        }
+    }
+
 
     private static final DataKey<String> SUBJECT = DataKey.create("action.test.subject", String.class);
 
     private final List<String> ran = new ArrayList<>();
 
     private static UIElement answering(String answer) {
-        return new UIElement() {
+        return new ProviderNode() {
             @Override
             public Object getData(DataKey<?> key) {
                 if (key == SUBJECT) return answer;
-                return super.getData(key);
+                return null;
             }
         };
     }

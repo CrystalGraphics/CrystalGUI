@@ -53,7 +53,7 @@ public final class DecorationSet {
      *
      * <p><b>Not on adjustment.</b> An edit moves every range, and every consumer of this is already
      * repainting for that edit; announcing here as well would mean a second full repaint per keystroke for
-     * information the consumer necessarily already has. Same reasoning as {@code UITreeObserver} deliberately
+     * information the consumer necessarily already has. Same reasoning as {@code TreeObserver} deliberately
      * not hooking {@code onStyleChanged}.</p>
      */
     public final Signal.Action onChanged = new Signal.Action();

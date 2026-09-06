@@ -4,7 +4,7 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.async.JobKey;
 import com.crystalgui.core.async.JobLane;
 import com.crystalgui.core.async.JobScheduler;
-import com.crystalgui.language.LanguageStack;
+import com.crystalgui.text.syntax.LanguageRegistry;
 import com.crystalgui.language.map.PlatformMappings;
 import com.crystalgui.language.platform.ScriptService;
 import com.crystalgui.language.platform.ScriptServices;
@@ -71,20 +71,22 @@ public class CrystalGUI {
     public static CommonProxy proxy;
 
     /**
-     * {@code .minecraft/config} on a client, {@code <serverdir>/config} on a dedicated server.
+     * {@code .minecraft} on a client, {@code <serverdir>} on a dedicated server — where
+     * {@code crystalgui/} goes.
      *
-     * <p>Only {@code FMLPreInitializationEvent} carries it, so it is captured there and handed to
-     * whatever needs a place for derived state. @see ScriptService1710#cacheRoot()</p>
+     * <p>Read off {@code FMLPreInitializationEvent}'s config directory, which is the only event that
+     * carries either, and taken one level up: the config directory is Forge's, and CrystalGUI's own
+     * root is beside it rather than inside it. @see ScriptService1710#cacheRoot()</p>
      */
-    private File configDirectory;
+    private File gameDirectory;
 
     @Mod.EventHandler
     public void preInit(FMLPreInitializationEvent event) {
         LOGGER.info("{}: preInit", NAME);
         // Captured here because this is the only event that carries it, and it is the side-agnostic
-        // answer to "where does derived state go" -- .minecraft/config on a client, <serverdir>/config
-        // on a dedicated server. @see ScriptService1710#cacheRoot()
-        this.configDirectory = event.getModConfigurationDirectory();
+        // answer to "where does crystalgui/ go" -- .minecraft on a client, <serverdir> on a dedicated
+        // server. Forge hands over its own config directory; ours is its sibling.
+        this.gameDirectory = event.getModConfigurationDirectory().getParentFile();
         proxy.preInit();
     }
 
@@ -128,8 +130,13 @@ public class CrystalGUI {
     }
 
     private void scriptInit() {
-        CgPlatform.provide(ScriptServices.SERVICE, new ScriptService1710(configDirectory));
-        LanguageStack.registerAll();
+        CgPlatform.provide(ScriptServices.SERVICE, new ScriptService1710(gameDirectory));
+        // WARMING, NOT WIRING. `language/` declares its grammars and engines as a LanguageKinds
+        // service, so the registry finds them on its own first read -- this only decides WHEN that is
+        // paid. Measured at 443ms, and the first read is otherwise the keystroke that opens an editor;
+        // here a loading screen is already up and nobody is waiting. Dropping this line costs the stall
+        // and not the languages, which is the whole point of the service.
+        LanguageRegistry.bootstrap();
 
         // The service itself is now SIDE-AGNOSTIC (Phase 4 A5): cacheRoot() takes the config
         // directory Forge hands over at preInit instead of reading Minecraft.getMinecraft(), so a

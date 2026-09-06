@@ -5,7 +5,7 @@
 // Everything with a .dll/.so or an engine behind it lives here, and an application with this module
 // absent behaves exactly as it did before — the built-in lexer colours, and nothing resolves.
 //
-// Sub-packages by concern, so a later split is a move rather than an untangling (plan_syntax.md §5.1):
+// Sub-packages by concern, so a later split is a move rather than an untangling (plan/lang-stack.md §5.1):
 //
 //   .grammar   tree-sitter: tokenizer, query loading, injections            <- here today
 //   .java      the ECJ adapter: compile, bindings, diagnostics, completion  <- M5/M6
@@ -312,7 +312,7 @@ dependencies {
     api("org.ow2.asm:asm-commons:$asmVersion")
     api("org.ow2.asm:asm-tree:$asmVersion")
 
-    // ── The engine bands (plan_syntax.md §6) ────────────────────────────────────────────────────
+    // ── The engine bands (plan/lang-stack.md §6) ────────────────────────────────────────────────────
     //
     // DELIBERATELY NOT ON ANY COMPILE OR RUNTIME CLASSPATH. These configurations are resolvable and
     // nothing consumes them, because an engine is loaded reflectively into an isolated child-first

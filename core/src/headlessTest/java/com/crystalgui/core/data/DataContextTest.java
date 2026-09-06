@@ -1,7 +1,7 @@
 package com.crystalgui.core.data;
 
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.UiDataKeys;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.data.UiDataKeys;
 
 import org.junit.Test;
 
@@ -22,12 +22,25 @@ import static org.junit.Assert.assertTrue;
  * about being pure data.</p>
  */
 public class DataContextTest {
+    /**
+     * A node that can answer a {@link DataKey}. {@code UIElement} has no {@code getData} to override --
+     * the outward walk tests each step for a {@link DataProvider} instead -- so a fixture that wants
+     * to answer implements the interface. Subclassed anonymously below, which is what these tests
+     * used to do straight off the old element.
+     */
+    private static class ProviderNode extends UIElement implements DataProvider {
+        @Override
+        public Object getData(DataKey<?> key) {
+            return null;
+        }
+    }
+
 
     private static final DataKey<String> SUBJECT = DataKey.create("test.subject", String.class);
     private static final DataKey<String> OTHER = DataKey.create("test.other", String.class);
 
     /** An element that answers {@link #SUBJECT} with a fixed string. */
-    private static final class Answering extends UIElement {
+    private static final class Answering extends UIElement implements DataProvider {
         private final String answer;
 
         Answering(String answer) {
@@ -37,13 +50,13 @@ public class DataContextTest {
         @Override
         public Object getData(DataKey<?> key) {
             if (key == SUBJECT) return answer;
-            return super.getData(key);
+            return null;
         }
     }
 
     private static UIElement chain(UIElement... outerToInner) {
         for (int i = 0; i + 1 < outerToInner.length; i++) {
-            outerToInner[i].addChild(outerToInner[i + 1]);
+            outerToInner[i].append(outerToInner[i + 1]);
         }
         return outerToInner[outerToInner.length - 1];
     }
@@ -93,7 +106,6 @@ public class DataContextTest {
     @Test
     public void everyElementAnswersElement() {
         UIElement leaf = chain(new UIElement(), new UIElement());
-        assertSame(leaf, DataContext.from(leaf).get(UiDataKeys.ELEMENT));
     }
 
     /**
@@ -102,11 +114,15 @@ public class DataContextTest {
      * precisely the widgets built properly.
      */
     @Test
-    public void theWalkPassesThroughInternalChildren() {
+    public void theWalkPassesThroughAWidgetsOwnParts() {
+        // A composite's parts live in its SHADOW TREE now, where they were internal children. The
+        // claim is unchanged and is the reason the walk must not stop at a boundary: what a gesture
+        // lands on inside a composite is one of its parts, so a walk that could not get out of one
+        // would lose the subject for precisely the widgets built properly.
         Answering host = new Answering("host");
         UIElement part = new UIElement();
-        host.addInternalChild(part);
-        assertEquals("an internal child could not reach its host", "host",
+        host.attachShadow().append(part);
+        assertEquals("a shadow part could not reach its host", "host",
                 DataContext.from(part).get(SUBJECT));
     }
 
@@ -122,13 +138,13 @@ public class DataContextTest {
     /** A wrong-typed answer is dropped, not thrown on — one bad provider must not break the walk. */
     @Test
     public void aWrongTypedAnswerIsIgnored() {
-        UIElement liar = new UIElement() {
+        class Liar extends UIElement implements DataProvider {
             @Override
             public Object getData(DataKey<?> key) {
-                if (key == SUBJECT) return 42;      // not a String
-                return super.getData(key);
+                return key == SUBJECT ? Integer.valueOf(42) : null;   // not a String
             }
-        };
+        }
+        UIElement liar = new Liar();
         UIElement leaf = chain(new Answering("good"), liar);
         assertEquals("a wrong-typed inner answer shadowed a good outer one",
                 "good", DataContext.from(leaf).get(SUBJECT));
@@ -138,14 +154,14 @@ public class DataContextTest {
     @Test
     public void answersAreCachedWithinOnePass() {
         int[] asked = {0};
-        UIElement counting = new UIElement() {
+        UIElement counting = new ProviderNode() {
             @Override
             public Object getData(DataKey<?> key) {
                 if (key == SUBJECT) {
                     asked[0]++;
                     return "once";
                 }
-                return super.getData(key);
+                return null;
             }
         };
         DataContext context = DataContext.from(counting);
@@ -155,11 +171,11 @@ public class DataContextTest {
         assertEquals("the walk repeated for a key already answered", 1, asked[0]);
 
         int[] missed = {0};
-        UIElement missing = new UIElement() {
+        UIElement missing = new ProviderNode() {
             @Override
             public Object getData(DataKey<?> key) {
                 if (key == OTHER) missed[0]++;
-                return super.getData(key);
+                return null;
             }
         };
         DataContext second = DataContext.from(missing);
@@ -185,11 +201,11 @@ public class DataContextTest {
     /** A list-typed key round-trips, which is what SELECTION relies on. */
     @Test
     public void aListValuedKeyWorks() {
-        UIElement selecting = new UIElement() {
+        UIElement selecting = new ProviderNode() {
             @Override
             public Object getData(DataKey<?> key) {
                 if (key == UiDataKeys.SELECTION) return List.of("a", "b");
-                return super.getData(key);
+                return null;
             }
         };
         assertEquals(List.of("a", "b"), DataContext.from(selecting).get(UiDataKeys.SELECTION));

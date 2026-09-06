@@ -1,0 +1,19 @@
+{
+  "cgui": 1,
+  "stylesheets": ["cguitest:sample"],
+  "model": "com.example.SampleModel",
+  "package": "com.example.ui",
+  "preview": { "sizes": [[800, 480]], "uiScale": 2 },
+
+  "root": {
+    "kind": "element",
+    "id": "root",
+    "class": "sample",
+    "children": [
+      { "kind": "text", "id": "title", "class": "heading", "state": { "text": "Status" } },
+      { "kind": "text", "id": "subject",
+        "bind": { "text": "subject" },
+        "design": { "state": { "text": "- Dev" } } }
+    ]
+  }
+}

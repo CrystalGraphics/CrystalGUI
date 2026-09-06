@@ -5,7 +5,6 @@ import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.ui.UIElement;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -100,7 +99,7 @@ public final class KeymapResolver {
         return stroke.hasNonShiftModifier() || stroke.isFunctionKey();
     }
 
-    public boolean resolve(@Nullable UIElement focused, KeyStroke stroke, KeyEventType type,
+    public boolean resolve(@Nullable KeymapScope focused, KeyStroke stroke, KeyEventType type,
                            long nowMillis) {
         return resolve(focused, stroke, type, nowMillis, false);
     }
@@ -108,7 +107,7 @@ public final class KeymapResolver {
     /**
      * @param repeat the platform's auto-repeat flag. Repeats are ignored outright — see below.
      */
-    public boolean resolve(@Nullable UIElement focused, KeyStroke stroke, KeyEventType type,
+    public boolean resolve(@Nullable KeymapScope focused, KeyStroke stroke, KeyEventType type,
                            long nowMillis, boolean repeat) {
         if (focused == null) return false;
 
@@ -162,7 +161,7 @@ public final class KeymapResolver {
         // remapping is impossible: rebinding undo to Mod+U would leave Mod+Z working as well, and the
         // old chord could never be taken away. VS Code spells the same idea with a "-command" entry.
         java.util.Set<String> userBound = new java.util.HashSet<>();
-        for (UIElement scope = focused; scope != null; scope = scope.getParent()) {
+        for (KeymapScope scope = focused; scope != null; scope = scope.commandParent()) {
             Keymap keymap = scope.keymapOrNull();
             if (keymap == null) continue;
 
@@ -243,19 +242,19 @@ public final class KeymapResolver {
      */
     private static final boolean TRACE = Boolean.getBoolean("crystalgui.keymap.trace");
 
-    private static void trace(UIElement focused, KeyStroke stroke, boolean typing) {
+    private static void trace(KeymapScope focused, KeyStroke stroke, boolean typing) {
         StringBuilder offered = new StringBuilder();
-        for (UIElement scope = focused; scope != null; scope = scope.getParent()) {
+        for (KeymapScope scope = focused; scope != null; scope = scope.commandParent()) {
             Keymap keymap = scope.keymapOrNull();
             if (keymap == null) continue;
             for (KeyBinding binding : keymap.bindings()) {
                 if (offered.length() > 0) offered.append(", ");
-                offered.append(scope.tagName()).append(':').append(binding.getChord())
+                offered.append(scope.getClass().getSimpleName()).append(':').append(binding.getChord())
                         .append("->").append(binding.getCommandId());
             }
         }
         CrystalGuiCore.LOGGER.info("[keymap] stroke={} key={} mods={} focused={} typing={} | visible: {}",
-                stroke, stroke.key(), stroke.modifiers(), focused.tagName(), typing, offered);
+                stroke, stroke.key(), stroke.modifiers(), focused.getClass().getSimpleName(), typing, offered);
     }
 
     /**
@@ -264,9 +263,9 @@ public final class KeymapResolver {
      * <p>Kept separate rather than folded into the main path so that "a release never touches pending
      * state" is a property of the structure instead of a condition somebody has to keep re-checking.</p>
      */
-    private boolean resolveRelease(UIElement focused, KeyStroke stroke) {
+    private boolean resolveRelease(KeymapScope focused, KeyStroke stroke) {
         boolean typing = focused.consumesTextInput();
-        for (UIElement scope = focused; scope != null; scope = scope.getParent()) {
+        for (KeymapScope scope = focused; scope != null; scope = scope.commandParent()) {
             Keymap keymap = scope.keymapOrNull();
             if (keymap == null) continue;
             for (KeyBinding binding : keymap.bindings()) {
@@ -282,7 +281,7 @@ public final class KeymapResolver {
         return false;
     }
 
-    private boolean fire(KeyBinding binding, UIElement source) {
+    private boolean fire(KeyBinding binding, KeymapScope source) {
         Command command = commands.get(binding.getCommandId());
         if (command == null) {
             // Real, because keymaps and registries are edited separately and a sheet can name a command

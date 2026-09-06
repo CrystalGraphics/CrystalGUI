@@ -1,13 +1,12 @@
 package com.crystalgui.ui.event;
 
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.ui.UIElement;
 import lombok.Getter;
 
 public abstract class UIEvent {
 
     @Getter
-    private final UIElement target;
+    private EventTarget target;
     @Getter
     private final boolean bubbles;
 
@@ -15,6 +14,8 @@ public abstract class UIEvent {
     private boolean phasePropagationStopped;
     @Getter
     private boolean propagationStopped;
+    @Getter
+    private boolean immediatePropagationStopped;
     @Getter
     private boolean defaultPrevented;
 
@@ -27,7 +28,7 @@ public abstract class UIEvent {
         return this;
     }
 
-    protected UIEvent(UIElement target, boolean bubbles) {
+    protected UIEvent(EventTarget target, boolean bubbles) {
         this.target = target;
         this.bubbles = bubbles;
     }
@@ -46,6 +47,28 @@ public abstract class UIEvent {
     }
 
     /** Prevents the default action associated with this event. */
+    /**
+     * Ends this element's remaining listeners as well as the walk — the DOM's
+     * {@code stopImmediatePropagation}.
+     *
+     * <p>The distinction is only observable under the new engine's dispatcher: the old one treats
+     * {@link #stopPropagation()} as this, which is why a listener attached to a widget's own group
+     * after its constructor may never run.</p>
+     */
+    public void stopImmediatePropagation() {
+        this.immediatePropagationStopped = true;
+        stopPropagation();
+    }
+
+    /**
+     * Re-points the target as the walk crosses a shadow boundary — the spec's retargeting, so a
+     * listener outside a composite is told the host and never the part. The dispatcher's, and
+     * nobody else's.
+     */
+    public void retarget(EventTarget target) {
+        this.target = target;
+    }
+
     public void preventDefault() {
         this.defaultPrevented = true;
     }
@@ -54,7 +77,11 @@ public abstract class UIEvent {
      * Redefined {@link Signal.Pair.Listener} so you get proper hints with the IDE.
      * @param <T>
      */
-    public interface Listener<T extends UIEvent> extends Signal.Pair.Listener<UIElement, T> {
-        void accept(UIElement thisElement, T event);
+    /**
+     * @param <E> what the listener was attached to — the element on the old engine, the node on the
+     *            new one; {@code thisElement} is that, never the event's target
+     */
+    public interface Listener<E extends EventTarget, T extends UIEvent> extends Signal.Pair.Listener<E, T> {
+        void accept(E thisElement, T event);
     }
 }

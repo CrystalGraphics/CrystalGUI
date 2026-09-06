@@ -1,10 +1,10 @@
 package com.crystalgui.headless;
 
 import com.crystalgui.core.search.SearchQuery;
-import com.crystalgui.ui.elements.chrome.QuickPickEntry;
-import com.crystalgui.ui.elements.chrome.QuickPickItem;
-import com.crystalgui.ui.elements.chrome.QuickPickSource;
-import com.crystalgui.ui.text.TextRange;
+import com.crystalgui.core.collection.pick.QuickPickEntry;
+import com.crystalgui.core.collection.pick.QuickPickItem;
+import com.crystalgui.core.collection.pick.QuickPickSource;
+import com.crystalgui.text.TextRange;
 import org.junit.Test;
 
 import java.util.ArrayList;

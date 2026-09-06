@@ -79,6 +79,55 @@ weights (id=100, class/pseudo-class=10, type=1, universal=0).
 **Not supported** (see §9 for the full gap list): `:nth-child`/attribute selectors, `~`/`+` sibling
 combinators, `@media`/`@import`.
 
+### `::part()` — reaching into a widget
+
+A widget's structure lives in a shadow tree, and an ordinary selector cannot reach in. `::part(name)`
+can: it selects a **real element** inside one and contributes to that element's own cascade.
+
+```css
+checkbox::part(mark)          { background: #1E1E1E; }
+checkbox:checked::part(mark)  { overlay: shape("checkmark"); }
+::part(v-scroller)            { width: 6px; }        /* hostless: whoever exposes it */
+```
+
+Three rules decide whether a declaration can be written at all:
+
+- **A pseudo-class BEFORE `::part()` describes the host; AFTER it describes the part.**
+  `dropdown::part(menu):open` asks whether the MENU is open — a node that is never open. Collapsing the
+  two made a dropdown's menu keep the closed-popup `opacity: 0` and match nothing that lifted it: it
+  opened, promoted, placed itself correctly, and drew at zero alpha.
+- **A `::part` rule is indexed under the HOST**, so styling a shadow descendant costs a second lookup —
+  and a host's re-match must re-match its exposed parts, or `checkbox:checked::part(mark)` keeps the
+  styles it matched under the host's PREVIOUS state.
+- **A hostless `::part(x)` is legal** and means "whoever exposes this". It is the right translation of a
+  bare class rule that deliberately avoided listing tags — a subclass reporting its own tag matches no
+  list, and its bars laid out at zero width while the wheel still scrolled perfectly.
+
+**What `::part()` CANNOT express**, and this is measured rather than feared — **401 of 1,048 shipped
+part selectors select a part under a part, and 99 more reach through a part into a tag**:
+
+| Wanted | Why it cannot be written |
+|---|---|
+| `::part(a)::part(b)` | invalid CSS — a part is a LEAF |
+| `dropdown::part(menu) menuitem` | nothing descends from a part |
+| `colorselector .__channel-row__ slider::part(thumb)` | a NESTED widget's part is inside ITS shadow tree |
+
+Two mechanisms answer these and only one exists: a sheet **scoped** to the composite's shadow root
+(below), and `exportparts`, which does not. Until then such rules reach nothing — silently, since a
+`::part` rule that matches nothing is indistinguishable from one that was never written.
+
+### `@scope` — a sheet that only applies inside one subtree
+
+`StyleEngine.addStylesheet(sheet, root)`: only nodes at or under `root` can match, and
+`StyleSlot.proximity` ranks **between specificity and source order** — so a composite's own sheet beats
+an outer rule of equal specificity and loses to a more specific one.
+
+This replaced a textual rewrite that prefixed every selector with a scoping class, and the difference is
+worth knowing because the prefix version had a bug no amount of care removes: CSS has no "this element
+or below", so `.scope S` cannot match the element WEARING `.scope`. Every rule aimed at the scoped root
+itself silently stopped applying — a panel opened as an unstyled sliver in the corner with nothing
+failing anywhere.
+
 **Pseudo-class names are resolved through `PseudoClasses.lookup(String)`**, which case-folds and swaps
 `-` for `_` — so `:focus-visible` finds `FOCUS_VISIBLE`. Both the eager parse-time validation and the
 match-time lookup go through it. That validation is why the mapping matters more than it looks: an
@@ -94,9 +143,9 @@ Both exist and mean different things, matching the web:
 | `:focus` | the element holds focus, however it got there |
 | `:focus-visible` | focus arrived by keyboard (Tab) or programmatically — **not** from a pointer click, unless the element takes text input |
 
-`UIInputHandler` decides this via `ui/input/FocusSource` (`KEYBOARD` / `POINTER` / `PROGRAMMATIC`), and
-applies the text-input carve-out through `UIElement.consumesTextInput()` — the same predicate the
-keyboard handler already uses. `UIElement.setFocused(boolean)` treats forced focus as *visible*; the
+`Input` decides this via `ui/input/FocusSource` (`KEYBOARD` / `POINTER` / `PROGRAMMATIC`), and
+applies the text-input carve-out through `UINode.consumesTextInput()` — the same predicate the
+keyboard handler already uses. `UINode.setFocused(boolean)` treats forced focus as *visible*; the
 two-arg `setFocused(boolean, boolean)` is what the handler calls to say otherwise.
 
 `default.css` hangs its ring off `:focus-visible`, so tabbing to a slider rings it and clicking it does
@@ -168,18 +217,18 @@ is — not from the old resting value. Matches real CSS transition behavior.
 
 ## 4. Frame Lifecycle
 
-`core/src/main/java/com/crystalgui/ui/UIWindow.java`
+`core/src/main/java/com/crystalgui/ui/UIDocument.java`
 
 ```
-UIWindow.paintFrame()
+UIDocument.paintFrame()
   advanceFrame()                               // shared with updateWithoutPainting() — see below
     styleEngine.calculateStyle(deltaSeconds)   // drainDirtyMatch() (selector rematch) + transitionEngine.tick()
-    tickAnimations(deltaSeconds)               // smooth scrolls + every registered UIFrameTicker
+    animation().tick(deltaSeconds)               // smooth scrolls + every registered UIFrameTicker
     calculateLayout()                          // Taffy computeLayout(), while dirty
-  CgUiPaintContext.getInstance()               // a SINGLETON — not owned per-UIWindow
+  CgUiPaintContext.getInstance()               // a SINGLETON — not owned per-UIDocument
   paintContext.beginFrame(actualScreenW, actualScreenH)  // GL save, ortho, bind gui_quad, reset scissor
     pose.pushPose(); pose.mulPoseMatrix(rootTransform)   // rootTransform = the ONE definition of uiScale
-      ui.rootElement.drawSubtree(paintContext) // paintSelf → children (z-sorted) → paintOverlay → paintOutline
+      ui.rootElement.the paint walk(paintContext) // paintContent → children (z-sorted) → paintDecoration → paintOutline
     pose.popPose()
   paintContext.endFrame()                      // GL state restore
   inputHandler.beginFrame()/endFrame()         // hover cache invalidation + hit-test + event dispatch
@@ -190,7 +239,7 @@ property (width, padding, ...) must be visible to Taffy in the same frame it cha
 `drainDirtyMatch` runs *only* inside `calculateStyle`, so a window that is never painted never matches
 a selector at all.
 
-The `rootTransform` push is deliberate and load-bearing: `RuntimeCache.localToWorld` falls back to the
+The `rootTransform` push is deliberate and load-bearing: `Box.localToWorld` falls back to the
 same matrix for the root, so hit-testing is correct *before* the first paint. Don't inline a
 `pose.scale(...)` here — that is exactly how the two definitions of `uiScale` drifted apart before.
 
@@ -378,11 +427,11 @@ value type of its own.
 `CrystalGraphics/core/src/main/resources/assets/crystalgraphics/shaders/lib/sdf.glsl`,
 `core/src/main/resources/assets/crystalgui/shaders/gui_rounded_rect.shader`,
 `core/src/main/java/com/crystalgui/render/texture/CgUiRoundedRect.java`,
-`core/src/main/java/com/crystalgui/style/property/visual/border/`, `UIElement.paintSelf`
+`core/src/main/java/com/crystalgui/style/property/visual/border/`, `UINode.paintContent`
 
 `border-radius`/`border-width`/`border-color` apply on top of *whatever* `background:` produces —
 matching real CSS (rounding/border is orthogonal to what the background *is*, not tied to one special
-drawable). `UIElement.paintSelf` resolves all three once per paint; if any are set, it branches on the
+drawable). `UINode.paintContent` resolves all three once per paint; if any are set, it branches on the
 resolved `background` drawable's concrete type: a flat color or a non-9-slice `CgUiSprite` gets wrapped
 in a freshly-built `CgUiRoundedRect` (clipped + stroked by the shared SDF shader); a 9-slice sprite
 falls through to the plain unclipped path (border-radius/border-width still resolve for hit-testing and
@@ -400,7 +449,7 @@ nothing.
 That `EMPTY → null` used to be `EMPTY → opaque white`, which was the bug behind "any `border-radius`
 turns the whole UI white": most containers set no `background:` at all, so a single universal radius
 painted a white slab over the root and everything structural under it. The correct guard already existed
-in `paintSelf` but sat *after* the rounded branch's early return, so the rounded path never reached it.
+in `paintContent` but sat *after* the rounded branch's early return, so the rounded path never reached it.
 Note `paintDefaultMaskShape` still falls back to opaque white on a `null` fill, and must — it builds a
 **mask**, where white means "fully reveal".
 
@@ -448,7 +497,7 @@ deferred gap — not requested, and orthogonal to border-width actually growing 
 quadrant-selected on the fragment's local position (Y-down local space). The elliptical overload
 normalizes the corner-region offset by (rx,ry) before a circular distance evaluation, then scales the
 result back by `min(rx,ry)` — approximate (exact only when rx==ry) but visually correct, matching this
-codebase's existing SDF approximation style. `UIElement`'s Java-side hit-test (`isMouseOverElement`)
+codebase's existing SDF approximation style. `UINode`'s Java-side hit-test (`isMouseOverElement`)
 uses the identical technique against the same resolved per-corner values, so rendering and hit-testing
 never disagree about the element's shape. `sdf_coverage` turns a signed distance into an antialiased
 0–1 mask via `fwidth`.
@@ -478,7 +527,7 @@ first uploads whatever was dirty from the *previous* draw call — one draw stal
 shape re-drawing identical values every frame, badly broken for two different instances alternating
 every frame (a fixed bug from an earlier session).
 
-**Transitions, not morphing**: `CgUiRoundedRect` is built fresh every frame by `paintSelf` from
+**Transitions, not morphing**: `CgUiRoundedRect` is built fresh every frame by `paintContent` from
 whatever the currently-interpolated style values are — it is never itself held inside the `background`
 cascade (there's no `roundedrect(...)` background value anymore), so `TransitionEngine` never
 interpolates between two `CgUiRoundedRect` instances directly. Instead, each of the 8 radius longhands,
@@ -491,7 +540,7 @@ through to `CgUiCrossFade` now, since `background` can only ever hold a `CgUiQua
 ## 8. Visual Layers (Opacity Isolation + Masking)
 
 `opacity < 1` and `overflow: hidden` (when auto-detected to `OverflowClip.MASK` — see
-`UIElement.resolveOverflowClip()`) both route through an offscreen "visual layer" — a screen-sized
+`UINode.resolveOverflowClip()`) both route through an offscreen "visual layer" — a screen-sized
 FBO from a small pool `CgUiPaintContext` owns (`beginLayerFbo`/`endLayerFbo`/`blitLayer`/
 `compositeMask`, `core/src/main/java/com/crystalgui/render/CgUiPaintContext.java`). Ordinary elements
 (opacity 1, no mask) skip this entirely — same direct-draw path as always, zero overhead.
@@ -510,8 +559,8 @@ visual-layers implementation (sibling checkout at `../LDLib2`, under
 `src/main/java/.../gui/ui/rendering/`), which uses the same technique for the same reason on top of
 Minecraft's `PictureInPictureRenderer`.
 
-**`OverflowClip.MASK`** (`UIElement.drawSubtree` — reached via `overflow: hidden` auto-detecting
-to mask, not an author-chosen `clip:` value anymore; see `UIElement.resolveOverflowClip()`)
+**`OverflowClip.MASK`** (`UINode.the paint walk` — reached via `overflow: hidden` auto-detecting
+to mask, not an author-chosen `clip:` value anymore; see `UINode.resolveOverflowClip()`)
 composites a mask onto the subtree's own layer via
 `CgBlendState.MASK_ALPHA_MULTIPLY` (`(ZERO, SRC_ALPHA)` blend func for both RGB and alpha) — **not**
 a stencil test. The mask is rendered into its *own* offscreen layer first, then blended onto the
@@ -519,7 +568,7 @@ subtree layer, multiplying the subtree's existing color+alpha by the mask's alph
 mask's alpha is 0, the subtree's output is zeroed too. This mirrors LDLib2's `VisualLayerPipRenderer`
 exactly (`renderMaskAndComposite`) — no `CgStencilState`/stencil buffer involved anywhere.
 
-**Default mask shape** (`UIElement.buildDefaultMask`) is the element's own resolved `CgUiRoundedRect`
+**Default mask shape** (`UINode.buildDefaultMask`) is the element's own resolved `CgUiRoundedRect`
 shape (same radii/border-width resolution `paintRoundedBackground` already does) with the border
 band's *color* forced to `#00000000` instead of its real color — since the shader already computes
 `color = mix(borderColor, fillColor, innerCoverage)` then multiplies the whole shape by the outer
@@ -528,10 +577,10 @@ staying opaque across the inner region. No shader changes needed for this — th
 to `#00000000`" framing the feature was originally specified with.
 
 **Ordering** (background → children → mask composite → overlay → outline → blit-with-opacity): the
-mask composites *after* children but *before* overlay. It clips **only the children** — `paintSelf`
+mask composites *after* children but *before* overlay. It clips **only the children** — `paintContent`
 draws the background straight into `subtreeFbo` while the mask multiplies a separate nested
-`childrenFbo`, so the background is never masked (see the explicit comment on `paintSelf`'s call in
-`UIElement.drawSubtree`). Overlay and outline likewise draw over full, unclipped content — matching
+`childrenFbo`, so the background is never masked (see the explicit comment on `paintContent`'s call in
+`UINode.the paint walk`). Overlay and outline likewise draw over full, unclipped content — matching
 how a 9-slice frame graphic typically sits on top of whatever it frames.
 
 **Not built**: masking with a *custom* (non-self) drawable — today the mask is always the element's
@@ -563,7 +612,7 @@ box), `scale`/`scaleX`/`scaleY` (unitless), `rotate`, `skew`/`skewX`/`skewY`, an
 multiplication, so `translate(10px) scale(2)` and `scale(2) translate(10px)` are genuinely different —
 the first translates then scales the translated space, the second scales first so the same translate
 lands at 20. A translate-field-plus-scale-field value type cannot represent that distinction at all.
-`UITransform` therefore stores `List<Op>` and `applyTo` walks it in order; each JOML call
+`Transform` therefore stores `List<Op>` and `applyTo` walks it in order; each JOML call
 post-multiplies, so declaration order *is* the composition order with no reversal.
 
 **`transform-origin` is two real longhands** (`transform-origin-x`/`-y`, both `LengthPercent`), with
@@ -571,16 +620,18 @@ post-multiplies, so declaration order *is* the composition order with no reversa
 Keywords (`left`/`center`/`right`/`top`/`bottom`) resolve to percentages, and the reversed keyword pair
 (`top left`) is accepted as CSS allows.
 
-**Hit-testing follows automatically and this is the load-bearing invariant.** `RuntimeCache.localToWorld`
-and the paint `PoseStack` both call the *same* `UITransform.applyTo`. If they ever diverged, a click
-would land somewhere other than what is drawn and nothing about the rendering would look wrong —
-`UITransformTest` exists to pin exactly that.
+**Hit-testing follows automatically and this is the load-bearing invariant.** `Box.localToWorld`
+and the paint `PoseStack` both call the *same* `Transform.applyTo`. If they ever diverged, a click
+would land somewhere other than what is drawn and nothing about the rendering would look wrong.
+`HitTestBeforePaintTest` is what pins it, and it pins the stronger half: a click lands on what layout
+put there with **no paint having happened at all**, which is only possible because the matrices come
+from the layout pass rather than from something a painter reconciles.
 
 Non-inheritable, matching CSS. It already reaches descendants through the matrix chain, and inheritance
 here is pull-based — an inherited change does not fire the inheriting element's `StyleChangeListener`s,
 which is the very mechanism that dirties the subtree's matrices.
 
-**Set from Java** with `element.setTransform(UITransform…)` (sugar writing `transform` at `INLINE`
+**Set from Java** with `element.setTransform(Transform…)` (sugar writing `transform` at `INLINE`
 origin) or `style(s -> s.general(g -> g.transformOrigin(x, y)))`.
 
 ---
@@ -596,7 +647,7 @@ return `null` from `StyleValueCodecs.forProperty` and make `InlineStyleCodec` th
 guarded so a transition into or out of `normal` snaps instead of blending `NaN` through every frame.
 `AutoFloatProperty` established the same idiom for `flex`/`aspect-rate`.
 
-**The sentinel becomes pixels in exactly one place — `TextField.paintOverlay`.** Resolving it in
+**The sentinel becomes pixels in exactly one place — `TextField.paintDecoration`.** Resolving it in
 `GeneralGroup`, in a `StyleValue`, or anywhere in the cascade would drag `CgFontFamily` into style
 resolution, which a dedicated server performs with no CrystalGraphics on the classpath at all.
 `core/src/headlessTest` exists to catch precisely that.
@@ -647,7 +698,7 @@ went unnoticed.
   past 1×. That is a CrystalGraphics-side glyph-cache concern, not a style one; LDLib2 has the same
   shape of problem and mitigates it with font oversampling on its TTF.
 - **No pseudo-elements** (`::before`/`::after`) — decorative sub-visuals use the `overlay`/`outline`
-  paint layers (§5) or a real internal child with a fixed class, not generated content.
+  paint layers (§5) or a real shadow part with a fixed class, not generated content.
 - **No `background-position`/`-size`/`-origin`** as independent properties — the analog is
   baked-in crop rects on `image()`/`sprite()` at parse time. **`overlay` and `outline` are not
   subject to this** (see §5): `overlay` has real `-origin`/`-fit`/`-position` longhands, and
@@ -665,7 +716,7 @@ went unnoticed.
   `border-radius` nor its `overflow: hidden`. It *is* clipped by an **ancestor's** scissor/mask
   (`pushScissor` drives real `GL_SCISSOR_TEST` and survives into nested layer FBOs), so a positive
   `outline-offset` inside a scroll view gets cut — real CSS behaves the same way.
-- **No `overlay-color`** — `paintOverlay`/`paintOutline` reset the ambient tint to white, so those
+- **No `overlay-color`** — `paintDecoration`/`paintOutline` reset the ambient tint to white, so those
   layers can only be tinted via a tint baked into the value (`image(path, #tint)`), unlike
   `background`, which `background-color` multiplies. (The SDF outline stroke is deliberately immune
   to ambient tint — the shader applies the vertex tint to `fillColor` only, so a focus ring can't be
@@ -690,7 +741,7 @@ went unnoticed.
   *throws* on a unit suffix, unlike `width`/`height`/`outline-offset`, which do accept `px`.
 - **9-slice backgrounds can't be visually rounded/bordered** — `border-radius`/`border-width` still
   resolve for hit-testing and Taffy box growth when `background` is a 9-slice `CgUiSprite`, but
-  `UIElement.paintSelf` falls through to the plain unclipped draw for that case rather than clipping
+  `UINode.paintContent` falls through to the plain unclipped draw for that case rather than clipping
   the sprite's pixels to the SDF shape. 9-slice textures are typically pre-baked with their own rounded
   corners already, so this is a lower-priority gap than it might first appear.
 - **SDF border stroke width is a single scalar**, even though real `border-width` is independently
@@ -717,13 +768,13 @@ went unnoticed.
 | Box-model shorthand expansion | `core/src/main/java/com/crystalgui/style/property/layout/BoxEdgeShorthands.java` |
 | Border-radius shorthand expansion + value type | `core/src/main/java/com/crystalgui/style/property/visual/border/` (`BorderRadiusShorthand`, `BorderRadiusProperties`, `LengthPercent`) |
 | `line-height` value + property | `core/src/main/java/com/crystalgui/style/property/visual/text/` (`LineHeightValue`, `LineHeightProperty`) |
-| `transform` value type | `core/src/main/java/com/crystalgui/ui/UITransform.java` (ordered `Op` list + `applyTo`) |
+| `transform` value type | `core/src/main/java/com/crystalgui/ui/Transform.java` (ordered `Op` list + `applyTo`) |
 | `transform` parsing/property/origin shorthand | `core/src/main/java/com/crystalgui/style/property/visual/transform/` (`TransformValue`, `TransformProperty`, `TransformOriginShorthand`) |
 | Shared CSS parsing helpers | `core/src/main/java/com/crystalgui/style/CssParsingUtil.java` (`splitTopLevelCommas`, `splitFunctionList`), `.../style/CssAngle.java` |
-| Frame lifecycle | `core/src/main/java/com/crystalgui/ui/UIWindow.java` |
-| Paint entry points | `core/src/main/java/com/crystalgui/ui/UIElement.java` (`paintSelf`/`paintOverlay`/`paintOutline`/`drawSubtree`) |
+| Frame lifecycle | `core/src/main/java/com/crystalgui/ui/UIDocument.java` |
+| Paint entry points | `core/src/main/java/com/crystalgui/ui/UINode.java` (`paintContent`/`paintDecoration`/`paintOutline`/`the paint walk`) |
 | Paint context | `core/src/main/java/com/crystalgui/render/CgUiPaintContext.java` |
-| Visual layers (opacity isolation + masking) | `CgUiPaintContext` (`beginLayerFbo`/`endLayerFbo`/`blitLayer`/`compositeMask`), `UIElement.drawSubtree`/`buildDefaultMask`, `CrystalGraphics/.../gl/framebuffer/CgFrameBuffer.java` (`createOwned`), `CrystalGraphics/.../api/state/CgBlendState.java` (`MASK_ALPHA_MULTIPLY`) |
+| Visual layers (opacity isolation + masking) | `CgUiPaintContext` (`beginLayerFbo`/`endLayerFbo`/`blitLayer`/`compositeMask`), `UINode.the paint walk`/`buildDefaultMask`, `CrystalGraphics/.../gl/framebuffer/CgFrameBuffer.java` (`createOwned`), `CrystalGraphics/.../api/state/CgBlendState.java` (`MASK_ALPHA_MULTIPLY`) |
 | Drawables | `core/src/main/java/com/crystalgui/render/texture/` |
 | `background:` parsing | `core/src/main/java/com/crystalgui/style/property/visual/texture/TextureValue.java` |
 | SDF shader lib | `CrystalGraphics/core/src/main/resources/assets/crystalgraphics/shaders/lib/sdf.glsl` |

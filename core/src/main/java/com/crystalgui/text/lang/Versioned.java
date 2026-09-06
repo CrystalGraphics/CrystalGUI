@@ -11,7 +11,7 @@ import javax.annotation.Nullable;
  * time the document has usually moved. Without a version stamp the answer is indistinguishable from a
  * current one: offsets still parse, ranges are still in bounds, and the result is confidently about text
  * that is no longer there. That failure is silent — it is why {@code TextBuffer.version()} exists at all
- * (see the version spine in {@code plan_syntax.md} §8), and this type is what carries it across the seam.</p>
+ * (see the version spine in {@code plan/lang-stack.md} §8), and this type is what carries it across the seam.</p>
  *
  * <h3>The consumer picks the staleness policy, not the producer</h3>
  *

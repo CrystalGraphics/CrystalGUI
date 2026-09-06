@@ -5,9 +5,9 @@ import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.net.wire.CgNetworkChannel;
 import com.crystalgui.serialization.ContentHash;
 import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.UIDescriptionCodec;
-import com.crystalgui.ui.ElementRegistry;
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.net.mirror.UIElementMirror;
+import com.crystalgui.ui.dom.UIElementRegistry;
+import com.crystalgui.ui.dom.UIElement;
 
 import cpw.mods.fml.common.FMLCommonHandler;
 import net.minecraft.server.MinecraftServer;
@@ -110,10 +110,17 @@ public final class CgUiServerSmoke {
      * see {@link #reportGlDivergence}.</p>
      */
     private static final List<String> NEVER_LOADED_ON_A_SERVER = Arrays.asList(
-            // Ours. CommonProxy exists so this one is unreachable from common code.
+            // Ours. CommonProxy exists so these are unreachable from common code.
+            //
+            // EVERY CLASS IN `mc.client`, and it is a list that must GROW WITH THAT PACKAGE. It named
+            // `Mc1710Workspace` until W3 deleted that class, and a name nothing can load is a guard that
+            // passes for ever -- while CgUiHud, CgUiOverlayInput and CgUiAutoTest, which arrived after
+            // the list was written, were never checked at all. A shrinking guard reports success.
             "com.crystalgui.mc.client.CgUiScreen",
             "com.crystalgui.mc.client.CgUiInput",
-            "com.crystalgui.mc.client.Mc1710Workspace",
+            "com.crystalgui.mc.client.CgUiHud",
+            "com.crystalgui.mc.client.CgUiOverlayInput",
+            "com.crystalgui.mc.client.CgUiAutoTest",
             "com.crystalgui.mc.ClientProxy",
             // Minecraft's. Naming one from a common path is the commonest spelling of this bug.
             "net.minecraft.client.Minecraft",
@@ -207,26 +214,26 @@ public final class CgUiServerSmoke {
         String detail = "";
         boolean ok = false;
         try {
-            ElementRegistry.bootstrapBuiltins();
+            UIElementRegistry.bootstrap();
 
             UIElement root = new UIElement();
             root.setId("smoke-root");
             root.addClass("panel");
             UIElement child = new UIElement();
             child.setId("smoke-child");
-            root.addChild(child);
+            root.append(child);
 
-            Object encoded = UIDescriptionCodec.CODEC.encode(PlainOps.INSTANCE, root);
+            Object encoded = new UIElementMirror<>(PlainOps.INSTANCE).describe(root);
             String hashA = ContentHash.of(PlainOps.INSTANCE, encoded);
             String hashB = ContentHash.of(PlainOps.INSTANCE,
-                    UIDescriptionCodec.CODEC.encode(PlainOps.INSTANCE, root));
+                    new UIElementMirror<>(PlainOps.INSTANCE).describe(root));
 
-            UIElement decoded = UIDescriptionCodec.CODEC.decode(PlainOps.INSTANCE, encoded);
+            UIElement decoded = new UIElementMirror<>(PlainOps.INSTANCE).decode(encoded);
 
             boolean stable = hashA.equals(hashB);
             boolean shape = decoded != null
-                    && "smoke-root".equals(decoded.getId())
-                    && decoded.getChildren().size() == 1;
+                    && "smoke-root".equals(decoded.id())
+                    && decoded.children().size() == 1;
 
             ok = stable && shape;
             detail = "hash=" + hashA + (stable ? "" : " UNSTABLE across two encodes")

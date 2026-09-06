@@ -14,7 +14,8 @@ Per-directory detail lives beside the assets it covers; this is the index.
 | Feather icons | `core/src/main/resources/assets/crystalgui/ui/icons/` | MIT | © 2013–2023 Cole Bemis. Verbatim |
 | Minecraft fonts | `core/src/main/resources/assets/crystalgui/ui/fonts/` | Public domain | `Minecraft.otf`, `MinecraftRegular.otf` |
 | JetBrains Mono | `core/src/main/resources/assets/crystalgui/ui/fonts/` | **SIL OFL 1.1** | `JetBrainsMono-Regular.ttf`. The **code** face — the editor and anything carrying `.__syntax__`. See [Fonts](#fonts) |
-| Taffy | Gradle dependency `dev.vfyjxf:taffy` | — | Extracted sources checked in at `research_repos/taffy/` for reference only |
+| **Taffy** (`taffy-java`) | `taffy/` | **MIT** | © 2026 vfyjxf. A pure-Java port of Rust [Taffy](https://github.com/DioxusLabs/taffy). **VENDORED AND MODIFIED** — the sources of `dev.vfyjxf:taffy:1.1.4`, checked in and forked, because its leaf-measure path is wrong under `flex-wrap: wrap` and the defect is one line inside the flexbox algorithm. [`taffy/MODIFICATIONS.md`](taffy/MODIFICATIONS.md) is the statement of changes MIT requires; `taffy/LICENSE` is the notice. The package stays `dev.vfyjxf.taffy` because `mc1710` relocates it when shipping. The pre-fork sources remain at `research_repos/taffy/` as the diff baseline |
+| fastutil | Gradle dependency, via `taffy/` | **Apache 2.0** | © 2002–2023 Sebastiano Vigna. Taffy's own dependency, for seven types. Shaded and relocated into the mod jar by `mc1710` |
 | LDLib2 | `research_repos/LDLib2/` | — | In-repo checkout, read for pattern prior art. **Not** a dependency and nothing is copied from it |
 | Minecraft 1.20.1 sources | `research_repos/mc1201_sources/` | Proprietary | Decompiled reference. Not redistributed, not built |
 | tree-sitter binding + six grammars | `lib/tree-sitter/` | MIT | See [lib/tree-sitter/README.md](lib/tree-sitter/README.md) for per-jar provenance |
@@ -79,7 +80,7 @@ a jar cannot do.
 
 ## Engine bands: ECJ and Rhino
 
-Three sets of jars, one per host-JVM band (`plan_syntax.md` §6). Declared in
+Three sets of jars, one per host-JVM band (`plan/lang-stack.md` §6). Declared in
 `language/build.gradle.kts` as resolvable configurations that **nothing consumes** — they are loaded
 reflectively into an isolated classloader at runtime, never onto a compile classpath.
 
@@ -142,7 +143,7 @@ data, taken from MinecraftForge's FML repository at
 needs on first use into its own config directory (`config/crystalgui/mappings/<mc>/<channel>-<version>`)
 and reuses it thereafter. That is not a caching optimisation that happens to have a licensing
 side-effect — it is the licensing position, chosen because MCP's terms have historically permitted use
-while restricting redistribution, and it is why `plan_syntax.md` §22 row 11 asks for the sourcing
+while restricting redistribution, and it is why `plan/lang-stack.md` §22 row 11 asks for the sourcing
 decision rather than for a bundled file.
 
 Three properties follow from it, and all three are enforced in code rather than remembered:
@@ -159,7 +160,7 @@ Three properties follow from it, and all three are enforced in code rather than 
 > **Open, and honest about it:** no digests are pinned, because upstream publishes no `.md5` beside the
 > CSVs. A corrupted download is currently caught by the parse rather than by a digest. The verification
 > machinery exists and is tested (`MappingCacheTest` covers corrupt-then-repair and reject-on-mismatch);
-> it is the reference data that is missing. Recorded here as well as in `plan_m12.md` §26.13a because
+> it is the reference data that is missing. Recorded here as well as in `plan/platform-mc1710.md` §26.13a because
 > this file is where somebody checks before a release.
 
 ## OpenJDK sources (fetched, derived on the user's machine, never redistributed)

@@ -29,13 +29,16 @@ val submoduleData = listOf(
             mapOf("module" to "com.crystalgraphics:core",
                 "projectPath" to ":core"),
             mapOf("module" to "com.crystalgraphics:platform",
-                "projectPath" to ":platform")
-            // NO mc1201-common substitution. `:mc1201:common` is commented out of CrystalGraphics'
-            // own settings.gradle.kts, and a dependencySubstitution naming a project that does not
-            // exist in the target build fails CONFIGURATION outright -- "Project with path
-            // ':mc1201:common' not found in build ':CrystalGraphics'" -- for every task, including
-            // ones that have nothing to do with Minecraft. Restore it in the same edit that
-            // uncomments mc1201 there.
+                "projectPath" to ":platform"),
+            // Must be added and removed in the same commit as :mc1201:common in CrystalGraphics'
+            // settings.gradle.kts: a substitution naming a project that is not in the target build
+            // fails configuration for every task, and the error names the module, not this file.
+            mapOf("module" to "com.crystalgraphics:crystalgraphics-mc1201-common",
+                "projectPath" to ":mc1201:common"),
+            // The 1.20.1 Forge MOD, for a consumer that wants CrystalGraphics in its own dev run's mod
+            // list rather than merely on its compile classpath.
+            mapOf("module" to "com.crystalgraphics:crystalgraphics-mc1201-forge",
+                "projectPath" to ":mc1201:forge")
         ),
 
         // mc1710-specific bootstrap args injected into RunMinecraftTask by integration.gradle.kts.
@@ -67,12 +70,22 @@ fun Map<String, *>.string(key: String): String = this[key] as String
 fun Map<String, *>.mapList(key: String): List<Map<String, String>> =
     this[key] as? List<Map<String, String>> ?: emptyList()
 
+// Loader substitutions go with the loaders. CrystalGraphics drops its own loaders when neither it nor
+// CrystalGUI is the build being invoked, and a substitution naming a missing project then fails
+// configuration for every task -- "Project with path ':mc1201:common' not found in build
+// ':CrystalGUI:CrystalGraphics'". Matched on the path so a loader added later is covered.
+val embeddedHere = gradle.parent != null
+
+fun isLoaderPath(projectPath: String): Boolean = projectPath == ":mc1710"
+
 submoduleData.forEach { mod ->
     includeBuild(mod.string("buildPath")) {
         dependencySubstitution {
-            mod.mapList("substitutions").forEach { substitution ->
-                substitute(module(substitution.getValue("module"))).using(project(substitution.getValue("projectPath")))
-            }
+            mod.mapList("substitutions")
+                .filterNot { embeddedHere && isLoaderPath(it.getValue("projectPath")) }
+                .forEach { substitution ->
+                    substitute(module(substitution.getValue("module"))).using(project(substitution.getValue("projectPath")))
+                }
         }
     }
 }

@@ -1,8 +1,10 @@
 package com.crystalgui.mc;
 
+import com.crystalgui.mc.example.MachineExample;
 import com.crystalgui.mc.net.CgUiConnections;
 import com.crystalgui.mc.net.CgUiWorkspaceHost;
 import com.crystalgui.mc.net.Mc1710NetworkChannel;
+import com.crystalgui.net.window.WindowProtocol;
 
 /**
  * The server-side half: nothing.
@@ -49,6 +51,15 @@ public class CommonProxy {
         // it registers, so this is the order that stays correct if anything ever opens one earlier. It
         // also makes the lifecycle's own "contributors: [...]" line true rather than an empty list.
         CgUiWorkspaceHost.register();
+        // THE WINDOW LIFECYCLE, on both sides. Puts a ServerWindows on every server connection and a
+        // ClientWindows on every client one, so a mod opens a UI with one call and never writes a tick
+        // handler, a player map or a logout hook for it. @see com.crystalgui.net.window.WindowProtocol
+        WindowProtocol.register();
         CgUiConnections.register();
+        // The worked example's SERVER half. After connections, because it opens a session per player
+        // on the connection that class holds -- registered earlier it would simply find none.
+        // Common code on purpose: it imports no screen, which is the property that lets it run on a
+        // dedicated server. @see com.crystalgui.mc.example.MachineExample
+        MachineExample.registerCommon();
     }
 }

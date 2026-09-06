@@ -1,6 +1,5 @@
 package com.crystalgui.ui.event;
 
-import com.crystalgui.ui.UIElement;
 
 /**
  * Close-request events — the web's {@code CloseWatcher} surface.
@@ -13,7 +12,7 @@ import com.crystalgui.ui.UIElement;
  */
 public abstract class CloseEvent extends UIEvent {
 
-    protected CloseEvent(UIElement target, boolean bubbles) {
+    protected CloseEvent(EventTarget target, boolean bubbles) {
         super(target, bubbles);
     }
 
@@ -25,7 +24,7 @@ public abstract class CloseEvent extends UIEvent {
      * </p>
      */
     public static class Cancel extends CloseEvent {
-        public Cancel(UIElement target) {
+        public Cancel(EventTarget target) {
             super(target, false);
         }
     }

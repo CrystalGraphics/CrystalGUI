@@ -1,5 +1,7 @@
 package com.crystalgui.ui.text;
 
+import com.crystalgui.text.TextRange;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;

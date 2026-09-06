@@ -2,9 +2,9 @@ package com.crystalgui.mc.net;
 
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.WorkspaceClient;
+import com.crystalgui.fs.Resource;
+import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.text.Change;
 
 import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
@@ -12,7 +12,6 @@ import cpw.mods.fml.common.gameevent.TickEvent;
 import net.minecraft.client.Minecraft;
 
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 
 /**
  * The workspace against a <b>genuinely separate server process</b> — {@code -PcgRemoteProbe}.
@@ -50,7 +49,10 @@ public final class CgUiRemoteWorkspaceProbe {
     private static final String PROBE_FILE = "remote-probe.txt";
     private static final String FIRST_TEXT = "written by the client, stored on the server\n";
 
-    private static WorkspaceClient<Object> files;
+    /** What step 4 writes, so the file on disk says which step last touched it. */
+    private static final String EDITED_TEXT = "EDITED by the client, stored on the server\n";
+
+    private static Workspace files;
     private static int ticks;
 
     private static volatile boolean listed;
@@ -101,7 +103,7 @@ public final class CgUiRemoteWorkspaceProbe {
                     if (ticks > DEADLINE_TICKS) finish(false, "joined, but no CrystalGUI connection");
                     return;
                 }
-                files = WorkspaceClient.forConnection(connection);
+                files = Workspace.of(connection);
                 CrystalGuiCore.LOGGER.info("[remote-probe] connected to a REMOTE server "
                         + "(isSingleplayer=false), CrystalGUI connection is live");
             }
@@ -124,13 +126,13 @@ public final class CgUiRemoteWorkspaceProbe {
             if (!listed) {
                 if (listing) return;
                 listing = true;
-                files.list(root,
-                        entries -> {
+                files.files().list(Resource.of(root))
+                        .then(answer -> {
                             CrystalGuiCore.LOGGER.info("[remote-probe] 1/4 listed {} entries from the "
-                                    + "REMOTE server", entries.size());
+                                    + "REMOTE server", answer.entries().size());
                             listed = true;
-                        },
-                        failure -> {
+                        })
+                        .onError(failure -> {
                             CrystalGuiCore.LOGGER.error("[remote-probe] listing failed: {}", failure.code());
                             listing = false;
                         });
@@ -142,16 +144,16 @@ public final class CgUiRemoteWorkspaceProbe {
                 creating = true;
                 // create() is unconditional, so a leftover from a previous run is overwritten rather
                 // than making the second run of this probe fail for a reason unrelated to the protocol.
-                files.create(probe, FIRST_TEXT.getBytes(StandardCharsets.UTF_8),
-                        etag -> {
+                files.files().write(Resource.of(probe), FIRST_TEXT.getBytes(StandardCharsets.UTF_8), null)
+                        .then(etag -> {
                             CrystalGuiCore.LOGGER.info("[remote-probe] 2/4 created {} on the server "
                                     + "(etag {})", PROBE_FILE, etag);
                             created = true;
-                        },
-                        failure -> {
+                        })
+                        .onError(failure -> {
                             CrystalGuiCore.LOGGER.error("[remote-probe] create failed: {} — if this is "
-                                    + "NO_PERMISSIONS then B4 is working and the player is not an op",
-                                    failure.code());
+                                    + "NOT_PERMITTED then the permission check is working and the "
+                                    + "player is not an op", failure.code());
                             creating = false;
                         });
                 return;
@@ -160,15 +162,15 @@ public final class CgUiRemoteWorkspaceProbe {
             if (!readBack) {
                 if (reading) return;
                 reading = true;
-                files.read(probe,
-                        document -> {
-                            String text = new String(document.content(), StandardCharsets.UTF_8);
+                files.files().readWhole(Resource.of(probe))
+                        .then(document -> {
+                            String text = new String(document.bytes(), StandardCharsets.UTF_8);
                             readBack = FIRST_TEXT.equals(text);
                             CrystalGuiCore.LOGGER.info("[remote-probe] 3/4 read it back: {} bytes, "
                                     + "matches={}", text.length(), readBack);
                             if (!readBack) reading = false;
-                        },
-                        failure -> {
+                        })
+                        .onError(failure -> {
                             CrystalGuiCore.LOGGER.error("[remote-probe] read failed: {}", failure.code());
                             reading = false;
                         });
@@ -178,24 +180,35 @@ public final class CgUiRemoteWorkspaceProbe {
             if (!deltaApplied) {
                 if (deltaing) return;
                 deltaing = true;
-                // C5 over a real socket: one change, not the whole file.
-                files.writeDelta(probe, List.of(new Change(0, 7, "EDITED ")),
-                        etag -> files.read(probe,
-                                after -> {
-                                    String text = new String(after.content(), StandardCharsets.UTF_8);
-                                    deltaApplied = text.startsWith("EDITED ");
-                                    CrystalGuiCore.LOGGER.info("[remote-probe] 4/4 after writeDelta the "
-                                            + "file starts \"{}\"",
-                                            text.substring(0, Math.min(16, text.length())));
-                                },
-                                failure -> {
-                                    CrystalGuiCore.LOGGER.error("[remote-probe] re-read failed: {}",
-                                            failure.code());
+                // A CONDITIONAL WRITE OVER A REAL SOCKET, quoting the etag the read handed back -- which
+                // is the property this step exists for: the server re-stats before it writes, so a file
+                // that moved underneath us is refused rather than clobbered.
+                Resource resource = Resource.of(probe);
+                files.files().stat(resource)
+                        .then(stat -> files.files()
+                                .write(resource, EDITED_TEXT.getBytes(StandardCharsets.UTF_8),
+                                        stat.etag())
+                                .then(etag -> files.files().readWhole(resource)
+                                        .then(after -> {
+                                            String text = new String(after.bytes(),
+                                                    StandardCharsets.UTF_8);
+                                            deltaApplied = text.startsWith("EDITED ");
+                                            CrystalGuiCore.LOGGER.info("[remote-probe] 4/4 after the "
+                                                    + "conditional write the file starts \"{}\"",
+                                                    text.substring(0, Math.min(16, text.length())));
+                                        })
+                                        .onError(failure -> {
+                                            CrystalGuiCore.LOGGER.error("[remote-probe] re-read "
+                                                    + "failed: {}", failure.code());
+                                            deltaing = false;
+                                        }))
+                                .onError(failure -> {
+                                    CrystalGuiCore.LOGGER.error("[remote-probe] conditional write "
+                                            + "failed: {}", failure.code());
                                     deltaing = false;
-                                }),
-                        failure -> {
-                            CrystalGuiCore.LOGGER.error("[remote-probe] writeDelta failed: {}",
-                                    failure.code());
+                                }))
+                        .onError(failure -> {
+                            CrystalGuiCore.LOGGER.error("[remote-probe] stat failed: {}", failure.code());
                             deltaing = false;
                         });
             }
@@ -205,7 +218,7 @@ public final class CgUiRemoteWorkspaceProbe {
             reported = true;
             if (pass) {
                 CrystalGuiCore.LOGGER.info("[remote-probe] PASS — listed, created, read back and "
-                        + "delta-wrote a file on a SEPARATE server process. Confirm on disk: "
+                        + "conditionally re-wrote a file on a SEPARATE server process. Confirm on disk: "
                         + "mc1710/run/server/crystalgui/workspace/{} should exist and start with "
                         + "\"EDITED\", and mc1710/run/client must have no such file.", PROBE_FILE);
             } else {

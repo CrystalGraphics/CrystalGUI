@@ -3,7 +3,7 @@ package com.crystalgui.style.transition;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.layout.BoxEdgeShorthands;
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.style.Styleable;
 
 import java.util.HashMap;
 import java.util.Iterator;
@@ -16,7 +16,7 @@ import java.util.Map;
  * transition completes, then lets the real winner take back over.
  */
 public final class TransitionEngine {
-    private final Map<UIElement, Map<StyleProperty<?>, ActiveTransition<?>>> active = new HashMap<>();
+    private final Map<Styleable, Map<StyleProperty<?>, ActiveTransition<?>>> active = new HashMap<>();
 
     /**
      * Offered first refusal on every transition-eligible computed-value change (see
@@ -24,7 +24,7 @@ public final class TransitionEngine {
      * will animate it in over subsequent {@link #tick} calls, {@code false} if the caller should
      * apply {@code toValue} immediately instead.
      */
-    public <T> boolean tryStart(UIElement element, StyleProperty<T> property, T fromValue, T toValue) {
+    public <T> boolean tryStart(Styleable element, StyleProperty<T> property, T fromValue, T toValue) {
         // Nothing meaningful to interpolate to/from "unset" — decline and let the caller apply the
         // new value (or lack of one) immediately, same as it does for a property's first-ever
         // resolution. Most interpolators (primitive-boxed ones via auto-unboxing, object ones via
@@ -68,7 +68,7 @@ public final class TransitionEngine {
      * notified) until its own unrelated duration happened to elapse, or forever if nothing ever
      * ticks it again.
      */
-    private <T> void cancelIfActive(UIElement element, StyleProperty<T> property) {
+    private <T> void cancelIfActive(Styleable element, StyleProperty<T> property) {
         var byProperty = active.get(element);
         if (byProperty == null) return;
         if (byProperty.remove(property) != null) {
@@ -78,7 +78,7 @@ public final class TransitionEngine {
     }
 
     @SuppressWarnings("unchecked")
-    private <T> TransitionSpec findApplicableSpec(UIElement element, StyleProperty<T> property) {
+    private <T> TransitionSpec findApplicableSpec(Styleable element, StyleProperty<T> property) {
         List<TransitionSpec> specs = element.getStyle().getComputed(StylePropertyRegistry.TRANSITION);
         if (specs == null || specs.isEmpty()) return null;
         TransitionSpec fallbackAll = null;
@@ -120,7 +120,7 @@ public final class TransitionEngine {
      * than hanging — the correct failure direction, since the alternative is a window that never
      * closes because a theme removed an animation.</p>
      */
-    public boolean isAnimating(UIElement element) {
+    public boolean isAnimating(Styleable element) {
         var byProperty = active.get(element);
         return byProperty != null && !byProperty.isEmpty();
     }
@@ -133,7 +133,7 @@ public final class TransitionEngine {
         var elementIterator = active.entrySet().iterator();
         while (elementIterator.hasNext()) {
             var elementEntry = elementIterator.next();
-            UIElement element = elementEntry.getKey();
+            Styleable element = elementEntry.getKey();
             var byProperty = elementEntry.getValue();
 
             var propertyIterator = byProperty.entrySet().iterator();
@@ -149,7 +149,7 @@ public final class TransitionEngine {
     }
 
     @SuppressWarnings("unchecked")
-    private <T> void tickOne(UIElement element, StyleProperty<?> propertyRaw, ActiveTransition<?> transitionRaw, long now) {
+    private <T> void tickOne(Styleable element, StyleProperty<?> propertyRaw, ActiveTransition<?> transitionRaw, long now) {
         StyleProperty<T> property = (StyleProperty<T>) propertyRaw;
         ActiveTransition<T> transition = (ActiveTransition<T>) transitionRaw;
 
@@ -158,7 +158,7 @@ public final class TransitionEngine {
         // 'fromValue' as the notified old value is an approximation (the real previous tick's value
         // isn't tracked separately) — harmless, since every consumer of this notification (e.g. the
         // TaffyBridge layout listeners) applies newVal unconditionally rather than diffing oldVal.
-        property.notifyListeners(element, transition.fromValue(), interpolated);
+        element.computedChanged(property, transition.fromValue(), interpolated);
 
         if (transition.isFinished(now)) {
             element.getStyle().endAnimationSlot(property);
@@ -173,7 +173,7 @@ public final class TransitionEngine {
      * the highest-priority origin) with no ticker left to ever finish or update it — a leak that
      * shows up as the element looking permanently stuck if it's ever reattached/reused.
      */
-    public void onElementDetached(UIElement element) {
+    public void onElementDetached(Styleable element) {
         var byProperty = active.remove(element);
         if (byProperty == null) return;
         for (var property : byProperty.keySet()) {

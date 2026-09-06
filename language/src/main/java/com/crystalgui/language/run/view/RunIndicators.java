@@ -5,9 +5,9 @@ import com.crystalgui.core.async.JobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.language.run.RunSessions;
-import com.crystalgui.ui.elements.workbench.ViewContainerRegistry;
-import com.crystalgui.ui.elements.workbench.Workbench;
-import com.crystalgui.ui.elements.workbench.decoration.FileDecorations;
+import com.crystalgui.workbench.view.ViewContainerRegistry;
+import com.crystalgui.workbench.WorkbenchContext;
+import com.crystalgui.workbench.decoration.FileDecorations;
 
 import javax.annotation.Nullable;
 
@@ -34,7 +34,7 @@ import javax.annotation.Nullable;
  * <p>{@link RunSessions#onDidChange} fires from wherever the transition happened — a one-shot's own
  * thread, or the game thread inside a tick handler. Both things updated here are {@code UIElement} state:
  * the badge attaches an internal child, and invalidating decorations repaints tree rows. So the signal
- * only <b>schedules</b>, and the work runs in {@link JobScheduler#drain()}, which {@code UIWindow} calls
+ * only <b>schedules</b>, and the work runs in {@link JobScheduler#drain()}, which {@code UIDocument} calls
  * once a frame on the UI thread.</p>
  *
  * <p><b>Keyed</b>, so a script that transitions twice in a frame — and a burst of them at startup —
@@ -71,7 +71,7 @@ public final class RunIndicators {
      *                    asked, and before this nothing ever asked again after it was registered, so a
      *                    script starting coloured no row until something else happened to rebind the tree
      */
-    public static RunIndicators install(Workbench workbench, RunSessions sessions,
+    public static RunIndicators install(WorkbenchContext workbench, RunSessions sessions,
                                         @Nullable FileDecorations decorations) {
         RunIndicators indicators = new RunIndicators(
                 sessions, workbench.toolWindowManager().viewContainers(), decorations);

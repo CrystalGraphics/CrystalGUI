@@ -1,7 +1,7 @@
 # CGUI Theming — Themes, Schemes, and the Token Vocabulary
 
 *The reference for CrystalGUI's appearance layer. Architecture and rationale live in
-`plan_styling.md`; this is the working guide: how to author a theme, how to author an editor
+`plan/style-overhaul.md`; this is the working guide: how to author a theme, how to author an editor
 colour scheme, what every token means, and the rules that keep the system from rotting. The token
 table at the bottom is GENERATED and machine-checked — see §6.*
 
@@ -111,6 +111,7 @@ crystal-dark.css is a migration-era pin awaiting the Islands pass; dark-plus.css
 editor scheme's.
 
 <!-- TOKENS:BEGIN -->
+
 | Token | Value | Defined in |
 |---|---|---|
 | `--accent` | `#3574F0` | crystal-dark.css |
@@ -147,6 +148,9 @@ editor scheme's.
 | `--breadcrumb-current-fg` | `var(--fg)` | base.css |
 | `--breadcrumb-link-fg` | `var(--link)` | base.css |
 | `--breadcrumb-sep-fg` | `var(--fg-hint)` | base.css |
+| `--builder-page-bg` | `var(--surface-editor)` | base.css |
+| `--builder-page-edge` | `var(--border-base)` | base.css |
+| `--builder-surface-bg` | `var(--surface-recessed)` | base.css |
 | `--button-bg` | `var(--surface-raised)` | base.css |
 | `--button-disabled-bg` | `var(--surface-raised)` | base.css |
 | `--button-disabled-fg` | `var(--fg-disabled)` | base.css |
@@ -317,6 +321,8 @@ editor scheme's.
 | `--graph-marquee-bg` | `#2C79C433` | crystal-dark.css |
 | `--graph-marquee-border` | `#44C0FF` | crystal-dark.css |
 | `--graph-node-hover-ring` | `#327090` | crystal-dark.css |
+| `--graph-node-text` | `var(--fg-secondary)` | base.css |
+| `--graph-node-text-bright` | `var(--fg)` | base.css |
 | `--graph-outputs-bg` | `#35353576` | crystal-dark.css |
 | `--graph-panel` | `var(--surface-panel)` | base.css |
 | `--graph-port-label-hover-fg` | `var(--fg)` | base.css |
@@ -462,6 +468,7 @@ editor scheme's.
 | `--prompt-caption-fg` | `var(--fg)` | base.css |
 | `--prompt-field-bg` | `var(--surface-recessed)` | base.css |
 | `--prompt-field-fg` | `var(--fg)` | base.css |
+| `--radar-web` | `var(--border-base)` | base.css |
 | `--radius-control` | `4px` | crystal-dark.css |
 | `--radius-panel` | `8px` | crystal-dark.css |
 | `--region-drop-bg` | `#3574F055` | crystal-dark.css |

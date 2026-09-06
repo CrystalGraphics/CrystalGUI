@@ -44,7 +44,7 @@ import java.util.zip.ZipOutputStream;
  *
  * <p>It is therefore <b>never automatic</b>. A fetch of this size, from a third party, on the user's
  * connection, is a thing somebody asks for — which is also how IntelliJ does it, and what
- * {@code plan_m11.md} §24.1 already named as the popup's "Download documentation" entry.</p>
+ * {@code plan/lang-resolver.md} §24.1 already named as the popup's "Download documentation" entry.</p>
  *
  * <h3>Why the cached form is a plain zip of stripped files</h3>
  *

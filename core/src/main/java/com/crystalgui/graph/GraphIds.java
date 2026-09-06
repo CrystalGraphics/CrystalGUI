@@ -6,11 +6,16 @@ import java.util.concurrent.ThreadLocalRandom;
 /**
  * Node ids: short, stable, and legal as identifiers.
  *
- * <h3>Stored, not derived — the opposite of the UI tree</h3>
- * <p>{@code NetworkIds} numbers UI elements by a document-order walk and transmits nothing, and its own
- * documentation states the cost: inserting an element renumbers everything after it. For a graph that is
- * fatal, because <b>edges reference ids</b> — adding one node would re-point every edge in the file. So a
- * graph id is generated once, written to the document, and never recomputed.</p>
+ * <h3>Stored, not derived — and the UI tree agrees now</h3>
+ * <p>A graph id is generated once, written to the document, and never recomputed, because <b>edges
+ * reference ids</b>: derive them from position and adding one node re-points every edge in the file.</p>
+ *
+ * <p>This paragraph used to draw a contrast — the UI tree numbered its elements by a document-order walk,
+ * so inserting an element renumbered everything after it, and a graph was called out as the case where
+ * that is fatal. <b>The contrast is gone, and it went the graph's way.</b> {@code ElementTreeSource}
+ * allocates a UI element's id on first sight and keeps it for the life of the source, through a reparent
+ * and a sibling insert, for the same reason stated one paragraph up: a message in flight names an
+ * element, and a name that moves is not a name. Both trees now store what they used to derive.</p>
  *
  * <h3>Why the alphabet is restricted</h3>
  * <p>The manifesto's compiler emits each node's GLSL under a namespaced prefix

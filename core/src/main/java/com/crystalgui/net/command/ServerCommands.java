@@ -36,7 +36,7 @@ public final class ServerCommands<T> {
      * One per connection, keyed weakly.
      *
      * <p>Two of these would both register {@code command/invoke} and the second would throw. Same shape
-     * and same reason as {@code WorkspaceClient.forConnection}, which was itself written after two
+     * and same reason as a workspace attachment, which was itself written after two
      * clients on one connection threw on a duplicate {@code fs.changed}.</p>
      */
     private static final Map<ProtocolConnection<?>, ServerCommands<?>> BY_CONNECTION = new WeakHashMap<>();

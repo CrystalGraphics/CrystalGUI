@@ -1,12 +1,12 @@
 package com.crystalgui.headless;
 
+import com.crystalgui.net.mirror.UIElementMirror;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.UIDescriptionCodec;
 import com.crystalgui.style.property.StylePropertyRegistry;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.TextField;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.control.TextField;
 import com.google.gson.JsonObject;
 import org.junit.Test;
 
@@ -50,7 +50,7 @@ public class TextStylePropertiesTest {
     public void aChildSeesAnAncestorsValues() {
         UIElement root = new UIElement();
         TextField field = new TextField();
-        root.addChild(field);
+        root.append(field);
 
         root.getStyle().getGeneralGroup().lineHeight(2f).caretWidth(3f).selectionColor(0xFF00FF00);
 
@@ -65,7 +65,7 @@ public class TextStylePropertiesTest {
     public void anOwnValueBeatsAnInheritedOne() {
         UIElement root = new UIElement();
         TextField field = new TextField();
-        root.addChild(field);
+        root.append(field);
 
         root.getStyle().getGeneralGroup().caretWidth(3f);
         field.getStyle().getGeneralGroup().caretWidth(7f);
@@ -109,14 +109,14 @@ public class TextStylePropertiesTest {
     }
 
     private static <T> UIElement roundTrip(UIElement source, DynamicOps<T> ops) {
-        return UIDescriptionCodec.CODEC.decode(ops, UIDescriptionCodec.CODEC.encode(ops, source));
+        return new UIElementMirror<>(ops).decode(new UIElementMirror<>(ops).describe(source));
     }
 
     /** A widget that never had them set must not carry them over the wire. */
     @Test
     public void defaultsAreNotSent() {
-        JsonObject encoded = UIDescriptionCodec.CODEC
-                .encode(JsonOps.INSTANCE, new TextField()).getAsJsonObject();
+        JsonObject encoded = new UIElementMirror<>(JsonOps.INSTANCE)
+                .describe(new TextField()).getAsJsonObject();
         assertFalse("an unstyled field should carry no style block at all", encoded.has("style"));
     }
 }

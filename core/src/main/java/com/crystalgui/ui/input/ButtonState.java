@@ -1,5 +1,6 @@
 package com.crystalgui.ui.input;
 
+import com.crystalgraphics.platform.input.CgSystemInput;
 import lombok.Getter;
 
 /**
@@ -26,6 +27,16 @@ public final class ButtonState {
      */
     public static final float MULTI_CLICK_SLOP = 4f;
 
+    /**
+     * How long a second press may follow the first and still continue the run, from the platform.
+     *
+     * <p>Here rather than on an input handler, and read by both engines: this class is the one that
+     * decides whether a press continues a multi-click run, and it was reaching across to the OLD
+     * engine's handler for half of the answer while owning the other half. That reference goes away
+     * at 6.9b with the class holding it.</p>
+     */
+    public static final long MULTI_CLICK_INTERVAL_MS = CgSystemInput.multiClickIntervalMs();
+
     @Getter
     private boolean pressed = false;
     private long lastPressedMillis = 0L;
@@ -49,7 +60,7 @@ public final class ButtonState {
         lastPressedMillis = millis;
         lastPressedX = x;
         lastPressedY = y;
-        if (millisDiff <= UIInputHandler.multiClickInterval && nearby) {
+        if (millisDiff <= MULTI_CLICK_INTERVAL_MS && nearby) {
             detail++;
         } else {
             detail = 1;

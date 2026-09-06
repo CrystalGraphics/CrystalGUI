@@ -7,7 +7,7 @@ import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.StyleSlot;
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.style.Styleable;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -42,7 +42,7 @@ public final class InlineStyleCodec {
 
     /** Encodes {@code element}'s INLINE-origin candidates. Returns {@code null} when there are none,
      * so the caller can omit the field entirely rather than writing an empty map. */
-    public static <T> T encode(DynamicOps<T> ops, UIElement element) {
+    public static <T> T encode(DynamicOps<T> ops, Styleable element) {
         // Sorted by property name so the encoding is a function of the element alone. The cascade
         // stores candidates in a HashMap, whose iteration order varies between JVM runs — and these
         // descriptions are content-addressed, so an unstable order would produce an unstable hash
@@ -78,7 +78,7 @@ public final class InlineStyleCodec {
     }
 
     /** Applies a previously encoded style map to {@code element}, at INLINE origin. */
-    public static <T> void decodeInto(DynamicOps<T> ops, T encoded, UIElement element) {
+    public static <T> void decodeInto(DynamicOps<T> ops, T encoded, Styleable element) {
         for (var entry : ops.getMapValue(encoded).entrySet()) {
             String name = ops.getStringValue(entry.getKey());
             StyleProperty<Object> property = StylePropertyRegistry.byName(name);

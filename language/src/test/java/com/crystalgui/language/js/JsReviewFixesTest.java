@@ -34,7 +34,7 @@ import com.crystalgui.language.engine.bridge.CodeActionContext;
  * that makes a regression test worth writing: each was reachable by ordinary use, none was caught by the
  * 178 tests that were already green, and most were invisible because the feature <em>appeared</em> to
  * work. They live together rather than being scattered through the six existing classes because what
- * they have in common is the review, and a reader following {@code plan_m10.md} §12a should find them in
+ * they have in common is the review, and a reader following {@code plan/lang-javascript.md} §12a should find them in
  * one place.</p>
  */
 public class JsReviewFixesTest {

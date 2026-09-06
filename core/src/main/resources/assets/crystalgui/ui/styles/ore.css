@@ -85,7 +85,13 @@ slider,
 slider .__fill__,
 slider .__spacer__,
 slider .__thumb__,
-scroller .__thumb__ {
+scroller .__thumb__,
+switch::part(knob),
+checkbox::part(mark),
+slider::part(fill),
+slider::part(spacer),
+slider::part(thumb),
+scroller::part(thumb) {
     border-radius: 0;
 }
 
@@ -98,7 +104,8 @@ scroller .__thumb__ {
  *
  * Only this selector: default.css sets no border-width on any other widget, and adding it to the list
  * above would claim the property for consumers without cause. */
-slider .__thumb__ {
+slider .__thumb__,
+slider::part(thumb) {
     border-width: 0;
 }
 
@@ -111,7 +118,10 @@ tab:focus-visible,
 textfield:focus-visible,
 checkbox:focus-visible .__mark__,
 switch:focus-visible .__knob__,
-slider:focus-visible .__thumb__ {
+slider:focus-visible .__thumb__,
+checkbox:focus-visible::part(mark),
+switch:focus-visible::part(knob),
+slider:focus-visible::part(thumb) {
     outline-offset: 0;
 }
 
@@ -140,18 +150,23 @@ splitview > .__divider__:focus {
 tabview .__strip__ {
     background: asset("crystalgui:ore", "rect");
 }
-scrollerview .__corner__ {
+scrollerview .__corner__,
+scrollerview::part(corner) {
     background: asset("crystalgui:ore", "scroller-track");
 }
 /* Step buttons are `display: none` in default.css and stay hidden here — this only matters for a
  * consumer that turns them on, which is a pure `display: flex` away and shouldn't also require
  * re-theming them. */
 scroller .__head__,
-scroller .__tail__ {
+scroller .__tail__,
+scroller::part(head),
+scroller::part(tail) {
     background: asset("crystalgui:ore", "button");
 }
 scroller .__head__:hover,
-scroller .__tail__:hover {
+scroller .__tail__:hover,
+scroller::part(head):hover,
+scroller::part(tail):hover {
     background: asset("crystalgui:ore", "button-pressed");
 }
 /* `.label` is deliberately NOT reset, and it is the one place the "undo everything" rule is wrong.
@@ -213,42 +228,50 @@ checkbox {
     color: #222222;
     text-shadow: false;
 }
-checkbox .__mark__ {
+checkbox .__mark__,
+checkbox::part(mark) {
     width: 12px;
     height: 12px;
     background: asset("crystalgui:ore", "checkbox-box");
 }
-checkbox:hover .__mark__ {
+checkbox:hover .__mark__,
+checkbox:hover::part(mark) {
     background: asset("crystalgui:ore", "checkbox-box-hover");
 }
-checkbox:active .__mark__ {
+checkbox:active .__mark__,
+checkbox:active::part(mark) {
     background: asset("crystalgui:ore", "checkbox-box-pressed");
 }
 
-checkbox:checked .__mark__ {
+checkbox:checked .__mark__,
+checkbox:checked::part(mark) {
     background: asset("crystalgui:ore", "checkbox-box-green");
     overlay: asset("crystalgui:ore", "checkbox-check");
     /* Natural 10x10, centered in the 12x12 box (overlay-position defaults to center) — matching
      * LDLib2's 10x10 mark inside a 12x12 toggle button, without the extra child element it uses. */
     overlay-fit: none;
 }
-checkbox:checked:hover .__mark__ {
+checkbox:checked:hover .__mark__,
+checkbox:checked:hover::part(mark) {
     background: asset("crystalgui:ore", "checkbox-box-green-hover");
 }
-checkbox:checked:active .__mark__ {
+checkbox:checked:active .__mark__,
+checkbox:checked:active::part(mark) {
     background: asset("crystalgui:ore", "checkbox-box-green-pressed");
 }
 
 /* Ring the 12x12 box rather than the whole checkbox row — reads better, and matches the actual
  * click target. Depends on ancestor-state descendant matching (`checkbox:focus .__mark__`). */
-checkbox:focus-visible .__mark__ {
+checkbox:focus-visible .__mark__,
+checkbox:focus-visible::part(mark) {
     outline: asset("crystalgui:ore", "focus-ring");
 }
 
 checkbox:disabled {
     color: #666666;
 }
-checkbox:disabled .__mark__ {
+checkbox:disabled .__mark__,
+checkbox:disabled::part(mark) {
     background: asset("crystalgui:ore", "checkbox-box-disabled");
 }
 
@@ -268,26 +291,32 @@ switch {
 switch:checked {
     background: asset("crystalgui:ore", "switch-on");
 }
-switch .__spacer__ {
+switch .__spacer__,
+switch::part(spacer) {
     flex-grow: 0;
     transition: flex-grow 150ms ease;
 }
-switch:checked .__spacer__ {
+switch:checked .__spacer__,
+switch:checked::part(spacer) {
     flex-grow: 1;
 }
-switch .__knob__ {
+switch .__knob__,
+switch::part(knob) {
     height: 100%;
     aspect-rate: 1;
     background: asset("crystalgui:ore", "button");
 }
-switch:checked .__knob__ {
+switch:checked .__knob__,
+switch:checked::part(knob) {
     background: asset("crystalgui:ore", "button-pressed");
 }
-switch:disabled .__knob__ {
+switch:disabled .__knob__,
+switch:disabled::part(knob) {
     background: asset("crystalgui:ore", "button-disabled");
 }
 /* Layout-free, so the ring can't resize the knob and disturb the slide. */
-switch:focus-visible .__knob__ {
+switch:focus-visible .__knob__,
+switch:focus-visible::part(knob) {
     outline: asset("crystalgui:ore", "focus-ring");
 }
 
@@ -325,18 +354,21 @@ slider {
 }
 /* The bar is real atlas art, not flat hex — these are Ore's own BTN_DEFAULT_SMALL_GREEN (#3C8527)
  * and BTN_PRESSED_SMALL (#B1B2B5), so the slider carries the same bevel as every other control. */
-slider .__fill__ {
+slider .__fill__,
+slider::part(fill) {
     height: 6px;
     background: asset("crystalgui:ore", "slider-fill");
 }
-slider .__spacer__ {
+slider .__spacer__,
+slider::part(spacer) {
     height: 6px;
     background: asset("crystalgui:ore", "slider-track");
 }
 /* Square, and exactly the root's height — the root is sized to the thumb precisely so the whole
  * thumb stays inside the hit box. The negative margins pull it half a thumb-width over each
  * neighbour, burying their end caps; see the convention note on `slider` above. */
-slider .__thumb__ {
+slider .__thumb__,
+slider::part(thumb) {
     width: 20px;
     height: 20px;
     margin-left: -10px;
@@ -346,22 +378,27 @@ slider .__thumb__ {
     z-index: 1;
     background: asset("crystalgui:ore", "button");
 }
-slider:hover .__thumb__ {
+slider:hover .__thumb__,
+slider:hover::part(thumb) {
     background: asset("crystalgui:ore", "button-pressed");
 }
-slider:active .__thumb__ {
+slider:active .__thumb__,
+slider:active::part(thumb) {
     background: asset("crystalgui:ore", "button-pressed");
     background-color: #DDDDDD;
 }
-slider:focus-visible .__thumb__ {
+slider:focus-visible .__thumb__,
+slider:focus-visible::part(thumb) {
     outline: asset("crystalgui:ore", "focus-ring");
 }
 /* A tint multiplied over the sprite (the `button:active` idiom above), not a flat colour replacing
  * it — that would drop the bevel and make the disabled bar the only flat thing on the panel. */
-slider:disabled .__fill__ {
+slider:disabled .__fill__,
+slider:disabled::part(fill) {
     background-color: #8C8C8C;
 }
-slider:disabled .__thumb__ {
+slider:disabled .__thumb__,
+slider:disabled::part(thumb) {
     background: asset("crystalgui:ore", "button-disabled");
 }
 
@@ -573,23 +610,28 @@ tabview .__strip-bar__ .__thumb__:hover {
  *
  * Only the CROSS axis is set — the thumb's length and position along the bar are runtime state
  * written from Java at IMPORTANT origin. */
-scroller .__track__ {
+scroller .__track__,
+scroller::part(track) {
     background: asset("crystalgui:ore", "scroller-track");
 }
 /* Ore hides the step buttons (its own ore.lss does the same via
  * `.__scroller_head_button__ { display: none }`); default.css already hides them, so this is a
  * deliberate non-override rather than an omission. */
-scroller .__thumb__ {
+scroller .__thumb__,
+scroller::part(thumb) {
     height: 100%;
     background: asset("crystalgui:ore", "scroller-thumb");
 }
-scroller.__vertical__ .__thumb__ {
+scroller.__vertical__ .__thumb__,
+scroller.__vertical__::part(thumb) {
     width: 100%;
 }
-scroller .__thumb__:hover {
+scroller .__thumb__:hover,
+scroller::part(thumb):hover {
     background: asset("crystalgui:ore", "scroller-thumb-hover");
 }
-scroller .__thumb__:active {
+scroller .__thumb__:active,
+scroller::part(thumb):active {
     background: asset("crystalgui:ore", "scroller-thumb-pressed");
     background-color: #DDDDDD;
 }
@@ -597,13 +639,15 @@ scroller .__thumb__:active {
 /* Bar thickness and pinning. 8px — which is also what LDLib2's ore.lss uses for the scrollers
  * embedded in its text area (it reserves 14px for a standalone one). An overlay bar sits on top of
  * the content rather than displacing it, so the slimmer of the two is the right pick. */
-scrollerview .__v-scroller__ {
+scrollerview .__v-scroller__,
+scrollerview::part(v-scroller) {
     width: 8px;
     top: 0;
     right: 0;
     bottom: 0;
 }
-scrollerview .__h-scroller__ {
+scrollerview .__h-scroller__,
+scrollerview::part(h-scroller) {
     height: 8px;
     left: 0;
     right: 0;
@@ -676,13 +720,16 @@ colorselector .__channel-row__ slider {
 /* Transparent, and at the row's full height: the slider's BACKGROUND is the gradient, so a fill and a
  * spacer that paint anything at all paint over the only thing the control is for. */
 colorselector .__channel-row__ slider .__fill__,
-colorselector .__channel-row__ slider .__spacer__ {
+colorselector .__channel-row__ slider .__spacer__,
+colorselector .__channel-row__ slider::part(fill),
+colorselector .__channel-row__ slider::part(spacer) {
     background: #00000000;
     height: 9px;
 }
 /* Kept in step with the same rule in default.css — see the note there on why width, border-width and
  * the margins have to be restated as a set. */
-colorselector .__channel-row__ slider .__thumb__ {
+colorselector .__channel-row__ slider .__thumb__,
+colorselector .__channel-row__ slider::part(thumb) {
     width: 3px;
     height: 9px;
     margin-left: -1.5px;
@@ -697,14 +744,18 @@ colorselector .__channel-row__ slider .__thumb__ {
  * background for every state the theme reacts to. */
 colorselector .__channel-row__ slider:hover .__thumb__,
 colorselector .__channel-row__ slider:active .__thumb__,
-colorselector .__channel-row__ slider:disabled .__thumb__ {
+colorselector .__channel-row__ slider:disabled .__thumb__,
+colorselector .__channel-row__ slider:hover::part(thumb),
+colorselector .__channel-row__ slider:active::part(thumb),
+colorselector .__channel-row__ slider:disabled::part(thumb) {
     background: #FFFFFF;
     background-color: #FFFFFF;
 }
 /* Ore rings the THUMB rather than the root, which is right for a 20px knob and wrong for a hairline —
  * the ring is wider than the thing it rings. The row's track carries a dark edge of its own, so the
  * focused slider is still legible with nothing here. */
-colorselector .__channel-row__ slider:focus-visible .__thumb__ {
+colorselector .__channel-row__ slider:focus-visible .__thumb__,
+colorselector .__channel-row__ slider:focus-visible::part(thumb) {
     outline: none;
 }
 

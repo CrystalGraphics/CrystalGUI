@@ -276,6 +276,12 @@ graphnode .__inputs__ {
 graphnode .__inputs__.__no-inputs__ {
     flex-grow: 0;
 }
+/* The mirror, for the master node every graph ends at: no outputs, so the empty column must not take
+ * half the row. It carries its own background, so a share of the free space draws as a darker strip
+ * down the inside of the right border. @see GraphNode#NO_OUTPUTS_CLASS */
+graphnode .__outputs__.__no-outputs__ {
+    flex-grow: 0;
+}
 graphnode .__outputs__ {
     flex-direction: column;
     flex-grow: 1;
@@ -309,6 +315,18 @@ graphnode .__controls__ {
     padding-bottom: 1px;
 }
 graphnode .__control-row__ {
+    /* THE ROW SPANS THE NODE, and it does not get that from `align-items` alone.
+     *
+     * A node on the canvas plane is out of flow and shrink-to-fit, so the row was laid out at its own
+     * content width -- measured at 90.7 inside a 133-wide `.__controls__` -- and its lighter fill
+     * stopped partway across, leaving the container's darker tone showing to the right of every
+     * labelled control. Only the rows whose CONTROL carries `.__full-width__` looked right, and by
+     * accident: that class gives the child `width: 100%`, which drags the row out with it.
+     *
+     * Invisible in a fixture that puts a node in ordinary flow, where the document stretches the node
+     * to its `max-width` and everything inside follows. A percentage contributes nothing to
+     * max-content, so this cannot widen the node itself. */
+    width: 100%;
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
@@ -390,7 +408,8 @@ graphnode .__control-row__ switch {
  * the box oblong, so it takes the height and the mark follows — the one control whose width is a
  * function of its height rather than of the row. */
 graphnode .__control-row__ checkbox,
-graphnode .__control-row__ checkbox .__mark__ {
+graphnode .__control-row__ checkbox .__mark__,
+graphnode .__control-row__ checkbox::part(mark) {
     width: var(--graph-ctrl-h);
     height: var(--graph-ctrl-h);
     min-height: var(--graph-ctrl-h);
@@ -403,7 +422,8 @@ graphnode .__control-row__ checkbox .__mark__ {
  * of the graph's own 14px — caught by `everyKind()`, not by eye. One more class component
  * (`.__config-control__.__boolean__`) is what breaks the tie in the node's favour. */
 graphnode .__control-row__ .__config-control__.__boolean__ checkbox,
-graphnode .__control-row__ .__config-control__.__boolean__ checkbox .__mark__ {
+graphnode .__control-row__ .__config-control__.__boolean__ checkbox .__mark__,
+graphnode .__control-row__ .__config-control__.__boolean__ checkbox::part(mark) {
     width: var(--graph-ctrl-h);
     height: var(--graph-ctrl-h);
     min-height: var(--graph-ctrl-h);
@@ -714,7 +734,8 @@ searchfield {
  * rather than failing), and a stand-in shape that is not a magnifier is just a wrong icon. All true, and
  * all about SHAPES -- the answer turned out to be an SVG, which the engine renders as real geometry with
  * `currentColor` bound at draw time. So the hook is finally connected, for every consumer at once. */
-searchfield .__icon__ {
+searchfield .__icon__,
+searchfield::part(icon) {
     /* SMALLER THAN ITS ARTWORK, deliberately, and it costs sharpness. The icon is authored on a
      * 16px grid with every edge on an integer coordinate, so it is crisp at 1:1 and at an exact
      * half (8px) and softer at anything between -- measured on the same set, 97% sharp pixels at
@@ -729,12 +750,14 @@ searchfield .__icon__ {
     color: var(--searchfield-icon-fg, #8A8A8A);
 }
 /* The field owns the slack; icon and clear keep their own size. */
-searchfield .__field__ {
+searchfield .__field__,
+searchfield::part(field) {
     width: 0;
     flex-grow: 1;
     flex-shrink: 1;
 }
-searchfield .__clear__ {
+searchfield .__clear__,
+searchfield::part(clear) {
     width: 9px;
     height: 9px;
     flex-shrink: 0;
@@ -892,7 +915,7 @@ colorselector .__hex-row__ textfield {
 }
 
 /* Swatch pair on top, wheel filling what is left. */
-colorselector .__left__ {
+colorselector .__left__{
     width: 73px;
     flex-direction: column;
     align-items: center;
@@ -902,7 +925,7 @@ colorselector .__left__ {
  * flex-shrink is 0 here, so without the minimum a short channel column would leave the 73px ring
  * overflowing its own parent rather than the parent staying open for it. Growing is what centres the
  * wheel — the box takes the slack and its own centring puts the ring in the middle of it. */
-colorselector .__wheel__ {
+colorselector .__wheel__{
     width: 73px;
     height: 0;
     min-height: 73px;
@@ -916,7 +939,7 @@ colorselector .__wheel__ {
 /* Centred against the LEFT column, which is the taller of the two: the swatch pair adds its height to
  * that side, so a channel stack starting at the top sits a few pixels above the ring's middle and reads
  * as misaligned with the thing it is describing. Centring is what ties the two columns together. */
-colorselector .__side__ {
+colorselector .__side__{
     width: 0;
     flex-grow: 1;
     flex-direction: column;
@@ -930,7 +953,7 @@ colorselector .__side__ {
 }
 /* Square, because a ring drawn into a non-square box is an ellipse — the shader normalises its own
  * radius, so an oval box would show as a stretched band with a round handle path on top of it. */
-colorselector .__ring__ {
+colorselector .__ring__{
     width: 73px;
     height: 73px;
 }
@@ -941,7 +964,7 @@ colorselector .__ring__ {
  *
  * Tied to the shader's inner radius: change one and this has to move, or the square either overlaps
  * the band or floats loose in the middle of it. */
-colorselector .__square__ {
+colorselector .__square__{
     position: absolute;
     left: 28%;
     top: 28%;
@@ -959,7 +982,7 @@ colorselector .__square__ {
  * SIZED TO SPAN THE BAND. The band is (1 - 0.72) of the ring's half-width — 14px on a 104px ring — so
  * the handle is 14px and reads as a collar around it rather than a dot floating on it. Derived from the
  * shader's inner radius, so the two move together. */
-colorselector .__ring-handle__ {
+colorselector .__ring-handle__{
     position: absolute;
     width: 9px;
     height: 9px;
@@ -971,7 +994,7 @@ colorselector .__ring-handle__ {
 }
 /* Much smaller: the square is a continuous field, so the handle marks a POINT rather than spanning
  * anything, and every pixel it covers is a colour you were trying to look at. */
-colorselector .__square-handle__ {
+colorselector .__square-handle__{
     position: absolute;
     width: 5px;
     height: 5px;
@@ -1017,7 +1040,8 @@ colorselector .__side__ dropdown {
  * parent changes nothing at all and the text goes on clipping ("RGB 0-2"). Smaller because the longest
  * label is nine characters in a box sized for six digits, and the box matches the hex field by design,
  * so the text is what gives. */
-colorselector .__side__ dropdown text {
+colorselector .__side__ dropdown text,
+colorselector .__side__ dropdown::part(label) {
     font-size: 6;
     text-align: center;
 }
@@ -1031,7 +1055,7 @@ colorselector .__side__ dropdown text {
 /* Sized against Unity's own reference swatch pair rather than the wheel/ring column: ~20% narrower and
  * ~20% taller than this used to be (44x8 -> 35x10) is what actually reads as "two stout chips", not the
  * wide flat strip the old proportions gave. */
-colorselector .__swatches__ {
+colorselector .__swatches__{
     width: 35px;
     flex-direction: row;
     height: 10px;
@@ -1058,7 +1082,7 @@ colorselector .__swatches__ .__swatch-new__ {
  * middle, 3px to match the box's own 20% bigger size — is set in Java instead, in
  * `ColorSelector.paintSwatch`, via `CgUiColorField.setCornerRadius(...)`. See that method's doc. */
 
-colorselector .__channels__ {
+colorselector .__channels__{
     width: 100%;
     flex-direction: column;
     gap-all: 3px;
@@ -1067,7 +1091,7 @@ colorselector .__channels__ {
  * track's visible edge stops 2px inside the slider's box (that padding is the thumb's travel room), so
  * a 4px gap reads as 6px against a 4px margin at the panel edge. 2 + 2 = 4 evens them, and hands the
  * difference to the bar — which is the only thing in the row that grows. */
-colorselector .__channel-row__ {
+colorselector .__channel-row__{
     width: 100%;
     flex-direction: row;
     align-items: center;
@@ -1114,7 +1138,9 @@ colorselector .__channel-row__ slider {
     border-radius: 0px;
 }
 colorselector .__channel-row__ slider .__fill__,
-colorselector .__channel-row__ slider .__spacer__ {
+colorselector .__channel-row__ slider .__spacer__,
+colorselector .__channel-row__ slider::part(fill),
+colorselector .__channel-row__ slider::part(spacer) {
     background: #00000000;
     height: 9px;
 }
@@ -1132,7 +1158,8 @@ colorselector .__channel-row__ slider .__spacer__ {
  *                   at both ends. -1.5px pairs with the slider's 1.5px padding to land it flush.
  *
  * All three are invisible in the stylesheet when wrong — the rule reads as complete on its own. */
-colorselector .__channel-row__ slider .__thumb__ {
+colorselector .__channel-row__ slider .__thumb__,
+colorselector .__channel-row__ slider::part(thumb) {
     width: 3px;
     height: 9px;
     margin-left: -1.5px;
@@ -1168,7 +1195,7 @@ colorselector .__channel-row__ textfield {
     flex-grow: 0;
 }
 
-colorselector .__hex-row__ {
+colorselector .__hex-row__{
     width: 100%;
     flex-direction: row;
     align-items: center;
@@ -1196,7 +1223,8 @@ colorselector .__hex-row__ textfield {
  *
  * Without them the popup inherits the global menu geometry and opens two or three times the size of the
  * control it belongs to, which reads as a different widget appearing rather than that button unfolding. */
-colorselector .__side__ dropdown .__menu__ {
+colorselector .__side__ dropdown .__menu__,
+colorselector .__side__ dropdown::part(menu) {
     min-width: 33px;
     padding-all: 1px;
 }
@@ -1208,6 +1236,52 @@ colorselector .__side__ dropdown .__menu__ menuitem {
 }
 /* On the item's own text, for the same reason the button's label needs it: `* { font-size: 10 }` gives
  * every element a specified size, so setting it on an ancestor changes nothing. */
-colorselector .__side__ dropdown .__menu__ menuitem text {
+colorselector .__side__ dropdown .__menu__ menuitem text,
+colorselector .__side__ dropdown .__menu__ menuitem::part(label) {
     font-size: 6;
+}
+
+/* ── The graph, so it is LEGIBLE without a theme ──────────────────────────────────────────────────
+ *
+ * Everything above in this file is the graph's GEOMETRY, and that is the whole of what the user-agent
+ * sheet used to say about it: a graphnode, a nodeport and a graphview had ZERO appearance
+ * declarations between them, against 12 for `dialog`, 7 for `textfield` and 6 each for `button` and
+ * `menu`. So every other self-drawing widget was visible on this sheet alone and the graph was not --
+ * laid out perfectly and painting nothing, which reads as a broken widget rather than an unthemed one.
+ *
+ * What follows is the MINIMUM that makes a graph readable, not a copy of `crystalgui:graph`. Every
+ * declaration names the same `--graph-*` token the theme's own fallbacks name and sets the same
+ * property the theme sets, so loading the theme overrides all of it and the themed look is unchanged
+ * -- checked declaration by declaration against `graph.css`.
+ *
+ * THE NODE STILL PAINTS NO BACKGROUND OF ITS OWN. Its regions do, and the port band deliberately does
+ * not: that is what lets a wire, drawn under every node, read as plugged into its dot rather than cut
+ * off at the border. Adding a fill here would break the one rule the whole node box is built around. */
+graphview {
+    background: var(--graph-canvas, #202020);
+}
+graphnode {
+    border-width: 1px;
+    border-color: var(--graph-edge, #1A1A1A);
+    color: var(--graph-node-text, #C8C8C8);
+}
+graphnode > .__title-bar__ {
+    background: var(--graph-title-bg, #56565676);
+    color: var(--graph-node-text-bright, #E8E8E8);
+}
+graphnode .__inputs__ { background-color: var(--graph-inputs-bg, #53535376); }
+graphnode .__outputs__ { background-color: var(--graph-outputs-bg, #35353576); }
+graphnode .__ports__ { background-color: var(--graph-ports-bg, #26262676); }
+graphnode .__controls__ { background: var(--graph-ports-bg, #26262676); }
+graphnode .__control-row__ {
+    background: var(--graph-control-row-bg, #56565676);
+    color: var(--graph-control-fg, #B4B4B4);
+}
+/* The dot's FILL. Its border-color is the port TYPE's colour and is the theme's alone: it is what
+ * `NodePort.typeColor()` reads back for the wire, so a fallback here would put a default wire colour
+ * in the user-agent sheet -- which is the one place the per-type palette must not be. Untyped ports
+ * fall back to the engine's own `type-dynamic` grey. */
+nodeport .__dot__ {
+    background-color: var(--graph-dot-bg, #212121);
+    border-color: var(--graph-port-dynamic, #B4B4B4);
 }

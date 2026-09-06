@@ -50,6 +50,23 @@ public final class CgUiSpriteRegistry {
     private CgUiSpriteRegistry() {
     }
 
+    /**
+     * Drops every parsed pack, so the next {@link #get} re-reads its JSON — the sprite half of a
+     * resource reload. @see com.crystalgui.lifecycle.CgUiLifecycle
+     *
+     * <p><b>Only the JSON.</b> The textures a pack names are reloaded by {@code CgTextureManager},
+     * which mutates the same {@code CgTexture2D} objects in place, so edited artwork already reaches
+     * sprites that were handed out before the reload. What does not is an edited pack file — new
+     * coordinates, a new border, a new element — because those were read once and cached here.</p>
+     *
+     * <p>Sprites already handed out keep the coordinates they were built with; they are replaced when
+     * whatever asked for them asks again, which for a stylesheet's {@code asset(...)} is the restyle
+     * that follows this in the same reload.</p>
+     */
+    public static void clearCache() {
+        CACHE.clear();
+    }
+
     /** Returns a fresh, independent {@link CgUiSprite} instance for the named element within the
      * given pack, or a visible fallback drawable if the pack file is missing/malformed or the
      * element doesn't exist — never {@code null}, so a broken reference degrades visibly rather
