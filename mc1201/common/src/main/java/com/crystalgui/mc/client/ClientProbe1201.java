@@ -55,6 +55,7 @@ public final class ClientProbe1201 {
         RESTORE, SHOOT_RESTORE_MID, SHOOT_RESTORED,
         JUMP_LIST, SHOOT_JUMP_LIST,
         PIN, OPEN_CHAT, OVERLAY_CLICK, SHOOT_OVERLAY,
+        HUD_GRABBED_CLICK,
         QUIT, DONE
     }
 
@@ -236,9 +237,22 @@ public final class ClientProbe1201 {
             case SHOOT_OVERLAY:
                 say("fps in " + CgUiHud1201.presentation() + " = " + mc.getFps());
                 shoot("overlay");
+                step = Step.HUD_GRABBED_CLICK;
+                waitTicks = SETTLE;
+                break;
+            case HUD_GRABBED_CLICK: {
+                // Back to playing: no screen, mouse grabbed. A press here is an attack, and the
+                // compositor must not see it however the camera happens to be pointing.
+                mc.setScreen(null);
+                if (mc.mouseHandler != null) mc.mouseHandler.grabMouse();
+                boolean consumed = Lifecycle1201.offerMouse(0, true, 0f);
+                say("grabbed=" + (mc.mouseHandler != null && mc.mouseHandler.isMouseGrabbed())
+                        + " presentation=" + CgUiHud1201.presentation()
+                        + " press consumed=" + consumed + " (expected false)");
                 step = Step.QUIT;
                 waitTicks = SETTLE;
                 break;
+            }
             case QUIT:
                 quit();
                 break;
