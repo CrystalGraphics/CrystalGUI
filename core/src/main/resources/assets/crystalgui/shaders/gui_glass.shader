@@ -84,7 +84,7 @@ Pass {
     // W3C compositing's non-separable LUMINOSITY blend -- the layer Windows' acrylic and Mica are
     // mostly made of: the backdrop keeps its hue and saturation and takes the tint's brightness, so
     // what a colourful scene contributes is a temperature and never a colour. Lum and ClipColor are the
-    // spec's own, with its 0.3 / 0.59 / 0.11 weights. @see docs/CGUI_MODERN_UI_RENDERING_RESEARCH.md §1.2
+    // spec's own, with its 0.3 / 0.59 / 0.11 weights. @see docs/CGUI_MODERN_UI_RENDERING_RESEARCH.md section 1.2
     //
     // ABOVE `void vertex`, with every other helper, because the compiler hoists this region into BOTH
     // generated stages -- and safe there because none of it names a fragment-only builtin.

@@ -3,7 +3,7 @@
 // A LINEAR GRADIENT IN ONE DRAW: up to eight stops evaluated per fragment along CSS's gradient line,
 // interpolated in PREMULTIPLIED alpha, masked by the element's own corner radii, and dithered before
 // the target quantises. What every production gradient does, and each of the four is a correction of
-// something this shader first got wrong -- see docs/CGUI_MODERN_UI_RENDERING_RESEARCH.md §8.
+// something this shader first got wrong -- see docs/CGUI_MODERN_UI_RENDERING_RESEARCH.md section 8.
 //
 // ONE DRAW, NOT ONE PER SEGMENT. The first version drew a quad per pair of stops and set two colours
 // on each; Skia evaluates a whole gradient of up to eight stops in a single unrolled shader
@@ -18,13 +18,13 @@
 // CSS'S GRADIENT LINE, for any angle. 0deg points up and the angle turns clockwise, so the direction
 // is (sin a, -cos a) in this Y-down projection; the line runs through the box's centre with the
 // length |W sin a| + |H cos a|, which is what puts 0% and 100% exactly at the corners at every angle
-// (CSS Images 3 §3.4.1). _Axis is that direction scaled by the box and divided by the length, so t
+// (CSS Images 3 section 3.4.1). _Axis is that direction scaled by the box and divided by the length, so t
 // is one dot product and the axis-aligned cases fall out (90deg: t = u; 180deg: t = v).
 //
 // PREMULTIPLIED, because `transparent` is transparent BLACK. A straight-alpha lerp from transparent
 // to #3574F033 passes through (26, 58, 120, 25): a dark, half-desaturated blue, which is the muddy
 // shoulder every naive gradient has on its way to a fade. CSS specifies premultiplied interpolation
-// for exactly this (CSS Images 3 §3.4.3) -- the colour holds its hue and only the alpha ramps. So the
+// for exactly this (CSS Images 3 section 3.4.3) -- the colour holds its hue and only the alpha ramps. So the
 // stops arrive premultiplied, the ramp mixes them premultiplied, and the result is written
 // premultiplied under a ONE / ONE_MINUS_SRC_ALPHA blend rather than unpremultiplied first.
 //

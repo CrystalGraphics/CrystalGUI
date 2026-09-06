@@ -1,6 +1,6 @@
 // crystalgui:shaders/gui_curve.shader
 //
-// Shared material for all CrystalGUI Bézier strokes — the curve counterpart to gui_quad.shader.
+// Shared material for all CrystalGUI Bezier strokes -- the curve counterpart to gui_quad.shader.
 // Geometry, colour, width, feather and cap style all come from CgVectorRenderer's per-instance
 // SSBO/TBO record via the CG_CURVE_* macros in cg_env.glsl; there is nothing per-draw here except
 // _LayerOpacity.
@@ -9,9 +9,9 @@
 // gui_quad.shader is separate from the engine's own quad consumers. Two UI-specific things differ
 // and neither belongs in the backend's reference material:
 //
-//   * DepthTest ALWAYS / DepthWrite OFF — the UI is painter's-order 2D. The engine's curve.shader
+//   * DepthTest ALWAYS / DepthWrite OFF -- the UI is painter's-order 2D. The engine's curve.shader
 //     uses LEQUAL because a stroke in a 3D scene should respect the depth already there.
-//   * _LayerOpacity — the whole-draw compositing opacity CgUiPaintContext.withLayerOpacity() drives
+//   * _LayerOpacity -- the whole-draw compositing opacity CgUiPaintContext.withLayerOpacity() drives
 //     (one side of a cross-fade, an FBO layer). Distinct from the per-instance colour alpha, which
 //     rides on the instance record; see gui_quad.shader's note on the same split.
 //
@@ -22,7 +22,7 @@
 #type pos2_uv2_col4ub
 #pragma cg_use curve
 
-// Shared with crystalgraphics:shaders/curve.shader — see that file and lib/stroke.glsl. This
+// Shared with crystalgraphics:shaders/curve.shader -- see that file and lib/stroke.glsl. This
 // material owns render state and the final alpha; it owns NONE of the stroke maths.
 #include "crystalgraphics:shaders/lib/stroke.glsl"
 
@@ -34,7 +34,7 @@ Properties {
 }
 
 struct v2f {
-    // Fragment position in the same space as the control points — i.e. after the PoseStack was
+    // Fragment position in the same space as the control points -- i.e. after the PoseStack was
     // baked in CPU-side, before projection. The only true per-vertex quantity here; the control
     // points themselves are re-read per instance in the fragment stage, since the v2f DSL has no
     // flat qualifier to carry them with.
