@@ -21,6 +21,9 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.input.keymap.Keymap;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.event.DragEvent;
+
+import org.joml.Vector2f;
 import com.crystalgui.widget.canvas.CanvasView;
 import com.crystalgui.widget.config.inspector.InspectorRegistry;
 import com.crystalgui.widget.config.inspector.InspectorSection;
@@ -111,7 +114,14 @@ public class SurfaceEditor extends CanvasView
     private final List<InspectorSection> sections = new ArrayList<>();
     private final List<Command> commands = new ArrayList<>();
 
-    private final List<Disposable> extensions;
+    private final List<Disposable> extensions = new ArrayList<>();
+
+    /** The ids this surface asked for, or null for everything contributed. Held until the first attach.
+     * @see #connected() */
+    @Nullable
+    private final List<String> wantedExtensions;
+
+    private boolean extensionsActivated;
 
     private boolean disposed;
 
@@ -126,6 +136,40 @@ public class SurfaceEditor extends CanvasView
     /** Everything on the classpath. What a test or a bare surface means. */
     public SurfaceEditor(SurfacePolicy policy) {
         this(NAME, policy, null);
+    }
+
+    /**
+     * Offers a drag to the registered {@link DropHandler}s, in registration order.
+     *
+     * <p>Attached ONCE here rather than by each feature: a handler that attached its own listener would
+     * have to know to {@code preventDefault} on Over as well as act on Drop — miss the first and the
+     * drop never arrives, with nothing anywhere reporting a problem. The first handler that accepts a
+     * payload gets it; the rest are not asked.</p>
+     *
+     * <p>World coordinates, because a handler is placing something ON THE PLANE and the pointer reports
+     * viewport space. Converting per handler is the same conversion written several times, and the one
+     * that drifts is the one that is wrong by the pan.</p>
+     */
+    private void installDropDispatch() {
+        events.getGroup(DragEvent.Over.class).attachListener((element, event) -> {
+            for (DropHandler handler : dropHandlers) {
+                if (handler.accepts(event.getPayload())) {
+                    event.preventDefault();
+                    return;
+                }
+            }
+        }, false, true);
+
+        events.getGroup(DragEvent.Drop.class).attachListener((element, event) -> {
+            Vector2f world = screenToWorld(event.getPosition().x(), event.getPosition().y());
+            for (DropHandler handler : dropHandlers) {
+                if (!handler.accepts(event.getPayload())) continue;
+                if (handler.drop(event.getPayload(), world.x(), world.y())) {
+                    event.stopPropagation();
+                    return;
+                }
+            }
+        }, false, true);
     }
 
     /** @param enabled the extension ids this surface wants, or null for everything contributed */
@@ -180,7 +224,11 @@ public class SurfaceEditor extends CanvasView
         this.overlays = new OverlayLayer(this);
         this.cursors = new Cursors(this::document);
         this.modes = new Modes(this);
-        this.extensions = SurfaceExtensions.activate(this, enabled);
+        installDropDispatch();
+        this.wantedExtensions = enabled;
+        // ONLY WHEN THIS IS THE LEAF. A subclass's own fields do not exist yet, so it calls
+        // ensureExtensions() at the end of its own constructor instead -- see that method.
+        if (getClass() == SurfaceEditor.class) ensureExtensions();
     }
 
     /**
@@ -457,12 +505,44 @@ public class SurfaceEditor extends CanvasView
         extensions.clear();
     }
 
+    /**
+     * Brings this surface's extensions up, once.
+     *
+     * <p><b>A subclass that enables any calls this at the END of its own constructor.</b> Activation
+     * cannot happen in THIS constructor, which runs first: an extension would be handed a subclass whose
+     * fields are all still null, and the failure is an NPE from inside a feature that did nothing wrong.
+     * Calling it last is the only moment the object is whole.</p>
+     *
+     * <p>{@link #connected()} calls it too, as the backstop for a surface that never bothered — but a
+     * surface used before it is shown (an editor adopting a document it has not displayed yet) needs its
+     * features at construction, so the backstop is not the primary path.</p>
+     *
+     * <p>Idempotent: a surface moved between docks would otherwise get two of everything.</p>
+     */
+    protected final void ensureExtensions() {
+        if (extensionsActivated) return;
+        extensionsActivated = true;
+        extensions.addAll(SurfaceExtensions.activate(this, wantedExtensions));
+    }
+
+    /**
+     * <b>Where the extensions come up</b> for a surface that did not bring them up itself.
+     *
+     * <p>A surface is built by a chain of constructors and this one runs FIRST — so an extension
+     * activated there is handed a subclass whose own fields are all still null, and the failure is an
+     * NPE from inside a feature that did nothing wrong. Here the whole object exists and it is in a
+     * document, which is what a feature that mounts an overlay or pushes a mode actually needs.</p>
+     *
+     * <p>Once per surface, not once per attach: a surface moved between docks would otherwise activate
+     * its features again and get two of everything.</p>
+     */
     @Override
     protected void connected() {
         super.connected();
         // The mode joins the window's input stack here rather than at construction: a surface with no
         // window has nothing to push onto, and a tool must not be live before the tree it acts on is.
         modes.attach(document());
+        ensureExtensions();
         onDidConnect.emit();
     }
 

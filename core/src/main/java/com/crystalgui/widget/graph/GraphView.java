@@ -30,6 +30,7 @@ import com.crystalgui.core.data.DataKey;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.ui.service.Animation;
 import com.crystalgui.ui.service.Input;
 import org.joml.Vector2f;
 import com.crystalgui.widget.canvas.CanvasView;
@@ -231,6 +232,33 @@ public class GraphView extends SurfaceEditor implements GraphContext {
         addOverlay(panel);
     }
 
+    /** @see GraphContext#useNodeLibrary */
+    @Override
+    public void useNodeLibrary(NodeTypeRegistry types, NodeWidgetFactory factory,
+                               TypeCompatibility rule) {
+        library.set(types, factory, rule);
+    }
+
+    /** @see GraphContext#placeNode */
+    @Override
+    public void placeNode(GraphNode node, float worldX, float worldY) {
+        addNode(node, worldX, worldY);
+    }
+
+    /** @see GraphContext#everyFrame */
+    @Override
+    public void everyFrame(Animation.Hook hook) {
+        UIDocument window = document();
+        if (window != null) window.animation().every(this, hook);
+    }
+
+    /** @see GraphContext#viewportBox */
+    @Override
+    @Nullable
+    public Box viewportBox() {
+        return box();
+    }
+
 
     /** What a graph means by the engine's questions. @see GraphPolicy */
     @Override
@@ -245,7 +273,19 @@ public class GraphView extends SurfaceEditor implements GraphContext {
     }
 
     public GraphView() {
-        super(NAME, List.of());
+        this(List.of());
+    }
+
+    /**
+     * A graph with the named surface extensions enabled.
+     *
+     * <p>An id absent from the classpath is logged and skipped, so a product that ships a feature as a
+     * separate jar degrades to a graph without it rather than failing to open.</p>
+     *
+     * @param enabled the extension ids this graph wants, or null for everything contributed
+     */
+    public GraphView(@Nullable List<String> enabled) {
+        super(NAME, enabled);
         wireLayer = new NodeWireLayer(this, connections);
         // First, so it paints under every node: equal z-index siblings paint in insertion order.
         addNode(wireLayer, 0f, 0f);
@@ -311,6 +351,9 @@ public class GraphView extends SurfaceEditor implements GraphContext {
             // field rather than recomputed in paint so the pick runs once per move, not once per frame.
             if (was != hoveredWire) markTreeDirty();
         }, false, true);
+        // LAST, and see ensureExtensions: an extension activated any earlier gets a GraphView whose
+        // wire layer, ports and library are all still null.
+        ensureExtensions();
     }
 
     /** Whether {@code target} is this graph's own node, or anything inside one — or a floating

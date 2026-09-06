@@ -3,3 +3,10 @@
 # Being here is availability, never enablement: `new SurfaceEditor(policy, List.of())` activates none of
 # them, which is what SurfaceShipsNothingTest holds the engine to.
 com.crystalgui.widget.surface.mode.SelectExtension
+
+# The shader graph's five. A graph enables them by id; a graph that does not is a plain node editor.
+com.crystalgui.app.shadergraph.extension.NodeLibraryExtension
+com.crystalgui.app.shadergraph.extension.PreviewsExtension
+com.crystalgui.app.shadergraph.extension.BlackboardExtension
+com.crystalgui.app.shadergraph.extension.ShaderSectionsExtension
+com.crystalgui.app.shadergraph.extension.GeneratedShaderExtension
