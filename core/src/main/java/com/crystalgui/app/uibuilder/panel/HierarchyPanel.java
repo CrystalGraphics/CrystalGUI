@@ -11,11 +11,14 @@ import com.crystalgui.app.uibuilder.canvas.BuilderContext;
 import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.core.signal.ConnectionGroup;
+import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.collection.tree.TreeRenderer;
 import com.crystalgui.widget.collection.tree.TreeView;
 import com.crystalgui.widget.text.UIText;
+
+import dev.vfyjxf.taffy.style.FlexDirection;
 
 /**
  * The document as a tree, selecting with the canvas.
@@ -80,6 +83,14 @@ public final class HierarchyPanel extends UIElement {
         });
         tree.setRenderer(new RowRenderer());
         tree.setExpanded(builder.getDocument().root(), true);
+        // THE FILL IDIOM, at DEFAULT origin so a sheet still decides. Without it the tree lays out at
+        // zero height: the rows exist, the panel is the right size, and nothing is drawn -- which reads
+        // as "the panel is empty" and is why asserting on visibleRows() could not see it. The project
+        // tree states the same three declarations for the same reason.
+        StyleGroup.defaultPipeline(getStyle().getLayoutGroup(),
+                l -> l.widthPercent(100f).heightPercent(100f).flexDirection(FlexDirection.COLUMN));
+        StyleGroup.defaultPipeline(tree.getStyle().getLayoutGroup(),
+                l -> l.widthPercent(100f).flexBasis(0f).flexGrow(1f));
         append(tree);
 
         // SELECTION, not activation: a single click on a row is choosing that node, and activation is

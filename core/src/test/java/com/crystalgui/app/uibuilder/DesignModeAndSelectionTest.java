@@ -237,6 +237,32 @@ public class DesignModeAndSelectionTest extends UiDocumentTestBase {
                 editor.surface().selection().contains(editor.artboard()));
     }
 
+    /**
+     * <b>A drag never marks a document node.</b>
+     *
+     * <p>The engine's move gesture marks what it is moving with a class for the duration. A node inside a
+     * UI document is placed by its parent, so there is no plane-move for it — but the gesture was
+     * engaged anyway and left {@code __moving__} behind, which is a class on a node of the document:
+     * encoded into the file, listed in the inspector, and enough to mark the tab dirty.</p>
+     */
+    @Test
+    public void draggingANodeDoesNotWriteADesignClassIntoTheDocument() {
+        Vector2f at = centre(first);
+        pressAt(at);
+        frame();
+
+        // DURING the press, which is when the mark goes on. Asserting after the release passes either
+        // way, because the gesture takes its own mark off when it ends -- so the leak is only visible
+        // for a drag that never ends cleanly, which is exactly how it was reported.
+        assertTrue("the press marked a node the file will be written from: " + first.classes(),
+                first.classes().isEmpty());
+
+        releaseAt(at);
+        frame();
+        assertTrue(first.classes().isEmpty());
+        assertFalse("and nothing was recorded to undo", editor.document().history().canUndo());
+    }
+
     private void pressAt(Vector2f at) {
         document.input().consumeMouseEvent(new CgSystemInput.Mouse.Event(
                 Math.round(at.x()), Math.round(at.y()), 0, 0, CgMouseCodes.LEFT_BUTTON, true, 0f, 1L));

@@ -50,7 +50,10 @@ public final class MoveGesture {
      * @return whether a drag started — false when there is nothing to move
      */
     public boolean begin(float rawX, float rawY, List<UIElement> moving) {
-        if (moving.isEmpty()) return false;
+        // ASKED BEFORE ANYTHING IS TOUCHED, and the order matters: the mark below goes on the items
+        // themselves, so a surface that does not move things at all must be refused before it is written
+        // to rather than at the end when there is no edit to record.
+        if (moving.isEmpty() || !policy.movesItems()) return false;
 
         List<UIElement> items = List.copyOf(moving);
         List<float[]> origins = new ArrayList<>(items.size());

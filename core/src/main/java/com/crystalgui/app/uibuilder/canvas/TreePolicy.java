@@ -67,6 +67,19 @@ public final class TreePolicy implements SurfacePolicy {
         return null;
     }
 
+    /**
+     * No. A node in a UI document is placed by its parent's layout, not by a coordinate.
+     *
+     * <p>Dragging one means <b>reorder or reparent</b> — L4.6's gesture, with an insertion marker — and
+     * the plane-move the engine offers has nothing to write. It was engaged anyway, which left the
+     * engine's {@code __moving__} class on a node of the document: encoded into the file, shown in the
+     * inspector's class list, and enough to mark the tab dirty.</p>
+     */
+    @Override
+    public boolean movesItems() {
+        return false;
+    }
+
     @Nullable
     private static UIElement parentOf(UIElement node) {
         return node.parent() instanceof UIElement parent ? parent : null;
