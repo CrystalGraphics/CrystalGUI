@@ -127,6 +127,33 @@ public class RadarChart extends UIElement {
         }
     }
 
+    /** How a wedge's fill is coloured between the two axes that bound it. */
+    public enum AxisGradient {
+
+        /** One flat colour per wedge — the axis it starts at. */
+        NONE,
+
+        /**
+         * Each wedge ramps from its own axis's colour to the NEXT one's, across the wedge.
+         *
+         * <p>Which makes the colour belong to the SPOKE rather than to the area beside it: every axis
+         * is its own hue along its own line, and the fill between two of them is the blend. A wedge
+         * chart otherwise reads as six flat panels that happen to meet, and the eye has to be told
+         * which panel goes with which label; here the label's colour runs all the way down its own
+         * edge and there is nothing to look up.</p>
+         */
+        BETWEEN_AXES,
+
+        /**
+         * Each wedge fades from its own colour at the rim to nothing at the centre.
+         *
+         * <p>Answers a different problem: every wedge converges on one point in the middle, and six
+         * saturated colours meeting there is the pinwheel a wedge chart is always about to become.
+         * The colour ends up where the datum is.</p>
+         */
+        TOWARD_CENTRE
+    }
+
     /** Below three there is no polygon to draw, and two axes are a line. */
     private static final int MIN_AXES = 3;
 
@@ -140,7 +167,7 @@ public class RadarChart extends UIElement {
     /** {@code 0} means "the largest value present", which is what a sheet of attributes wants. */
     private double explicitMax;
     private int rings = 4;
-    private boolean axisGradients;
+    private AxisGradient axisGradient = AxisGradient.NONE;
     /** What the labels were last placed against, so the hook below costs two comparisons a frame. */
     private float placedWidth = -1f;
     private float placedHeight = -1f;
@@ -226,24 +253,15 @@ public class RadarChart extends UIElement {
     }
 
     /**
-     * Fades each wedge toward the centre instead of filling it flat. Off by default.
+     * How a wedge is coloured between the two axes bounding it. {@link AxisGradient#NONE} by default.
      *
-     * <p>The ramp runs along the wedge's own bisector, from the axis's hue at zero alpha in the middle
-     * to the full fill strength at the rim — so the colour is where the DATUM is and the middle lets
-     * go. That is worth having for a reason beyond taste: at the centre every wedge converges on one
-     * point, and six saturated colours meeting there is the pinwheel a wedge chart is always about to
-     * become. Fading them out leaves the rim, which is the part that carries the reading.</p>
-     *
-     * <p>No new number. The rim end is the same {@code ::part(fill)} strength a flat fill uses and the
-     * centre end is transparent, so a theme still has exactly one dial. The two ends share their RGB
-     * and differ only in alpha, which is what keeps the ramp from passing through a muddy half-colour
-     * the way a lerp toward transparent BLACK does.</p>
-     *
-     * <p>Neighbouring wedges agree along the edge they share: each measures the same point at the same
-     * angle from its own bisector, so the two ramps meet at the same value and no seam appears.</p>
+     * <p>No new number either way. A ramp's ends are the same {@code ::part(fill)} strength a flat
+     * fill uses, so a theme still has exactly one dial — and both ends of a fade share their RGB and
+     * differ only in alpha, which is what keeps it from passing through the muddy half-colour a lerp
+     * toward transparent BLACK gives.</p>
      */
-    public RadarChart setAxisGradients(boolean gradients) {
-        this.axisGradients = gradients;
+    public RadarChart setAxisGradient(AxisGradient gradient) {
+        this.axisGradient = gradient == null ? AxisGradient.NONE : gradient;
         return this;
     }
 
@@ -339,20 +357,35 @@ public class RadarChart extends UIElement {
             // every axis, so it belongs in one place rather than in six.
             int rim = scaleAlpha(axes.get(i).argb() | 0xFF000000, strength);
 
+            int rimNext = scaleAlpha(axes.get(next).argb() | 0xFF000000, strength);
+
             CgVectorRenderer.Triangle wedge = ctx.triangle().points(cx, cy, x1, y1, x2, y2);
-            // The ramp's far end is the midpoint of the RIM, which is where this wedge's bisector
-            // actually leaves it -- the rim is a chord rather than an arc, so its own two ends are
-            // nearer the centre than any arc through them would be.
-            float mx = (x1 + x2) / 2f - cx;
-            float my = (y1 + y2) / 2f - cy;
-            float lenSq = mx * mx + my * my;
-            if (axisGradients && lenSq > 0f) {
-                // `dir` carries the SCALE as well as the direction -- the axis divided by its own
-                // length -- so dividing the midpoint vector by its squared length gives t = 1 exactly
-                // at the rim. Same RGB at both ends and only the alpha ramping, so the hue holds.
-                wedge.gradient(rim & 0x00FFFFFF, rim, cx, cy, mx / lenSq, my / lenSq);
-            } else {
-                wedge.color(rim);
+            float ux = x1 - cx, uy = y1 - cy;
+            float vx = x2 - cx, vy = y2 - cy;
+
+            switch (axisGradient) {
+                case BETWEEN_AXES -> {
+                    // A ramp that is 0 along the spoke to P1 and 1 along the spoke to P2, which is
+                    // what puts each axis's own hue on its own line. `t = dot(p - C, dir)` is zero on
+                    // the line through C perpendicular to dir, so dir must be perpendicular to u --
+                    // and dividing by the cross product is what makes it reach exactly 1 on v.
+                    float cross = ux * vy - uy * vx;
+                    // Zero when the two spokes are collinear, which includes either value being 0:
+                    // the wedge is a sliver with no width to ramp across, so it takes one colour.
+                    if (Math.abs(cross) > 1e-4f) wedge.gradient(rim, rimNext, cx, cy, -uy / cross, ux / cross);
+                    else wedge.color(rim);
+                }
+                case TOWARD_CENTRE -> {
+                    // The far end is the midpoint of the RIM, which is where this wedge's bisector
+                    // actually leaves it -- the rim is a chord rather than an arc, so its own two ends
+                    // are nearer the centre than any arc through them would be. `dir` carries the SCALE
+                    // as well as the direction, so dividing by the squared length reaches 1 at the rim.
+                    float mx = (ux + vx) / 2f, my = (uy + vy) / 2f;
+                    float lenSq = mx * mx + my * my;
+                    if (lenSq > 0f) wedge.gradient(rim & 0x00FFFFFF, rim, cx, cy, mx / lenSq, my / lenSq);
+                    else wedge.color(rim);
+                }
+                default -> wedge.color(rim);
             }
             // The RIM is the outline; the two spokes are seams against the neighbouring wedges.
             // Feathering those would draw a soft crack down every one of them.
@@ -423,11 +456,18 @@ public class RadarChart extends UIElement {
             double there = angleOf(next);
             float rHere = radius * extent(i);
             float rThere = radius * extent(next);
+            // THE RIM BLENDS WITH THE FILL UNDER IT. A segment runs between two vertices that carry
+            // different hues, so a flat stroke would put axis i's colour hard up against axis i+1's
+            // point -- the one place the eye is looking to read that axis off.
+            int from = axes.get(i).argb() | 0xFF000000;
+            int to = axisGradient == AxisGradient.BETWEEN_AXES
+                    ? axes.get(next).argb() | 0xFF000000
+                    : from;
             ctx.curve()
                     .line(cx + (float) Math.cos(here) * rHere, cy + (float) Math.sin(here) * rHere,
                             cx + (float) Math.cos(there) * rThere, cy + (float) Math.sin(there) * rThere)
                     .width(line / 2f)
-                    .color(axes.get(i).argb() | 0xFF000000)
+                    .colors(from, to)
                     .submit();
         }
     }
