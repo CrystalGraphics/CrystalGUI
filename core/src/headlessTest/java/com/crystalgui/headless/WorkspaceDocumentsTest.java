@@ -117,8 +117,12 @@ public class WorkspaceDocumentsTest {
 
     /** One server tick's worth of watch notifications, delivered. */
     private void notifyChange(CgPath path, CgFileEvent.Kind kind) {
-        Map<Object, List<FsMessages.FileChange>> byPeer =
-                hub.tick(WorkspaceActor.LOCAL, List.of(CgFileEvent.of(kind, path)));
+        deliverTick(List.of(CgFileEvent.of(kind, path)));
+    }
+
+    /** A whole tick, through the same coalescing and per-peer filter a real one takes. */
+    private void deliverTick(List<CgFileEvent> events) {
+        Map<Object, List<FsMessages.FileChange>> byPeer = hub.tick(WorkspaceActor.LOCAL, events);
         List<FsMessages.FileChange> mine = binding.changesFor(byPeer);
         if (!mine.isEmpty()) {
             serverSide.notify(FsMethods.CHANGED, new StateMap<>(PlainOps.INSTANCE,
@@ -507,6 +511,38 @@ public class WorkspaceDocumentsTest {
         assertNotNull("and so did the backup", workspace.backup().get(moved));
         assertNull("with nothing stranded behind", workspace.backup().get(closed));
         assertTrue(workspace.history().entriesOf(closed).isEmpty());
+    }
+
+    /**
+     * <b>And for a rename nobody performed in the app.</b> The explorer holds a recursive watch on each
+     * project root, so a change to a file nothing has open still reaches this client; {@code WatchHub}
+     * pairs the delete and the create a filesystem watcher reports into the one RENAMED that carries
+     * the stores. Nothing else puts that pairing in front of a client.
+     */
+    @Test
+    public void anExternalRenameOfAClosedFileMovesItsStores() {
+        workspace.watch(Resource.of(CgPath.parse("proj:")), true);
+        pump();
+
+        Resource closed = file("README.md");
+        CgPath from = CgPath.parse("proj:README.md");
+        CgPath to = CgPath.parse("proj:NOTES.md");
+        workspace.history().record(closed, "was here\n".getBytes(StandardCharsets.UTF_8));
+        workspace.backup().save(closed, "unsaved\n".getBytes(StandardCharsets.UTF_8), "etag-1");
+
+        // The hub has to have stat-ed it once, or its deletion carries no etag to pair against.
+        deliverTick(List.of(CgFileEvent.of(CgFileEvent.Kind.MODIFIED, from)));
+
+        // Moved from outside: the file really moves -- mtime and so etag intact -- and the watcher
+        // reports the two halves separately, which is all any of NIO, inotify or Win32 ever gives.
+        service.rename(WorkspaceActor.LOCAL, from, to, false);
+        deliverTick(List.of(CgFileEvent.of(CgFileEvent.Kind.DELETED, from),
+                CgFileEvent.of(CgFileEvent.Kind.CREATED, to)));
+
+        Resource moved = file("NOTES.md");
+        assertEquals("the history came with it", 1, workspace.history().entriesOf(moved).size());
+        assertNotNull("and so did the backup", workspace.backup().get(moved));
+        assertNull("with nothing stranded behind", workspace.backup().get(closed));
     }
 
     // ── Lifetime ────────────────────────────────────────────────────────────────────────────────
