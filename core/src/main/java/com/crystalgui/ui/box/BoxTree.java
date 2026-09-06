@@ -588,6 +588,7 @@ public final class BoxTree {
         box.contentHeight = layout.contentSize().height;
         box.border = layout.border();
         box.padding = layout.padding();
+        box.margin = layout.margin();
         for (Box child : box.hosted) read(child);
     }
 

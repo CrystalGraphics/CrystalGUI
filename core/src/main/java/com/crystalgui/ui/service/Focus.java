@@ -395,6 +395,29 @@ public final class Focus {
         return last;
     }
 
+    /**
+     * The Tab sequence under {@code scope}, in order, <b>without moving focus</b>.
+     *
+     * <pre>{@code
+     * for (UIElement stop : focus.traversalOrder(dialog)) drawBadge(stop);
+     * }</pre>
+     *
+     * <p>The same walk {@link #nextTabbable} steps through one at a time, answered whole. Asking for it
+     * by stepping means moving focus to read it — which fires focus events, scrolls things into view and
+     * changes what the inspector is looking at, so the answer is destroyed by the act of asking.</p>
+     *
+     * <p>The scope itself is excluded even when it is tabbable: it is the container being asked ABOUT.
+     * Empty when nothing under it takes Tab, which is an ordinary answer for a panel of labels.</p>
+     */
+    public List<UIElement> traversalOrder(UIElement scope) {
+        if (scope == null) return List.of();
+        List<UIElement> stops = new ArrayList<>();
+        for (UIElement node : order(scope)) {
+            if (node != scope && tabbable(node)) stops.add(node);
+        }
+        return List.copyOf(stops);
+    }
+
     @Nullable
     public UIElement firstTabbableIn(UIElement scope) {
         for (UIElement node : order(scope)) {

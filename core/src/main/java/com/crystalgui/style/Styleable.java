@@ -94,6 +94,21 @@ public interface Styleable extends StyleScope {
 
     // ── State, for the pseudo-classes ────────────────────────────────────────
 
+    /**
+     * A pseudo-state this element has been FORCED into, or null to use the real one.
+     *
+     * <p>What a devtools {@code :hov} panel writes: a rule can be made to apply with no pointer, no
+     * focus and nothing pressed, so a hover state can be read at leisure instead of chased. Null is the
+     * ordinary answer and means "ask the getter" — it is not the same as {@code FALSE}, which forces the
+     * state OFF against a real pointer.</p>
+     *
+     * <p>Default null, so a {@link Styleable} that is not an element needs no opinion.</p>
+     */
+    @Nullable
+    default Boolean forcedState(PseudoClasses pseudo) {
+        return null;
+    }
+
     boolean isEnabled();
 
     boolean isChecked();

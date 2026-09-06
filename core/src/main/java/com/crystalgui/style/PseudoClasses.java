@@ -62,7 +62,16 @@ public enum PseudoClasses {
         return valueOf(cssName.toUpperCase(Locale.ROOT).replace('-', '_'));
     }
 
+    /**
+     * Whether this pseudo-class matches {@code element} right now.
+     *
+     * <p><b>A forced state is asked first</b>, which is the one place that has to happen: every selector
+     * goes through here, so a devtools override applied at the getters would have to be applied at
+     * twelve of them and would still miss the thirteenth.</p>
+     */
     public boolean applies(Styleable element) {
+        Boolean forced = element.forcedState(this);
+        if (forced != null) return forced;
         return elementPredicate.test(element);
     }
 }

@@ -65,6 +65,8 @@ public final class Box {
     FloatRect border = new FloatRect(0f, 0f, 0f, 0f);
     FloatRect padding = new FloatRect(0f, 0f, 0f, 0f);
 
+    FloatRect margin = new FloatRect(0f, 0f, 0f, 0f);
+
     // Per-box state that is not style: what the compositor is animating. The SCROLL is the node's,
     // so it survives a freeze with nothing captured and a mirror shows the same offset.
     private @Nullable Integer zIndexOverride;
@@ -233,6 +235,19 @@ public final class Box {
 
     public FloatRect padding() {
         return padding;
+    }
+
+    /**
+     * The margin, OUTSIDE the border box — the one box-model edge the other two do not describe.
+     *
+     * <p>Read from the layout like {@link #border()} and {@link #padding()}, so it is the margin Taffy
+     * actually resolved rather than what the cascade asked for: a percentage is a number here, and a
+     * collapsed or clamped margin reports what happened.</p>
+     *
+     * <p>What a box-model overlay draws its fourth rect from. Without it such an overlay has three.</p>
+     */
+    public FloatRect margin() {
+        return margin;
     }
 
     /** The extent of what is laid out inside — what a scroll offset can reach. */
