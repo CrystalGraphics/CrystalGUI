@@ -118,6 +118,7 @@ public final class Lifecycle1201 {
     // ── Client ──────────────────────────────────────────────────────────────────────────────────
 
     public static void clientTick() {
+        com.crystalgui.mc.client.ClientProbe1201.tick();
         CgUiKeybinds1201.tick();
         Connections1201.onClientTick();
         run(clientTickHooks);
