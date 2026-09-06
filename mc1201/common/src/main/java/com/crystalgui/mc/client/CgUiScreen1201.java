@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.api.render.CgRenderPipeline;
+import com.crystalgui.core.storage.StorageLayout;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
@@ -123,10 +124,11 @@ public final class CgUiScreen1201 extends Screen {
     private static final class Mc1201Host implements HostServices {
 
         @Override
-        public Path configDirectory() {
+        public Path storageRoot() {
             Minecraft mc = Minecraft.getInstance();
             File root = mc == null ? new File(".") : mc.gameDirectory;
-            return new File(root, "config/crystalgui").toPath();
+            // ONE ROOT; the engine owns workspace-config/, cache/ and projects/ inside it.
+            return StorageLayout.rootIn(root.toPath());
         }
 
         @Override
@@ -157,7 +159,7 @@ public final class CgUiScreen1201 extends Screen {
         Application launched;
         try {
             launched = host.desktop().applications()
-                    .launch(CrystalEditor.KIND, host.workspace(), host.config());
+                    .launch(CrystalEditor.KIND, host.workspace());
         } catch (RuntimeException failed) {
             return false;
         }

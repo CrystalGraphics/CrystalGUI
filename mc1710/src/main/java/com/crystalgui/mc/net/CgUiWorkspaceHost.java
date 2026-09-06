@@ -1,7 +1,9 @@
 package com.crystalgui.mc.net;
 
+import com.crystalgui.core.storage.StorageLayout;
 import com.crystalgui.fs.server.WorkspaceService;
 import com.crystalgui.fs.protocol.ScriptingMode;
+import java.io.File;
 import java.nio.file.Path;
 
 import javax.annotation.Nullable;
@@ -19,6 +21,7 @@ import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.WorldServer;
 
 /**
  * <b>The three questions {@link WorkspaceHost} cannot answer on its own</b> - where the workspace is,
@@ -39,6 +42,12 @@ public final class CgUiWorkspaceHost {
 
     /** Matches the client's handle on the project. */
     public static final String PROJECT_ID = "minecraft.workspace";
+
+    /**
+     * The one project a server serves, until W3b makes {@code projects/} a listing rather than a
+     * constant. The leaf keeps the name the directory already had, so the move is one segment deep.
+     */
+    private static final String PROJECT_DIR = "workspace";
 
     private static WorkspaceHost host;
     private static boolean registered;
@@ -67,12 +76,29 @@ public final class CgUiWorkspaceHost {
          * Null until a world loads, which is why {@code WorkspaceHost} asks per connection rather than
          * once: {@link MinecraftServer#getServer()} answers null at mod init and contribution happens
          * long before any world.
+         *
+         * <p><b>The world's own directory in single-player, the server's on a dedicated one</b> — the
+         * WORLD and server scopes (D25-D28). {@code getFile} would answer with the data directory,
+         * which {@code IntegratedServer} overrides to {@code mc.mcDataDir}: every world on one
+         * installation shared a workspace, and deleting a save left its projects behind.</p>
          */
         @Override
         @Nullable
         public Path root() {
             MinecraftServer server = MinecraftServer.getServer();
-            return server == null ? null : server.getFile("crystalgui/workspace").toPath();
+            if (server == null) return null;
+            File base;
+            if (server.isDedicatedServer()) {
+                base = server.getFile("");
+            } else {
+                WorldServer[] worlds = server.worldServers;
+                // The overworld's save handler is where the world's own directory comes from. Null
+                // between "a server exists" and "it has loaded a world", which is the state above.
+                if (worlds == null || worlds.length == 0 || worlds[0] == null) return null;
+                base = worlds[0].getSaveHandler().getWorldDirectory();
+                if (base == null) return null;
+            }
+            return StorageLayout.projectsIn(base.toPath()).resolve(PROJECT_DIR);
         }
 
         @Override

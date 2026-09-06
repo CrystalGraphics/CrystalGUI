@@ -1,5 +1,6 @@
 package com.crystalgui.desktop.app;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -12,6 +13,7 @@ import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.storage.ConfigStorage;
+import com.crystalgui.core.storage.StorageLayout;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Workspace;
@@ -211,11 +213,41 @@ public final class ApplicationRegistry {
         return application;
     }
 
-    /** Launches with nothing asked of it. */
+    /**
+     * Launches onto <b>this desktop's own storage</b> — the usual call, and the one to reach for.
+     *
+     * <p>A caller supplies no directory at all: the host told the desktop once, with
+     * {@code Desktop.useStorage}. The overloads below exist for a caller that genuinely needs a
+     * different one, which is rare and deliberate.</p>
+     *
+     * <p>Refuses, with a named reason, when nobody has said where this desktop writes — rather than
+     * inventing somewhere. An application whose preferences silently go to a directory nobody chose
+     * looks exactly like one whose preferences do not work.</p>
+     */
+    @Nullable
+    public Application launch(ApplicationKind kind, @Nullable Workspace workspace) {
+        ConfigStorage storage = desktop.config();
+        if (storage == null) {
+            CrystalGuiCore.LOGGER.warn("[cgui] '{}' was not launched: this desktop has nowhere to "
+                    + "write. Call Desktop.useStorage(installation) first.", kind.id());
+            return null;
+        }
+        return launch(kind, workspace, storage, desktop.cacheRoot());
+    }
+
+    /** Launches with nothing asked of it, and nowhere to cache derived output. */
     @Nullable
     public Application launch(ApplicationKind kind, @Nullable Workspace workspace,
                               ConfigStorage storage) {
-        return launch(kind, LaunchContext.of(kind, desktop, workspace, scoped(kind, storage)));
+        return launch(kind, workspace, storage, null);
+    }
+
+    /** Launches with nothing asked of it. @param cacheRoot {@code crystalgui/cache}, or null for none */
+    @Nullable
+    public Application launch(ApplicationKind kind, @Nullable Workspace workspace,
+                              ConfigStorage storage, @Nullable Path cacheRoot) {
+        return launch(kind, LaunchContext.of(kind, desktop, workspace,
+                scoped(kind, storage), workspacesIn(storage), cacheFor(kind, cacheRoot)));
     }
 
     /**
@@ -226,10 +258,17 @@ public final class ApplicationRegistry {
     @Nullable
     public Application open(Resource resource, @Nullable Workspace workspace,
                             ConfigStorage storage) {
+        return open(resource, workspace, storage, null);
+    }
+
+    /** As {@link #open(Resource, Workspace, ConfigStorage)}, with somewhere to cache. */
+    @Nullable
+    public Application open(Resource resource, @Nullable Workspace workspace,
+                            ConfigStorage storage, @Nullable Path cacheRoot) {
         ApplicationKind kind = handlerFor(resource);
         if (kind == null) return null;
         return launch(kind, new LaunchContext(kind, desktop, workspace, scoped(kind, storage),
-                List.of(resource)));
+                workspacesIn(storage), cacheFor(kind, cacheRoot), List.of(resource)));
     }
 
     /**
@@ -286,6 +325,31 @@ public final class ApplicationRegistry {
 
     /** D20: each application's own corner of a shared config directory. */
     private static ConfigStorage scoped(ApplicationKind kind, ConfigStorage storage) {
-        return storage.scoped(kind.id());
+        return storage.scoped(StorageLayout.APPS).scoped(kind.id());
+    }
+
+    /**
+     * The parent of every workspace's own store — {@code workspace-config/projects/}.
+     *
+     * <p>Handed over unscoped by workspace on purpose: the identity arrives with the greeting, so the
+     * application scopes it. It is still not the config root, so one application cannot reach another's
+     * preferences through it.</p>
+     */
+    private static ConfigStorage workspacesIn(ConfigStorage storage) {
+        return storage.scoped(StorageLayout.PROJECTS);
+    }
+
+    /**
+     * The same corner of {@code cache/}, sanitised by hand.
+     *
+     * <p>{@link ConfigStorage#scoped} does this substitution for us; a raw {@link Path} has nobody to
+     * do it, and an application id is namespaced ({@code crystalgui:editor}) with a colon that cannot
+     * be a directory on Windows.</p>
+     */
+    @Nullable
+    private static Path cacheFor(ApplicationKind kind, @Nullable Path cacheRoot) {
+        if (cacheRoot == null) return null;
+        return cacheRoot.resolve(StorageLayout.APPS)
+                .resolve(kind.id().replace(':', '.').replace('/', '.'));
     }
 }

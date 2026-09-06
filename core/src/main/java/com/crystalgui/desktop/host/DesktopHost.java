@@ -1,12 +1,12 @@
 package com.crystalgui.desktop.host;
 
+import java.nio.file.Path;
 import java.util.function.Supplier;
 
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.storage.ConfigStorage;
-import com.crystalgui.core.storage.LocalConfigStorage;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.client.Workspace;
@@ -53,6 +53,9 @@ public final class DesktopHost implements Disposable {
     private final HostServices services;
     private final UIDocument document;
     private final ConfigStorage config;
+
+    /** Where derived output goes. Handed to an application at launch; never written to by this class. */
+    private final Path cacheRoot;
     private final DesktopWindowMount mount;
 
     @Nullable
@@ -76,11 +79,14 @@ public final class DesktopHost implements Disposable {
         // NOT INSTALLED FOR YOU. Without this the surface matches no selector at all and everything on
         // it renders as an unstyled column of boxes.
         this.document.styles().addStylesheet(StyleSheet.DEFAULT);
-        this.config = new LocalConfigStorage(services.configDirectory());
-        // WHERE THE ARRANGEMENT LIVES, and nothing else. The compositor owns reading it, applying it to
-        // windows as they open, and writing it again when the surface closes; a host has no business
-        // holding a second copy of that policy.
-        Desktop.of(document).persistTo(config, services.desktopId());
+        // THE HOST SAYS WHERE crystalgui/ IS AND NOTHING ELSE. The compositor derives its config
+        // store, its cache root and its arrangement record from that one directory -- durable and
+        // derived as separate trees, so "delete cache/ and nothing is lost" needs no caveat.
+        Desktop desktop = Desktop.of(document).useStorage(services.storageRoot());
+        this.config = desktop.config();
+        this.cacheRoot = desktop.cacheRoot();
+        // AND THE ARRANGEMENT, which the compositor owns reading, applying and writing again.
+        desktop.persistAs(services.desktopId());
         this.mount = new DesktopWindowMount(document);
     }
 
@@ -98,9 +104,19 @@ public final class DesktopHost implements Disposable {
         return Desktop.of(document);
     }
 
-    /** Where private records go — the arrangement, an application's session, backups. */
+    /** Where private records go — the arrangement, an application's preferences, its session. */
     public ConfigStorage config() {
         return config;
+    }
+
+    /**
+     * Where derived output goes — {@code crystalgui/cache/}, and everything under it is disposable.
+     *
+     * <p>Handed to an application at launch. Deleting this whole tree at any moment loses nothing; that
+     * is what makes it a sibling of {@link #config()} rather than a directory inside it.</p>
+     */
+    public Path cacheRoot() {
+        return cacheRoot;
     }
 
     /** The file client, or null until there is a connection to carry it. */
@@ -139,7 +155,11 @@ public final class DesktopHost implements Disposable {
                 // AN ATTACHMENT ON THE CONNECTION, not a constructor: this wire is shared, and a second
                 // workspace on it would be a second subscriber to fs.changed. @see Workspace#of
                 workspace = Workspace.of(live);
-                workspace.setStorage(config);
+                // NO STORE SET HERE. A backup belongs to a WORKSPACE, and which workspace this is
+                // cannot be known until the server greets -- so the store is given in
+                // WorkbenchApplication.restoreWhenReady, where the identity exists. Setting the
+                // desktop's own store here wrote every server's unsaved work into one directory, and
+                // was then overwritten by the application's anyway.
                 bound = live;
             } else if (bound != live) {
                 workspace.rebind(live);
