@@ -157,10 +157,13 @@ public class WatcherReachesTheClientTest {
         assertTrue(await("Before.java", FsMessages.ChangeKind.CREATED));
 
         Files.move(from, root.resolve("After.java"));
-        assertTrue("the new name arrives", await("After.java", FsMessages.ChangeKind.CREATED)
-                || await("After.java", FsMessages.ChangeKind.RENAMED));
-        assertTrue("and the old one must go, or the tree keeps a row for a file that is gone",
-                await("Before.java", FsMessages.ChangeKind.DELETED)
-                        || await("After.java", FsMessages.ChangeKind.RENAMED));
+
+        // ONE RENAMED, not a delete beside a create. The pairing matches the etag the vanished half
+        // used to hold, so it only works if the hub had stat-ed the file -- which for a file nobody has
+        // open means the watch primed the tree. A delete-and-create carries the tree correctly and
+        // still loses the document's identity: nothing retargets, and its backup and history stay filed
+        // under a name that no longer exists.
+        assertTrue("a move under a watched root is ONE rename",
+                await("After.java", FsMessages.ChangeKind.RENAMED));
     }
 }
