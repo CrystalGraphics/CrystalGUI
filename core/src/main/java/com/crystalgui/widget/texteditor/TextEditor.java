@@ -5870,14 +5870,18 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         // viewportHeight() reaches it through horizontalBarThickness -> getMaxScrollLeft ->
         // getScrollWidth, and a scrollbar that is not shown has NO BOX -- so a zero here is a geometry
         // question, not a text one. Said once per editor rather than per frame.
+        //
+        // NOT BEFORE THERE IS A BOX. An editor that has not been laid out yet has no viewport, which
+        // is the ordinary state on the way in rather than the failure above -- the rectangle this
+        // warns about needs a box to be drawn into. Worse than the noise: the flag latches, so a warning
+        // spent here is one the genuine case can no longer produce.
         boolean degenerate = viewport <= 0f || !(height > 0f);
-        if (!warnedDegenerateWindow && (degenerate || TRACE_WINDOW)) {
+        if (box() != null && !warnedDegenerateWindow && (degenerate || TRACE_WINDOW)) {
             warnedDegenerateWindow = true;
             String state = "viewport=" + viewport + " lineHeight=" + height + " viewLines=" + count
                     + " rows=[" + first + ".." + last + "] scrollTop=" + scrollTop()
-                    + " box=" + (box() == null ? "<none>"
-                            : box().width() + "x" + box().height()
-                                    + " client=" + box().clientWidth() + "x" + box().clientHeight());
+                    + " box=" + box().width() + "x" + box().height()
+                    + " client=" + box().clientWidth() + "x" + box().clientHeight();
             if (degenerate) {
                 CrystalGuiCore.LOGGER.warn("[cgui] TextEditor realised no rows -- it will draw its "
                         + "background and no text. {}", state);
