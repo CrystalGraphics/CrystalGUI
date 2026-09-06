@@ -595,11 +595,39 @@ public class WorkspaceDocumentsTest {
         pump();
         assertEquals(1, hub.subscriptionCount("alice"));
 
-        notifyRename(MAIN_PATH, CgPath.parse("proj:src/Renamed.java"), "etag-2");
-        assertEquals("still one while it is open", 1, hub.subscriptionCount("alice"));
+        // PERFORMED, not just announced: the re-watch subscribes to where the file now is, and the
+        // server will not watch a path that does not exist.
+        CgPath renamed = CgPath.parse("proj:src/Renamed.java");
+        service.rename(WorkspaceActor.LOCAL, MAIN_PATH, renamed, false);
+        notifyRename(MAIN_PATH, renamed, "etag-2");
+        assertEquals("still one, now on the path it moved to", 1, hub.subscriptionCount("alice"));
 
         opened.result().dispose();
         pump();
         assertEquals("and it goes when the document does", 0, hub.subscriptionCount("alice"));
+    }
+
+    /**
+     * <b>A renamed file still hears about itself.</b> The server watches a PATH, so moving only this
+     * client's own key left it subscribed to where the document used to be: a renamed file went deaf and
+     * stayed that way until it was closed and reopened.
+     */
+    @Test
+    public void aRenamedDocumentIsWatchedAtItsNewPath() {
+        Document document = open(MAIN);
+        CgPath renamed = CgPath.parse("proj:src/Renamed.java");
+
+        service.rename(WorkspaceActor.LOCAL, MAIN_PATH, renamed, false);
+        notifyRename(MAIN_PATH, renamed, "etag-2");
+        assertEquals(file("src/Renamed.java"), document.resource());
+
+        // Somebody else writes to it where it now lives.
+        service.write(WorkspaceActor.LOCAL, renamed,
+                "class Renamed {}".getBytes(StandardCharsets.UTF_8), null);
+        notifyChange(renamed, CgFileEvent.Kind.MODIFIED);
+
+        assertEquals("the change reached it at the path it moved to",
+                "class Renamed {}",
+                document.as(TextDocumentModel.class).buffer().toString());
     }
 }

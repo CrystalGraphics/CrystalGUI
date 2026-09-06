@@ -103,11 +103,7 @@ public final class WorkspaceDocuments implements Disposable {
         this.kinds = Objects.requireNonNull(kinds, "kinds");
         documents.onDidOpen.connect(onDidOpen::emit);
         documents.onDidClose.connect(document -> {
-            Attachment held = watches.remove(document.resource());
-            if (held != null) {
-                held.changes().disconnect();
-                held.watch().dispose();
-            }
+            release(watches.remove(document.resource()));
             // THE UNWATCH TAKES THIS CLIENT OUT OF THE PATH'S PRESENCE, so there is nothing to
             // withdraw -- only the memo of what the server was told, which describes a document that
             // no longer exists.
@@ -138,10 +134,7 @@ public final class WorkspaceDocuments implements Disposable {
     @Override
     public void dispose() {
         lifetime.disconnectAll();
-        for (Attachment held : watches.values()) {
-            held.changes().disconnect();
-            held.watch().dispose();
-        }
+        for (Attachment held : watches.values()) release(held);
         watches.clear();
     }
 
@@ -250,6 +243,25 @@ public final class WorkspaceDocuments implements Disposable {
 
     /** Watches the file and reports this client's dirtiness, so the other side can say who is editing. */
     private void attach(Document document) {
+        watchFor(document);
+        // THE SUBSCRIPTION MOVES WITH THE FILE, and it is a real unwatch-and-watch rather than a
+        // re-keying of the map: the server watches a PATH, so a document that only moved its own key
+        // went on being told about where it used to be and heard nothing about where it now is. A
+        // renamed file went deaf until it was closed and reopened. Filing it under the new resource
+        // also matters on close, which looks the watch up by the resource the document has now.
+        document.onDidChangeResource.connect((from, to) -> {
+            release(watches.remove(from));
+            watchFor(document);
+        });
+        document.onDidChangeState.connect(state -> {
+            onDidChangeState.emit(document, state);
+            reportEditing(document);
+        });
+        document.onDidChange.connect(() -> backup(document));
+    }
+
+    /** Subscribes to wherever the document is now, and files it under that. */
+    private void watchFor(Document document) {
         Workspace.Watch watch = workspace.watch(document.resource(), false);
         Connection listening = watch.onChanged.connect(changes -> {
             for (FsMessages.FileChange change : changes) {
@@ -263,19 +275,13 @@ public final class WorkspaceDocuments implements Disposable {
             }
         });
         watches.put(document.resource(), new Attachment(watch, listening));
-        // A RENAME MOVES THE KEY WITH THE DOCUMENT. It is filed under the resource the document had
-        // when it opened and looked up on close by the resource it has NOW, so a renamed document's
-        // watch was disposed by nobody: it stayed subscribed, and the listener on it stayed pointed at
-        // a document that had moved.
-        document.onDidChangeResource.connect((from, to) -> {
-            Attachment held = watches.remove(from);
-            if (held != null) watches.put(to, held);
-        });
-        document.onDidChangeState.connect(state -> {
-            onDidChangeState.emit(document, state);
-            reportEditing(document);
-        });
-        document.onDidChange.connect(() -> backup(document));
+    }
+
+    /** Lets go of one attachment: the listener first, then this holder's claim on the watch. */
+    private void release(@Nullable Attachment held) {
+        if (held == null) return;
+        held.changes().disconnect();
+        held.watch().dispose();
     }
 
     /**
