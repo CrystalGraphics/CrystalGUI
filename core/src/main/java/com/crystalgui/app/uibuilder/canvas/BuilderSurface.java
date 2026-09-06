@@ -69,7 +69,11 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
     public Object getData(DataKey<?> key) {
         if (key == BuilderEditor.UI_BUILDER) return owner;
         if (key == BuilderEditor.UI_DOCUMENT) return document;
-        if (key == BuilderEditor.BUILDER_SELECTION) return selection;
+        // ONLY WHEN IT HAS SOMETHING TO SAY. A DataContext stops at the first non-null answer, and the
+        // inspector's source is the ACTIVE EDITOR'S VIEW -- which for a .cgui is this element. Answering
+        // an empty selection therefore shadowed the document-level LiveSubject outright, so live inspect
+        // reported nothing for exactly the file type it exists for. Silence lets the walk reach it.
+        if (key == BuilderEditor.BUILDER_SELECTION) return selection.statesNothing() ? null : selection;
         return null;
     }
 

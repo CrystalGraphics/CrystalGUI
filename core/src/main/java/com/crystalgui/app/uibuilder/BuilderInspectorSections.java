@@ -4,6 +4,7 @@ import java.util.List;
 import dev.vfyjxf.taffy.geometry.FloatRect;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.style.property.StyleProperty;
+import com.crystalgui.style.ComputedStyle;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.PseudoClasses;
 import com.crystalgui.app.uibuilder.inspect.MatchedRules;
@@ -403,8 +404,12 @@ public final class BuilderInspectorSections {
             form.row(ConfigDescriptor.info("box.margin", "margin"), edges(box.margin()));
             form.row(ConfigDescriptor.info("box.border", "border"), edges(box.border()));
             form.row(ConfigDescriptor.info("box.padding", "padding"), edges(box.padding()));
+            // THE CONTENT BOX, not contentWidth(): those are different questions and this panel is
+            // asking the box model's. contentWidth() is the extent of what is INSIDE, which for a leaf
+            // that draws its own glyphs is zero -- so a text node reported "0.0 x 0.0" for a row every
+            // reader takes to mean the box its text is laid out in.
             form.row(ConfigDescriptor.info("box.content", "content"),
-                    round(box.contentWidth()) + " x " + round(box.contentHeight()));
+                    round(box.contentBoxWidth()) + " x " + round(box.contentBoxHeight()));
         }
     }
 
@@ -431,12 +436,18 @@ public final class BuilderInspectorSections {
                 form.row(ConfigDescriptor.info("flex.parent", "parent"), "none");
                 return;
             }
+            // THROUGH ComputedStyle, which is what BoxStyle hands Taffy. getComputed answers the
+            // cascade SLOT and is null when no rule declared the property -- true, and not the question:
+            // every one of these has an initial the layout actually uses, so three untouched defaults
+            // were reported as three nulls.
+            ComputedStyle parentStyle = parent.getStyle().computed();
+            ComputedStyle own = node.getStyle().computed();
             form.row(ConfigDescriptor.info("flex.direction", "parent direction"),
-                    String.valueOf(parent.getStyle().getComputed(LayoutProperties.FLEX_DIRECTION)));
+                    String.valueOf(parentStyle.get(LayoutProperties.FLEX_DIRECTION)));
             form.row(ConfigDescriptor.info("flex.grow", "grow"),
-                    String.valueOf(node.getStyle().getComputed(LayoutProperties.FLEX_GROW)));
+                    String.valueOf(own.get(LayoutProperties.FLEX_GROW)));
             form.row(ConfigDescriptor.info("flex.shrink", "shrink"),
-                    String.valueOf(node.getStyle().getComputed(LayoutProperties.FLEX_SHRINK)));
+                    String.valueOf(own.get(LayoutProperties.FLEX_SHRINK)));
         }
     }
 

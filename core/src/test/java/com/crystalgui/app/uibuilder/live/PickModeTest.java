@@ -19,6 +19,8 @@ import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
 
+import dev.vfyjxf.taffy.style.TaffyPosition;
+
 /**
  * <b>L3.5 — the next click anywhere in the window becomes a selection.</b>
  *
@@ -105,6 +107,34 @@ public class PickModeTest extends UiDocumentTestBase {
         assertFalse("a consumed move would freeze every :hover in the window",
                 picker.pointerMoved(at.x(), at.y()));
         assertEquals(target, picker.hovered());
+    }
+
+    /**
+     * <b>An unhittable layer over the whole window is picked through, not picked.</b>
+     *
+     * <p>The regression, and it made the picker useless rather than merely imprecise: the workbench keeps
+     * a full-application {@code RegionDropOverlay} that paints nothing and is {@code hit-test: false}, so
+     * a picker reaching through the flag reported that same invisible sheet wherever you clicked. Every
+     * click, one answer, and nothing you were pointing at.</p>
+     */
+    @Test
+    public void anUnhittableLayerOverEverythingIsNotWhatGetsPicked() {
+        open();
+        UIElement sheet = new UIElement().layout(l -> l.positionType(TaffyPosition.ABSOLUTE)
+                                                       .left(0f).top(0f).width(W).height(H));
+        sheet.setId("sheet");
+        sheet.setHitTest(false);
+        document.append(sheet);
+        document.update(W, H);
+
+        PickMode picker = PickMode.start(document);
+        clickOn(target);
+
+        BuilderSelection selection = DataContext.from(target).get(BuilderEditor.BUILDER_SELECTION);
+        assertNotNull(selection);
+        assertSame("the sheet is a picture, and the pick went through it",
+                target, selection.node());
+        assertFalse(document.input().hasMode(picker));
     }
 
     private void clickOn(UIElement element) {

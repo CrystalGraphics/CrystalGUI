@@ -109,6 +109,9 @@ public class DockArea extends UIElement {
     private final Map<SplitView, DockBranch> splitBranches = new IdentityHashMap<>();
 
     private boolean rebuildPending = true;
+
+    /** Set across buildNode, so a group's own announce waits for the tree to be re-attached. */
+    private boolean rebuilding;
     private boolean ticking;
     @Nullable
     private DockGroup activeGroup;
@@ -332,6 +335,12 @@ public class DockArea extends UIElement {
      * than belt-and-braces.</p>
      */
     void announceActivePanel() {
+        // NOT WHILE THE TREE IS DETACHED. rebuild() empties `content` before buildNode, and buildNode
+        // syncs every group -- so a sync's own announce reaches a listener whose panel is in no document:
+        // anything resolved by walking outward, a status bar most of all, is simply not there. Dropping
+        // the announce rather than the edge is what matters: rebuild() announces again after appending,
+        // and consuming the edge here made that second call a no-op. @see #rebuild
+        if (rebuilding) return;
         DockPanelRef now = activePanel();
         if (Objects.equals(now, announcedPanel)) return;
         announcedPanel = now;
@@ -551,7 +560,13 @@ public class DockArea extends UIElement {
         splitBranches.clear();
 
         phase("clear + prune");
-        UIElement built = buildNode(layout.root(), 0);
+        rebuilding = true;
+        UIElement built;
+        try {
+            built = buildNode(layout.root(), 0);
+        } finally {
+            rebuilding = false;
+        }
         phase("buildNode (the whole tree)");
         if (built != null) {
             // flex-grow plus a zero basis, and deliberately NOT an explicit width/height: this area is a

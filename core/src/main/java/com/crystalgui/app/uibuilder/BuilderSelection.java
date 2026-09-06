@@ -65,6 +65,17 @@ public final class BuilderSelection {
         return nodes.isEmpty();
     }
 
+    /**
+     * Whether this selection says <b>nothing at all</b> — no nodes, no rule, no token, not the canvas.
+     *
+     * <p>Distinct from {@link #isEmpty()}, which is about nodes only: a selection with a rule picked and
+     * no node is empty and is very much a statement. Asked by a provider deciding whether to answer or to
+     * let the question travel further out.</p>
+     */
+    public boolean statesNothing() {
+        return nodes.isEmpty() && rule == null && token == null && !canvasSelected;
+    }
+
     public int size() {
         return nodes.size();
     }

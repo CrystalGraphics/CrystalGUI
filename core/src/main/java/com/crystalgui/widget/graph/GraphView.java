@@ -29,7 +29,6 @@ import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.event.MouseEvent;
-import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.service.Animation;
 import com.crystalgui.ui.service.Input;
 import org.joml.Vector2f;
@@ -308,19 +307,6 @@ public class GraphView extends SurfaceEditor implements GraphContext {
         // about where its wires are — left cullable, it would vanish the moment the view left world
         // origin, taking every wire with it. It culls per wire instead, where the endpoints are known.
         setCullExempt(wireLayer, true);
-
-        // The graph must be able to HOLD focus, or none of its keys work.
-        //
-        // requestFocus refuses anything whose policy is NONE, which is the default — so the canvas took
-        // no focus, every graph command resolved no GraphView from the focused element, and Delete,
-        // Ctrl+A and Escape disabled themselves while the widget looked entirely alive. Pressing a node
-        // happened to work because a node is CLICK-focusable, which made the failure look like "some
-        // keys work and some do not".
-        //
-        // CLICK rather than FOCUSABLE: a canvas is not a tab stop. You reach it by pressing it, the way
-        // you reach one in every editor.
-        setFocusPolicy(FocusPolicy.CLICK);
-
 
         this.events.getGroup(MouseEvent.Down.class).attachListener((el, event) -> {
             if (!isEnabled() || event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;

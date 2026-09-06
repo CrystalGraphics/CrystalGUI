@@ -18,6 +18,7 @@ import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.input.keymap.Keymap;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
@@ -223,7 +224,14 @@ public class SurfaceEditor extends CanvasView
         this.geometry = new Geometry(surface);
         this.overlays = new OverlayLayer(this);
         this.cursors = new Cursors(this::document);
-        this.modes = new Modes(this);
+        this.modes = new Modes(this, () -> this);
+        // A SURFACE MUST BE ABLE TO HOLD FOCUS, or none of its keys work: requestFocus refuses anything
+        // whose policy is NONE, so every command that resolves a surface from the focused element
+        // disables itself while the widget looks entirely alive. Pressing an ITEM happens to work,
+        // because an item is click-focusable, which makes it read as "some keys work and some do not".
+        //
+        // CLICK rather than FOCUSABLE: a canvas is not a tab stop. You reach it by pressing it.
+        setFocusPolicy(FocusPolicy.CLICK);
         installDropDispatch();
         this.wantedExtensions = enabled;
         // ONLY WHEN THIS IS THE LEAF. A subclass's own fields do not exist yet, so it calls

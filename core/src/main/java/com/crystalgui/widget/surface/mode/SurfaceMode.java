@@ -2,6 +2,7 @@ package com.crystalgui.widget.surface.mode;
 
 import com.crystalgraphics.platform.input.CgMouseCodes;
 
+import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.InputMode;
 import com.crystalgui.widget.surface.SurfaceContext;
@@ -46,7 +47,19 @@ final class SurfaceMode implements InputMode {
         int modifiers = SelectTool.modifiersNow();
         if (!pressed) return tool.pointerUp(x, y, button, modifiers);
         if (!ownedHere(x, y)) return false;
+        // A CLAIMED PRESS STILL MOVES FOCUS. Modes are asked before the tree, so consuming here means
+        // Focus.pressed never runs -- and the surface's own keys, which resolve it from the focused
+        // element, stay dead however often you click it. A press the surface DECLINES falls through to
+        // ordinary dispatch and focuses correctly, which is why only some clicks appeared to work.
+        focusSurface();
         return tool.pointerDown(x, y, button, modifiers);
+    }
+
+    private void focusSurface() {
+        UIElement view = modes.view();
+        if (view == null) return;
+        UIDocument window = view.document();
+        if (window != null) window.focus().requestFocus(view);
     }
 
     @Override
