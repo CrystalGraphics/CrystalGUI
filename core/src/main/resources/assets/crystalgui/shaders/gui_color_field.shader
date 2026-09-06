@@ -1,7 +1,7 @@
 // crystalgui:shaders/gui_color_field.shader
 //
 // The continuously-varying surfaces a colour picker is made of. Every one is a per-pixel function of
-// position, so none can be a texture or a batched quad — the same reason gui_rounded_rect.shader
+// position, so none can be a texture or a batched quad -- the same reason gui_rounded_rect.shader
 // exists and is drawn through CgUiPaintContext.withMaterial(...).
 //
 //   HUE_RING (0)   an annulus, hue taken from the angle
@@ -14,11 +14,11 @@
 // path, and the alpha slider cannot drift from the others.
 //
 // HUE_STRIP exists because H is the one channel GRADIENT cannot express. Hue 0 and hue 1 are both
-// red, so a two-stop ramp between them is a flat red bar — which is exactly what the H slider drew
+// red, so a two-stop ramp between them is a flat red bar -- which is exactly what the H slider drew
 // until this mode was added.
 //
 // Rounded corners come from the same sdf_rounded_box the rest of the UI uses, so a picker's
-// swatches clip identically to every other rounded surface — including against UIElement's
+// swatches clip identically to every other rounded surface -- including against UIElement's
 // hit-test, which uses the same per-corner radii.
 
 #type pos2_uv2_col4ub
@@ -64,7 +64,7 @@ Pass {
     }
 
     // The transparency checkerboard, in PIXELS rather than uv, so the squares stay the same size
-    // whatever the widget's dimensions — a checker that stretched with its box would read as a
+    // whatever the widget's dimensions -- a checker that stretched with its box would read as a
     // pattern belonging to the colour rather than to the surface behind it.
     //
     // DECLARED BEFORE vertex(), and that is not style. The pass body is split at the stage functions,
@@ -93,7 +93,7 @@ Pass {
         vec4 result;
 
         if (_Mode < 0.5) {
-            // ── HUE_RING ────────────────────────────────────────────────────
+            // -- HUE_RING ----------------------------------------------------
             // Distance from centre normalised so the ring is round even when the box is not, then
             // banded between the inner radius and the edge. atan gives -pi..pi; the +0.5 turns it
             // into 0..1 with red at the top, which is the orientation every picker uses.
@@ -109,21 +109,21 @@ Pass {
             float inner = smoothstep(_InnerRadius - aa, _InnerRadius, radius);
             result = vec4(hsv_to_rgb(vec3(hue, 1.0, 1.0)), outer * inner);
         } else if (_Mode < 1.5) {
-            // ── SV_SQUARE ───────────────────────────────────────────────────
-            // x is saturation, y is value with 1 at the TOP — uv runs downward, so the flip is
+            // -- SV_SQUARE ---------------------------------------------------
+            // x is saturation, y is value with 1 at the TOP -- uv runs downward, so the flip is
             // what puts white in the corner every user expects it in.
             result = vec4(hsv_to_rgb(vec3(_Hue, i.uv.x, 1.0 - i.uv.y)), 1.0);
         } else if (_Mode < 2.5) {
-            // ── GRADIENT ────────────────────────────────────────────────────
+            // -- GRADIENT ----------------------------------------------------
             // Composited over the checker HERE rather than relying on blending, so the result is
             // opaque and the surface behind the widget never shows through a low-alpha stop.
             vec4 ramp = mix(_ColorA, _ColorB, i.uv.x);
             vec3 over = mix(cg_checker(i.uv * _BoxSize), ramp.rgb, ramp.a);
             result = vec4(over, 1.0);
         } else {
-            // ── HUE_STRIP ───────────────────────────────────────────────────
+            // -- HUE_STRIP ---------------------------------------------------
             // The H channel's track, and it cannot be a GRADIENT: hue 0 and hue 1 are BOTH red, so a
-            // two-stop ramp between them is a flat red bar — which is exactly what the H slider drew
+            // two-stop ramp between them is a flat red bar -- which is exactly what the H slider drew
             // before this mode existed. A hue sweep is not expressible as two endpoints.
             //
             // ALWAYS fully saturated and bright. Drawing it at the current saturation and value was

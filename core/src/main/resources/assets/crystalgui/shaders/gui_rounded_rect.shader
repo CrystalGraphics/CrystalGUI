@@ -2,14 +2,14 @@
 //
 // SDF-based rounded-rectangle "canvas": interior filled by _FillColor, a sampled _MainTex
 // (WITH_TEXTURE_FILL, single stretched sample), or a 9-slice sprite (WITH_9SLICE_FILL, per-pixel
-// equivalent of CgUiSprite's 9-quad slicing — see the fragment's own comment), with an optional
+// equivalent of CgUiSprite's 9-quad slicing -- see the fragment's own comment), with an optional
 // _BorderColor stroke band (WITH_BORDER) along the outer edge. All fill modes and the border share
 // one rounded-box SDF, so corners clip everything consistently. _CornerRadiusX/_CornerRadiusY each
-// hold four independent per-corner radii (TL,TR,BR,BL, CSS order) — elliptical corners (rx != ry).
+// hold four independent per-corner radii (TL,TR,BR,BL, CSS order) -- elliptical corners (rx != ry).
 // UIElement's rounded-corner hit-test uses the same per-corner (rx,ry) values and the same
 // approximate elliptical SDF technique, so rendering and hit-testing stay consistent.
 //
-// Not part of CgUiPaintContext's shared box-model batch (see gui_quad.shader) — drawn via
+// Not part of CgUiPaintContext's shared box-model batch (see gui_quad.shader) -- drawn via
 // CgUiPaintContext.withMaterial(...) since it needs its own per-instance uniforms (corner
 // radius, border, box size) that don't fit the shared quad batch's per-vertex-only tint.
 
@@ -30,7 +30,7 @@ Properties {
     _MainTex      ("Main Texture", sampler2D) = "white"
     _FillColor    ("Fill Color",   color)     = (1.0, 1.0, 1.0, 1.0)
     _BorderColor  ("Border Color", color)     = (0.0, 0.0, 0.0, 1.0)
-    // SPLIT_BORDER only. Unity's inset text-field bevel: a darker top edge, a lighter bottom edge —
+    // SPLIT_BORDER only. Unity's inset text-field bevel: a darker top edge, a lighter bottom edge --
     // see CgUiRoundedRect.setBorder(width, top, bottom).
     _BorderColorTop    ("Border Color Top",    color) = (0.0, 0.0, 0.0, 1.0)
     _BorderColorBottom ("Border Color Bottom", color) = (0.0, 0.0, 0.0, 1.0)
@@ -39,7 +39,7 @@ Properties {
     _BorderWidth  ("Border Width", float)     = 0.0
     _BoxSize      ("Box Size (px)", vec2)     = (0.0, 0.0)
     _LayerOpacity ("Layer Opacity", float)    = 1.0
-    // WITH_9SLICE_FILL only — mirrors CgUiSprite's own border/UV-breakpoint fields exactly, so the
+    // WITH_9SLICE_FILL only -- mirrors CgUiSprite's own border/UV-breakpoint fields exactly, so the
     // fragment reproduces the same 9-region remap CgUiSprite does with 9 separate quads, in one pass.
     _NineSliceBorder  ("9-Slice Border L,T,R,B (px)",       vec4) = (0.0, 0.0, 0.0, 0.0)
     _NineSliceOuterUV ("9-Slice Outer UV u0,v0,u3,v3",      vec4) = (0.0, 0.0, 1.0, 1.0)
@@ -152,7 +152,7 @@ Pass {
         vec4 fillColor = texture(_MainTex, vec2(u, v));
         // Multiply ALL FOUR channels, never alpha alone: the WITH_BORDER mix() below interpolates
         // toward fillColor on straight alpha, so a colour left in an alpha-zeroed fill would drag
-        // the border's inner edge and leave a fringe — the same hazard paintOutline documents.
+        // the border's inner edge and leave a fringe -- the same hazard paintOutline documents.
         fillColor *= keepX * keepY * centerMask;
 #elif defined(WITH_TEXTURE_FILL)
         vec4 fillColor = texture(_MainTex, i.uv);
@@ -160,7 +160,7 @@ Pass {
         vec4 fillColor = _FillColor;
 #endif
 
-        // Ambient background-color tint — scoped to the fill/background region only, so it never
+        // Ambient background-color tint -- scoped to the fill/background region only, so it never
         // bleeds into _BorderColor's own independently-resolved alpha below.
         fillColor *= i.color;
 
@@ -169,14 +169,14 @@ Pass {
 #ifdef SPLIT_BORDER
         // Which of the FOUR edges this boundary pixel belongs to, not just which half of the box: a
         // naive `localPos.y < 0` split colours the whole stroke by vertical half, which cuts the LEFT
-        // and RIGHT edges in two as well — visible as a diagonal seam at the corners and a hard split
+        // and RIGHT edges in two as well -- visible as a diagonal seam at the corners and a hard split
         // running down each side, instead of a plain, uniform side matching the fill. Comparing how far
         // the pixel is from the box's horizontal extent (`dx`) against its vertical extent (`dy`) picks
         // out the horizontal (top/bottom) edges specifically: a pixel near the LEFT/RIGHT boundary has
         // a small `dx` and a comparatively large `dy`, so `dy < dx` is false there and it falls through
-        // to the uniform `_BorderColor` — the same colour the fill uses, so it disappears the way
+        // to the uniform `_BorderColor` -- the same colour the fill uses, so it disappears the way
         // Unity's side edges do. Only pixels genuinely closer to the top/bottom boundary take the
-        // split colour, picked by `localPos.y`'s sign (this engine's UI projection is Y-down — see
+        // split colour, picked by `localPos.y`'s sign (this engine's UI projection is Y-down -- see
         // gui_color_field.shader's `1.0 - i.uv.y`, which exists BECAUSE this direction is the natural
         // one here and had to be flipped for that shader's own bottom-up convention).
         float dx = halfSize.x - abs(localPos.x);
