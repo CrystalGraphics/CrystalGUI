@@ -13,22 +13,23 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 
 /**
- * <b>A scripted client run, off unless asked for.</b> {@code -Dcrystalgui.clientProbe=true}
+ * A scripted client run: join a world, drive a fixed routine, photograph each step, quit.
  *
- * <p>What {@code serverSmoke} is to the dedicated server, this is to the client: boot, drive a fixed
- * routine, photograph each step, quit. It exists because the rendering faults on this loader are all
- * things somebody has to LOOK at -- a wash that appears only while an animation is playing, a menu that
- * flashes white for a few frames, a surface that is a flat fill rather than a blurred one -- and none
- * of them is reachable from a headless test or from the harness, which has no world behind the UI and
- * therefore never takes the paths that break.
+ * <pre>{@code
+ * ./gradlew :mc1201:forge:runClient -Dcrystalgui.clientProbe=true
+ * ./gradlew :mc1201:forge:runClient -Dcrystalgui.clientProbe=true -PcgWorld="Some World"
+ * }</pre>
  *
- * <p>The alternative is a person opening the game, performing the routine by hand and describing what
- * they saw, once per candidate fix. That is the slowest instrument available and the least precise: a
- * photograph taken at a named step is comparable across runs, and a sentence is not.
+ * <p>Screenshots land in {@code runs/client/screenshots} as {@code cgui-NN-step.png}. Add
+ * {@code -Dcrystalgui.layer.probe=true} for GL readbacks alongside them.</p>
  *
- * <p><b>It quits on its own, and it quits when it goes wrong too</b> -- {@link #BUDGET_TICKS} is a hard
- * ceiling, so a step that never becomes ready ends the run rather than leaving a client up forever with
- * a Gradle task attached to it.
+ * <p>What {@code serverSmoke} is to the dedicated server, this is to the client — for faults that have
+ * to be looked at, and that a headless test and the harness cannot reach because neither has a world
+ * behind the UI. It quits on {@link #BUDGET_TICKS} even when a step never becomes ready, so a stalled
+ * run ends rather than stranding a Gradle task.</p>
+ *
+ * <p>Add a step by extending {@link Step} and giving it a case in {@code advance()}; each sets the next
+ * step and optionally {@code waitTicks}.</p>
  */
 public final class ClientProbe1201 {
 
@@ -100,9 +101,8 @@ public final class ClientProbe1201 {
                 editorWaited = 0;
                 break;
             case WAIT_EDITOR:
-                // POLLED, never assumed. The editor needs a workspace and a workspace needs a
-                // connection, so the window appears some unknown number of ticks after the ask -- and a
-                // fixed wait either photographs an empty desktop or spends time it did not need.
+                // Polled rather than waited out: the editor needs a workspace, which needs a connection,
+                // so the window appears an unknown number of ticks after the ask.
                 if (mainWindow() != null) {
                     say("editor window is up after " + editorWaited + " ticks");
                     step = Step.SHOOT_EDITOR;
@@ -171,10 +171,8 @@ public final class ClientProbe1201 {
                     step = Step.QUIT;
                     return;
                 }
-                // ANCHORED ON THE TASKBAR ENTRY, not on the desktop. The anchor decides placement, and
-                // anchored to the desktop the menu resolves somewhere the screenshot never showed -- so
-                // the shot came back looking like the menu had not opened at all, which is a different
-                // fault from the one being chased.
+                // Anchored on the taskbar entry: the anchor decides placement, and anchored to the
+                // desktop the menu lands somewhere the screenshot does not cover.
                 UIElement anchor = desktop.querySelector("." + ENTRY_CLASS);
                 say("jump list anchored on " + (anchor == null ? "the desktop (no entry found)" : "an entry"));
                 SystemMenu.showJumpList(frame, anchor != null ? anchor : desktop);

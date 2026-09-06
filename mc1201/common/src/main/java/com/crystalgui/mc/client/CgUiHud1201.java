@@ -44,14 +44,9 @@ public final class CgUiHud1201 {
         boolean foreignUp = current != null && !(current instanceof CgUiScreen1201);
         if (foreignUp != foreignScreenWasUp) {
             foreignScreenWasUp = foreignUp;
-            // NULLABLE, and this ran unguarded. Desktop.screenOverlay() answers null while the compositor
-            // has no document -- which is its ordinary state until something opens a window -- so the
-            // commonest case of all, an empty desktop, threw here on the very first screen change.
-            //
-            // It threw from the HUD overlay event, and BEFORE paint()'s try/finally, so nothing restored
-            // the GL state the frame had already touched. Minecraft renders its overlays in one chain, so
-            // its own next overlay failed too ("Error rendering overlay 'minecraft:vignette'") and the
-            // rest of that chain never ran -- once per frame, for the life of the session.
+            // Nullable: screenOverlay() answers null while the compositor has no document, which is its
+            // ordinary state until a window opens. Thrown from the HUD event it takes out the rest of
+            // Minecraft's overlay chain with it.
             ScreenOverlay overlay = desktop.screenOverlay();
             if (overlay != null) overlay.onForeignScreenChanged(foreignUp);
         }
@@ -64,10 +59,8 @@ public final class CgUiHud1201 {
         Desktop desktop = CgUiScreen1201.desktop();
         if (desktop == null || !CgUiHostGl1201.contextIsLive()) return;
 
-        // INSIDE the guard, not before it. Deciding what to present reads the compositor and can throw
-        // for the same reasons painting it can; thrown from here it escaped into Minecraft's overlay
-        // chain, which then abandoned the rest of its own overlays and left this frame's GL state
-        // wherever we had put it. The catch below exists precisely so that cannot happen.
+        // Inside the guard: deciding what to present reads the compositor and can throw for the same
+        // reasons painting it can, and the catch below is what keeps that out of Minecraft's chain.
         DesktopPresentation presentation;
         try {
             presentation = presentation();

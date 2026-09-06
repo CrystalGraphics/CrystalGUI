@@ -424,8 +424,7 @@ final class CgUiBackdrop {
         if (tex == null) return;
         float u0 = rx / (float) w, u1 = (rx + rw) / (float) w;
         float vTop = 1f - ry / (float) h, vBottom = 1f - (ry + rh) / (float) h;
-        // Declared, not bound by hand -- @see CgUiPaintContext#blitLayer. This is the composite that
-        // was erasing the captured scene, which is what made every glass surface a flat fill.
+        // Declared, not bound by hand. @see CgUiPaintContext#blitLayer
         ctx.layerBlitMaterial.applyProperties(b -> b.sampler("_MainTex", 0, tex));
         ctx.withMaterial(ctx.layerBlitMaterial, () -> {
             ctx.poseStack.pushPose();
@@ -606,10 +605,9 @@ final class CgUiBackdrop {
         int qw = Math.max(1, Math.round(target.getWidth() * fracW));
         int qh = Math.max(1, Math.round(target.getHeight() * fracH));
         ctx.beginLayerFbo(target);
-        // THE PROJECTION, WHICH THE VIEWPORT ALONE DOES NOT COVER. beginLayerFbo sets the viewport and
-        // leaves the frame's ortho alone -- right for a screen-sized layer, wrong for a blur target, which
-        // at a working scale of 2 is half the screen: a full-size quad then lands on a quarter of it and
-        // the rest keeps the clear. Invisible at scale 1, where the two sizes agree. @see compositeMask
+        // The ortho as well as the viewport: beginLayerFbo sets only the viewport, which is enough for a
+        // screen-sized layer and not for a blur target at a working scale above 1 -- a full-size quad
+        // lands on a fraction of it and the rest keeps the clear. @see CgUiPaintContext#compositeMask
         CgFrameData fd = CgRenderPipeline.getInstance().getFrameData();
         Matrix4f enclosingProj = new Matrix4f(fd.projMatrix);
         int enclosingW = fd.viewportW, enclosingH = fd.viewportH;

@@ -11,21 +11,22 @@ import com.crystalgraphics.platform.gl.state.CgGlSlot;
 import com.crystalgui.core.CrystalGuiCore;
 
 /**
- * <b>A probe for the nested render-target path, off unless asked for.</b>
- * {@code -Dcrystalgui.layer.probe=true}
+ * GL readbacks for the layer path, off unless asked for. {@code -Dcrystalgui.layer.probe=true}
  *
- * <p>It exists for one question, and it is the question every symptom in this path shares: content that
- * should be on screen is not. From the screen alone "the target never received it" and "the target
- * received it and the composite threw it away" are indistinguishable — both are a missing picture, both
- * throw nothing, and both look like the widget rather than the plumbing. Only a readback separates them,
- * which is why {@code glReadPixels} had to reach the backend at all.
+ * <pre>{@code
+ * CgUiLayerProbe.frame();                                  // once per UI frame
+ * if (CgUiLayerProbe.ENABLED) {
+ *     CgUiLayerProbe.log("blitLayer src=" + fbo.getId()
+ *             + " holds=[" + CgUiLayerProbe.contents(fbo) + "]");
+ * }
+ * }</pre>
  *
- * <p>So each layer is sampled at two moments: after its subtree has painted into it, and after it has
- * been composited back. Non-zero then zero is a composite fault; zero then zero is a draw fault; and a
- * framebuffer that is not complete is neither, which is worth knowing before reading either number.
+ * <p>From the screen, a target that never received its content and one whose content the composite
+ * threw away are the same missing picture. Only a readback separates them.</p>
  *
- * <p><b>Every call is a full pipeline stall</b> — a synchronous readback per layer per frame. That is
- * the point of the flag; nothing here may run in an ordinary frame.
+ * <p>{@link #contents} and {@link #atOwner} rebind the framebuffer and stall the pipeline, so nothing
+ * here may run in an ordinary frame. Sampling is one frame in {@code EVERY} and stops after
+ * {@code BUDGET} lines; call {@link #frame()} or every reader returns an empty string.</p>
  */
 public final class CgUiLayerProbe {
 
@@ -114,11 +115,8 @@ public final class CgUiLayerProbe {
             int cy = fbo.getHeight() - Math.round(ownY + ownH / 2f) - h / 2;
             cx = Math.max(0, Math.min(Math.max(0, fbo.getWidth() - w), cx));
             cy = Math.max(0, Math.min(Math.max(0, fbo.getHeight() - h), cy));
-            // AND THE TOP-LEFT OF THE BOX, a few pixels in, which for anything that lays its content out
-            // from the top is where the content IS. The centre answers a different question and answered
-            // it misleadingly once already: an 8-line file in a 329px-tall editor is legitimately blank
-            // at its own centre, so a centre patch reported the children layer empty when the text was
-            // sitting 250px above the sample.
+            // The top-left of the box too: anything laying content out from the top may be legitimately
+            // blank at its own centre, which reads as an empty layer.
             int tx = Math.max(0, Math.min(Math.max(0, fbo.getWidth() - w), Math.round(ownX) + 4));
             int ty = Math.max(0, Math.min(Math.max(0, fbo.getHeight() - h),
                     fbo.getHeight() - Math.round(ownY) - h - 4));
@@ -158,10 +156,8 @@ public final class CgUiLayerProbe {
         if (!ENABLED || !sampling) return "";
         if (fbo == null) return "<null>";
         try (CgGlScope scope = CgGlState.save(CgGlSlot.FBO)) {
-            // THE PROBE HAS THE DISEASE IT IS INVESTIGATING. CgGL.glBindFramebuffer goes through the
-            // state shadow, which eliminates a bind it believes is already in effect -- so without this
-            // the readback below can silently sample whatever was ALREADY bound instead of the target
-            // asked for, and every number here would be a confident measurement of the wrong thing.
+            // The shadow elides a bind it believes is already in effect, so without this the readback
+            // can sample whatever was already bound instead of the target asked for.
             CgGlState.invalidateAllIfPresent();
             CgGL.glBindFramebuffer(CgGL.GL_FRAMEBUFFER, fbo.getId());
             // Anything already queued belongs to the caller, not to us; drained so the error reported
@@ -173,21 +169,14 @@ public final class CgUiLayerProbe {
             }
             int w = Math.min(PATCH, Math.max(1, fbo.getWidth()));
             int h = Math.min(PATCH, Math.max(1, fbo.getHeight()));
-            // THE CORNER IS THE ONE THAT MATTERS, and sampling only the centre hid it for four runs.
-            // blitLayer composites a layer FULL-SCREEN, and its contract says that is safe only because
-            // "everywhere the layer's own content didn't draw stayed transparent from the initial clear".
-            // The centre is where a window legitimately is, so it is opaque either way and says nothing.
-            // A corner that is NOT transparent is the whole of symptoms 3 and 4: a full-screen composite
-            // of it at fractional opacity darkens (or whitens) the entire screen while appearing to
-            // animate nothing.
+            // Both, because they answer different questions. blitLayer composites a layer full-screen
+            // and is only safe if everywhere the subtree did not draw stayed transparent -- so the
+            // corner is what tests that, while the centre is where a window legitimately is.
             String centre = patch(Math.max(0, (fbo.getWidth() - w) / 2),
                                   Math.max(0, (fbo.getHeight() - h) / 2), w, h);
             String corner = patch(0, 0, w, h);
-            // AND THE TOP-LEFT, which is the only place the BACKDROP CAPTURE writes: it blits the scene
-            // into a sub-rect at the target's top-left, so centre and corner both land in untouched
-            // buffer. Read without it, the capture reports itself uniformly opaque black -- which is
-            // exactly what a failed scene blit would look like, and is really the alpha-only clear
-            // outside the region. It nearly cost a wrong root cause.
+            // The backdrop capture writes a sub-rect at the target's top-left, so centre and corner
+            // both land in untouched buffer and would report it uniformly empty.
             String top = patch(0, Math.max(0, fbo.getHeight() - h), w, h);
             return "centre[" + centre + "] corner[" + corner + "] topLeft[" + top + "]";
         } catch (Throwable unreadable) {

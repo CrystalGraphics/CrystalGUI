@@ -25,12 +25,14 @@ public final class CgUiHostGl1201 {
     private CgUiHostGl1201() {}
 
     /**
-     * Whether there is a GL context to paint into at all.
+     * Whether there is a GL context to paint into. Ask before every paint:
      *
-     * <p>Shutdown is the case: {@code GameShuttingDownEvent} runs {@code destroyContext()} and the render
-     * thread then draws the save-progress screen, so {@code beginFrame} bound a deleted material and
-     * turned a clean quit into a crash report. Asked here rather than guarded in the engine — a deleted
-     * material genuinely cannot be bound; what is wrong is asking it to.</p>
+     * <pre>{@code
+     * if (host == null || !CgUiHostGl1201.contextIsLive()) return;
+     * }</pre>
+     *
+     * <p>{@code GameShuttingDownEvent} destroys the context while the render thread still draws the
+     * save-progress screen, so a paint after it binds deleted materials.</p>
      */
     public static boolean contextIsLive() {
         return CgGraphicsLifecycle.isInitialized();
