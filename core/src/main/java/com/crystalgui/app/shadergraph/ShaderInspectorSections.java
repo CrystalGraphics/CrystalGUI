@@ -33,6 +33,7 @@ import com.crystalgui.widget.graph.NodePort;
 import com.crystalgui.widget.config.inspector.InspectorForm;
 import com.crystalgui.widget.config.inspector.InspectorRegistry;
 import com.crystalgui.widget.config.inspector.InspectorSection;
+import com.crystalgui.widget.surface.extension.SectionSet;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -77,36 +78,18 @@ public final class ShaderInspectorSections {
      * window. It used to be {@code new PropertySection()} per call, which is per {@code CrystalEditor}
      * — four editors put twenty sections in the registry and drew four copies of every form.</p>
      */
-    private static final List<InspectorSection> SECTIONS = List.of(
+    private static final SectionSet SECTIONS = SectionSet.of(
             new PropertySection(), new NodeSection(), new MultiNodeSection(),
             new WireSection(), new GraphSettingsSection());
-
-    /** How many contributions currently want them. @see #register() */
-    private static int holders;
 
     /**
      * Puts the graph's sections in the inspector, and hands back the way to take them out again.
      *
-     * <p>Counted rather than idempotent, because both answers have to be right: a second editor must
-     * not double the forms, and the first editor closing must not empty the inspector under the second
-     * one. The sections are in the registry for exactly as long as at least one contribution holds
-     * them.</p>
+     * <p>The counting is {@link SectionSet}'s: a second editor must not double the forms, and the first
+     * editor closing must not empty the inspector under the second one.</p>
      */
     public static Disposable register() {
-        if (holders++ == 0) {
-            for (InspectorSection section : SECTIONS) InspectorRegistry.register(section);
-        }
-        return new Disposable() {
-            private boolean released;
-
-            @Override
-            public void dispose() {
-                if (released) return;
-                released = true;
-                if (--holders > 0) return;
-                for (InspectorSection section : SECTIONS) InspectorRegistry.remove(section);
-            }
-        };
+        return SECTIONS.register();
     }
 
     // ── Shared resolution ───────────────────────────────────────────────────────────────────────

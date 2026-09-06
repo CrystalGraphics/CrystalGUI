@@ -97,6 +97,20 @@ public final class Surface {
         return canvas.getZoom();
     }
 
+    /** The view offset, in the surface's own space — a screen offset, not a world one. */
+    public float panX() {
+        return canvas.getPanX();
+    }
+
+    public float panY() {
+        return canvas.getPanY();
+    }
+
+    public Surface setPan(float x, float y) {
+        canvas.setPan(x, y);
+        return this;
+    }
+
     public Surface setZoom(float zoom) {
         canvas.setZoom(zoom);
         return this;

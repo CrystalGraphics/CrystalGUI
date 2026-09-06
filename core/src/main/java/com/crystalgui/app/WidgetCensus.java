@@ -41,7 +41,9 @@ import com.crystalgui.widget.texteditor.find.SearchReplaceBar;
 import com.crystalgui.widget.texteditor.TextEditor;
 import com.crystalgui.widget.graph.GraphNode;
 import com.crystalgui.widget.graph.GraphView;
+import com.crystalgui.widget.composite.CreateMenu;
 import com.crystalgui.widget.graph.node.NodeCreationMenu;
+import com.crystalgui.widget.surface.insert.InsertMenu;
 import com.crystalgui.widget.graph.NodePort;
 import com.crystalgui.widget.graph.NodeWireLayer;
 import com.crystalgui.widget.config.inspector.Inspector;
@@ -175,6 +177,9 @@ public final class WidgetCensus {
         WidgetContracts.localOnly(NodePort.class, "Part of the graph document.");
         WidgetContracts.localOnly(NodeWireLayer.class, "Part of the graph document -- it draws the edges.");
         WidgetContracts.localOnly(NodeCreationMenu.class, "Part of the graph, and built from the node registry.");
+        WidgetContracts.localOnly(CreateMenu.class,
+                "A search menu over a consumer's library -- what it lists is not describable.");
+        WidgetContracts.localOnly(InsertMenu.class, "As CreateMenu -- the engine's Add menu over one.");
 
         WidgetContracts.localOnly(Workbench.class,
                 "The IDE shell. Its layout is a WorkbenchSession record, which is persisted and restored "

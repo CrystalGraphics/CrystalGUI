@@ -28,6 +28,7 @@ import com.crystalgui.widget.surface.edit.Clipboard;
 import com.crystalgui.widget.surface.edit.Edits;
 import com.crystalgui.widget.canvas.WorldRect;
 import com.crystalgui.widget.surface.extension.SurfaceExtensions;
+import com.crystalgui.widget.surface.insert.InsertMenu;
 import com.crystalgui.widget.surface.mode.Cursors;
 import com.crystalgui.widget.surface.mode.Modes;
 import com.crystalgui.widget.surface.overlay.Geometry;
@@ -96,6 +97,9 @@ public class SurfaceEditor extends UIElement
     private final Snapping snapping = new Snapping();
     private final Cursors cursors;
     private final Modes modes;
+
+    @Nullable
+    private InsertMenu insertMenu;
 
     @Nullable
     private Clipboard<?> clipboard;
@@ -362,6 +366,7 @@ public class SurfaceEditor extends UIElement
         return List.copyOf(viewModes);
     }
 
+    @Override
     public List<InsertSource> insertSources() {
         return List.copyOf(insertSources);
     }
@@ -376,6 +381,28 @@ public class SurfaceEditor extends UIElement
 
     public List<Command> commands() {
         return List.copyOf(commands);
+    }
+
+    /**
+     * Opens the Add menu at a point on the plane.
+     *
+     * <p>Built on first use and reused — it is a popover, so it is the same element every time. A
+     * surface with no insert sources opens an empty one, which is honest: it means nothing offered
+     * anything.</p>
+     */
+    public InsertMenu openInsertMenu(float worldX, float worldY) {
+        if (insertMenu == null) {
+            insertMenu = new InsertMenu(this);
+            appendStructural(insertMenu);
+        }
+        insertMenu.openAtWorld(worldX, worldY);
+        return insertMenu;
+    }
+
+    /** The Add menu, or null while nothing has opened one. */
+    @Nullable
+    public InsertMenu insertMenu() {
+        return insertMenu;
     }
 
     @Override
