@@ -15,6 +15,8 @@ import com.google.gson.JsonParser;
 
 import com.crystalgraphics.util.io.CgIO;
 
+import com.crystalgui.core.signal.Signal;
+
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.NodeContract;
 import com.crystalgui.ui.dom.UIElementRegistry;
@@ -41,6 +43,16 @@ public final class UiTemplates {
     }
 
     private static final Map<String, UiTemplate> CACHE = new ConcurrentHashMap<>();
+
+    /**
+     * Fires after any document is forgotten, so what was built from one can rebuild itself.
+     *
+     * <p>Every connected {@code TemplateInstance} listens, which is what makes editing a template under
+     * a running client show up without reopening the screen. A host drives it: F3+T on 1.7.10, the
+     * resource-reload event on 1.20, a workspace change in the builder — all of them call
+     * {@link #reloadAll}.</p>
+     */
+    public static final Signal.Action onDidReload = new Signal.Action();
 
     /**
      * The document under {@code assetId}, parsed once.
@@ -131,11 +143,13 @@ public final class UiTemplates {
      */
     public static void reloadAll() {
         CACHE.clear();
+        onDidReload.emit();
     }
 
     /** Drops one document. */
     public static void reload(String assetId) {
         CACHE.remove(assetId);
+        onDidReload.emit();
     }
 
     /** Puts an already-parsed document in the cache under {@code assetId} — the builder's live copy. */

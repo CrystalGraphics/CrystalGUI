@@ -4,6 +4,9 @@ import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.ui.dom.NodeContract;
+import com.crystalgui.template.Bound;
+import com.crystalgui.template.UiTemplate;
+import com.crystalgui.template.UiTemplates;
 import com.crystalgui.ui.dom.Name;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Field;
@@ -201,6 +204,10 @@ public final class UiType<P extends UIElement & Networked<M>, M> {
      */
     public P build(@Nullable M model) {
         P panel = create.get();
+        // A TEMPLATE FIRST, so the @Bound fields are filled before anything else is created and before
+        // build() is asked to arrange anything -- a panel laid out by a document has its tree by then.
+        UiTemplate.Source source = type.getAnnotation(UiTemplate.Source.class);
+        if (source != null) UiTemplates.load(source.value()).inflateInto(panel);
         for (Field part : partsOf(type)) {
             UIElement value = read(panel, part);
             if (value == null) {
@@ -208,6 +215,10 @@ public final class UiType<P extends UIElement & Networked<M>, M> {
                 // the model, and only the parent's layout knows which slice that is --
                 // `engines = EnginePanel.TYPE.build(m.engines())`. Plain widgets have no such input.
                 if (Networked.class.isAssignableFrom(part.getType())) continue;
+                // Neither is a @Bound field: it comes from the document or not at all. A required one
+                // the document has not got already threw; an optional one stays null, which is what
+                // optional means -- creating a second Button here would put it in no tree.
+                if (part.isAnnotationPresent(Bound.class)) continue;
                 value = instantiate(part);
                 write(panel, part, value);
             }
@@ -256,7 +267,12 @@ public final class UiType<P extends UIElement & Networked<M>, M> {
      */
     public static void bindFields(UIElement panel) {
         for (Field part : partsOf(panel.getClass())) {
-            write(panel, part, panel.require("#" + part.getName(), asElement(part.getType())));
+            // A @Bound field may name a different id from its own -- resolve by what it asked for, or
+            // the client looks for #chart while the document calls it #stats.
+            Bound declared = part.getAnnotation(Bound.class);
+            String id = declared == null || declared.value().isEmpty() ? part.getName() : declared.value();
+            if (declared != null && declared.optional() && panel.querySelector("#" + id) == null) continue;
+            write(panel, part, panel.require("#" + id, asElement(part.getType())));
         }
     }
 

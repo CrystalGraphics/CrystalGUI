@@ -11,6 +11,7 @@ import javax.annotation.Nullable;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import com.crystalgui.core.signal.Connection;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.ShadowRoot;
@@ -54,6 +55,10 @@ public class TemplateInstance extends UIElement {
     private final Map<String, Object> params = new LinkedHashMap<>();
 
     private boolean built;
+
+    /** Held only while connected, so a detached instance is not kept alive by the signal. */
+    @Nullable
+    private Connection reloadWatch;
 
     /** Empty — the registry's factory. The template arrives as an attribute. */
     public TemplateInstance() {
@@ -153,6 +158,27 @@ public class TemplateInstance extends UIElement {
     @Override
     protected void connected() {
         super.connected();
+        if (reloadWatch == null) {
+            reloadWatch = UiTemplates.onDidReload.connect(() -> {
+                built = false;
+                rebuild();
+                installSheets();
+            });
+        }
+        installSheets();
+    }
+
+    /** Stops listening: a screen that closed must not rebuild on the next reload. */
+    @Override
+    protected void disconnected() {
+        super.disconnected();
+        if (reloadWatch != null) {
+            reloadWatch.disconnect();
+            reloadWatch = null;
+        }
+    }
+
+    private void installSheets() {
         UIDocument window = document();
         if (window == null || template == null) return;
         ShadowRoot shadow = shadowRoot();

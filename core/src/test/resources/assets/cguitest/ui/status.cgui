@@ -1,0 +1,14 @@
+{
+  "cgui": 1,
+  "model": "com.example.StatusModel",
+
+  "root": {
+    "kind": "element",
+    "class": "status",
+    "children": [
+      { "kind": "text", "id": "title", "state": { "text": "Status" } },
+      { "kind": "text", "id": "subject", "state": { "text": "-" } },
+      { "kind": "button", "id": "close" }
+    ]
+  }
+}

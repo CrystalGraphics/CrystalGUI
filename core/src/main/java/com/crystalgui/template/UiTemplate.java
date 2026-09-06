@@ -1,5 +1,9 @@
 package com.crystalgui.template;
 
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +46,28 @@ public final class UiTemplate {
 
     /** The format major this reader understands. A document declaring a higher one is refused. */
     public static final int FORMAT = 1;
+
+    /**
+     * The document a {@code Networked} panel is laid out by.
+     *
+     * <pre>{@code
+     * @UiTemplate.Source("mymod:ui/status")
+     * public final class StatusPanel extends UIElement implements Networked<StatusModel> {
+     *     @Bound UIText title;
+     *     public void build(StatusModel model) { }    // the template is the layout
+     * }
+     * }</pre>
+     *
+     * <p>{@code UiType.build} inflates it into the panel and fills the {@link Bound} fields before
+     * {@code build} runs, so the tree exists by the time the panel is asked to arrange anything.</p>
+     */
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target(ElementType.TYPE)
+    public @interface Source {
+
+        /** The document id — {@code namespace:path}, without the extension. */
+        String value();
+    }
 
     private final String origin;
     private final int formatVersion;
@@ -222,6 +248,22 @@ public final class UiTemplate {
             throw new UiTemplateException(origin, null, "<" + child.tagName() + "> asks for the slot \""
                     + wanted + "\", and " + instance.templateId() + " offers " + offered);
         }
+    }
+
+    /**
+     * Inflates into {@code owner} and fills its {@link Bound} fields by id.
+     *
+     * <pre>{@code
+     * UiTemplates.load("mymod:ui/status").inflateInto(panel);
+     * }</pre>
+     *
+     * @return the root that was appended
+     */
+    public UIElement inflateInto(UIElement owner) {
+        UIElement root = inflate();
+        owner.append(root);
+        TemplateBinder.bind(owner, owner);
+        return root;
     }
 
     /**
