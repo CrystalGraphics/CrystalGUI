@@ -4,14 +4,13 @@ import com.crystalgui.mc.client.CgUiKeybinds1201;
 import com.crystalgui.mc.platform.Lifecycle1201;
 import com.crystalgui.net.wire.CgNetworkChannel;
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
-import net.fabricmc.fabric.api.client.screen.v1.ScreenKeyboardEvents;
-import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
@@ -19,6 +18,12 @@ import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+
+import org.lwjgl.glfw.GLFW;
+import org.lwjgl.glfw.GLFWCharCallback;
+import org.lwjgl.glfw.GLFWKeyCallback;
+import org.lwjgl.glfw.GLFWMouseButtonCallback;
+import org.lwjgl.glfw.GLFWScrollCallback;
 
 import java.util.function.BiConsumer;
 
@@ -141,24 +146,65 @@ public final class CrystalGUI1201FabricCommon implements ModInitializer {
             ClientPlayConnectionEvents.DISCONNECT.register(
                     (handler, client) -> Lifecycle1201.clientDisconnected());
 
-            // Pinned windows. ScreenOverlay decides; Fabric's allow* events cancel by returning false.
+            // Pinned windows. ScreenOverlay decides; the loader only forwards and honours the boolean.
             HudRenderCallback.EVENT.register((graphics, tickDelta) -> Lifecycle1201.paintHud());
+            ScreenEvents.AFTER_INIT.register((client, screen, width, height) ->
+                    ScreenEvents.afterRender(screen).register(
+                            (s, g, mx, my, td) -> Lifecycle1201.paintOverlay()));
 
-            ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
-                ScreenEvents.afterRender(screen).register((s, g, mx, my, td) -> Lifecycle1201.paintOverlay());
+            ClientLifecycleEvents.CLIENT_STARTED.register(
+                    client -> Input.install(client.getWindow().getWindow()));
+        }
 
-                ScreenMouseEvents.allowMouseClick(screen).register(
-                        (s, mx, my, button) -> !Lifecycle1201.offerMouse(button, true, 0f));
-                ScreenMouseEvents.allowMouseRelease(screen).register(
-                        (s, mx, my, button) -> !Lifecycle1201.offerMouse(button, false, 0f));
-                ScreenMouseEvents.allowMouseScroll(screen).register(
-                        (s, mx, my, hAmount, vAmount) -> !Lifecycle1201.offerMouse(-1, false, (float) vAmount));
+        /**
+         * Input, on GLFW's own callbacks rather than Fabric's screen events.
+         *
+         * <p><b>Fabric API has neither half of what this needs.</b> {@code ScreenKeyboardEvents} has no
+         * character event, so typing could not reach a pinned window at all, and there is no non-screen
+         * input event, so HUD mode heard nothing -- the two gaps Forge fills with {@code CharacterTyped}
+         * and {@code InputEvent}. Chaining GLFW is the pattern this project already uses for scroll,
+         * which Fabric also has no event for, and it is preferred to a mixin.</p>
+         *
+         * <p>One path for the HUD and for a screen, which is what mc1710's own drain is. Not forwarding
+         * to the previous callback IS the cancellation: Minecraft never sees what we consumed.</p>
+         */
+        private static final class Input {
 
-                ScreenKeyboardEvents.allowKeyPress(screen).register(
-                        (s, key, scancode, modifiers) -> !Lifecycle1201.offerKey(key, (char) 0, true));
-                ScreenKeyboardEvents.allowKeyRelease(screen).register(
-                        (s, key, scancode, modifiers) -> !Lifecycle1201.offerKey(key, (char) 0, false));
-            });
+            private Input() {}
+
+            static void install(long window) {
+                // Read back by setting null, because GLFW hands the previous callback to the SETTER --
+                // there is no getter, and Minecraft's own must keep running for everything we decline.
+                GLFWMouseButtonCallback prevButton = GLFW.glfwSetMouseButtonCallback(window, null);
+                GLFW.glfwSetMouseButtonCallback(window, (win, button, action, mods) -> {
+                    if (action != GLFW.GLFW_REPEAT
+                            && Lifecycle1201.offerMouse(button, action == GLFW.GLFW_PRESS, 0f)) {
+                        return;
+                    }
+                    if (prevButton != null) prevButton.invoke(win, button, action, mods);
+                });
+
+                GLFWKeyCallback prevKey = GLFW.glfwSetKeyCallback(window, null);
+                GLFW.glfwSetKeyCallback(window, (win, key, scancode, action, mods) -> {
+                    if (action != GLFW.GLFW_REPEAT
+                            && Lifecycle1201.offerKey(key, (char) 0, action == GLFW.GLFW_PRESS)) {
+                        return;
+                    }
+                    if (prevKey != null) prevKey.invoke(win, key, scancode, action, mods);
+                });
+
+                GLFWCharCallback prevChar = GLFW.glfwSetCharCallback(window, null);
+                GLFW.glfwSetCharCallback(window, (win, codepoint) -> {
+                    if (Lifecycle1201.offerKey(0, (char) codepoint, true)) return;
+                    if (prevChar != null) prevChar.invoke(win, codepoint);
+                });
+
+                GLFWScrollCallback prevScroll = GLFW.glfwSetScrollCallback(window, null);
+                GLFW.glfwSetScrollCallback(window, (win, dx, dy) -> {
+                    if (Lifecycle1201.offerMouse(-1, false, (float) dy)) return;
+                    if (prevScroll != null) prevScroll.invoke(win, dx, dy);
+                });
+            }
         }
     }
 }
