@@ -45,6 +45,8 @@ import org.joml.Vector2f;
 import com.crystalgui.core.undo.CompositeEdit;
 import com.crystalgui.widget.canvas.CanvasView;
 import com.crystalgui.widget.surface.Surface;
+import com.crystalgui.widget.surface.SurfaceEditor;
+import com.crystalgui.widget.surface.select.SurfaceSelection;
 import com.crystalgui.widget.surface.SurfacePolicy;
 import com.crystalgui.widget.surface.mode.Marquee;
 import com.crystalgui.widget.surface.mode.MoveGesture;
@@ -79,13 +81,13 @@ import java.util.Set;
  * connection counts are all decided in one place — and it is the place a command (6.2.4) will call
  * into, so undo has a single seam rather than needing to walk the tree putting ports back.</p>
  *
- * <p><b>The tag trap applies here.</b> {@code GraphView extends CanvasView} but reports the tag
+ * <p><b>The tag trap applies here.</b> {@code GraphView extends SurfaceEditor} but reports the tag
  * {@code graphview}, and a {@code canvasview} rule matches none of it — a widget's cascade identity is
  * its tag, never its Java supertype. Anything the canvas needs from a stylesheet must name
  * {@code graphview} too; the viewport's structural styling is written from Java at DEFAULT origin
  * precisely so this class inherits it for real.</p>
  */
-public class GraphView extends CanvasView implements UndoScope, DataProvider {
+public class GraphView extends SurfaceEditor {
 
     /**
      * This widget's kind.
@@ -295,36 +297,17 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
      * <p><b>Only document state goes through it.</b> Pan, zoom, selection and collapse are view state
      * and are mutated directly; Ctrl+Z after wiring up a graph must undo the wire, not the scroll.</p>
      */
-    private final UndoStack undoStack = new UndoStack();
-
     /**
-     * The one door every change to this graph goes through — the engine's, over the stack above.
+     * The one door every change to this graph goes through — the engine's.
      *
-     * <p>A transaction opened here is one undo step however many nodes it moved, which is what makes a
-     * forty-node drag one Ctrl+Z.</p>
-     */
-    private final Edits edits = new Edits(undoStack);
-
-    /** @see UndoScope */
-    @Override
-    public UndoStack undoStack() {
-        return undoStack;
-    }
-
-    @Getter
-    private float wireBaseWidth = DEFAULT_WIRE_WIDTH;
-
-    /** Fires after any change to the edge set — connect, disconnect, or a node leaving with wires on it. */
-    public final Signal.Action onConnectionsChanged = new Signal.Action();
-
-    /**
-     * The engine's gestures, over this view as a surface.
+     * <p>The stack under it is the surface's own, resolved from focus by {@code UndoScope}, so a graph
+     * in one tab and an editor in another never share a history. A transaction opened here is one undo
+     * step however many nodes it moved.</p>
      *
-     * <p>The band, the multi-item move and the picker are {@code widget.surface}'s — a graph and a UI
-     * builder want the same three and got them from the same place at L2. What stays here is what a
-     * graph means by them: {@link GraphPolicy}.</p>
+     * <p><b>Only document state goes through it.</b> Pan, zoom, selection and collapse are view state
+     * and are mutated directly; Ctrl+Z after wiring up a graph must undo the wire, not the scroll.</p>
      */
-    private final Surface surface = new Surface(this);
+    private final Edits edits = edits();
 
     /** The wire under the pointer, or null. Drives the hover thickening — a wire cannot carry {@code
      * :hover} itself, having no element. */
@@ -332,32 +315,27 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
     @Nullable
     private GraphConnection hoveredWire;
 
-    private final GraphPolicy policy = new GraphPolicy();
+    @Getter
+    private float wireBaseWidth = DEFAULT_WIRE_WIDTH;
 
-    private final Picking picking = new Picking(new Picking.Surfaces() {
-        @Override
-        public UIDocument window() {
-            return document();
-        }
+    /** Fires after any change to the edge set — connect, disconnect, or a node leaving with wires on it. */
+    public final Signal.Action onConnectionsChanged = new Signal.Action();
 
-        @Override
-        public List<UIElement> items() {
-            return List.copyOf(content().children());
-        }
 
-        @Override
-        public WorldRect boundsOf(UIElement item) {
-            return worldBoundsOf(item);
-        }
+    /** What a graph means by the engine's questions. @see GraphPolicy */
+    @Override
+    protected SurfacePolicy createPolicy() {
+        return new GraphPolicy();
+    }
 
-        @Override
-        public UIElement itemFor(UIElement hit) {
-            return policy.itemFor(hit);
-        }
-    });
+    /** A graph's selection answers two typed questions the engine's does not. @see GraphSelection */
+    @Override
+    protected SurfaceSelection createSelection(SurfacePolicy policy) {
+        return new GraphSelection();
+    }
 
     public GraphView() {
-        super(NAME);
+        super(NAME, List.of());
         wireLayer = new NodeWireLayer(this, connections);
         // First, so it paints under every node: equal z-index siblings paint in insertion order.
         addNode(wireLayer, 0f, 0f);
@@ -835,7 +813,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
         for (EdgeData edge : source.edges()) document.restoreEdge(edge);
 
         syncFromDocument();
-        undoStack.clear();
+        edits.history().clear();
         // ONE emit at the end, and it is not belt and braces. `restoreEdge` deliberately only records in
         // the changeset, and `GraphDocument.clear()` empties the property list AFTER its last removeNode
         // — so loading a graph with no nodes, or one whose last act is an edge, would tell nothing
@@ -926,7 +904,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
             if (connections.size() != before) applied++;
         }
 
-        selection.prune(this);
+        getSelection().prune(this);
         if (applied > 0) onConnectionsChanged.emit();
         return applied;
     }
@@ -961,7 +939,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
             // never reaches them.
             for (NodePort port : node.getPorts()) forgetPortEditor(port);
             content().remove(node);
-            selection.prune(this);
+            getSelection().prune(this);
             return this;
         }
         edits.begin("delete node");
@@ -971,7 +949,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
         } finally {
             edits.end();
         }
-        selection.prune(this);
+        getSelection().prune(this);
         return this;
     }
 
@@ -985,8 +963,8 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
      * @return how many nodes and wires went
      */
     public int deleteSelection() {
-        List<GraphNode> doomedNodes = selection.nodes();
-        GraphConnection doomedWire = selection.wire();
+        List<GraphNode> doomedNodes = getSelection().nodes();
+        GraphConnection doomedWire = getSelection().wire();
         if (doomedNodes.isEmpty() && doomedWire == null) return 0;
 
         edits.begin("delete");
@@ -996,7 +974,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
         } finally {
             edits.end();
         }
-        selection.clear();
+        getSelection().clear();
         return doomedNodes.size() + (doomedWire == null ? 0 : 1);
     }
 
@@ -1015,7 +993,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
     @Nullable
     public GraphDocument copySelection() {
         List<String> ids = new ArrayList<>();
-        for (GraphNode node : selection.nodes()) {
+        for (GraphNode node : getSelection().nodes()) {
             if (node.getNodeId() != null) ids.add(node.getNodeId());
         }
         if (ids.isEmpty()) return null;
@@ -1072,7 +1050,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
             edits.end();
         }
 
-        selection.replaceWith(pasted);
+        getSelection().replaceWith(pasted);
         return pasted;
     }
 
@@ -1213,9 +1191,12 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
      * What is selected. A model rather than a flag per node, so a marquee, a delete command and an
      * inspector all read one answer — see {@link GraphSelection}, including why selection is not
      * undoable.
+     *
+     * <p>The set itself is the surface's; this is the typed read of it.</p>
      */
-    @Getter
-    private final GraphSelection selection = new GraphSelection();
+    public GraphSelection getSelection() {
+        return (GraphSelection) selection();
+    }
 
     /**
      * The press rule every graph editor uses, and the one a naive implementation gets wrong.
@@ -1226,23 +1207,23 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
      * one replaces it. Shift always toggles.</p>
      */
     public GraphView selectNode(GraphNode node, boolean additive) {
-        if (additive) selection.toggle(node);
-        else if (!selection.contains(node)) selection.selectOnly(node);
+        if (additive) getSelection().toggle(node);
+        else if (!getSelection().contains(node)) getSelection().selectOnly(node);
         return this;
     }
 
     public GraphView clearSelection() {
-        selection.clear();
+        getSelection().clear();
         return this;
     }
 
     public List<GraphNode> selectedNodes() {
-        return selection.nodes();
+        return getSelection().nodes();
     }
 
     /** Every node on the plane, selected. */
     public GraphView selectAll() {
-        selection.replaceWith(nodes());
+        getSelection().replaceWith(nodes());
         return this;
     }
 
@@ -1498,7 +1479,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
         Vector2f world = screenToWorld(rawX, rawY);
         GraphConnection hit = wireLayer.pickWire(world.x(), world.y());
         if (hit != null) {
-            selection.selectOnly(hit);
+            getSelection().selectOnly(hit);
             return true;
         }
 
@@ -1514,13 +1495,13 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
 
     /** The band. Built on first use, because it adds an overlay and a constructor is not the place. */
     Marquee marquee() {
-        if (marquee == null) marquee = new Marquee(surface, picking, selection);
+        if (marquee == null) marquee = new Marquee(surface(), picking(), selection());
         return marquee;
     }
 
     /** Dragging what is selected, as one undo step. @see MoveGesture */
     public MoveGesture moveGesture() {
-        if (moveGesture == null) moveGesture = new MoveGesture(surface, policy, edits);
+        if (moveGesture == null) moveGesture = new MoveGesture(surface(), policy(GraphPolicy.class), edits);
         return moveGesture;
     }
 
@@ -1532,11 +1513,6 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
      * composed into one step.</p>
      */
     private final class GraphPolicy implements SurfacePolicy {
-
-        @Override
-        public UndoStack history() {
-            return undoStack;
-        }
 
         @Override
         @Nullable
@@ -1605,7 +1581,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
 
     /** Frames the selection, or everything when nothing is selected — Unity binds these to F and A. */
     public GraphView frameSelection(float padding) {
-        List<GraphNode> selected = selection.nodes();
+        List<GraphNode> selected = getSelection().nodes();
         if (selected.isEmpty()) {
             fitToContent(padding);
             return this;
@@ -1797,7 +1773,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
             edits.end();
         }
         pendingFrom = null;
-        selection.selectOnly(node);
+        getSelection().selectOnly(node);
     }
 
     // ── Wire geometry ───────────────────────────────────────────────────────

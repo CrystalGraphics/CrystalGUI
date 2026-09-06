@@ -43,11 +43,18 @@ public interface SurfacePolicy {
     }
 
     /**
-     * Where this surface's undo history lives — the consumer's document owns it, not the engine.
+     * Where this surface's undo history lives, or <b>null</b> for one of the surface's own.
      *
-     * <p>Asked once, at construction. A surface with nothing to undo answers a stack of its own.</p>
+     * <p>A document owns its history — two panes onto one file share it — so a consumer with a document
+     * answers that. One without says null and the surface keeps a stack nobody else can reach.</p>
+     *
+     * <p>Asked once, while the surface is being built, so it must not read anything the consumer has not
+     * initialised yet. That is why declining is spelled as null rather than as a field.</p>
      */
-    UndoStack history();
+    @Nullable
+    default UndoStack history() {
+        return null;
+    }
 
     /**
      * The item {@code hit} belongs to — usually an ancestor walk — or null when it belongs to none.
