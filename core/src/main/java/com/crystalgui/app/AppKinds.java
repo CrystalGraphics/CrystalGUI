@@ -1,6 +1,7 @@
 package com.crystalgui.app;
 
 import com.crystalgui.app.shadergraph.ShaderGraphEditor;
+import com.crystalgui.app.uibuilder.canvas.Artboard;
 import com.crystalgui.ui.dom.NodeContract;
 import com.crystalgui.ui.dom.NodeKinds;
 import com.crystalgui.ui.dom.UIElementRegistry;
@@ -28,5 +29,8 @@ public final class AppKinds implements NodeKinds {
         // registered by `WorkbenchKinds`, because the element is the ENGINE's and what is left in
         // `app/` is a manifest -- which is data, and declares no kind at all.
         UIElementRegistry.registerTag(ShaderGraphEditor.NAME, NodeContract.INERT);
+        // The builder's page frame, for the same reason: `artboard` is what a theme names to
+        // draw the page edge, and a kind nothing registered matches nothing.
+        UIElementRegistry.registerTag(Artboard.NAME, NodeContract.INERT);
     }
 }

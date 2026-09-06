@@ -11,6 +11,7 @@ import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.dispose.Disposable;
+import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
@@ -57,8 +58,16 @@ public class SurfaceEditor extends UIElement implements SurfaceContext, DataProv
      */
     public static final Name NAME = Name.of("surface");
 
-    /** This surface, for a command that acts on one. */
-    public static final DataKey<SurfaceEditor> SURFACE = DataKey.create("surface", SurfaceEditor.class);
+    /**
+     * This surface, for a command that acts on one.
+     *
+     * <p>Not {@code "surface"}: {@code CommandPalette} declared that name for the {@code UIDocument} it
+     * opens over, and a key is interned by NAME with its TYPE as part of the declaration — so the second
+     * class to initialise throws. {@code ContextKeys} resolves by name out of a {@code when} expression,
+     * which is why the shipped one is the one that must not move.</p>
+     */
+    public static final DataKey<SurfaceEditor> SURFACE =
+            DataKey.create("editingSurface", SurfaceEditor.class);
 
     private final SurfacePolicy policy;
     private final CanvasView canvas = new CanvasView();
@@ -76,6 +85,14 @@ public class SurfaceEditor extends UIElement implements SurfaceContext, DataProv
     private final List<Disposable> extensions;
 
     private boolean disposed;
+
+    /**
+     * Fires when this surface joins a window — the first moment anything needing one may run.
+     *
+     * <p>A consumer's theme goes here: resolving a stylesheet id reads a file, and a constructor is also
+     * run by a server.</p>
+     */
+    public final Signal.Action onDidConnect = new Signal.Action();
 
     /** Everything on the classpath. What a test or a bare surface means. */
     public SurfaceEditor(SurfacePolicy policy) {
@@ -233,6 +250,12 @@ public class SurfaceEditor extends UIElement implements SurfaceContext, DataProv
             extensions.get(i).dispose();
         }
         extensions.clear();
+    }
+
+    @Override
+    protected void connected() {
+        super.connected();
+        onDidConnect.emit();
     }
 
     private <T> Disposable add(List<T> into, T what) {
