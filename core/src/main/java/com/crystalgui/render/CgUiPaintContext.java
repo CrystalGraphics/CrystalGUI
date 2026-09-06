@@ -177,6 +177,18 @@ public final class CgUiPaintContext {
     private final CgMaterial curveMaterial;
 
     /**
+     * The mask multiply's own material — a private instance, never the caller's.
+     *
+     * <p>{@code _MainTex} is a Properties-block sampler, so SETTING it changes the material for good:
+     * every later {@code bind()} re-binds that texture and a raw {@link #bindTexture} is overwritten.
+     * Borrowing the enclosing material for the multiply therefore left every sprite drawn through it
+     * afterwards reading the mask's texture, or the white fallback once the sampler was handed back —
+     * themed chrome flooding white on any page that masks anything, and drawing as nothing without the
+     * hand-back. Neither reads as a mask bug.</p>
+     */
+    private final CgMaterial maskMaterial;
+
+    /**
      * Dedicated material for {@link #blitLayer}, distinct from {@link #boxModelMaterial}.
      * A visual-layer FBO is always cleared fully transparent before anything paints into it, so
      * at every partially-covered pixel its stored color ends up premultiplied by its own alpha —
@@ -345,6 +357,9 @@ public final class CgUiPaintContext {
         this.boxModelMaterial = CgMaterial.load("crystalgui:shaders/gui_quad.shader");
         this.curveMaterial = CgMaterial.load("crystalgui:shaders/gui_curve.shader");
         this.layerBlitMaterial = CgMaterial.load("crystalgui:shaders/gui_layer_blit.shader");
+        // newInstance, not load: load() is registry-cached, so it would hand back boxModelMaterial
+        // itself and reintroduce exactly the sharing this material exists to avoid.
+        this.maskMaterial = CgMaterial.newInstance("crystalgui:shaders/gui_quad.shader");
         this.blurMaterial = CgMaterial.load("crystalgui:shaders/gui_blur.shader");
         this.downsampleMaterial = CgMaterial.load("crystalgui:shaders/gui_downsample.shader");
         // AFTER the materials: it holds them, and a field initialiser would run before they exist.
@@ -1791,11 +1806,12 @@ public final class CgUiPaintContext {
                 // a "white" default, so the material binds THAT and multiplies the subtree by an alpha
                 // of 1 everywhere -- no mask at all, and the layer survives full-bleed. @see blitLayer
                 //
-                // It goes on currentMaterial because the multiply needs a blend this material does not
-                // declare, so it cannot be moved onto layerBlitMaterial without that material's own
-                // RenderState clobbering MASK_ALPHA_MULTIPLY at flush.
-                masked.applyProperties(b -> b.sampler("_MainTex", 0, maskTex));
-                bindQuadPath(masked);
+                // On a material of ours, never the caller's: a sampler property is retained, so setting
+                // it on the enclosing material rewrites what every later draw through it samples. This
+                // one is gui_quad like boxModelMaterial, so the manual MASK_ALPHA_MULTIPLY below still
+                // survives the bind exactly as it did when the caller's material was borrowed.
+                maskMaterial.applyProperties(b -> b.sampler("_MainTex", 0, maskTex));
+                bindQuadPath(maskMaterial);
                 currentTexture = null;
                 CgBlendState.MASK_ALPHA_MULTIPLY.apply();
                 // Same v-flip as blitLayer — maskTex is another FBO color attachment, same OpenGL
@@ -1809,20 +1825,12 @@ public final class CgUiPaintContext {
                 flush();
                 poseStack.popPose();
             } finally {
-                // AND PARKED ON A TEXTURE THAT IS NEVER DELETED. A sampler property is RETAINED and
-                // re-bound on every later bind() of that material, and currentMaterial here is whatever
-                // the enclosing draw left bound -- usually the rounded-rect one. Leaving a POOLED mask
-                // attachment named on it outlives the pool slot: a surface resize recreates the pool,
-                // the texture is deleted, and the next ordinary rounded rect throws "CgTexture2D has
-                // been deleted" from inside CgUiRoundedRect.draw, a frame later and nowhere near a mask.
-                // PARKED ONLY IF IT IS NOT THE BLIT MATERIAL. A sampler property is RETAINED and re-bound
-            // on every later bind(), so a POOLED mask attachment left named on the rounded-rect material
-            // outlives the pool slot -- a resize deletes it and the next rounded rect throws. The blit
-            // material is the exception: parking it overwrites the source its own composites declare.
-                if (masked != layerBlitMaterial) {
-                    masked.applyProperties(b -> b.sampler("_MainTex", 0, whitePixel));
-                    currentTexture = null;
-                }
+                // PARKED, because the mask attachment is POOLED: a resize deletes it and the next bind
+                // of a material still naming it throws. Safe here in a way it never was on the caller's
+                // material — nothing but this multiply ever binds this one.
+                maskMaterial.applyProperties(b -> b.sampler("_MainTex", 0, whitePixel));
+                bindQuadPath(masked != null ? masked : boxModelMaterial);
+                currentTexture = null;
                 scissorStack.resume(suspendedMask);
                 fd.projMatrix.set(enclosingProj);
                 fd.viewportW = enclosingW;
