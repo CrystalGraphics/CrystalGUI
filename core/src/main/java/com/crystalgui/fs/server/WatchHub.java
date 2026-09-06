@@ -222,6 +222,7 @@ public final class WatchHub {
         // Consumed per tick. A deletion whose partner never arrived was a deletion, and holding its
         // etag any longer would let a create minutes later be reported as a rename of it.
         etagBefore.clear();
+        renamedAway.entrySet().removeIf(each -> each.setValue(each.getValue() - 1) <= 1);
         if (coalesced.isEmpty()) return Map.of();
 
         Map<Object, List<FsMessages.FileChange>> out = new LinkedHashMap<>();
@@ -298,7 +299,8 @@ public final class WatchHub {
             // only what a client OPENED is ever in lastEtag, since a recursive watch primes nothing
             // for its descendants. Applying the rescan's rule to an explicit event meant a deletion
             // was reported for a file somebody had open and for no other file in the project.
-            boolean sighted = hint == CgFileEvent.Kind.DELETED;
+            // ...unless the server itself moved it away, and this is that move coming back.
+            boolean sighted = hint == CgFileEvent.Kind.DELETED && renamedAway.remove(path) == null;
             if (!sighted && (!known || last == null)) {
                 lastEtag.put(path, null);
                 return null;
@@ -363,6 +365,20 @@ public final class WatchHub {
 
     private final List<Stated> stated = new ArrayList<>();
 
+    /**
+     * Paths the server itself renamed away, and how many ticks to disbelieve the watcher about them.
+     *
+     * <p>A rename is one operation and the watcher sees it as two halves: the source vanishing and the
+     * destination appearing. The destination is suppressed by its etag already matching, but the source
+     * looks exactly like a deletion — and a deletion the watcher SAW is trusted on its own, because that
+     * is the only way a file nobody had open can be reported gone. Both rules are right; they just meet
+     * here, and the answer is that the server already said what happened to this path.</p>
+     */
+    private final Map<CgPath, Integer> renamedAway = new LinkedHashMap<>();
+
+    /** Ticks an echo is disbelieved for. The watcher is milliseconds behind, not tenths of a second. */
+    private static final int ECHO_TICKS = 4;
+
     /** The etag a path held before this tick removed it — the only evidence a rename has of its source. */
     private final Map<String, String> etagBefore = new LinkedHashMap<>();
 
@@ -386,6 +402,7 @@ public final class WatchHub {
      * fact should never be re-derived from evidence when it can be recorded.</p>
      */
     public FsMessages.FileChange noteRenamed(CgPath from, CgPath to, @Nullable String etag) {
+        renamedAway.put(from, ECHO_TICKS);
         if (lastEtag.containsKey(from)) {
             lastEtag.remove(from);
             lastEtag.put(to, etag);
