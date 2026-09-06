@@ -55,6 +55,8 @@ public final class Lifecycle1201 {
      * {@link CgUiKeybinds1201#all()} must be read AFTER this runs.
      */
     public static void bootstrapClient() {
+        // Behind the loading screen, where the registry's discovery costs nobody anything.
+        LanguageStack1201.announce();
         MachineExampleClient1201.registerClient();
     }
 
