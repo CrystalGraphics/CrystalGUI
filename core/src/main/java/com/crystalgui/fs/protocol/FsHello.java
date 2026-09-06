@@ -50,7 +50,16 @@ public record FsHello(int protocolVersion,
                       long servicesTierBytes,
                       long readOnlyTierBytes,
                       long maxFileBytes,
-                      String workspaceId) {
+                      String workspaceId,
+                      String actor) {
+
+    /** Everything but the name the server calls this client. */
+    public FsHello(int protocolVersion, boolean caseSensitive, List<String> reservedNames,
+                   int maxNameLength, long servicesTierBytes, long readOnlyTierBytes,
+                   long maxFileBytes, String workspaceId) {
+        this(protocolVersion, caseSensitive, reservedNames, maxNameLength, servicesTierBytes,
+                readOnlyTierBytes, maxFileBytes, workspaceId, "");
+    }
 
     /**
      * A compact record with no identity — what a client assumes before a server has answered, and what
@@ -158,6 +167,7 @@ public record FsHello(int protocolVersion,
                             DEFAULT_READ_ONLY_TIER)
                     .optional("maxFile", Codecs.LONG, value.maxFileBytes(), 0L)
                     .optional("workspaceId", Codecs.STRING, value.workspaceId(), "")
+                    .optional("actor", Codecs.STRING, value.actor(), "")
                     .build();
         }
 
@@ -172,7 +182,8 @@ public record FsHello(int protocolVersion,
                     in.optional("servicesTier", Codecs.LONG, DEFAULT_SERVICES_TIER),
                     in.optional("readOnlyTier", Codecs.LONG, DEFAULT_READ_ONLY_TIER),
                     in.optional("maxFile", Codecs.LONG, 100L * 1024 * 1024),
-                    in.optional("workspaceId", Codecs.STRING, ""));
+                    in.optional("workspaceId", Codecs.STRING, ""),
+                    in.optional("actor", Codecs.STRING, ""));
         }
     };
 }

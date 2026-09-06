@@ -478,9 +478,13 @@ public class WorkspaceServiceTest {
     // ── Who did it ────────────────────────────────────────────────────────
 
     /**
-     * <b>An operation reaches the other peers with a name on it, and never goes home again.</b> A
-     * filesystem event cannot carry one — the OS was never told who asked — so only an operation the
-     * server performed can say, and the peer that asked is the one peer that already knows.
+     * <b>An operation reaches every peer with a name on it, its author included.</b>
+     *
+     * <p>A filesystem event cannot carry a name — the OS was never told who asked — so only an
+     * operation the server performed can say. It goes to the author too, which looked wrong at first
+     * (they already know) and was wrong twice over: nothing else updates that client's own tree, so a
+     * folder they moved a file into never listed it, and their own open tab never retargeted. What they
+     * are spared is the <em>telling</em>, which the workbench filters by author.</p>
      */
     @Test
     public void anOperationIsToldToOtherPeersByName() {
@@ -499,12 +503,13 @@ public class WorkspaceServiceTest {
                 "etag-2", "alice", alice);
         Map<Object, List<FsMessages.FileChange>> out = hub.tick(WorkspaceActor.LOCAL, List.of());
 
-        assertNull("whoever asked already knows, and would reload what they just wrote", out.get(alice));
-        List<FsMessages.FileChange> heard = out.get(bob);
-        assertNotNull("everybody else hears about it", heard);
-        assertEquals(1, heard.size());
-        assertEquals("alice", heard.get(0).author());
-        assertTrue(heard.get(0).byPeer());
+        for (Object peer : List.of(alice, bob)) {
+            List<FsMessages.FileChange> heard = out.get(peer);
+            assertNotNull("every peer hears it, the author included", heard);
+            assertEquals(1, heard.size());
+            assertEquals("alice", heard.get(0).author());
+            assertTrue(heard.get(0).byPeer());
+        }
     }
 
     /** And a change from outside the workspace carries no name, because nothing knows one. */
