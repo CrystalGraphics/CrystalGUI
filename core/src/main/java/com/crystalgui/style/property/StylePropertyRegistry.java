@@ -32,7 +32,7 @@ import com.crystalgui.style.property.visual.transform.TransformProperty;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.style.transition.TransitionSpec;
 import com.crystalgui.style.transition.TransitionValue;
-import com.crystalgui.ui.UITransform;
+import com.crystalgui.style.property.visual.transform.Transform;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
@@ -43,6 +43,13 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
 public class StylePropertyRegistry {
+    // Every `addListener` registration that stood here is gone with the property-listener API -- see
+    // `StyleProperty`. They were the old cascade's bridge into Taffy and into `UIElement`'s caches
+    // (`invalidateFocusableChain`, `onPositionModeChanged`, `invalidatePoseCachesRecursively`,
+    // `onResizeModeChanged`, `taffyBridge.set*`). The new engine needs none of them: `BoxStyle` reads
+    // `ComputedStyle` on every sync, and the two cases that still need telling -- a `font-size` that
+    // moves an `em`, and `resize` growing handles -- go through `UIElement.computedChanged`.
+
     private static final Map<String, StyleProperty<?>> PROPERTIES_BY_NAME = new ConcurrentHashMap<>();
     private static volatile AtomicReferenceArray<StyleProperty<?>> PROPERTIES_BY_ID = new AtomicReferenceArray<>(256);
 
@@ -89,9 +96,6 @@ public class StylePropertyRegistry {
      */
     public static final StyleProperty<Float> FONT_SIZE = create("font-size", 16f).setInheritable(true);
 
-    static {
-        FONT_SIZE.addListener((el, property, oldValue, newValue) -> el.invalidateFontRelativeStyles());
-    }
     /**
      * The UI's default face — <b>proportional</b>, and monospace is applied to code surfaces instead.
      *
@@ -186,11 +190,7 @@ public class StylePropertyRegistry {
             create(new LengthPercentProperty("text-offset-x", LengthPercent.ZERO)).setInheritable(true);
     public static final StyleProperty<LengthPercent> TEXT_OFFSET_Y =
             create(new LengthPercentProperty("text-offset-y", LengthPercent.ZERO)).setInheritable(true);
-    public static final StyleProperty<Integer> Z_INDEX = create("z-index", 0).addListener((elem, prop, oldVal, newVal) -> {
-        if (elem.getParent() != null) {
-            elem.getParent().getRuntimeCache().sortedChildren.invalidate();
-        }
-    });
+    public static final StyleProperty<Integer> Z_INDEX = create("z-index", 0);
     // Whether clipping happens at all. The clip *mechanism* (scissor vs mask) is auto-detected from
     // the element's resolved shape — see UIElement#resolveOverflowClip(). Replaces the old
     // `clip: none|scissor|mask` property, which let authors pick the mechanism directly.
@@ -199,7 +199,7 @@ public class StylePropertyRegistry {
     // zeroes an item's automatic minimum size, which is what allows a flex item to shrink below its
     // own content. Without this listener `overflow: hidden` was purely cosmetic and oversized content
     // still forced every ancestor wider, leaving callers to write `min-width: 0` by hand.
-    public static final StyleProperty<Overflow> OVERFLOW = create("overflow", Overflow.class, Overflow.VISIBLE)
+    public static final StyleProperty<Overflow> OVERFLOW = create("overflow", Overflow.class, Overflow.VISIBLE);
             // NULL IS A LEGAL RESOLVED VALUE and means "no candidate at any origin" -- notifyListeners
             // declares newVal @Nullable, LayoutProperties.createSetter falls back to initialValue for
             // exactly this, and this listener was the one place in the engine that did not. It is reached
@@ -208,14 +208,12 @@ public class StylePropertyRegistry {
             // switch -- NullPointerException out of resolveTouched, from inside calculateStyle, so it
             // takes the frame loop down rather than the element. Found when a taskbar entry stopped being
             // `__animating__` and no other rule mentioned overflow.
-            .addListener((elem, prop, oldVal, newVal) -> elem.getStyle().taffyBridge
-                    .setOverflow(toTaffyOverflow(newVal == null ? prop.initialValue : newVal)));
 
     /** Our CSS-facing set onto Taffy's smaller layout-facing one — the entire cost of keeping our own
      * enum. {@code AUTO} collapses to {@code HIDDEN} rather than {@code SCROLL} because Taffy reserves
      * a scrollbar gutter only for {@code SCROLL}, and our scrollbars overlay the content instead of
      * displacing it. */
-    private static dev.vfyjxf.taffy.style.Overflow toTaffyOverflow(Overflow overflow) {
+    public static dev.vfyjxf.taffy.style.Overflow toTaffyOverflow(Overflow overflow) {
         return switch (overflow) {
             case VISIBLE -> dev.vfyjxf.taffy.style.Overflow.VISIBLE;
             case CLIP -> dev.vfyjxf.taffy.style.Overflow.CLIP;
@@ -233,8 +231,7 @@ public class StylePropertyRegistry {
      * <p><b>Not restricted to scroll containers</b>, unlike the spec — see {@link Resize} for why that
      * restriction is a browser rendering artifact rather than a semantic rule.</p>
      */
-    public static final StyleProperty<Resize> RESIZE = create("resize", Resize.class, Resize.NONE)
-            .addListener((elem, prop, oldVal, newVal) -> elem.onResizeModeChanged(newVal));
+    public static final StyleProperty<Resize> RESIZE = create("resize", Resize.class, Resize.NONE);
 
     /**
      * CSS {@code cursor} (CSS UI 4). <b>Inherited</b>, initial {@code auto}, exactly as the spec says --
@@ -408,7 +405,7 @@ public class StylePropertyRegistry {
 
     // ── transform ────────────────────────────────────────────────────────────
     //
-    // CSS's transform, as an ordered function list (see UITransform for why the order has to be
+    // CSS's transform, as an ordered function list (see Transform for why the order has to be
     // preserved rather than decomposed into fields). Layout-free: Taffy never sees it, so there is no
     // TaffyBridge listener here — a transform moves pixels and the hit-test matrix, nothing else.
     //
@@ -422,18 +419,15 @@ public class StylePropertyRegistry {
     // Deliberately NOT inheritable, matching CSS. A transform already reaches the whole subtree through
     // the matrix chain, and inheritance here is pull-based — an inherited change does not fire the
     // inheriting element's listeners, which is exactly the invalidation this depends on.
-    public static final StyleProperty<UITransform> TRANSFORM =
-            create(new TransformProperty("transform", UITransform.IDENTITY))
-                    .addListener((elem, prop, oldVal, newVal) -> elem.invalidatePoseCachesRecursively());
+    public static final StyleProperty<Transform> TRANSFORM =
+            create(new TransformProperty("transform", Transform.IDENTITY));
     // transform-origin is 1-2 value shorthand syntax over these two (see TransformOriginShorthand),
     // the same way margin/padding/outline-offset work. Both default to 50% — the element's own centre,
     // so an unqualified scale or rotation stays put, as in CSS.
     public static final StyleProperty<LengthPercent> TRANSFORM_ORIGIN_X =
-            create(new LengthPercentProperty("transform-origin-x", TransformOriginShorthand.CENTER))
-                    .addListener((elem, prop, oldVal, newVal) -> elem.invalidatePoseCachesRecursively());
+            create(new LengthPercentProperty("transform-origin-x", TransformOriginShorthand.CENTER));
     public static final StyleProperty<LengthPercent> TRANSFORM_ORIGIN_Y =
-            create(new LengthPercentProperty("transform-origin-y", TransformOriginShorthand.CENTER))
-                    .addListener((elem, prop, oldVal, newVal) -> elem.invalidatePoseCachesRecursively());
+            create(new LengthPercentProperty("transform-origin-y", TransformOriginShorthand.CENTER));
 
     // ── Registry infrastructure ──────────────────────────────────────────────
 

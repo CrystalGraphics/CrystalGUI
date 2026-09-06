@@ -9,8 +9,11 @@ import javax.annotation.Nullable;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * One peer's end of the protocol — a {@link MessageRouter} with a transport under it and a name for who
@@ -49,6 +52,24 @@ public final class ProtocolConnection<T> {
 
     private long callTimeoutMillis = 10_000L;
 
+    /**
+     * Things scoped to this connection, one per type — the seat a subsystem's per-connection state
+     * takes. @see #attachment
+     */
+    private final Map<Class<?>, Object> attachments = new LinkedHashMap<>();
+
+    /** Marks a type being built, so a factory that re-enters for its own type says so. @see #attachment */
+    private static final Object CONSTRUCTING = new Object();
+
+    /** Run at the end of every {@link #tick()}. @see #onTick */
+    private final List<Runnable> tickHooks = new ArrayList<>();
+
+    /** Run once, when the peer goes away. @see #onClosed */
+    private final List<Consumer<String>> closeHooks = new ArrayList<>();
+
+    private boolean closed;
+    private String closeReason = "";
+
     ProtocolConnection(UITransport<T> transport, DynamicOps<T> ops, Runnable pump, @Nullable Object peer) {
         this.ops = ops;
         this.pump = pump;
@@ -82,6 +103,101 @@ public final class ProtocolConnection<T> {
         return router;
     }
 
+    // ── Per-connection state, hooks ─────────────────────────────────────────
+
+    /**
+     * The one instance of {@code type} for this connection, built on first ask.
+     *
+     * <p><b>What three static {@code WeakHashMap}s were.</b> {@code UiWindowMux.of},
+     * {@code ClientUiSessions.forConnection} and the workspace each memoised
+     * "the X for this connection" independently, each with the same javadoc explaining the same
+     * singleton-per-connection reason, and each relying on <em>garbage collection</em> rather than on
+     * the lifecycle to let go. The connection is the natural owner of anything scoped to it, so the
+     * memo lives here: it dies with the connection, it needs no weak reference, and there is one
+     * statement of the pattern rather than one per subsystem.</p>
+     *
+     * <p>The reason those memos exist at all is unchanged and worth restating: a second
+     * {@code UiWindowMux} over one router would each install their own handler for a method and the
+     * second would be refused by {@link MessageRouter}'s duplicate check — so "the X for this
+     * connection" has to be a single answer, not something a caller remembers to share.</p>
+     *
+     * <p>A factory may ask for a <em>different</em> attachment (a host asking for a mux is the real
+     * case); asking for its own throws rather than recursing or quietly building two.</p>
+     */
+    @SuppressWarnings("unchecked")
+    public synchronized <A> A attachment(Class<A> type, Function<ProtocolConnection<T>, A> factory) {
+        Object existing = attachments.get(type);
+        if (existing == CONSTRUCTING) {
+            throw new IllegalStateException("the factory for " + type.getName()
+                    + " asked for its own attachment; it is not built yet");
+        }
+        if (existing != null) return (A) existing;
+        attachments.put(type, CONSTRUCTING);
+        A created;
+        try {
+            created = factory.apply(this);
+        } catch (RuntimeException | Error failed) {
+            // Or the marker outlives the failure and every later ask reports a bogus recursion.
+            attachments.remove(type);
+            throw failed;
+        }
+        attachments.put(type, created);
+        return created;
+    }
+
+    /** Whether {@code type} has already been attached, without <em>causing</em> it. */
+    public synchronized boolean hasAttachment(Class<?> type) {
+        Object existing = attachments.get(type);
+        return existing != null && existing != CONSTRUCTING;
+    }
+
+    /**
+     * Runs at the end of every {@link #tick()} — <b>after</b> the mailbox is drained and timeouts have
+     * been swept.
+     *
+     * <p>Order is the whole point: a hook is where per-connection work belongs, and it must see this
+     * tick's input already delivered. Draining after would run every window's tick against the
+     * <em>previous</em> tick's messages, which looks like one frame of network latency and is not.</p>
+     *
+     * <p>One hook's exception does not stop the others — the same rule
+     * {@code CgUiConnections.tickSafely} already applies per peer, for the same reason: a frozen
+     * subsystem with no error of its own is the shape that gets diagnosed as a network fault.</p>
+     */
+    public ProtocolConnection<T> onTick(Runnable hook) {
+        if (hook != null) tickHooks.add(hook);
+        return this;
+    }
+
+    /**
+     * Runs once, when the peer goes away — the fact everything above the router needs and could not
+     * get.
+     *
+     * <p>{@link #close} used to do exactly one thing: fail every pending request. Nothing was
+     * <em>told</em>. So a {@code ServerUiSession} on a dead connection stayed open, kept observing its
+     * tree and kept encoding state deltas into a wire nobody was reading, until something external
+     * remembered to close it — which is why every consumer grew its own "is the connection still
+     * there" poll, and why forgetting one leaked for the life of the server.</p>
+     *
+     * <p><b>A hook registered after the connection has already closed runs immediately.</b> Same rule
+     * and same reason as {@code CgLifecycleListener.onInit} reaching a late registrant: the guarantee
+     * is <em>exactly once</em>, whenever it was asked for, because the alternative is a miss that
+     * nothing reports.</p>
+     */
+    public ProtocolConnection<T> onClosed(Consumer<String> hook) {
+        if (hook == null) return this;
+        if (closed) {
+            hook.accept(closeReason);
+            return this;
+        }
+        closeHooks.add(hook);
+        return this;
+    }
+
+    /** Whether the peer has gone. A closed connection dispatches nothing and ticks nothing. */
+    public boolean isClosed() {
+        return closed;
+    }
+
     /** How long this connection's calls wait before their error handler is told. */
     public ProtocolConnection<T> setCallTimeoutMillis(long millis) {
         this.callTimeoutMillis = millis;
@@ -94,7 +210,7 @@ public final class ProtocolConnection<T> {
      * Serves a method. The handler must answer exactly once — the router enforces it.
      *
      * <p>Shaped as {@link Call.Handler} rather than {@link MessageRouter.RequestHandler} so that
-     * {@code WorkspaceRpc.Registrar} and {@code ServerUiSession::onCall} remain interchangeable: a
+     * {@code WorkspaceBinding.Registrar} and {@code ServerUiSession::onCall} stay interchangeable: a
      * subsystem is written once and installs onto either.</p>
      */
     public ProtocolConnection<T> onRequest(String method, Call.Handler<T> handler) {
@@ -145,12 +261,14 @@ public final class ProtocolConnection<T> {
      * @return how many messages were dispatched
      */
     public int tick() {
+        if (closed) return 0;
         pump.run();
 
         List<T> batch;
         synchronized (mailbox) {
             if (mailbox.isEmpty()) {
                 router.tickTimeouts(System.currentTimeMillis());
+                runTickHooks();
                 return 0;
             }
             batch = new ArrayList<>(mailbox);
@@ -171,12 +289,49 @@ public final class ProtocolConnection<T> {
             dispatched++;
         }
         router.tickTimeouts(System.currentTimeMillis());
+        runTickHooks();
         return dispatched;
     }
 
-    /** Fails everything outstanding. Call when the peer goes away, or every caller waits out its timeout. */
+    private void runTickHooks() {
+        // Indexed rather than iterated: a hook may legitimately add another (a host opening a window
+        // from inside a tick), and a ConcurrentModificationException there would be a crash caused by
+        // ordinary use. Anything added during a tick runs on the NEXT one.
+        int count = tickHooks.size();
+        for (int i = 0; i < count; i++) {
+            try {
+                tickHooks.get(i).run();
+            } catch (RuntimeException failed) {
+                CrystalGuiCore.LOGGER.error("A connection tick hook failed: {}", failed.getMessage(), failed);
+            }
+        }
+    }
+
+    /**
+     * The peer has gone: fail everything outstanding, then tell anything that asked.
+     *
+     * <p>Without the first half every caller waits out its own timeout for an answer that is never
+     * coming; without the second, nothing above the router ever learns — see {@link #onClosed}.</p>
+     *
+     * <p><b>Failing comes first</b> so a close hook does not see requests still pending against a wire
+     * that has gone. Idempotent: a connection closes once, and hooks are dropped afterwards so a
+     * retained connection cannot keep them alive.</p>
+     */
     public void close(String reason) {
-        router.failAllPending(reason);
+        if (closed) return;
+        closed = true;
+        closeReason = reason == null ? "" : reason;
+        router.failAllPending(closeReason);
+        List<Consumer<String>> hooks = new ArrayList<>(closeHooks);
+        closeHooks.clear();
+        for (Consumer<String> hook : hooks) {
+            try {
+                hook.accept(closeReason);
+            } catch (RuntimeException failed) {
+                // One subsystem's teardown must not cost every other subsystem its own.
+                CrystalGuiCore.LOGGER.error("A connection close hook failed: {}", failed.getMessage(), failed);
+            }
+        }
     }
 
     private StateMap<T> read(@Nullable T payload) {

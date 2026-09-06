@@ -2,7 +2,6 @@ package com.crystalgui.style.property.visual.transform;
 
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.visual.border.LengthPercent;
-import com.crystalgui.ui.UITransform;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -20,23 +19,23 @@ import java.util.List;
  * {@code scale(1)} to {@code rotate(45deg) scale(2)}) is one an author can always avoid by writing both
  * ends with the same functions, which is the standard advice for CSS transform animations anyway.</p>
  */
-public class TransformProperty extends StyleProperty<UITransform> {
+public class TransformProperty extends StyleProperty<Transform> {
 
-    public TransformProperty(String name, UITransform initialValue) {
-        super(name, UITransform.class, initialValue, TransformValue::new);
+    public TransformProperty(String name, Transform initialValue) {
+        super(name, Transform.class, initialValue, TransformValue::new);
         setAllowTransition(true);
         setInterpolator(TransformProperty::interpolate);
     }
 
-    static UITransform interpolate(UITransform from, UITransform to, float t) {
-        List<UITransform.Op> a = from.ops();
-        List<UITransform.Op> b = to.ops();
+    static Transform interpolate(Transform from, Transform to, float t) {
+        List<Transform.Op> a = from.ops();
+        List<Transform.Op> b = to.ops();
         if (a.size() != b.size()) return snap(from, to, t);
 
-        List<UITransform.Op> out = new ArrayList<>(a.size());
+        List<Transform.Op> out = new ArrayList<>(a.size());
         for (int i = 0; i < a.size(); i++) {
-            UITransform.Op fromOp = a.get(i);
-            UITransform.Op toOp = b.get(i);
+            Transform.Op fromOp = a.get(i);
+            Transform.Op toOp = b.get(i);
             if (fromOp.kind() != toOp.kind()) return snap(from, to, t);
 
             LengthPercent lx = lerp(fromOp.lx(), toOp.lx(), t);
@@ -45,15 +44,15 @@ public class TransformProperty extends StyleProperty<UITransform> {
             // so one incommensurable pair snaps the whole transform rather than half of it.
             if (lx == null || ly == null) return snap(from, to, t);
 
-            out.add(new UITransform.Op(fromOp.kind(), lx, ly,
+            out.add(new Transform.Op(fromOp.kind(), lx, ly,
                     lerp(fromOp.fx(), toOp.fx(), t),
                     lerp(fromOp.fy(), toOp.fy(), t)));
         }
-        return UITransform.of(out);
+        return Transform.of(out);
     }
 
     /** {@link com.crystalgui.style.property.IValueInterpolator#BINARY}'s rule, named for the reason. */
-    private static UITransform snap(UITransform from, UITransform to, float t) {
+    private static Transform snap(Transform from, Transform to, float t) {
         return t < 0.5f ? from : to;
     }
 

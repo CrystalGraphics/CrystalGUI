@@ -24,7 +24,7 @@ public final class StyleSheetRegistry {
      * renamed without both following.
      *
      * <p>default.css was split at its own section boundaries once it passed 6,000 lines
-     * (plan_styling.md step 8) — a pure move, contiguous by construction so rule order across the
+     * (plan/style-overhaul.md step 8) — a pure move, contiguous by construction so rule order across the
      * parts is exactly the old file's order. <b>Order here is load-bearing</b> the same way order
      * within a file is: equal-specificity ties fall to source order, and the concatenation IS the
      * source ({@code :disabled} after {@code :hover} being the classic casualty of a reorder).</p>
@@ -39,6 +39,7 @@ public final class StyleSheetRegistry {
             "crystalgui:ua/workbench",
             "crystalgui:ua/panels",
             "crystalgui:ua/search",
+            "crystalgui:ua/uibuilder",
             // LAST, and deliberately: CrystalOS's window chrome contains widgets from every part above
             // it, so an equal-specificity tie between a frame's own rule and something inside the frame
             // resolves in favour of the frame. Nothing depends on that today -- every rule in the part is

@@ -18,6 +18,17 @@ base { archivesName.set("crystalgui-mc1201-fabric") }
 // Adds CrystalGraphics compile-time deps (core, platform, mc1201-common) via composite substitution.
 apply(from = rootProject.file("gradle/module_integration/integration.gradle.kts").toURI())
 
+// The producing task is wired in below: a bare path serves whatever happens to sit on disk.
+val crystalGraphicsBuild = gradle.includedBuild("CrystalGraphics")
+val crystalGraphicsMod = fileTree(crystalGraphicsBuild.projectDir.resolve("mc1201/fabric/build/libs")) {
+    include("crystalgraphics-mc1201-fabric-*.jar")
+    exclude("*-sources.jar", "*-all.jar", "*-dev.jar", "*-java*.jar")
+}
+
+tasks.matching { it.name in setOf("runClient", "runServer") }.configureEach {
+    dependsOn(crystalGraphicsBuild.task(":mc1201:fabric:remapJar"))
+}
+
 dependencies {
     minecraft("com.mojang:minecraft:${property("mc1201.minecraft")}")
     mappings(loom.layered {
@@ -26,6 +37,22 @@ dependencies {
     })
     modImplementation("net.fabricmc:fabric-loader:${property("mc1201.fabric.loader")}")
     modImplementation("net.fabricmc.fabric-api:fabric-api:${property("mc1201.fabric.api")}")
+
+    // CRYSTALGRAPHICS, AS A MOD. It registers CgPlatform from its own entrypoint and nothing here
+    // does it, so without this every class resolves and the desktop paints nothing. One dependency
+    // covers everything: that jar already bundles platform, core and freetype the same way this
+    // module bundles :core and :mc1201:common below, so there is no library half to add separately
+    // and nothing is shipped twice.
+    //
+    // Named as a FILE, because the obvious form does not work. Adding a composite substitution for
+    // com.crystalgraphics:crystalgraphics-mc1201-fabric and depending on that coordinate was tried:
+    // Loom derives a remapped dependency's coordinate from the PROJECT NAME, so it went looking for
+    // "com.crystalgraphics:fabric", which exists nowhere. Loom's remapJar output is what a mod
+    // dependency must be -- intermediary namespace -- and modLocalRuntime is what maps it back to
+    // named for a dev run; a plain runtimeOnly would put an intermediary mod on a named classpath and
+    // fail at class load rather than at resolution. Local, because this is how a dev run finds
+    // CrystalGraphics and not something a published POM should demand.
+    modLocalRuntime(crystalGraphicsMod)
 }
 
 loom {
@@ -99,3 +126,13 @@ val extractMcSources by tasks.registering(Sync::class) {
 // ideaSyncTask is Loom's dedicated IDE sync hook — the right moment for one-time source gen.
 // CLI users who want sources without IDE sync: ./gradlew :mc1201:fabric:extractMcSources
 tasks.named("ideaSyncTask") { dependsOn(extractMcSources) }
+
+// CrystalGraphics ships as its OWN MOD on this loader, so its classes must not also be on the system
+// classpath. Knot loads a mod jar's classes itself, so a class present in both places exists TWICE --
+// and com.crystalgraphics.platform.CgPlatform holds the platform bundle in a static. CrystalGraphics
+// registered into its copy and CrystalGUI read the other, so a dedicated server reported
+// "CgPlatform not yet registered" one line after the log said it had registered.
+//
+// Only runtimeClasspath: compileOnly still needs them, and forge/neoforge take theirs from a classpath
+// rather than a mod jar, so this is fabric's alone.
+configurations.named("runtimeClasspath") { exclude(group = "com.crystalgraphics") }

@@ -30,7 +30,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 /**
- * The anti-rot machinery ({@code plan_styling.md} §4.2) — the styling contracts that used to live
+ * The anti-rot machinery ({@code plan/style-overhaul.md} §4.2) — the styling contracts that used to live
  * in comments, promoted to build failures. default.css rotted to 161 unrelated colours precisely
  * because breaking its rules broke no build; each test here is one of those rules with teeth.
  *
@@ -44,7 +44,7 @@ public class StyleGovernanceTest {
     private static final String SCHEMES = "/assets/crystalgui/ui/schemes/";
 
     /** What a SCHEME may define — the editor's tokens and nothing else. The split that makes
-     * "Crystal Dark + a different scheme" a legal pair (plan_styling.md §3.6). */
+     * "Crystal Dark + a different scheme" a legal pair (plan/style-overhaul.md §3.6). */
     private static final List<String> SCHEME_TOKEN_PREFIXES =
             List.of("--editor-", "--syntax-", "--find-match-", "--search-excluded-");
 
@@ -65,7 +65,12 @@ public class StyleGovernanceTest {
             Set.of("--graph-port-label-hover-fg");
     private static final Set<String> FALLBACK_ONLY_EXACT = Set.of(
             "--decoration-added", "--decoration-renamed", "--decoration-untracked",
-            "--decoration-deleted", "--decoration-conflict");
+            "--decoration-deleted", "--decoration-conflict",
+            // An ALPHA rather than a colour: how strongly a radar chart washes its wedges, with the
+            // hue coming from the data. It derives from no system role because it is not a role --
+            // there is no surface or foreground it could be a shade of -- and the same wash suits a
+            // light theme as a dark one, which is the test this set exists to express.
+            "--radar-fill");
 
     /**
      * <b>Offered hooks: defined by no theme, and that is the point.</b> Distinct from a palette —
@@ -94,7 +99,7 @@ public class StyleGovernanceTest {
      * user-agent parts come from {@link StyleSheetRegistry#DEFAULT_SHEET_PARTS}, the one manifest,
      * so renaming a part without updating it fails here rather than silently shrinking coverage.
      * ore.css is deliberately absent: it is a full sprite SKIN awaiting its move to {@code themes/}
-     * (plan_styling.md §3.2), where hex is legal — holding it to the token rule now would demand
+     * (plan/style-overhaul.md §3.2), where hex is legal — holding it to the token rule now would demand
      * tokenizing a file whose whole content is theme-side. */
     private static final List<String> STRUCTURE_SHEETS = structureSheets();
 
@@ -115,7 +120,7 @@ public class StyleGovernanceTest {
     }
 
     /**
-     * <b>The system vocabulary, pinned</b> — plan_styling.md §3.1, decided 2026-08-10. This list
+     * <b>The system vocabulary, pinned</b> — plan/style-overhaul.md §3.1, decided 2026-08-10. This list
      * IS the spec: base.css may derive only into these names, and adding a name here is an API
      * decision (append-mostly; renames go through the manager's alias table), not a convenience.
      */

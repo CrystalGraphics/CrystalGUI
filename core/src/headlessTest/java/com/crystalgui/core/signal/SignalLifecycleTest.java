@@ -17,7 +17,7 @@ import static org.junit.Assert.assertTrue;
  * <b>What a signal must survive once signals stop being leaves.</b>
  *
  * <p>Every signal in the engine was a leaf until now: something emitted, listeners ran, nothing emitted
- * back. {@code plan.md} step 3 makes them <b>chain</b> on purpose — a dirty change fires a tab-title
+ * back. {@code plan/shell-architecture-audit.md} step 3 makes them <b>chain</b> on purpose — a dirty change fires a tab-title
  * refresh which fires a layout change — so re-entrancy stops being exotic and becomes the normal shape.</p>
  *
  * <p>These pin the two properties that has to rest on: an emission may nest, and a subscription may be

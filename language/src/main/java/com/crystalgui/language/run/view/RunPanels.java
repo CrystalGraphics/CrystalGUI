@@ -1,10 +1,11 @@
 package com.crystalgui.language.run.view;
 
+import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.ClipboardCommands;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.WorkspaceFileService;
+import com.crystalgui.document.DocumentState;
 import com.crystalgui.language.run.RunSessions;
 import com.crystalgui.language.run.exec.ScriptInput;
 import com.crystalgui.language.run.exec.ScriptOutput;
@@ -14,14 +15,14 @@ import com.crystalgui.language.run.console.ConsoleFilter;
 import com.crystalgui.language.run.console.ConsoleSettings;
 import com.crystalgui.language.run.console.RunConsole;
 import com.crystalgui.text.TextPoint;
-import com.crystalgui.ui.elements.chrome.ContextMenu;
-import com.crystalgui.ui.elements.dock.DockDropZone;
-import com.crystalgui.ui.elements.dock.DockPanelDescriptor;
-import com.crystalgui.ui.elements.editor.EditorCommands;
-import com.crystalgui.ui.elements.editor.TextEditor;
-import com.crystalgui.ui.elements.list.ListView;
-import com.crystalgui.ui.elements.workbench.Workbench;
-import com.crystalgui.ui.elements.workbench.decoration.FileDecorations;
+import com.crystalgui.widget.overlay.ContextMenu;
+import com.crystalgui.workbench.dock.drag.DockDropZone;
+import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
+import com.crystalgui.widget.texteditor.EditorCommands;
+import com.crystalgui.widget.texteditor.TextEditor;
+import com.crystalgui.widget.collection.list.ListView;
+import com.crystalgui.workbench.WorkbenchContext;
+import com.crystalgui.workbench.decoration.FileDecorations;
 
 import javax.annotation.Nullable;
 
@@ -60,7 +61,7 @@ public final class RunPanels {
      *                 the things that would be stopped. Null for a workbench that shows a console somebody
      *                 else fills
      */
-    public static RunPanel install(Workbench workbench, RunConsole console, RunSessions sessions,
+    public static RunPanel install(WorkbenchContext workbench, RunConsole console, RunSessions sessions,
                                    @Nullable ScriptRuntimes runtimes) {
         RunPanel panel = new RunPanel().bindTo(console).bindSessions(sessions);
         // ONE SOURCE FOR "IS ANYTHING RUNNING", and it is the runtimes — the same objects `script.stop`'s
@@ -75,10 +76,10 @@ public final class RunPanels {
         // caption without anyone remembering to.
         panel.setRunnableLanguages(runtimes == null ? "" : runtimes.languageNames());
         // NAMED AND OPTED IN, which is the whole of remembering soft wrap between launches. The id ties
-        // a stored payload to the widget; UIWindow hands it its state as it joins the tree, so a
+        // a stored payload to the widget; UIDocument hands it its state as it joins the tree, so a
         // restored setting is applied before the first frame rather than after it.
         panel.setId(RunPanel.PANEL_ID);
-        panel.setSessionPersistent(true);
+        panel.set(Attribute.SESSION_PERSISTENT, true);
 
         // BESIDE PROBLEMS, and for the reason Workbench gives for its own anchors: closing a panel and
         // reopening it from the activity bar should land it back where it was rather than somewhere
@@ -115,7 +116,7 @@ public final class RunPanels {
                 // KEYBOARD focus and not clicks -- so the programmatic one would outline the whole editor
                 // viewport every time a link was followed. It also scrolls, which would fight the
                 // revealAt above rather than agree with it.
-                editor.requestPointerFocus();
+                editor.document().focus().requestPointerFocus(editor);
             });
         });
 
@@ -128,14 +129,21 @@ public final class RunPanels {
         // is over, and `Operation.source()` is the only place the old path still exists by the time this
         // fires. Both come off `onDidRun` rather than `onWillRun` -- a delete the server refuses must not
         // take the row with it.
-        workbench.files().onDidRun.connect(operation -> {
-            if (operation == null) return;
-            if (operation.kind() == WorkspaceFileService.Kind.DELETE) {
-                sessions.forget(Resource.of(operation.target()));
-            } else if (operation.kind() == WorkspaceFileService.Kind.MOVE && operation.source() != null) {
-                sessions.forget(Resource.of(operation.source()));
-            }
+        //
+        // THROUGH THE DOCUMENT STORE, not through this client's own operations. A file can be deleted or
+        // renamed by anybody -- another player, a git checkout, an editor outside the game -- and the
+        // server reports all of them the same way. Listening to what THIS client did covered one case
+        // of three, and it read as the panel being right because the case it covered is the one you
+        // test by hand.
+        workbench.documents().onDidChangeState.connect((document, state) -> {
+            if (state == DocumentState.ORPHANED) sessions.forget(document.resource());
         });
+        workbench.documents().onDidOpen.connect(document ->
+                // A RENAME MOVES THE RUN, it does not end it. The session is about the SCRIPT, and a
+                // script that was renamed while it was running is still running -- ending it there
+                // dropped the transcript, the elapsed time and the Stop button for a run that was still
+                // going, with the process left with nothing pointing at it.
+                document.onDidChangeResource.connect(sessions::retarget));
 
         // REMOVING A SCRIPT TAKES ITS OUTPUT WITH IT, and that is the whole point of the verb: the
         // complaint it answers is a console that fills up with runs you have finished reading. Dropping
@@ -156,7 +164,7 @@ public final class RunPanels {
 
         // THE INDICATOR, which is free once the provider exists: the tree already merges independent
         // contributors and bubbles them to folders.
-        FileDecorations decorations = workbench.fileTree().getDecorations();
+        FileDecorations decorations = workbench.decorations();
         decorations.addProvider(new RunDecorations(sessions));
         // AND THE THING THAT MAKES IT VISIBLE. A provider is PULLED during bind, so registering one is
         // only half: without this the row's colour appeared whenever the tree happened to rebind for some

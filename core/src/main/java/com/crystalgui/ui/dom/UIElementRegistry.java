@@ -1,0 +1,219 @@
+package com.crystalgui.ui.dom;
+
+import com.crystalgui.core.CrystalGuiCore;
+import java.util.Map;
+import java.util.ServiceLoader;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
+
+import javax.annotation.Nullable;
+
+/**
+ * {@link Name} → how to build a node of that kind, and its {@link NodeContract}.
+ *
+ * <p>The engine's {@code customElements.define}: a description saying {@code <mymod:machine>} decodes
+ * into the class registered under that name, and a peer asking what a kind can report is answered
+ * from the contract registered beside it. Unknown names <b>throw</b> on {@link #create}, as the old
+ * {@code ElementRegistry} does — a typo must not become a styleless container. The three built-in
+ * kinds are registered below; widgets register from their own class initialisers in M6, and a
+ * {@code UiType} registers its panel.</p>
+ */
+public final class UIElementRegistry {
+
+    /**
+     * <b>Declared above the static block, and it has to be.</b> That block reads {@code UIElement.NAME},
+     * which initialises {@link UIElement} — and a widget's own class initialiser registers itself here
+     * ({@link com.crystalgui.ui.box.UIText} is the shipped example, and every widget M6 ports will
+     * be another), so the moment any of these classes gains one, initialisation re-enters this class
+     * while it is still being initialised. The JVM lets a thread straight through its own in-progress
+     * init rather than deadlocking, so that is safe <em>only</em> while this map already exists.
+     * Moving it below the block turns every built-in registration into a
+     * {@link NullPointerException} on a class that plainly declares it.
+     */
+    private static final Map<Name, Entry> ENTRIES = new ConcurrentHashMap<>();
+
+    /** {@code factory} is null for a cascade-only kind — see {@link #registerTag}. */
+    private record Entry(@Nullable Supplier<? extends UIElement> factory, NodeContract contract,
+                        KindInfo info) {
+    }
+
+    /**
+     * The built-ins, registered from here rather than from each class's own initialiser.
+     *
+     * <p>Self-registration is the pattern for a widget and the wrong one for these three, because of
+     * <b>who is asked first</b>: {@link #create} is the decode path, and a client decoding a
+     * description before it has constructed anything would find {@code element} unregistered — a
+     * class nothing has touched has not initialised, so its static block has not run. Naming them
+     * here means the registry cannot be asked before they are in it.</p>
+     *
+     * <p>{@code shadow-root} is deliberately absent: a shadow root is never described, so it has a
+     * name for the cascade and nothing to build from the wire.</p>
+     */
+    static {
+        register(UIElement.NAME, UIElement::new, plain(UIElement.NAME, true));
+        register(UISlot.NAME, UISlot::new, plain(UISlot.NAME, true));
+        register(UIDocument.NAME, UIDocument::new, plain(UIDocument.NAME, true));
+    }
+
+    /** Whether the {@link NodeKinds} services have been run. @see #bootstrap() */
+    private static volatile boolean bootstrapped;
+
+    /**
+     * Runs every {@link NodeKinds} service once — what makes the registry's contents a function of
+     * the CLASSPATH rather than of what this JVM happened to touch.
+     *
+     * <p>Called at the top of every read below, which is the old {@code ElementRegistry}'s own
+     * arrangement and the reason it is correct without a host remembering anything: a client
+     * decoding {@code <crystalgui:button>} has, by construction, asked the registry a question.</p>
+     *
+     * <p><b>Loaded with THIS class's loader, never the context one.</b> On 1.7.10 the context
+     * classloader during a network read is whatever the host left there, and LaunchWrapper's is not
+     * the one that defined these classes — a {@code ServiceLoader} pointed at it finds nothing, or
+     * finds a second copy of everything. The defining loader is the only one guaranteed to see the
+     * jar this interface came from.</p>
+     *
+     * <p><b>Public, and called by {@link UIDocument}'s constructor as well as by every decode.</b> A
+     * layer's service declares more than names — {@code Widgets} also tells the engine how to build a
+     * resize handle — and a UI assembled IN PROCESS decodes nothing, so waiting for a decode meant a
+     * window built by hand never loaded the layer that speaks for it. Idempotent, so the extra call
+     * costs one volatile read.</p>
+     *
+     * <p>A service that throws is reported and skipped rather than taking the registry down with it:
+     * one mod's broken widget must not make every other kind unresolvable, and a decode that finds
+     * an unknown name already throws with a message naming what IS registered.</p>
+     */
+    public static void bootstrap() {
+        if (bootstrapped) return;
+        synchronized (UIElementRegistry.class) {
+            if (bootstrapped) return;
+            bootstrapped = true;
+            for (NodeKinds kinds : ServiceLoader.load(NodeKinds.class, UIElementRegistry.class.getClassLoader())) {
+                try {
+                    kinds.register();
+                } catch (RuntimeException | LinkageError e) {
+                    CrystalGuiCore.LOGGER.error("A NodeKinds service failed to register its kinds: {}",
+                            kinds.getClass().getName(), e);
+                }
+            }
+        }
+    }
+
+    private UIElementRegistry() {
+    }
+
+    public static void register(Name name, Supplier<? extends UIElement> factory, NodeContract contract) {
+        register(name, factory, contract, KindInfo.derived());
+    }
+
+    /**
+     * As above, saying where the kind files and what else it is called.
+     *
+     * <pre>{@code
+     * register(Button.NAME, Button::new, CONTRACT,
+     *         KindInfo.of("Controls").synonyms("press", "click"));
+     * }</pre>
+     *
+     * <p>Read by anything that LISTS kinds — an Insert menu, a Library panel — so both file and search
+     * them identically. A kind registered without one gets {@link KindInfo#derived}.</p>
+     */
+    public static void register(Name name, Supplier<? extends UIElement> factory, NodeContract contract,
+            KindInfo info) {
+        Objects.requireNonNull(name, "name");
+        Objects.requireNonNull(factory, "factory");
+        Objects.requireNonNull(contract, "contract");
+        ENTRIES.put(name, new Entry(factory, contract, info == null ? KindInfo.derived() : info));
+    }
+
+    /**
+     * A kind that exists for the CASCADE and cannot be built.
+     *
+     * <p>A widget's cascade identity is its tag, so a node declaring no kind inherits
+     * {@code crystalgui:element} and matches every bare {@code element} rule there is — and one
+     * declaring a kind nothing registered matches nothing at all, which is the
+     * {@code ToolWindowFrame} failure: no background, no border, and it reads as the widget never
+     * having been built.</p>
+     *
+     * <p>But plenty of kinds are never DECODED. Nothing describes a workbench, a window, a switcher
+     * or a dock over a wire; they are built by an application with collaborators a description could
+     * not carry. Those registered a factory that invented an argument — {@code new
+     * WindowSwitcher(null)}, {@code new WindowFrame("")} — which works until a widget refuses the
+     * invention. {@code Workbench} refuses a null client on its first line, correctly.</p>
+     *
+     * <p>So: registered, styleable, and {@link #create} refuses it by name.</p>
+     */
+    public static void registerTag(Name name, NodeContract contract) {
+        Objects.requireNonNull(name, "name");
+        Objects.requireNonNull(contract, "contract");
+        ENTRIES.put(name, new Entry(null, contract, KindInfo.derived()));
+    }
+
+    /**
+     * Where a kind files and what else it is called — {@link KindInfo#derived} for one that said nothing.
+     *
+     * <p>Never null, so a picker needs no branch for a kind that declared nothing about itself.</p>
+     */
+    public static KindInfo infoOf(Name name) {
+        bootstrap();
+        Entry entry = ENTRIES.get(name);
+        return entry == null ? KindInfo.derived() : entry.info();
+    }
+
+    /** Whether this kind can be BUILT, as opposed to merely existing for the cascade. */
+    public static boolean isBuildable(Name name) {
+        bootstrap();
+        Entry entry = ENTRIES.get(name);
+        return entry != null && entry.factory() != null;
+    }
+
+    public static boolean isRegistered(Name name) {
+        bootstrap();
+        return ENTRIES.containsKey(name);
+    }
+
+    /** A fresh node of the named kind. Throws for a name nothing registered. */
+    public static UIElement create(Name name) {
+        bootstrap();
+        Entry entry = ENTRIES.get(name);
+        if (entry == null) {
+            throw new IllegalArgumentException("No node kind is registered as <" + name + ">; registered: "
+                    + ENTRIES.keySet());
+        }
+        if (entry.factory() == null) {
+            throw new IllegalArgumentException("<" + name + "> is a cascade-only kind and cannot be "
+                    + "built: it is registered so a sheet can name it, and nothing describes one over "
+                    + "a wire. @see UIElementRegistry#registerTag");
+        }
+        return entry.factory().get();
+    }
+
+    /** The contract for a kind — the registered one, or a plain container's for a name nothing registered. */
+    public static NodeContract contractFor(Name name) {
+        bootstrap();
+        Entry entry = ENTRIES.get(name);
+        return entry != null ? entry.contract() : plain(name, true);
+    }
+
+    public static Set<Name> names() {
+        bootstrap();
+        return Set.copyOf(ENTRIES.keySet());
+    }
+
+    /** A contract that reports nothing and carries no state: the plain container's. */
+    public static NodeContract plain(Name name, boolean acceptsChildren) {
+        return new Plain(name.toString(), acceptsChildren);
+    }
+
+    private record Plain(String name, boolean acceptsDescribedChildren) implements NodeContract {
+        @Override
+        public Set<String> eventKinds() {
+            return Set.of();
+        }
+
+        @Override
+        public boolean carriesState() {
+            return false;
+        }
+    }
+}

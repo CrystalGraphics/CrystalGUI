@@ -7,6 +7,10 @@ plugins {
     `java-library`
 }
 
+// Coordinates, so a consumer's dependencySubstitution can name this module.
+group = "com.crystalgui"
+version = "1.0.0"
+
 java {
     sourceCompatibility = JavaVersion.VERSION_21
     targetCompatibility = JavaVersion.VERSION_21
@@ -82,8 +86,8 @@ dependencies {
     testCompileOnly("org.jspecify:jspecify:1.0.0")
 
     // Taffy layout engine + JOML (consumed from CG at runtime; needed here for compile)
-    compileOnly("dev.vfyjxf:taffy:${rootProject.properties["taffy_version"]}")
-    testImplementation("dev.vfyjxf:taffy:${rootProject.properties["taffy_version"]}")
+    compileOnly(project(":taffy"))
+    testImplementation(project(":taffy"))
     compileOnly("org.joml:joml:${rootProject.properties["jomlVersion"]}")
     testImplementation("org.joml:joml:${rootProject.properties["jomlVersion"]}")
 
@@ -147,6 +151,28 @@ dependencies {
 // NodeId, TaffyStyle), and field descriptors resolve at class load — unlike method-body references,
 // which don't. A server deployment therefore needs both on its classpath even though it never lays
 // anything out. Non-obvious, and someone will eventually try to strip them.
+// A second resource root, so a non-Java file may sit beside the code it belongs to.
+//
+// Gradle copies src/main/resources and nothing else, so a .css next to a .java compiles, ships, and
+// is absent from the jar -- which fails at runtime as a missing file rather than at build time as a
+// missing rule. com/crystalgui/app/machine/ui/machine.css is the one file relying on this today:
+// the example panel is meant to be read as a single directory (model, tree, theme, both session
+// halves), and splitting its theme into the assets tree would mean opening two source roots to read
+// one panel.
+//
+// This is NOT the way to ship an engine asset. Anything a resource pack is expected to override
+// belongs under assets/crystalgui/ where CgIO and the resource manager can find it; this root is
+// read with plain getResourceAsStream and a pack cannot reach it.
+//
+// The exclude is what keeps processResources from copying every .java file in the module into the
+// jar alongside the classes.
+sourceSets.main {
+    resources {
+        srcDir("src/main/java")
+        exclude("**/*.java")
+    }
+}
+
 val headlessTest: SourceSet by sourceSets.creating {
     compileClasspath += sourceSets["main"].output
     runtimeClasspath += sourceSets["main"].output
@@ -154,14 +180,34 @@ val headlessTest: SourceSet by sourceSets.creating {
 
 dependencies {
     "headlessTestImplementation"("junit:junit:4.13.2")
+    // For EngineBoundaryTest's bytecode scan of the strangler line (plan/engine-core.md §2), nothing else.
+    // Test-only: the mod jar's ASM is language/'s, relocated, and this must not become a second copy.
+    "headlessTestImplementation"("org.ow2.asm:asm:${rootProject.properties["asmVersion"]}")
     "headlessTestImplementation"("com.crystalgraphics:platform:1.0.0")
     "headlessTestImplementation"("org.apache.logging.log4j:log4j-core:2.26.1")
     "headlessTestImplementation"("com.google.code.gson:gson:2.11.0")
-    "headlessTestImplementation"("dev.vfyjxf:taffy:${rootProject.properties["taffy_version"]}")
+    "headlessTestImplementation"(project(":taffy"))
     "headlessTestImplementation"("org.joml:joml:${rootProject.properties["jomlVersion"]}")
     "headlessTestCompileOnly"("com.google.code.findbugs:jsr305:3.0.2")
     "headlessTestCompileOnly"("org.projectlombok:lombok:1.18.44")
     "headlessTestAnnotationProcessor"("org.projectlombok:lombok:1.18.44")
+}
+
+// -- Test workers ------------------------------------------------------------
+// GRADLE'S DEFAULT WORKER HEAP IS 512 MB, and that was never a decision anybody made here.
+//
+// It became one the moment a test could build a whole application: ApplicationRetentionTest builds
+// and disposes six CrystalEditors and WorkbenchExtensionsTest five workbenches, each of which is a
+// dock, an editor service, a file tree, a shader-graph contribution and a style engine. Every one of
+// them is correctly released -- that is what those tests assert -- but they are allocated in a worker
+// that has already run 175 other classes, and the peak is what runs out, not the retention.
+//
+// The failure is worth naming because it does not look like memory: the worker's uncaught-exception
+// handler dies with an OutOfMemoryError, Gradle reports "Process 'Gradle Test Executor N' finished
+// with non-zero exit value 1", and the class it happened to be running is blamed -- a headless
+// tool-window model test with no allocation in it at all.
+tasks.withType<Test>().configureEach {
+    maxHeapSize = "2g"
 }
 
 val headlessTestTask = tasks.register<Test>("headlessTest") {
@@ -173,6 +219,49 @@ val headlessTestTask = tasks.register<Test>("headlessTest") {
 }
 
 tasks.named("check") { dependsOn(headlessTestTask) }
+
+
+// -- M5 acceptance ------------------------------------------------------------
+// The new engine's own definition of done, as ONE invocation: `./gradlew :core:m5Acceptance`.
+//
+// Named rather than left as a list somebody retypes, because the point of the list is that it is
+// the SAME list every time -- the seam suite over both trees, the strangler boundary read out of
+// the constant pool, one-pass layout compared against the old engine, hit-testing with no paint
+// having happened, the focus and hit-test rows, and the engine-parity comparison (which SKIPS with
+// instructions when no GL run has produced its PNGs -- an environment gate, never an answer gate).
+val m5Headless = tasks.register<Test>("m5AcceptanceHeadless") {
+    description = "M5's headless half: the seam, the boundary, the box tree, the services."
+    group = "verification"
+    testClassesDirs = headlessTest.output.classesDirs
+    classpath = headlessTest.runtimeClasspath
+    useJUnit()
+    filter {
+        includeTestsMatching("com.crystalgui.ui.dom.*")
+        includeTestsMatching("com.crystalgui.ui.box.*")
+        includeTestsMatching("com.crystalgui.ui.service.*")
+        includeTestsMatching("com.crystalgui.headless.EngineBoundaryTest")
+        includeTestsMatching("com.crystalgui.net.mirror.*")
+    }
+}
+
+val m5Fonted = tasks.register<Test>("m5AcceptanceFonted") {
+    description = "M5's half that needs fonts and CSS: one-pass layout on both engines, shaped text."
+    group = "verification"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnit()
+    filter {
+        includeTestsMatching("com.crystalgui.ui.box.*")
+        includeTestsMatching("com.crystalgui.ui.dom.*")
+        includeTestsMatching("com.crystalgui.ui.service.*")
+    }
+}
+
+tasks.register("m5Acceptance") {
+    description = "M5 is done by its own definition: run this."
+    group = "verification"
+    dependsOn(m5Headless, m5Fonted)
+}
 
 
 // -- Import guard -------------------------------------------------------------
@@ -262,4 +351,24 @@ tasks.named<JavaCompile>("compileJava") {
 // which takes every entry including these.
 tasks.jar {
     from(sourceSets.main.get().allJava) { into("assets/crystalgui/sources") }
+}
+
+// Runs the worked example in com.crystalgui.example.machine end to end, printing every envelope
+// the loopback wire. It is documentation you can execute:
+//
+//     ./gradlew :core:runExample
+//
+// ON THE HEADLESS CLASSPATH ON PURPOSE. That source set has CrystalGraphics deliberately absent, so
+// the demo running at all is evidence the whole session layer is server-safe -- rather than a claim
+// in a javadoc that nothing checks. Run it on main's runtime classpath instead and it would prove
+// only that it works where everything is present, which is the case nobody doubts.
+tasks.register<JavaExec>("runExample") {
+    group = "documentation"
+    description = "Runs com.crystalgui.example.machine.MachineDemo -- a server-built UI over a loopback wire."
+    mainClass.set("com.crystalgui.example.machine.MachineDemo")
+    classpath = headlessTest.runtimeClasspath
+    // log4j2 with no configuration file defaults its root level to ERROR, so MachineTrace's INFO
+    // lines -- the ones naming the thread each step ran on -- are dropped and the demo looks like it
+    // has no logging at all. In game Minecraft configures log4j and they appear; here nothing does.
+    systemProperty("org.apache.logging.log4j.level", "INFO")
 }

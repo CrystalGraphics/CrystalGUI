@@ -6,11 +6,11 @@ The service layer under the dock, the workbench and the editor: the things a wid
 **Read this before adding anything to `ui/elements/dock/`, `ui/elements/workbench/` or `editor/`.**
 Most of what looks like a missing feature there is a service that already exists, and most of what
 looks like a needed helper is the symptom of one that does not — see
-[`plan.md`](../plan.md) for the architecture review this layer is being built from.
+[`plan/shell-architecture-audit.md`](../plan.md) for the architecture review this layer is being built from.
 
 > **This document is the index of that layer. Every new service API lands here in the same commit
 > that introduces it.** A capability nobody knows about gets re-implemented locally, which is exactly
-> the accumulation `plan.md` exists to stop.
+> the accumulation `plan/shell-architecture-audit.md` exists to stop.
 
 ---
 
@@ -24,7 +24,9 @@ looks like a needed helper is the symptom of one that does not — see
 | `Resource` — URI schemes, virtual documents | **shipped** | [Resources](#resources) |
 | `DockPane` — retargetable panel views | **shipped** | [Panes and placement](#panes-and-placement) |
 | `DockService` — `open(input, placement)` | **shipped** as `Workbench.open` | [Opening things](#opening-things) |
-| `DocumentType` — a file type, declared by its owner | **shipped** | [Contributions](#contributions) |
+| `DocumentKind` — a file type, declared by its owner | **shipped** | [Contributions](#contributions) |
+| `Workspace` — the server's filesystem, from the client | **shipped** | [Resources](#resources) |
+| `EditorService` — one lane for opening anything | **shipped** | [Opening things](#opening-things) |
 | `Inspector` — one inspector, any subject | **shipped** | [Contributions](#contributions) |
 | `Notifications` / `StatusBar` — events and ambient text, plus their views (`StatusBarView`, `NotificationsView`, `NotificationBalloons`) | **shipped** | [Notifications and status](#notifications-and-status) |
 | `DockBannerProvider` — a strip above a panel | **shipped** | [Contributions](#contributions) |
@@ -63,7 +65,7 @@ also what keeps the concurrency surface to exactly one object (the completion qu
 touched by two threads, so no widget ever needs a lock.
 
 The cost is that a job starts on a frame boundary, up to ~16ms at 60fps. That is inside every budget in
-`plan_syntax.md` §7.3, and it buys determinism.
+`plan/lang-stack.md` §7.3, and it buys determinism.
 
 `drain()` is **deliver → promote → deliver**. The second delivery catches a job that finished *during*
 promotion (always, on a same-thread executor; sometimes, on a real pool with short work) which would
@@ -109,7 +111,7 @@ without logging.
 **Document versions.** `TextBuffer.version()` is a monotonic counter bumped by every applied edit —
 *including undo and redo*, which move the text as surely as typing does. Staleness policy belongs to the
 consumer, because there are three legitimate answers (discard / keep-and-adjust / keep-per-line, see
-`plan_syntax.md` §8) and a scheduler deciding centrally would have to understand every consumer. It
+`plan/lang-stack.md` §8) and a scheduler deciding centrally would have to understand every consumer. It
 guarantees only that a superseded job's result never lands; comparing the stamp is the caller's job.
 
 ### Rules
@@ -231,16 +233,16 @@ behaves.
 |---|---|---|
 | `CrystalEditor` | every `ShaderGraphEditor` it builds | replaced a `graphs` list that was never pruned, so every graph ever opened stayed reachable for the session |
 | `ShaderGraphEditor` | its `MainPreviewPanel` | that panel's `delete()` had **no caller anywhere** — its `createOwned` target and meshes leaked for the life of the process |
-| `OpenDocuments.close` | the document it drops | only reached today when a file is **deleted or moved**; closing a *tab* does not come through here yet |
+| `DocumentReference` | one holder's claim on a document | the model is disposed by the **last** reference released, so a tab, the Problems panel and a background compile can each hold one |
 | `CgUiLifecycle` | the GL gate and its queue | not an owner — the seam |
 
 ### What disposes, and what deliberately does not
 
 | Action | Disposes? | Why |
 |---|---|---|
-| **Close a tab** | **yes**, when it was the last panel showing that path | `DockArea.onDidClosePanel` → `Workbench` releases the document and emits `onDidCloseDocument`. Guarded on "is anything else still showing this", because one document can have several panels — releasing on the first close leaves the surviving tab drawing something torn down, which is worse than the leak because it fails while looking fine. Derived resources are skipped: releasing a graph because its generated-source tab closed would take the document with it |
-| **Rename / move a file** | **no** | Goes through `OpenDocuments.retarget`, not `close`. It is the same document at a new address; disposing and rebuilding would discard unsaved work and churn GL for a path change |
-| **Delete a file** | **yes** | `WorkspaceFileService` closes what was open under it. The document is genuinely dead |
+| **Close a tab** | **releases that tab's reference** | `EditorService.close` drops the `DocumentReference` and nothing more. The model is disposed when the **last** holder releases — which may be the Problems panel, an index or a background compile, later than the tab and never earlier. Releasing on the tab's close is the "Parser is closed" defect: the surviving holder is left reading something torn down, which fails while looking fine |
+| **Rename / move a file** | **no** | `Document.retarget` moves it. It is the same document at a new address; disposing and rebuilding would discard unsaved work and churn GL for a path change |
+| **Delete a file** | **no — it is ORPHANED** | The buffer is kept and the document moves to `DocumentState.ORPHANED`, because closing the tab would throw away text the user may well want to write back. That is the whole reason a buffer is worth more than the file |
 | **Close the editor** | yes | `Disposer.dispose(editor)` — the root of the tree |
 | **Context destroyed** | yes | `CgGraphicsLifecycle`, which is where pooled GL objects are supposed to die |
 
@@ -290,7 +292,7 @@ release the same way, because none of them is doing anything — leaving the tre
 ## Data context
 
 `com.crystalgui.core.data` — `DataKey`, `DataProvider`, `DataContext`. Standard keys in
-`com.crystalgui.ui.UiDataKeys`.
+`com.crystalgui.ui.data.UiDataKeys`.
 
 How a command finds its subject without naming the widget that supplies it. Ported from IntelliJ's
 `DataKey`/`DataProvider`/`DataContext`.
@@ -344,7 +346,7 @@ preview or something not yet written can participate in a command written today.
 
 The `when`-expression parser (`editorFocus && resourceExtname == .java`). Predicates over
 `DataContext` cover commands today; the parser is only needed when keymaps want conditions, and it is
-~1000 lines in VS Code with most of that being parsing. See `plan.md` §15.6.
+~1000 lines in VS Code with most of that being parsing. See `plan/shell-architecture-audit.md` §15.6.
 
 ---
 
@@ -387,12 +389,12 @@ what the test suite caught when `ExplorerCommands` (which closes over a `Workben
 
 | Global today | Still per-window, because they capture an owner |
 |---|---|
-| `UndoCommands`, `GraphCommands`, `DockCommands`, `EditorCommands`, `ShaderGraphEditor`, `BlackboardPanel` | `ExplorerCommands` (`Workbench`), `CrystalEditorCommands` (`CrystalEditor`, `UIWindow`), `ChromeCommands` (`UIWindow`) |
+| `UndoCommands`, `GraphCommands`, `DockCommands`, `EditorCommands`, `ShaderGraphEditor`, `BlackboardPanel` | `ExplorerCommands` (`Workbench`), `CrystalEditorCommands` (`CrystalEditor`, `UIDocument`), `ChromeCommands` (`UIDocument`) |
 
 The three on the right migrate once there are data keys for a workbench, an editor and a window — the
 same move that turned `GraphCommands.graphFor` from an `instanceof` walk into a key.
 
-### A widget's commands arrive with the widget — two hooks on `UIElement`
+### A widget's commands arrive with the widget — two hooks on `UINode`
 
 ```java
 class GraphView extends CanvasView {
@@ -410,7 +412,7 @@ The split is load-bearing. A command is registered once and resolves its subject
 **binding on an element** is the only thing that scopes a chord to a widget, so it must be on each one.
 `F` frames a graph and `Mod+D` adds a caret in an editor precisely because those live on the elements.
 
-Both run from `UIElement`'s constructor, so **subclass fields do not exist yet** — the classic Java
+Both run from `UINode`'s constructor, so **subclass fields do not exist yet** — the classic Java
 hazard, deliberately embraced. Registration happens once per class, so a captured `this` would pin every
 later invocation to whichever instance was built first; the timing makes that hard to write by accident.
 
@@ -497,8 +499,8 @@ it from the context instead:
 | Was captured | Now |
 |---|---|
 | `ExplorerCommands(Workbench)` | `Workbench.WORKBENCH` |
-| `CrystalEditorCommands(CrystalEditor, UIWindow)` | `CrystalEditor.CRYSTAL_EDITOR` + `UiDataKeys.WINDOW` |
-| `ChromeCommands(UIWindow)` | `UiDataKeys.WINDOW` |
+| `CrystalEditorCommands(CrystalEditor, UIDocument)` | `CrystalEditor.CRYSTAL_EDITOR` + `UiDataKeys.WINDOW` |
+| `ChromeCommands(UIDocument)` | `UiDataKeys.WINDOW` |
 
 This is strictly better than capturing, not merely equivalent: with two windows open the palette now opens
 in the one you pressed the key in, and Save Layout saves the right one. The captured version could not
@@ -512,11 +514,11 @@ frame* behind a flag, for one reason — registration needed a window to reach a
 
 Two things fell out of that work.
 
-`UIElement.onWindowChanged(previous, current)` is the hook whose absence caused those polls. Anything an
+`UINode.onWindowChanged(previous, current)` is the hook whose absence caused those polls. Anything an
 element must do *once it has a window* goes here. Both arguments are given because detach is the half that
 leaks.
 
-`UIWindow.addDataProvider(...)` is IntelliJ's frame-level `DataProvider`, consulted by `DataContext`
+`UIDocument.addDataProvider(...)` is IntelliJ's frame-level `DataProvider`, consulted by `DataContext`
 **after** the element walk. It exists because the walk goes *outward*, so it only finds ancestors — and a
 `Workbench` is a descendant of the root, alongside everything else. With nothing focused, which is how a
 window looks the moment it opens, there is no workbench on the path at all. `Ctrl+P` and `F5` are precisely
@@ -593,9 +595,9 @@ at all. A field is discoverable by autocomplete and impossible to publish to fro
 | `onDidChangeLayout` | `DockArea` | the activity bar's `:checked` sweep |
 | `onDidRegister` | `DockPanelRegistry` | the activity bar's descriptor walk |
 | `onDidLoadListing` | `WorkspaceTreeSource` | `WorkbenchSession.tick`'s per-frame restore retry |
-| `onDidChangeDirty` | `OpenDocuments` | `encode()` on every open document, every frame |
-| `onDidChange(Runnable)` | `FileDocument` (SPI) | — the source the above is built from |
-| `onDidChangeFocus` | `UIInputHandler` | the Inspector's application-supplied subject — see below |
+| `onDidChangeState` | `WorkspaceDocuments` | a per-frame poll of every open document's dirtiness |
+| `onChanged()` | `DocumentModel` (SPI) | — the source the above is built from |
+| `onDidChangeFocus` | `Input` | the Inspector's application-supplied subject — see below |
 
 **`onDidChangeFocus` is the one that unlocked the Inspector.** `FocusEvent.Focus`/`Blur` are dispatched
 *at the element* and bubble, so they answer "did I gain focus"; they cannot answer "who holds focus now"
@@ -732,11 +734,11 @@ assertion or a single-label host wants.
 **Alignment is fixed at registration.** Moving an entry between ends means disposing the handle and
 registering a new one, which is VS Code's arrangement too — an accessor names a place as well as an entry.
 The view's removal pass therefore runs before its placement pass, or an element that changed ends would
-briefly be a child of both groups and `addChild` throws on a second parent.
+briefly be a child of both groups and `append` throws on a second parent.
 
 ### The view is `StatusBarView`, and it renders rather than computes
 
-`ui.elements.chrome.StatusBarView` — the model/view split is in the names, because two classes called
+`widget.chrome.StatusBarView` — the model/view split is in the names, because two classes called
 `StatusBar` in two packages compile and read as a mistake forever after. `Workbench` mounts one below its
 content, where the column layout alone puts it at the bottom.
 
@@ -744,16 +746,16 @@ content, where the column layout alone puts it at the bottom.
 |---|---|
 | It shows **only** what a writer keyed | Anything it computed itself would be a fact with no owner, and the keying would be pointless |
 | Slots are updated **in place**, never rebuilt | Status items are written from per-frame paths, so a rebuild per change discards and recreates the tree continuously — invisible in any screenshot. The engine's standing "never rebuild what is being clicked on" rule |
-| The removal pass runs **before** placement | An id that changed ends would otherwise be a child of both groups for an instant, and `addChild` throws on a second parent |
+| The removal pass runs **before** placement | An id that changed ends would otherwise be a child of both groups for an instant, and `append` throws on a second parent |
 | A spacer takes the slack, not `margin-left: auto` | Auto margins *share* free space between every auto margin in the row — the trap the activity bar's groups already cost a session |
 | It subscribes only while attached | `StatusBar` is static and outlives every view of it, so a view that never unsubscribed keeps itself and its elements alive for the rest of the process |
 | A slot's tooltip is attached **once** and re-texted | `Tooltip.attach` adds a hover listener pair per call and `detach` leaves them inert rather than removing them, so attach/detach cycling accumulates listeners — and the compile summary rewrites its tooltip on every recompile |
 | Separators are **elements**, not borders | The paint path takes `border().left` as *the* border width and strokes a uniform box, so `border-width-left` drew a rectangle around every readout instead of a rule between two. `Breadcrumbs` spells its separators the same way |
 | `breadcrumbs()` is the one widget, not an item | A trail is clickable and structured. The host sets it; the view still derives nothing |
 
-**A document publishes its own items, through `FileDocument.setActive(boolean)`.** The workbench knows
+**A view publishes its own items, through `DocumentEditor.activated(boolean)`.** The workbench knows
 exactly one thing no document can work out for itself — which tab is in front — and that is all it says.
-`TextFileDocument` answers with caret, line ending, encoding and indent; a shader graph answers with a
+`TextEditorView` answers with caret, line ending, encoding and indent; a shader graph answers with a
 compile summary; an image answers with neither.
 
 The first cut had `Workbench` writing the text readouts directly. It worked, and it does not scale: every
@@ -840,7 +842,10 @@ against mutants.
 
 ## Resources
 
-`com.crystalgui.fs` — `Resource`, `ResourceContentProvider`, `ResourceRegistry`.
+`com.crystalgui.fs` — `Resource`, `CgPath`, and the two failure types both halves name.
+`com.crystalgui.fs.client` — `Workspace` and its facades, `ContentProvider`, `ContentProviders`.
+`com.crystalgui.fs.provider` — the filesystem SPI under all of it; `com.crystalgui.fs.server` — the
+workspace over it, where authorisation, etags, trash and presence live.
 
 **A tab's input, whether or not it is a file.** A workbench opens things with no disk presence — a
 generated shader, a diff, an untitled buffer — and both references model that with a *scheme* rather than
@@ -867,41 +872,64 @@ keep a map for, and because it survives `parse` it survives a saved session with
 Five graphs give five distinct generated resources — which is what makes a compiled source a *document per
 graph* rather than one shared panel showing whichever is in front.
 
+### Who answers for a scheme — `ContentProvider`
+
+```java
+workspace.registerScheme("library", new LibrarySources());   // this server's
+ContentProviders.contribute("library", new LibrarySources()); // the process's
+```
+
+A provider answers three questions and only one is about bytes: `read` (the content), `symbolOf` (what
+the resource *is*, which is how a tab draws its glyph) and `locate` (where a member of it is declared).
+Every answer is a `Reply`, because the work can be real — reading a source archive is I/O and
+decompiling a class is hundreds of milliseconds, and neither may land on a frame.
+
+Register through `Workspace.registerScheme` when the scheme belongs to one server, and through
+`ContentProviders.contribute` when it belongs to the process — a language stack registers at mod init,
+long before any world is joined, so it has no workspace to be handed and `core/` may never name
+`language/`. Each workspace drains the contributions into its own table, so two servers in one client
+keep separate ones.
+
 ### Rules
 
-- **The project scheme refuses a provider.** It is read through the workspace client, which needs a
-  session and a round trip; a provider is a synchronous byte-returning method reached from a paint path.
+- **A project resource's CONTENT always comes from the server**, whatever has registered the scheme.
+  `Workspace.read` checks the scheme before it checks the provider table, so a provider registered for
+  `project://` — which is how the author's own `.java` files get a declaration glyph — is never asked
+  for their bytes.
 - **Unregistered schemes are read-only.** Refusing to write something nobody claims is the safe direction.
 - **`read()` must answer when the origin is gone** — empty bytes, never a throw. A derived tab outlives
   what it was derived from, and a pane can render a banner over empty but not over an exception.
-- Registration is explicit and global, for the same reasons commands are.
+- **Registration answers a `Disposable`**, so a mod that unloads takes its schemes with it.
 
-### `FileDocument.resource()` — and what it deleted
+### The document is the identity; the resource is a property of it
 
-A document says what it *is* (IntelliJ's `FileEditor.getFile()`, VS Code's `EditorInput.resource`).
-Without it, going from a document back to its address needs a map maintained beside the document store —
-`CrystalEditor` had `Map<String, ShaderGraphEditor>` plus a **reverse linear scan** to answer "which graph
-is this". Gone, with `graphForPath` and `pathOf`.
+`Document.resource()` is what it is *currently* called, and `onDidChangeResource` is the one event a
+store subscribes to — so a rename **moves** the document rather than orphaning every map keyed on its
+old name. IntelliJ's `VirtualFile` is the same object after a rename and its
+`VFilePropertyChangeEvent` is this signal.
 
-The generated shader's tab input is now the derived resource itself, so a restored session resolves by
-**parsing its own input** — nothing has to have been rebuilt first, which the map could not promise.
+That matters because a rename can come from anywhere. The server reports one as a single change
+carrying both ends, `WorkspaceDocuments` retargets the document, and the workbench moves the tab **in
+place** so it keeps its position and its selection. A rename reported as a deletion closes the tab
+instead, which is what happens to anyone reading `path` alone.
 
-### `OpenDocuments` stays keyed by `CgPath`, deliberately
+### One store, keyed by `Resource`
 
-It is the *disk* store: `onDisk` bytes, `unreadable`, `requested`, `markSaved`. A derived resource has no
-disk presence, so re-keying would give every entry fields half of them can never use — the flag-shaped
-design schemes exist to replace. **A derived document needs a provider and a view, not a slot in the file
-store.**
+`Documents` holds every open document by resource, so a project file, a decompiled class and a
+generated shader source are all in it and there is one way to open any of them. Keyed by `CgPath`,
+anything that was not a project file could not be in the store at all — which is what forces a second
+open lane into existence.
 
-No session version bump either. That tab's state used to be the graph's bare path, which parses as a
-project resource with no origin; reading it as the origin itself is one line, and the forms are
-unambiguous — a derived resource always has an origin, a bare path never does.
+Whether `Main.java` and `main.java` are one document is the **host's** rule, and only the server knows
+it: it arrives in the protocol's greeting and is handed to `Documents.setKeyStrategy`. `Resource`
+equality stays strict, exactly as VS Code keeps `URI` strict and folds in `extUri` — a key that folded
+would make two genuinely different files on a case-sensitive host collide.
 
 ---
 
 ## Panes and placement
 
-`com.crystalgui.ui.elements.dock` — `DockInput`, `DockPane`, `DockPaneProvider`, `DockPlacement`.
+`com.crystalgui.widget.dock` — `DockInput`, `DockPane`, `DockPaneProvider`, `DockPlacement`.
 
 ### `DockInput` — the runtime form of what a tab shows
 
@@ -962,7 +990,7 @@ Until placement is a value, "open this next to me" is not a request a widget can
 reaching through the dock and the layout to ask what the dock knows about itself.
 
 - **`groupOf` walks `getParent()`**, which returns the real parent regardless of how a child was added. A
-  panel's content is often an internal child of a composite, so skipping internal parents would answer
+  panel's content is often an shadow part of a composite, so skipping internal parents would answer
   null for exactly the widgets built properly.
 - **`resolve` returning null is ordinary**: `with()` may name an element outside any dock, `side()` names
   a split that does not exist yet. Opening reads null as "make one"; asking reads it as "nowhere".
@@ -1001,10 +1029,10 @@ overload and no way to ask.** That is why VS Code's is `openEditor(input, option
   panel *types* over one path, which is what the release guard checks for.
 - `open` returns the leaf it landed in, so a caller acts on it rather than searching for it again.
 
-## `UIElement.setOnlyChild`
+## `UINode.setOnlyChild`
 
 **"Show one of several things in this slot", done correctly.** Not
-`clearAllChildren().addChild(wanted)` — that skips internal children *by design*, and a composite widget
+`clearAllChildren().append(wanted)` — that skips shadow parts *by design*, and a composite widget
 routinely marks itself internal, so the obvious pair leaves the outgoing child in place and stacks the
 incoming one underneath. That was "two inspectors in one tab", and it read as a paint bug.
 
@@ -1017,12 +1045,12 @@ own statement about its parts, and it is right. The host was what assumed one ki
 
 The service layer under the two rails. Everything here is reached from `Workbench` —
 `toolWindowManager()`, `stripe(rail)`, `stripes()`, `dropOverlay()` — and nothing in it needs a
-`UIWindow`, which is why the geometry halves are testable headlessly.
+`UIDocument`, which is why the geometry halves are testable headlessly.
 
 ### Placement is `(region, side)`, and nothing else
 
 `ToolWindowState` stores a `DockRegion` and a `RegionSide`. That pair is IntelliJ's `anchor` +
-`isSplit`, and it is the **whole** of where a tool window lives — see `plan.md` §24.10, which quotes
+`isSplit`, and it is the **whole** of where a tool window lives — see `plan/shell-architecture-audit.md` §24.10, which quotes
 the platform source. An anchor's two halves share one stripe, separated by a rule.
 
 | Ask | Method |
@@ -1063,12 +1091,12 @@ target-phase only — hears nothing at all.
 
 ### Two widgets that came out of this, and are not workbench-specific
 
-- **`DragGhost`** (`ui.elements`) — the capsule under the cursor. `parkIn(host)` once, `follow(window,
-  icon, text)` per drag. It exists because `UIDragController.setGhost` takes any element by design, and
+- **`DragGhost`** (`widget`) — the capsule under the cursor. `parkIn(host)` once, `follow(window,
+  icon, text)` per drag. It exists because `Drag.setGhost` takes any element by design, and
   three rules are invisible in that signature: it must be in the tree before it can be promoted, it must
   be `absolute`/`none` **from Java at IMPORTANT at construction** (the first layout runs before any rule
   matches, and `UIText` latches its self-sizing there), and it must be registered per drag.
-- **`InsertionMarker`** (`ui.elements`) — the gap showing where a drop lands. `OVERLAY` floats over the
+- **`InsertionMarker`** (`widget`) — the gap showing where a drop lands. `OVERLAY` floats over the
   list; `IN_FLOW` opens a real gap and everything after it shifts. `DockGroup` uses the first because its
   caret is not a sibling of the tabs; `StripeView` uses the second. It owns the two rules every reorder
   needs: the first item whose **midpoint** is past the pointer, and an index range of `[0, size]` so the
@@ -1083,7 +1111,7 @@ frozen DOM would restore whatever widgets happened to exist when it was written,
 rebuilds its own from its model on each open.
 
 So a widget's own geometry had nowhere to live. `SessionState` is where — a bag of `writeState`
-payloads keyed by element id, held by the `UIWindow` and persisted by `WorkbenchSession` under a
+payloads keyed by element id, held by the `UIDocument` and persisted by `WorkbenchSession` under a
 `widgets` key.
 
 ```java
@@ -1101,14 +1129,14 @@ script rail and its transcript is a real preference, and without this it snapped
 > — and a way to name one — `setId`. A second, parallel mechanism made every panel re-implement
 > persistence for widgets that could already describe themselves, and it could only ever reach a
 > panel's **root**: a divider three levels down had to be hand-proxied out through the panel and back.
-> `SplitView` now answers for its own weights, which `UIDescriptionCodec` gets for free.
+> `SplitView` now answers for its own weights, which `UINodeMirror` gets for free.
 
 | Concern | Where it already lived |
 |---|---|
-| What a widget wants preserved | `UIElement.writeState` / `readState` |
-| Which widget it is | `UIElement.setId` |
-| When a widget appears | `UIWindow.registerElement` |
-| When it goes away | `UIWindow.unregisterElement` |
+| What a widget wants preserved | `UINode.writeState` / `readState` |
+| Which widget it is | `UINode.setId` |
+| When a widget appears | `UIDocument.registerElement` |
+| When it goes away | `UIDocument.unregisterElement` |
 
 The only new parts are the bag and one boolean.
 
@@ -1157,6 +1185,98 @@ The only new parts are the bag and one boolean.
 - **No version bump for adopting it.** The `widgets` key is additive and every read tolerates its
   absence; bumping discards every existing arrangement.
 
+## Applications, extensions and the engine
+
+**Five tiers, and each names only the one below.** A *host* supplies a surface, a config directory and a
+connection; the *shell* (`Desktop`) composites windows; an *application* is a manifest plus the features
+it enables; the *engine* (`Workbench`) is what a workbench IS; an *extension* attaches a feature to one.
+
+```java
+// desktop/app — what is installed, answerable with nothing running
+ApplicationKind.of("mymod:notes", "Notes")
+        .icon("mymod:notes")
+        .opens(DocumentKind.FilePatterns.extension("notes"))
+        .singleInstance()
+        .launch(context -> WorkbenchApplication.of(context)
+                .with("crystalgui:notes")            // the extension ids this product turns on
+                .title("Notes")
+                .key("notes:main")
+                .policy(WindowPolicy.HIDE_ON_CLOSE)
+                .start());
+```
+
+**Nothing installs it.** A line in `META-INF/services/com.crystalgui.desktop.app.ApplicationKinds`
+names a class that puts the manifest into whatever registry asks, and every desktop runs those services
+once, lazily, on its first question — the arrangement `UIElementRegistry` already uses. So a jar on the
+classpath offers its products, and `launch(kind, workspace, storage)` starts one and answers an
+`Application` — its `mainWindow()`, `open(resource)`, `activate()` and `dispose()`.
+
+`ApplicationRegistry.install(kind)` stays public for what a service cannot serve: a manifest built at
+run time from something only the running process knows.
+
+**A second product is a second manifest, never a second shell.** The list of extension ids is the whole
+of what distinguishes one workbench application from another; `WorkbenchApplication` is the shared
+runtime — the workbench, the window, the preferences, the session, the status flattening, the menu bar
+in the caption and the initial focus. `CrystalEditor` is a manifest and three choices.
+
+### The rules that are easy to get wrong
+
+| Rule | Why |
+|---|---|
+| **Installing is not launching** | A launcher lists installed manifests, `handlerFor(resource)` answers "open with", and a search matches keywords — all with nothing running. Deriving associations by building an application and asking its workbench is what made them unanswerable before |
+| **Closing is not quitting** | Under `HIDE_ON_CLOSE` the window goes away and the application is still running, with every document and the whole arrangement intact. `Application.dispose()` is the other verb — and it is why `WindowRegistry.evictIfNeeded` exempts an application's **main** window (D17): a cap on hidden windows must never quit a product nobody asked to quit |
+| **Each application gets its own corner of the storage** | `ConfigStorage.scoped(applicationId)`, applied by the registry before the factory runs. Two products sharing one directory both write `settings.json` and a session record, and the second to save wins |
+| **Preferences are yours, workspace state is the workspace's** | `LaunchContext.storage()` is `workspace-config/apps/<id>/` and holds what is the same on every server. A session, a backup and local history belong to one workspace, so they go in `workspace-config/projects/<identity>/` — reached by scoping `LaunchContext.workspaces()` once the greeting has supplied an identity, which is why they are set in `restoreWhenReady` and not in a constructor |
+| **`cache/` is a sibling of the config tree, and disposable** | `LaunchContext.cache()` is `crystalgui/cache/apps/<id>/`. Deleting the whole tree at any moment must lose nothing — anything that would be missed belongs under `workspace-config/`. `StorageLayout` names every segment of the tree, and nothing else may spell them |
+| **The session is keyed by (application id, workspace identity)** | A record describes a *workbench over a workspace*, whose tabs may come from any project — one record per project over one dock would restore N layouts onto one screen. The identity is the `workspaceId` the server greets with, or a hash of the sorted project ids from a server that has never heard of it |
+| **An id nothing contributed is a logged absence** | The three-tier degradation the language stack already follows, and what lets `crystalgui:scripting` be listed by every manifest and simply be missing on a host with no engine band |
+| **A `Workbench` built directly still gets everything** | `new Workbench(workspace)` activates every contributed extension — which is what a test and a harness scene mean. Only an application filters |
+| **The window knows its application** | `WindowFrame.setApplication(kind)` — Windows' `AppUserModelID`, X11's `WM_CLASS`. The taskbar groups by it, keeping one product's windows adjacent by first appearance |
+| **A host names no product and no feature** | Both are `ServiceLoader` services. A list in code can only name what the class holding it may see — which is why the shader-graph extension had to be contributed by an *application*, and why a mod's own could never be in either list at all. Two products claiming one file type is the ordinary case; the first installed wins |
+
+### Writing an extension
+
+```java
+public final class NotesKind implements WorkbenchExtension {
+    public static final String ID = "crystalgui:notes";
+    public static final DocumentKind KIND = DocumentKind.of(ID, "Notes")
+            .files(DocumentKind.FilePatterns.extension("notes"))
+            .model((resource, bytes) -> NotesModel.decode(bytes))
+            .editor(NotesView::new);
+
+    public NotesKind() { }                                  // ServiceLoader's rule
+    @Override public String id() { return ID; }
+    @Override public Disposable activate(WorkbenchContext workbench) {
+        return workbench.kinds().register(KIND);            // everything it registered, in one handle
+    }
+}
+```
+
+**One class per feature.** A declaration and a separate `*Extension` beside it read as a boundary and
+are a wrapper — one lifetime, one id, and the second file's only real content is the name of the first.
+The declaration stays a `static final` so a launcher can read what an extension claims without
+activating it.
+
+**The engine's own panels come through this door too.** Project, Problems, Notifications, Presence
+and the Inspector are all extensions — `new Workbench(workspace, List.of())` has no tool windows at
+all, and that is asserted. It is not economy: the built-ins are the only real test of the seam, and if
+Problems could not be expressed as one then no third-party panel could be either. What stays on the
+engine is what is true whether or not anybody is looking — the project listing, the file decorations,
+the root watches, an external change reaching a document.
+
+A line in `META-INF/services/com.crystalgui.workbench.extension.WorkbenchExtension` says *this jar has the
+feature*; a manifest's `with(...)` says *this product enables it*. Availability is discovered, so it is a
+fact about the jars present rather than about which module remembered to make a call — and an id nothing
+contributed is a logged absence, never an error, which is what lets `crystalgui:scripting` be listed by
+every manifest and simply be missing on a host with no engine band.
+
+`WorkbenchExtensions.contribute(extension)` stays for what a service cannot serve: one built at run
+time. The language stack uses it, because whether the Run shell is available is a question about an
+engine *band* rather than about a jar. An extension is written against `WorkbenchContext` and never
+against `Workbench` — `LayeringTest` asserts that from the constant pool.
+
+---
+
 ## Contributions
 
 **A feature declares what it can do; nothing enumerates features.** This is the principle the six earlier
@@ -1164,19 +1284,32 @@ steps kept running into and the two below finally apply — IntelliJ's extension
 `contributes` manifest. The test of it is mechanical: **`com.crystalgui.editor` imports exactly one name
 from `com.crystalgui.graph`**, the contribution it enables.
 
-### `DocumentType` — which editor opens which file
+### `DocumentKind` — which editor opens which file
 
 ```java
-workbench.contribute(DocumentType.of("shadergraph.file", "Shader Graph")
-        .forExtensions("shadergraph")
-        .document(path -> new ShaderGraphEditor().setResource(Resource.of(path))));
+workbench.contribute(DocumentKind.of("crystalshader:graph", "Shader Graph")
+        .files(DocumentKind.FilePatterns.extension("shadergraph"))
+        .icon("crystalshader:graph")
+        .model((resource, bytes) -> GraphModel.decode(bytes))   // what it IS
+        .editor(GraphView::new)                                 // one way of looking at it
+        .status(GraphStatus::contribute),                       // while it is in front
+        "shadergraph");                                         // and the panel binding
 ```
 
-Declared by the package that owns the type, not by the application. It replaced
-`registerDocumentType(id, title, factory)` **plus** `bindEditorExtensions(id, …)` — two calls that are
-meaningless apart: a factory with no binding never opens anything, and a binding with no factory threw
-`"No document factory for panel type"` *when a user opened a file*. Two calls that must both happen are
-one fact, and `contribute` refuses an incomplete type on the spot.
+Declared by the package that owns the type, not by the application. **One call**, because a factory
+with no binding never opens anything and a binding with no factory fails at the moment somebody opens a
+file — two calls that must both happen are one fact, and `contribute` refuses an incomplete kind on the
+spot.
+
+**The model and the view are declared separately**, and that split is what the rest of the layer rests
+on: a model knows its content and nothing about paths, tabs, saving or windows, so a document analyses
+with no tab open and two split panes share one parse tree. `.editor` is optional — a kind that can be
+opened, analysed and saved with nothing to look at it is what a build artefact is.
+
+At most one kind may call `.fallback()`, and that is the "File" kind: every text file nothing else
+claims, plus every resource in a registered scheme. Without it, opening an unrecognised extension
+answers "nothing knows how to open this", which is right for a graph format nobody registered and
+wrong for a `.txt`.
 
 ### `Inspector` — one inspector, any subject
 
@@ -1210,8 +1343,8 @@ IntelliJ's `EditorNotificationProvider`. Facts about a tab that the tab cannot s
 *read-only*, *out of date*. The motivating case: `compiled_graph.shader` is `setReadOnly(true)`, so typing
 in it silently does nothing, which reads as a **broken editor** rather than as a generated file.
 
-- **Asked with the `DockPanelRef`, not a document** — deliberately. The generated source tab is *not* a
-  `FileDocument`; it is a panel type whose ref carries the derived `Resource` in its state. A
+- **Asked with the `DockPanelRef`, not a document** — deliberately. The generated source tab is not a
+  document of its own; it is a panel type whose ref carries the derived `Resource` in its state. A
   document-shaped question could not have been asked about the one tab that needed it.
 - **Wrapping happens in `DockGroup.contentFor`**, the single place every panel passes through — document
   tabs, pane-backed panels and plain registry-built ones alike.
@@ -1228,7 +1361,7 @@ A contributor declares *what* it can describe and *how to read it*. Everything e
 
 | Boilerplate | Who does it |
 |---|---|
-| Deciding what is being inspected | `Inspector`, from `UIInputHandler.onDidChangeFocus` |
+| Deciding what is being inspected | `Inspector`, from `Input.onDidChangeFocus` |
 | Ignoring focus that lands **inside the inspector** | `Inspector` — asking to see something must not change what is shown |
 | Latching, so losing focus does not blank the panel | `Inspector` |
 | Keeping the last subject when **nothing can describe** the new one | `Inspector` |
@@ -1384,7 +1517,7 @@ document.diagnostics().changeOne(services.id(), compiled.problems());
 | **Absence is the feature flag, and there is no other one** | Three tiers degrade independently and each absence is silent: no engine → grammar colouring, no grammar → keyword lexer, neither → plain text. A `enableSemanticHighlighting` boolean would be a second source of truth about what is actually loaded, and the two disagree the moment a native fails to load |
 | **Per DOCUMENT, never per editor** | The same file in two split panes is one document. Two sets would double every compile, publish two competing diagnostic slices into one `DiagnosticSet`, and disagree about which version they had reached |
 | **`LanguageServices.close()` is the ONLY close on the seam** | `SemanticTokenProvider` has one too and nothing outside an implementation may call it — an editor closing a provider releases something it was only lent, while the document's other view carries on using it |
-| **The document owns them — `TextFileDocument.dispose()`** | Not the widget. The dock rebuilds every panel on every split and drag, so releasing on widget teardown frees a parse tree for a document that is still open and rebuilds it next frame. **This is also what finally calls `SyntaxTokenizer.close()`**: that method has existed since the seam did and nothing in the application ever reached it, so every text document's native parse tree survived until the process ended |
+| **The document owns them — `TextDocumentModel.dispose()`** | Not the widget. The dock rebuilds every panel on every split and drag, so releasing on widget teardown frees a parse tree for a document that is still open and rebuilds it next frame. **This is also what finally calls `SyntaxTokenizer.close()`**: that method has existed since the seam did and nothing in the application ever reached it, so every text document's native parse tree survived until the process ended |
 | **`setLanguageServices` unsubscribes, it does not close** | Same reason — the editor holds, the document owns |
 | **Diagnostics are NOT on this interface** | They already have a home with a per-owner model built for exactly this. `services.id()` is the owner key; mirroring the list here would be two copies with no rule about which is authoritative |
 | **Every answer carries the document version it describes** | `Versioned<T>`. The consumer picks the staleness policy, because there are three correct ones and they are not interchangeable: **discard** for hover and go-to-definition, **keep adjusted** for diagnostics, **keep per line** for semantic tokens — dropping those on every keystroke flickers the file back to lexer colouring and restores it 300ms later |
@@ -1397,8 +1530,8 @@ document.diagnostics().changeOne(services.id(), compiled.problems());
 `HeaderContributor` — a view offers controls; the container decides placement.
 
 ```java
-public class ProblemsPanel extends UIElement implements HeaderContributor {
-    @Override public UIElement headerContent() { return tabs; }   // asked ONCE, when mounted
+public class ProblemsPanel extends UINode implements HeaderContributor {
+    @Override public UINode headerContent() { return tabs; }   // asked ONCE, when mounted
 }
 ```
 
@@ -1414,7 +1547,7 @@ rather than built per call, or the container ends up holding a previous one.
 
 **A menu is a query, not a list.** `MenuId` names a place a menu is drawn; a command declares that it
 belongs there; a renderer asks the registry what is there *right now*. Nothing enumerates menu items —
-which is what lets `com.crystalgui.ui.elements.graph` own the entire Graph menu without the shell
+which is what lets `com.crystalgui.widget.graph` own the entire Graph menu without the shell
 importing it, and what makes `MainMenuCommands` 70 lines that declare two commands.
 
 ### Putting an item in a menu
@@ -1524,7 +1657,7 @@ release.
 ```java
 MenuBarView bar = new MenuBarView(CommandRegistry.global());
 MainMenuCommands.install(bar);      // the six standard titles, or call addMenu yourself
-workbench.addInternalChild(bar);    // above content; the workbench is a column
+workbench.appendStructural(bar);    // above content; the workbench is a column
 ```
 
 | | |
@@ -1622,6 +1755,6 @@ nobody has opened without fetching the project.
 ### File operations
 
 `ExplorerCommands` resolves conflicts rather than writing through them: a **copy** onto a taken name gets
-`WorkspaceFileService.incrementalName`, and a **move** onto one is refused with the name in the message.
+`FileOperations.incrementalName`, and a **move** onto one is refused with the name in the message.
 Every path out of a paste iteration must call its `batch.track()` runnable, including the refusals — a
 `continue` that skips it leaves the undo group open forever.

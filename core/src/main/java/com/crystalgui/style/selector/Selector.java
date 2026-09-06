@@ -1,6 +1,6 @@
 package com.crystalgui.style.selector;
 
-import com.crystalgui.ui.UIElement;
+import com.crystalgui.style.Styleable;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -37,12 +37,22 @@ public record Selector(List<CompoundSelector> compounds, List<Combinator> combin
     }
 
     /**
+     * Whether this selector's pseudo-element selects a real element in a shadow tree
+     * ({@code ::part}) rather than a paint-time overlay ({@code ::highlight}).
+     *
+     * @see CompoundSelector#selectsShadowPart()
+     */
+    public boolean selectsShadowPart() {
+        return compounds.get(compounds.size() - 1).selectsShadowPart();
+    }
+
+    /**
      * Whether this selector applies to {@code element}'s own style.
      *
      * <p>Always false when a pseudo-element is present — those rules style an overlay, not the element,
      * and are routed separately by {@code StyleEngine}. See {@link #matchesOriginating}.</p>
      */
-    public boolean matches(UIElement element) {
+    public boolean matches(Styleable element) {
         if (pseudoElement() != null) return false;
         return matchesOriginating(element);
     }
@@ -53,11 +63,19 @@ public record Selector(List<CompoundSelector> compounds, List<Combinator> combin
      * <p>Identical to {@link #matches} except that a trailing pseudo-element is ignored rather than
      * disqualifying. This is what {@code .code text::highlight(keyword)} is matched with.</p>
      */
-    public boolean matchesOriginating(UIElement element) {
+    /**
+     * Whether the parts after the pseudo-element describe {@code part} — @see
+     * CompoundSelector#matchesAfterPseudoElement.
+     */
+    public boolean matchesAfterPseudoElement(Styleable part) {
+        return compounds.get(compounds.size() - 1).matchesAfterPseudoElement(part);
+    }
+
+    public boolean matchesOriginating(Styleable element) {
         int lastIndex = compounds.size() - 1;
         if (!compounds.get(lastIndex).matchesOriginating(element)) return false;
 
-        UIElement current = element;
+        Styleable current = element;
         for (int i = lastIndex - 1; i >= 0; i--) {
             var compound = compounds.get(i);
             var combinator = combinators.get(i); // combinators[i] connects compounds[i] -> compounds[i+1]

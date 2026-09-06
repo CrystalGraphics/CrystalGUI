@@ -3,7 +3,9 @@ package com.crystalgui.language.java;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.ResourceRegistry;
+import com.crystalgui.core.dispose.Disposable;
+import com.crystalgui.fs.client.ContentProvider;
+import com.crystalgui.fs.client.ContentProviders;
 import com.crystalgui.language.engine.EngineHost;
 import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.text.lang.SymbolInfo;
@@ -30,7 +32,7 @@ import static org.junit.Assert.assertTrue;
  * either call site suggested it might.</p>
  *
  * <p>So the answer is deferred: null now, computed on {@link JobScheduler}, announced through
- * {@link ResourceRegistry#onSymbolResolved} when it lands. The glyph arrives a moment late, which is what
+ * {@link ContentProvider#onDidResolveSymbol} when it lands. The glyph arrives a moment late, which is what
  * every IDE does with a decompiled tab and is the only alternative to a frozen frame.</p>
  */
 public class LibrarySymbolDeferralTest {
@@ -57,7 +59,14 @@ public class LibrarySymbolDeferralTest {
     }
 
     private static SymbolInfo ask(Resource of) {
-        return ResourceRegistry.providerFor(of).symbolOf(of);
+        return providerFor(of).symbolOf(of);
+    }
+
+    private static ContentProvider providerFor(Resource resource) {
+        for (ContentProviders.Contribution contribution : ContentProviders.all()) {
+            if (contribution.scheme().equals(resource.scheme())) return contribution.provider();
+        }
+        throw new AssertionError("nothing is contributed for " + resource.scheme());
     }
 
     /**
@@ -84,7 +93,8 @@ public class LibrarySymbolDeferralTest {
     @Test
     public void theAnswerArrivesOnADrainAndIsAnnounced() {
         AtomicInteger announced = new AtomicInteger();
-        Connection watch = ResourceRegistry.onSymbolResolved.connect(resource -> announced.incrementAndGet());
+        Disposable watch = providerFor(DELIVERED)
+                .onDidResolveSymbol(resource -> announced.incrementAndGet());
         try {
             ask(DELIVERED);
             SymbolInfo landed = null;
@@ -103,7 +113,7 @@ public class LibrarySymbolDeferralTest {
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
         } finally {
-            watch.disconnect();
+            watch.dispose();
         }
     }
 }

@@ -25,7 +25,7 @@ import java.util.Set;
  *
  * <h3>The canonical stack</h3>
  * <p>{@link StyleSheet#DEFAULT} → {@code themeSheet} → {@code schemeSheet} → the app's own sheets
- * ({@code plan_styling.md} §3.3). The two sheets this class owns are <b>stable instances whose
+ * ({@code plan/style-overhaul.md} §3.3). The two sheets this class owns are <b>stable instances whose
  * rules are swapped in place</b> ({@link StyleSheet#refillFrom}), never removed and re-added — the
  * sheet <em>list</em> of an installed engine does not change across a swap, which is what keeps
  * "re-adding appends at highest priority" out of the picture by construction.</p>
@@ -69,7 +69,7 @@ public final class UiThemeManager {
      * {@code workbench.colorCustomizations}, and the reason its users never have to fork a theme to
      * change one colour.
      *
-     * <p>Last in the merge (plan_styling.md §3.3), so it survives a theme swap and re-applies on top
+     * <p>Last in the merge (plan/style-overhaul.md §3.3), so it survives a theme swap and re-applies on top
      * of the new one: "I always want my accent pink" is a statement about the user, not about the
      * theme they happen to be running. Keys are token names with or without the {@code --} prefix —
      * a settings file written by hand should not fail on a detail that carries no information.</p>
@@ -222,11 +222,48 @@ public final class UiThemeManager {
         apply();
     }
 
+    /**
+     * Re-reads every theme file from disk and re-applies the active pair — <b>theme hot reload</b>,
+     * and the call a host pairs with {@code StyleEngine.reloadStylesheets()}.
+     *
+     * <p>Both halves are needed and neither covers the other. A stylesheet reload re-reads the sheets
+     * and re-substitutes them against {@code boundVariables}, which is the table the active theme
+     * produced <em>when it was last applied</em> — so an edited token is invisible. This re-reads the
+     * theme, rebinds the table and restyles; the sheets keep the rules they already had.</p>
+     *
+     * <p>Three things go stale here and only one is obvious. The registry entries are replaced by
+     * {@link ThemeRegistry#reloadAll()}, so this class's own {@code activeTheme} reference points at
+     * the object that was just superseded and has to be re-resolved by id. {@code baseTable} is
+     * {@code themes/base.css} read once and cached forever, so a component-token edit would never
+     * appear. And a file that stopped parsing keeps its previous entry, which means a re-resolve can
+     * legitimately answer with the old object — that is the intended degrade, not a failure, and is
+     * why a null answer here restores rather than deactivates.</p>
+     *
+     * @return how many theme files were re-read and accepted
+     */
+    public int reloadFromDisk() {
+        int reloaded = ThemeRegistry.reloadAll();
+        // NEVER deactivate on a null. A theme whose file was deleted or is momentarily unreadable keeps
+        // its registry entry, so null here means the id itself is gone -- and dropping to the unthemed
+        // base mid-edit blanks the look and reads as the reload being broken.
+        if (activeTheme != null) {
+            UiTheme reread = ThemeRegistry.get(activeTheme.id());
+            if (reread != null) activeTheme = reread;
+        }
+        if (activeScheme != null) {
+            UiTheme reread = ThemeRegistry.get(activeScheme.id());
+            if (reread != null) activeScheme = reread;
+        }
+        baseTable = null;
+        apply();
+        return reloaded;
+    }
+
     private void apply() {
         List<UiTheme> chain = inheritanceChain(activeTheme);
 
         // Merge order (later wins): base ← root ancestor ← … ← theme ← scheme ← the user's own
-        // overrides (plan_styling.md §3.3). With NOTHING active the table stays empty — pristine
+        // overrides (plan/style-overhaul.md §3.3). With NOTHING active the table stays empty — pristine
         // sheets on their fallbacks, not a half-bound base.
         LinkedHashMap<String, String> merged = new LinkedHashMap<>();
         boolean anything = !chain.isEmpty() || activeScheme != null || !overrides.isEmpty();

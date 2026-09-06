@@ -1,7 +1,5 @@
 package com.crystalgui.core.data;
 
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.UIWindow;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -30,7 +28,7 @@ import javax.annotation.Nullable;
  *
  * <p>Click-focus targets the <b>exact element hit</b>, which in a composite widget is one of its
  * internal parts — a tab's label, a row's icon. Walking only public parents would therefore lose the
- * subject for precisely the widgets that are built properly. {@code UIElement.getParent()} returns the
+ * subject for precisely the widgets that are built properly. {@code CommandTarget.commandParent()} returns the
  * real parent regardless of how the child was added, so the walk gets this for free; it is written down
  * because a future "skip internal children" optimisation would silently break every composite.</p>
  *
@@ -46,7 +44,7 @@ public final class DataContext {
     public static final DataContext EMPTY = new DataContext(null);
 
     @Nullable
-    private final UIElement source;
+    private final CommandTarget source;
 
     /**
      * Answers found during this pass, including the nulls.
@@ -57,18 +55,18 @@ public final class DataContext {
      */
     private final Map<DataKey<?>, Object> answered = new HashMap<>();
 
-    private DataContext(@Nullable UIElement source) {
+    private DataContext(@Nullable CommandTarget source) {
         this.source = source;
     }
 
     /** A context that asks {@code source} and everything above it. */
-    public static DataContext from(@Nullable UIElement source) {
+    public static DataContext from(@Nullable CommandTarget source) {
         return source == null ? EMPTY : new DataContext(source);
     }
 
     /** The element the walk starts at, or null. */
     @Nullable
-    public UIElement source() {
+    public CommandTarget source() {
         return source;
     }
 
@@ -112,7 +110,7 @@ public final class DataContext {
      */
     @Nullable
     private Object walk(DataKey<?> key) {
-        for (UIElement element = source; element != null; element = element.getParent()) {
+        for (CommandTarget element = source; element != null; element = element.commandParent()) {
             if (!(element instanceof DataProvider provider)) continue;
             Object answer = provider.getData(key);
             if (answer != null && key.cast(answer) != null) return answer;
@@ -146,9 +144,7 @@ public final class DataContext {
     @Nullable
     private Object fromWindow(DataKey<?> key) {
         if (source == null) return null;
-        UIWindow window = source.getAttachedWindow();
-        if (window == null) return null;
-        for (DataProvider provider : window.getDataProviders()) {
+        for (DataProvider provider : source.scopeProviders()) {
             Object answer = provider.getData(key);
             if (answer != null && key.cast(answer) != null) return answer;
         }

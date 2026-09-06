@@ -5,6 +5,10 @@ import com.crystalgui.core.CrystalGuiCore;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.lang.ref.Reference;
+import java.lang.ref.ReferenceQueue;
+import java.lang.ref.WeakReference;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,27 +18,34 @@ import java.util.function.Consumer;
 import javax.annotation.Nullable;
 
 /**
- * The ownership tree — a port of IntelliJ's {@code Disposer}.
+ * <b>The ownership tree</b> - register a resource against a parent and it is released when the parent is.
+ *
+ * <p>A port of IntelliJ's {@code Disposer}, and the answer to "who frees this". Use it whenever
+ * something's lifetime is <em>contained</em> by something else's: a panel's subscriptions, a window's
+ * services, an application's workbench.</p>
+ *
+ * <pre>{@code
+ * Disposer.register(parent, child);   // child goes when parent does
+ * Disposer.dispose(parent);           // children first, in reverse order, then parent
+ * }</pre>
  *
  * <h3>The one rule</h3>
  *
- * <p>Everything registers against a parent, and disposing a parent releases its children <b>first, in
- * reverse registration order</b>, before releasing the parent itself. Reverse order is not tidiness: a
- * child registered later may have been built <em>from</em> an earlier one, so releasing forwards frees
- * a dependency out from under its dependent. It is the same argument {@code CompositeEdit} makes about
- * undoing backwards, and the same one {@code CgGraphicsLifecycle} makes about VAOs before VBOs.</p>
+ * <p>Disposing a parent releases its children <b>first, in reverse registration order</b>. Reverse order
+ * is not tidiness: a child registered later may have been built <em>from</em> an earlier one, so
+ * releasing forwards frees a dependency out from under its dependent. Same argument a composite edit
+ * makes about undoing backwards, and the graphics lifecycle makes about VAOs before VBOs.</p>
  *
  * <h3>Identity, not equality</h3>
  *
- * <p>The maps are {@link IdentityHashMap}. A disposable is a <em>thing</em>, not a value, and two
- * equal-but-distinct objects own different resources. Using {@code equals} here would let one release
- * another's memory and leave its own — which is exactly the class of bug this exists to remove.</p>
+ * <p>The maps are identity-based. A disposable is a <em>thing</em>, not a value, and two equal-but-distinct
+ * objects own different resources - using {@code equals} would let one release another's memory and
+ * leave its own.</p>
  *
  * <h3>Iterative, not recursive</h3>
  *
- * <p>The walk is explicit rather than recursive because a disposal tree mirrors a widget tree, and a
- * deep UI is thousands of levels in the pathological case. A {@code StackOverflowError} during teardown
- * is unrecoverable and leaves half the graph freed.</p>
+ * <p>The walk is explicit because a disposal tree mirrors a widget tree, and a {@code StackOverflowError}
+ * during teardown is unrecoverable: it leaves half the graph freed.</p>
  *
  * @see Disposable for what this is for and, more importantly, what it is not
  */
@@ -49,8 +60,29 @@ public final class Disposer {
     /** Child → its parent, so disposing a child can unlink it without searching. */
     private static final Map<Disposable, Disposable> PARENTS = new IdentityHashMap<>();
 
-    /** Everything already released. Kept so a double dispose is a no-op rather than a second free. */
-    private static final Map<Disposable, Boolean> DISPOSED = new IdentityHashMap<>();
+    /**
+     * Everything already released, held <b>weakly</b>. Kept so a double dispose is a no-op rather than
+     * a second free.
+     *
+     * <p><b>Weakly, because this map used to be the largest leak in the engine.</b> It was an
+     * {@code IdentityHashMap} with strong keys and nothing but {@link #resetForTesting()} ever removed
+     * from it — so every object ever disposed was retained for the life of the process, along with
+     * everything it referenced. Disposing four editors kept four whole editor trees: the thing whose
+     * entire job is releasing was the thing holding on. It surfaced as an {@code OutOfMemoryError} in a
+     * test worker and read as the editors leaking, which they no longer were.</p>
+     *
+     * <p>Weak is not a compromise here, it is the exact requirement: a question about an object nobody
+     * holds cannot be asked, so this record only has to outlive the object's last holder. The moment
+     * the last one lets go, "has it been disposed" is unaskable and the answer is worth nothing.</p>
+     *
+     * <p>{@link Gone} is what makes that possible while keeping identity semantics — the JDK has no
+     * weak identity map, and {@code WeakHashMap} keys on {@code equals}, which is the one thing the
+     * class note above says must not happen.</p>
+     */
+    private static final Map<Gone, Boolean> DISPOSED = new HashMap<>();
+
+    /** Where a {@link Gone} key lands once its subject has been collected. @see #purgeCollected() */
+    private static final ReferenceQueue<Disposable> COLLECTED = new ReferenceQueue<>();
 
     /** {@link Disposable.Gl} instances waiting for the GL thread; see {@link #setGlGate}. */
     private static final Deque<Disposable> GL_QUEUE = new ArrayDeque<>();
@@ -95,8 +127,8 @@ public final class Disposer {
             throw new IllegalArgumentException("neither parent nor child may be null");
         }
         if (parent == child) throw new IllegalArgumentException("a disposable cannot own itself");
-        if (DISPOSED.containsKey(parent)) return false;
-        if (DISPOSED.containsKey(child)) return true;      // nothing left to own
+        if (wasDisposed(parent)) return false;
+        if (wasDisposed(child)) return true;               // nothing left to own
 
         Disposable existing = PARENTS.get(child);
         if (existing == parent) return true;
@@ -122,7 +154,7 @@ public final class Disposer {
 
         List<Disposable> order;
         synchronized (Disposer.class) {
-            if (DISPOSED.containsKey(target)) return;
+            if (wasDisposed(target)) return;
             // Read BEFORE the maps are cleared. Reading it after finds null, the unlink never happens,
             // and the parent's child list keeps a reference to something already released -- so
             // disposing the parent later frees it a second time.
@@ -131,7 +163,7 @@ public final class Disposer {
             // Marked BEFORE anything runs, so a dispose() that re-enters -- a listener firing, a
             // child unregistering itself -- finds the work already claimed instead of doing it twice.
             for (Disposable each : order) {
-                DISPOSED.put(each, Boolean.TRUE);
+                recordDisposed(each);
                 CHILDREN.remove(each);
                 PARENTS.remove(each);
             }
@@ -143,7 +175,7 @@ public final class Disposer {
 
     /** Whether {@code target} has been released. Null is treated as disposed — there is nothing to free. */
     public static synchronized boolean isDisposed(@Nullable Disposable target) {
-        return target == null || DISPOSED.containsKey(target);
+        return target == null || wasDisposed(target);
     }
 
     /**
@@ -199,6 +231,55 @@ public final class Disposer {
     // ── Internals ───────────────────────────────────────────────────────────────────────────────
 
     /**
+     * A weak reference that hashes and compares by the IDENTITY of what it points at.
+     *
+     * <p>Which is the whole trick: {@code WeakHashMap} would key on {@code equals}, and two
+     * equal-but-distinct disposables own different resources — letting one answer for the other is the
+     * class of bug this file exists to remove. The hash is taken at construction and kept, so a key
+     * whose subject has been collected still lands in the bucket it was filed under and can be removed.</p>
+     */
+    private static final class Gone extends WeakReference<Disposable> {
+        private final int hash;
+
+        Gone(Disposable of, ReferenceQueue<Disposable> queue) {
+            super(of, queue);
+            this.hash = System.identityHashCode(of);
+        }
+
+        @Override
+        public int hashCode() {
+            return hash;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) return true;
+            if (!(other instanceof Gone)) return false;
+            Disposable mine = get();
+            return mine != null && mine == ((Gone) other).get();
+        }
+    }
+
+    /** Drops the record of anything the collector has taken. Called before every read and write. */
+    private static void purgeCollected() {
+        for (Reference<? extends Disposable> taken; (taken = COLLECTED.poll()) != null; ) {
+            DISPOSED.remove(taken);
+        }
+    }
+
+    private static boolean wasDisposed(Disposable target) {
+        purgeCollected();
+        // A lookup key, not a record: it is handed no queue, so it is ordinary garbage the moment this
+        // returns, and its subject is alive by construction -- the caller is holding it.
+        return DISPOSED.containsKey(new Gone(target, null));
+    }
+
+    private static void recordDisposed(Disposable target) {
+        purgeCollected();
+        DISPOSED.put(new Gone(target, COLLECTED), Boolean.TRUE);
+    }
+
+    /**
      * {@code target} and its descendants, deepest-and-last-registered first.
      *
      * <p>Explicitly stacked rather than recursive — see the class note on depth. The reversal is what
@@ -213,7 +294,7 @@ public final class Disposer {
             // Already gone: it was disposed directly earlier and has not been unlinked from a stale
             // list. Skipping it here rather than trusting the unlink keeps a double free impossible
             // even if some path forgets.
-            if (DISPOSED.containsKey(current)) continue;
+            if (wasDisposed(current)) continue;
             visited.add(current);
             List<Disposable> kids = CHILDREN.get(current);
             if (kids == null) continue;

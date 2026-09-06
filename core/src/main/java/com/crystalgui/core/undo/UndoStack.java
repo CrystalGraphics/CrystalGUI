@@ -104,6 +104,17 @@ public final class UndoStack {
     private boolean applying;
 
     /**
+     * Whether an undo or a redo is running right now.
+     *
+     * <p>What a producer of edits asks before recording one. An operation replayed by a redo must not
+     * push a second entry describing itself — the entry it is being replayed from is already on the
+     * stack, and {@code push} refuses during an apply for exactly that reason.</p>
+     */
+    public boolean isApplying() {
+        return applying;
+    }
+
+    /**
      * Fires after anything that changes what undo or redo would do — an execute, an undo, a redo, a
      * clear, a commit. One signal rather than several because every consumer (an enabled/disabled
      * toolbar button, a history panel, a dirty marker) re-reads the whole state anyway.

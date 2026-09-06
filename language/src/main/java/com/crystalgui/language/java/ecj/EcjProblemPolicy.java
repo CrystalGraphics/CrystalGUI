@@ -40,7 +40,7 @@ import java.util.Set;
  * no reference implementation reports one as a diagnostic — IntelliJ draws a gutter marker on the
  * declaration and lets you navigate to what it overrides. Reporting it here would put a squiggle, a
  * Problems row and an error-stripe mark on every correctly written override in the file. The marker is a
- * real feature and is recorded in {@code plan_quickfix_catalog.md} §18.6; it belongs with the editor's
+ * real feature and is recorded in {@code plan/lang-quickfix-catalog.md} §18.6; it belongs with the editor's
  * gutter parts and needs nothing from this file.</p>
  */
 public final class EcjProblemPolicy {

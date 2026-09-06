@@ -1,18 +1,22 @@
 package com.crystalgui.language.run.view;
 
+import com.crystalgui.fs.protocol.ScriptingMode;
+import com.crystalgui.workbench.WorkbenchContext;
+import com.crystalgui.workbench.extension.WorkbenchExtension;
 import com.crystalgui.core.async.JobKey;
 import com.crystalgui.core.async.JobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.dispose.Disposable;
 import java.util.List;
 import java.util.Map;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.ui.elements.editor.TextEditor;
-import com.crystalgui.ui.elements.workbench.Workbench;
+import com.crystalgui.text.syntax.LanguageRegistry;
+import com.crystalgui.widget.texteditor.TextEditor;
 
 import javax.annotation.Nullable;
 
@@ -38,31 +42,103 @@ import com.crystalgui.language.run.console.RunSummary;
 import com.crystalgui.language.run.exec.ScriptRefusedException;
 
 /**
- * Scripting, attached to a workbench — the engine, the commands, the console, and the indicator.
+ * <b>Scripting, as a workbench feature</b> - the Run command, the console, the indicator and the Run
+ * panel.
  *
- * <h3>This module owns the wiring, not the application</h3>
+ * <p>Enable it by naming {@code crystalgui:scripting} in an application's manifest. It is discovered
+ * from this jar's services entry, so no host wires it up: {@link #activate} opens whatever engines are
+ * available, installs the commands and the panel, and hands back a handle that closes them again.</p>
  *
- * <p>It used to live in the harness, and that was wrong in a way worth naming: the harness is one host
- * among several, and everything it was doing — compile whatever {@code .java} file is in front, run it,
- * route its output, mark it running — is true of <em>any</em> workbench, not of that one. Leaving it
- * there meant a Minecraft loader would have reimplemented all of it, from a class it could not see, and
- * the two would have drifted the first time either changed.</p>
+ * <h3>It names no language</h3>
  *
- * <p>So the host supplies the two things only it knows — which workbench, and where to cache — and this
- * supplies the rest. A mod adds what scripts can reach through {@link ScriptBindings}, which is a
- * registry precisely so no host has to know which mods are present; a language adds that it can run
- * through {@link ScriptRuntimes}, which is a registry for the same reason. <b>Nothing here names a
- * language.</b> Which file is a script, which runtime compiles it, what a stack frame looks like in its
- * output — every one of those is asked of the runtimes, so the day a second one registers, this class
- * is not edited.</p>
+ * <p>Which file is a script, which runtime compiles it, and what a stack frame looks like in its output
+ * are all asked of {@link ScriptRuntimes}. A mod adds what scripts can reach through
+ * {@link ScriptBindings}; a language adds that it can run by contributing a runtime. The day a second
+ * runtime registers, this class is not edited.</p>
  *
- * <h3>Everything is optional except the workbench</h3>
+ * <h3>Everything degrades</h3>
  *
- * <p>{@link #install} answers null when no runtime is available rather than wiring a dead Run command.
- * A menu row and an accelerator that do nothing teach people the feature is broken, which is worse than
- * their absence teaching them it is unavailable.</p>
+ * <p>With no engine band there is no runtime, so {@link #install} answers null and {@code activate}
+ * hands back a no-op: the editor still colours and simply offers no Run. That is better than a menu row
+ * and an accelerator that do nothing, which teach people the feature is broken rather than unavailable.
+ * The same is true one level up - a server may refuse local execution, and then the command is present
+ * and disabled with its reason.</p>
+ *
+ * <h3>Two roles, one class</h3>
+ *
+ * <p>The public no-argument constructor exists for {@code ServiceLoader} and builds a shell that can
+ * answer {@link #id()} and {@link #activate} and nothing else; a <em>running</em> one comes from
+ * {@link #install}. Keeping them together is deliberate - a separate {@code ScriptingExtension} beside
+ * this would share its lifetime and its id and carry this class's name as its only real content.</p>
  */
-public final class ScriptWorkbench implements Closeable {
+public final class ScriptWorkbench implements WorkbenchExtension, Closeable {
+
+    /** What an application's manifest names to enable scripting. @see WorkbenchExtensions */
+    public static final String ID = "crystalgui:scripting";
+
+    /**
+     * The SERVICE instance — <b>not a running one</b>.
+     *
+     * <p>{@code ServiceLoader} needs a public no-argument constructor, and what it builds is the thing
+     * that answers {@link #id()} and {@link #activate}. A <em>live</em> shell comes from
+     * {@link #install}, which is private-constructed with everything it holds. Two roles, one class,
+     * because a separate {@code ScriptingExtension} beside this one is a wrapper wearing a boundary's
+     * clothes: one lifetime, one id, and the second file's only real content would be the name of the
+     * first.</p>
+     *
+     * <p>The half-built instance is the cost of that, and it is bounded: nothing but {@code id} and
+     * {@code activate} may be called on it, and both are static in everything but syntax. Folding the
+     * fields below into a nested holder — as {@code ProjectExtension.Live} does — would remove even
+     * that, and is the follow-up worth doing when this file is next open for other reasons.</p>
+     */
+    public ScriptWorkbench() {
+        this(null, null, null, null, null);
+    }
+
+    @Override
+    public String id() {
+        return ID;
+    }
+
+    /**
+     * Answers a no-op handle when no language has a runtime.
+     *
+     * <p>This stack's three-tier degradation rather than a failure: a host with no engine band shows
+     * the file and offers no Run, and a menu row that does nothing teaches people the feature is broken
+     * rather than unavailable.</p>
+     */
+    @Override
+    public Disposable activate(WorkbenchContext workbench) {
+        // THE RUNTIMES ARE CONTRIBUTED BY THE LANGUAGES, so this has to make sure they have registered.
+        //
+        // Not belt-and-braces: extensions activate while a workbench is being BUILT, before anything has
+        // opened a document, so the registry's own read-triggered discovery has not run yet. Without this
+        // `ScriptRuntimes.open` answers empty, `install` answers null, and the Run panel is simply absent
+        // -- which is indistinguishable from a host with no engine band, and is the one absence this
+        // class is documented to produce legitimately.
+        //
+        // A UI-side call by construction: `.run.view` is the package that may name `com.crystalgui.ui`,
+        // so nothing headless reaches this line and no dedicated server loads a grammar through it.
+        LanguageRegistry.bootstrap();
+        ScriptWorkbench installed = install(CommandRegistry.global(), workbench,
+                workbench.cacheDirectory(CACHE_DIRECTORY));
+        if (installed == null) return () -> { };
+        return () -> {
+            try {
+                installed.close();
+            } catch (IOException failed) {
+                // TEARDOWN IS EXACTLY WHEN A HALF-FINISHED JOB IS WORST, and a workbench closing must
+                // not be stopped by an engine band that will not shut down. Said out loud, then dropped.
+                //
+                // System.err rather than the engine's logger, which this module cannot see: log4j is
+                // the host's and `language/` compiles without it -- the same reason LanguageStack
+                // reports a grammar that will not load this way.
+                System.err.println("[crystalgui] scripting did not close cleanly: " + failed);
+            }
+        };
+    }
+
+    public static final String CACHE_DIRECTORY = "script-cache";
 
     private final ScriptRuntimes runtimes;
     private final RunConsole console;
@@ -85,7 +161,7 @@ public final class ScriptWorkbench implements Closeable {
      * @param cacheRoot where compiled scripts are cached between launches; null for memory only
      */
     @Nullable
-    public static ScriptWorkbench install(CommandRegistry registry, Workbench workbench,
+    public static ScriptWorkbench install(CommandRegistry registry, WorkbenchContext workbench,
                                           @Nullable Path cacheRoot) {
         // BEFORE THE RUNTIME CHECK, deliberately. Remapping a file out of the runtime namespace needs the
         // platform's MAPPING and nothing else -- no engine, no analysis, no way to run anything. A host
@@ -224,7 +300,7 @@ public final class ScriptWorkbench implements Closeable {
      * the other safe shape and is unavailable here for the reason the bug exists: a closed panel is a
      * detached one, so nothing inside it is running to do the pulling.</p>
      */
-    private void inputWanted(Workbench workbench) {
+    private void inputWanted(WorkbenchContext workbench) {
         if (!console.isAwaitingInput()) {
             promptShown.set(false);
             return;
@@ -245,7 +321,7 @@ public final class ScriptWorkbench implements Closeable {
      * draws exactly this line: its Run tool window activates and does not take focus unless "Focus tool
      * window" is switched on. Without the restore, running a script silently ends your typing session.</p>
      */
-    private static void showConsole(Workbench workbench) {
+    private static void showConsole(WorkbenchContext workbench) {
         if (workbench.isPanelOpen(RunPanels.RUN_TYPE)) return;
         // ASKED BEFORE, RESTORED AFTER. Only when the editor actually held focus -- a Run started from
         // the file tree or the palette has no caret to return, and taking one there would be theft in
@@ -255,7 +331,7 @@ public final class ScriptWorkbench implements Closeable {
         workbench.showPanel(RunPanels.RUN_TYPE);
         // POINTER focus, never requestFocus: the latter rings, and `:focus-visible` exists to ring
         // KEYBOARD focus and not this.
-        if (wasTyping) editor.requestPointerFocus();
+        if (wasTyping) editor.document().focus().requestPointerFocus(editor);
     }
 
     /**
@@ -268,7 +344,7 @@ public final class ScriptWorkbench implements Closeable {
      * there. Hence the continuation: running straight after the call would compile whatever was in front
      * a moment ago, which is the exact bug this method exists to close.</p>
      */
-    private void rerun(Workbench workbench, @Nullable Resource script) {
+    private void rerun(WorkbenchContext workbench, @Nullable Resource script) {
         if (script == null) {
             registry.run(ScriptCommands.RUN);
             return;
@@ -289,7 +365,7 @@ public final class ScriptWorkbench implements Closeable {
      * question about the application whose answer changes with every tab switch and every keystroke.</p>
      */
     @Nullable
-    private ScriptRuntime.Compiled compileFor(Workbench workbench, @Nullable Resource script) {
+    private ScriptRuntime.Compiled compileFor(WorkbenchContext workbench, @Nullable Resource script) {
         if (script == null) return compileActive(workbench);
 
         CgPath path = script.asPath();
@@ -297,6 +373,7 @@ public final class ScriptWorkbench implements Closeable {
             Notifications.warning("Run: " + script.name() + " has no file to read");
             return null;
         }
+        if (!mayRunHere(workbench, path)) return null;
         // ASKED, NOT documentFor() -- which CREATES a document for any path handed to it. Compiling
         // would then open the file as a side effect, so a toolbar button would grow a tab, and a
         // script deleted since it ran would come back as an empty editor rather than as a refusal.
@@ -313,7 +390,7 @@ public final class ScriptWorkbench implements Closeable {
     }
 
     @Nullable
-    private ScriptRuntime.Compiled compileActive(Workbench workbench) {
+    private ScriptRuntime.Compiled compileActive(WorkbenchContext workbench) {
         TextEditor editor = workbench.activeEditor();
         if (editor == null) {
             Notifications.warning("Run: no text file is open");
@@ -342,7 +419,7 @@ public final class ScriptWorkbench implements Closeable {
      * <p>{@code onDone} runs on the UI thread during {@code drain()}, which is what lets the refusal
      * notification and the console below stay where they are.</p>
      */
-    private void compileForAsync(Workbench workbench, @Nullable Resource script,
+    private void compileForAsync(WorkbenchContext workbench, @Nullable Resource script,
                                  java.util.function.Consumer<ScriptRuntime.Compiled> onReady) {
         Snapshot snapshot = snapshotFor(workbench, script);
         if (snapshot == null) {
@@ -378,7 +455,33 @@ public final class ScriptWorkbench implements Closeable {
 
     /** The UI-thread half of a run: which file, which runtime, and what it says right now. */
     @Nullable
-    private Snapshot snapshotFor(Workbench workbench, @Nullable Resource script) {
+    /**
+     * Whether this workbench may run {@code path} <b>here</b>, and a refusal that says why if not.
+     *
+     * <p>Asked at the ONE place both routes pass through — Shift+F10 and the palette compile whatever
+     * is in front, the rail's Rerun names a file, and both arrive at a snapshot. Asking at the command
+     * instead would leave the rail's route open, and asking in each would be two answers to one
+     * question.</p>
+     *
+     * <p>What it enforces is a <em>server's</em> statement about its own files: on a dedicated server
+     * the Run command compiles the buffer in front and executes it in the PLAYER's JVM, which is a live
+     * scripting environment inside every client reachable from any project they can edit. A stock
+     * client offers none of that unless the server says so. It stops nothing on a modified client, and
+     * nothing can — {@code ScriptPolicy}'s javadoc says the trust model is the answer.</p>
+     */
+    private static boolean mayRunHere(WorkbenchContext workbench, @Nullable CgPath path) {
+        if (path == null) return true;
+        ScriptingMode mode = workbench.workspace().capabilities().scriptingMode(Resource.of(path));
+        if (mode.allowsLocalRun()) return true;
+        Notifications.show(Notification.warning("Run: " + path.name() + " may not be run here")
+                .withDetail(mode == ScriptingMode.AUTHORIZED
+                        ? "This server runs scripts itself and sends what it has checked. Nothing "
+                                + "compiled here will execute."
+                        : "No server speaks for this project while you are connected to another one."));
+        return false;
+    }
+
+    private Snapshot snapshotFor(WorkbenchContext workbench, @Nullable Resource script) {
         CgPath path;
         TextEditor editor;
         if (script == null) {
@@ -388,10 +491,14 @@ public final class ScriptWorkbench implements Closeable {
                 return null;
             }
             path = workbench.activeFilePath();
+            if (!mayRunHere(workbench, path)) return null;
         } else {
             path = script.asPath();
             if (path == null) {
                 Notifications.warning("Run: " + script.name() + " has no file to read");
+                return null;
+            }
+            if (!mayRunHere(workbench, path)) {
                 return null;
             }
             // ASKED, NOT documentFor() -- see compileFor.

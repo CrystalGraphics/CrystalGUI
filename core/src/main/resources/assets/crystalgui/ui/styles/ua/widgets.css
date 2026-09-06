@@ -50,7 +50,20 @@ button, dropdown {
  * "clips the glyphs the ellipsis stands in for, on exactly the box it measured against." A dropdown
  * whose value text is longer than its row showed a near-invisible sliver of background with ghost
  * text escaping past the node's edge — the box was right, the paint wasn't clipped to it. */
-button text, dropdown text {
+button text, dropdown text,
+/* THE SAME RULE FOR THE PORTED BUTTON, and both spellings stand until M6.9.
+ *
+ * `button text` reaches the label by TAG because the old Button gives it no class (the note above
+ * says so outright) -- and a tag selector cannot reach into a shadow tree, which is the whole point
+ * of one. The ported Button exposes it as `part="label"` instead, so the rule that finds it is
+ * `button::part(label)`.
+ *
+ * BOTH ENGINES RUN UNTIL THE CUTOVER and share this one sheet, so the twin sits beside the original
+ * rather than replacing it: a selector that matches nothing costs nothing, and deleting the old one
+ * now would unstyle every Button in the running application. The host rules above (`button`,
+ * `button:hover`) need no twin at all -- the TAG is `button` on either engine, which is what makes
+ * the port a widget at a time rather than a sheet at a time. */
+button::part(label), dropdown::part(label) {
     flex-shrink: 1;
     min-width: 0;
     white-space: nowrap;
@@ -84,23 +97,27 @@ checkbox {
     align-items: center;
     text-shadow: false;
 }
-checkbox .__mark__ {
+checkbox .__mark__,
+checkbox::part(mark) {
     width: 12px;
     height: 12px;
     background: var(--checkbox-mark-bg, #9A9A9A);
     border-radius: 2px;
 }
-checkbox:hover .__mark__ {
+checkbox:hover .__mark__,
+checkbox:hover::part(mark) {
     background: var(--checkbox-mark-hover-bg, #B4B4B4);
 }
-checkbox:checked .__mark__ {
+checkbox:checked .__mark__,
+checkbox:checked::part(mark) {
     background: var(--checkbox-checked-bg, #3C8527);
     /* A real vector checkmark, not a texture asset — default.css has no image assets to lean on and
        previously drew nothing here at all beyond the colour change. shape("checkmark") needs no font
        glyph and no sprite pack, so it works with literally nothing else loaded. */
     overlay: shape("checkmark");
 }
-checkbox:disabled .__mark__ {
+checkbox:disabled .__mark__,
+checkbox:disabled::part(mark) {
     background: var(--checkbox-disabled-bg, #6E6E6E);
 }
 
@@ -121,14 +138,17 @@ switch {
 switch:checked {
     background: var(--switch-checked-bg, #3C8527);
 }
-switch .__spacer__ {
+switch .__spacer__,
+switch::part(spacer) {
     flex-grow: 0;
     transition: flex-grow 150ms ease;
 }
-switch:checked .__spacer__ {
+switch:checked .__spacer__,
+switch:checked::part(spacer) {
     flex-grow: 1;
 }
-switch .__knob__ {
+switch .__knob__,
+switch::part(knob) {
     height: 100%;
     aspect-rate: 1;
     background: var(--switch-knob, #D0D1D4);
@@ -136,7 +156,8 @@ switch .__knob__ {
      * how big the switch gets — which is why this isn't a px value like the track's. */
     border-radius: 50%;
 }
-switch:disabled .__knob__ {
+switch:disabled .__knob__,
+switch:disabled::part(knob) {
     background: var(--switch-disabled-knob, #8C8C8C);
 }
 
@@ -160,17 +181,20 @@ slider {
     border-radius: 4px;
 }
 /* 3px is half of the 6px bar height, so fill and track read as one rounded rail. */
-slider .__fill__ {
+slider .__fill__,
+slider::part(fill) {
     height: 6px;
     background: var(--slider-fill, #3C8527);
     border-radius: 3px;
 }
-slider .__spacer__ {
+slider .__spacer__,
+slider::part(spacer) {
     height: 6px;
     background: var(--slider-track, #6E6E6E);
     border-radius: 3px;
 }
-slider .__thumb__ {
+slider .__thumb__,
+slider::part(thumb) {
     width: 10px;
     height: 10px;
     margin-left: -5px;
@@ -189,13 +213,16 @@ slider .__thumb__ {
     border-width: 2px;
     border-color: var(--slider-thumb-ring, #FFFFFF);
 }
-slider:hover .__thumb__ {
+slider:hover .__thumb__,
+slider:hover::part(thumb) {
     background: var(--slider-thumb-hover, #E4E5E8);
 }
-slider:disabled .__fill__ {
+slider:disabled .__fill__,
+slider:disabled::part(fill) {
     background: var(--slider-disabled-fill, #5A6E5A);
 }
-slider:disabled .__thumb__ {
+slider:disabled .__thumb__,
+slider:disabled::part(thumb) {
     background: var(--slider-disabled-thumb, #8C8C8C);
 }
 
@@ -413,7 +440,8 @@ tab,
  * `contain`, so an icon whose art is not square keeps its aspect instead of being stretched to the box.
  * `flex-shrink: 0`, because a strip full of tabs is exactly where the engine's shrink default would
  * otherwise eat the icon before it touches the label. */
-tab .__pre-icon__ {
+tab .__pre-icon__,
+tab::part(pre-icon) {
     /* 1:1 WITH THE ARTWORK, and this one is not a taste decision.
      *
      * The file-type set is authored at 16px with every stroke centreline on a HALF-integer, so a
@@ -451,7 +479,8 @@ tab .__pre-icon__ {
  * one property along: left at 4px either side, an 9px glyph sits in a 17px box and the tab grows by the
  * difference. This is the third time that pair has cost a round; see the menu-bar and search-toggle
  * notes for the other two. */
-tab .__close__ {
+tab .__close__,
+tab::part(close) {
     width: 11px;
     height: 11px;
     min-height: 0;
@@ -481,12 +510,15 @@ tab .__close__ {
  * which is the whole point of reserving the space. `:hover` walks the chain, so hovering the button
  * itself keeps the tab hovered too and the glyph does not blink out from under the pointer. */
 tab:hover .__close__,
-tab:checked .__close__ {
+tab:checked .__close__,
+tab:hover::part(close),
+tab:checked::part(close) {
     opacity: 1;
 }
 /* And its own hover is the usual affordance a control gets, so it reads as pressable rather than as a
  * mark printed on the tab. */
-tab .__close__:hover {
+tab .__close__:hover,
+tab::part(close):hover {
     background-color: var(--tab-close-hover-bg, #5A5A5A);
     color: var(--tab-close-hover-fg, #DDDDDD);
 }

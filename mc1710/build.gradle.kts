@@ -53,6 +53,28 @@ version = providers.gradleProperty("modVersion").orElse("1.0.0").get()
 
 apply(from = "repositories.gradle")
 apply(from = "dependencies.gradle")
+
+// ASK shadowImplementation FOR JARS.
+//
+// It carries RetroFuturaGradle's obfuscation attributes, and a PROJECT dependency publishes several
+// variants (classes, resources, the jar) where a Maven artifact publishes one -- so the moment :taffy
+// stopped being `dev.vfyjxf:taffy` and became a module of ours, resolution became ambiguous and
+// shadowJar failed before it started: "we cannot choose between the following variants of project
+// :taffy". Naming the element type is the whole fix; the RFG attributes in that error are unmatched
+// on every variant equally and are not what the resolver is stuck on.
+configurations.named("shadowImplementation") {
+    attributes {
+        attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE,
+                objects.named(LibraryElements::class.java, LibraryElements.JAR))
+    }
+}
+
+// ...and say who PRODUCES that jar. Asking for the JAR element type above makes shadowJar read
+// `taffy/build/libs/taffy.jar` directly, and Gradle cannot infer the producing task through an
+// attribute override -- it fails the build outright rather than racing, which is the good outcome and
+// still needs answering. Solution 2 of the three Gradle offers, because it is the one that states the
+// relationship rather than merely ordering it.
+tasks.named("shadowJar") { dependsOn(":taffy:jar") }
 // Composite build integration — injects CrystalGraphics dev deps + RunMinecraftTask bootstrap.
 // Uses project-relative path (../gradle/...) to avoid Windows URI issues with rootProject.file().
 // Use .toURI() to ensure forward-slash paths on Windows — IntelliJ Gradle sync fails on
@@ -420,6 +442,23 @@ tasks.named<JavaExec>(runTask) {
     // Pair with -PcgJoin against a running :mc1710:runServer.
     if (providers.gradleProperty("cgWireProbe").isPresent) {
         systemProperty("crystalgui.wire.probe", "true")
+    }
+
+    // -PcgEditorProbe opens the editor and then works through it, on the INTEGRATED server. That
+    // configuration is the one a player actually runs and the one no other probe covers: every other
+    // probe here closes the GUI or never opens one, which is how a `doesGuiPauseGame` returning true
+    // took the whole workspace down in single-player with nothing in the log. A dedicated server
+    // cannot be paused by a client GUI, so this deliberately refuses to run in multiplayer.
+    if (providers.gradleProperty("cgEditorProbe").isPresent) {
+        systemProperty("crystalgui.editor.probe", "true")
+    }
+
+    // -PcgTwoClientProbe=writer|watcher, run on BOTH of two clients joined to one runServer. The
+    // watcher subscribes and reports what reached it; the writer creates a file and then edits it.
+    // Everything the watcher, presence and the conflict path exist for is a statement about a SECOND
+    // client, and one client is the fixture that passes against all of it.
+    providers.gradleProperty("cgTwoClientProbe").orNull?.let { role ->
+        systemProperty("crystalgui.twoclient.probe", role)
     }
 
     // -PcgJoin=host[:port] makes the client connect straight to a server instead of the main menu.

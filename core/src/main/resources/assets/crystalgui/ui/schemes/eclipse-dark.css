@@ -10,7 +10,7 @@
  * the other way — a local is yellow, a field is cyan, a call is lime, a parameter is blue — so nearly
  * every identifier carries a colour, and the colour is the fastest way to know what a name IS without
  * reading the declaration. Neither is more correct; they answer different questions, which is exactly
- * why the scheme axis exists (plan_styling.md §3.6).
+ * why the scheme axis exists (plan/style-overhaul.md §3.6).
  *
  * IT IS A CHILD OF DARCULA, and that is load-bearing here. The exported .icls overrides forty-odd
  * attributes and inherits the rest, so every row below is one of two things and the comments say

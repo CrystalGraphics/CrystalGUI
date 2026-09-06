@@ -79,14 +79,22 @@ textfield:disabled {
  * A theme that flips a tooltip above its anchor will want margin-bottom instead. */
 
 tooltip {
-    /* A HOVER IS NOT A REQUEST. The pointer crosses a dozen controls on its way somewhere, and a tooltip
-     * that fires on every one of them flickers a box over the thing you were reading. Waiting for the
-     * pointer to STOP is what turns "passed over" into "asked about" -- which is why every desktop
-     * toolkit has this delay and none of them makes it zero. One second is IntelliJ's own initial
-     * delay; a theme that wants a snappier rail can shorten it per selector.
+    /* INSTANT BY DEFAULT, and the wait is opted into by whatever needs it (tooltip.__wait__ below).
+     *
+     * This read 1 for a long time, on the argument that a hover is not a request: the pointer crosses
+     * a dozen controls on its way somewhere, and waiting for it to STOP is what turns "passed over"
+     * into "asked about". That is a real distinction and it is still why __wait__ exists -- but it
+     * describes a MINORITY of the tooltips here. Most label something small and deliberate: a data
+     * point on a chart, a status entry, a swatch, a glyph button that says nothing else about itself.
+     * Reaching one of those IS the question, and answering a second later reads as the label being
+     * broken rather than as restraint.
+     *
+     * So the default is the common case and the wait is stated where it earns itself. Note it can only
+     * be stated as a CLASS: a tooltip is a child of the document, not of its anchor, so no selector
+     * describing where the anchor lives can reach it.
      *
      * The property, not a constant in the widget: this class's own doc asked for it that way. */
-    tooltip-delay: 1;
+    tooltip-delay: 0;
     background: var(--tooltip-bg, #1E1E1EF0);
     outline: 1px var(--tooltip-border, #00000080);
     padding-left: 4px;
@@ -95,6 +103,19 @@ tooltip {
     padding-bottom: 2px;
     margin-top: 3px;
 }
+/* A WAIT, for a tooltip whose anchor the pointer CROSSES rather than aims at -- see
+ * Tooltip.WAIT_CLASS, which is what puts this class on one. A window caption's controls are the
+ * standing example: three marks in a corner that nobody reads, where a label arriving at once lands
+ * over the button you are already clicking.
+ *
+ * A CLASS, not a selector on the anchor. A tooltip is a child of the DOCUMENT rather than of what it
+ * describes, so `.__window__ .__title-bar__ .__controls__ tooltip` can never match -- and both this
+ * sheet's siblings had been written that way, asking for two seconds and getting whatever the rule
+ * above said. */
+tooltip.__wait__ {
+    tooltip-delay: 1;
+}
+
 
 /* max-width goes on the LABEL, not on the tooltip box. UIText wraps against a width it can see on
  * itself — an ancestor's max-width is not one, because a self-sizing UIText reports its full
@@ -102,7 +123,8 @@ tooltip {
  * Bounding the label instead makes it wrap, and the tooltip box then shrink-wraps the wrapped text,
  * which is also what keeps edge-clamping honest — placement measures the box, so the box has to be
  * the size of what actually draws. */
-tooltip .__label__ {
+tooltip .__label__,
+tooltip::part(label) {
     color: var(--tooltip-fg, #FFFFFF);
     max-width: 170px;
     /* SET EXPLICITLY, because `white-space` INHERITS and a tooltip lives as an internal child of the thing
@@ -213,7 +235,10 @@ dialog .__title-bar__ {
  *
  * A popover is a bare box on the web (the UA sheet gives `<dialog>`/`[popover]` little more than borders),
  * so this is our chrome: enough for a menu to be legible with no theme loaded. */
-popover, menu, dropdown .__menu__ {
+popover,
+menu,
+dropdown .__menu__,
+dropdown::part(menu) {
     min-width: 60px;
     /* LIGHTER than the panels it floats over, with a LIGHT hairline. Both matter, and the first version
      * got both backwards: #2A2F36 with a #00000060 outline is within a few points of every dark surface in
@@ -231,7 +256,7 @@ popover, menu, dropdown .__menu__ {
      * `color: #222222`, which on this surface renders as barely-legible grey. Colour is inheritable, so the
      * fix belongs at the top of the popover rather than repeated on each item. */
     color: var(--menu-fg, #DDDDDD);
-    /* Transparent while closed, opaque once `__open__` lands — see the rule below. The pair is what gives the
+    /* Transparent while closed, opaque once `:open` holds — see the rule below. The pair is what gives the
      * transition a real value to start from; a popover coming out of `display: none` otherwise has no previous
      * opacity to interpolate from, which is the problem `@starting-style` exists to solve on the web.
      *
@@ -252,7 +277,21 @@ popover, menu, dropdown .__menu__ {
  * how wide its items wanted to be and collapsed to `min-width` — clipping every label. Letting the default
  * `align-items: stretch` do the work instead means the menu sizes to its widest item and the items then
  * fill it, which is the standard CSS idiom for exactly this and the reason the idiom exists. */
-popover.__open__, menu.__open__, dropdown .__menu__.__open__ {
+/* `:open` AND NOT A CLASS, and the difference is what a shadow tree makes of it.
+ *
+ * This was `popover.__open__, menu.__open__, dropdown .__menu__.__open__`, which works for a popover in
+ * the light tree and cannot work for one inside a shadow tree: a class does not cross that boundary. A
+ * Dropdown's menu therefore matched the base rule above through `::part(menu)` -- picking up its
+ * `opacity: 0` -- and matched nothing that lifted it again, so the menu opened, promoted, placed itself
+ * correctly and drew at zero alpha. Every observable said it was open; the screen said nothing had
+ * happened.
+ *
+ * A pseudo-class is legal after `::part()` where a class is not, which is exactly why the web spells
+ * this one `:popover-open`. The class is still flipped by the widget for any theme that reads it; this
+ * rule no longer depends on it. */
+popover:open,
+menu:open,
+dropdown::part(menu):open {
     opacity: 1;
 }
 
@@ -263,7 +302,8 @@ popover.__open__, menu.__open__, dropdown .__menu__.__open__ {
  * difference is drawn rather than merely spaced, which is why it reads as the first item being mis-set
  * instead of as the menu being a pixel loose. Even means the first bar is inset from the frame by the
  * same amount it is separated from the next one. */
-menu .__items__ {
+menu .__items__,
+menu::part(items) {
     flex-direction: column;
     gap-all: 2px;
 }
@@ -288,7 +328,8 @@ menu {
  *
  * Inset from the menu's edges — a rule running the full width reads as the bottom of the menu rather
  * than as a divider inside it, which is why Windows insets its own. */
-menu .__separator__ {
+menu .__separator__,
+menu::part(separator) {
     height: 1px;
     min-height: 1px;
     flex-grow: 0;
@@ -310,7 +351,13 @@ menu .__separator__ {
  * same size as each other for free.
  *
  * Not on `menu text`, which would also catch anything a caller puts in a row. */
-menuitem text {
+/* AND THE ACCELERATOR, which is a `text` too and is NOT reached by `menuitem text`: it is handed to
+ * `setPostIcon`, so it sits in the Button's shadow tree where a descendant selector cannot go. Without
+ * this the label shrank to 8 and the shortcut beside it stayed at the universal 10 -- the one pair in
+ * the row that the comment above says stays the same size as each other for free. */
+menuitem text,
+menuitem::part(label),
+menuitem::part(post-icon) {
     font-size: 8;
 }
 
@@ -395,7 +442,12 @@ menuitem:focus {
  * space is left. */
 /* Dimmer than the label — it is an affordance, not content. Colour is inheritable, so this only needs to
  * override, not restate. */
-menuitem .__submenu-arrow__ {
+/* THE TWIN NAMES THE PART THAT EXISTS, and scopes itself by the HOST's class. The arrow is handed to
+ * `setPostIcon`, so it is the Button's `post-icon` part -- the same slot an accelerator uses, which is
+ * why this cannot be a bare `menuitem::part(post-icon)`: that would put a chevron overlay on every row
+ * with a shortcut. A row has one or the other, and `__has-submenu__` is which. */
+menuitem .__submenu-arrow__,
+menuitem.__has-submenu__::part(post-icon) {
     margin-left: auto;
     width: 8px;
     height: 8px;
@@ -433,7 +485,11 @@ menuitem:disabled {
  * it zero width here (rather than leaving the check up to `dropdown .__menu__` alone) means an ordinary
  * menu's rows stay exactly as wide as their label, with no dead gutter reserved for a checkmark that
  * item can never show. */
-menuitem .__mark__ {
+/* THE MARK IS THE PRE-ICON, which is the part name that exists -- `::part(mark)` was generated from the
+ * CLASS and names nothing. @see the accelerator, which had the same slip. */
+menuitem .__mark__,
+menuitem::part(pre-icon),
+menuitem::part(mark) {
     width: 0;
     margin-right: 0;
     flex-grow: 0;
@@ -443,7 +499,9 @@ menuitem .__mark__ {
  * gutter is reserved for ALL of them, checked or not. Without a shared gutter the checked row's label
  * would sit one glyph to the right of every other row's, which reads as misaligned text rather than as
  * "this one has a mark". `:checked` only ever changes the overlay, never the box. */
-dropdown .__menu__ menuitem .__mark__ {
+dropdown .__menu__ menuitem::part(pre-icon),
+dropdown .__menu__ menuitem .__mark__,
+dropdown .__menu__ menuitem::part(mark) {
     width: 12px;
     height: 12px;
     flex-grow: 0;
@@ -455,7 +513,9 @@ dropdown .__menu__ menuitem .__mark__ {
     margin-right: 1px;
     color: var(--menu-mark, #DDDDDD);
 }
-dropdown .__menu__ menuitem:checked .__mark__ {
+dropdown .__menu__ menuitem:checked::part(pre-icon),
+dropdown .__menu__ menuitem:checked .__mark__,
+dropdown .__menu__ menuitem:checked::part(mark) {
     overlay: shape("checkmark");
 }
 
@@ -470,7 +530,12 @@ dropdown .__menu__ menuitem:checked .__mark__ {
  *
  * The gutter is reserved whether or not a row is currently checked, so ticking one does not shift its
  * label sideways. */
-menu.__has-checkable__ menuitem .__mark__ {
+/* THE GUTTER, and it is what a menu's left inset actually IS. With the part unreachable every row's
+ * mark measured zero, so labels sat flush against the row's own 6px padding instead of a glyph's width
+ * further in -- which reads as the menu having lost its padding rather than its gutter. */
+menu.__has-checkable__ menuitem .__mark__,
+menu.__has-checkable__ menuitem::part(pre-icon),
+menu.__has-checkable__ menuitem::part(mark) {
     width: 12px;
     height: 12px;
     flex-grow: 0;
@@ -481,7 +546,9 @@ menu.__has-checkable__ menuitem .__mark__ {
 }
 /* The mark itself is still the ITEM's business: only a checkable row ever shows one, even though every
  * row in the menu reserves the space for it. */
-menu.__has-checkable__ menuitem.__checkable__:checked .__mark__ {
+menu.__has-checkable__ menuitem.__checkable__:checked::part(pre-icon),
+menu.__has-checkable__ menuitem.__checkable__:checked .__mark__,
+menu.__has-checkable__ menuitem.__checkable__:checked::part(mark) {
     overlay: shape("checkmark");
 }
 /* Same trim the dropdown rule below makes, and for the same reason: the base `menuitem` rule's 6px
@@ -519,7 +586,9 @@ dropdown {
  * the button. Always chevron-DOWN: unlike a foldout, a dropdown's popup can open above or below
  * depending on room, so there is no "open" direction for the glyph to point at (see
  * AnchoredPlacement's flip). */
-dropdown .__chevron__ {
+dropdown .__chevron__,
+dropdown::part(post-icon),
+dropdown::part(chevron) {
     width: 8px;
     height: 8px;
     flex-grow: 0;
@@ -686,12 +755,17 @@ dialog .__title-bar__ .__close__:hover {
     z-index: 11;
 }
 
-/* ONLY the bottom-right corner draws a grip. The other three stay full-size and fully draggable —
- * this is `background`, not `display` or `width`, so the hit area is untouched.
+/* ONLY ONE handle draws a grip. The others stay full-size and fully draggable — this is `background`,
+ * not `display` or `width`, so the hit area is untouched.
  *
  * That asymmetry is the convention every desktop toolkit landed on, and the web's single grabber is the
  * same idea taken further: one visible grip says "this resizes" without ringing the element in four
- * marks that read as selection handles. A panel wearing all four looks selected rather than resizable. */
+ * marks that read as selection handles. A panel wearing all four looks selected rather than resizable.
+ *
+ * The bottom-right corner, in EVERY resizable mode — it exists under `resize: horizontal` and
+ * `vertical` too, and a drag on it moves only the axis the mode allows, which is what a browser does
+ * with a `textarea`. Painting the grip on a full-length edge strip instead was tried and reads as a
+ * scrollbar. */
 .__resizer-bottom-right__ {
     background: var(--resizer-grip, #FFFFFF40);
 }

@@ -47,7 +47,7 @@
  *
  * <h2>Where the rest is written down</h2>
  *
- * <p>{@code plan_m10.md} — §2 for what this engine offers against the Java one and at what fidelity, §3
+ * <p>{@code plan/lang-javascript.md} — §2 for what this engine offers against the Java one and at what fidelity, §3
  * for the loader argument in full, and §12a for the review that produced this split.</p>
  */
 package com.crystalgui.language.js;

@@ -43,6 +43,13 @@ neoForge {
     runs {
         create("client") {
             client()
+            gameDirectory = project.file("runs/client")
+        }
+        // A server run, so serverSmoke has something to boot here too. Without it this loader is the
+        // one that cannot be checked for the server-side class-loading contract.
+        create("server") {
+            server()
+            gameDirectory = project.file("runs/server")
         }
     }
 
@@ -58,6 +65,12 @@ neoForge {
         }
     }
 }
+
+// Puts CrystalGraphics on this run: its MC-free jars as libraries, its loader as a mod. BELOW the
+// loader block on purpose -- ModDevGradle creates additionalRuntimeClasspath while that extension is
+// configured, not when its plugin is applied, so an apply above it fails with "Configuration with
+// name 'additionalRuntimeClasspath' not found".
+apply(from = rootProject.file("gradle/module_integration/crystalgraphics-run.gradle.kts").toURI())
 
 // Extracts NeoForge + MC 1.20.4 sources and resources into build/mc-src for local navigation.
 // Sync (not Copy) removes stale files when the source jar changes between toolchain version bumps.

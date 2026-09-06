@@ -33,7 +33,6 @@ import com.crystalgui.render.texture.svg.SvgDocument;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.sheet.StyleRule;
 import com.crystalgui.style.sheet.StyleSheet;
-import com.crystalgui.ui.UIWindow;
 import lombok.Getter;
 import lombok.Setter;
 import org.joml.Matrix4f;
@@ -81,6 +80,19 @@ import java.util.Set;
  * there is no recording phase and nothing to flush. This is intentional for now, not merely unoptimized. </p>
  */
 public final class CgUiPaintContext {
+
+    /**
+     * The {@code uiScale} glyphs are warmed at.
+     *
+     * <p>Was {@code UIWindow.DEFAULT_UI_SCALE}, and the reason that constant existed is unchanged: a
+     * warm aims at the size text is actually drawn at ({@code font-size * uiScale}), so one aimed at
+     * the wrong size is SILENTLY useless -- the glyphs generate, cache, and are never looked up.</p>
+     *
+     * <p>It lives here now because the new engine has no single default to borrow: {@code BoxTree}
+     * starts at 1 and the host sets what it wants, which on Minecraft is 2. So this is the scale the
+     * WARM is for, stated where the warm is, rather than a second copy of somebody else's default.</p>
+     */
+    private static final float WARM_UI_SCALE = 2f;
     /** {@code namespace:path} resolved through {@link CgIO}'s waterfall (filesystem override →
      * MC resource manager → classpath) — works identically in-game and in the harness/tests,
      * unlike the hardcoded absolute Windows path this replaced ({@code C:\WINDOWS\Fonts\arial.ttf},
@@ -134,7 +146,7 @@ public final class CgUiPaintContext {
         // AND THE TWO ASSET CACHES, both off the render thread. Neither needs GL, which is what makes
         // them a removal rather than a move -- see each method.
         preloadIcons();
-        warmGlyphs(UIWindow.DEFAULT_UI_SCALE);
+        warmGlyphs(WARM_UI_SCALE);
 
         // AND ONE EMPTY FRAME, which is the larger half. Compiling the shaders left the first real
         // beginFrame at 252 ms against 285 -- so most of that cost was never the GLSL: it is the quad
@@ -186,7 +198,7 @@ public final class CgUiPaintContext {
 
     /** 1×1 fully opaque white ({@code RGBA = 255, 255, 255, 255}). */
     @Getter
-    private final CgTexture2D whitePixel;
+    final CgTexture2D whitePixel;
 
     @Getter
     final PoseStack poseStack;
@@ -562,10 +574,18 @@ public final class CgUiPaintContext {
         // glScope.close() (see its own note) is what puts the real target back before compositing.
         glScope = CgGlState.save(
                 CgGlSlot.FBO, CgGlSlot.PROGRAM, CgGlSlot.TEXTURES, CgGlSlot.BLEND,
-                CgGlSlot.DEPTH, CgGlSlot.CULL, CgGlSlot.VIEWPORT, CgGlSlot.ALPHA_TEST);
+                CgGlSlot.DEPTH, CgGlSlot.CULL, CgGlSlot.VIEWPORT, CgGlSlot.ALPHA_TEST,
+                CgGlSlot.SCISSOR);
         // ALPHA_TEST is saved above only so the host gets it back; this is what turns it off, before
         // anything of ours draws. @see #disableFixedFunctionAlphaTest
         disableFixedFunctionAlphaTest();
+
+        // A UI FRAME OWNS THE WHOLE SURFACE, so anything the host left in GL_SCISSOR_TEST would clip
+        // the full-screen clear below and every draw after it. SCISSOR is in the save list above for the
+        // other direction: popScissor DISABLES the test once the stack empties, so without it a host that
+        // was clipping gets handed back a state where it is not.
+        scissorStack.reset();
+        CgGL.glDisable(CgGL.GL_SCISSOR_TEST);
 
         // BEFORE the redirect, because the redirect is what hides it. @see #sceneFboId
         backdrop.captureSceneTarget();
@@ -627,7 +647,6 @@ public final class CgUiPaintContext {
         FrameProfile.end(timed, "glbegin:bindQuadPath");
         currentMaterial = boxModelMaterial;
         currentTexture = null;
-        scissorStack.reset();
         frameActive = true; // must be set before warmUp() — quad() requires an active frame
 
         if (!warmedUp) {
@@ -744,6 +763,9 @@ public final class CgUiPaintContext {
         long resolved = FrameProfile.begin();
         msaaResolveFbo.blitFrom(msaaFbo, CgGL.GL_COLOR_BUFFER_BIT, CgGL.GL_NEAREST);
         FrameProfile.end(resolved, "glend:msaaResolve");
+        // THE WHOLE FRAME'S PICTURE, at the first moment it is readable — msaaFbo is multisampled and
+        // this resolve is what makes it samplable at all. Empty here means nothing the UI drew reached
+        // the frame target, which would be a fault far upstream of any one layer.
         if (glScope != null) {
             glScope.close();
             glScope = null;
@@ -786,6 +808,9 @@ public final class CgUiPaintContext {
                 CgGlSlot.STENCIL, CgGlSlot.COLOR_MASK, CgGlSlot.ALPHA_TEST)) {
             disableFixedFunctionAlphaTest();
             blitLayer(msaaResolveFbo, 1f);
+            // THE HOST'S OWN TARGET, and the last thing this class can observe. Content here with a flat
+            // fill on screen means the presenting broke, not the drawing — which is the reading the
+            // comment above has described for two loaders without anything ever measuring it.
         }
 
         currentMaterial = null;
@@ -924,6 +949,34 @@ public final class CgUiPaintContext {
         // already open, which is what made enabling this line unusable before. Its shadow pass wanted a
         // batch so the two draws coalesce; this batch already gives it that, and more.
         textRenderer.beginBatch();
+    }
+
+    /**
+     * Binds a texture for a COMPOSITE, dropping the state shadow's texture beliefs first.
+     *
+     * <p>Every UI shader samples on unit 0 and {@code bind(0)} is supposed to guarantee that. It cannot
+     * on its own: binding any texture moves the ACTIVE unit as a side effect, and the engine binds
+     * several of its own near the top of the range on the way into a draw -- {@code cg_DepthBuffer} at
+     * {@code DEPTH_TEXTURE_UNIT}, the quad and curve instance buffers above it. Where the shadow's idea
+     * of the active unit and the driver's disagree, the {@code glActiveTexture(0)} underneath is elided
+     * as redundant and the {@code glBindTexture} lands on the engine's unit instead. Measured on a
+     * 1.20.1 client: {@code activeUnit=28} with the wanted texture bound to 28.
+     *
+     * <p><b>What the sampler reads then is not nothing.</b> An unbound unit answers {@code (0,0,0,1)} --
+     * opaque black -- and {@code gui_layer_blit} declares {@code _MainTex = "white"}, so a premultiplied
+     * `over` composite either erases its destination or floods it. Both were measured in one run: a
+     * fully EMPTY layer compositing to pure white, and a populated one compositing to black.
+     *
+     * <p>Only the three raw-bind composites use this -- {@link #blitLayer}, {@link #compositeMask} and
+     * the backdrop's own. Everything else declares its sampler through {@code applyProperties}, which
+     * binds the texture and sets the uniform together and is immune; forcing the unit globally instead
+     * was tried and stamps on the text material's binding, which took every glyph in the application
+     * off screen while sliders and icons still drew.
+     */
+    public void bindCompositeTexture(CgTexture2D texture) {
+        CgGlState.manager().invalidate(CgGlSlot.TEXTURES);
+        currentTexture = null;
+        bindTexture(texture);
     }
 
     public void bindTexture(CgTexture2D texture) {
@@ -1453,6 +1506,10 @@ public final class CgUiPaintContext {
             fbo.bind();
             CgGL.glViewport(0, 0, fbo.getWidth(), fbo.getHeight());
             fbo.clearColor(0f, 0f, 0f, 0f);
+            // AND THE MATERIAL RESTS ON A TEXTURE THAT IS NEVER DELETED. A sampler property is retained
+            // and re-bound later, so a pooled layer left named here outlives its pool slot. This runs when
+            // a layer is created, wants white anyway, and every real composite declares its own first.
+            layerBlitMaterial.applyProperties(b -> b.sampler("_MainTex", 0, whitePixel));
             withMaterial(layerBlitMaterial, () -> {
                 bindTexture(whitePixel);
                 quad().at(0, 0).size(fbo.getWidth(), fbo.getHeight()).color(0x0).submit();
@@ -1519,13 +1576,24 @@ public final class CgUiPaintContext {
 
         fbo.bind();
         CgGL.glViewport(0, 0, fbo.getWidth(), fbo.getHeight());
+        // THE CLEAR MUST NOT BE CLIPPED. A scissored clear wipes only the clipped region, so the rest
+        // of a POOLED layer keeps the previous user's pixels -- and blitLayer composites the whole layer
+        // full-screen, on the assumption that everything the subtree did not draw is transparent. The
+        // clip is re-applied straight after, so it still governs the drawing.
+        if (clear) {
+            int[] suspended = scissorStack.suspend();
+            scissorStack.clearScissorIfNeeded();
+            fbo.clearColor(0f, 0f, 0f, 0f);
+            scissorStack.resume(suspended);
+        }
         // THE INHERITED CLIP, RE-EXPRESSED FOR THIS BUFFER. A GL scissor rect is bottom-left pixels of
         // one particular target; the rect the enclosing element pushed is kept top-left and flipped
         // against whatever is bound, so a layer of another height than its parent -- a pool layer
-        // inside a window's snapshot -- clips the same region rather than a band at its bottom. The
-        // clear below honours the scissor too, which is what makes doing this BEFORE it matter.
+        // inside a window's snapshot -- clips the same region rather than a band at its bottom.
         if (scissorStack.hasScissor()) scissorStack.applyScissorIfNeeded(fbo.getHeight());
-        if (clear) fbo.clearColor(0f, 0f, 0f, 0f);
+        // The state a layer STARTS in: complete or not, and what a live scissor would clip it to. An
+        // incomplete target discards every draw silently, and an inherited clip expressed against the
+        // wrong height is the documented way a layer ends up with a band of untouched pixels.
 
         fd.projMatrix.identity().ortho(0, fbo.getWidth(), fbo.getHeight(), 0, -1, 1);
         fd.viewportW = fbo.getWidth();
@@ -1549,6 +1617,9 @@ public final class CgUiPaintContext {
      * {@link #compositeMask} for what to do with the finished FBO. */
     public void endLayerFbo() {
         flush();
+        // AFTER the flush and BEFORE the target is swapped back — the only moment the layer holds its
+        // finished content and is still bound. A zero here is a draw fault and nothing downstream can
+        // be blamed for it.
         LayerFrame frame = layerStack.pop();
         CgFrameData fd = CgRenderPipeline.getInstance().getFrameData();
         fd.projMatrix.set(frame.savedProjMatrix());
@@ -1649,16 +1720,33 @@ public final class CgUiPaintContext {
 
     public void blitLayer(CgFrameBuffer fbo, float opacity) {
         CgTexture2D colorTex = (CgTexture2D) fbo.getColorTexture(0);
+        // THE SAMPLER IS DECLARED, NOT BOUND BY HAND. _MainTex is a Properties-block sampler with a
+        // "white" default, so a raw bindTexture() is ignored: the material binds the fallback to a unit
+        // of its own choosing and points the uniform there. gui_layer_blit composites premultiplied, so
+        // that is not a missing image -- it floods the destination white. CgUiGlass declares its the same way.
+        layerBlitMaterial.applyProperties(b -> b.sampler("_MainTex", 0, colorTex));
         withMaterial(layerBlitMaterial, () -> withLayerOpacity(opacity, () -> {
-            bindTexture(colorTex);
             poseStack.pushPose();
             poseStack.setIdentity();
             quad().at(0, 0).size(fbo.getWidth(), fbo.getHeight())
                   .uv(0f, 1f, 1f, 0f)   // V flipped — see the javadoc above
                   .color(getColor()).submit();
             flush();
+            // WHICH UNIT THE LAYER TEXTURE LANDED ON, read after the draw. gui_layer_blit declares
+            // `_MainTex ... = "white"`, so a sampler that misses its texture does not draw nothing --
+            // it draws the WHITE FALLBACK, and premultiplied `over` turns that into dst = white*k +
+            // dst*(1-k). At k=1 the destination becomes white; at a rising k it washes out. Those are
+            // the two symptoms this composite is blamed for, and neither looks like a binding fault.
             poseStack.popPose();
         }));
+    }
+
+    /**
+     * The target {@link #blitLayer} just drew into — the innermost live layer, or the frame's own MSAA
+     * target when none is open. Probe-only: nothing in the paint path needs to ask this.
+     */
+    private CgFrameBuffer currentTarget() {
+        return layerStack.isEmpty() ? msaaFbo : layerStack.peek().fbo();
     }
 
     /**
@@ -1674,8 +1762,11 @@ public final class CgUiPaintContext {
         try (CgGlScope scope = CgGlState.save(CgGlSlot.FBO, CgGlSlot.VIEWPORT, CgGlSlot.BLEND)) {
             subtreeFbo.bind();
             CgGL.glViewport(0, 0, subtreeFbo.getWidth(), subtreeFbo.getHeight());
-            // The clip, for THIS buffer's height -- @see beginLayerFbo. Restored in the finally below.
-            if (scissorStack.hasScissor()) scissorStack.applyScissorIfNeeded(subtreeFbo.getHeight());
+            // AND THE MULTIPLY IS NOT CLIPPED EITHER. Its job is to zero the subtree everywhere the
+            // mask does not cover; clipped, whatever lies outside the clip is left unmasked -- the one
+            // thing a mask exists to prevent.
+            int[] suspendedMask = scissorStack.suspend();
+            scissorStack.clearScissorIfNeeded();
             // AND THE PROJECTION, which the viewport alone does not cover. This runs after the
             // subtree's layer has been ended, so the frame's ortho is the ENCLOSING target's -- and
             // that is only the same size as the layer when the enclosing target is the screen. Inside a
@@ -1685,6 +1776,8 @@ public final class CgUiPaintContext {
             // not reach, and the window's lighter base surface showed through the hole -- a minimised
             // editor's photograph with a pale block across its islands and a strip of content
             // surviving inside it. Same shape as the scissor flip, found from the same picture.
+            // Captured before the try, so the finally can hand its sampler back. @see the note there.
+            CgMaterial masked = currentMaterial;
             CgFrameData fd = CgRenderPipeline.getInstance().getFrameData();
             Matrix4f enclosingProj = new Matrix4f(fd.projMatrix);
             int enclosingW = fd.viewportW, enclosingH = fd.viewportH;
@@ -1694,7 +1787,16 @@ public final class CgUiPaintContext {
             CgRenderPipeline.getInstance().prepareFrame();
             try {
                 CgTexture2D maskTex = (CgTexture2D) maskFbo.getColorTexture(0);
-                bindTexture(maskTex);
+                // DECLARED, because a raw bind is ignored: _MainTex is a Properties-block sampler with
+                // a "white" default, so the material binds THAT and multiplies the subtree by an alpha
+                // of 1 everywhere -- no mask at all, and the layer survives full-bleed. @see blitLayer
+                //
+                // It goes on currentMaterial because the multiply needs a blend this material does not
+                // declare, so it cannot be moved onto layerBlitMaterial without that material's own
+                // RenderState clobbering MASK_ALPHA_MULTIPLY at flush.
+                masked.applyProperties(b -> b.sampler("_MainTex", 0, maskTex));
+                bindQuadPath(masked);
+                currentTexture = null;
                 CgBlendState.MASK_ALPHA_MULTIPLY.apply();
                 // Same v-flip as blitLayer — maskTex is another FBO color attachment, same OpenGL
                 // bottom-left-origin storage vs. our top-left screen-space convention. Same
@@ -1707,6 +1809,21 @@ public final class CgUiPaintContext {
                 flush();
                 poseStack.popPose();
             } finally {
+                // AND PARKED ON A TEXTURE THAT IS NEVER DELETED. A sampler property is RETAINED and
+                // re-bound on every later bind() of that material, and currentMaterial here is whatever
+                // the enclosing draw left bound -- usually the rounded-rect one. Leaving a POOLED mask
+                // attachment named on it outlives the pool slot: a surface resize recreates the pool,
+                // the texture is deleted, and the next ordinary rounded rect throws "CgTexture2D has
+                // been deleted" from inside CgUiRoundedRect.draw, a frame later and nowhere near a mask.
+                // PARKED ONLY IF IT IS NOT THE BLIT MATERIAL. A sampler property is RETAINED and re-bound
+            // on every later bind(), so a POOLED mask attachment left named on the rounded-rect material
+            // outlives the pool slot -- a resize deletes it and the next rounded rect throws. The blit
+            // material is the exception: parking it overwrites the source its own composites declare.
+                if (masked != layerBlitMaterial) {
+                    masked.applyProperties(b -> b.sampler("_MainTex", 0, whitePixel));
+                    currentTexture = null;
+                }
+                scissorStack.resume(suspendedMask);
                 fd.projMatrix.set(enclosingProj);
                 fd.viewportW = enclosingW;
                 fd.viewportH = enclosingH;

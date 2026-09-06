@@ -1,0 +1,218 @@
+package com.crystalgui.workbench.extension;
+
+import javax.annotation.Nullable;
+
+import com.crystalgui.widget.texteditor.TextEditor;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.text.TextPoint;
+import com.crystalgui.core.dispose.Disposable;
+import com.crystalgui.core.notify.StatusBarAlignment;
+import com.crystalgui.core.notify.StatusBarEntry;
+import com.crystalgui.core.notify.StatusBarEntryAccessor;
+import com.crystalgui.core.signal.ConnectionGroup;
+import com.crystalgui.document.Document;
+import com.crystalgui.text.diagnostic.DiagnosticSet;
+import com.crystalgui.text.diagnostic.DiagnosticSeverity;
+import com.crystalgui.workbench.WorkbenchContext;
+import com.crystalgui.workbench.chrome.problems.ProblemsPanel;
+import com.crystalgui.workbench.dock.drag.DockDropZone;
+import com.crystalgui.workbench.toolwindow.ToolWindowKind;
+
+/**
+ * The <b>Problems</b> panel and its status-bar count - every diagnostic in the workspace, in one list.
+ *
+ * <p>Enable it by naming {@link #ID} in an application's manifest. Three things arrive together, which
+ * is why they are one extension: the tool window, the indexing that fills it, and the error/warning
+ * readout in the status bar. A product with no use for any of them gets none of them.</p>
+ *
+ * <h3>Every kind of document, not just text</h3>
+ *
+ * <p>It attaches whatever a {@code Document} reports as its diagnostics, so a shader graph's compile
+ * errors land here beside a Java file's. A kind that reports none simply answers null and contributes
+ * nothing - there is no per-language wiring to add.</p>
+ *
+ * <h3>What it does when you click a row</h3>
+ *
+ * <p>Opens the file and puts the caret on the problem, or opens it and shows the quick fixes. Both go
+ * through {@code openFile}'s continuation rather than the statement after it: opening a file that is not
+ * already on screen is asynchronous, so positioning on the next line would act on the editor from
+ * <em>before</em> the click - correct for a problem in the file you are already looking at, and wrong
+ * for every other, which is what makes that failure read as intermittent.</p>
+ *
+ * <h3>Withdrawn when there is nothing to say</h3>
+ *
+ * <p>The status entry disappears at zero rather than reading "0 errors, 0 warnings". A clean workspace
+ * is the normal state, and a permanent zero is a readout people stop seeing.</p>
+ */
+public final class ProblemsExtension implements WorkbenchExtension {
+
+    public static final String ID = "crystalgui:problems";
+
+    /** The panel type id — a session record and a stripe button both name it. */
+    public static final String TYPE = "problems";
+
+    /** Reveals the panel. What a failing status readout points at. */
+    public static final String SHOW = "workbench.showProblems";
+
+    /** Left of the caret readout and right of the branch: the workspace, then the file. */
+    public static final int COUNT_PRIORITY = 200;
+
+    /** {@code ServiceLoader} needs a public no-argument constructor. */
+    public ProblemsExtension() {
+    }
+
+    @Override
+    public String id() {
+        return ID;
+    }
+
+    @Override
+    public Disposable activate(WorkbenchContext workbench) {
+        ProblemsPanel panel = new ProblemsPanel();
+        Live live = new Live(workbench, panel);
+
+        Disposable registration = workbench.registerToolWindow(
+                ToolWindowKind.of(TYPE, "Problems")
+                        .icon("crystalgui:toolwindows/problems")
+                        .anchor(DockDropZone.SPLIT_DOWN)
+                        .view(ctx -> panel)
+                        .toggle(SHOW)
+                        .openByDefault());
+
+        live.bind();
+        return () -> {
+            live.close();
+            registration.dispose();
+        };
+    }
+
+    /** What the feature holds while it is on: the index wiring and the one status entry. */
+    private static final class Live {
+
+        private final WorkbenchContext workbench;
+        private final ProblemsPanel panel;
+        private final ConnectionGroup lifetime = new ConnectionGroup();
+
+        @Nullable
+        private StatusBarEntryAccessor countEntry;
+
+        Live(WorkbenchContext workbench, ProblemsPanel panel) {
+            this.workbench = workbench;
+            this.panel = panel;
+        }
+
+        void bind() {
+            lifetime.add(workbench.documents().onDidOpen.connect(this::index));
+            for (Document already : workbench.documents().all()) index(already);
+            lifetime.add(workbench.markers().onDidChange.connect(resource -> refreshCount()));
+            // WHICH FILE IS IN FRONT, told on every tab change whether or not the filter is on -- so
+            // switching "Show Active File Only" on narrows to what you are looking at NOW rather than to
+            // whatever happened to be in front when you last switched it off.
+            //
+            // BOTH SIGNALS, AND THE TAB ONE IS THE ONE THAT WAS MISSING. `onDidOpenDocument` fires when a
+            // file's CONTENT lands, which is not a tab change at all: it says nothing when you click
+            // between two files that are already open, and at the moment it does fire the dock may not
+            // have activated the panel yet -- the groups are built in `tickFrame`, a frame later. So the
+            // panel was told "the file in front is nothing" and never told otherwise: the File tab showed
+            // the whole workspace, and clicking between the tabs changed only which one was highlighted.
+            // The comment above has described the intended behaviour since it was written.
+            lifetime.add(workbench.dock().onDidChangeActivePanel.connect(panelRef -> follow()));
+            lifetime.add(workbench.onDidOpenDocument().connect(path -> follow()));
+            follow();
+            refreshCount();
+
+            // BOTH HANDLERS ARE INLINE, and deliberately not folded into one openAndReveal(CgPath, TextPoint).
+            //
+            // That helper reads as the obvious de-duplication and gives this class a navigation API in terms
+            // of a text POSITION -- which is knowledge a workbench has no business holding. It arranges panels
+            // and owns documents; where a caret goes inside one is the editor's affair, and a method here
+            // taking a TextPoint invites every future caller to route text navigation through the shell.
+            lifetime.add(panel.onProblemChosen.connect(node -> {
+                if (node.diagnostic() == null || node.resource() == null || !node.resource().isProject()) return;
+                TextPoint at = node.diagnostic().start();
+                // AS THE CONTINUATION OF THE OPEN, not as the statement after it. openFile is asynchronous for
+                // a file that is not already on screen -- it returns before the read has come back -- so
+                // positioning on the next line acted on the editor from BEFORE the click. That is correct for
+                // a problem in the file you are already looking at and wrong for every other, which is why it
+                // read as intermittent rather than as broken.
+                workbench.openFile(node.resource().asPath(), () -> {
+                    TextEditor editor = workbench.activeEditor();
+                    if (editor == null) return;
+                    editor.revealAt(at);
+                    UIDocument window = workbench.document();
+                    if (window != null) window.focus().requestFocus(editor);
+                });
+            }));
+
+            // SHOW QUICK-FIXES IS NAVIGATE PLUS ONE STEP, and it is spelled out here for the same reason the
+            // handler above is: which editor and what to do with it is the caller's business. The panel has
+            // no editor and must not reach for one -- it asks, and this answers.
+            //
+            // The list is opened INSIDE the continuation, after the caret has been placed: the actions are
+            // resolved from an offset, so asking before the file is open and positioned would ask about
+            // wherever the previous editor's caret happened to be.
+            lifetime.add(panel.onQuickFixesRequested.connect(node -> {
+                if (node.diagnostic() == null || node.resource() == null || !node.resource().isProject()) return;
+                TextPoint at = node.diagnostic().start();
+                workbench.openFile(node.resource().asPath(), () -> {
+                    TextEditor editor = workbench.activeEditor();
+                    if (editor == null) return;
+                    editor.revealAt(at);
+                    UIDocument window = workbench.document();
+                    if (window != null) window.focus().requestFocus(editor);
+                    editor.showCodeActionsAt(editor.getCaret());
+                });
+            }));
+        }
+
+        private void index(Document document) {
+            DiagnosticSet problems = document.diagnostics();
+            if (problems != null) workbench.markers().attach(document.resource(), problems);
+        }
+
+        /**
+         * Points the panel at this workspace's index.
+         *
+         * <p>Bound <b>once</b>, not per tab. It used to re-point at the active document's set on every
+         * tab change, which is what made it a second opinion about the file already on screen; the index
+         * is the whole workspace, so switching tabs changes nothing about what it should show, and
+         * re-binding would rebuild the tree and throw away which files you had expanded.</p>
+         */
+        private void follow() {
+            if (panel.source() == null || panel.source().markers() != workbench.markers()) {
+                panel.bindTo(workbench.markers());
+            }
+            panel.setActiveResource(workbench.activeResource());
+        }
+
+        /** The workspace's error and warning totals, as one status entry. */
+        private void refreshCount() {
+            int errors = workbench.markers().count(DiagnosticSeverity.ERROR);
+            int warnings = workbench.markers().count(DiagnosticSeverity.WARNING);
+            // WITHDRAWN WHEN THERE IS NOTHING TO SAY, rather than reading "0 errors, 0 warnings". A clean
+            // workspace is the normal state, and a permanent zero is a readout you learn to stop seeing.
+            if (errors == 0 && warnings == 0) {
+                if (countEntry != null) countEntry.dispose();
+                countEntry = null;
+                return;
+            }
+            StatusBarEntry entry = new StatusBarEntry("Problems",
+                    errors + " " + (errors == 1 ? "error" : "errors")
+                            + ", " + warnings + " " + (warnings == 1 ? "warning" : "warnings"),
+                    "Problems in the workspace", SHOW,
+                    errors > 0 ? StatusBarEntry.Kind.ERROR : StatusBarEntry.Kind.WARNING);
+            if (countEntry == null) {
+                countEntry = workbench.statusBar().addEntry(entry, "workbench.problems",
+                        StatusBarAlignment.LEFT, COUNT_PRIORITY);
+            } else {
+                countEntry.update(entry);
+            }
+        }
+
+        void close() {
+            lifetime.disconnectAll();
+            if (countEntry != null) countEntry.dispose();
+            countEntry = null;
+        }
+    }
+}

@@ -1,5 +1,7 @@
 package com.crystalgui.fs;
 
+import com.crystalgui.fs.CgPath;
+
 import javax.annotation.Nullable;
 import java.util.Objects;
 
@@ -39,7 +41,7 @@ import java.util.Objects;
  * otherwise keep a map for. It is spelled inside the path — {@code shader-generated://mymod.proj:fire.shadergraph}
  * — so it survives {@link #parse} and therefore a saved session, with nothing to keep in step.</p>
  *
- * <p>Immutable, value-equal, and usable as a map key: that is what lets {@code OpenDocuments} be keyed by
+ * <p>Immutable, value-equal, and usable as a map key: that is what lets the document store be keyed by
  * resource rather than by path without anything else changing.</p>
  */
 public final class Resource {

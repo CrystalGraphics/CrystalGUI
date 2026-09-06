@@ -35,6 +35,34 @@
  *      the first draft used background-color and visibly darkened every Ore sprite in cgui-ore-theme.
  */
 
+/* ── The new engine's own two rules (M6.0) ────────────────────────────────────────────────────
+ *
+ * Both exist so the ENGINE never writes into the cascade. The old one spelled these from Java at
+ * IMPORTANT origin -- `setDisplayed` did it from 74 call sites and the top layer did it on every
+ * promotion -- which outranks every author sheet and is what EngineBoundaryTest now forbids
+ * outright. A user-agent rule says the same thing one origin BELOW an author, so a theme that wants
+ * `visibility` instead of `display`, or a collapse animation, can still have it. */
+
+/* NOTE there is no `[hidden] { display: none }` rule, which is what HTML uses and what plan/engine-port.md
+ * D5 assumed: THIS SELECTOR ENGINE HAS NO ATTRIBUTE SELECTORS (AGENTS.md lists them with :nth-child
+ * and the sibling combinators as deliberately absent). So `Attribute.HIDDEN` is STRUCTURAL instead --
+ * BoxTree gives a hidden node no box at all, exactly as it gives none to `display: none` -- which is
+ * smaller than teaching the parser a new selector kind for one rule, and is closer to what the old
+ * engine did anyway: its IMPORTANT-origin `display` could not be overridden by a theme either. */
+
+/* The top layer -- CSS Position 4's, and the reason a tooltip can escape an `overflow: hidden`
+ * ancestor. A zero-sized, out-of-flow layer over everything the document holds: it must take NO
+ * space, or an empty one covers the whole surface and swallows every click that misses a popup.
+ * Promotion itself is imperative (`box().setHost(document.topLayer())`), exactly as the web promotes
+ * with `showPopover()` rather than a declaration. */
+top-layer {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 0;
+    height: 0;
+}
+
 /* ── Text ──────────────────────────────────────────────────────────────────────────────────────
  * font-size defaults to 16 in the property registry, which is huge next to Minecraft's own UI.
  * These are inheritable, so setting them on the widgets reaches their labels. */

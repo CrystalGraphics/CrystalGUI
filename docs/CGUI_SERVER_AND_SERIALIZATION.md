@@ -1,11 +1,14 @@
 # CrystalGUI on a Server — Serialization, Sessions, RPC
 
-> **Current-state reference** for `core/src/main/java/com/crystalgui/serialization/` (11 classes) and
-> `core/src/main/java/com/crystalgui/net/` (10 classes), plus the `core/src/headlessTest/` source set
-> that guards them.
+> **Current-state reference** for `core/src/main/java/com/crystalgui/serialization/`,
+> `core/src/main/java/com/crystalgui/ui/contract/` and `core/src/main/java/com/crystalgui/net/` —
+> the last of which is five packages now: the sessions at its root, `mirror` (the edit script,
+> generic in the node type), `protocol` (envelopes and routing), `wire` (the byte transport) and
+> `window` (a window's lifetime, and what a panel is handed).
 >
-> Companions: `CGUI_WIDGETS.md` (what the widgets are) and `CGUI_STYLE_RENDER_PIPELINE.md` (what the
-> styles mean).
+> Companions: `CGUI_BUILDING_UIS.md` (how to write one — start there if you are USING this),
+> `CGUI_NETWORKING_PRIMER.md` (the same ground bottom-up), `CGUI_WIDGETS.md` (what the widgets are)
+> and `CGUI_STYLE_RENDER_PIPELINE.md` (what the styles mean).
 >
 > Re-verify against the code before trusting a specific signature.
 
@@ -21,14 +24,14 @@ So the split is:
 
 ```
 SERVER                                          CLIENT
-build a UIElement tree  ──── description ────►  rebuild the same tree
+build a UINode tree  ──── description ────►  rebuild the same tree
 hold session state      ◄──── events ─────────  user clicks, types, drags
 call client methods     ◄───── RPC ──────────►  call server methods
 ```
 
 Two consequences shape everything below:
 
-1. **The tree must be describable without being renderable.** Hence codecs over `UIElement`, and hence
+1. **The tree must be describable without being renderable.** Hence codecs over `UINode`, and hence
    the rule that anything on a server path may not touch `CgIO`, fonts or GL.
 2. **Descriptions repeat.** The same GUI opens hundreds of times. Hence content-addressing: the open
    packet carries a *hash*, and the bytes only move if the client has never seen them.
@@ -78,39 +81,60 @@ float v    = in.optional("v", Codecs.FLOAT, 0f);
 **Everything is `LinkedHashMap`-ordered on purpose.** Insertion order is what makes the same tree
 encode to the same bytes twice, which is what makes hashing work at all (§4).
 
-## 2. Widget state — `StateMap`
+## 2. Widget state — `StateMap` and the contract that fills it
 
-`serialization/StateMap.java`
+`serialization/StateMap.java`, `ui/contract/`
 
-A small typed key/value bag over any `DynamicOps`. Widgets read and write it through two protected
-hooks on `UIElement`:
+A `StateMap` is a small typed key/value bag over any `DynamicOps`. **What goes in it is declared, not
+written.** A widget states what kind of thing it is once, and the engine derives the encoding:
 
 ```java
-@Override protected <T> void writeState(StateMap<T> out) {
-    out.putStringIfNot("text", text, "");        // omitted when it equals the default
-    out.putEnum("mode", mode);
-}
-@Override protected <T> void readState(StateMap<T> in) {
-    setText(in.getString("text", ""));
-    setMode(in.getEnum("mode", Mode.class, Mode.STRING));
-}
+public static final State<Slider, Float> VALUE =
+        State.of("value", StateTypes.FLOAT, Slider::getValue, Slider::setValue, 0f)
+                .sanitizedBy(v -> Float.isNaN(v) ? 0f : v);
+
+public static final WidgetContract<Slider> CONTRACT = WidgetContracts.register(
+        WidgetContract.of(Slider.class, "slider")
+                .state(MIN).state(MAX).state(STEP).primary(VALUE)
+                .event(VALUE_CHANGED)
+                .build());
 ```
 
-`putXIfNot(key, value, omitWhen)` is the workhorse: a default-valued widget writes an **empty** state
-map, which then gets dropped entirely. Every getter takes a fallback, so a field added later decodes
-against an older sender without a version bump.
+**Declaration order is apply order**, and four widgets depend on it: a slider must take its range
+before its value or the value is clamped against the old bounds; a dropdown must have its options
+before an index into them means anything; a text field must have its mode before its text, or the text
+is parsed by the old one; a colour selector must take mode, then original, then colour.
 
-Seven widgets implement these — `Button`, `Checkbox`, `Switch`, `Slider`, `TextField`, `UIText`,
-`Tab` — plus `UIElement` itself for the generic parts.
+A slot omitted at its default writes nothing, so a default-valued widget produces an **empty** state
+map, which is then dropped entirely. Every read takes a fallback, so a slot added later decodes against
+an older sender with no version bump.
 
-## 3. Descriptions — `UIDescriptionCodec`
+> **This replaced two protected hooks**, `writeState`/`readState`, which seven widgets implemented by
+> hand. Three defects came out of the change and all three were the same shape: a slot that is
+> **settable and never written**. A stub getter is declared in a way that reads as complete, so the
+> state simply never travels and there is nothing to search for. `ClientSmokeTest` walks the whole
+> registry over a loopback wire for exactly that, and found eighteen more — see §8.
 
-`serialization/UIDescriptionCodec.java`, `ui/ElementRegistry.java`
+**28 widgets carry a contract.** The rest are on a census (`WidgetCensus`) with a written reason each,
+and a coverage test fails on a class that is neither.
+
+## 3. Descriptions — `UIElementMirror`
+
+`net/mirror/UIElementMirror.java`, `ui/dom/UIElementRegistry.java`
 
 Encodes a whole `UIElement` subtree: tag, id, classes, flags, inline styles, per-widget state,
-children. The tag comes from **`ElementRegistry`**, which maps `"button" ↔ Button.class` plus a
-no-arg factory in both directions (`tagOf`, `tags()`, `bootstrapBuiltins()` — idempotent and
-auto-called by every lookup). A widget with no registered tag cannot be serialized at all.
+children. The tag comes from **`UIElementRegistry`**, which maps a `Name` to a factory and a contract
+(`create`, `names()`, `bootstrap()` — idempotent, auto-called by every lookup, and driven by the
+`NodeKinds` services on the classpath rather than a hand-written list). A widget with no registered
+kind cannot be described at all.
+
+**What counts as a child is `describedChildren()`**, and a widget whose own parts are light children
+must override it. A part added with `appendStructural` is still a light child, so a widget that does
+not override describes its own scaffolding — and the far side then builds those parts in its
+constructor *and* adopts the described ones. Measured at 2n−1 elements per widget across the whole
+config kit; for `Dialog` and `SplitView`, which refuse public children, decoding threw outright.
+`Tab`, `TabView`, `Dialog`, `SplitView`, `ConfigControl` and `ColorSelector` each answer for
+themselves.
 
 Encoding is aggressively sparse — flags pack into one int (bit 0 enabled, bit 1 hit-testable, both
 default on so an ordinary element omits the field), and every field with a default value is left out.
@@ -149,20 +173,36 @@ This is what makes re-opening cheap: `OpenWindow` carries the hash and the eleme
 description. A client that already holds that hash rebuilds immediately with **zero** transfer,
 however large the tree.
 
-## 5. Network ids — derived, not transmitted
+## 5. Network ids — allocated once, then owned
 
-`net/NetworkIds.java`
+`ui/dom/UINodeTreeSource.java`
 
 ```java
-int count = NetworkIds.assign(root);        // document-order walk, stamps element.networkId
-UIElement el = NetworkIds.find(root, nid);
+int nid = ids.idOf(element);       // allocated on first sight, kept for the life of the source
+UIElement el = ids.byId(nid);      // a map lookup
 ```
 
-Ids come from a deterministic document-order walk on **both** sides. Nothing is sent. Both sides
-rebuilt the same tree from the same description, so both walks produce the same numbering.
+An id lives in a table the tree source owns, keyed by element identity. **It survives a sibling
+insert, a reparent and a detach** — which is the whole point, because a message in flight names an
+element and a name that moves is not a name.
 
-The trade-off is explicit: this is why there is no structural delta yet (§8). Inserting an element
-renumbers everything after it.
+Ids are still *derived* for the opening description and *stated* from then on, and the two cases
+answer different questions:
+
+| | Ids on the wire | Why |
+|---|---|---|
+| **Pristine description** (`open()`) | none — both sides run the same document-order walk | Nothing sent is what makes a description **content-addressed**: two windows showing the same thing hash the same, so re-opening costs one small packet however large the tree |
+| **Live description** (a late viewer joining a reshaped window) | each element carries `nid` | After the first structural change a walk no longer reproduces the numbering the existing viewers hold, so a newcomer has to be told it — otherwise every id it derived would name a different element |
+
+`UIElementMirror.describeLive`/`decodeLive` are the second form. A live description hashes to
+something no pristine one matches, which is correct rather than unfortunate: a reshaped window was
+never going to share another window's cache entry.
+
+> **This section used to describe the opposite**, and the entry that replaced it is worth keeping:
+> ids came from a walk on both sides, nothing was sent, and *"inserting an element renumbers
+> everything after it"* was recorded as an accepted trade-off. It was the defect the whole rewrite
+> came out of — a positional id is not an identity, and a structural delta cannot be written on top of
+> one, because you cannot say "this one moved" without a name for "this one".
 
 ## 6. Stylesheets over the wire — `SheetRef`
 
@@ -210,10 +250,16 @@ one class, where it used to mean a record in the union, an arm in each of two co
 
 `EnvelopeCodec.VERSION = 1`, carried in the `ui/openWindow` payload and checked on open.
 
-Methods are namespaced with a slash, after LSP's `textDocument/hover` — `ui/*` here, `workspace/*` for
-the file protocol, `script/*` for a runtime in `language/` that `core` never learns about. `UiMethods`
+Methods are namespaced with a slash, after LSP's `textDocument/hover` — `ui/*` here, `fs/*` for the
+file protocol, `script/*` for a runtime in `language/` that `core` never learns about. `UiMethods`
 lists the `ui/*` names as **a convenience, not a registry**: nothing enumerates them and nothing
-validates against them. A peer may send any string, and an unknown one is answered with
+validates against them.
+
+> **`fs/*` is the one that is not like this.** Its names are in `FsMethods` and its payloads are
+> records with codecs in `FsMessages`, so a field written on one side is provably the field read on the
+> other — which is the difference between a protocol two ends implement and one two ends *agree* on.
+> The `ui/*` side is deliberately looser because a widget tree's content is not a fixed vocabulary;
+> a filesystem's twenty verbs are. See `com.crystalgui.fs.protocol`. A peer may send any string, and an unknown one is answered with
 `ProtocolErrors.METHOD_NOT_FOUND` rather than dropped. The moment that file becomes the list of legal
 methods it is `UIPacket` again with different syntax.
 
@@ -231,6 +277,17 @@ methods it is `UIPacket` again with different syntax.
 > nothing tied a body to the request that wanted it. As a request it correlates by id for free, a client
 > that asks twice cannot confuse the answers, and a server that no longer serves that window **refuses**
 > instead of staying silent, so the client learns rather than waiting out a timeout.
+
+> **A `ui/stateDelta` never comes back as a `ui/event`.** Applying a delta runs the widget's ordinary
+> setter, which fires the widget's ordinary change signal — which is exactly what the client hung the
+> event report on. So the server moving a slider used to make every client that received it report that
+> the *user* had moved it: one `ui/event` per viewer, for a gesture nobody made. Harmless in the common
+> case and only there — the echo carries the value the server just sent, so the handler writes the model
+> back to what it already holds and `Property.set` returns early — and wrong the moment a handler counts
+> anything or records who did it, which with two viewers attributes it to the wrong player.
+> `ClientUiSession` suppresses reporting for the duration of a delta. `shouldSuppress`, which stops a
+> delta landing on a focused text field and resetting the caret mid-word, is the narrow ancestor of the
+> same loop and stays: it stops the *value* arriving, not the *report* leaving.
 
 **Every `ui/*` payload carries `w`, the window id** — in the payload rather than the envelope, because it
 is a fact about the UI protocol and the envelope is not allowed to know one. LDLib2 resolves incoming
@@ -277,47 +334,109 @@ private to an adapter. The full table, and the packaging step a new loader must 
 
 ### The sessions
 
-**`ServerUiSession<T>`** implements `UITreeObserver`, so it is told when elements attach, detach or go
-state-dirty, and coalesces those into one `ui/stateDelta` per `tick()`.
+**`ServerUiSession<N, T>`** implements `TreeObserver<N>`, so it is told when elements are inserted,
+removed, moved or go state-dirty, and coalesces those into one `ui/treeOps` and one `ui/stateDelta`
+per `tick()`. It is generic in the node type: the mirror is authored once and a second engine supplies
+a `TreeSource` and a `NodeMirror`.
 
 ```java
-var session = new ServerUiSession<>(windowId, root, transport, PlainOps.INSTANCE)
+var session = new ServerUiSession<>(windowId, new UIElementTreeSource(root),
+                new UIElementMirror<>(connection.ops()), connection)
         .addSheet(SheetRef.ofResource("crystalgui:ore", oreHash))
         .setUseUserAgentSheet(true);
 
-session.onActivate(myButton, ctx -> ctx.session().call("client:toast", null, …));
-session.on(mySlider, UiEventKinds.VALUE, ctx -> model.set(ctx.payload().getFloat("v", 0)));
-session.onCall("server:save", (args, responder) -> responder.ok(result));
+session.on(myButton, Button.ACTIVATE, ctx -> …);
+session.on(mySlider, Slider.VALUE_CHANGED, (ctx, value) -> model.set(value));
+session.onCall("save", (args, responder) -> responder.ok(result));
 
 session.open();
-// every tick:
-session.tick();
+session.tick();     // every tick
 ```
 
-Event kinds are the small closed set in `UiEventKinds`: `activate`, `toggle`, `value`, `text`. The
-handler receives a `UiEventContext<T>` of `(session, element, payload)`.
+**An event kind is a string an `Event` declares**, unique only within its own widget's contract, so a
+third party mints one without editing anything of ours. `Button.ACTIVATE` and `Slider.VALUE_CHANGED`
+are typed constants over those strings — the typed overload hands the handler a decoded payload rather
+than a raw map.
 
-**`ClientUiSession<T>`** is the mirror: description cache (`hasCached(hash)`, `cacheSize()`), rebuilds
-the tree on open, exposes `root()`/`sheets()`/`useUserAgentSheet()`, and the same symmetric
-`onCall`/`call` surface.
+> There is deliberately **no kind vocabulary class.** `UiEventKinds` was a closed set of four strings
+> and it went at M3: two vocabularies for one thing is drift, and a closed set is a list a third party
+> cannot add to.
 
-> **`onCall`'s signature did not change.** `Call.Handler<T>`/`Call.Responder<T>` are `RpcRegistry`'s two
-> interfaces under a new roof — they were what a *caller* writes against, and the point of the rewrite
-> was that callers do not move. An RPC is now an ordinary request, so its correlation and timeout are the
-> router's; the per-session patience is a `callTimeoutMillis` field, defaulting to the 10s
-> `RpcRegistry` used.
+**`ClientUiSession<N, T>`** is the mirror: a description cache (`hasCached(hash)`, `cacheSize()`),
+rebuilds the tree on open, exposes `root()`/`type()`/`title()`/`key()`/`presentation()`/`sheets()`, and
+the same symmetric `onCall`/`call` surface.
+
+Most hosts never touch either. `ServerWindows`/`ClientWindows` own a window's whole lifetime and a
+panel is handed a `ServerScope`/`ClientScope` — see `docs/CGUI_BUILDING_UIS.md`.
+
+## 7b. Collections — `ui/rows`
+
+A panel's widgets are described in full, which is right for a dozen controls and wrong for a
+collection. So a collection is a **window**, not a list:
+
+```java
+io.stream(container, source, row -> new SlotRow(), SlotRow::show);
+```
+
+The server holds all of it and describes only the rows a viewer can see. `ui/rows` is a **request**
+carrying `{nid, from, to}` and answering with the **count** — the viewer needs a scrollbar before it
+needs rows — and the rows themselves arrive as ordinary described children, since a row may hold a
+real `Button` that reports like any other.
+
+Three properties make it safe, and each fails separately:
+
+- **Rows are keyed, never positional.** A row whose key has not changed keeps its element, so an
+  insert above the window is an insert rather than a rebuild of everything below it.
+- **Every viewer sees the union.** Rows are structure and structure goes to every viewer — a tree delta
+  renumbers both ends, so withholding one from a viewer scrolled elsewhere would leave it addressing
+  elements by numbers the server has moved on from. Two viewers at the same place cost one window
+  between them; two scrolled apart cost the **span**, which is what a contiguous child list can express.
+- **A window at the end follows.** Appended rows are described without the viewer asking, which is what
+  a log wants; a viewer reading the middle is left where they are.
+
+## 7c. Where a window appears — `Presentation`
+
+`ui/openWindow` carries `WINDOW`, `EDITOR_TAB` or `TOOL_WINDOW(region)`. Only the server knows what a
+panel is *for*, and a client cannot tell a machine's controls from a live log by reading the tree.
+
+It is a **hint**: a host with no workbench opens a window regardless, and an unrecognised placement
+parses as `WINDOW` rather than failing — refusing to parse a placement is refusing the window. A client
+may not name one; it is declared beside the resolver (`openable(type, resolver, presentation)`),
+because where a panel belongs is the mod's statement about its own UI.
+
+## 7d. Children the viewer added — `addLocal`
+
+`ClientScope.addLocal(parent, child)` marks a node local: an ordinary child in every way that shows,
+and invisible in every way that travels — never described, never numbered, never counted by the
+integrity check. `insertAt` keeps locals as the **tail** of the light list and refuses to put a
+described child past them, so index N means the same thing on both sides by construction.
+
+Appending one by hand instead puts it in the described child list, and the server's next insert lands
+one index off — silently, because an index is an int and every one of them still resolves to something.
 
 ## 8. Known gaps — stated honestly
 
-- **No `TreeDelta`.** A structural add/remove means a *new description* and a re-open, which the
-  content-addressed cache makes cheap but which is not a delta. Positional network ids (§5) are what
-  make an incremental version a real design problem, not an afternoon.
 - **No slots/inventory.** The Minecraft-specific half of a container GUI does not exist.
-- **No multi-viewer fan-out.** One session, one client.
-- **`TabView`'s tabs and panes do not round-trip** — they live in internal containers, which the
-  description codec does not descend into.
-- **Only seven widgets implement `writeState`/`readState`**; the rest carry no state worth sending
-  today, but a new stateful widget must add them or it will silently arrive blank.
+- **A table's columns and a tree's expansion do not travel.** The rows of both do — a served collection
+  is a stream on a container (§7b) — but a `TableView`'s column set and a `TreeView`'s expanded nodes
+  have no wire form. The expansion is the interesting one: it is view state for a local tree and would
+  be the server's for a served one, and inventing a form for it before something needs it is how two
+  mechanisms for one rule start disagreeing.
+- **No text filter on a row source.** A `SORT` is one event the source answers; a filter is a search
+  feature and waits for one.
+- **`TextEditor` and `GraphView` are not on the wire.** A document is the filesystem's business
+  (`plan/fs-rewrite.md`), and shipping one as a described tree would be a second format for it.
+
+Four entries that used to stand here are gone, and what replaced each is worth knowing:
+
+| Was | Now |
+|---|---|
+| *No `TreeDelta` — a structural change means a new description and a re-open* | `ui/treeOps` carries `insert`/`remove`/`move`. The entry named positional ids as what made the incremental version *"a real design problem, not an afternoon"*, and that was exactly right: the ids had to stop being positional first (§5) |
+| *No multi-viewer fan-out — one session, one client* | Many viewers per window, each with its own visibility gate. `MultiViewerTest` |
+| *Only seven widgets implement `writeState`/`readState`* | 28 widgets carry a `WidgetContract` and the engine derives the encoding (§2). The rest are on a census with a written reason each |
+| *A collection widget sends no rows* | It still sends none, and that is now the right answer rather than a gap: a served collection is a `stream` on a **container** and the rows arrive as its described children. The `ListView` a client builds over a `RemoteRows` around them is the client's own view of them, which is why it is local-only for the same reason `Configurator` is |
+| *`TabView`'s tabs and panes do not round-trip* | They do. `describedChildren`/`adoptDescribedChild` is the pair, and a described tab is **placed** — its button in the rail, its content in the panes — rather than appended |
+| *Rate policy is declared and not yet applied* | Applied. A widget declares its own tempo because the right answer is a property of the interaction, and `commitOnRelease` is what makes throttling safe: dropping intermediate values is fine and dropping the last one is data loss. `RatePolicyTest`, `RateGateTest` |
 
 ## 9. The headless contract
 
@@ -342,11 +461,19 @@ drift.
 |---|---|
 | `HeadlessClasspathSanityTest` | CrystalGraphics really is off the classpath |
 | `HeadlessTreeSmokeTest` | build/attach/lay out a tree with no GL |
-| `UIDescriptionCodecTest` | tree round-trip, both ops |
-| `WidgetStateRoundTripTest` | per-widget `writeState`/`readState` |
-| `UITreeObserverTest` | attach/detach/state-dirty notifications |
+| `UIElementTreeTest`, `UIElementTreeSourceContractTest` | the node tree and the `ui.dom` seam, on their own terms — no session involved |
+| `MirrorOverUIElementTreeTest` | **M2's acceptance** — a sibling insert keeps every other instance, a move keeps one, identity and inline style travel, an idle window is silent |
+| `MirrorIsEngineAgnosticTest` | the mirror driven over a twelve-line node class that has never heard of a widget |
+| `TreeOpsTest` | the `insert`/`remove`/`move` wire vocabulary |
+| `WidgetContractRoundTripTest` | the named widgets, including the four whose slot ORDER is load-bearing |
+| **`ClientSmokeTest`** | **every contracted widget, over a loopback wire, at once** — one of each in one tree, every slot set to a distinct value and read back off the client's own instance. A walk over the registry rather than a list, because the failure it exists for is a widget nobody remembered |
+| `MultiViewerTest` | two viewers agree, a hidden one is not sent to, and one coming back is brought up to date |
+| `RowStreamTest` | **7.0** — ten thousand rows cost a window, the union of two viewers, and a followed tail |
+| `PresentationTest` | **7.1** — a placement survives the wire, a host with no workbench opens anyway, and a panel reads files through its scope |
+| `LocalChildTest` | **7.2** — a viewer's own control: undescribed, uncounted, and never shifting an index |
 | `ContentHashTest` | canonical form and collision resistance |
 | `SessionHandshakeTest` | open → req-desc → desc, and the cache-hit path that transfers nothing |
-| `ServerBehaviourLoopTest` | event in, handler runs, state update out |
-| `TextStylePropertiesTest` | the text style properties at value level (the CSS half lives in `test/`) |
-| `TransformStylePropertiesTest` | `transform`/`transform-origin` at value level (the CSS half lives in `test/`) |
+| `EventValidationTest`, `RatePolicyTest`, `RateGateTest` | what a legal gesture could have produced is sanitized; what it could not is refused; and a throttle never drops the last value |
+| `WindowLifecycleTest`, `CloseVetoTest`, `TwoWindowsOnOneConnectionTest` | the window layer's close matrix, its veto and its multiplexing |
+| `MachineExampleTest` | the worked example end to end, on a classpath with no fonts |
+| `TextStylePropertiesTest`, `TransformStylePropertiesTest` | those style properties at value level (the CSS half lives in `test/`) |

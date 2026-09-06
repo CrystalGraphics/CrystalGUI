@@ -21,7 +21,7 @@ import java.nio.file.Path;
  * <p>The fetch is tens of megabytes from a third party over the user's own connection, and what it
  * produces is a GPL-derived extract made on their machine for their use. Every one of those is a reason
  * it has to be asked for rather than done quietly on a first launch — which is also what IntelliJ does,
- * and what {@code plan_m11.md} §24.1 already named as the popup's <i>Download documentation</i> entry.
+ * and what {@code plan/lang-resolver.md} §24.1 already named as the popup's <i>Download documentation</i> entry.
  * The engine bands and the mapping data are fetched automatically because without them the feature does
  * not work at all; this one only makes an existing feature better, so it waits to be asked.</p>
  *

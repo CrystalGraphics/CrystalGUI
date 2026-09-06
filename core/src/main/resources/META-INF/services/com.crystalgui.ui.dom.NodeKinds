@@ -1,0 +1,15 @@
+# Each LAYER declares its own kinds; the registry runs them once, lazily, on the first question
+# anybody asks it. @see com.crystalgui.ui.dom.NodeKinds for why this is not a static block per widget.
+#
+# One line per layer, added when that layer's first widget is ported:
+#   6.1  com.crystalgui.widget.Widgets
+#   6.3  com.crystalgui.workbench.chrome.ChromeKinds  (folded under the workbench at 6.7)
+#   6.1  com.crystalgui.desktop.DesktopKinds  (WindowIcon came early: Taskbar needs it)
+#   6.7  com.crystalgui.workbench.WorkbenchKinds
+#   L1.5 com.crystalgui.template.TemplateKinds  (the document loader is its own layer)
+com.crystalgui.widget.Widgets
+com.crystalgui.workbench.chrome.ChromeKinds
+com.crystalgui.desktop.DesktopKinds
+com.crystalgui.workbench.WorkbenchKinds
+com.crystalgui.app.AppKinds
+com.crystalgui.template.TemplateKinds

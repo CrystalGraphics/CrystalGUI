@@ -4,7 +4,10 @@ import com.crystalgui.lifecycle.CgUiLifecycle;
 import com.crystalgui.mc.client.CgUiAutoTest;
 import com.crystalgui.mc.client.CgUiHud;
 import com.crystalgui.mc.client.CgUiInput;
+import com.crystalgui.mc.example.MachineExampleClient;
+import com.crystalgui.mc.net.CgUiEditorOpenProbe;
 import com.crystalgui.mc.net.CgUiNetProbe;
+import com.crystalgui.mc.net.CgUiTwoClientProbe;
 import com.crystalgui.mc.net.CgUiRemoteWorkspaceProbe;
 import com.crystalgui.mc.net.CgUiWireProbe;
 import com.crystalgui.mc.net.CgUiSessionProbe;
@@ -37,5 +40,14 @@ public class ClientProxy extends CommonProxy {
         // The DEDICATED-server version: -PcgRemoteProbe, against runServer over a socket.
         CgUiRemoteWorkspaceProbe.register();
         CgUiWireProbe.register();
+        // The configuration a PLAYER runs and no other probe covers: the editor on screen, on the
+        // INTEGRATED server, which is the only place a client GUI can stop the ticking that answers it.
+        CgUiEditorOpenProbe.register();
+        // And the one a single client cannot show at all: two processes, one server, and a watcher
+        // hearing about somebody else's writes. Run it on both. @see CgUiTwoClientProbe
+        CgUiTwoClientProbe.register();
+        // The worked example's CLIENT half: F8, and the session it shows. Always on -- it is meant to
+        // be opened and looked at, unlike the probes above, which are diagnostics behind a flag.
+        MachineExampleClient.registerClient();
     }
 }

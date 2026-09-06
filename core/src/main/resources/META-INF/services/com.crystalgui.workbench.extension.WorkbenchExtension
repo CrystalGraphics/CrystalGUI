@@ -1,0 +1,18 @@
+# Every extension on the classpath is FOUND; nothing lists them in code. Contributing was a call, and
+# a call can only name what the class making it is allowed to see -- the shader graph lives in `app/`,
+# above the workbench, so an APPLICATION had to contribute it, and a mod's extension could never be in
+# that list at all. @see com.crystalgui.workbench.extension.WorkbenchExtensions
+#
+# Being here is availability, never enablement: an application's manifest names the ids it wants, and
+# an id nothing contributed is a logged absence rather than an error.
+#
+# ONE CLASS PER FEATURE. Each of these declares its own id and attaches itself; a separate
+# `*Extension` wrapper beside the declaration was two files with one lifetime between them.
+com.crystalgui.example.notes.NotesKind
+com.crystalgui.workbench.extension.InspectorExtension
+com.crystalgui.workbench.extension.NotificationsExtension
+com.crystalgui.workbench.extension.ProblemsExtension
+com.crystalgui.workbench.extension.PresenceExtension
+com.crystalgui.workbench.extension.ProjectExtension
+com.crystalgui.app.shadergraph.ShaderGraphContribution
+com.crystalgui.app.uibuilder.UiBuilderContribution

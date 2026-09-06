@@ -3,7 +3,7 @@ package com.crystalgui.text.search;
 import com.crystalgui.core.search.SearchMatcher;
 import com.crystalgui.core.search.SearchQuery;
 import com.crystalgui.text.Rope;
-import com.crystalgui.ui.text.TextRange;
+import com.crystalgui.text.TextRange;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;

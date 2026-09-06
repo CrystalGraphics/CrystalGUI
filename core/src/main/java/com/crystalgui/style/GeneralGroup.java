@@ -16,7 +16,7 @@ import com.crystalgui.style.property.visual.Resize;
 import com.crystalgui.style.property.visual.ScrollBehavior;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.transition.TransitionSpec;
-import com.crystalgui.ui.UITransform;
+import com.crystalgui.style.property.visual.transform.Transform;
 
 import java.util.List;
 
@@ -256,14 +256,14 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
      * CSS's {@code transform} — a paint-time affine over this element and its subtree, applied on top
      * of layout without disturbing it. Hit-testing follows it automatically.
      *
-     * @see com.crystalgui.ui.UIElement#setTransform(UITransform)
+     * @see com.crystalgui.ui.UIElement#setTransform(Transform)
      */
-    public UITransform transform() {
+    public Transform transform() {
         return getValueSave(StylePropertyRegistry.TRANSFORM);
     }
 
-    public GeneralGroup transform(UITransform transform) {
-        set(StylePropertyRegistry.TRANSFORM, transform == null ? UITransform.IDENTITY : transform);
+    public GeneralGroup transform(Transform transform) {
+        set(StylePropertyRegistry.TRANSFORM, transform == null ? Transform.IDENTITY : transform);
         return this;
     }
 

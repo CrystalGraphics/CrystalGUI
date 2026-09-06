@@ -7,8 +7,8 @@ import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.Button;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.control.Button;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -28,9 +28,10 @@ import static org.junit.Assert.fail;
  * answer yes to.
  *
  * <p>{@code ProtocolTest} covers the envelope and the router. This covers the <b>wiring</b>: that a
- * subsystem registers once, globally, and is bound onto every connection afterwards without knowing one
- * exists. Both halves matter and the second is the one that was missing — the protocol was general while
- * a router was reachable only by constructing a {@code ServerUiSession}.</p>
+ * subsystem registers once, globally — as a lambda, sided at the call site — and is bound onto every
+ * connection afterwards without knowing one exists. Both halves matter and the second is the one that
+ * was missing — the protocol was general while a router was reachable only by constructing a
+ * {@code ServerUiSession}.</p>
  */
 public class ProtocolContributionTest {
 
@@ -76,26 +77,18 @@ public class ProtocolContributionTest {
      */
     @Test
     public void twoUnrelatedSubsystemsShareOneConnection() {
-        Protocols.contribute("workspace", new Protocols.Contributor() {
-            @Override
-            public <T> void bind(ProtocolConnection<T> connection) {
+        Protocols.contribute("workspace", connection ->
                 connection.onRequest("workspace/read", (args, respond) -> {
-                    StateMap<T> out = new StateMap<>(connection.ops());
+                    StateMap<Object> out = new StateMap<>(connection.ops());
                     out.putString("body", "contents of " + args.getString("path", "?"));
                     respond.ok(out);
-                });
-            }
-        });
-        Protocols.contribute("script", new Protocols.Contributor() {
-            @Override
-            public <T> void bind(ProtocolConnection<T> connection) {
+                }));
+        Protocols.contribute("script", connection ->
                 connection.onRequest("script/eval", (args, respond) -> {
-                    StateMap<T> out = new StateMap<>(connection.ops());
+                    StateMap<Object> out = new StateMap<>(connection.ops());
                     out.putInt("result", args.getInt("x", 0) * 2);
                     respond.ok(out);
-                });
-            }
-        });
+                }));
         connect();
 
         AtomicReference<String> body = new AtomicReference<>();
@@ -125,22 +118,18 @@ public class ProtocolContributionTest {
      */
     @Test
     public void aUiSessionAndANonUiSubsystemShareOneWire() {
-        Protocols.contribute("workspace", new Protocols.Contributor() {
-            @Override
-            public <T> void bind(ProtocolConnection<T> connection) {
+        Protocols.contribute("workspace", connection ->
                 connection.onRequest("workspace/read", (args, respond) -> {
-                    StateMap<T> out = new StateMap<>(connection.ops());
+                    StateMap<Object> out = new StateMap<>(connection.ops());
                     out.putString("body", "contents of " + args.getString("path", "?"));
                     respond.ok(out);
-                });
-            }
-        });
+                }));
         connect();
 
         UIElement root = new UIElement();
-        root.addChild(new Button("Press me"));
-        ServerUiSession<Object> server = new ServerUiSession<>(1, root, a);
-        ClientUiSession<Object> client = new ClientUiSession<>(b);
+        root.append(new Button("Press me"));
+        ServerUiSession<UIElement, Object> server = Sessions.serveOn(1, root, a);
+        ClientUiSession<UIElement, Object> client = Sessions.viewOn(b);
 
         AtomicReference<UIElement> arrived = new AtomicReference<>();
         client.onWindowOpened(arrived::set);
@@ -164,7 +153,7 @@ public class ProtocolContributionTest {
         assertEquals("the workspace answered on the shared wire",
                 "contents of src/Main.java", body.get());
         assertEquals("and the window arrived on the same one",
-                1, arrived.get() == null ? -1 : arrived.get().getChildren().size());
+                1, arrived.get() == null ? -1 : arrived.get().children().size());
     }
 
     /**
@@ -177,17 +166,29 @@ public class ProtocolContributionTest {
     @Test
     public void everyConnectionOpenedAfterwardsCarriesTheContribution() {
         List<Object> boundTo = new ArrayList<>();
-        Protocols.contribute("audit", new Protocols.Contributor() {
-            @Override
-            public <T> void bind(ProtocolConnection<T> connection) {
-                boundTo.add(connection.peer());
-            }
-        });
+        Protocols.contribute("audit", connection -> boundTo.add(connection.peer()));
 
         Protocols.open(pair[0], PlainOps.INSTANCE, () -> { }, "player-one");
         Protocols.open(pair[1], PlainOps.INSTANCE, () -> { }, "player-two");
 
         assertEquals(List.of("player-one", "player-two"), boundTo);
+    }
+
+    /**
+     * {@code server()} and {@code client()} put the side in the method name — the guard every server
+     * contributor used to open with, now unwritable wrong.
+     */
+    @Test
+    public void aSidedContributorBindsOnlyOnItsOwnEnd() {
+        List<String> log = new ArrayList<>();
+        Protocols.server("mymod", connection -> log.add("server:" + connection.peer()));
+        Protocols.client("mymod", connection -> log.add("client:" + connection.peer()));
+        connect();
+
+        // One name, both sides: two halves of one protocol, and each end got exactly its own.
+        assertEquals(List.of("server:peer-b", "client:null"), log);
+        assertEquals("one subsystem, however many sides it registered",
+                Set.of("mymod"), Protocols.contributors());
     }
 
     /**
@@ -207,18 +208,11 @@ public class ProtocolContributionTest {
     /** A contributor that throws costs the connection itself, never the other subsystems on it. */
     @Test
     public void oneBrokenContributorDoesNotTakeTheOthersWithIt() {
-        Protocols.contribute("broken", new Protocols.Contributor() {
-            @Override
-            public <T> void bind(ProtocolConnection<T> connection) {
-                throw new IllegalStateException("misconfigured");
-            }
+        Protocols.contribute("broken", connection -> {
+            throw new IllegalStateException("misconfigured");
         });
-        Protocols.contribute("working", new Protocols.Contributor() {
-            @Override
-            public <T> void bind(ProtocolConnection<T> connection) {
-                connection.onRequest("working/ping", (args, respond) -> respond.ok(null));
-            }
-        });
+        Protocols.contribute("working", connection ->
+                connection.onRequest("working/ping", (args, respond) -> respond.ok(null)));
         connect();
 
         AtomicReference<Boolean> answered = new AtomicReference<>(false);
@@ -228,14 +222,10 @@ public class ProtocolContributionTest {
         assertTrue("the surviving contributor must still serve its methods", answered.get());
     }
 
-    /** Two subsystems claiming one name is a wiring mistake, and is refused rather than resolved. */
+    /** Two subsystems claiming one name ON ONE SIDE is a wiring mistake, refused rather than resolved. */
     @Test
     public void aDuplicateContributorNameIsRefused() {
-        Protocols.Contributor noop = new Protocols.Contributor() {
-            @Override
-            public <T> void bind(ProtocolConnection<T> connection) {
-            }
-        };
+        Protocols.Contributor noop = connection -> { };
         Protocols.contribute("workspace", noop);
         try {
             Protocols.contribute("workspace", noop);
@@ -243,7 +233,14 @@ public class ProtocolContributionTest {
         } catch (IllegalStateException expected) {
             assertTrue(expected.getMessage().contains("workspace"));
         }
-        assertEquals(Set.of("workspace"), Protocols.contributors());
+        try {
+            Protocols.server("only", noop);
+            Protocols.server("only", noop);
+            fail("the sided registrations dedupe too");
+        } catch (IllegalStateException expected) {
+            assertTrue(expected.getMessage().contains("only"));
+        }
+        assertEquals(Set.of("workspace", "only"), Protocols.contributors());
     }
 
     /**
@@ -256,11 +253,7 @@ public class ProtocolContributionTest {
     @Test
     public void tickPumpsTheWireItself() {
         int[] pumps = {0};
-        Protocols.contribute("noop", new Protocols.Contributor() {
-            @Override
-            public <T> void bind(ProtocolConnection<T> connection) {
-            }
-        });
+        Protocols.contribute("noop", connection -> { });
         ProtocolConnection<Object> connection =
                 Protocols.open(pair[0], PlainOps.INSTANCE, () -> pumps[0]++, null);
 

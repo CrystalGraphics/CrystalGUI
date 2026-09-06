@@ -9,8 +9,6 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.style.transition.TransitionEngine;
 import com.crystalgui.core.async.FrameProfile;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.UIWindow;
 import lombok.Getter;
 import org.jetbrains.annotations.Nullable;
 
@@ -22,21 +20,28 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
+import java.util.Collection;
+import java.util.function.Supplier;
 
 /**
  * One instance per {@link UIWindow}. Owns the registered stylesheets, the dirty-rematch queue
  * (selector re-matching on id/class/pseudo-class change), and — via {@link TransitionEngine} — the
- * active state-transition driver. Driven once per frame from {@link UIWindow#paintFrame()}, before
+ * active state-transition driver. Driven once per frame from {@code UIDocument.frame}, before
  * layout.
  */
 public final class StyleEngine {
-    private final UIWindow window;
+    /** Every styleable in the tree, for the whole-tree invalidation a sheet change is. */
+    private final Supplier<? extends Collection<? extends Styleable>> elements;
+
+    /** A sheet and the subtree it is installed for; a null root is the whole tree. */
+    private record Installed(StyleSheet sheet, @Nullable StyleScope root) {
+    }
 
     @Getter
     private final TransitionEngine transitionEngine = new TransitionEngine();
 
-    private final List<StyleSheet> sheets = new ArrayList<>();
-    private final Set<UIElement> dirtyMatch = new HashSet<>();
+    private final List<Installed> sheets = new ArrayList<>();
+    private final Set<Styleable> dirtyMatch = new HashSet<>();
 
     /** Exactly the STYLESHEET/IMPORTANT-origin slots this engine last applied to each element — kept
      * so a re-match can remove precisely what it added, without guessing by origin (an IMPORTANT-
@@ -60,7 +65,7 @@ public final class StyleEngine {
      *
      * <p>Weak keys are what keep that from being a leak: an element that really is gone takes its entry
      * with it, and one that comes back still has it.</p> */
-    private final Map<UIElement, List<StyleSlot<?>>> appliedByElement = new WeakHashMap<>();
+    private final Map<Styleable, List<StyleSlot<?>>> appliedByElement = new WeakHashMap<>();
 
     /**
      * Resolved {@code ::highlight(name)} styles, per element, per highlight name.
@@ -71,7 +76,7 @@ public final class StyleEngine {
      * so it stays in step with the ordinary cascade by construction rather than by a second
      * invalidation path.</p>
      */
-    private final Map<UIElement, Map<String, HighlightStyle>> highlightsByElement = new HashMap<>();
+    private final Map<Styleable, Map<String, HighlightStyle>> highlightsByElement = new HashMap<>();
 
     /**
      * Every live engine, weakly held — what {@link #reloadStylesheets()} restyles.
@@ -83,8 +88,8 @@ public final class StyleEngine {
     private static final Set<StyleEngine> LIVE =
             Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
 
-    public StyleEngine(UIWindow window) {
-        this.window = window;
+    public StyleEngine(Supplier<? extends Collection<? extends Styleable>> elements) {
+        this.elements = elements;
         LIVE.add(this);
     }
 
@@ -124,12 +129,38 @@ public final class StyleEngine {
     }
 
     public void addStylesheet(StyleSheet sheet) {
-        sheets.add(sheet);
+        addStylesheet(sheet, null);
+    }
+
+    /**
+     * Installs for a SUBTREE — CSS {@code @scope}. Only elements at or under {@code root} can match
+     * its rules, and among candidates of equal specificity a closer scope root wins (scoping
+     * proximity, ranked between specificity and order of appearance). A shadow root as the scope is
+     * how a composite's own sheet reaches its parts and nothing outside them; an unscoped sheet
+     * reaches into no shadow tree at all, except through {@code ::part()}.
+     */
+    public void addStylesheet(StyleSheet sheet, @Nullable StyleScope root) {
+        sheets.add(new Installed(sheet, root));
         markAllDirty();
     }
 
+    /** Removes EVERY installation of {@code sheet}, whatever it was scoped to. @see #removeStylesheet(StyleSheet, StyleScope) */
     public void removeStylesheet(StyleSheet sheet) {
-        if (sheets.remove(sheet)) {
+        if (sheets.removeIf(installed -> installed.sheet() == sheet)) {
+            markAllDirty();
+        }
+    }
+
+    /**
+     * Removes ONE installation — the sheet as scoped to {@code root}, leaving its other scopes alone.
+     *
+     * <p>Needed the moment one parsed sheet is installed against several roots, which is what sharing
+     * a parse between two windows of one type means. The unscoped overload would take them all off,
+     * so closing either window would unstyle the other — silently, and only ever with two of them
+     * open.</p>
+     */
+    public void removeStylesheet(StyleSheet sheet, @Nullable StyleScope root) {
+        if (sheets.removeIf(installed -> installed.sheet() == sheet && installed.root() == root)) {
             markAllDirty();
         }
     }
@@ -163,13 +194,13 @@ public final class StyleEngine {
             FrameProfile.blame("markAllDirty", "com.crystalgui.style");
             FrameProfile.count("whole-window-invalidations", 1);
         }
-        dirtyMatch.addAll(window.getElements());
+        dirtyMatch.addAll(elements.get());
     }
 
     /**
      * Whether a STATE change on an ancestor could alter {@code descendant}'s match. @see StyleSheet
      *
-     * <p>The question {@code UIElement.invalidateStyleMatch()} asks before re-matching a subtree.
+     * <p>The question {@code Styleable.invalidateStyleMatch()} asks before re-matching a subtree.
      * Answering it honestly is what turns a hover into a walk instead of hundreds of re-matches — in a
      * running client one hover change re-matched <b>291</b> elements and a focus change <b>402 to 713</b>,
      * every one of them at 20-25µs.</p>
@@ -194,10 +225,10 @@ public final class StyleEngine {
      * @return the reachable descendant keys, or null when a state change here can reach nothing
      */
     @Nullable
-    public Set<String> stateDescendantKeysFrom(UIElement ancestor) {
+    public Set<String> stateDescendantKeysFrom(Styleable ancestor) {
         Set<String> reachable = null;
         for (int i = 0; i < sheets.size(); i++) {
-            StyleSheet sheet = sheets.get(i);
+            StyleSheet sheet = sheets.get(i).sheet();
             // An unkeyable subject (`foo:hover *`) means anything could match, so nothing can be narrowed.
             if (sheet.hasUnboundedStateDescendants()) return EVERYTHING;
             reachable = addAll(reachable, sheet.stateDescendantsFromAnyAncestor());
@@ -225,7 +256,7 @@ public final class StyleEngine {
     public static final Set<String> EVERYTHING = Collections.unmodifiableSet(new HashSet<>());
 
     /** Whether {@code descendant} carries any of {@code reachable}. @see #stateDescendantKeysFrom */
-    public static boolean carriesAny(UIElement descendant, Set<String> reachable) {
+    public static boolean carriesAny(Styleable descendant, Set<String> reachable) {
         if (reachable == EVERYTHING) return true;
         if (reachable.contains(descendant.tagName())) return true;
         for (String cls : descendant.getClasses()) {
@@ -234,9 +265,9 @@ public final class StyleEngine {
         return !descendant.getId().isEmpty() && reachable.contains(descendant.getId());
     }
 
-    public boolean stateReaches(UIElement descendant) {
+    public boolean stateReaches(Styleable descendant) {
         for (int i = 0; i < sheets.size(); i++) {
-            StyleSheet sheet = sheets.get(i);
+            StyleSheet sheet = sheets.get(i).sheet();
             if (sheet.hasUnboundedStateDescendants()) return true;
             Set<String> keys = sheet.stateDescendantKeys();
             if (keys.isEmpty()) continue;
@@ -249,12 +280,12 @@ public final class StyleEngine {
         return false;
     }
 
-    /** Called from {@link UIElement#invalidateStyleMatch()} — marks an element for re-matching. */
-    public void markDirty(UIElement element) {
+    /** Called from {@link Styleable#invalidateStyleMatch()} — marks an element for re-matching. */
+    public void markDirty(Styleable element) {
         // BLAMED WHILE PROFILING. A count says three hundred elements were re-matched; only the caller
         // says why, and "why" is the whole question when nothing on screen is moving. @see FrameProfile
         if (FrameProfile.ENABLED && dirtyMatch.add(element)) {
-            FrameProfile.blame("markDirty", "com.crystalgui.style", "com.crystalgui.ui.UIElement");
+            FrameProfile.blame("markDirty", "com.crystalgui.style", "com.crystalgui.ui.dom.UIElement");
             return;
         }
         dirtyMatch.add(element);
@@ -265,7 +296,7 @@ public final class StyleEngine {
      *
      * <p>What it does <b>not</b> do is forget which slots it applied — see {@link #appliedByElement}.</p>
      */
-    public void onElementDetached(UIElement element) {
+    public void onElementDetached(Styleable element) {
         dirtyMatch.remove(element);
         // appliedByElement is deliberately NOT cleared here — see its own note. It is what the next
         // match spends to withdraw the rules that stopped applying, and an element that never returns
@@ -274,7 +305,7 @@ public final class StyleEngine {
         transitionEngine.onElementDetached(element);
     }
 
-    /** Called from {@link UIWindow#paintFrame()}, before layout is recomputed — and again afterwards for
+    /** Called from {@code UIDocument.frame}, before layout is recomputed — and again afterwards for
      * as long as {@link #hasPendingMatches()} reports work that layout itself created. */
     public void calculateStyle(float deltaSeconds) {
         // THE TWO HALVES REPORTED APART. They cost differently and for unrelated reasons -- the drain is
@@ -301,7 +332,7 @@ public final class StyleEngine {
     }
 
     /** Exactly what the last {@link #resetRematchCountForTesting} onwards re-matched. Tests only. */
-    private final List<UIElement> rematchedForTesting = new ArrayList<>();
+    private final List<Styleable> rematchedForTesting = new ArrayList<>();
 
     /**
      * Whether to record at all — <b>off until a test asks</b>.
@@ -329,26 +360,44 @@ public final class StyleEngine {
      * <p>Re-matching an element whose answer has not changed is by construction invisible from the
      * outside, so a test for "and it no longer does that" has nothing else to look at.</p>
      */
-    public List<UIElement> rematchedForTesting() {
+    public List<Styleable> rematchedForTesting() {
         return rematchedForTesting;
     }
 
+    /** How many times one pass may re-drain before it gives up on settling. */
+    private static final int MAX_SETTLE_ROUNDS = 8;
+
     private void drainDirtyMatch() {
         if (dirtyMatch.isEmpty()) return;
-        // Snapshot-and-clear before iterating: a reentrant invalidateStyleMatch() call during
-        // matching (plausible — style-change listeners already mutate state synchronously) must
-        // land in the freshly-cleared set and get picked up next frame, not throw a
-        // ConcurrentModificationException or recurse within this same pass.
-        var batch = new ArrayList<>(dirtyMatch);
-        dirtyMatch.clear();
-        // NAMES WHAT IS CHURNING, not merely how much. "Style is slow" is not actionable; "2,143 elements
-        // re-matched, 2,000 of them .__error-stripe__" is a fix. Off unless asked for. @see FrameProfile
-        if (FrameProfile.ENABLED) profileBatch(batch);
-        if (recordRematches) rematchedForTesting.addAll(batch);
+        // PARENTS FIRST, AND UNTIL SETTLED. The dirty set is a hash set, so a child could be matched
+        // before its parent -- and an `em` on the child then resolved against a font size the parent
+        // had not computed yet, which is the wrong number until the next frame. Depth order is what a
+        // top-down style recalc is. And a match that dirties descendants (a font-size change; the
+        // reentrant invalidateStyleMatch() calls style-change listeners make) is drained again in the
+        // same pass, bounded, so one calculateStyle() answers for the whole tree. Snapshot-and-clear
+        // per round, so those reentrant calls land in the cleared set rather than throwing a
+        // ConcurrentModificationException.
         long timed = FrameProfile.begin();
-        for (var element : batch) {
-            rematch(element);
+        int total = 0;
+        for (int round = 0; round < MAX_SETTLE_ROUNDS && !dirtyMatch.isEmpty(); round++) {
+            var batch = new ArrayList<>(dirtyMatch);
+            dirtyMatch.clear();
+            batch.sort((a, b) -> Integer.compare(depthOf(a), depthOf(b)));
+            // NAMES WHAT IS CHURNING, not merely how much. "Style is slow" is not actionable; "2,143
+            // elements re-matched, 2,000 of them .__error-stripe__" is a fix. Off unless asked for.
+            if (FrameProfile.ENABLED) profileBatch(batch);
+            if (recordRematches) rematchedForTesting.addAll(batch);
+            for (var element : batch) {
+                rematch(element);
+            }
+            total += batch.size();
         }
+        if (!dirtyMatch.isEmpty()) {
+            CrystalGuiCore.LOGGER.warn("Style matching did not settle in {} rounds; {} element(s) carry to the next pass",
+                    MAX_SETTLE_ROUNDS, dirtyMatch.size());
+        }
+        var batch = new ArrayList<Styleable>();   // for the step label below
+        for (int i = 0; i < total; i++) batch.add(null);
         // THE PER-ELEMENT COST, stated rather than assumed. Everything about narrowing invalidation rests
         // on "a rematch costs ~20-25us", which was a comment in this file and never a measurement -- and
         // the trade between marking fewer elements and walking a smaller tree is decided by that number.
@@ -356,10 +405,16 @@ public final class StyleEngine {
     }
 
     /** Counts the batch by the most specific class each element carries, for the frame report. */
-    private static void profileBatch(List<UIElement> batch) {
+    private static int depthOf(Styleable element) {
+        int depth = 0;
+        for (Styleable at = element.getParent(); at != null; at = at.getParent()) depth++;
+        return depth;
+    }
+
+    private static void profileBatch(List<Styleable> batch) {
         FrameProfile.count("rematched", batch.size());
         Map<String, Integer> byName = new HashMap<>();
-        for (UIElement element : batch) {
+        for (Styleable element : batch) {
             String name = element.getClasses().isEmpty()
                     ? element.tagName() : element.getClasses().iterator().next();
             byName.merge(name, 1, Integer::sum);
@@ -391,7 +446,7 @@ public final class StyleEngine {
      * <p>Never null, because "no theme styles this highlight name" is an ordinary, expected state — a
      * highlighter emits names without knowing which of them a given theme cares about.</p>
      */
-    public HighlightStyle highlightStyle(UIElement element, String name) {
+    public HighlightStyle highlightStyle(Styleable element, String name) {
         var forElement = highlightsByElement.get(element);
         if (forElement == null) return HighlightStyle.EMPTY;
         return forElement.getOrDefault(name, HighlightStyle.EMPTY);
@@ -415,7 +470,7 @@ public final class StyleEngine {
      * {@code replaceOrPutCandidate} no-ops on unchanged values, so the second pass costs a walk and
      * nothing else.</p>
      */
-    private void rematch(UIElement element) {
+    private void rematch(Styleable element) {
         float fontSize = element.getStyle().getGeneralGroup().fontSize();
         boolean fontRelative = rematchAgainst(element, fontSize);
         if (fontRelative) {
@@ -425,7 +480,7 @@ public final class StyleEngine {
         // WHETHER A LATER FONT-SIZE CHANGE HAS TO COME BACK HERE. Nothing else re-runs this pass, so an
         // element whose size is written after its rules matched -- a widget imposing its own at IMPORTANT,
         // which is what TextEditor does to its gutter on every zoom -- would keep the em pixels it was
-        // given when the sheet last matched. @see UIElement#invalidateFontRelativeStyles
+        // given when the sheet last matched. @see Styleable#invalidateFontRelativeStyles
         element.setHasFontRelativeStyles(fontRelative);
     }
 
@@ -435,7 +490,7 @@ public final class StyleEngine {
      * @return whether any matched declaration was font-relative, i.e. whether the answer depends on
      *         {@code fontSize} at all
      */
-    private boolean rematchAgainst(UIElement element, float fontSize) {
+    private boolean rematchAgainst(Styleable element, float fontSize) {
         var previouslyApplied = appliedByElement.get(element);
         boolean sawFontRelative = false;
 
@@ -444,16 +499,77 @@ public final class StyleEngine {
         // second pass, so the two cannot disagree about which rules matched.
         Map<String, Map<StyleProperty<?>, StyleSlot<?>>> highlightSlots = new HashMap<>();
 
+        // SPIKE S2. Null for an ordinary element, which is every element in the engine today, so the
+        // whole shadow path below costs one map lookup per rematch until something attaches a root.
+        Styleable shadowHost = element.shadowHost();
+
         for (int sheetIndex = 0; sheetIndex < sheets.size(); sheetIndex++) {
-            var sheet = sheets.get(sheetIndex);
-            for (var rule : sheet.candidatesFor(element)) {
+            var installed = sheets.get(sheetIndex);
+            var sheet = installed.sheet();
+            // WHICH RULES CAN REACH THIS ELEMENT. An unscoped sheet reaches everything outside a shadow
+            // tree, and a shadow tree's parts only through ::part(). A scoped sheet reaches what is at
+            // or under its root -- the shadow root itself, for a composite's own sheet -- and its
+            // candidates rank by how close that root is.
+            int proximity;
+            int hostProximity;
+            boolean ordinaryRulesReach;
+            if (installed.root() == null) {
+                proximity = StyleSlot.UNSCOPED;
+                hostProximity = StyleSlot.UNSCOPED;
+                ordinaryRulesReach = shadowHost == null;
+            } else {
+                proximity = proximityOf(element, installed.root());
+                hostProximity = shadowHost == null ? -1 : proximityOf(shadowHost, installed.root());
+                ordinaryRulesReach = proximity >= 0;
+            }
+            boolean partRulesReach = shadowHost != null && hostProximity >= 0;
+            if (!ordinaryRulesReach && !partRulesReach) continue;
+            List<StyleRule> candidates = ordinaryRulesReach ? sheet.candidatesFor(element) : List.of();
+            if (partRulesReach) {
+                // A ::part rule is indexed under the HOST's type, id and classes -- `button::part(label)`
+                // lives in the `button` bucket -- so it is unreachable from the element it applies to.
+                // This is the cost S2 set out to measure: styling a shadow descendant means asking the
+                // index twice, once for the element and once for its host.
+                candidates = new ArrayList<>(candidates);
+                candidates.addAll(sheet.candidatesFor(shadowHost));
+            }
+            for (var rule : candidates) {
                 var pseudo = rule.selector().pseudoElement();
                 if (pseudo != null) {
-                    if (rule.selector().matchesOriginating(element)) {
-                        collectHighlight(highlightSlots, pseudo.argument(), rule, sheet, sheetIndex);
+                    if (rule.selector().selectsShadowPart()) {
+                        // ::part selects a REAL element, unlike ::highlight, so it contributes to this
+                        // element's own cascade rather than to a side table. It applies when this element
+                        // is exposed under that part name AND the compound describes its host.
+                        if (partRulesReach
+                                && pseudo.argument().equals(element.partName())
+                                && rule.selector().matchesOriginating(shadowHost)
+                                // ...and whatever follows `::part()` is about the PART, not the host.
+                                && rule.selector().matchesAfterPseudoElement(element)) {
+                            int partSpecificity = rule.selector().specificity();
+                            var partDecls = rule.declarations();
+                            for (int i = 0; i < partDecls.size(); i++) {
+                                var decl = partDecls.get(i);
+                                var origin = decl.important() ? StyleOrigin.IMPORTANT : sheet.getOrigin();
+                                long order = (long) sheetIndex * SHEET_ORDER_STRIDE
+                                        + (long) rule.sourceOrder() * DECLARATION_ORDER_MULTIPLIER + i;
+                                if (isFontRelative(decl)) sawFontRelative = true;
+                                var slot = toSlot(decl, origin, partSpecificity, hostProximity, order, fontSize);
+                                if (slot != null) newSlots.add(slot);
+                            }
+                        }
+                        continue;
+                    }
+                    if (ordinaryRulesReach && rule.selector().matchesOriginating(element)) {
+                        collectHighlight(highlightSlots, pseudo.argument(), rule, sheet, sheetIndex, proximity);
                     }
                     continue;
                 }
+                // ENCAPSULATION. An ordinary rule may not reach into a shadow tree -- that is the whole
+                // proposition, and the reason ::part has to exist at all. Note it is checked HERE and not
+                // by pruning the index: a rule that matches this element by class is a legitimate match
+                // for an element in the LIGHT tree with the same class, so the scope is a property of the
+                // pairing rather than of the rule.
+                if (!ordinaryRulesReach) continue;
                 if (!rule.selector().matches(element)) continue;
                 int specificity = rule.selector().specificity();
                 var decls = rule.declarations();
@@ -471,7 +587,7 @@ public final class StyleEngine {
                     long sourceOrder = (long) sheetIndex * SHEET_ORDER_STRIDE
                             + (long) rule.sourceOrder() * DECLARATION_ORDER_MULTIPLIER + i;
                     if (isFontRelative(decl)) sawFontRelative = true;
-                    var slot = toSlot(decl, origin, specificity, sourceOrder, fontSize);
+                    var slot = toSlot(decl, origin, specificity, proximity, sourceOrder, fontSize);
                     if (slot != null) newSlots.add(slot);
                 }
             }
@@ -521,7 +637,7 @@ public final class StyleEngine {
      * would leave an author with a rule that looks right and does nothing.</p>
      */
     private void collectHighlight(Map<String, Map<StyleProperty<?>, StyleSlot<?>>> out, String name,
-                                  StyleRule rule, StyleSheet sheet, int sheetIndex) {
+                                  StyleRule rule, StyleSheet sheet, int sheetIndex, int proximity) {
         int specificity = rule.selector().specificity();
         var decls = rule.declarations();
         for (int i = 0; i < decls.size(); i++) {
@@ -550,7 +666,7 @@ public final class StyleEngine {
             var origin = decl.important() ? StyleOrigin.IMPORTANT : sheet.getOrigin();
             long sourceOrder = (long) sheetIndex * SHEET_ORDER_STRIDE
                     + (long) rule.sourceOrder() * DECLARATION_ORDER_MULTIPLIER + i;
-            var slot = toSlot(decl, origin, specificity, sourceOrder);
+            var slot = toSlot(decl, origin, specificity, proximity, sourceOrder, Float.NaN);
             if (slot == null) continue;
             var forName = out.computeIfAbsent(name, ignored -> new HashMap<>());
             var existing = forName.get(decl.property());
@@ -567,7 +683,7 @@ public final class StyleEngine {
      */
     @Nullable
     static <T> StyleSlot<T> toSlot(StyleRule.Declaration decl, StyleOrigin origin, int specificity, long sourceOrder) {
-        return toSlot(decl, origin, specificity, sourceOrder, Float.NaN);
+        return toSlot(decl, origin, specificity, StyleSlot.UNSCOPED, sourceOrder, Float.NaN);
     }
 
     /**
@@ -578,7 +694,7 @@ public final class StyleEngine {
     @Nullable
     @SuppressWarnings("unchecked")
     static <T> StyleSlot<T> toSlot(StyleRule.Declaration decl, StyleOrigin origin, int specificity,
-                                   long sourceOrder, float fontSize) {
+                                   int proximity, long sourceOrder, float fontSize) {
         var property = (StyleProperty<T>) decl.property();
         T value;
         // THE ONE PLACE AN `em` BECOMES A NUMBER. A StyleValue is parsed once and shared by every element
@@ -595,7 +711,7 @@ public final class StyleEngine {
                     property.name, decl.value().rawValue);
             return null;
         }
-        return StyleSlot.of(property, origin, specificity, sourceOrder, value);
+        return StyleSlot.of(property, origin, specificity, proximity, sourceOrder, value);
     }
 
     /** Whether a matched declaration's value is an {@code em} and so needs the element's font size. */
@@ -604,6 +720,20 @@ public final class StyleEngine {
     }
 
     public List<StyleSheet> getSheets() {
-        return List.copyOf(sheets);
+        List<StyleSheet> out = new ArrayList<>(sheets.size());
+        for (Installed installed : sheets) out.add(installed.sheet());
+        return out;
+    }
+
+    /** Hops from {@code element} up to {@code root} inclusive, or -1 when {@code root} is not above it. */
+    private static int proximityOf(StyleScope element, StyleScope root) {
+        int hops = 0;
+        // THE SCOPE CHAIN, not getParent(). They differ at exactly one place and it is the one that
+        // matters here: getParent() answers null when the parent is a shadow root, so a sheet scoped
+        // to a composite's own shadow root would be unreachable from every part inside it.
+        for (StyleScope at = element; at != null; at = at.styleScopeParent(), hops++) {
+            if (at == root) return hops;
+        }
+        return -1;
     }
 }

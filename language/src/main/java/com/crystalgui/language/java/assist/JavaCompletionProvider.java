@@ -607,7 +607,7 @@ public final class JavaCompletionProvider implements CompletionProvider {
      * without asking for a comment, so the rows carry none. This method is exactly where that would be
      * filled — it is the lazy hook, and the pane it feeds is the one place a doc is worth the lookup —
      * but it receives a {@link CompletionItem} rather than a binding, so filling it means re-resolving
-     * the declaring type. Real work rather than a line, and it is recorded in {@code plan_m13.md} §25.6
+     * the declaring type. Real work rather than a line, and it is recorded in {@code plan/lang-production-names.md} §25.6
      * rather than left as a comment nobody owns. Returning the item unchanged is still the honest answer
      * and is what {@link CompletionItem#needsResolution()} expects — the pane shows nothing rather than
      * "loading" forever.</p>

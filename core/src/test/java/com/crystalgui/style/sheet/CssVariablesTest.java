@@ -8,7 +8,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 /**
- * The variable substrate under theming ({@code plan_styling.md} §3.4): external tables, the
+ * The variable substrate under theming ({@code plan/style-overhaul.md} §3.4): external tables, the
  * {@code var(--x, fallback)} two-arg form, and fixed-point table resolution.
  *
  * <p>String-level on purpose — substitution is textual, so its contract is decidable on strings,

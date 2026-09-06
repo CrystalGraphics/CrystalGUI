@@ -1,25 +1,24 @@
 package com.crystalgui.mc.client;
 
+import com.crystalgui.core.storage.StorageLayout;
+import com.crystalgui.desktop.host.DesktopHost;
+import com.crystalgui.desktop.host.HostServices;
+import java.nio.file.Path;
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.platform.gl.state.CgGlState;
-import com.crystalgui.core.dispose.Disposer;
+import com.crystalgui.desktop.Desktop;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.editor.CrystalEditor;
-import com.crystalgui.core.command.CommandRegistry;
-import com.crystalgui.fs.LocalConfigStorage;
-import com.crystalgui.language.run.view.RunPanels;
-import com.crystalgui.language.run.view.ScriptWorkbench;
+import com.crystalgui.app.crystaleditor.CrystalEditor;
+import com.crystalgui.workbench.app.WorkbenchApplication;
+import com.crystalgui.core.storage.LocalConfigStorage;
 import com.crystalgui.style.sheet.StyleSheet;
-import com.crystalgui.ui.Ui;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.UIWindow;
-import com.crystalgui.ui.elements.desktop.DesktopPresentation;
-import com.crystalgui.ui.elements.desktop.WindowFrame;
-import com.crystalgui.ui.elements.desktop.WindowPolicy;
-import com.crystalgui.ui.elements.desktop.WindowState;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.desktop.window.WindowFrame;
+import com.crystalgui.core.window.WindowState;
 import com.crystalgui.mc.net.CgUiConnections;
 import com.crystalgui.net.protocol.ProtocolConnection;
 
+import com.crystalgui.fs.client.Workspace;
 import javax.annotation.Nullable;
 
 import net.minecraft.client.Minecraft;
@@ -31,26 +30,35 @@ import org.lwjgl.input.Mouse;
 import java.io.File;
 
 /**
- * The Minecraft host for {@link CrystalEditor}.
+ * <b>The Minecraft screen CrystalGUI draws into</b> - a {@code GuiScreen} wrapped around a
+ * {@link DesktopHost}.
  *
- * <p>{@code CrystalEditor}'s own javadoc states the contract this implements: <i>"A host supplies a
- * {@link com.crystalgui.fs.WorkspaceClient} and a window; everything else is decided here."</i> So this
- * class is deliberately small — it owns a {@link UIWindow}, drives one frame, and saves on close.
- * Which panels exist, what the layout is, which commands answer to which keys and where focus starts
- * are all the editor's, and none of them appear below.</p>
+ * <p>Deliberately small. It answers the host's three questions, forwards Minecraft's screen lifecycle
+ * ({@code initGui} to {@code shown}, {@code drawScreen} to {@code frame}, {@code onGuiClosed} to
+ * {@code hidden}), and does nothing else. Which applications exist, what the layout is, which commands
+ * answer to which keys and where focus starts are all decided above it.</p>
  *
- * <p>The reference host is the harness's {@code CgUiDockScene}; this is the same sequence with
- * Minecraft's clock and screen size substituted.</p>
+ * <h3>Closing this screen does not close anything</h3>
+ *
+ * <p>The desktop, its windows and every running application outlive it - the screen is a viewport onto
+ * them, so pressing Escape and reopening gets the same unsaved documents back. Only game shutdown
+ * disposes the host.</p>
  *
  * <h3>Real device pixels, never {@code ScaledResolution}</h3>
  *
- * <p>{@link #drawScreen}'s {@code mouseX}/{@code mouseY} arrive already divided by Minecraft's GUI
- * scale, and {@code GuiScreen.width}/{@code height} are the scaled size. <b>None of them are
- * used here.</b> {@code UIWindow} takes raw pixels and applies its own scale through
- * {@code getRootTransform()}, which {@code AGENTS.md} names as <i>the single definition of what
- * uiScale means</i> — feeding it pre-scaled numbers creates a second definition, and the two disagree
- * by exactly the scale factor. The symptom is the nasty one: everything draws correctly and every
- * click lands somewhere else.</p>
+ * <p>{@code drawScreen}'s {@code mouseX}/{@code mouseY} arrive already divided by Minecraft's GUI scale,
+ * and {@code GuiScreen.width}/{@code height} are the scaled size. <b>None of them are used here.</b> The
+ * engine takes raw pixels and applies its own scale on the box tree's root transform, which is the
+ * single definition of what {@code uiScale} means - feeding it pre-scaled numbers creates a second one,
+ * and the two disagree by exactly the scale factor. The symptom is the nasty one: everything draws
+ * correctly and every click lands somewhere else.</p>
+ *
+ * <h3>It must not pause the game</h3>
+ *
+ * <p>{@code doesGuiPauseGame()} is false, and that is load-bearing rather than a preference: pausing
+ * stops the integrated server ticking, so the connection is never pumped and every request this screen
+ * makes dies at its timeout. A workspace that appears empty in single-player and works in multiplayer is
+ * this line.</p>
  *
  * @see CgUiInput for why input does not arrive through this class at all
  */
@@ -62,7 +70,7 @@ public final class CgUiScreen extends GuiScreen {
     /**
      * <b>The host sizes the root, and nothing else will.</b>
      *
-     * <p>{@code UIWindow.init(w, h)} looks like it does this and does not: all it calls is
+     * <p>{@code UIDocument.init(w, h)} looks like it does this and does not: all it calls is
      * {@code UIElement.initScreen}, whose entire body is {@code runtimeCache.resetCache()} plus the
      * same call on each child. The root therefore has <em>no</em> width or height of its own, and with
      * Taffy's defaults here ({@code flex-direction: COLUMN}, {@code min-size: 0}, no explicit size) it
@@ -97,9 +105,57 @@ public final class CgUiScreen extends GuiScreen {
      * {@code GuiScreen} each time one is shown, so the state has to live somewhere that is not the
      * screen.</p>
      */
-    private static CrystalEditor editor;
-    private static UIWindow uiWindow;
-    private static Mc1710Workspace workspace;
+    private static WorkbenchApplication editor;
+    /**
+     * The scale this host draws at.
+     *
+     * <p>Still a HOST choice — the box tree takes whatever a host sets and this one could answer
+     * something else. It defers to the seam's default so the two loaders cannot drift apart on a number
+     * every shipped stylesheet was measured against.</p>
+     */
+    public static final float DEFAULT_UI_SCALE = HostServices.DEFAULT_UI_SCALE;
+
+    /** When the last frame was presented, for the delta the engine's motion runs on. */
+    private static long lastFrameNanos;
+
+    /**
+     * Seconds of RENDERED time since the previous frame.
+     *
+     * <p>Rendered, not wall: the first windows of a session open into the worst stall there is --
+     * measured at 398ms and 282ms between consecutive frames -- so wall time would charge a 150ms
+     * gesture its whole duration for frames nobody saw. The engine's own animation service clamps a
+     * long gap; this only has to report one honestly. Zero on the first frame, which holds every
+     * animation at its start value rather than completing it before anything was drawn.</p>
+     */
+    static float frameDelta() {
+        long now = System.nanoTime();
+        long previous = lastFrameNanos;
+        lastFrameNanos = now;
+        if (previous == 0L) return 0f;
+        return (now - previous) / 1_000_000_000f;
+    }
+
+    /**
+     * The surface, the compositor, the workspace and the window mount — everything a host is handed.
+     *
+     * <p><b>Static, and that is the point:</b> Minecraft builds a fresh {@code GuiScreen} every time the
+     * screen is displayed, so a per-instance host would mean a new desktop — and a new set of windows and
+     * unsaved documents — on every open. This one outlives every screen and is disposed at game
+     * shutdown.</p>
+     */
+    private static DesktopHost host;
+
+    /**
+     * The workspace this screen's editor is using, or null before there is one.
+     *
+     * <p>For {@code CgUiEditorOpenProbe}, which has to work through the SAME workspace the editor is
+     * using rather than opening one of its own — a second one would answer over the same wire and
+     * prove nothing about whether the screen stopped the server from ticking.</p>
+     */
+    @Nullable
+    public static Workspace workspaceForProbe() {
+        return host == null ? null : host.workspace();
+    }
     /** The window the editor lives in. @see #initGui */
     private static WindowFrame editorWindow;
 
@@ -122,27 +178,7 @@ public final class CgUiScreen extends GuiScreen {
      */
     private static final float FIRST_RUN_FRACTION = 0.86f;
 
-    /** Run and Stop for the active file, or null where no engine band opened. @see #initGui */
-    private static ScriptWorkbench scripting;
 
-    /**
-     * The connection the project list was last asked on, or {@code null} for never.
-     *
-     * <p>Was a {@code boolean}, and the editor is <b>static and outlives every screen</b> —
-     * {@code disposeAll} says so itself: <i>"frees the editor at game shutdown, not called on close"</i>.
-     * So a one-shot flag meant the project list was asked for <b>at most once per game session</b>,
-     * however many worlds were joined afterwards. Leave a world, join another, press F6: an empty Project
-     * panel, no root, New File and New Folder greyed because there is nowhere to create INTO — and
-     * nothing in the log, because the ask never happened rather than failing.</p>
-     *
-     * <p>Keyed on the connection because that is what actually changes. Re-opening the editor on the same
-     * wire must not re-ask (the tree already has its roots and a second listing would be pure churn), and
-     * a new wire must.</p>
-     */
-    @Nullable
-    private static ProtocolConnection<Object> projectsAskedOn;
-
-    private long lastFrameNanos = System.nanoTime();
 
     /** Set by the pump when an Escape reached the window and nothing consumed it. @see CgUiInput */
     private boolean closeRequested;
@@ -180,11 +216,32 @@ public final class CgUiScreen extends GuiScreen {
 
     /** Whether the editor has been built — read by the pump before it touches anything. */
     static boolean isReady() {
-        return uiWindow != null;
+        return host != null;
     }
 
-    static UIWindow window() {
-        return uiWindow;
+    /**
+     * The one {@code UIDocument} on the client, or null before the screen has ever been opened.
+     *
+     * <p><b>Public because there is exactly one, and that is the point.</b> Anything with a UI to show
+     * opens a {@code WindowFrame} on <em>this</em> desktop rather than standing up a second
+     * {@code GuiScreen} — a second screen is a second claim on the input pump, the GL handoff, the
+     * desktop's own persistence and the modal stack, and only one of them can be in front. The editor
+     * is a window here; so is the worked example's panel. @see com.crystalgui.mc.example.MachineExampleClient
+     */
+    public static UIDocument window() {
+        return host == null ? null : host.document();
+    }
+
+    /**
+     * This client's compositor, or null before the screen has ever been opened.
+     *
+     * <p>The host seam moved off the document at 6.9a and onto the compositor, which is where it
+     * belongs: the engine may not name a desktop, so {@code Desktop.of} names the document and not
+     * the reverse. Everything a loader used to ask a {@code UIWindow} -- suspend, resume, what to
+     * present, whether anything is pinned, the overlay -- it asks here.</p>
+     */
+    public static Desktop desktop() {
+        return host == null ? null : host.desktop();
     }
 
     void requestClose() {
@@ -225,13 +282,9 @@ public final class CgUiScreen extends GuiScreen {
         // than as a missing flag.
         Keyboard.enableRepeatEvents(true);
 
-        if (uiWindow != null) {
+        if (host != null) {
             // Reopening: the desktop comes back exactly as it was left. Everything below built it once.
-            // exitHudMode first, and it is a no-op unless the screen was closed with something pinned --
-            // it is what puts back the windows the HUD hid, and it has to run BEFORE the resume so the
-            // desktop it restores them onto is the attached one.
-            uiWindow.exitHudMode();
-            uiWindow.resumeDesktop();
+            host.shown();
             bringEditorForward();
             return;
         }
@@ -257,50 +310,53 @@ public final class CgUiScreen extends GuiScreen {
      */
     private void buildDesktop() {
         trace("begin");
-        File dataDir = mc.mcDataDir;
-        // NO ROOT. The files live on the SERVER now (Phase 4 B2) -- in single-player that is the
-        // integrated server, which is why there is one code path rather than a local special case.
-        workspace = new Mc1710Workspace();
-        trace("workspace + language registration");
+        host = DesktopHost.create(new Mc1710Host())
+                // WHAT A SERVER'S WINDOW IS OFFERED FIRST. The workbench honours an editor-tab or
+                // tool-window hint and hands everything else back to the desktop, so a client with no
+                // editor open still gets every window -- which is the hint working rather than failing.
+                // A supplier because the editor is built later than this and on demand.
+                .setWindowMount(() -> editor == null
+                        ? null : editor.workbench().windowMount(host.windowMount()));
+        // NO SEPARATE ROOT: the DOCUMENT is the root on this engine, so the class the host sheet keys
+        // on goes on it directly.
+        host.document().addClass(ROOT_CLASS);
+        host.document().styles().addStylesheet(StyleSheet.parse(HOST_STYLES));
+        trace("DesktopHost + host stylesheet");
+    }
 
-        // BESIDE the workspace, not inside it: a session record is private and must not become part of
-        // a project a resource pack could ship. ONE storage, shared: the editor's preferences and session
-        // records and the desktop's window arrangement all live in the same private directory, and
-        // building two would be two answers to the question of where that is.
-        config = new LocalConfigStorage(new File(dataDir, "config/crystalgui").toPath());
+    /**
+     * The three things only this platform can answer. @see HostServices
+     *
+     * <p>Where private files go, how big a pixel is, and whether there is a server. Everything the
+     * screen used to decide for itself — the window's title, its key, its icon, its close policy, its
+     * first-run geometry, when to ask for the project list — was the same answer on every host and is
+     * not asked here.</p>
+     */
+    private final class Mc1710Host implements HostServices {
 
-        // A BARE ROOT, and the editor becomes a WINDOW on the desktop the UIWindow already owns.
-        UIElement root = new UIElement();
-        root.addClass(ROOT_CLASS);
-        uiWindow = new UIWindow(Ui.of(root));
-        // NOT INSTALLED FOR YOU. Without this the window matches no selector at all and the editor
-        // renders as an unstyled column of boxes.
-        uiWindow.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
-        uiWindow.getStyleEngine().addStylesheet(StyleSheet.parse(HOST_STYLES));
+        @Override
+        public Path storageRoot() {
+            // ONE ROOT, and the engine owns the tree in it -- workspace-config/, cache/, projects/.
+            // Was config/crystalgui, which put the client's private files a level away from the
+            // workspace directory that already called itself crystalgui/.
+            return StorageLayout.rootIn(mc.mcDataDir.toPath());
+        }
 
-        // WHERE THE ARRANGEMENT LIVES, and nothing else -- CrystalOS W12. The compositor owns reading it,
-        // applying it to windows as they open, and writing it again when the screen closes; a host has no
-        // business holding a second copy of that policy.
-        uiWindow.desktop().persistTo(config, DESKTOP_ID);
+        @Override
+        public float uiScale() {
+            return DEFAULT_UI_SCALE;
+        }
 
-        // ATTACHED HERE, not left to the first frame -- a window opened before the tree HAS a UIWindow
-        // gets no animation at all.
-        //
-        // WindowAnimator.start() begins `UIWindow window = frame.getAttachedWindow(); if (window == null)
-        // return;`, which is right (an animation writes styles, and invalidateStyleMatch early-returns on
-        // a detached element) and is silent. initGui builds the desktop and opens the editor immediately,
-        // while the init below used to happen only in drawScreen -- so the FIRST window of every session
-        // opened with no timeline, and every later one animated correctly. Every launch is a fresh
-        // client, so the first open is exactly the one anybody testing this looks at: reported as the
-        // open animation being broken when there was no open animation to be broken.
-        //
-        // Calling it twice is free -- drawScreen calls it every frame anyway, which is how a resize is
-        // picked up -- and the display size is just as knowable here as it is there.
-        //
-        // Same trap AGENTS.md already records for a session restore that runs above uiWindow.init in the
-        // same method. It is the ATTACH that is the precondition, not the paint.
-        uiWindow.init(mc.displayWidth, mc.displayHeight);
-        trace("UIWindow + stylesheets");
+        @Override
+        public String desktopId() {
+            return DESKTOP_ID;
+        }
+
+        @Override
+        @Nullable
+        public ProtocolConnection<Object> connection() {
+            return CgUiConnections.client();
+        }
     }
 
     /**
@@ -310,77 +366,33 @@ public final class CgUiScreen extends GuiScreen {
      */
     private boolean ensureEditorWindow() {
         if (editorWindow != null) return true;
-        if (!workspace.isConnected()) {
-            // THE FILES LIVE ON THE SERVER (Phase 4 B2) -- in single-player that is the integrated
-            // server -- so there is genuinely nothing for a workbench to show without one. Named rather
-            // than left to throw out of a constructor, because "the editor needs a world" and "the editor
-            // is broken" look identical from the outside, and the second is what a crash report says.
-            CrystalGuiCore.LOGGER.warn("The editor needs a world: CgUiConnections.client() is null, so the "
-                    + "join event has not fired. The desktop is open and the editor is not on it.");
-            return false;
-        }
-        File dataDir = mc.mcDataDir;
-        editor = new CrystalEditor(workspace.client());
-        trace("CrystalEditor construction");
-        // THE SAME storage the desktop's arrangement went into. Two would be two answers to the question
-        // of where a private directory is.
-        editor.useConfig(config);
-
+        // ONE CALL, AND EVERY REFUSAL IS THE REGISTRY'S. "The editor needs a world" used to be a log
+        // line written here, beside the storage wiring, the class registration, the window's title, key,
+        // policy and icon, the first-run geometry, the project ask and the session restore -- fourteen
+        // decisions, none of which is about Minecraft, all of which are the same answer on every host.
+        // What is left below is the two that genuinely are: how big a first-run window is on THIS
+        // display, and that the arrangement record is applied over it rather than under it.
+        com.crystalgui.desktop.app.Application launched = host.desktop().applications()
+                .launch(CrystalEditor.KIND, host.workspace());
+        if (!(launched instanceof WorkbenchApplication)) return false;
+        editor = (WorkbenchApplication) launched;
+        trace("CrystalEditor launch");
         editor.addClass(EDITOR_CLASS);
+        editorWindow = editor.mainWindow();
 
-        // RUN AND STOP, for the file in front. Installed here rather than by CrystalEditor because it
-        // belongs to the LANGUAGE module: the editor is the shell, and a shell that hard-wired a Run
-        // panel would drag ECJ and Rhino into every application built on it. CgUiDockScene installs it
-        // the same way and for the same reason.
-        //
-        // Null when no engine band opened, and the commands are then deliberately NOT registered -- a
-        // Run row that cannot run anything teaches people the feature is broken rather than unavailable.
-        //
-        // The cache root is beside the config rather than inside the workspace: compiled output is
-        // derived, private, and must not become part of a project a resource pack could ship.
-        scripting = ScriptWorkbench.install(
-                CommandRegistry.global(), editor.workbench(),
-                new File(dataDir, "config/crystalgui/script-cache").toPath());
-        if (scripting != null) editor.workbench().revealPanel(RunPanels.RUN_TYPE);
-
-        trace("scripting install");
-        // HIDE_ON_CLOSE, because a workbench is not a dialog: closing it keeps every document, the dock
-        // arrangement and the undo history, and its taskbar entry is how it comes back. That is the same
-        // promise the static fields above already made, now made by the lifecycle instead of by keeping
-        // a reference nobody could see.
-        //
-        // Escape then falls out end to end with nothing here to arrange it: the cascade inside the
-        // window runs first (a dropdown, then a modal), the window is its own last close watcher so its
-        // policy minimises it, and only an Escape that nothing wanted reaches handleKeyboardInput below
-        // and closes the screen.
-        editorWindow = uiWindow.openWindow(new WindowFrame("Crystal Editor"));
-        editorWindow.setPolicy(WindowPolicy.HIDE_ON_CLOSE).setKey("editor:main");
-        editorWindow.setIcon("crystalgui:logo");
-        // setContent, not content().addChild -- it is what ADOPTS the editor's menu bar into the
-        // caption, so the window has one header rather than two stacked on each other.
-        editorWindow.setContent(editor);
-        // A WINDOW ON A DESKTOP, not a full-screen editor — and only as a DEFAULT: the record below
-        // overrides it the moment there is one, so this is what a first run looks like and nothing else.
-        //
-        // It used to maximise here, which was right while the desktop was a migration nobody was meant
-        // to notice: a maximised frame IS the editor that was there before W7. Once the compositor is
-        // the point, that default hides everything it was built for — the taskbar, the caption, snapping,
-        // the fact that there is a desktop at all — behind an application that happens to fill the screen.
+        // A WINDOW ON A DESKTOP, not a full-screen editor -- and only as a DEFAULT: the arrangement
+        // record overrides it the moment there is one, so this is what a first run looks like and
+        // nothing else.
         //
         // Sized in LOGICAL pixels off the display and DEFAULT_UI_SCALE, which is the scale this host
         // deliberately never changes. A percentage in the sheet would be tempting and would lose to the
         // desktop's own cascade, which writes left/top at a higher origin for any window nobody placed.
-        float logicalWidth = mc.displayWidth / UIWindow.DEFAULT_UI_SCALE;
-        float logicalHeight = mc.displayHeight / UIWindow.DEFAULT_UI_SCALE;
+        float logicalWidth = mc.displayWidth / DEFAULT_UI_SCALE;
+        float logicalHeight = mc.displayHeight / DEFAULT_UI_SCALE;
         editorWindow.resizeTo(Math.round(logicalWidth * FIRST_RUN_FRACTION),
                 Math.round(logicalHeight * FIRST_RUN_FRACTION));
         editorWindow.moveTo(Math.round(logicalWidth * (1f - FIRST_RUN_FRACTION) / 2f),
                 Math.round(logicalHeight * (1f - FIRST_RUN_FRACTION) / 2f));
-
-        // WHERE THE ARRANGEMENT LIVES, and nothing else -- CrystalOS W12. The compositor owns reading it,
-        // applying it to windows as they open, and writing it again when the screen closes; a host has no
-        // business holding a second copy of that policy. AFTER the editor window is open, so the record
-        // is applied over the defaults above rather than under them.
         trace("editor window");
         return true;
     }
@@ -407,7 +419,7 @@ public final class CgUiScreen extends GuiScreen {
         // for whatever is behind it -- so an empty desktop has no taskbar either, and F7 pressed before
         // anything was ever opened would show the game and nothing else. The first open therefore builds
         // the editor whichever key asked for it; from then on the two keys differ as they should.
-        boolean nothingOpen = uiWindow.desktop().registry().size() == 0;
+        boolean nothingOpen = desktop().registry().size() == 0;
         if (!showEditorOnOpen && !nothingOpen) return;
         if (!ensureEditorWindow()) return;
         // BUILT, and only RAISED for F6. Opening a window already shows it, so an empty desktop now has
@@ -421,14 +433,12 @@ public final class CgUiScreen extends GuiScreen {
         // it straight back with nothing on screen to explain why.
         showEditorOnOpen = false;
         if (editorWindow.state() == WindowState.HIDDEN) editorWindow.show(true);
-        uiWindow.desktop().activate(editorWindow);
+        desktop().activate(editorWindow);
     }
 
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
-        long now = System.nanoTime();
-        float delta = (float) ((now - lastFrameNanos) / 1_000_000_000.0);
-        lastFrameNanos = now;
+        float delta = frameDelta();
 
         if (closeRequested) {
             closeRequested = false;
@@ -449,7 +459,7 @@ public final class CgUiScreen extends GuiScreen {
             // By this point displayGuiScreen has run onGuiClosed (which entered HUD mode) and nulled the
             // current screen, so the presentation is already HUD and the pinned windows can simply be
             // painted now, in the frame that would otherwise have dropped them.
-            uiWindow.paint(CgUiHud.presentation(), mc.displayWidth, mc.displayHeight);
+            desktop().paint(CgUiHud.presentation(), delta, mc.displayWidth, mc.displayHeight);
             return;
         }
 
@@ -484,26 +494,14 @@ public final class CgUiScreen extends GuiScreen {
         // only appears in game.
         pumpInput();
 
-        // ONE NETWORK TICK, before anything reads the workspace.
-        workspace.pump(delta);
-        ProtocolConnection<Object> live = CgUiConnections.client();
-        if (live != null && live != projectsAskedOn) {
-            projectsAskedOn = live;
-            editor.workbench().fileTree().loadProjects();
-            // AFTER loadProjects, never before: the restore parks the folders it wants expanded and
-            // retries until the listings that reveal them arrive, so asking first parks everything.
-            editor.restoreSession(Mc1710Workspace.PROJECT_ID);
-        }
+        // ONE HOST TICK, before anything reads the workspace: the client is repaired if the wire
+        // moved, and the mount is re-asked. Both were written out here; both are the same on any host.
+        host.frame(delta);
+        // THE PROJECT ASK AND THE SESSION RESTORE WERE HERE, keyed on a static "which wire did I ask
+        // on". Both are the application's: it hangs them off the greeting and the project listing, which
+        // fire again on a reconnect -- so rejoining a different world reads THAT world's record, which
+        // a per-process latch could never do. @see WorkbenchApplication
 
-        // Raw pixels. NOT ScaledResolution -- see the class javadoc.
-        //
-        // And the SCALE stays at UIWindow's own default, which is what CgUiDockScene runs at. Deriving
-        // it from ScaledResolution.getScaleFactor() sounds respectful of the player's preference and is
-        // wrong for this window: MC's GUI scale is tuned for a hotbar and an inventory and reaches 4 on
-        // a large display, so the editor rendered at roughly twice the size of the same panels in the
-        // harness. An IDE is not a game HUD. Matching the harness is also what makes a harness capture
-        // and an in-game one comparable, which is the whole basis for testing one against the other.
-        uiWindow.init(mc.displayWidth, mc.displayHeight);
 
         // MINECRAFT WRITES GL STATE BEHIND CrystalGraphics' BACK, SO THE SHADOW MUST BE DROPPED HERE.
         //
@@ -528,7 +526,7 @@ public final class CgUiScreen extends GuiScreen {
         // no caller decides for itself whether it is its turn. That is the whole of the close flicker:
         // this method closes the screen from inside itself, and the overlay hook for the same frame had
         // already run and stood down, so the frame was painted by nobody. @see DesktopPresentation
-        uiWindow.paint(CgUiHud.presentation(), mc.displayWidth, mc.displayHeight);
+        desktop().paint(CgUiHud.presentation(), delta, mc.displayWidth, mc.displayHeight);
         if (TRACE && !tracedFirstPaint) {
             tracedFirstPaint = true;
             // THE ONE THAT NEEDS A CLIENT. Fonts, glyph atlases, icon SVGs and the first layout of the
@@ -558,14 +556,12 @@ public final class CgUiScreen extends GuiScreen {
         // describing a context that no longer exists.
         CgGlState.invalidateAllIfPresent();
 
-        if (editor != null) editor.giveInitialFocus();
-
         framesPainted++;
         // UNATTENDED SCRIPT RUN, off unless asked for. On the CLIENT THREAD, which is where the Run
         // command runs too -- a probe on a worker would prove nothing about a failure that reaches the
         // game loop. @see CgUiAutoTest#runScriptOnce
         if (framesPainted == CgUiAutoTest.RUN_SCRIPT_ON_FRAME) {
-            CgUiAutoTest.runScriptOnce(scripting);
+            CgUiAutoTest.runScriptOnce();
         }
         // The §15.5 A proof, on the same frame budget. @see CgUiAutoTest#probeLiveBytesOnce
         if (framesPainted == 5) CgUiAutoTest.probeLiveBytesOnce();
@@ -590,7 +586,7 @@ public final class CgUiScreen extends GuiScreen {
      * neither device.</p>
      */
     private void pumpInput() {
-        if (uiWindow == null) return;
+        if (host == null) return;
         if (Mouse.isCreated()) {
             while (Mouse.next()) handleMouseInput();
         }
@@ -611,7 +607,8 @@ public final class CgUiScreen extends GuiScreen {
      */
     @Override
     public void handleKeyboardInput() {
-        if (uiWindow == null) return;
+        UIDocument window = window();
+        if (window == null) return;
         // THE SENSE WAS INVERTED, and both halves of the symptom followed from it.
         //
         // consumeKeyboardEvent returns TRUE when the UI CONSUMED the key -- that return exists precisely
@@ -619,7 +616,7 @@ public final class CgUiScreen extends GuiScreen {
         // closed on an Escape the window had already dealt with, and stayed open on one nobody wanted:
         // Escape on bare desktop did nothing at all, while Escape in the editor closed a popup AND the
         // whole screen. Reported exactly that way -- "it only closes when I escape on the editor".
-        boolean consumed = CgUiInput.pumpKeyboard(uiWindow);
+        boolean consumed = CgUiInput.pumpKeyboard(window);
         if (!consumed && Keyboard.getEventKeyState() && Keyboard.getEventKey() == Keyboard.KEY_ESCAPE) {
             closeRequested = true;
         }
@@ -628,9 +625,10 @@ public final class CgUiScreen extends GuiScreen {
     /** <b>The mouse pump.</b> Once per event, same contract as above. */
     @Override
     public void handleMouseInput() {
-        if (uiWindow == null) return;
+        UIDocument window = window();
+        if (window == null) return;
         // Raw device height, never GuiScreen.height -- see CgUiInput.pumpMouse.
-        CgUiInput.pumpMouse(uiWindow, mc.displayHeight);
+        CgUiInput.pumpMouse(window, mc.displayHeight);
     }
 
     /**
@@ -658,18 +656,7 @@ public final class CgUiScreen extends GuiScreen {
         // records its session and preferences, each because it went off screen and each knowing what it
         // is responsible for. A host says where the config directory is; it does not say what to put in
         // it. @see Desktop#persistTo and CrystalEditor#saveState
-        if (uiWindow != null) {
-            // PINNED WINDOWS SURVIVE THE SCREEN CLOSING, which is the half of a pin that Win32's
-            // WS_EX_TOPMOST has no way to express -- it has no desktop to close. With something pinned
-            // the compositor goes to the HUD instead of off: every UNPINNED window is hidden (detached,
-            // so it freezes exactly as before) and the pinned ones keep laying out, ticking and painting
-            // over the running game through CgUiHud.
-            //
-            // With nothing pinned this is the suspend it always was, which is strictly cheaper: the
-            // whole compositor leaves the tree in one detach rather than window by window.
-            if (uiWindow.hasPinnedWindows()) uiWindow.enterHudMode();
-            else uiWindow.suspendDesktop();
-        }
+        if (host != null) host.hidden();
     }
 
     /**
@@ -695,13 +682,12 @@ public final class CgUiScreen extends GuiScreen {
         return false;
     }
 
-    /** Frees the editor at game shutdown. Not called on close — see the {@code editor} field. */
+    /** Quits the editor at game shutdown. Not called on close — see the {@code editor} field. */
     public static void disposeAll() {
-        if (editor != null) Disposer.dispose(editor);
+        if (editor != null) editor.dispose();
+        if (host != null) host.dispose();
         editor = null;
         editorWindow = null;
-        uiWindow = null;
-        workspace = null;
-        projectsAskedOn = null;
+        host = null;
     }
 }

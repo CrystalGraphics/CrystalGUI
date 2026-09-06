@@ -12,7 +12,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.WeakHashMap;
 
 /**
  * Dispatches by <b>window id as well as method</b>, so more than one UI session can share one wire.
@@ -30,7 +29,7 @@ import java.util.WeakHashMap;
  * <h3>Why it is a layer above the router rather than a change to it</h3>
  *
  * <p>{@code MessageRouter} is the generic transport vocabulary: it knows requests, responses,
- * notifications, cancels and correlation, and it knows nothing about windows — {@code WorkspaceRpc} and a
+ * notifications, cancels and correlation, and it knows nothing about windows — the filesystem and a
  * future {@code script/*} bind to it and have no window to be keyed by. Teaching it {@code UiMethods.WINDOW}
  * would put one subsystem's payload shape into the layer every other subsystem shares. So the split is
  * the same one {@link com.crystalgui.net.wire.FrameMultiplexer} already makes a layer down: the generic
@@ -53,16 +52,6 @@ import java.util.WeakHashMap;
  */
 public final class UiWindowMux<T> {
 
-    /**
-     * One mux per connection, keyed weakly.
-     *
-     * <p>Two of these over one router would each install their own handler for a method and the second
-     * would throw — so "the mux for this connection" has to be a single answer, not something a caller
-     * remembers to share. Same shape and same reason as {@code WorkspaceClient.forConnection}, which was
-     * itself written after two clients on one connection threw on a duplicate {@code fs.changed}.</p>
-     */
-    private static final Map<ProtocolConnection<?>, UiWindowMux<?>> BY_CONNECTION = new WeakHashMap<>();
-
     private final MessageRouter<T> router;
     private final DynamicOps<T> ops;
 
@@ -81,14 +70,21 @@ public final class UiWindowMux<T> {
         this.ops = connection.ops();
     }
 
-    /** The mux for this connection, created on first use. */
+    /**
+     * The mux for this connection, created on first use.
+     *
+     * <p>Two of these over one router would each install their own handler for a method and the second
+     * would be refused by {@link MessageRouter}'s duplicate check — so "the mux for this connection" has
+     * to be a single answer, not something a caller remembers to share.</p>
+     *
+     * <p>Held by the connection ({@link ProtocolConnection#attachment}) rather than in a static
+     * {@code WeakHashMap} here. The memo is per connection, so the connection is what should own it: it
+     * dies when the connection does rather than when a collector happens to notice, and the pattern is
+     * stated once for every subsystem instead of once per subsystem.</p>
+     */
     @SuppressWarnings("unchecked")
-    public static synchronized <T> UiWindowMux<T> of(ProtocolConnection<T> connection) {
-        UiWindowMux<?> existing = BY_CONNECTION.get(connection);
-        if (existing != null) return (UiWindowMux<T>) existing;
-        UiWindowMux<T> created = new UiWindowMux<>(connection);
-        BY_CONNECTION.put(connection, created);
-        return created;
+    public static <T> UiWindowMux<T> of(ProtocolConnection<T> connection) {
+        return (UiWindowMux<T>) connection.attachment(UiWindowMux.class, c -> new UiWindowMux<>(c));
     }
 
     // ── Registration ────────────────────────────────────────────────────────────────────────────

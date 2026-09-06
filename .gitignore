@@ -40,3 +40,7 @@ layout.json
 research_repos/
 docs_research/
 NUL
+__pycache__/
+
+# The plans, cloned by hand from a private remote. Absent is normal.
+/plan/

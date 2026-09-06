@@ -431,7 +431,8 @@ notificationsview .__notification__ .__message__ {
 /* A STATUS-BAR TOOLTIP GETS MORE ROOM. 170px is tuned for a label or a toolbar button, where the tooltip
  * is a few words; a status item's tooltip is the sentence its four-word readout left out — a compile
  * summary, a driver's refusal — and at the default width that is five or six lines of very short measure. */
-.__status-bar__ tooltip .__label__ {
+.__status-bar__ tooltip .__label__,
+.__status-bar__ tooltip::part(label) {
     max-width: 255px;
 }
 
@@ -1215,10 +1216,63 @@ progressbar {
     overflow: hidden;
 }
 
-progressbar .__fill__ {
+progressbar .__fill__,
+progressbar::part(fill) {
     height: 100%;
     background-color: var(--progress-fill-bg, #3D7AB8);
     border-radius: 2px;
+}
+
+/* ── RadarChart ─────────────────────────────────────────────────────────────────────────────────
+ * A size, because a chart has no content to be sized by: its labels are out of flow, so an unsized
+ * one measures zero and draws nothing. Square, since the plot is a circle inscribed in the box.
+ *
+ * `color` IS THE WEB. The rings and the spokes read the element's computed colour, which is the one
+ * property a chart-shaped widget can carry without inventing a part that exists only to hold a
+ * value -- and it inherits, so a panel setting a colour dims its charts with it. Each axis's own
+ * colour is DATA and arrives inline on its label, which is why nothing here names one.
+ *
+ * `--radar-web` is defined in no theme on purpose: it is the same neutral line in every one shipped,
+ * so it rides this fallback and a theme that wants otherwise simply defines it. */
+radarchart {
+    width: 160px;
+    height: 160px;
+    /* THE WEB'S COLOUR, and only its colour. border-WIDTH is deliberately not set: a border box is
+     * drawn whether or not the element has a background, so any width here puts a rectangle around
+     * the plot. The stroke thickness is the `web` part's height instead. */
+    border-color: var(--radar-web, #3C3F41);
+}
+/* Not drawn. It carries the web's stroke thickness as its height, which is the one way to state that
+ * in CSS for a widget whose lines are not its border. Absolute and zero-width, so it costs nothing. */
+radarchart::part(web) {
+    height: 1px;
+    width: 0;
+}
+/* Not drawn either. The ALPHA of this colour is how strongly a wedge fills; its rgb is ignored,
+ * because the hue is the axis's. Faint on purpose: the rim is drawn opaque, and the contrast between
+ * a washed fill and its own saturated outline is what stops a wedge chart reading as a pie. */
+radarchart::part(fill) {
+    height: 0;
+    width: 0;
+    background-color: var(--radar-fill, #FFFFFF6D);
+}
+/* The marker on each value vertex, and the ONE thing in a chart that can be hovered -- which is
+ * why it is an element rather than something the paint pass draws: hit testing works on boxes.
+ * SQUARE, so 50% is a circle, the same reason the slider thumb can use a percentage radius and a
+ * tab cannot. Its colour is the axis's and arrives inline; only the size and the shape are the
+ * theme's. */
+radarchart::part(point) {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+}
+radarchart::part(axis-label) {
+    font-weight: bold;
+    /* THE GAP BETWEEN A LABEL AND ITS VERTEX -- Chart.js's pointLabels.padding, and it needs no Java
+     * because the placement already works off the label's OUTER box: whichever edge faces the chart
+     * sits on the vertex, so padding on that edge is the gap. Without it "WIL" touches the bottom
+     * point of the polygon it names. */
+    padding-all: 4px;
 }
 
 /* THE GLYPH GOES IN `overlay`, NOT `background` — which is what lets it have a hover chip at all.

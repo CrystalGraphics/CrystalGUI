@@ -1,6 +1,6 @@
 package com.crystalgui.testsupport;
 
-import com.crystalgui.ui.elements.desktop.Desktop;
+import com.crystalgui.desktop.Desktop;
 import org.junit.Before;
 
 /**
@@ -43,6 +43,10 @@ public abstract class UiTestBase {
         // would be asserting against wall time. Worse, a live transform is a REAL transform -- hit
         // testing goes through the same chain the paint does -- so a test pressing a caption during an
         // opening animation would miss it, by an amount that depends on how fast the machine is.
+        // THE NEW COMPOSITOR'S FLAG. This named `ui.elements.desktop.Desktop` -- the OLD one -- so
+        // every new-engine test extending this base had its animations quieted on a static nothing it
+        // used was reading. The reasoning above is unchanged and was always right; it was pointed at
+        // the wrong class, which is invisible because both spellings compile and neither complains.
         Desktop.setAnimationsEnabled(false);
     }
 }

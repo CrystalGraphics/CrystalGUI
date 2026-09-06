@@ -6,7 +6,7 @@ package com.crystalgui.text.lang;
  *
  * <h3>Every kind names a capture, and that is deliberate</h3>
  *
- * <p>{@link #captureName()} maps a kind onto the highlighting vocabulary ({@code plan_syntax.md} §10.1),
+ * <p>{@link #captureName()} maps a kind onto the highlighting vocabulary ({@code plan/lang-stack.md} §10.1),
  * which is what lets a semantic token provider be written without inventing a second colour vocabulary
  * beside the grammars'. That matters more than it looks: the whole value of semantic tokens is
  * <em>correcting</em> what the grammar guessed, so both have to be saying the same kind of thing. A

@@ -9,10 +9,10 @@ import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.ElementRegistry;
-import com.crystalgui.ui.UIElement;
-import com.crystalgui.ui.elements.Button;
-import com.crystalgui.ui.elements.Slider;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UIElementRegistry;
+import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.control.Slider;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -61,16 +61,16 @@ public class TwoWindowsOnOneConnectionTest {
     private Button buttonOne;
     private Button buttonTwo;
 
-    private ServerUiSession<Object> windowOne;
-    private ServerUiSession<Object> windowTwo;
+    private ServerUiSession<UIElement, Object> windowOne;
+    private ServerUiSession<UIElement, Object> windowTwo;
 
-    private ClientUiSessions<Object> client;
-    private final List<ClientUiSession<Object>> created = new ArrayList<>();
+    private ClientUiSessions<UIElement, Object> client;
+    private final List<ClientUiSession<UIElement, Object>> created = new ArrayList<>();
 
     @Before
     public void setUp() {
         Protocols.resetForTesting();
-        ElementRegistry.bootstrapBuiltins();
+        UIElementRegistry.bootstrap();
 
         link = InMemoryTransport.pair();
         serverSide = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "alice");
@@ -80,19 +80,19 @@ public class TwoWindowsOnOneConnectionTest {
         buttonOne = new Button("one");
         sliderOne = new Slider();
         sliderOne.setRange(0f, 10f);
-        rootOne.addChild(buttonOne);
-        rootOne.addChild(sliderOne);
+        rootOne.append(buttonOne);
+        rootOne.append(sliderOne);
 
         rootTwo = new UIElement();
         buttonTwo = new Button("two");
         sliderTwo = new Slider();
         sliderTwo.setRange(0f, 10f);
-        rootTwo.addChild(buttonTwo);
-        rootTwo.addChild(sliderTwo);
+        rootTwo.append(buttonTwo);
+        rootTwo.append(sliderTwo);
 
         // THE LINE THAT USED TO THROW.
-        windowOne = new ServerUiSession<>(1, rootOne, serverSide);
-        windowTwo = new ServerUiSession<>(2, rootTwo, serverSide);
+        windowOne = Sessions.serveOn(1, rootOne, serverSide);
+        windowTwo = Sessions.serveOn(2, rootTwo, serverSide);
 
         client = ClientUiSessions.forConnection(clientSide);
         client.onSession(created::add);
@@ -114,8 +114,8 @@ public class TwoWindowsOnOneConnectionTest {
         }
     }
 
-    private ClientUiSession<Object> clientWindow(int id) {
-        ClientUiSession<Object> session = client.session(id);
+    private ClientUiSession<UIElement, Object> clientWindow(int id) {
+        ClientUiSession<UIElement, Object> session = client.session(id);
         assertNotNull("no client session for window " + id, session);
         return session;
     }
@@ -138,8 +138,8 @@ public class TwoWindowsOnOneConnectionTest {
         assertNotNull("window 2 must have a tree", two);
         assertNotSame("and they must not be the same tree", one, two);
 
-        assertEquals("one", ((Button) one.getChildren().get(0)).getText());
-        assertEquals("two", ((Button) two.getChildren().get(0)).getText());
+        assertEquals("one", ((Button) one.children().get(0)).getText());
+        assertEquals("two", ((Button) two.children().get(0)).getText());
     }
 
     /**
@@ -160,17 +160,17 @@ public class TwoWindowsOnOneConnectionTest {
         settle();
 
         assertEquals("window 1 moved", 7f,
-                ((Slider) clientWindow(1).root().getChildren().get(1)).getValue(), 0.001f);
+                ((Slider) clientWindow(1).root().children().get(1)).getValue(), 0.001f);
         assertEquals("window 2 must not have", 0f,
-                ((Slider) clientWindow(2).root().getChildren().get(1)).getValue(), 0.001f);
+                ((Slider) clientWindow(2).root().children().get(1)).getValue(), 0.001f);
 
         sliderTwo.setValue(3f);
         settle();
 
         assertEquals("window 2 moved", 3f,
-                ((Slider) clientWindow(2).root().getChildren().get(1)).getValue(), 0.001f);
+                ((Slider) clientWindow(2).root().children().get(1)).getValue(), 0.001f);
         assertEquals("and window 1 stayed where it was", 7f,
-                ((Slider) clientWindow(1).root().getChildren().get(1)).getValue(), 0.001f);
+                ((Slider) clientWindow(1).root().children().get(1)).getValue(), 0.001f);
     }
 
     /** An event goes back to the session that described the element, not to whichever registered last. */
@@ -178,13 +178,13 @@ public class TwoWindowsOnOneConnectionTest {
     public void anEventReachesOnlyItsOwnSession() {
         AtomicInteger pressesOne = new AtomicInteger();
         AtomicInteger pressesTwo = new AtomicInteger();
-        windowOne.onActivate(buttonOne, ctx -> pressesOne.incrementAndGet());
-        windowTwo.onActivate(buttonTwo, ctx -> pressesTwo.incrementAndGet());
+        windowOne.on(buttonOne, Button.ACTIVATE, ctx -> pressesOne.incrementAndGet());
+        windowTwo.on(buttonTwo, Button.ACTIVATE, ctx -> pressesTwo.incrementAndGet());
         windowOne.open();
         windowTwo.open();
         settle();
 
-        ((Button) clientWindow(2).root().getChildren().get(0)).onPressed.emit();
+        ((Button) clientWindow(2).root().children().get(0)).onPressed.emit();
         settle();
 
         assertEquals("window 2's button", 1, pressesTwo.get());
@@ -241,7 +241,7 @@ public class TwoWindowsOnOneConnectionTest {
         sliderTwo.setValue(5f);
         settle();
         assertEquals("window 2 still receives deltas", 5f,
-                ((Slider) clientWindow(2).root().getChildren().get(1)).getValue(), 0.001f);
+                ((Slider) clientWindow(2).root().children().get(1)).getValue(), 0.001f);
     }
 
     /**
@@ -263,9 +263,9 @@ public class TwoWindowsOnOneConnectionTest {
 
         UIElement replacementRoot = new UIElement();
         Button replacementButton = new Button("reopened");
-        replacementRoot.addChild(replacementButton);
+        replacementRoot.append(replacementButton);
 
-        ServerUiSession<Object> replacement = new ServerUiSession<>(1, replacementRoot, serverSide);
+        ServerUiSession<UIElement, Object> replacement = Sessions.serveOn(1, replacementRoot, serverSide);
         replacement.open();
         for (int i = 0; i < 24; i++) {
             link[0].deliver();
@@ -279,7 +279,7 @@ public class TwoWindowsOnOneConnectionTest {
         assertNotNull("window 1 must open again in the id its predecessor released",
                 client.session(1));
         assertEquals("reopened",
-                ((Button) clientWindow(1).root().getChildren().get(0)).getText());
+                ((Button) clientWindow(1).root().children().get(0)).getText());
         assertNotNull("and window 2 is untouched", client.session(2));
     }
 
@@ -343,9 +343,9 @@ public class TwoWindowsOnOneConnectionTest {
                 Protocols.open(solo[1], PlainOps.INSTANCE, () -> { }, null);
 
         UIElement root = new UIElement();
-        root.addChild(new Button("solo"));
-        ServerUiSession<Object> server = new ServerUiSession<>(7, root, soloServer);
-        ClientUiSession<Object> view = new ClientUiSession<>(soloClient);
+        root.append(new Button("solo"));
+        ServerUiSession<UIElement, Object> server = Sessions.serveOn(7, root, soloServer);
+        ClientUiSession<UIElement, Object> view = Sessions.viewOn(soloClient);
 
         server.open();
         for (int i = 0; i < 24; i++) {
@@ -357,7 +357,7 @@ public class TwoWindowsOnOneConnectionTest {
         }
 
         assertNotNull(view.root());
-        assertEquals("solo", ((Button) view.root().getChildren().get(0)).getText());
+        assertEquals("solo", ((Button) view.root().children().get(0)).getText());
         assertEquals(7, view.windowId());
     }
 
@@ -371,7 +371,7 @@ public class TwoWindowsOnOneConnectionTest {
     @Test
     public void aPlainSessionAndTheHostCannotShareAConnection() {
         try {
-            new ClientUiSession<>(clientSide);
+            Sessions.viewOn(clientSide);
             fail("a plain session must not be able to join a connection the host already owns");
         } catch (IllegalStateException expected) {
             assertTrue("the message must name the method: " + expected.getMessage(),

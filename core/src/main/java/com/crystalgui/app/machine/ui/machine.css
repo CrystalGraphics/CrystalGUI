@@ -1,0 +1,260 @@
+/*
+ * The machine panel's theme -- step 3 of the example. See MachineStyles.java, which loads this file
+ * and hands it to the client as a SheetRef.
+ *
+ * It sits beside the Java it styles rather than under src/main/resources, so the panel is one
+ * directory: model, tree, theme, both session halves. core/build.gradle.kts adds src/main/java as a
+ * resource root (excluding *.java) to make that work -- see the comment there.
+ *
+ * Deliberately small. The engine's user-agent sheet already gives every widget functional geometry,
+ * so an author's sheet is a diff against something that works rather than a description from
+ * nothing. That is what MachineServer's setUseUserAgentSheet(true) is for: with it off, the client
+ * applies this and nothing else, and the panel is a stack of unstyled boxes.
+ *
+ * Note what is NOT here: no rule sets a colour by a literal in a widget's Java. Anything written
+ * from Java arrives at INLINE origin, which outranks every stylesheet rule at any specificity -- so
+ * a rule competing with one is not overridden, it never applies at all, and nothing reports that.
+ */
+
+.machine-panel {
+    padding: 12px;
+    flex-direction: column;
+    gap-all: 8px;
+    /* Wide enough for a demo entry's second line to sit on one row. At 320px every outcome
+       sentence wrapped to three lines and the strip was taller than the machine above it. */
+    width: 560px;
+}
+
+.machine-row {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 8px;
+}
+
+.machine-title {
+    font-size: 14;
+    color: #E8E8E8;
+}
+
+/*
+ * font-size does not effectively inherit -- the user-agent sheet opens with `* { font-size: 10 }`,
+ * which is a candidate at STYLESHEET origin on EVERY element, and inheritance only applies where a
+ * property has no candidate at any origin. So this has to sit on the text element itself; on the row
+ * around it, it would resolve correctly on the row and change nothing about the label inside.
+ */
+.machine-label {
+    color: #AAAAAA;
+}
+
+.machine-status {
+    color: #7FB8FF;
+}
+
+/*
+ * The protocol demo readout. Amber rather than the status line's blue, because it answers a
+ * different question -- the status line says what the MACHINE is doing, this says what the WIRE
+ * last did, and the two update from unrelated events.
+ *
+ * A WIDTH, because this sits in a row beside its author badge and the longest message is well over
+ * a hundred characters. Sized by the sheet (the element calls neverSelfSizeWidth) it wraps inside
+ * this box; left to size itself it would push the row past the panel edge.
+ */
+.machine-wire {
+    width: 440px;
+    color: #E8B65A;
+}
+
+/*
+ * WHO WROTE THE LINE. Deliberately not blue or grey: those two already mean REQUEST and NOTIFY in
+ * the strip above, and reusing them here would have the same colour answering two questions.
+ */
+.machine-who-server {
+    background-color: #4EC9A0;
+}
+
+.machine-who-client {
+    background-color: #C586C0;
+}
+
+/*
+ * ── THE PROTOCOL DEMO STRIP ───────────────────────────────────────────────────────────────────
+ *
+ * Every demo button is the SAME WIDTH and first on its row, so the five of them form a column the
+ * eye can run down. Sized here rather than in Java for the reason at the top of this file: a width
+ * written from Java lands at INLINE origin and no stylesheet rule could ever move it again.
+ */
+#pingClient,
+#announce,
+#askStats,
+#heartbeat,
+#badRename {
+    width: 120px;
+}
+
+.machine-hint {
+    color: #808080;
+}
+
+/* One entry: the button row, then the sentence under it. */
+.machine-demo {
+    flex-direction: column;
+    gap-all: 2px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+/*
+ * The KIND badge -- the first thing to read, because it answers the only question that matters:
+ * is an answer coming back? Fixed width so the three labels line up into a column.
+ */
+.machine-kind {
+    width: 62px;
+    text-align: center;
+    color: #1E1E1E;
+}
+
+/* Blue for "an answer is coming back". */
+.machine-kind-request {
+    background-color: #4A9EFF;
+}
+
+/* Grey for "nothing comes back" -- deliberately quieter, because less happens. */
+.machine-kind-notify {
+    background-color: #9A9A9A;
+}
+
+/* Red for the one the server says no to. */
+.machine-kind-refused {
+    background-color: #E06C5A;
+}
+
+.machine-direction {
+    width: 118px;
+    color: #CCCCCC;
+}
+
+/*
+ * The exact string on the wire. Amber to match the result readout, because they are the two places
+ * the same vocabulary appears -- press "Ask stats" and machine/stats is what shows up in the log.
+ */
+.machine-method {
+    color: #E8B65A;
+}
+
+/* The sentence. Indented to the button's width so it hangs under the description, not the button. */
+.machine-outcome {
+    margin-left: 128px;
+    color: #9A9A9A;
+}
+
+/* Matched by setId(...) in MachinePanel. Unrelated to the network ids the protocol addresses by. */
+#throughput {
+    width: 160px;
+}
+
+#progress {
+    width: 160px;
+}
+
+#label {
+    width: 160px;
+}
+
+#purge {
+    width: 90px;
+}
+
+/*
+ * -- THE NESTED ENGINE PANEL -------------------------------------------------------------------
+ *
+ * EnginePanel is a Networked element, so `enginepanel` is a real tag the cascade can match: the
+ * same registration that lets a description decode into the class makes it styleable by type. It is
+ * matched by CLASS here anyway, because the class is what MachinePanel toggles.
+ *
+ * HIDDEN BY DEFAULT, and this file is the only thing that decides so. The client adds
+ * .machine-engine-open when the button is pressed, and nothing about that crosses the wire. Nothing
+ * in Java writes `display` either -- a display written from Java would land at INLINE origin, and no
+ * stylesheet rule could ever move it again.
+ *
+ * Two classes on one element beat one (specificity 20 against 10), which is what lets the open rule
+ * win with no !important anywhere.
+ */
+.machine-engine {
+    display: none;
+    flex-direction: column;
+    gap-all: 6px;
+    padding: 8px;
+    margin-left: 12px;
+    background-color: #232323;
+}
+
+.machine-engine.machine-engine-open {
+    display: flex;
+}
+
+/*
+ * The result lines are narrower in here than in the panel around them: this box is inset by a
+ * margin and its own padding, and .machine-wire is a fixed 440px because these lines are sized by
+ * the sheet rather than by their text. Left alone, the badge plus the line overhangs the box by a
+ * couple of pixels -- and an overhang is not clipped, it is drawn over whatever is beside it.
+ */
+.machine-engine .machine-wire {
+    width: 400px;
+}
+
+/*
+ * IDS ARE DOCUMENT-WIDE, and a nested panel does not get a namespace for them.
+ *
+ * The scope prefixes WIRE METHODS -- engine/tune -- and deliberately nothing else. An element id is
+ * for the cascade, so #load below matches the engine slider wherever it happens to be nested, and a
+ * field named `progress` on both panels would be one selector matching two widgets. Worth knowing
+ * before naming a child field after a parent one: the BIND still resolves correctly, because each
+ * panel searches its own subtree, and the stylesheet does not.
+ */
+#showEngine {
+    width: 120px;
+}
+
+#load,
+#heat {
+    width: 160px;
+}
+
+#restart,
+#tune {
+    width: 120px;
+}
+
+/*
+ * The three collections, side by side.
+ *
+ * A fixed height on each column is what makes the streams demonstrable rather than merely correct: a
+ * column sized to its content would realise every row the window holds and there would be nothing to
+ * scroll, which is the one thing a viewer has to do for a window to move.
+ */
+.machine-streams {
+    flex-direction: row;
+    gap-all: 12px;
+    margin-top: 10px;
+}
+
+.machine-stream-column {
+    width: 0;
+    flex-grow: 1;
+    height: 180px;
+    gap-all: 3px;
+    overflow: auto;
+}
+
+.machine-slot {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 6px;
+    height: 20px;
+}
+
+.machine-take {
+    width: 54px;
+    min-height: 16px;
+    height: 16px;
+}
