@@ -1,8 +1,7 @@
-package com.crystalgui.widget.surface;
+package com.crystalgui.widget.surface.insert;
 
 import java.util.List;
 
-import com.crystalgui.widget.surface.insert.Insertable;
 
 /**
  * Where the insert menu gets its rows — a node library, a template folder, a list of recent picks.

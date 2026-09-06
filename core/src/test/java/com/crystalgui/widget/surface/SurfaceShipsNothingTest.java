@@ -5,6 +5,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.util.List;
 
+import com.crystalgui.widget.surface.mode.ToolKind;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;

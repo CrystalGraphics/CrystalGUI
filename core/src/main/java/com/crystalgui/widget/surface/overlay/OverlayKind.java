@@ -1,10 +1,11 @@
-package com.crystalgui.widget.surface;
+package com.crystalgui.widget.surface.overlay;
 
 import java.util.function.Function;
 
 import javax.annotation.Nullable;
 
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.surface.SurfaceContext;
 
 /**
  * <b>An overlay in one declaration</b> — something drawn over the surface that is not part of what is

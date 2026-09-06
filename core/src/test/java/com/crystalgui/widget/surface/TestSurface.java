@@ -13,7 +13,10 @@ import com.crystalgui.widget.config.inspector.InspectorSection;
 import com.crystalgui.widget.surface.extension.SurfaceExtension;
 import com.crystalgui.widget.surface.insert.Insertable;
 import com.crystalgui.widget.surface.mode.Tool;
+import com.crystalgui.widget.surface.mode.ToolKind;
+import com.crystalgui.widget.surface.overlay.OverlayKind;
 import com.crystalgui.widget.surface.overlay.ViewMode;
+import com.crystalgui.widget.surface.overlay.ViewModeKind;
 
 /** The stand-in consumer the engine's own tests run against: a policy, and an extension of everything. */
 final class TestSurface {
@@ -59,11 +62,11 @@ final class TestSurface {
         public Disposable activate(SurfaceContext surface) {
             List<Disposable> handles = new ArrayList<>();
             handles.add(surface.registerTool(ToolKind.of("test:tool", "Tool")
-                    .tool(ctx -> new Tool() { })));
+                                                     .tool(ctx -> new Tool() { })));
             handles.add(surface.registerOverlay(OverlayKind.of("test:overlay", "Overlay")
-                    .element(ctx -> new UIElement())));
+                                                           .element(ctx -> new UIElement())));
             handles.add(surface.registerViewMode(ViewModeKind.of("test:mode", "Mode")
-                    .mode(ctx -> new ViewMode() {
+                                                             .mode(ctx -> new ViewMode() {
                         @Override
                         public void enter() {
                         }

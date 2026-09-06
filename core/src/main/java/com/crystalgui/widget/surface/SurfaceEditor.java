@@ -18,6 +18,11 @@ import com.crystalgui.widget.canvas.CanvasView;
 import com.crystalgui.widget.config.inspector.InspectorRegistry;
 import com.crystalgui.widget.config.inspector.InspectorSection;
 import com.crystalgui.widget.surface.extension.SurfaceExtensions;
+import com.crystalgui.widget.surface.insert.InsertSource;
+import com.crystalgui.widget.surface.mode.ToolKind;
+import com.crystalgui.widget.surface.overlay.OverlayKind;
+import com.crystalgui.widget.surface.overlay.ViewModeKind;
+import com.crystalgui.widget.surface.select.SurfaceSelection;
 
 /**
  * <b>An editing surface</b>: a plane of items you select, move, insert into and look at through tools
@@ -58,6 +63,7 @@ public class SurfaceEditor extends UIElement implements SurfaceContext, DataProv
     private final SurfacePolicy policy;
     private final CanvasView canvas = new CanvasView();
     private final Surface surface;
+    private final SurfaceSelection selection;
 
     private final List<ToolKind> tools = new ArrayList<>();
     private final List<OverlayKind> overlays = new ArrayList<>();
@@ -94,6 +100,7 @@ public class SurfaceEditor extends UIElement implements SurfaceContext, DataProv
                 l -> l.widthPercent(100f).heightPercent(100f));
         appendStructural(canvas);
         this.surface = new Surface(canvas);
+        this.selection = new SurfaceSelection(policy::markSelected);
         this.extensions = SurfaceExtensions.activate(this, enabled);
     }
 
@@ -102,6 +109,11 @@ public class SurfaceEditor extends UIElement implements SurfaceContext, DataProv
     @Override
     public Surface surface() {
         return surface;
+    }
+
+    @Override
+    public SurfaceSelection selection() {
+        return selection;
     }
 
     @Override

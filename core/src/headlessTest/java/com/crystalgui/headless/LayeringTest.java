@@ -119,6 +119,7 @@ public class LayeringTest {
             // the position is documentation; what the entry buys is that the package is GOVERNED,
             // and the order inside it is SurfaceLayeringTest's.
             "com/crystalgui/widget/surface/",
+            "com/crystalgui/widget/surface/select/",
             "com/crystalgui/widget/surface/mode/",
             "com/crystalgui/widget/surface/overlay/",
             "com/crystalgui/widget/surface/insert/",

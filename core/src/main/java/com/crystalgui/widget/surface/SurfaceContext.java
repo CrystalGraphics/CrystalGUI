@@ -3,6 +3,11 @@ package com.crystalgui.widget.surface;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.widget.config.inspector.InspectorSection;
+import com.crystalgui.widget.surface.insert.InsertSource;
+import com.crystalgui.widget.surface.mode.ToolKind;
+import com.crystalgui.widget.surface.overlay.OverlayKind;
+import com.crystalgui.widget.surface.overlay.ViewModeKind;
+import com.crystalgui.widget.surface.select.SurfaceSelection;
 
 /**
  * <b>What a surface extension is written against</b> — the editor's surface, without the editor's class.
@@ -32,6 +37,9 @@ public interface SurfaceContext {
 
     /** The plane, the view onto it, and the theme. */
     Surface surface();
+
+    /** What is selected, and the one signal that says it changed. */
+    SurfaceSelection selection();
 
     Disposable registerTool(ToolKind kind);
 
