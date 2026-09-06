@@ -47,6 +47,14 @@ public final class UiBuilderContribution implements WorkbenchExtension {
                 "cgui");
         // The kind is registered ON the workbench, so it goes when the workbench does and needs no
         // handle of its own. @see WorkbenchExtension
-        return () -> { };
+        Disposable commands = BuilderCommands.register();
+        // THE ONE THING IN A PROCESS-WIDE REGISTRY, so it is what this handle has to be able to take
+        // back. Counted: a second editor must not double the forms, and the first one closing must not
+        // empty the inspector under the second. The graph's own note, and the same shape.
+        Disposable sections = BuilderInspectorSections.register();
+        return () -> {
+            sections.dispose();
+            commands.dispose();
+        };
     }
 }
