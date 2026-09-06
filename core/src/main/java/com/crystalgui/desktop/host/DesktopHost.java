@@ -86,6 +86,7 @@ public final class DesktopHost implements Disposable {
         this.config = desktop.config();
         this.cacheRoot = desktop.cacheRoot();
         // AND THE ARRANGEMENT, which the compositor owns reading, applying and writing again.
+        desktop.useLocalWorld(services::localWorldDirectory);
         desktop.persistAs(services.desktopId());
         this.mount = new DesktopWindowMount(document);
     }

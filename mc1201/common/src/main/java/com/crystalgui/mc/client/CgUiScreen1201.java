@@ -21,6 +21,8 @@ import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.workbench.app.WorkbenchApplication;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.world.level.storage.LevelResource;
+import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -132,6 +134,20 @@ public final class CgUiScreen1201 extends Screen {
             Minecraft mc = Minecraft.getInstance();
             // THE GAME DIRECTORY, not crystalgui/ inside it -- the engine adds that segment.
             return (mc == null ? new File(".") : mc.gameDirectory).toPath();
+        }
+
+        /**
+         * The save directory in single-player, null on someone else's server.
+         *
+         * <p>{@code getSingleplayerServer()} is the whole test: it answers non-null exactly when this
+         * client is also the server, which is when its own disk holds the world.</p>
+         */
+        @Override
+        @Nullable
+        public Path localWorldDirectory() {
+            Minecraft mc = Minecraft.getInstance();
+            IntegratedServer server = mc == null ? null : mc.getSingleplayerServer();
+            return server == null ? null : server.getWorldPath(LevelResource.ROOT);
         }
 
         @Override

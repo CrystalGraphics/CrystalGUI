@@ -1,5 +1,7 @@
 package com.crystalgui.mc.client;
 
+import net.minecraft.world.WorldServer;
+import net.minecraft.server.MinecraftServer;
 import com.crystalgui.desktop.host.DesktopHost;
 import com.crystalgui.desktop.host.HostServices;
 import java.nio.file.Path;
@@ -338,6 +340,23 @@ public final class CgUiScreen extends GuiScreen {
             // THE GAME DIRECTORY, not crystalgui/ inside it -- the engine adds that segment, along with
             // workspace-config/, cache/ and projects/ below it.
             return mc.mcDataDir.toPath();
+        }
+
+        /**
+         * The save directory in single-player, null on someone else's server.
+         *
+         * <p>An integrated server is one this client is running, so its world is on this disk. A
+         * client connected outward has no {@code MinecraftServer} at all, which is the null.</p>
+         */
+        @Override
+        @Nullable
+        public Path localWorldDirectory() {
+            MinecraftServer server = MinecraftServer.getServer();
+            if (server == null || server.isDedicatedServer()) return null;
+            WorldServer[] worlds = server.worldServers;
+            if (worlds == null || worlds.length == 0 || worlds[0] == null) return null;
+            File directory = worlds[0].getSaveHandler().getWorldDirectory();
+            return directory == null ? null : directory.toPath();
         }
 
         @Override
