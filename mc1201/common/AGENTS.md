@@ -1,34 +1,34 @@
 # mc1201/common — Agent Knowledge Base
 
-> ⚠️ **Not in the build.** `includeBuild("mc1201")` is commented out in the root
-> `settings.gradle.kts`, so none of the commands below run until it is uncommented. The sources are
-> real; the module is not currently compiled or tested by anything.
+The MC 1.20.x code that is not a loader's. Compiled against MC 1.20.1 + MinecraftForge 47.2.0 via
+`legacyForge` in `cg-mc1201-common.gradle.kts`, and consumed by `forge`, `neoforge` and `fabric`
+through the `commonOutput` configuration.
 
-Shared MC 1.20.x platform implementation. Compiles against MC 1.20.1 + MinecraftForge 47.2.0
-via `legacyForge` in `cg-mc1201-common.gradle.kts`. The compiled JAR is consumed by all three
-loader subprojects (`forge`, `neoforge`, `fabric`) via the `commonOutput` configuration.
-
-## Build
+**No loader type appears here.** A Forge, NeoForge or Fabric import in this module is a mistake — it
+compiles against one loader and is used by three.
 
 ```bash
-./gradlew :mc1201:common:compileJava   # compiles shared sources only
+./gradlew :mc1201:common:compileJava
 ```
-
-No loader-specific types (Forge/NeoForge/Fabric APIs) appear in this module.
 
 ## Package Guide
 
 | Package | What it contains |
 |---|---|
-| `com.crystalgui.mc.platform` | `CgPlatformService1201` (the CrystalGUI-side platform bridge) and `CrystalGUI1201` (shared bootstrap) — the module's only two source files |
-
-There is no `com.crystalgui.mc.mixin` package and no per-package `AGENTS.md` here. (An earlier version
-of this table claimed both, having been copied from `CrystalGraphics/mc1201/common/AGENTS.md`, where
-`MixinGameRenderer` / `MixinMinecraftShutdown` do exist. CrystalGUI's own mixin configs are per-loader
-JSON in `forge/`, `neoforge/` and `fabric/`.)
+| `com.crystalgui.mc.platform` | `Lifecycle1201` — **the one class a loader talks to**: bootstrap, client init, the server and client ticks, player join/leave, overlay paint, and the mouse/key offers. Plus `CrystalGUI1201`, which holds the mod id and name |
+| `com.crystalgui.mc.client` | The host: `CgUiScreen1201` (the viewport a desktop attaches to), `CgUiInput1201`, `CgUiHud1201`, `CgUiHostGl1201`, `CgUiKeybinds1201`, `ClientProbe1201` |
+| `com.crystalgui.mc.net` | `Connections1201`, `Peer1201`, `WorkspaceHost1201` (where the served workspace is), and `ServerSmoke1201` |
+| `com.crystalgui.mc.example` | `MachineExample1201` and its client half — the worked example, not engine code |
 
 ## Key Design Points
 
-- **No GL calls in constructors** — all GL work deferred to first `CgGraphicsLifecycle.onOpaquePass` call (lazy init via `onRenderFrame`)
-- **Mixin AP**: provided by `legacyForge`; do NOT add a second `annotationProcessor` for Mixin in this module — it causes duplicate-AP SRG mapping errors
-- **`legacyForge` not `neoForge`**: NeoForm 1.20.1 was never published; `legacyForge{version="1.20.1-47.2.0"}` is the only ModDevGradle path
+- **`Lifecycle1201` is the seam.** A loader subscribes its own events and forwards; every body on the
+  far side is one call into this module. Anything a loader does beyond registering is in the wrong
+  place — see the loader modules' own notes.
+- **The transport is the exception.** Three loaders mean three networking APIs, so each builds its own
+  `CgNetworkChannel` and passes it to `Lifecycle1201.bootstrap`.
+- **No GL in constructors or static initialisers.** GL work waits for the first paint.
+- **Mixin AP**: provided by `legacyForge`. Do not add a second `annotationProcessor` for Mixin here —
+  it produces duplicate-AP SRG mapping errors.
+- **`legacyForge`, not `neoForge`**: NeoForm 1.20.1 was never published, so
+  `legacyForge { version = "1.20.1-47.2.0" }` is the only ModDevGradle path.
