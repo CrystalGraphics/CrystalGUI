@@ -127,7 +127,25 @@ public final class HierarchyPanel extends UIElement {
 
     /** Rebuilds the rows from the document, keeping what was expanded. */
     public void refresh() {
-        tree.refresh();
+        withoutWritingBack(tree::refresh);
+    }
+
+    /**
+     * Runs something that rebuilds the tree, <b>without letting it answer itself</b>.
+     *
+     * <p>A refresh re-emits the list's own selection, and that lands in {@link #chooseRows}, which writes
+     * the shared selection. So a rebuild triggered by the selection changing writes back whatever the
+     * rebuilt list happened to have — the row highlight and the inspector then name different nodes, and
+     * neither is what was clicked.</p>
+     */
+    private void withoutWritingBack(Runnable rebuild) {
+        boolean was = syncing;
+        syncing = true;
+        try {
+            rebuild.run();
+        } finally {
+            syncing = was;
+        }
     }
 
     private void chooseRows(Set<Integer> indices) {
@@ -155,10 +173,30 @@ public final class HierarchyPanel extends UIElement {
         if (syncing) return;
         UIElement node = builder.builderSelection().node();
         if (node == null) return;
-        for (UIElement at = node.parentElement(); at != null; at = at.parentElement()) {
-            tree.setExpanded(at, true);
+        withoutWritingBack(() -> {
+            for (UIElement at = node.parentElement(); at != null; at = at.parentElement()) {
+                tree.setExpanded(at, true);
+            }
+            tree.refresh();
+            selectRowFor(node);
+        });
+    }
+
+    /**
+     * Puts the list's own highlight on the row for {@code node}.
+     *
+     * <p>Without it the highlight is whatever survived the rebuild, so selecting on the canvas left the
+     * hierarchy pointing at the previous node — one of the two halves of "the row says one thing and the
+     * inspector another".</p>
+     */
+    private void selectRowFor(UIElement node) {
+        List<TreeRow<UIElement>> rows = tree.visibleRows();
+        for (int i = 0; i < rows.size(); i++) {
+            if (rows.get(i).item() == node) {
+                tree.select(i);
+                return;
+            }
         }
-        tree.refresh();
     }
 
     @Override
