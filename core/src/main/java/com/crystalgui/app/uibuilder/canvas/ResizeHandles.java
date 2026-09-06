@@ -223,10 +223,30 @@ public final class ResizeHandles extends UIElement {
         document.apply(new BuilderEdit.SetInlineStyle(node, before, after));
     }
 
+    /**
+     * Notes what is selected; <b>shows or hides on the next frame</b>.
+     *
+     * <p>Selection changes while a press is being dispatched — the tool selects from inside
+     * {@code pointerDown} — and this codebase's rule is that a widget must never restructure the
+     * elements it is being clicked on. Toggling {@code display} here tears boxes out from under the
+     * walk in progress, which is the {@code "Cannot read field events because path[i] is null"} failure
+     * {@code Inspector.inspect} records and why that method defers too: event, then a flag, then one
+     * change next frame.</p>
+     */
     private void followSelection() {
         List<UIElement> selected = ctx.selection().items();
         target = selected.size() == 1 ? selected.get(0) : null;
-        setDisplayed(target != null);
+        pendingVisibility = true;
+    }
+
+    /** @see #followSelection */
+    private boolean pendingVisibility = true;
+
+    private void applyVisibility() {
+        if (!pendingVisibility) return;
+        pendingVisibility = false;
+        boolean wanted = target != null;
+        if (isDisplayed() != wanted) setDisplayed(wanted);
     }
 
     /**
@@ -256,6 +276,7 @@ public final class ResizeHandles extends UIElement {
         super.connected();
         if (document() == null) return;
         document().animation().afterLayout(this, delta -> {
+            applyVisibility();
             place();
             return true;
         });

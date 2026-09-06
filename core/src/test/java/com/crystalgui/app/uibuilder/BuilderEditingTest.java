@@ -167,6 +167,70 @@ public class BuilderEditingTest extends UiDocumentTestBase {
                 .anyMatch(row -> row.item() == title));
     }
 
+    /**
+     * <b>The hierarchy must not clear the selection it was told about.</b>
+     *
+     * <p>Reported as "click an element and the handles vanish and it stays broken". Following a selection
+     * refreshes the tree, and a refresh re-emits the list's own selection — straight back into the
+     * handler that writes the shared selection. Outside the re-entrancy guard that write lands with
+     * whatever the rebuilt list happened to have, which is nothing.</p>
+     */
+    @Test
+    public void showingASelectionInTheHierarchyDoesNotClearIt() {
+        HierarchyPanel hierarchy = new HierarchyPanel(editor.surface());
+        document.append(hierarchy);
+        document.update(W, H);
+
+        editor.selection().selectOnly(title);
+        document.update(W, H);
+        frame();
+
+        assertSame("the hierarchy answered its own refresh and cleared the selection",
+                title, editor.selection().node());
+        assertSame("...and the engine's item set with it",
+                title, editor.surface().selection().items().isEmpty()
+                        ? null : editor.surface().selection().items().get(0));
+        assertSame("so the handles came off the node", title, editor.handles().target());
+    }
+
+    /**
+     * <b>Clicking a row in the hierarchy selects, and keeps selecting.</b>
+     *
+     * <p>The direction that was reported: click a row and the handles vanish, and it stays broken.</p>
+     */
+    @Test
+    public void clickingAHierarchyRowSelectsAndTheSelectionSurvives() {
+        HierarchyPanel hierarchy = new HierarchyPanel(editor.surface());
+        document.append(hierarchy);
+        document.update(W, H);
+        frame();
+
+        int row = rowFor(hierarchy, title);
+        hierarchy.tree().select(row);
+        document.update(W, H);
+        frame();
+
+        assertSame("a row click selected nothing", title, editor.selection().node());
+        assertSame("and the handles are not on it", title, editor.handles().target());
+
+        // AND AGAIN, on the other node: "perma break" means the second one does nothing.
+        int rootRow = rowFor(hierarchy, editor.document().root());
+        hierarchy.tree().select(rootRow);
+        document.update(W, H);
+        frame();
+
+        assertSame("the second row click did nothing", editor.document().root(),
+                editor.selection().node());
+    }
+
+    private static int rowFor(HierarchyPanel hierarchy, UIElement node) {
+        var rows = hierarchy.tree().visibleRows();
+        for (int i = 0; i < rows.size(); i++) {
+            if (rows.get(i).item() == node) return i;
+        }
+        throw new AssertionError("no row for " + node);
+    }
+
     /** Selecting on the canvas expands the hierarchy to the node, so a deep selection is findable. */
     @Test
     public void theHierarchyFollowsTheCanvasSelection() {
