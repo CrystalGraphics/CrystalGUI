@@ -101,6 +101,11 @@ public final class BuilderEditor implements DocumentEditor {
         // The document's own sheets, once there is a window to put them on. Installing them here would
         // reach a file from a constructor that a server also runs.
         surface.onDidConnect.connect(this::installSheets);
+        // A RELOAD REPLACES THE TREE, and the frame is holding the old one. `adopt` mints a new root,
+        // so everything reading document.root() -- the hierarchy above all -- moves to a tree the canvas
+        // is not showing. resync() is a no-op unless the root instance actually changed, which is why it
+        // can hang off the ordinary change signal.
+        document.onChanged().connect(this::adoptNewTree);
     }
 
     public UiBuilderDocument document() {
@@ -192,6 +197,18 @@ public final class BuilderEditor implements DocumentEditor {
     @Override
     public void disposeView() {
         surface.dispose();
+    }
+
+    /**
+     * Re-points the canvas at the document's current root, and drops a selection that no longer exists.
+     *
+     * <p>The stale selection is not a detail: it holds elements from the replaced tree, which are in no
+     * document and have no boxes, so everything drawn from it points at nothing.</p>
+     */
+    private void adoptNewTree() {
+        if (!artboard.resync()) return;
+        selection().clear();
+        surface.selection().clear();
     }
 
     private void installSheets() {

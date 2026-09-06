@@ -41,7 +41,15 @@ public final class Lifecycle {
         if (node.isFrozen()) return;
         document.input().forget(node);
         document.focus().forget(node);
-        document.animation().forget(node);
+        // NOT THE ANIMATION HOOKS. `Animation.tick` already skips a frozen owner and says why -- "GONE is
+        // gone; FROZEN is coming back" -- so that skip is the whole handling of a freeze, and dropping
+        // the hooks here made it dead code and the freeze permanent: nothing re-registers on thaw,
+        // because a hook is registered from `connected()` and a frozen node was never disconnected.
+        //
+        // The dock freezes a tab it hides, so switching tabs and coming back left every per-frame and
+        // post-layout hook in that subtree gone for the session -- resize handles stranded at their
+        // layer's origin, no hover outline, and nothing to say why. Destroying still forgets them, which
+        // is the case `forget` exists for.
         for (UIElement at : node.composedSubtree()) at.setFrozen(true);
         // The structure changed as far as the box tree is concerned: a frozen subtree has no boxes.
         node.markStructureChanged();

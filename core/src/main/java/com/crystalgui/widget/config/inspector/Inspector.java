@@ -256,6 +256,9 @@ public class Inspector extends UIElement {
         }
     }
 
+    /** {@code -Dcrystalgui.builder.diagnose=true} — what the panel was asked and what answered. */
+    private static final boolean DIAGNOSE = Boolean.getBoolean("crystalgui.builder.diagnose");
+
     private void rebuild(@Nullable UIElement source) {
         // A DETACHED SUBJECT ANSWERS NOTHING, and that is not the same as "nothing to describe".
         //
@@ -275,6 +278,11 @@ public class Inspector extends UIElement {
         DataContext context = source == null ? null : DataContext.from(source);
         List<InspectorSection> sections =
                 context == null ? List.of() : InspectorRegistry.sectionsFor(context);
+        if (DIAGNOSE) {
+            com.crystalgui.core.CrystalGuiCore.LOGGER.info(
+                    "[inspector] rebuild source={} attached={} sections={}",
+                    source, source == null ? null : source.document() != null, sections.size());
+        }
 
         // NOTHING CAN DESCRIBE IT, SO IT IS NOT A SUBJECT. Keep showing the last thing that was.
         //
