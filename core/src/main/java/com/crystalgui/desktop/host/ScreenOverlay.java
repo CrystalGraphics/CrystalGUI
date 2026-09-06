@@ -153,7 +153,7 @@ public final class ScreenOverlay {
 
         // Promoted into the top layer -- a dialog, a menu, a tooltip, the switcher. The promoted node
         // ITSELF is a legitimate hit, so this matches at depth zero.
-        for (UIElement walk = hit; walk != null; walk = walk.parentElement()) {
+        for (UIElement walk = hit; walk != null; walk = walk.composedParent()) {
             if (window.isPromoted(walk)) return hit;
         }
 
@@ -167,9 +167,15 @@ public final class ScreenOverlay {
         // Asking for a WindowFrame in the chain is the precise question. It excludes the bare layer, and
         // it excludes the taskbar for free -- which is desktop chrome this presentation does not paint,
         // so a click at the bottom of the screen belongs to the game.
+        //
+        // THE COMPOSED PARENT, because the hit comes from the COMPOSED tree. A window's chrome is a
+        // shadow tree and a caller's content sits in its slot, so the light walk stopped at the shadow
+        // root -- whose parent is null by design -- and never reached the frame. Every click inside a
+        // pinned window read as a click outside one: focus was taken off whatever had it and given to
+        // nothing, and the keys went to the game.
         Desktop desktop = Desktop.ifPresent(window);
         UIElement layer = desktop == null ? null : desktop.windowLayer();
-        for (UIElement walk = hit; walk != null; walk = walk.parentElement()) {
+        for (UIElement walk = hit; walk != null; walk = walk.composedParent()) {
             if (walk instanceof WindowFrame) return hit;
             if (walk == layer) return null;
         }
