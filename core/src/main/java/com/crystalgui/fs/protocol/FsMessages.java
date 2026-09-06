@@ -496,10 +496,29 @@ public final class FsMessages {
         CREATED, MODIFIED, DELETED, RENAMED
     }
 
-    /** @param from set only for a {@link ChangeKind#RENAMED}, which is ONE event and never a pair */
-    public record FileChange(String path, ChangeKind kind, String etag, String from) {
+    /**
+     * @param from   set only for a {@link ChangeKind#RENAMED}, which is ONE event and never a pair
+     * @param author who asked for this, or empty when nothing here did — a filesystem event carries no
+     *               name, because the OS does not know who was asking. Empty therefore means
+     *               <b>outside the workspace</b>, not unknown: a change the server performed always
+     *               names its actor
+     */
+    public record FileChange(String path, ChangeKind kind, String etag, String from, String author) {
+        public FileChange(String path, ChangeKind kind, String etag, String from) {
+            this(path, kind, etag, from, "");
+        }
+
         public FileChange(String path, ChangeKind kind, String etag) {
-            this(path, kind, etag, "");
+            this(path, kind, etag, "", "");
+        }
+
+        /** Whether somebody on this workspace did it, as opposed to something outside it. */
+        public boolean byPeer() {
+            return !author.isEmpty();
+        }
+
+        public FileChange by(String who) {
+            return new FileChange(path, kind, etag, from, who == null ? "" : who);
         }
     }
 
@@ -511,6 +530,7 @@ public final class FsMessages {
                     .field("kind", Codecs.enumOf(ChangeKind.class), value.kind())
                     .optional(ETAG, Codecs.STRING, value.etag(), "")
                     .optional("from", Codecs.STRING, value.from(), "")
+                    .optional("author", Codecs.STRING, value.author(), "")
                     .build();
         }
 
@@ -520,7 +540,8 @@ public final class FsMessages {
             return new FileChange(in.field(PATH, Codecs.STRING),
                     in.field("kind", Codecs.enumOf(ChangeKind.class)),
                     in.optional(ETAG, Codecs.STRING, ""),
-                    in.optional("from", Codecs.STRING, ""));
+                    in.optional("from", Codecs.STRING, ""),
+                    in.optional("author", Codecs.STRING, ""));
         }
     };
 

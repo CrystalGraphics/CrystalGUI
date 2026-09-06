@@ -14,6 +14,7 @@ import com.crystalgui.fs.server.WorkspaceOperation;
 import com.crystalgui.fs.server.WorkspacePermission;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.server.WorkspaceService;
+import java.util.Map;
 import com.crystalgui.fs.protocol.FsMessages;
 import com.crystalgui.fs.server.WatchHub;
 import org.junit.Before;
@@ -30,6 +31,8 @@ import java.nio.file.Paths;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
@@ -469,5 +472,76 @@ public class WorkspaceServiceTest {
         } catch (IOException e) {
             throw new AssertionError(e);
         }
+    }
+
+    // ── Who did it ────────────────────────────────────────────────────────
+
+    /**
+     * <b>An operation reaches the other peers with a name on it, and never goes home again.</b> A
+     * filesystem event cannot carry one — the OS was never told who asked — so only an operation the
+     * server performed can say, and the peer that asked is the one peer that already knows.
+     */
+    @Test
+    public void anOperationIsToldToOtherPeersByName() {
+        ProjectRegistry registry = new ProjectRegistry().register(() -> List.of(
+                new WorkspaceProject("proj", "Proj", tempRoot())));
+        WorkspaceService service = new WorkspaceService(
+                registry, new InMemoryFileSystem().seed("proj:Main.java", "class Main {}"),
+                WorkspacePermission.ALLOW_ALL);
+        WatchHub hub = new WatchHub(service);
+        Object alice = new Object();
+        Object bob = new Object();
+        hub.watch(alice, () -> "alice", CgPath.parse("proj:"), true);
+        hub.watch(bob, () -> "bob", CgPath.parse("proj:"), true);
+
+        hub.noteChanged(CgPath.parse("proj:Main.java"), FsMessages.ChangeKind.MODIFIED,
+                "etag-2", "alice", alice);
+        Map<Object, List<FsMessages.FileChange>> out = hub.tick(WorkspaceActor.LOCAL, List.of());
+
+        assertNull("whoever asked already knows, and would reload what they just wrote", out.get(alice));
+        List<FsMessages.FileChange> heard = out.get(bob);
+        assertNotNull("everybody else hears about it", heard);
+        assertEquals(1, heard.size());
+        assertEquals("alice", heard.get(0).author());
+        assertTrue(heard.get(0).byPeer());
+    }
+
+    /** And a change from outside the workspace carries no name, because nothing knows one. */
+    @Test
+    public void aChangeFromOutsideCarriesNoName() {
+        Path root = tempRoot();
+        ProjectRegistry registry = new ProjectRegistry().register(() -> List.of(
+                new WorkspaceProject("proj", "Proj", root)));
+        WorkspaceService service = new WorkspaceService(
+                registry, new LocalFileSystem(registry), WorkspacePermission.ALLOW_ALL);
+        WatchHub hub = new WatchHub(service);
+        Object peer = new Object();
+        hub.watch(peer, WorkspaceActor.LOCAL, CgPath.parse("proj:"), true);
+
+        service.drainFileEvents();
+        write(root.resolve("Appeared.java"), "class Appeared {}" + "\n");
+
+        long deadline = System.currentTimeMillis() + 5000;
+        FsMessages.FileChange seen = null;
+        while (seen == null && System.currentTimeMillis() < deadline) {
+            for (List<FsMessages.FileChange> mine
+                    : hub.tick(WorkspaceActor.LOCAL, service.drainFileEvents()).values()) {
+                for (FsMessages.FileChange change : mine) {
+                    if (change.path().endsWith("Appeared.java")) seen = change;
+                }
+            }
+            if (seen == null) {
+                try {
+                    Thread.sleep(25);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }
+        assertNotNull("the watcher saw it", seen);
+        assertFalse("nothing here asked for it", seen.byPeer());
+        assertEquals("", seen.author());
+        service.close();
     }
 }

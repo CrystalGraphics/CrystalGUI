@@ -193,7 +193,9 @@ public final class WorkspaceBinding<T> {
                     ? service.create(actor, path, request.content())
                     : service.write(actor, path, request.content(),
                             request.etag().isEmpty() ? null : request.etag());
-            hub.noteWritten(path, etag);
+            hub.noteChanged(path, request.create()
+                    ? FsMessages.ChangeKind.CREATED : FsMessages.ChangeKind.MODIFIED,
+                    etag, actor.displayName(), peer);
             service.presence().setEditing(actor, path, false);
             audit.record(actor, WorkspaceOperation.WRITE, path);
             operations.record(request.op(), etag);
@@ -208,7 +210,7 @@ public final class WorkspaceBinding<T> {
 
             requireValidName(path);
             String etag = service.create(actor, path, request.content());
-            hub.noteWritten(path, etag);
+            hub.noteChanged(path, FsMessages.ChangeKind.CREATED, etag, actor.displayName(), peer);
             audit.record(actor, WorkspaceOperation.WRITE, path);
             operations.record(request.op(), etag);
             return etag;
@@ -228,7 +230,7 @@ public final class WorkspaceBinding<T> {
             String repeat = operations.answerFor(request.op());
             if (repeat != null) return repeat;
 
-            hub.noteDeleted(path);
+            hub.noteDeleted(path, actor.displayName(), peer);
             String trashId = service.deleteToTrash(actor, path, true, null);
             service.presence().closed(actor, path);
             audit.record(actor, WorkspaceOperation.WRITE, path);
@@ -244,7 +246,7 @@ public final class WorkspaceBinding<T> {
             if (repeat != null) return repeat;
 
             CgPath restored = service.restore(actor, request.path());
-            hub.noteWritten(restored, null);
+            hub.noteChanged(restored, FsMessages.ChangeKind.CREATED, null, actor.displayName(), peer);
             audit.record(actor, WorkspaceOperation.WRITE, restored);
             operations.record(request.op(), restored.toString());
             return restored.toString();
@@ -262,7 +264,7 @@ public final class WorkspaceBinding<T> {
             String etag = service.stat(actor, to).etag();
             // STATED, never inferred. A rename the server performed is a fact, and the delete-and-create
             // pairing is a heuristic for the ones that happen outside.
-            hub.noteRenamed(from, to, etag);
+            hub.noteRenamed(from, to, etag, actor.displayName(), peer);
             audit.record(actor, WorkspaceOperation.WRITE, to);
             operations.record(request.op(), etag);
             return etag;
@@ -283,7 +285,7 @@ public final class WorkspaceBinding<T> {
             requireValidName(to);
             service.copy(actor, from, to, request.overwrite());
             String etag = service.stat(actor, to).etag();
-            hub.noteWritten(to, etag);
+            hub.noteChanged(to, FsMessages.ChangeKind.CREATED, etag, actor.displayName(), peer);
             audit.record(actor, WorkspaceOperation.WRITE, to);
             operations.record(request.op(), etag);
             return etag;
