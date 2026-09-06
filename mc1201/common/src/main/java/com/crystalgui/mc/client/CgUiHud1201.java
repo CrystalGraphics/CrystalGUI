@@ -55,7 +55,23 @@ public final class CgUiHud1201 {
     }
 
     /** Paints whatever {@link #presentation()} says, bracketed by the GL discipline. */
-    public static void paint() {
+    /** The HUD arm: no screen is up. @see #paint(DesktopPresentation) */
+    public static void paintHud() {
+        paint(DesktopPresentation.HUD);
+    }
+
+    /** The arm for somebody else's screen. @see #paint(DesktopPresentation) */
+    public static void paintOverScreen() {
+        paint(DesktopPresentation.OVERLAY);
+    }
+
+    /**
+     * Paints {@code arm}, and only when the compositor is actually in it.
+     *
+     * <p>One arm per hook. A frame with a screen open fires the HUD hook and the screen hook both, and
+     * painting from each draws the whole compositor twice -- style, layout and all.</p>
+     */
+    private static void paint(DesktopPresentation arm) {
         Desktop desktop = CgUiScreen1201.desktop();
         if (desktop == null || !CgUiHostGl1201.contextIsLive()) return;
 
@@ -69,10 +85,12 @@ public final class CgUiHud1201 {
             desktop.exitHudMode();
             return;
         }
-        if (presentation == DesktopPresentation.NONE || presentation == DesktopPresentation.DESKTOP) {
-            // DESKTOP is our own screen's job; painting it from here would draw it twice.
-            return;
-        }
+        // DESKTOP is our own screen's job, NONE paints nothing, and the other arm's hook owns the rest.
+        if (presentation != arm) return;
+        // 1.20 posts no screen event for a move, so the pointer is offered once per frame from here --
+        // the per-frame drain mc1710 gets from pumping the event queue itself. Without it hover never
+        // updates and a drag runs on wherever the pointer was when a button last changed.
+        offerMove();
         CgUiHostGl1201.enter();
         try {
             desktop.paint(presentation, CgUiScreen1201.frameDelta(), surfaceWidth(), surfaceHeight());
@@ -95,6 +113,16 @@ public final class CgUiHud1201 {
         // reaches.
         return overlay.offerMouse(pointerX(), pointerY(), button, pressed,
                 CgUiInput1201.wheel(platformWheel));
+    }
+
+    /** No button, and the value the engine reads as "this is a move". */
+    private static final int NO_BUTTON = -1;
+
+    /** The pointer's position, delivered and never consumed. @see ScreenOverlay#offerMouse */
+    public static void offerMove() {
+        ScreenOverlay overlay = overlay();
+        if (overlay == null) return;
+        overlay.offerMouse(pointerX(), pointerY(), NO_BUTTON, false, 0f);
     }
 
     /** @return whether the desktop consumed it */

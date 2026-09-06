@@ -5,16 +5,19 @@ import com.crystalgui.mc.client.CgUiKeybinds1201;
 import com.crystalgui.mc.platform.Lifecycle1201;
 import com.crystalgui.net.wire.CgNetworkChannel;
 import com.mojang.logging.LogUtils;
+import net.minecraft.client.Minecraft;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
+import org.lwjgl.glfw.GLFW;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
-import net.neoforged.neoforge.client.event.RenderGuiOverlayEvent;
+import net.neoforged.neoforge.client.event.RenderGuiEvent;
+import net.neoforged.neoforge.client.event.InputEvent;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.TickEvent;
@@ -198,12 +201,15 @@ public final class CrystalGUI1201NeoForge {
                 NeoForge.EVENT_BUS.addListener(ClientBus::onClientLoggedIn);
                 NeoForge.EVENT_BUS.addListener(ClientBus::onClientLoggedOut);
 
-                NeoForge.EVENT_BUS.addListener(ClientBus::onRenderGuiOverlay);
+                NeoForge.EVENT_BUS.addListener(ClientBus::onRenderGui);
                 NeoForge.EVENT_BUS.addListener(ClientBus::onScreenRender);
+                NeoForge.EVENT_BUS.addListener(ClientBus::onHudMouseButton);
+                NeoForge.EVENT_BUS.addListener(ClientBus::onHudKey);
                 NeoForge.EVENT_BUS.addListener(ClientBus::onMousePressed);
                 NeoForge.EVENT_BUS.addListener(ClientBus::onMouseReleased);
                 NeoForge.EVENT_BUS.addListener(ClientBus::onMouseScrolled);
                 NeoForge.EVENT_BUS.addListener(ClientBus::onKeyPressed);
+                NeoForge.EVENT_BUS.addListener(ClientBus::onKeyReleased);
                 NeoForge.EVENT_BUS.addListener(ClientBus::onCharTyped);
             }
 
@@ -224,12 +230,33 @@ public final class CrystalGUI1201NeoForge {
                 Lifecycle1201.clientDisconnected();
             }
 
-            private static void onRenderGuiOverlay(RenderGuiOverlayEvent.Post event) {
-                Lifecycle1201.paintOverlay();
+            /**
+             * ONCE a frame. RenderGuiOverlayEvent fires per vanilla overlay element, so painting from it
+             * drew the whole compositor a dozen times a frame.
+             */
+            private static void onRenderGui(RenderGuiEvent.Post event) {
+                Lifecycle1201.paintHud();
             }
 
             private static void onScreenRender(ScreenEvent.Render.Post event) {
                 Lifecycle1201.paintOverlay();
+            }
+
+            /**
+             * HUD mode: no screen is open, so no ScreenEvent fires and these are the only input there is.
+             * Guarded on the screen being absent, or the screen handlers below would see each event twice.
+             */
+            private static void onHudMouseButton(InputEvent.MouseButton.Pre event) {
+                if (Minecraft.getInstance().screen != null || event.getAction() == GLFW.GLFW_REPEAT) return;
+                if (Lifecycle1201.offerMouse(event.getButton(), event.getAction() == GLFW.GLFW_PRESS, 0f)) {
+                    event.setCanceled(true);
+                }
+            }
+
+            /** @see #onHudMouseButton */
+            private static void onHudKey(InputEvent.Key event) {
+                if (Minecraft.getInstance().screen != null || event.getAction() == GLFW.GLFW_REPEAT) return;
+                Lifecycle1201.offerKey(event.getKey(), (char) 0, event.getAction() == GLFW.GLFW_PRESS);
             }
 
             private static void onMousePressed(ScreenEvent.MouseButtonPressed.Pre event) {
@@ -246,6 +273,10 @@ public final class CrystalGUI1201NeoForge {
 
             private static void onKeyPressed(ScreenEvent.KeyPressed.Pre event) {
                 if (Lifecycle1201.offerKey(event.getKeyCode(), (char) 0, true)) event.setCanceled(true);
+            }
+
+            private static void onKeyReleased(ScreenEvent.KeyReleased.Pre event) {
+                if (Lifecycle1201.offerKey(event.getKeyCode(), (char) 0, false)) event.setCanceled(true);
             }
 
             private static void onCharTyped(ScreenEvent.CharacterTyped.Pre event) {
