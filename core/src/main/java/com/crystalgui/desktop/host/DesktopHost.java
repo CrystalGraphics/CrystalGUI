@@ -187,8 +187,21 @@ public final class DesktopHost implements Disposable {
         desktop().resume();
     }
 
-    /** The surface went away. The compositor detaches; nothing is destroyed. */
+    /**
+     * The surface went away. The compositor detaches, and nothing is destroyed -- unless a window is
+     * pinned, in which case the desktop goes to the HUD instead.
+     *
+     * <p>A pinned window is the one thing that outlives its surface. {@link Desktop#enterHudMode} puts
+     * away everything that is not pinned and leaves the compositor attached, which it must be:
+     * {@link Desktop#presentation} answers {@code NONE} for a detached desktop. With nothing pinned the
+     * suspend is strictly cheaper -- the whole compositor leaves the tree in one detach rather than
+     * window by window.</p>
+     */
     public void hidden() {
+        if (desktop().hasPinnedWindows()) {
+            desktop().enterHudMode();
+            return;
+        }
         desktop().suspend();
     }
 
