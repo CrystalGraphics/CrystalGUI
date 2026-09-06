@@ -8,6 +8,7 @@ import com.crystalgui.app.uibuilder.BuilderSelection;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
+import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.widget.surface.SurfaceEditor;
 
@@ -35,12 +36,77 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
     @Nullable
     private BuilderEditor owner;
 
+    /** Fires after design mode is switched. @see #setDesignMode */
+    public final Signal.Value<Boolean> onDidChangeDesignMode = new Signal.Value<>();
+
+    /** Guards the two selections against answering each other. @see #bridgeSelections */
+    private boolean syncingSelection;
+
     BuilderSurface(UiBuilderDocument document, Artboard artboard, @Nullable List<String> enabled) {
         super(NAME, new TreePolicy(artboard), enabled);
         this.document = document;
         this.artboard = artboard;
+        bridgeSelections();
         // LAST: an extension activated any earlier gets a surface whose document and artboard are null.
         ensureExtensions();
+    }
+
+    /**
+     * Keeps the engine's item set and the builder's selection saying the same thing.
+     *
+     * <p>Two of them because they answer different questions — the engine moves a set of items and knows
+     * nothing about rules or tokens — and one of them because a canvas click and a hierarchy click are
+     * the same selection to everybody who reads it. Both directions, since the hierarchy and the
+     * inspector write the builder's and the canvas writes the engine's.</p>
+     *
+     * <p>The guard is not belt-and-braces: each write announces, and an announcement the other side acts
+     * on comes straight back.</p>
+     */
+    private void bridgeSelections() {
+        selection().onChanged.connect(() -> {
+            if (syncingSelection) return;
+            syncingSelection = true;
+            try {
+                selection.replaceWith(selection().items());
+            } finally {
+                syncingSelection = false;
+            }
+        });
+        selection.onChanged.connect(() -> {
+            if (syncingSelection) return;
+            syncingSelection = true;
+            try {
+                selection().replaceWith(selection.nodes());
+            } finally {
+                syncingSelection = false;
+            }
+        });
+    }
+
+    @Override
+    public boolean isDesignMode() {
+        return artboard.isDesignMode();
+    }
+
+    /**
+     * Switches design and preview.
+     *
+     * <p>Two things move together and neither is enough alone: the artboard's {@code hit-test}, which
+     * decides whether the document's widgets see input at all, and the surface's own mode, which is
+     * asked before the tree and would otherwise keep swallowing every press in preview.</p>
+     */
+    @Override
+    public void setDesignMode(boolean design) {
+        if (artboard.isDesignMode() == design) return;
+        artboard.setDesignMode(design);
+        if (design) modes().attach(document());
+        else modes().detach();
+        onDidChangeDesignMode.emit(design);
+    }
+
+    @Override
+    public Signal.Value<Boolean> onDidChangeDesignMode() {
+        return onDidChangeDesignMode;
     }
 
     void ownedBy(BuilderEditor editor) {
@@ -54,6 +120,7 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
      * gesture moves, this one also carries the rule and the token a panel picked. L4.4 makes the canvas
      * drive both; until then this is what the inspector reads.</p>
      */
+    @Override
     public BuilderSelection builderSelection() {
         return selection;
     }

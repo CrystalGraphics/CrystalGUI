@@ -10,3 +10,4 @@ com.crystalgui.app.shadergraph.extension.PreviewsExtension
 com.crystalgui.app.shadergraph.extension.BlackboardExtension
 com.crystalgui.app.shadergraph.extension.ShaderSectionsExtension
 com.crystalgui.app.shadergraph.extension.GeneratedShaderExtension
+com.crystalgui.app.uibuilder.BuilderOverlaysExtension

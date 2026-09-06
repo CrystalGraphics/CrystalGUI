@@ -14,6 +14,7 @@ import com.crystalgui.style.property.visual.Resize;
 import com.crystalgui.style.property.visual.ScrollBehavior;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.property.visual.border.LengthPercentProperty;
+import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.color.ColorProperty;
 import com.crystalgui.style.property.visual.text.FontFamilyValue;
 import com.crystalgui.style.property.visual.text.FontStyle;
@@ -461,13 +462,38 @@ public class StylePropertyRegistry {
     }
 
     public static Collection<StyleProperty<?>> all() {
+        ensureLayoutProperties();
         return PROPERTIES_BY_NAME.values();
     }
 
     @SuppressWarnings("unchecked")
     @Nullable
     public static <T> StyleProperty<T> byName(String name) {
+        ensureLayoutProperties();
         return (StyleProperty<T>) PROPERTIES_BY_NAME.get(name);
+    }
+
+    /** Whether {@link #ensureLayoutProperties} has run. */
+    private static volatile boolean layoutForced;
+
+    /**
+     * Forces {@code LayoutProperties} to register, once.
+     *
+     * <p>The ~150 layout properties are {@code static final}s on another class, so they enter this
+     * registry when that class is <b>initialised</b> — and nothing here makes that happen. Whoever
+     * touches it first wins, which in a running workbench is the user-agent sheet and in anything else
+     * may be nobody: {@code byName("height")} answered null and an inline style on a valid document was
+     * refused as an unknown property, while {@link #all()} silently omitted every layout property from
+     * the computed style.</p>
+     *
+     * <p>Not a static block on this class. The dependency runs both ways — those fields are created
+     * through {@link #create} — so a block here would re-enter a half-initialised {@code
+     * LayoutProperties} and register its not-yet-assigned fields as null.</p>
+     */
+    private static void ensureLayoutProperties() {
+        if (layoutForced) return;
+        layoutForced = true;
+        LayoutProperties.init();
     }
 
     @SuppressWarnings("unchecked")

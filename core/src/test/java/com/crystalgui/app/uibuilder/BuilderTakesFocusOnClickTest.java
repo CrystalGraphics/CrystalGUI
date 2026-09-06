@@ -11,7 +11,11 @@ import org.junit.Test;
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.testsupport.UiDocumentTestBase;
+import com.crystalgui.core.data.Transform2D;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIElement;
+
+import org.joml.Vector2f;
 import com.crystalgui.ui.dom.UIElementRegistry;
 
 /**
@@ -46,13 +50,13 @@ public class BuilderTakesFocusOnClickTest extends UiDocumentTestBase {
         frame();
     }
 
-    /** Empty plane, outside the artboard. */
+    /** Empty plane, outside the artboard. Focus lands on the PLANE, which is what holds the keys. */
     @Test
     public void clickingThePlaneFocusesTheBuilder() {
         press(760f, 460f);
         frame();
 
-        assertSame(editor.view(), document.focus().focused());
+        assertSame(editor.surface(), document.focus().focused());
     }
 
     /**
@@ -64,11 +68,15 @@ public class BuilderTakesFocusOnClickTest extends UiDocumentTestBase {
      */
     @Test
     public void clickingTheArtboardFocusesTheBuilder() {
-        press(40f, 40f);
+        // Measured rather than guessed: a toolbar sits above the plane, so a fixed point near the top of
+        // the tab is in the toolbar and tests something else entirely.
+        Box board = editor.artboard().box();
+        Vector2f at = Transform2D.apply(board.localToWorld(), 4f, 4f);
+        press(at.x(), at.y());
         frame();
 
         UIElement focused = document.focus().focused();
         assertTrue("focus is the builder, or something inside it",
-                focused == editor.view() || editor.view().contains(focused));
+                focused == editor.surface() || editor.surface().contains(focused));
     }
 }

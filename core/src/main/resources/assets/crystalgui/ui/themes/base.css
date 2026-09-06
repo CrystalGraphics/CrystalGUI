@@ -34,6 +34,15 @@ theme {
     --builder-page-bg: var(--surface-editor);
     --builder-page-edge: var(--border-base);
 
+    /* The canvas overlays. Hover is the SOFT accent and selection the full one, so the outline that
+     * follows the pointer never competes with the one that says what you are working on; the parent's
+     * context stroke is a border colour rather than a third accent, because it is not a state. */
+    --builder-hover: var(--accent-hover);
+    --builder-selected: var(--accent);
+    --builder-selected-parent: var(--border-strong);
+    --builder-tag-fg: var(--fg-on-accent);
+    --builder-toolbar-bg: var(--surface-base);
+
     --breadcrumb-current-fg: var(--fg);
     --breadcrumb-link-fg: var(--link);
     --breadcrumb-sep-fg: var(--fg-hint);

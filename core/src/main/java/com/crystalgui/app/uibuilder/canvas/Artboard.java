@@ -5,6 +5,9 @@ import com.google.gson.JsonElement;
 
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.style.property.visual.border.LengthPercent;
+import com.crystalgui.style.property.visual.transform.Transform;
+import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 
@@ -46,6 +49,7 @@ public final class Artboard extends UIElement {
         this.width = size[0];
         this.height = size[1];
         applySize();
+        setDesignMode(true);
         append(document.root());
     }
 
@@ -61,6 +65,50 @@ public final class Artboard extends UIElement {
     public float boardHeight() {
         return height;
     }
+
+    /**
+     * Design or preview, and it is <b>one attribute</b>.
+     *
+     * <p>{@code hit-test: false} is {@code pointer-events: none} for a whole subtree, so setting it on
+     * the frame makes every widget in the document quiescent — no hover, no {@code :hover}, no tooltip,
+     * no focus, no wheel, because the engine never looks inside. Preview clears it and the widgets are
+     * simply used. The frame is not part of the document, so this is never encoded.</p>
+     *
+     * <p>The builder still selects through it: {@code Picking} resolves with {@code BoxTree.pick}, which
+     * reaches into unhittable subtrees deliberately.</p>
+     */
+    public Artboard setDesignMode(boolean design) {
+        setHitTest(!design);
+        return this;
+    }
+
+    /** @see #setDesignMode */
+    public boolean isDesignMode() {
+        return !get(Attribute.HIT_TEST);
+    }
+
+    /**
+     * How big a pixel is on this page — Minecraft's GUI scale, 1 to 4.
+     *
+     * <p>A {@code transform}, so the layout underneath stays in logical pixels and nothing reflows: a
+     * document designed at 2x has the same box tree as at 1x and is simply drawn twice the size. That is
+     * also why hit-testing still lands, since it inverts the same matrix the painter used.</p>
+     */
+    public Artboard setUiScale(float scale) {
+        this.uiScale = scale;
+        StyleGroup.inlinePipeline(getStyle().getGeneralGroup(), g -> g
+                .transform(Transform.scale(scale, scale))
+                .transformOriginX(LengthPercent.ZERO)
+                .transformOriginY(LengthPercent.ZERO));
+        return this;
+    }
+
+    /** @see #setUiScale */
+    public float uiScale() {
+        return uiScale;
+    }
+
+    private float uiScale = 1f;
 
     /** Resizes the page. What the preset menu and the size matrix write. */
     public Artboard setSize(float width, float height) {
