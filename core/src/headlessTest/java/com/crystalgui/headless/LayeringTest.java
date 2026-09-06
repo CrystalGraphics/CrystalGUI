@@ -114,6 +114,15 @@ public class LayeringTest {
             "com/crystalgui/widget/config/control/",
             "com/crystalgui/widget/config/inspector/",
             "com/crystalgui/widget/canvas/",
+            // THE SHARED EDITING ENGINE, between the plane it is built on and the first thing
+            // built on it. Ordering above the middle tier claims nothing (see the note there), so
+            // the position is documentation; what the entry buys is that the package is GOVERNED,
+            // and the order inside it is SurfaceLayeringTest's.
+            "com/crystalgui/widget/surface/",
+            "com/crystalgui/widget/surface/mode/",
+            "com/crystalgui/widget/surface/overlay/",
+            "com/crystalgui/widget/surface/insert/",
+            "com/crystalgui/widget/surface/extension/",
             "com/crystalgui/widget/graph/",
             // The node's own BUILD half: the widget factory's callers, the field binder and the
             // create menu. GraphNode, NodePort and PortDefaultEditor are NOT here and cannot be --
