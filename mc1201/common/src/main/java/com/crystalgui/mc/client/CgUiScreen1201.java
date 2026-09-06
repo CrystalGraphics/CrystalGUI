@@ -55,7 +55,7 @@ public final class CgUiScreen1201 extends Screen {
     private static boolean showEditorOnOpen;
 
     /**
-     * Set by {@link #openEditor()}, cleared once a window exists.
+     * Set whenever a launch was wanted and could not be done, cleared once a window exists.
      *
      * <p>The editor needs a workspace, which needs a connection, and there may not be one on the frame
      * the screen opens. {@code init()} re-runs only on a resize, so a failed attempt was never retried.
@@ -201,8 +201,13 @@ public final class CgUiScreen1201 extends Screen {
     private void bringEditorForward() {
         boolean nothingOpen = desktop() != null && desktop().registry().size() == 0;
         if (!showEditorOnOpen && !nothingOpen) return;
-        if (!ensureEditorWindow()) return;
-        // BUILT, which is what this flag is about -- the bring-forward below is a separate question and
+        if (!ensureEditorWindow()) {
+            // Armed on the failure rather than by openEditor() alone: opening the DESKTOP first also
+            // wants an editor when nothing is open, and it never retried.
+            awaitingEditorLaunch = true;
+            return;
+        }
+        // Built, which is what this flag is about -- the bring-forward below is a separate question and
         // may legitimately decline.
         awaitingEditorLaunch = false;
         if (!showEditorOnOpen) return;
