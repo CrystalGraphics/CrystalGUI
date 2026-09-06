@@ -5,11 +5,14 @@ import javax.annotation.Nullable;
 import com.crystalgui.app.uibuilder.canvas.BuilderContext;
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.document.DocumentEditor;
+import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.workbench.editor.EditorService;
 import com.crystalgui.workbench.WorkbenchContext;
+
+import dev.vfyjxf.taffy.style.FlexDirection;
 
 /**
  * The <b>Design</b> tool window: the hierarchy of whatever {@code .cgui} is in front.
@@ -40,6 +43,8 @@ public final class DesignToolWindow extends UIElement {
         super(NAME);
         this.workbench = workbench;
         addClass(PANEL_CLASS);
+        StyleGroup.defaultPipeline(getStyle().getLayoutGroup(),
+                l -> l.widthPercent(100f).heightPercent(100f).flexDirection(FlexDirection.COLUMN));
         follow();
     }
 

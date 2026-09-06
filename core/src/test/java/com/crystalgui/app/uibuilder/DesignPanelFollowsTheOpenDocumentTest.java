@@ -11,6 +11,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.app.uibuilder.panel.DesignToolWindow;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.client.Workspace;
@@ -27,6 +28,7 @@ import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.workbench.Workbench;
@@ -76,8 +78,9 @@ public class DesignPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase {
         new WorkspaceBinding<>(service, new WatchHub(service), WorkspaceActor.LOCAL, "host",
                 PlainOps.INSTANCE).installOn(serverEnd);
 
-        workbench = new Workbench(Workspace.of(clientEnd),
-                List.of(UiBuilderContribution.ID));
+        // THE PRODUCT'S OWN LIST, not just the builder's id: the panel came up empty in the running
+        // editor while a minimal fixture passed, and the only difference left was what else is on.
+        workbench = new Workbench(Workspace.of(clientEnd), CrystalEditor.EXTENSIONS);
         UIElement root = new UIElement().layout(l -> l.width(1200).height(800));
         root.append(workbench);
         document.append(root);
@@ -123,6 +126,15 @@ public class DesignPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase {
         assertNotNull("the panel is empty with a .cgui in front", design.hierarchy());
         assertTrue("and it has the document's own nodes in it",
                 design.hierarchy().tree().visibleRows().size() >= 2);
+
+        // AND SOMEWHERE TO DRAW THEM. Rows in the model with a zero-height tree is exactly what "the
+        // panel is empty" looked like, and asserting only on visibleRows() could not tell the two apart:
+        // the fill idiom was missing, so the tree laid out at nothing inside a panel of the right size.
+        Box treeBox = design.hierarchy().tree().box();
+        assertNotNull("the tree was never laid out", treeBox);
+        assertTrue("the tree has no height, so its rows cannot be seen: " + treeBox.height(),
+                treeBox.height() > 1f);
+        assertTrue("...nor any width: " + treeBox.width(), treeBox.width() > 1f);
     }
 
     /** With nothing open it is empty, which is the state it must not be stuck in. */

@@ -95,4 +95,20 @@ public interface SurfacePolicy {
      */
     @Nullable
     Edit moveEdit(List<Move> moves);
+
+    /**
+     * Whether dragging an item MOVES it on the plane.
+     *
+     * <p>True for a graph, where a node's position is its own and the plane is where it lives. False for
+     * anything holding a laid-out TREE: a node inside a UI document is placed by its parent, so dragging
+     * it means reorder or reparent — a different gesture entirely — and there is no coordinate to write.
+     * </p>
+     *
+     * <p>Answering false is not a nicety. The move gesture marks what it is moving with a class while the
+     * drag runs, and a class on a node of a document is <b>encoded into the file</b>: dragging a text
+     * node left {@code __moving__} on it, dirtied the tab, and would have saved it.</p>
+     */
+    default boolean movesItems() {
+        return true;
+    }
 }
