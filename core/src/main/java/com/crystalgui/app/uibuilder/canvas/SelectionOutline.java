@@ -8,7 +8,7 @@ import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.widget.surface.SurfaceContext;
+import com.crystalgui.app.uibuilder.BuilderSelection;
 
 /**
  * What is selected, and what is laying it out.
@@ -30,11 +30,11 @@ public final class SelectionOutline extends UIElement {
 
     private static final float THICKNESS = 1f;
 
-    private final SurfaceContext ctx;
+    private final BuilderContext builder;
 
-    public SelectionOutline(SurfaceContext ctx) {
+    public SelectionOutline(BuilderContext builder) {
         super(NAME);
-        this.ctx = ctx;
+        this.builder = builder;
         addClass(OVERLAY_CLASS);
         set(Attribute.HIT_TEST, false);
         // AND NOT THE ANSWER TO A PICK EITHER. hit-test alone is not enough here: a design surface
@@ -46,7 +46,12 @@ public final class SelectionOutline extends UIElement {
     @Override
     public void paintContent(CgUiPaintContext paint, Box box) {
         if (box == null) return;
-        List<UIElement> selected = ctx.selection().items();
+        // THE BUILDER'S SELECTION, which is the one the inspector and the hierarchy read. The engine's
+        // item set is what a GESTURE moves and is kept in step by the plane -- but "in step" is a
+        // property that can fail, and when it did the canvas outlined one node while the inspector
+        // described another. One source for everything a reader sees; the other stays an implementation
+        // detail of dragging.
+        List<UIElement> selected = builder.builderSelection().nodes();
         if (selected.isEmpty()) return;
 
         int accent = getStyle().computed().get(StylePropertyRegistry.COLOR);

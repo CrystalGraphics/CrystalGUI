@@ -21,7 +21,7 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.service.Drag;
-import com.crystalgui.widget.surface.SurfaceContext;
+
 
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
@@ -81,7 +81,7 @@ public final class ResizeHandles extends UIElement {
     /** Never smaller than this on screen, whatever the zoom — a handle you cannot hit is not one. */
     private static final float SIZE = 8f;
 
-    private final SurfaceContext ctx;
+    private final BuilderContext ctx;
 
     private final UiBuilderDocument document;
 
@@ -92,7 +92,7 @@ public final class ResizeHandles extends UIElement {
     @Nullable
     private UIElement target;
 
-    public ResizeHandles(SurfaceContext ctx, UiBuilderDocument document) {
+    public ResizeHandles(BuilderContext ctx, UiBuilderDocument document) {
         super(NAME);
         this.ctx = ctx;
         this.document = document;
@@ -100,7 +100,9 @@ public final class ResizeHandles extends UIElement {
         anchorWithoutCovering(this);
 
         for (Spot spot : Spot.values()) handles.add(buildHandle(spot));
-        connections.add(ctx.selection().onChanged.connect(this::followSelection));
+        // THE BUILDER'S SELECTION, for the reason SelectionOutline states: one source for everything a
+        // reader sees, so the handles cannot end up on a different node from the one being described.
+        connections.add(ctx.builderSelection().onChanged.connect(this::followSelection));
         followSelection();
     }
 
@@ -234,7 +236,7 @@ public final class ResizeHandles extends UIElement {
      * change next frame.</p>
      */
     private void followSelection() {
-        List<UIElement> selected = ctx.selection().items();
+        List<UIElement> selected = ctx.builderSelection().nodes();
         target = selected.size() == 1 ? selected.get(0) : null;
         pendingVisibility = true;
     }

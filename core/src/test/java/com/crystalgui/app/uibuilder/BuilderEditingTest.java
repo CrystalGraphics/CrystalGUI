@@ -246,12 +246,16 @@ public class BuilderEditingTest extends UiDocumentTestBase {
         assertSame("the row was clicked and something else got selected",
                 root, editor.selection().node());
         assertSame(root, rowItem(hierarchy));
+        // ROOT AND TITLE OCCUPY THE SAME BOX -- root is auto-height around one text line -- so a
+        // disagreement between the panels is invisible on the canvas until something depends on it.
+        assertSame("the handles are on a different node", root, editor.handles().target());
 
         hierarchy.tree().select(rowFor(hierarchy, title));
         document.update(W, H);
         frame();
         assertSame(title, editor.selection().node());
         assertSame(title, rowItem(hierarchy));
+        assertSame("the handles stayed on the previous node", title, editor.handles().target());
 
         // AND FROM THE CANVAS, which is the direction that rebuilds the tree to reveal the node.
         editor.selection().selectOnly(root);
@@ -259,6 +263,8 @@ public class BuilderEditingTest extends UiDocumentTestBase {
         frame();
         assertSame("the hierarchy answered its own rebuild", root, editor.selection().node());
         assertSame("the row highlight did not follow", root, rowItem(hierarchy));
+        assertSame("the handles are on a different node from the one being described",
+                root, editor.handles().target());
     }
 
     /** What the list itself has highlighted, which is what a reader sees. */
