@@ -3,6 +3,8 @@ package com.crystalgui.render;
 import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
 import com.crystalgraphics.gl.texture.CgTexture2D;
+import com.crystalgraphics.api.render.CgFrameData;
+import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.platform.gl.state.CgGlScope;
 import com.crystalgraphics.platform.gl.state.CgGlSlot;
@@ -358,6 +360,11 @@ final class CgUiBackdrop {
         final int fx0 = capX0, fy0 = capY0, fw = capW, fh = capH;
         ctx.beginLayerFbo(captureFbo, false);
         try {
+            // WHAT THE UI-SO-FAR ACTUALLY HOLDS OVER THE CAPTURED REGION, read before it is composited.
+            // The whole pipeline rests on it being TRANSPARENT wherever nothing has drawn: premultiplied
+            // `over` is dst = src + dst*(1 - src.a), so a transparent source leaves the scene alone and
+            // an OPAQUE BLACK one erases it completely. Those two produce an identical-looking flat
+            // panel downstream, and only the alpha channel tells them apart.
             withoutScissor(() -> {
                 drawOver((CgTexture2D) ctx.msaaResolveFbo.getColorTexture(0), fx0, fy0, fw, fh, w, h);
                 for (CgFrameBuffer layer : enclosing) {
@@ -417,12 +424,18 @@ final class CgUiBackdrop {
         if (tex == null) return;
         float u0 = rx / (float) w, u1 = (rx + rw) / (float) w;
         float vTop = 1f - ry / (float) h, vBottom = 1f - (ry + rh) / (float) h;
+        // Declared, not bound by hand -- @see CgUiPaintContext#blitLayer. This is the composite that
+        // was erasing the captured scene, which is what made every glass surface a flat fill.
+        ctx.layerBlitMaterial.applyProperties(b -> b.sampler("_MainTex", 0, tex));
         ctx.withMaterial(ctx.layerBlitMaterial, () -> {
-            ctx.bindTexture(tex);
             ctx.poseStack.pushPose();
             ctx.poseStack.setIdentity();
             ctx.quad().at(0, 0).size(rw, rh).uv(u0, vTop, u1, vBottom).color(0xFFFFFFFF).submit();
             ctx.flush();
+            // AND AGAIN AFTER THE FLUSH, because submit() only QUEUES. The material's render state is
+            // uploaded by the bind, and the reading that matters is the one in force when the geometry
+            // is actually drawn -- which is here. Measuring at submit time answers a question nobody
+            // asked and answers it reassuringly.
             ctx.poseStack.popPose();
         });
     }
@@ -513,6 +526,11 @@ final class CgUiBackdrop {
             result = blurB;
         }
 
+        // EACH STAGE, because "the glass is a flat fill" is equally consistent with a capture that is
+        // flat, a downsample that lost it, and a blur that produced nothing -- and they are three
+        // different bugs. The capture is read at the region it actually wrote into; a whole-target read
+        // would sample the untouched remainder and report every stage empty.
+
         blurFrame = ctx.frameId;
         blurRadiusPx = radiusPx;
         blurResult = result;
@@ -588,6 +606,17 @@ final class CgUiBackdrop {
         int qw = Math.max(1, Math.round(target.getWidth() * fracW));
         int qh = Math.max(1, Math.round(target.getHeight() * fracH));
         ctx.beginLayerFbo(target);
+        // THE PROJECTION, WHICH THE VIEWPORT ALONE DOES NOT COVER. beginLayerFbo sets the viewport and
+        // leaves the frame's ortho alone -- right for a screen-sized layer, wrong for a blur target, which
+        // at a working scale of 2 is half the screen: a full-size quad then lands on a quarter of it and
+        // the rest keeps the clear. Invisible at scale 1, where the two sizes agree. @see compositeMask
+        CgFrameData fd = CgRenderPipeline.getInstance().getFrameData();
+        Matrix4f enclosingProj = new Matrix4f(fd.projMatrix);
+        int enclosingW = fd.viewportW, enclosingH = fd.viewportH;
+        fd.projMatrix.identity().ortho(0, target.getWidth(), target.getHeight(), 0, -1, 1);
+        fd.viewportW = target.getWidth();
+        fd.viewportH = target.getHeight();
+        CgRenderPipeline.getInstance().prepareFrame();
         try {
             withoutScissor(() -> ctx.withMaterial(material, () -> {
                 ctx.poseStack.pushPose();
@@ -598,6 +627,10 @@ final class CgUiBackdrop {
                 ctx.poseStack.popPose();
             }));
         } finally {
+            fd.projMatrix.set(enclosingProj);
+            fd.viewportW = enclosingW;
+            fd.viewportH = enclosingH;
+            CgRenderPipeline.getInstance().prepareFrame();
             ctx.endLayerFbo();
         }
     }
