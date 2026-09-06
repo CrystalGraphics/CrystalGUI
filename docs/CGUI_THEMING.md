@@ -111,6 +111,7 @@ crystal-dark.css is a migration-era pin awaiting the Islands pass; dark-plus.css
 editor scheme's.
 
 <!-- TOKENS:BEGIN -->
+
 | Token | Value | Defined in |
 |---|---|---|
 | `--accent` | `#3574F0` | crystal-dark.css |
@@ -147,6 +148,9 @@ editor scheme's.
 | `--breadcrumb-current-fg` | `var(--fg)` | base.css |
 | `--breadcrumb-link-fg` | `var(--link)` | base.css |
 | `--breadcrumb-sep-fg` | `var(--fg-hint)` | base.css |
+| `--builder-page-bg` | `var(--surface-editor)` | base.css |
+| `--builder-page-edge` | `var(--border-base)` | base.css |
+| `--builder-surface-bg` | `var(--surface-recessed)` | base.css |
 | `--button-bg` | `var(--surface-raised)` | base.css |
 | `--button-disabled-bg` | `var(--surface-raised)` | base.css |
 | `--button-disabled-fg` | `var(--fg-disabled)` | base.css |
@@ -703,4 +707,5 @@ editor scheme's.
 | `--window-title-bg` | `var(--surface-base)` | base.css |
 | `--window-title-fg` | `var(--fg-secondary)` | base.css |
 | `--workbench-bg` | `var(--surface-base)` | base.css |
+
 <!-- TOKENS:END -->

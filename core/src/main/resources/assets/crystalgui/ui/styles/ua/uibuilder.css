@@ -1,0 +1,39 @@
+/* ua/uibuilder.css — one part of StyleSheet.DEFAULT, the user-agent sheet.
+ *
+ * The UI builder: the design surface and the artboard a document is laid out on.
+ *
+ * The parts concatenate IN MANIFEST ORDER (StyleSheetRegistry.DEFAULT_SHEET_PARTS) into the
+ * one sheet the engine loads — rule order across files is as load-bearing as within one
+ * (:disabled after :hover ties), so files split at section boundaries and never reorder.
+ * The sheet-wide contract (no !important, no asset(), colours only as var() fallbacks)
+ * lives at the top of ua/core.css and is enforced by StyleGovernanceTest. */
+
+/* ── The design surface ──────────────────────────────────────────────────────────────────────────────
+ *
+ * The tab a .cgui opens in: a pan-and-zoom plane with artboards on it. `height: 100%` and NOT the
+ * `height: 0` + `flex-grow: 1` fill idiom: a dock area sizes its content definitely, and growing into a
+ * parent that is not distributing gives a surface zero pixels tall — which is a tab that opened and has
+ * nothing in it. */
+surface {
+    width: 100%;
+    height: 100%;
+    background-color: var(--builder-surface-bg, #1B1B1F);
+}
+
+surface canvasview {
+    width: 100%;
+    height: 100%;
+}
+
+/* ── The artboard ────────────────────────────────────────────────────────────────────────────────────
+ *
+ * One page, at one canvas size, holding the document's real tree. It needs a background of its own for
+ * the same reason a page in Figma does: an empty document over an empty plane is indistinguishable from
+ * an editor that failed to open. The size is written by the widget — it is the document's, not a theme's
+ * — and everything else here is. */
+artboard {
+    border-width: 1px;
+    background-color: var(--builder-page-bg, #2B2B31);
+    border-color: var(--builder-page-edge, #4A4A54);
+    overflow: hidden;
+}

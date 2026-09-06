@@ -28,6 +28,12 @@ theme {
     --blackboard-subtitle-fg: var(--fg-hint);
     --blackboard-type-fg: var(--fg-hint);
 
+    /* The UI builder. The plane is RECESSED and the page is the editor surface, so a document
+     * reads as a page lying on a workbench rather than as a panel among panels. */
+    --builder-surface-bg: var(--surface-recessed);
+    --builder-page-bg: var(--surface-editor);
+    --builder-page-edge: var(--border-base);
+
     --breadcrumb-current-fg: var(--fg);
     --breadcrumb-link-fg: var(--link);
     --breadcrumb-sep-fg: var(--fg-hint);
