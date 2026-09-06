@@ -1,5 +1,6 @@
 package com.crystalgui.widget.surface.select;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -199,7 +200,19 @@ public class SurfaceSelection {
      * @param keepSecondary whether the secondary is still there; only asked when there is one
      */
     public void retain(Predicate<UIElement> keepItem, Predicate<Object> keepSecondary) {
-        boolean changed = items.removeIf(item -> !keepItem.test(item));
+        // UNMARKED ON THE WAY OUT, like every other exit. An item dropped here still carried its
+        // selected look, and a delete leaves the widget alive for undo to bring back -- so it returned
+        // wearing a ring the selection no longer knew about, and clicking away cleared a set that was
+        // already empty.
+        List<UIElement> gone = new ArrayList<>();
+        for (UIElement item : items) {
+            if (!keepItem.test(item)) gone.add(item);
+        }
+        for (UIElement item : gone) {
+            items.remove(item);
+            marking.mark(item, false);
+        }
+        boolean changed = !gone.isEmpty();
         if (secondary != null && !keepSecondary.test(secondary)) {
             secondary = null;
             changed = true;

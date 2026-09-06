@@ -189,6 +189,51 @@ public class GraphEditingTest extends UiDocumentTestBase {
         assertTrue(graph.getSelection().isEmpty());
     }
 
+    /**
+     * <b>A deleted node must not come back selected.</b>
+     *
+     * <p>Delete detaches the widget and prunes it out of the selection, but undo brings the SAME widget
+     * back — so an item that left the set without being unmarked returned still wearing its ring, and
+     * clicking away cleared a set that was already empty. Reported from the gallery.</p>
+     */
+    @Test
+    public void undoingADeleteDoesNotRestoreTheSelection() {
+        GraphNode a = node("A", 20f, 20f);
+        GraphNode b = node("B", 20f, 220f);
+        graph.getSelection().replaceWith(java.util.List.of(a, b));
+        frame();
+
+        graph.deleteSelection();
+        frame();
+        graph.undoStack().undo();
+        frame();
+
+        assertTrue("the selection is empty after a delete", graph.getSelection().isEmpty());
+        assertFalse("and a restored node is not still ringed", a.isChecked());
+        assertFalse(b.isChecked());
+    }
+
+    /** And what the press path does with it: clicking empty canvas leaves nothing selected. */
+    @Test
+    public void pressingEmptyCanvasAfterAnUndoneDeleteClearsNothing() {
+        GraphNode a = node("A", 20f, 20f);
+        graph.getSelection().selectOnly(a);
+        frame();
+
+        graph.deleteSelection();
+        frame();
+        graph.undoStack().undo();
+        frame();
+
+        press(physicalOfWorld(300f, 260f));
+        frame();
+        release(physicalOfWorld(300f, 260f));
+        frame();
+
+        assertTrue(graph.getSelection().isEmpty());
+        assertFalse(a.isChecked());
+    }
+
     // ── The press rule ──────────────────────────────────────────────────────
 
     /**
