@@ -586,17 +586,24 @@ public final class ExplorerCommands {
         if (!isRenameable(path)) return;
         boolean directory = treeFor(context).isDirectory(path);
 
+        // AND THE TAB GOES WITH IT. A delete arriving over the watch orphans an open document on
+        // purpose, so a file removed by somebody else does not take an unread buffer with it -- but the
+        // author of the delete is not somebody else, and leaving their tab open means a later save from
+        // it recreates the file they just removed. Unsaved work still keeps its tab; see closeDeleted.
+        Runnable delete = () -> workbench.files().delete(Resource.of(path))
+                .then(trashId -> workbench.editors.closeDeleted(Resource.of(path)));
+
         if (!workbench.resolve(WorkbenchSettings.CONFIRM_DELETE)) {
             // Turned off deliberately, so it deletes. Still routed through the same file service, so undo
             // and the trash behave identically -- the setting removes the question, not the safety net.
-            workbench.files().delete(Resource.of(path));
+            delete.run();
             return;
         }
 
         InputDialog.confirm(UIElement.sourceOf(context), "Delete",
                 directory ? "Delete '" + path.name() + "' and everything in it?"
                         : "Delete '" + path.name() + "'?",
-                () -> workbench.files().delete(Resource.of(path)));
+                delete);
     }
 
     /**

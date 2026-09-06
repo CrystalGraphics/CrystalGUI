@@ -562,6 +562,48 @@ public class EditorServiceTest {
         assertTrue(((RecordingView) locked.editor()).readOnly);
     }
 
+    // ── Deleting what is open ────────────────────────────────────────────
+
+    /** A file the author deletes takes its tab with it, rather than leaving one open on nothing. */
+    @Test
+    public void deletingAFileClosesItsTab() {
+        EditorService.Tab tab = open(MAIN);
+        assertEquals(1, editors.tabs().size());
+
+        editors.closeDeleted(MAIN);
+
+        assertTrue("the tab went with the file", editors.tabs().isEmpty());
+        assertFalse(editors.tabs().contains(tab));
+    }
+
+    /** A directory takes everything under it. */
+    @Test
+    public void deletingADirectoryClosesEveryTabUnderIt() {
+        open(MAIN);
+        open(file("README.md"));
+        assertEquals(2, editors.tabs().size());
+
+        editors.closeDeleted(Resource.of(CgPath.parse("proj:src")));
+
+        assertEquals("only the one under src/ closed", 1, editors.tabs().size());
+        assertEquals(file("README.md"), editors.tabs().get(0).resource());
+    }
+
+    /**
+     * <b>Unsaved work keeps its tab.</b> That buffer is the only copy of the text left anywhere the
+     * author can see it, so a delete must not be the thing that takes it.
+     */
+    @Test
+    public void deletingAFileWithUnsavedWorkKeepsItsTab() {
+        EditorService.Tab tab = open(MAIN);
+        tab.document().as(TextDocumentModel.class).buffer().insert(0, "// half-typed\n");
+        assertTrue(tab.document().isDirty());
+
+        editors.closeDeleted(MAIN);
+
+        assertEquals("the work is still reachable", 1, editors.tabs().size());
+    }
+
     private void registerViewedKind() {
         kinds.register(DocumentKind.of("test:viewed", "Viewed")
                 .files(DocumentKind.FilePatterns.extension("java"))

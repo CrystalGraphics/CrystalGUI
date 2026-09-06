@@ -205,6 +205,32 @@ public final class EditorService implements Disposable {
         onDidClose.emit(tab);
     }
 
+    /**
+     * Closes the editors for something this client has just deleted.
+     *
+     * <p>Only for a delete the author ASKED for. A file that disappears underneath keeps its editor,
+     * marked — that is {@code WorkspaceDocuments}' orphan rule, and VS Code's
+     * {@code workbench.editor.closeOnFileDelete} default — so a file somebody else removes cannot take
+     * an unread buffer with it. A deliberate delete is not that case: it leaves a tab open on a file its
+     * author knows is gone, and a save from that tab silently recreates it.</p>
+     *
+     * <p><b>A tab holding unsaved work stays open</b>, whoever deleted the file. That buffer is the only
+     * copy of the text left anywhere the author can see it, and a delete was never asked to take it.</p>
+     *
+     * @param deleted what was deleted — a directory closes every editor under it too
+     */
+    public void closeDeleted(Resource deleted) {
+        String target = deleted.toString();
+        String under = target + "/";
+        for (Tab tab : new ArrayList<>(tabs.values())) {
+            String key = tab.resource().toString();
+            if (!key.equals(target) && !key.startsWith(under)) continue;
+            Document document = tab.document();
+            if (document != null && document.isDirty()) continue;
+            close(tab);
+        }
+    }
+
     public void closeAll() {
         for (Tab tab : new ArrayList<>(tabs.values())) close(tab);
     }
@@ -244,6 +270,10 @@ public final class EditorService implements Disposable {
     public int restoreUnsavedWork() {
         int restored = 0;
         for (Backup.Entry entry : documents.restorable()) {
+            // LEFT ON DISK, not discarded. Nothing here can open it, so nothing here can compare it
+            // against the file -- and a kind is absent because an extension did not load as often as
+            // because it is gone, so discarding would throw away work that a later launch could give
+            // back. It costs one stale file per resource; the alternative costs somebody's work.
             if (kinds.forResource(entry.resource()) == null) continue;
             // THE BYTES, once the document is there. Opening alone reads the SERVER's copy and settles
             // CLEAN, so the work this method exists to give back was read from the store, counted, and
