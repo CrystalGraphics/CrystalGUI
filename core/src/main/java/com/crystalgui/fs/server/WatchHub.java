@@ -225,7 +225,8 @@ public final class WatchHub {
      * <p><b>The etag is the arbiter even when an event prompted the look.</b> An {@code ENTRY_MODIFY}
      * fires for a touch that changed no bytes, so trusting the event alone reports changes that did not
      * happen — and a client that reloads on those loses an unsaved buffer to a file that is identical.
-     * The event's kind is used only to tell a first sighting from a modification.</p>
+     * The kind is consulted for one thing only: a DELETED event is trusted on its own, because the
+     * file is gone and there is nothing left to arbitrate.</p>
      */
     @Nullable
     private FsMessages.FileChange recheck(WorkspaceActor actor, CgPath path,
@@ -243,14 +244,20 @@ public final class WatchHub {
                     created ? FsMessages.ChangeKind.CREATED : FsMessages.ChangeKind.MODIFIED, now);
         } catch (CgFileSystemException gone) {
             if (gone.getError() != CgFileError.FILE_NOT_FOUND) return null;
-            // A file that was never there and still is not is not news.
-            if (!known || last == null) {
+            // THE WATCHER SAW IT GO, and that is evidence in its own right. A rescan re-stats paths
+            // speculatively, so "not there now, not there before" is genuinely not news there -- but
+            // only what a client OPENED is ever in lastEtag, since a recursive watch primes nothing
+            // for its descendants. Applying the rescan's rule to an explicit event meant a deletion
+            // was reported for a file somebody had open and for no other file in the project.
+            boolean sighted = hint == CgFileEvent.Kind.DELETED;
+            if (!sighted && (!known || last == null)) {
                 lastEtag.put(path, null);
                 return null;
             }
             // RECORDED AS IT GOES, because it is the only evidence a rename pairing has of its source
-            // and this is the last moment anybody holds it.
-            etagBefore.put(path.toString(), last);
+            // and this is the last moment anybody holds it. Absent for a file never stat-ed, which is
+            // why such a move arrives as a delete and a create rather than as one RENAMED.
+            if (last != null) etagBefore.put(path.toString(), last);
             lastEtag.put(path, null);
             return new FsMessages.FileChange(path.toString(), FsMessages.ChangeKind.DELETED, "");
         }
@@ -357,20 +364,7 @@ public final class WatchHub {
 
         /** Whether an event about {@code candidate} concerns this subscription. */
         public boolean covers(CgPath candidate) {
-            if (candidate == null) return false;
-            if (candidate.equals(path)) return true;
-            if (!candidate.project().equals(path.project())) return false;
-
-            List<String> mine = path.segments();
-            List<String> theirs = candidate.segments();
-            if (theirs.size() <= mine.size()) return false;
-            for (int i = 0; i < mine.size(); i++) {
-                if (!mine.get(i).equals(theirs.get(i))) return false;
-            }
-            // A DIRECT child either way; a deeper one only when recursive. Which is what makes an
-            // expanded folder cost one subscription rather than one per file in it, without also
-            // signing that peer up for everything under a tree it has not opened.
-            return recursive || theirs.size() == mine.size() + 1;
+            return path.covers(candidate, recursive);
         }
     }
 }

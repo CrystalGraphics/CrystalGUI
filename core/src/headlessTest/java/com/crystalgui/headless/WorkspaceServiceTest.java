@@ -3,7 +3,9 @@ package com.crystalgui.headless;
 import com.crystalgui.fs.CgFileError;
 import com.crystalgui.fs.CgFileSystemException;
 import com.crystalgui.fs.CgPath;
+import com.crystalgui.fs.provider.CgFileEvent;
 import com.crystalgui.fs.provider.InMemoryFileSystem;
+import com.crystalgui.fs.provider.LocalFileSystem;
 import com.crystalgui.fs.project.ProjectInfo;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.server.WorkspaceActor;
@@ -12,8 +14,16 @@ import com.crystalgui.fs.server.WorkspaceOperation;
 import com.crystalgui.fs.server.WorkspacePermission;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.server.WorkspaceService;
+import com.crystalgui.fs.protocol.FsMessages;
+import com.crystalgui.fs.server.WatchHub;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.nio.file.Path;
+
+import java.nio.file.Files;
+
+import java.io.IOException;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
@@ -322,6 +332,142 @@ public class WorkspaceServiceTest {
             return null;
         } catch (CgFileSystemException e) {
             return e.getError();
+        }
+    }
+
+    // ── The watcher comes with the filesystem ─────────────────────────────────────
+
+    /**
+     * <b>A service built by hand watches its files, because the provider brings the watcher.</b>
+     *
+     * <p>It used to be attached by {@code WorkspaceHost}, so anything assembling a service without that
+     * class got none — silently, since the field defaults to {@code NONE} and the only symptom is a
+     * workspace that runs a poll interval behind for ever.</p>
+     */
+    @Test
+    public void aServiceOverRealFilesWatchesThemWithoutBeingToldTo() {
+        Path root = tempRoot();
+        ProjectRegistry registry = new ProjectRegistry().register(() -> List.of(
+                new WorkspaceProject("proj", "Proj", root)));
+        WorkspaceService service = new WorkspaceService(
+                registry, new LocalFileSystem(registry), WorkspacePermission.ALLOW_ALL);
+        try {
+            service.drainFileEvents();   // the first drain is what opens a watcher on each root
+            write(root.resolve("Made.java"), "class Made {}" + "\n");
+
+            assertTrue("nobody attached a source; the LocalFileSystem supplied its own",
+                    awaitEvent(service, "Made.java"));
+        } finally {
+            service.close();
+        }
+    }
+
+    /** And closing releases the handles — which nothing owned, so nothing freed. */
+    @Test
+    public void closingReleasesTheWatchHandles() {
+        WorkspaceService service = new WorkspaceService(
+                new ProjectRegistry(), new InMemoryFileSystem(), WorkspacePermission.ALLOW_ALL);
+
+        service.close();
+        // Twice, because a server stopped in place runs reset() again on the next stop.
+        service.close();
+
+        assertTrue(service.drainFileEvents().isEmpty());
+    }
+
+    private static boolean awaitEvent(WorkspaceService service, String endingIn) {
+        long deadline = System.currentTimeMillis() + 5000;
+        while (System.currentTimeMillis() < deadline) {
+            for (CgFileEvent event : service.drainFileEvents()) {
+                if (event.path() != null && event.path().toString().endsWith(endingIn)) return true;
+            }
+            try {
+                Thread.sleep(25);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return false;
+    }
+
+    private static Path tempRoot() {
+        try {
+            return Files.createTempDirectory("cgui-provider-watch");
+        } catch (IOException e) {
+            throw new AssertionError(e);
+        }
+    }
+
+    private static void write(Path file, String text) {
+        try {
+            Files.write(file, text.getBytes(StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            throw new AssertionError(e);
+        }
+    }
+
+    /**
+     * <b>A deletion the watcher saw is reported, even for a file nobody opened.</b>
+     *
+     * <p>The explorer's arrangement: one recursive watch on the project root and no per-file watch on
+     * anything. Only opened files are ever stat-ed into the hub, so the rescan's rule — "not there now,
+     * not there before is not news" — silently swallowed every deletion in the project except one for
+     * a file that happened to be open. Creates survived, so a move half-arrived: the new row appeared
+     * and the old one never left.</p>
+     */
+    @Test
+    public void aDeletionUnderARecursiveWatchIsReported() {
+        Path root = tempRoot();
+        Path doomed = root.resolve("Doomed.java");
+        write(doomed, "class Doomed {}" + "\n");
+
+        ProjectRegistry registry = new ProjectRegistry().register(() -> List.of(
+                new WorkspaceProject("proj", "Proj", root)));
+        WorkspaceService service = new WorkspaceService(
+                registry, new LocalFileSystem(registry), WorkspacePermission.ALLOW_ALL);
+        WatchHub hub = new WatchHub(service);
+        Object peer = new Object();
+        // The root, recursively, and NOTHING per file -- exactly what the explorer subscribes.
+        hub.watch(peer, WorkspaceActor.LOCAL, CgPath.parse("proj:"), true);
+
+        service.drainFileEvents();
+        delete(doomed);
+
+        assertTrue("the watcher saw it go; the hub had never stat-ed it",
+                awaitChange(service, hub, peer, "Doomed.java"));
+        service.close();
+    }
+
+    private static boolean awaitChange(WorkspaceService service, WatchHub hub, Object peer,
+                                       String endingIn) {
+        long deadline = System.currentTimeMillis() + 5000;
+        while (System.currentTimeMillis() < deadline) {
+            List<CgFileEvent> events = service.drainFileEvents();
+            if (!events.isEmpty()) {
+                for (List<FsMessages.FileChange> mine
+                        : hub.tick(WorkspaceActor.LOCAL, events).values()) {
+                    for (FsMessages.FileChange change : mine) {
+                        if (change.path().endsWith(endingIn)
+                                && change.kind() == FsMessages.ChangeKind.DELETED) return true;
+                    }
+                }
+            }
+            try {
+                Thread.sleep(25);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return false;
+    }
+
+    private static void delete(Path file) {
+        try {
+            Files.delete(file);
+        } catch (IOException e) {
+            throw new AssertionError(e);
         }
     }
 }

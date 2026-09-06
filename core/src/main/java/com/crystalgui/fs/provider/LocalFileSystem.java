@@ -19,8 +19,10 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -93,6 +95,12 @@ public final class LocalFileSystem implements CgFileSystem {
         caps.add(CgFileCapability.FILE_ATOMIC_WRITE);
         if (caseSensitive) caps.add(CgFileCapability.PATH_CASE_SENSITIVE);
         return CgFileCapability.of(caps.toArray(new CgFileCapability[0]));
+    }
+
+    /** A watcher per project root. @see CgFileSystem#eventSource */
+    @Override
+    public CgFileEvent.Source eventSource() {
+        return new ProjectWatchers(projects);
     }
 
     // ── Reading ─────────────────────────────────────────────────────────────────────────────────
@@ -375,5 +383,46 @@ public final class LocalFileSystem implements CgFileSystem {
             return new CgFileSystemException(CgFileError.NO_PERMISSIONS, "not permitted: " + path, cause);
         }
         return new CgFileSystemException(CgFileError.UNKNOWN, "io error at " + path, cause);
+    }
+
+    /**
+     * One NIO watcher per project root, opened as roots appear.
+     *
+     * <p><b>Per project, and lazily.</b> A project is a separate directory tree, so one watcher cannot
+     * cover them all — and a server registers its projects after the filesystem exists, so a watcher
+     * opened at construction would watch a root that is not there yet and never recover. Draining is
+     * where the registry is re-read, which is also the only moment anybody is listening.</p>
+     */
+    private static final class ProjectWatchers implements CgFileEvent.Source {
+
+        private final ProjectRegistry projects;
+        private final Map<String, CgFileEvent.Source> byProject = new LinkedHashMap<>();
+        private boolean closed;
+
+        ProjectWatchers(ProjectRegistry projects) {
+            this.projects = projects;
+        }
+
+        @Override
+        public List<CgFileEvent> drain() {
+            if (closed) return List.of();
+            for (WorkspaceProject project : projects.all()) {
+                // NEVER THROWS -- a root that cannot be watched leaves the poll to reconcile it, and
+                // refusing to serve the workspace over it would be a far worse answer.
+                byProject.computeIfAbsent(project.id(), id ->
+                        NioFileEventSource.open(id, project.root(), project.excludes()));
+            }
+            if (byProject.isEmpty()) return List.of();
+            List<CgFileEvent> out = new ArrayList<>();
+            for (CgFileEvent.Source source : byProject.values()) out.addAll(source.drain());
+            return out;
+        }
+
+        @Override
+        public void close() {
+            closed = true;
+            for (CgFileEvent.Source source : byProject.values()) source.close();
+            byProject.clear();
+        }
     }
 }

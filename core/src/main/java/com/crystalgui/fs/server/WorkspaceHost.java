@@ -23,7 +23,6 @@ import com.crystalgui.fs.protocol.FsMessages;
 import com.crystalgui.fs.protocol.FsMethods;
 import com.crystalgui.fs.provider.CgFileEvent;
 import com.crystalgui.fs.provider.LocalFileSystem;
-import com.crystalgui.fs.provider.NioFileEventSource;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
@@ -180,10 +179,9 @@ public final class WorkspaceHost {
                 .setWorkspaceId(identityOf(root));
         CrystalGuiCore.LOGGER.info("[cgui-fs] serving {}", root);
 
-        // ONE source for the project, not one per player: every watch costs an OS handle and Linux caps
-        // them per USER. Never throws -- a workspace that cannot be watched still works, half a second
-        // behind, and refusing to serve it would be a far worse answer.
-        service.attachEvents(NioFileEventSource.open(projectId, root, project.excludes()));
+        // The watcher comes with the filesystem -- one source per project root, opened as roots appear.
+        // It was assembled here, which meant anything building a service without this class got none.
+        // @see CgFileSystem#eventSource
         hub = new WatchHub(service);
         return service;
     }
@@ -379,6 +377,9 @@ public final class WorkspaceHost {
     public synchronized void reset() {
         boundPeers.clear();
         connections.clear();
+        // THE HANDLES FIRST. A watch is an OS handle; dropping the reference leaks one tree's worth
+        // per stop, and a reload-in-place does exactly this repeatedly.
+        if (service != null) service.close();
         service = null;
         hub = null;
         untilPoll = POLL_SECONDS;

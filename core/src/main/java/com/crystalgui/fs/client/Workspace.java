@@ -549,12 +549,12 @@ public final class Workspace implements Disposable {
 
         boolean covers(Resource candidate) {
             if (candidate.equals(resource)) return true;
-            String mine = resource.toString();
-            String theirs = candidate.toString();
-            if (!theirs.startsWith(mine)) return false;
-            String rest = theirs.substring(mine.length());
-            if (!rest.startsWith("/")) return false;
-            return recursive || rest.indexOf('/', 1) < 0;
+            // THE SAME RULE THE SERVER APPLIES, and now literally the same code. This was a second
+            // copy written on string prefixes, and it answered false for every file under a project
+            // root -- so the explorer's one recursive watch heard nothing, and only a file with a
+            // watch of its own (an open document) ever saw a change. @see CgPath#covers
+            if (!resource.isProject() || !candidate.isProject()) return false;
+            return resource.asPath().covers(candidate.asPath(), recursive);
         }
 
         @Override

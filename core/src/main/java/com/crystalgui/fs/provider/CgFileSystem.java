@@ -37,6 +37,20 @@ public interface CgFileSystem {
      */
     Set<CgFileCapability> capabilities();
 
+    /**
+     * A watcher for this filesystem, or {@link CgFileEvent.Source#NONE} when it cannot produce events.
+     *
+     * <p><b>The provider owns watching</b>, as in VS Code's {@code IFileSystemProvider.watch}: only the
+     * implementation knows whether there is an OS underneath to ask. It was assembled by the host
+     * instead, which meant a host that built a service by hand simply got none — and silently, since
+     * the field defaults to {@code NONE} and the workspace merely runs a poll interval behind for ever.</p>
+     *
+     * <p>Called once, by {@code WorkspaceService}, which owns the returned source and closes it.</p>
+     */
+    default CgFileEvent.Source eventSource() {
+        return CgFileEvent.Source.NONE;
+    }
+
     default boolean has(CgFileCapability capability) {
         return capabilities().contains(capability);
     }

@@ -67,6 +67,8 @@ public final class WorkspaceService {
         if (projects == null || files == null) throw new IllegalArgumentException();
         this.projects = projects;
         this.files = files;
+        // THE PROVIDER'S, not a host's to remember. @see CgFileSystem#eventSource
+        this.events = files == null ? CgFileEvent.Source.NONE : files.eventSource();
         this.trash = trash == null ? WorkspaceTrash.NONE : trash;
         // A host that registers projects and forgets the callback gets a workspace nobody can open,
         // rather than one everybody can.
@@ -115,6 +117,18 @@ public final class WorkspaceService {
     }
 
     private CgFileEvent.Source events = CgFileEvent.Source.NONE;
+
+    /**
+     * Releases the watch handles this service holds. <b>Call it when the workspace goes away.</b>
+     *
+     * <p>A watch is an OS handle and Linux caps them per user, so a host torn down and rebuilt — a world
+     * unloaded, a server stopped in place — leaks one tree's worth every time it happens. Nothing closed
+     * the source at all before, because nothing owned it.</p>
+     */
+    public void close() {
+        events.close();
+        events = CgFileEvent.Source.NONE;
+    }
 
     /**
      * Who has what open, across every peer.
