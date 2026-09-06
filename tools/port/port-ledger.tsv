@@ -3,18 +3,21 @@
 # leaving the rest alone; the generator preserves confirmations by name.
 #
 # CLASS	path	lines	destination	batch	how	status
-CLASS	net/window/ClientScope	92	net/window	6.8	copy	in-place
-CLASS	net/window/ClientWindowContext	96	net/window	6.8	copy	in-place
-CLASS	net/window/ClientWindows	592	net/window	6.8	copy	in-place
+CLASS	net/window/ClientScope	144	net/window	6.8	copy	in-place
+CLASS	net/window/ClientWindowContext	105	net/window	6.8	copy	in-place
+CLASS	net/window/ClientWindows	634	net/window	6.8	copy	in-place
 CLASS	net/window/CloseReason	53	net/window	6.8	move	in-place
 CLASS	net/window/Networked	256	net/window	6.8	copy	in-place
 CLASS	net/window/OpenResolver	58	net/window	6.8	move	in-place
+CLASS	net/window/Presentation	131	net/window	6.8	move	in-place
+CLASS	net/window/RemoteRows	141	net/window	6.8	copy	in-place
+CLASS	net/window/RowSource	62	net/window	6.8	move	in-place
 CLASS	net/window/ScopedSheets	124	net/window	6.8	move	in-place
-CLASS	net/window/ServerScope	514	net/window	6.8	copy	in-place
+CLASS	net/window/ServerScope	593	net/window	6.8	copy	in-place
 CLASS	net/window/ServerWindow	265	net/window	6.8	copy	in-place
-CLASS	net/window/ServerWindows	517	net/window	6.8	copy	in-place
+CLASS	net/window/ServerWindows	552	net/window	6.8	copy	in-place
 CLASS	net/window/SheetSupply	231	net/window	6.8	copy	in-place
-CLASS	net/window/UiType	344	net/window	6.8	copy	in-place
+CLASS	net/window/UiType	360	net/window	6.8	copy	in-place
 CLASS	net/window/ViewCommands	123	net/window	6.8	copy	in-place
 CLASS	net/window/WindowMount	74	net/window	6.8	copy	in-place
 CLASS	net/window/WindowProtocol	57	net/window	6.8	move	in-place
@@ -26,7 +29,7 @@ CLASS	language/run/view/RunIndicators	114	language/run/view	6.7	copy	in-place
 CLASS	language/run/view/RunPanel	1074	language/run/view	6.7	copy	in-place
 CLASS	language/run/view/RunPanels	261	language/run/view	6.7	move	in-place
 CLASS	language/run/view/RunRail	353	language/run/view	6.7	copy	in-place
-CLASS	language/run/view/ScriptWorkbench	567	language/run/view	6.7	move	in-place
+CLASS	language/run/view/ScriptWorkbench	674	language/run/view	6.7	move	in-place
 CLASS	language/run/view/TailFollow	127	language/run/view	6.7	copy	in-place
 #
 # PART	owner	name	kind	uses	source	why
@@ -74,6 +77,7 @@ PART	ArrayControl	entry	B	2	confirmed	a rule selects through it (1)
 PART	ArrayControl	foot	B	2	confirmed	a rule selects through it (1)
 PART	ArrayControl	head	B	2	confirmed	a rule selects through it (1)
 PART	ArrayControl	remove	B	0	confirmed	leaf in every rule
+PART	Artboard	artboard	A	0	proposed	leaf in every rule
 PART	AssetControl	asset	B	3	confirmed	a rule selects through it (2)
 PART	AssetControl	browse	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	AssetControl	field	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
@@ -148,8 +152,18 @@ PART	ConflictDialog	conflict	B	4	confirmed	a rule selects through it (3)
 PART	ConflictDialog	conflict-actions	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	ConflictDialog	conflict-message	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	ConflictDialog	conflict-who	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
-PART	CrystalEditor	content	A	0	confirmed	leaf in every rule
-PART	CrystalEditor	editor-content	A	0	confirmed	leaf in every rule
+PART	CreateMenu	category	A	0	proposed	leaf in every rule
+PART	CreateMenu	category-segment	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	CreateMenu	category-separator	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	CreateMenu	empty	C	2	proposed	state adjective
+PART	CreateMenu	entry	A	0	proposed	leaf in every rule
+PART	CreateMenu	entry-category	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	CreateMenu	items	A	0	proposed	leaf in every rule
+PART	CreateMenu	label	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
+PART	CreateMenu	search	A	0	proposed	leaf in every rule
+PART	CreateMenu	title	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	CreateMenu	title-bar	A	0	proposed	leaf in every rule
+PART	CreateMenu	twisty	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	Desktop	live	C	1	confirmed	state adjective
 PART	Desktop	snap-preview	B	1	confirmed	leaf in every rule
 PART	Desktop	windows	B	0	confirmed	leaf in every rule
@@ -180,6 +194,7 @@ PART	DockGroup	empty	C	2	confirmed	state adjective
 PART	DockGroup	missing	C	0	confirmed	state adjective
 PART	DockGroup	pane-host	A	0	confirmed	leaf in every rule
 PART	DockWindow	dock-window	B	1	confirmed	a rule selects through it (1)
+PART	DocumentTabs	missing	C	0	proposed	state adjective
 PART	DocumentationPopup	doc-body	B	0	confirmed	leaf in every rule
 PART	DocumentationPopup	doc-definition	B	0	confirmed	leaf in every rule
 PART	DocumentationPopup	doc-definition-box	B	0	confirmed	leaf in every rule
@@ -212,7 +227,7 @@ PART	ErrorStripePart	error-stripe-warning	B	1	confirmed	leaf in every rule
 PART	GraphNode	collapse	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	GraphNode	collapsed	C	4	confirmed	state adjective
 PART	GraphNode	control-row	B	0	confirmed	leaf in every rule
-PART	GraphNode	controls	B	1	confirmed	a rule selects through it (1)
+PART	GraphNode	controls	B	0	confirmed	leaf in every rule
 PART	GraphNode	empty-collapsed	C	0	confirmed	state adjective
 PART	GraphNode	full-width	C	1	confirmed	state adjective
 PART	GraphNode	inputs	B	0	confirmed	leaf in every rule
@@ -276,6 +291,7 @@ PART	MarkupView	markup-quote-rule	B	0	confirmed	leaf in every rule
 PART	MarkupView	markup-row	B	0	confirmed	leaf in every rule
 PART	MarkupView	markup-table	B	0	confirmed	leaf in every rule
 PART	MarkupView	markup-term	B	0	confirmed	leaf in every rule
+PART	Marquee	marquee	A	0	proposed	leaf in every rule
 PART	MaskControl	chevron	B	0	confirmed	leaf in every rule
 PART	MaskControl	mask	B	10	confirmed	a rule selects through it (10)
 PART	MaskControl	mask-panel	B	1	confirmed	a rule selects through it (1)
@@ -306,6 +322,7 @@ PART	MergeView	merge-pane-title	A	1	confirmed	leaf in every rule, scoped by an a
 PART	MergeView	merge-panes	B	4	confirmed	a rule selects through it (3)
 PART	MergeView	merge-status	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	MergeView	merge-toolbar	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	MoveGesture	moving	C	0	proposed	state adjective
 PART	NavigatorView	nav-arrow	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	NavigatorView	nav-back	B	0	confirmed	leaf in every rule
 PART	NavigatorView	nav-detail	B	0	confirmed	leaf in every rule
@@ -315,18 +332,7 @@ PART	NavigatorView	nav-label	B	0	confirmed	leaf in every rule
 PART	NavigatorView	nav-node	B	0	confirmed	leaf in every rule
 PART	NavigatorView	nav-search	B	0	confirmed	leaf in every rule
 PART	NavigatorView	nav-sidebar	B	0	confirmed	leaf in every rule
-PART	NodeCreationMenu	category	B	0	confirmed	leaf in every rule
-PART	NodeCreationMenu	category-segment	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
-PART	NodeCreationMenu	category-separator	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
-PART	NodeCreationMenu	empty	C	2	confirmed	state adjective
-PART	NodeCreationMenu	entry	B	0	confirmed	leaf in every rule
-PART	NodeCreationMenu	entry-category	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
-PART	NodeCreationMenu	items	B	0	confirmed	leaf in every rule
-PART	NodeCreationMenu	label	B	3	confirmed	leaf in every rule, scoped by an ancestor in 3
-PART	NodeCreationMenu	search	B	0	confirmed	leaf in every rule
-PART	NodeCreationMenu	title	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
-PART	NodeCreationMenu	title-bar	B	0	confirmed	leaf in every rule
-PART	NodeCreationMenu	twisty	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	NetworkedPanels	networked-loading	A	0	proposed	leaf in every rule
 PART	NodePort	dot	B	0	confirmed	leaf in every rule
 PART	NodePort	dot-core	B	0	confirmed	leaf in every rule
 PART	NodePort	editor	B	0	confirmed	leaf in every rule
@@ -339,6 +345,9 @@ PART	NodePort	label	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	NodePort	output	B	3	confirmed	a rule selects through it (1)
 PART	NodeWidgetFactory	unknown-type	C	0	confirmed	state adjective
 PART	NodeWireLayer	wire-layer	B	0	confirmed	leaf in every rule
+PART	NotesView	notes	A	0	proposed	leaf in every rule
+PART	NotesView	notes-add	A	0	proposed	leaf in every rule
+PART	NotesView	notes-row	A	0	proposed	leaf in every rule
 PART	NotificationBalloons	balloon	B	3	confirmed	leaf in every rule, scoped by an ancestor in 3
 PART	NotificationBalloons	balloons	B	6	confirmed	a rule selects through it (5)
 PART	NotificationBalloons	hidden	C	1	confirmed	state adjective
@@ -614,6 +623,7 @@ PART	ToolWindowFrame	dock	A	2	confirmed	leaf in every rule, scoped by an ancesto
 PART	ToolWindowFrame	floating	C	0	confirmed	state adjective
 PART	ToolWindowFrame	tool-window	B	10	confirmed	a rule selects through it (9)
 PART	ToolWindowFrame	windowed	C	0	confirmed	state adjective
+PART	Tooltip	wait	A	1	proposed	leaf in every rule
 PART	TreeSearch	dimmed	C	1	confirmed	state adjective
 PART	TreeSearch	find-bar	B	32	confirmed	a rule selects through it (31)
 PART	TreeSearch	find-close	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
@@ -641,8 +651,8 @@ PART	VectorControl	vector	B	4	confirmed	a rule selects through it (3)
 PART	VectorControl	vector-cell	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	ViewContainer	content	A	0	confirmed	leaf in every rule
 PART	ViewContainer	header	B	3	confirmed	a rule selects through it (2)
-PART	ViewContainer	hide	B	4	confirmed	a rule selects through it (1)
-PART	ViewContainer	panel-header	B	5	confirmed	a rule selects through it (4)
+PART	ViewContainer	hide	B	3	confirmed	leaf in every rule, scoped by an ancestor in 3
+PART	ViewContainer	panel-header	B	4	confirmed	a rule selects through it (3)
 PART	ViewContainer	title	A	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	ViewContainer	view-container	B	4	confirmed	a rule selects through it (3)
 PART	ViewContainer	view-content	B	6	confirmed	a rule selects through it (4)
@@ -651,7 +661,7 @@ PART	WindowFrame	caption-adopted	C	2	confirmed	state adjective
 PART	WindowFrame	caption-chrome	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	WindowFrame	close	B	7	confirmed	a rule selects through it (1)
 PART	WindowFrame	content	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
-PART	WindowFrame	controls	B	2	confirmed	a rule selects through it (1)
+PART	WindowFrame	controls	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	WindowFrame	fullscreen	C	1	confirmed	state adjective
 PART	WindowFrame	hud	C	0	confirmed	state adjective
 PART	WindowFrame	icon	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
@@ -661,8 +671,8 @@ PART	WindowFrame	minimize	B	3	confirmed	leaf in every rule, scoped by an ancesto
 PART	WindowFrame	pin	B	5	confirmed	leaf in every rule, scoped by an ancestor in 5
 PART	WindowFrame	pinned	C	1	confirmed	state adjective
 PART	WindowFrame	title	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
-PART	WindowFrame	title-bar	B	28	confirmed	a rule selects through it (24)
-PART	WindowFrame	window	B	35	confirmed	a rule selects through it (31)
+PART	WindowFrame	title-bar	B	27	confirmed	a rule selects through it (23)
+PART	WindowFrame	window	B	34	confirmed	a rule selects through it (30)
 PART	WindowIcon	branded	C	1	confirmed	state adjective
 PART	WindowIcon	tile-mono	A	1	confirmed	leaf in every rule
 PART	WindowIcon	window-icon	B	11	confirmed	a rule selects through it (1)
@@ -685,9 +695,10 @@ PART	WindowThumbnail	thumbnail	B	0	confirmed	leaf in every rule
 PART	Workbench	content	A	0	confirmed	leaf in every rule
 PART	Workbench	dock	A	0	confirmed	leaf in every rule
 PART	Workbench	file-editor	A	1	confirmed	leaf in every rule
-PART	Workbench	missing	C	0	confirmed	state adjective
 PART	Workbench	viewer	A	0	confirmed	leaf in every rule
 PART	Workbench	workbench-content	A	0	confirmed	leaf in every rule
+PART	WorkbenchApplication	content	A	0	proposed	leaf in every rule
+PART	WorkbenchApplication	editor-content	A	0	proposed	leaf in every rule
 PART	WorkbenchRegions	workbench-centre	A	1	confirmed	leaf in every rule
 PART	WorkbenchRegions	workbench-regions	A	0	confirmed	leaf in every rule
 PART	WorkbenchRegions	workbench-split	A	1	confirmed	leaf in every rule
