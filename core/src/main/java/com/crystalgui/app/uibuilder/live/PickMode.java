@@ -113,11 +113,22 @@ public final class PickMode implements InputMode {
         onEnded.emit();
     }
 
+    /**
+     * Two stages, and each answers a question the other cannot.
+     *
+     * <p>The hit test picks <b>which live thing you are pointing at</b>, honouring {@code hit-test:
+     * false} so an application's full-window pictures are passed over. Then a pick <b>inside that</b>
+     * reaches the deepest node, ignoring the flag — which is what gets into a builder's artboard, whose
+     * whole subtree is unhittable precisely so the document does not react to being designed.</p>
+     *
+     * <p>Nothing is skipped for inertness in either: a picker must reach into a modal-blocked region,
+     * since looking at what a dialog has disabled is half of why you are looking.</p>
+     */
     @Nullable
     private UIElement elementAt(float x, float y) {
-        // Nothing skipped: inertness is the predicate's business, and a picker must reach INTO a
-        // modal-blocked region -- looking at what a dialog has disabled is half of why you are looking.
-        Box box = document.boxes().hitTest(x, y, ignored -> false);
-        return box == null ? null : box.node();
+        Box live = document.boxes().hitTest(x, y, ignored -> false);
+        if (live == null) return null;
+        Box deepest = live.pick(x, y, ignored -> false);
+        return (deepest == null ? live : deepest).node();
     }
 }

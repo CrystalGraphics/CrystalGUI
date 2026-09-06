@@ -34,3 +34,81 @@ artboard {
     border-color: var(--builder-page-edge, #4A4A54);
     overflow: hidden;
 }
+
+
+/* The builder's own plane is a `surface` with its own tag, so it takes the rule above by repetition
+ * rather than by inheritance -- a Name is per class and a subclass that declares one does not answer to
+ * its parent's. Listed together so the two cannot drift. */
+buildersurface {
+    width: 100%;
+    height: 100%;
+    background-color: var(--builder-surface-bg, #1B1B1F);
+}
+
+
+/* ── Canvas overlays ─────────────────────────────────────────────────────────────────────────────────
+ *
+ * Viewport children, so every stroke here is 1px at any zoom and none of it is in the tree being
+ * designed. Both draw with fills read from their OWN computed style rather than from a constant in Java,
+ * which is what lets a theme restate them: `color` is the stroke each overlay is about, `border-color`
+ * the secondary one.
+ *
+ * They fill the viewport because what they draw is positioned inside them, not by them. */
+hoverhighlight, selectionoutline {
+    width: 100%;
+    height: 100%;
+    color: var(--builder-hover, #6E9BF5);
+}
+
+/* The selection accent, and the dimmer stroke on its PARENT -- the flex context, which is the answer to
+ * "why is this here" and is Figma's reason for drawing it at all. */
+selectionoutline {
+    color: var(--builder-selected, #3574F0);
+    border-color: var(--builder-selected-parent, #55607A);
+}
+
+/* The tag naming what a click would select: kind, #id, size. Positioned by the widget through a
+ * compositor override, so nothing here places it -- only what it looks like. */
+hoverhighlight::part(tag) {
+    padding: 1 3 1 3;
+    font-size: 9;
+    color: var(--builder-tag-fg, #FFFFFF);
+    background-color: var(--builder-hover, #6E9BF5);
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+
+
+/* ── The tab's own layout ────────────────────────────────────────────────────────────────────────────
+ *
+ * Toolbar over plane. The plane takes the fill idiom (`height: 0` + `flex-grow: 1`) and the toolbar its
+ * own height, which is this codebase's rule for "one fixed row and one that takes the rest" -- a
+ * percentage on the plane would measure against a parent that is still distributing. */
+builderpane {
+    width: 100%;
+    height: 100%;
+    flex-direction: column;
+}
+
+buildertoolbar {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    gap: 4;
+    padding: 3 6 3 6;
+    background-color: var(--builder-toolbar-bg, #2B2D30);
+    border-bottom-color: var(--builder-page-edge, #4A4A54);
+    border-width-bottom: 1px;
+}
+
+buildertoolbar > dropdown {
+    min-width: 72;
+}
+
+/* The plane fills what the toolbar left. NOT height: 100% -- see the note above. */
+builderpane > buildersurface {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+}

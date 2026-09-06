@@ -1,0 +1,152 @@
+package com.crystalgui.app.uibuilder;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
+
+import java.nio.charset.StandardCharsets;
+
+import org.joml.Vector2f;
+import org.junit.Before;
+import org.junit.Test;
+
+import com.crystalgraphics.platform.input.CgMouseCodes;
+import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
+import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
+import com.crystalgui.core.data.DataContext;
+import com.crystalgui.core.data.Transform2D;
+import com.crystalgui.style.sheet.StyleSheet;
+import com.crystalgui.testsupport.UiDocumentTestBase;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UIElementRegistry;
+
+/**
+ * <b>L4.4 — design mode, and a click that selects.</b>
+ *
+ * <p>The whole design/preview switch is one attribute. {@code hit-test: false} on the artboard makes
+ * every widget in the document quiescent — the engine never looks inside — while the builder still picks
+ * through it, because {@code Picking} resolves with a pick rather than a hit test. Preview clears the
+ * attribute and pops the mode, and the same tree is simply used.</p>
+ */
+public class DesignModeAndSelectionTest extends UiDocumentTestBase {
+
+    private static final String SOURCE = "{\n"
+            + "  \"cgui\": 1,\n"
+            + "  \"root\": { \"kind\": \"element\", \"id\": \"root\",\n"
+            + "    \"children\": [\n"
+            + "      { \"kind\": \"text\", \"id\": \"first\", \"state\": { \"text\": \"one\" } },\n"
+            + "      { \"kind\": \"text\", \"id\": \"second\", \"state\": { \"text\": \"two\" } }\n"
+            + "    ] }\n"
+            + "}\n";
+
+    private BuilderEditor editor;
+    private UIElement first;
+    private UIElement second;
+
+    @Before
+    public void openTheDocument() {
+        UIElementRegistry.bootstrap();
+        editor = new BuilderEditor(new UiBuilderDocument(
+                SOURCE.getBytes(StandardCharsets.UTF_8), "test:page"));
+        UIElement root = new UIElement().layout(l -> l.width(800).height(500));
+        root.append(editor.view());
+        document.append(root);
+        document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
+        document.update(W, H);
+        frame();
+
+        first = editor.document().root().children().get(0);
+        second = editor.document().root().children().get(1);
+    }
+
+    /** A builder opens in design mode, and design mode IS the attribute. */
+    @Test
+    public void aBuilderOpensWithTheDocumentQuiescent() {
+        assertTrue(editor.surface().isDesignMode());
+        assertTrue("the artboard is unhittable, so nothing under it sees input",
+                editor.artboard().isDesignMode());
+    }
+
+    /** <b>The point of L4.4.</b> A press on the canvas selects the node under it. */
+    @Test
+    public void aClickOnTheCanvasSelectsTheNodeUnderIt() {
+        clickOn(second);
+
+        assertEquals(1, editor.selection().size());
+        assertSame(second, editor.selection().node());
+    }
+
+    /** And the inspector reads it, which is the only reason a selection is worth having. */
+    @Test
+    public void theInspectorSeesWhatTheCanvasSelected() {
+        clickOn(first);
+
+        BuilderSelection seen =
+                DataContext.from(editor.view()).get(BuilderEditor.BUILDER_SELECTION);
+        assertSame(first, seen.node());
+    }
+
+    /**
+     * <b>Both directions.</b> The hierarchy writes the builder's selection and the canvas must follow.
+     *
+     * <p>Two selections exist because they answer different questions — the engine moves a set of items
+     * and knows nothing about rules or tokens — and they are one selection to everybody who reads them.
+     * </p>
+     */
+    @Test
+    public void selectingThroughTheBuilderReachesTheEngine() {
+        editor.selection().selectOnly(second);
+
+        assertTrue("the engine's item set followed", editor.surface().selection().contains(second));
+        assertEquals(1, editor.surface().selection().size());
+    }
+
+    /** And a canvas click reaches the builder's, without the two answering each other forever. */
+    @Test
+    public void theBridgeSettlesRatherThanEchoing() {
+        editor.surface().selection().selectOnly(first);
+
+        assertSame(first, editor.selection().node());
+        assertEquals(1, editor.surface().selection().size());
+        assertEquals(1, editor.selection().size());
+    }
+
+    /** Preview hands the document back its input. */
+    @Test
+    public void previewMakesTheDocumentLiveAgain() {
+        editor.surface().setDesignMode(false);
+
+        assertFalse(editor.artboard().isDesignMode());
+        assertFalse("and the surface's mode is off the stack, or it would swallow every press",
+                document.input().modes().stream()
+                        .anyMatch(mode -> "surface".equals(mode.name())));
+    }
+
+    /** Switching back re-arms both halves. */
+    @Test
+    public void designModeComesBack() {
+        editor.surface().setDesignMode(false);
+        editor.surface().setDesignMode(true);
+
+        assertTrue(editor.artboard().isDesignMode());
+        assertTrue(document.input().modes().stream()
+                .anyMatch(mode -> "surface".equals(mode.name())));
+    }
+
+    private void clickOn(UIElement element) {
+        Vector2f at = centre(element);
+        document.input().consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                Math.round(at.x()), Math.round(at.y()), 0, 0, CgMouseCodes.LEFT_BUTTON, true, 0f, 1L));
+        frame();
+        document.input().consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                Math.round(at.x()), Math.round(at.y()), 0, 0, CgMouseCodes.LEFT_BUTTON, false, 0f, 2L));
+        frame();
+    }
+
+    private Vector2f centre(UIElement element) {
+        var box = element.box();
+        return Transform2D.apply(box.localToWorld(), box.width() * 0.5f, box.height() * 0.5f);
+    }
+}

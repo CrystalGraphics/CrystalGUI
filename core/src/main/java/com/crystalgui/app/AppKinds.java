@@ -2,6 +2,11 @@ package com.crystalgui.app;
 
 import com.crystalgui.app.shadergraph.ShaderGraphEditor;
 import com.crystalgui.app.uibuilder.canvas.Artboard;
+import com.crystalgui.app.uibuilder.canvas.BuilderPane;
+import com.crystalgui.app.uibuilder.canvas.BuilderSurface;
+import com.crystalgui.app.uibuilder.canvas.BuilderToolbar;
+import com.crystalgui.app.uibuilder.canvas.HoverHighlight;
+import com.crystalgui.app.uibuilder.canvas.SelectionOutline;
 import com.crystalgui.ui.dom.NodeContract;
 import com.crystalgui.ui.dom.NodeKinds;
 import com.crystalgui.ui.dom.UIElementRegistry;
@@ -32,5 +37,14 @@ public final class AppKinds implements NodeKinds {
         // The builder's page frame, for the same reason: `artboard` is what a theme names to
         // draw the page edge, and a kind nothing registered matches nothing.
         UIElementRegistry.registerTag(Artboard.NAME, NodeContract.INERT);
+        // The builder's plane and its two canvas overlays, all three for the tag alone: `ua/uibuilder.css`
+        // gives the plane its ground and the overlays their stroke colours, and an overlay whose colour
+        // rule matches nothing draws in the initial black on a dark canvas -- invisible, not obviously
+        // broken.
+        UIElementRegistry.registerTag(BuilderSurface.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(HoverHighlight.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(SelectionOutline.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(BuilderPane.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(BuilderToolbar.NAME, NodeContract.INERT);
     }
 }

@@ -2,6 +2,7 @@ package com.crystalgui.app.uibuilder.canvas;
 
 import java.util.List;
 
+import com.crystalgui.app.uibuilder.BuilderOverlaysExtension;
 import com.crystalgui.app.uibuilder.BuilderSelection;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.core.data.DataKey;
@@ -48,16 +49,39 @@ public final class BuilderEditor implements DocumentEditor {
     private static final String PAN_X = "panX";
     private static final String PAN_Y = "panY";
 
+    private static final String PRESET = "preset";
+    private static final String SCALE = "uiScale";
+
     private final UiBuilderDocument document;
     private final Artboard artboard;
     private final BuilderSurface surface;
+    private final BuilderToolbar toolbar;
+    private final BuilderPane pane;
 
     public BuilderEditor(UiBuilderDocument document) {
         this.document = document;
         this.artboard = new Artboard(document);
-        this.surface = new BuilderSurface(document, artboard, List.of(SelectExtension.ID));
+        this.surface = new BuilderSurface(document, artboard,
+                List.of(SelectExtension.ID, BuilderOverlaysExtension.ID));
         surface.ownedBy(this);
         surface.surface().place(artboard, 0f, 0f);
+        this.toolbar = new BuilderToolbar(new BuilderToolbar.BuilderSurfaceHost() {
+            @Override
+            public Artboard artboard() {
+                return artboard;
+            }
+
+            @Override
+            public boolean isDesignMode() {
+                return surface.isDesignMode();
+            }
+
+            @Override
+            public void setDesignMode(boolean design) {
+                surface.setDesignMode(design);
+            }
+        });
+        this.pane = new BuilderPane(toolbar, surface);
         // The document's own sheets, once there is a window to put them on. Installing them here would
         // reach a file from a constructor that a server also runs.
         surface.onDidConnect.connect(this::installSheets);
@@ -81,19 +105,53 @@ public final class BuilderEditor implements DocumentEditor {
         return surface.builderSelection();
     }
 
-    @Override
-    public UIElement view() {
-        return surface;
+    /** The toolbar above the canvas. */
+    public BuilderToolbar toolbar() {
+        return toolbar;
     }
 
     @Override
+    public UIElement view() {
+        return pane;
+    }
+
+    /**
+     * Where you were looking, so reopening a document does not put you back at the origin.
+     *
+     * <p>The camera and the two viewer settings, and deliberately <b>not</b> the selection: a selection
+     * is about the tree and a tree is what the file already carries, so restoring one means holding an
+     * id path that may no longer resolve. Zero and 1x are the defaults, so a document that was never
+     * moved writes almost nothing.</p>
+     */
+    @Override
     public <T> void writeViewState(StateMap<T> out) {
         out.putFloat(ZOOM, surface.surface().zoom());
+        if (surface.surface().panX() != 0f) out.putFloat(PAN_X, surface.surface().panX());
+        if (surface.surface().panY() != 0f) out.putFloat(PAN_Y, surface.surface().panY());
+        if (artboard.uiScale() != 1f) out.putFloat(SCALE, artboard.uiScale());
+        out.putString(PRESET, Math.round(artboard.boardWidth()) + "x"
+                + Math.round(artboard.boardHeight()));
     }
 
     @Override
     public <T> void readViewState(StateMap<T> in) {
         if (in.has(ZOOM)) surface.surface().setZoom(in.getFloat(ZOOM, 1f));
+        surface.surface().setPan(in.getFloat(PAN_X, 0f), in.getFloat(PAN_Y, 0f));
+        if (in.has(SCALE)) artboard.setUiScale(in.getFloat(SCALE, 1f));
+        readPreset(in.getString(PRESET, ""));
+    }
+
+    /** {@code 800x480} back into a page size; anything else is ignored rather than refused. */
+    private void readPreset(String preset) {
+        int cross = preset.indexOf('x');
+        if (cross <= 0) return;
+        try {
+            artboard.setSize(Float.parseFloat(preset.substring(0, cross)),
+                    Float.parseFloat(preset.substring(cross + 1)));
+        } catch (NumberFormatException malformed) {
+            // A session record somebody edited, or one from a build that wrote it differently. The
+            // camera is a convenience; refusing to open the document over one is not a trade worth making.
+        }
     }
 
     @Override
