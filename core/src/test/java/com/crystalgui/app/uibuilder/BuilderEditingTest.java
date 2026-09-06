@@ -223,6 +223,51 @@ public class BuilderEditingTest extends UiDocumentTestBase {
                 editor.selection().node());
     }
 
+    /**
+     * <b>The row and the inspector always name the same node.</b>
+     *
+     * <p>Reported as "#root is highlighted and the inspector shows #title". A refresh re-emits the list's
+     * own selection, which lands in the handler that writes the shared selection — so a rebuild caused by
+     * the selection changing wrote back whatever the rebuilt list happened to have, and the two halves
+     * drifted apart.</p>
+     */
+    @Test
+    public void theRowAndTheSharedSelectionNeverDisagree() {
+        HierarchyPanel hierarchy = new HierarchyPanel(editor.surface());
+        document.append(hierarchy);
+        document.update(W, H);
+        frame();
+
+        UIElement root = editor.document().root();
+
+        hierarchy.tree().select(rowFor(hierarchy, root));
+        document.update(W, H);
+        frame();
+        assertSame("the row was clicked and something else got selected",
+                root, editor.selection().node());
+        assertSame(root, rowItem(hierarchy));
+
+        hierarchy.tree().select(rowFor(hierarchy, title));
+        document.update(W, H);
+        frame();
+        assertSame(title, editor.selection().node());
+        assertSame(title, rowItem(hierarchy));
+
+        // AND FROM THE CANVAS, which is the direction that rebuilds the tree to reveal the node.
+        editor.selection().selectOnly(root);
+        document.update(W, H);
+        frame();
+        assertSame("the hierarchy answered its own rebuild", root, editor.selection().node());
+        assertSame("the row highlight did not follow", root, rowItem(hierarchy));
+    }
+
+    /** What the list itself has highlighted, which is what a reader sees. */
+    private static UIElement rowItem(HierarchyPanel hierarchy) {
+        var indices = hierarchy.tree().getSelectedIndices();
+        if (indices.isEmpty()) return null;
+        return hierarchy.tree().visibleRows().get(indices.iterator().next()).item();
+    }
+
     private static int rowFor(HierarchyPanel hierarchy, UIElement node) {
         var rows = hierarchy.tree().visibleRows();
         for (int i = 0; i < rows.size(); i++) {
