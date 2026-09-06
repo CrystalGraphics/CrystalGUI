@@ -105,8 +105,6 @@ public final class Widgets implements NodeKinds {
         // engine answered the lowercased class name instead, which is the fallback that left 32 tags
         // matching by accident and ToolWindowFrame matching nothing at all.
         UIElementRegistry.register(SymbolIcon.NAME, SymbolIcon::new, NodeContract.INERT);
-        // INERT: a chart is a readout, so it reports no events and carries no wire state of its own.
-        UIElementRegistry.register(RadarChart.NAME, RadarChart::new, RadarChart.CONTRACT);
 
         // ── text ─────────────────────────────────────────────────────────────
         // The engine's one text leaf AND the widget layer's label -- D15 merged `ui.box.TextNode` into
@@ -261,5 +259,6 @@ public final class Widgets implements NodeKinds {
         // ── form ─────────────────────────────────────────────────────────────
         UIElementRegistry.register(SearchField.NAME, SearchField::new, SearchField.CONTRACT);
         UIElementRegistry.register(ColorSelector.NAME, ColorSelector::new, ColorSelector.CONTRACT);
+        UIElementRegistry.register(RadarChart.NAME, RadarChart::new, RadarChart.CONTRACT);
     }
 }
