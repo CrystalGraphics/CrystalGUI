@@ -28,6 +28,7 @@ import java.io.IOException;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
@@ -543,5 +544,60 @@ public class WorkspaceServiceTest {
         assertFalse("nothing here asked for it", seen.byPeer());
         assertEquals("", seen.author());
         service.close();
+    }
+
+    /**
+     * <b>A rename the server performed is one event, not a rename and a deletion.</b>
+     *
+     * <p>The watcher sees the same move as two halves. The destination is suppressed because its etag
+     * already matches what the write recorded, but the source looks exactly like a deletion — and a
+     * deletion the watcher SAW is trusted on its own, since that is the only way a file nobody had open
+     * can be reported gone. So an author renaming their own file was told it had been deleted.</p>
+     */
+    @Test
+    public void aStatedRenameIsNotAlsoReportedAsADeletion() {
+        Path root = tempRoot();
+        Path from = root.resolve("Before.java");
+        write(from, "class Before {}\n");
+
+        ProjectRegistry registry = new ProjectRegistry().register(() -> List.of(
+                new WorkspaceProject("proj", "Proj", root)));
+        WorkspaceService service = new WorkspaceService(
+                registry, new LocalFileSystem(registry), WorkspacePermission.ALLOW_ALL);
+        WatchHub hub = new WatchHub(service);
+        Object watcher = new Object();
+        Object mover = new Object();
+        hub.watch(watcher, WorkspaceActor.LOCAL, CgPath.parse("proj:"), true);
+        hub.watch(mover, () -> "mover", CgPath.parse("proj:"), true);
+        service.drainFileEvents();
+
+        CgPath source = CgPath.parse("proj:Before.java");
+        CgPath target = CgPath.parse("proj:After.java");
+        service.rename(WorkspaceActor.LOCAL, source, target, false);
+        hub.noteRenamed(source, target, service.stat(WorkspaceActor.LOCAL, target).etag(),
+                "mover", mover);
+
+        long deadline = System.currentTimeMillis() + 3000;
+        List<FsMessages.FileChange> heard = new ArrayList<>();
+        while (System.currentTimeMillis() < deadline) {
+            List<FsMessages.FileChange> mine =
+                    hub.tick(WorkspaceActor.LOCAL, service.drainFileEvents()).get(watcher);
+            if (mine != null) heard.addAll(mine);
+            try {
+                Thread.sleep(25);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        service.close();
+
+        for (FsMessages.FileChange change : heard) {
+            assertNotEquals("the move came back as a deletion of where it came from",
+                    FsMessages.ChangeKind.DELETED, change.kind());
+        }
+        assertTrue("and the rename itself is told, by name", heard.stream().anyMatch(
+                change -> change.kind() == FsMessages.ChangeKind.RENAMED
+                        && "mover".equals(change.author())));
     }
 }
