@@ -582,4 +582,24 @@ public class WorkspaceDocumentsTest {
         assertNull(documents.get(MAIN));
         assertEquals(0, hub.subscriptionCount("alice"));
     }
+
+    /**
+     * <b>...and after a rename too.</b> The watch is filed under the resource a document opened with and
+     * looked up on close by the one it has now, so a renamed document's subscription outlived it — the
+     * server went on streaming a path this client was no longer at, to a listener still pointed at a
+     * document that had moved.
+     */
+    @Test
+    public void closingARenamedDocumentUnwatchesItToo() {
+        Reply<DocumentReference> opened = documents.open(MAIN);
+        pump();
+        assertEquals(1, hub.subscriptionCount("alice"));
+
+        notifyRename(MAIN_PATH, CgPath.parse("proj:src/Renamed.java"), "etag-2");
+        assertEquals("still one while it is open", 1, hub.subscriptionCount("alice"));
+
+        opened.result().dispose();
+        pump();
+        assertEquals("and it goes when the document does", 0, hub.subscriptionCount("alice"));
+    }
 }
