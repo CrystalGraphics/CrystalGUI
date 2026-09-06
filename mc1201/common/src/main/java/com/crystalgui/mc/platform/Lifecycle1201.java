@@ -14,6 +14,7 @@ import com.crystalgui.mc.client.CgUiKeybinds1201;
 import com.crystalgui.mc.net.Connections1201;
 import com.crystalgui.mc.net.ServerSmoke1201;
 import com.crystalgui.mc.net.WorkspaceHost1201;
+import com.crystalgui.net.window.WindowProtocol;
 import com.crystalgui.net.wire.CgNetworkChannel;
 
 import net.minecraft.server.MinecraftServer;
@@ -41,6 +42,9 @@ public final class Lifecycle1201 {
      */
     public static void bootstrap(CgNetworkChannel channel) {
         CgPlatform.provide(CgNetworkChannel.SERVICE, channel);
+        // Before the connections: a contributor binds only to connections opened after it registers.
+        // Without it a client has no ClientWindows, and every requestOpen is refused locally.
+        WindowProtocol.register();
         Connections1201.register();
         MachineExample1201.registerCommon();
     }
