@@ -315,6 +315,10 @@ public final class WorkspaceDocuments implements Disposable {
                 document.setEtag(change.etag());
             }
             case CREATED, MODIFIED -> {
+                // ALREADY WHAT WE HOLD. Every client hears about its own writes, so this is mostly a
+                // document being told about the save it just made -- and re-reading the file it just
+                // wrote is a round trip to arrive where it already is.
+                if (!change.etag().isEmpty() && change.etag().equals(document.etag())) return;
                 if (document.isDirty()) {
                     // UNSAVED WORK. Only a person can say what happens to it, and until they do the
                     // document is left exactly as it is.

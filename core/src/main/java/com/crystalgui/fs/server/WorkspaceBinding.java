@@ -418,7 +418,7 @@ public final class WorkspaceBinding<T> {
         boolean caseSensitive = service.caseSensitive();
         return new FsHello(FsHello.VERSION, caseSensitive, FsHello.WINDOWS_RESERVED, 255,
                 FsHello.DEFAULT_SERVICES_TIER, FsHello.DEFAULT_READ_ONLY_TIER,
-                WorkspaceService.MAX_FILE_BYTES, service.workspaceId());
+                WorkspaceService.MAX_FILE_BYTES, service.workspaceId(), actor.displayName());
     }
 
     /** This peer's editing flag, set from what the client reports about its own document. */

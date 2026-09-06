@@ -91,6 +91,14 @@ public final class ExplorerBinding {
      * can put a name to — {@code FileChange#byPeer} is the whole of that distinction.</p>
      */
     private void announce(List<FsMessages.FileChange> changes) {
+        // NOT YOUR OWN DOING. The change itself still arrives -- it is what updates this client's own
+        // tree and retargets its own tabs -- and it is only the telling that would be absurd.
+        String me = workbench.workspace.server().actor();
+        List<FsMessages.FileChange> theirs = new ArrayList<>();
+        for (FsMessages.FileChange change : changes) {
+            if (me.isEmpty() || !me.equals(change.author())) theirs.add(change);
+        }
+        changes = theirs;
         if (changes.isEmpty()) return;
         String who = soleAuthor(changes);
 
