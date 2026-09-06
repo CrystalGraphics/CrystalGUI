@@ -3,13 +3,11 @@ package com.crystalgui.mc.forge;
 import com.crystalgui.mc.client.CgUiKeybinds1201;
 import com.crystalgui.mc.platform.Lifecycle1201;
 import com.crystalgui.net.wire.CgNetworkChannel;
-import net.minecraft.client.Minecraft;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
-import net.minecraftforge.client.event.InputEvent;
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
 import net.minecraftforge.client.event.RenderGuiEvent;
 import net.minecraftforge.client.event.ScreenEvent;
@@ -22,7 +20,6 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.NetworkRegistry;
-import org.lwjgl.glfw.GLFW;
 import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 
@@ -212,25 +209,6 @@ public final class CrystalGUI1201Forge {
             @SubscribeEvent
             public static void onScreenRender(ScreenEvent.Render.Post event) {
                 Lifecycle1201.paintOverlay();
-            }
-
-            /**
-             * HUD mode: no screen is open, so no ScreenEvent fires and these are the only input there is.
-             * Guarded on the screen being absent, or the screen handlers below would see each event twice.
-             */
-            @SubscribeEvent
-            public static void onHudMouseButton(InputEvent.MouseButton.Pre event) {
-                if (Minecraft.getInstance().screen != null || event.getAction() == GLFW.GLFW_REPEAT) return;
-                if (Lifecycle1201.offerMouse(event.getButton(), event.getAction() == GLFW.GLFW_PRESS, 0f)) {
-                    event.setCanceled(true);
-                }
-            }
-
-            /** @see #onHudMouseButton */
-            @SubscribeEvent
-            public static void onHudKey(InputEvent.Key event) {
-                if (Minecraft.getInstance().screen != null || event.getAction() == GLFW.GLFW_REPEAT) return;
-                Lifecycle1201.offerKey(event.getKey(), (char) 0, event.getAction() == GLFW.GLFW_PRESS);
             }
 
             @SubscribeEvent
