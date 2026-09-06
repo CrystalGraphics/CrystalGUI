@@ -114,6 +114,41 @@ public class FreezeTest {
         assertEquals("a ticker was the ONE thing that carried on in a hidden window, invisibly, "
                 + "because registration was one-way and only the ticker could stop it",
                 1, ticks.size());
+
+        // THE HOOK IS KEPT, AND SKIPPED. This asserted it was dropped, which is a stronger claim than
+        // "costs no ticks" and the one that made a freeze permanent: a hook is registered from
+        // connected(), and a frozen node was never disconnected, so nothing re-registers on thaw. It
+        // also made Animation.tick's own frozen branch -- "GONE is gone; FROZEN is coming back" --
+        // unreachable. Destroying still drops it; that is what forget() is for.
+        assertEquals("a frozen owner keeps its hook so the thaw below can resume it",
+                1, document.animation().hookCount());
+
+        document.lifecycle().thaw(panel);
+        frame(document);
+        assertEquals("the freeze was permanent -- nothing ticks again after a thaw",
+                2, ticks.size());
+    }
+
+    @Test
+    public void destroyingASubtreeStillEndsItsTicks() {
+        UIDocument document = new UIDocument();
+        UIElement panel = at("panel", 0, 0, 200, 200);
+        document.append(panel);
+        frame(document);
+
+        List<String> ticks = new ArrayList<>();
+        document.animation().every(panel, delta -> {
+            ticks.add("tick");
+            return true;
+        });
+        frame(document);
+        assertEquals(1, ticks.size());
+
+        document.lifecycle().destroy(panel);
+        frame(document);
+        frame(document);
+
+        assertEquals(1, ticks.size());
         assertEquals(0, document.animation().hookCount());
     }
 

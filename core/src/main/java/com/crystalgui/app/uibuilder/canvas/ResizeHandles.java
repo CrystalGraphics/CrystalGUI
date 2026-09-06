@@ -10,6 +10,7 @@ import com.google.gson.JsonElement;
 
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.style.InlineStyleCodec;
@@ -235,6 +236,10 @@ public final class ResizeHandles extends UIElement {
      * {@code Inspector.inspect} records and why that method defers too: event, then a flag, then one
      * change next frame.</p>
      */
+    /** {@code -Dcrystalgui.builder.diagnose=true} — one line per frame from the handle layer. */
+    private static final boolean DIAGNOSE =
+            Boolean.getBoolean("crystalgui.builder.diagnose");
+
     private void followSelection() {
         List<UIElement> selected = ctx.builderSelection().nodes();
         target = selected.size() == 1 ? selected.get(0) : null;
@@ -244,10 +249,21 @@ public final class ResizeHandles extends UIElement {
     /** @see #followSelection */
     private boolean pendingVisibility = true;
 
+    /**
+     * Shows the handles only when there is a laid-out node to put them on.
+     *
+     * <p><b>A selected node with no box is the ordinary state</b>, not an error: a document whose tab is
+     * not in front is hidden, and hidden means no boxes. {@code place()} then has nothing to measure and
+     * returns — leaving eight handles at their layer's own origin, stacked in the corner of the canvas,
+     * which is what "the handles are jumbled up in the top left" was. Measured in the harness: 579 frames
+     * with a target and no box.</p>
+     *
+     * <p>Re-checked every frame rather than only when the selection changes, because the box appearing
+     * and disappearing is not a selection change and nothing announces it.</p>
+     */
     private void applyVisibility() {
-        if (!pendingVisibility) return;
+        boolean wanted = target != null && target.box() != null;
         pendingVisibility = false;
-        boolean wanted = target != null;
         if (isDisplayed() != wanted) setDisplayed(wanted);
     }
 
@@ -261,6 +277,11 @@ public final class ResizeHandles extends UIElement {
     private void place() {
         Box own = box();
         float[] rect = CanvasRects.of(target, this);
+        if (DIAGNOSE) {
+            CrystalGuiCore.LOGGER.info("[handles] place target={} targetBox={} ownBox={} rect={}",
+                    target, target == null ? null : target.box(), own,
+                    rect == null ? null : java.util.Arrays.toString(rect));
+        }
         if (own == null || rect == null) return;
         float half = SIZE * 0.5f;
         for (int i = 0; i < handles.size(); i++) {
@@ -277,6 +298,7 @@ public final class ResizeHandles extends UIElement {
     protected void connected() {
         super.connected();
         if (document() == null) return;
+        if (DIAGNOSE) CrystalGuiCore.LOGGER.info("[handles] connected, registering afterLayout");
         document().animation().afterLayout(this, delta -> {
             applyVisibility();
             place();

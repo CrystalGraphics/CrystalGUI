@@ -118,11 +118,24 @@ public final class Artboard extends UIElement {
         return this;
     }
 
-    /** Puts the document's current root back in, after an adopt replaced it. */
-    public Artboard resync() {
+    /**
+     * Puts the document's current root back in, after an adopt replaced it.
+     *
+     * <p><b>Idempotent, and it must be called.</b> {@code adopt} builds a brand-new root element — a
+     * reload, a revert, the file changing underneath — and this frame held the old one. Nothing called
+     * this: the hierarchy read {@code document.root()} and listed the NEW tree while the canvas went on
+     * showing the OLD one, so a row click selected a node that was in no document and therefore had no
+     * box. Handles stranded at their layer's origin, no outline, nothing resizable, and a canvas click
+     * selecting a node with no row in the panel — all one cause.</p>
+     *
+     * @return whether the tree was actually replaced
+     */
+    public boolean resync() {
+        UIElement current = document.root();
+        if (children().size() == 1 && children().get(0) == current) return false;
         removeAll();
-        append(document.root());
-        return this;
+        append(current);
+        return true;
     }
 
     private void applySize() {

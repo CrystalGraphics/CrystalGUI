@@ -73,6 +73,13 @@ public final class InspectorExtension implements WorkbenchExtension {
     private static void seed(WorkbenchContext workbench, Inspector inspector) {
         EditorService.Tab active = workbench.editors().active();
         DocumentEditor view = active == null ? null : active.editor();
+        if (DIAGNOSE) {
+            com.crystalgui.core.CrystalGuiCore.LOGGER.info("[inspector] seed active={} view={}",
+                    active, view == null ? null : view.view());
+        }
         if (view != null) inspector.inspect(view.view());
     }
+
+    /** {@code -Dcrystalgui.builder.diagnose=true} — every moment the panel is re-pointed. */
+    private static final boolean DIAGNOSE = Boolean.getBoolean("crystalgui.builder.diagnose");
 }
