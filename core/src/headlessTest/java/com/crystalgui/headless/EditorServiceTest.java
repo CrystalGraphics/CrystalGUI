@@ -387,6 +387,27 @@ public class EditorServiceTest {
         assertEquals(DocumentState.DIRTY, back.state());
     }
 
+    /** And saving what was given back is what finally consumes the offer. */
+    @Test
+    public void savingRestoredWorkDiscardsTheBackup() {
+        EditorService.Tab tab = open(MAIN);
+        tab.document().as(TextDocumentModel.class).buffer().insert(0, "// half-typed\n");
+        editors.closeAll();
+        editors.restoreUnsavedWork();
+        pump();
+
+        EditorService.Tab back = editors.tabFor(EditorInput.of(MAIN));
+        assertEquals("the offer stands until it is written", 1,
+                workspace.backup().restorable().size());
+
+        documents.save(back.document());
+        pump();
+
+        assertFalse(back.document().isDirty());
+        assertTrue("what the file now holds needs no backup",
+                workspace.backup().restorable().isEmpty());
+    }
+
     /**
      * <b>...and dirty against the etag it was in step with</b>, not against the file as it is now.
      *
