@@ -2,9 +2,12 @@ package com.crystalgui.app.uibuilder;
 
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
+import com.crystalgui.app.uibuilder.panel.DesignToolWindow;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.document.DocumentKind;
 import com.crystalgui.workbench.WorkbenchContext;
+import com.crystalgui.workbench.region.DockRegion;
+import com.crystalgui.workbench.toolwindow.ToolWindowKind;
 import com.crystalgui.workbench.extension.WorkbenchExtension;
 
 /**
@@ -24,6 +27,9 @@ import com.crystalgui.workbench.extension.WorkbenchExtension;
 public final class UiBuilderContribution implements WorkbenchExtension {
 
     public static final String ID = "crystalgui:uibuilder";
+
+    /** The hierarchy's tool window. */
+    public static final String DESIGN_PANEL = "uibuilder.design";
 
     /** The file type. {@code DocumentKinds} resolves a {@code .cgui} to this. */
     public static final String DOCUMENT_TYPE = "cgui.file";
@@ -52,7 +58,20 @@ public final class UiBuilderContribution implements WorkbenchExtension {
         // back. Counted: a second editor must not double the forms, and the first one closing must not
         // empty the inspector under the second. The graph's own note, and the same shape.
         Disposable sections = BuilderInspectorSections.register();
+
+        // BUILT EAGERLY, like the Inspector's: the dock caches a panel factory's result permanently, so
+        // handing back a placeholder while waiting for a document hands back the placeholder for the
+        // rest of the session.
+        DesignToolWindow design = new DesignToolWindow(workbench);
+        Disposable panel = workbench.registerToolWindow(
+                ToolWindowKind.of(DESIGN_PANEL, "Design")
+                        .icon("crystalgui:toolwindows/hierarchy")
+                        .region(DockRegion.SIDEBAR)
+                        .view(ctx -> design)
+                        .openByDefault());
+
         return () -> {
+            panel.dispose();
             sections.dispose();
             commands.dispose();
         };

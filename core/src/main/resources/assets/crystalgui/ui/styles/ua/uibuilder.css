@@ -112,3 +112,66 @@ builderpane > buildersurface {
     height: 0;
     flex-grow: 1;
 }
+
+
+/* ── Resize handles ──────────────────────────────────────────────────────────────────────────────────
+ *
+ * Eight real elements, each taking its own press -- which is what a painted handle could never do, and
+ * why they carry a cursor here rather than a branch in the mode. The layer fills the viewport and the
+ * widget places each handle inside it through a compositor override; only appearance is here.
+ *
+ * The cursors are the eight CSS names, and the pairing is the one every editor uses: a corner resizes
+ * both axes and an edge resizes one. */
+resizehandles {
+    width: 100%;
+    height: 100%;
+}
+
+resizehandles > * {
+    background-color: var(--builder-handle-bg, #FFFFFF);
+    border-width: 1px;
+    border-color: var(--builder-selected, #3574F0);
+}
+
+.__handle-top-left__, .__handle-bottom-right__ { cursor: nwse-resize; }
+.__handle-top-right__, .__handle-bottom-left__ { cursor: nesw-resize; }
+.__handle-top__, .__handle-bottom__ { cursor: ns-resize; }
+.__handle-left__, .__handle-right__ { cursor: ew-resize; }
+
+
+/* ── In-place text editing ───────────────────────────────────────────────────────────────────────────
+ *
+ * A field over the node, not typing into the document: in design mode the artboard is `hit-test: false`,
+ * so nothing inside it can take a keystroke at all. The widget matches the node's font size and position;
+ * this is the ring that says the field is a field. */
+textedit {
+    width: 100%;
+    height: 100%;
+}
+
+textedit > textfield {
+    border-width: 1px;
+    border-color: var(--builder-selected, #3574F0);
+    background-color: var(--builder-page-bg, #2B2B31);
+}
+
+
+/* ── The Design panel ────────────────────────────────────────────────────────────────────────────────
+ *
+ * The hierarchy of whatever .cgui is in front. Empty rather than absent when the tab is not a builder --
+ * a tool window that comes and goes moves everything beside it. */
+designtoolwindow, hierarchypanel {
+    width: 100%;
+    height: 100%;
+}
+
+.__hierarchy-row__ {
+    flex-direction: row;
+    align-items: center;
+    padding: 1 4 1 4;
+}
+
+.__hierarchy-row__.__selected__ {
+    background-color: var(--builder-selected, #3574F0);
+    color: var(--builder-tag-fg, #FFFFFF);
+}
