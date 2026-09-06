@@ -1529,11 +1529,14 @@ public final class CgUiPaintContext {
                 flush();
             });
         }
-        // CgGlScope already restored the real GL FBO/program/texture bindings to whatever was active
-        // before — resync the CPU-side bookkeeping fields withMaterial() left pointing at
-        // boxModelMaterial back to match, rather than leaving them stale relative to the real GL state.
-        currentMaterial = previousMaterial;
+        // Re-bound through the renderer rather than by assigning the field: CgQuadRenderer owns the quad
+        // path's material and the scope above restores only the GL program. Setting currentMaterial alone
+        // left the renderer holding layerBlitMaterial while GL held the caller's, so every quad submitted
+        // afterwards that frame was computed against one and issued against the other -- the whole surface
+        // until the next beginFrame rebinds. @see #bindQuadPath
         currentTexture = previousTexture;
+        currentMaterial = previousMaterial;
+        if (previousMaterial != null) bindQuadPath(previousMaterial);
     }
 
     /**
