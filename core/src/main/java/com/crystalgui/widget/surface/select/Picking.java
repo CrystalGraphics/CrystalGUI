@@ -80,6 +80,12 @@ public final class Picking {
     public List<UIElement> touching(WorldRect band) {
         List<UIElement> caught = new ArrayList<>();
         for (UIElement item : surfaces.items()) {
+            // THROUGH THE POLICY, exactly as itemAt is. A thing on the plane is not automatically
+            // something a gesture may take: a UI builder places its ARTBOARD there -- the page the tree
+            // is laid out on -- and answers null for it, because selecting the page is not an edit. Asking
+            // items() directly let a marquee catch it anyway, so clicking empty canvas put eight resize
+            // handles on the page frame and the inspector described the frame instead of the document.
+            if (surfaces.itemFor(item) != item) continue;
             if (overlaps(band, surfaces.boundsOf(item))) caught.add(item);
         }
         return caught;
