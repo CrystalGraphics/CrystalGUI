@@ -14,6 +14,7 @@ import com.crystalgui.workbench.diff.ConflictDialog;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Map;
 
 /**
@@ -114,22 +115,57 @@ public final class ExplorerBinding {
         return who;
     }
 
-    private static String verb(FsMessages.FileChange change) {
+    /** {@code alice moved test.shadergraph to fah}. Package-private so the wording is testable. */
+    static String verb(FsMessages.FileChange change) {
         return switch (change.kind()) {
             case CREATED -> "added " + nameOf(change.path());
             case DELETED -> "deleted " + nameOf(change.path());
-            case RENAMED -> "renamed " + nameOf(change.from()) + " to " + nameOf(change.path());
+            case RENAMED -> moved(change) + " " + nameOf(change.from()) + destination(change);
             case MODIFIED -> "changed " + nameOf(change.path());
         };
     }
 
-    private static String past(FsMessages.FileChange change) {
+    /** The same, with the file as the subject: {@code test.shadergraph was moved to fah}. */
+    static String past(FsMessages.FileChange change) {
         return switch (change.kind()) {
             case CREATED -> "added";
             case DELETED -> "deleted";
-            case RENAMED -> "renamed to " + nameOf(change.path());
+            case RENAMED -> moved(change) + destination(change);
             case MODIFIED -> "changed";
         };
+    }
+
+    /**
+     * <b>A move and a rename are one event and read as two different things.</b>
+     *
+     * <p>RENAMED covers both, so describing it by the last segment alone said "renamed
+     * test.shadergraph to test.shadergraph" for every move -- the name is exactly what a move keeps.
+     * The parent directory is what tells them apart.</p>
+     */
+    private static String moved(FsMessages.FileChange change) {
+        return sameFolder(change) ? "renamed" : "moved";
+    }
+
+    /** Where it went: a new name, a new folder, or both. */
+    private static String destination(FsMessages.FileChange change) {
+        String name = nameOf(change.path());
+        if (sameFolder(change)) return " to " + name;
+        String folder = folderOf(change.path());
+        return name.equals(nameOf(change.from()))
+                ? " to " + folder
+                : " to " + folder + " as " + name;
+    }
+
+    private static boolean sameFolder(FsMessages.FileChange change) {
+        if (change.from().isEmpty()) return true;
+        return Objects.equals(CgPath.parse(change.from()).parent(),
+                CgPath.parse(change.path()).parent());
+    }
+
+    /** The folder something landed in, or the project root, which has no name of its own. */
+    private static String folderOf(String path) {
+        CgPath parent = CgPath.parse(path).parent();
+        return parent == null || parent.segments().isEmpty() ? "the project root" : parent.name();
     }
 
     /** The last segment, which is what somebody reading a notification recognises. */
