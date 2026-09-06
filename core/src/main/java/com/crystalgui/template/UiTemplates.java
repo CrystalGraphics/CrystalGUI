@@ -1,9 +1,5 @@
 package com.crystalgui.template;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -17,7 +13,11 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 
+import com.crystalgraphics.util.io.CgIO;
+
 import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.dom.NodeContract;
+import com.crystalgui.ui.dom.UIElementRegistry;
 
 /**
  * Where {@code .cgui} documents are loaded from, and cached.
@@ -27,13 +27,13 @@ import com.crystalgui.ui.dom.Name;
  * UIElement tree = status.inflate();
  * }</pre>
  *
- * <p>An id is {@code namespace:path}, resolved on the classpath as
- * {@code /assets/<namespace>/<path>.cgui} — <b>through this class's own classloader</b>, never through
- * CrystalGraphics, so a dedicated server can load one. Parsed once and cached; {@link #reloadAll} drops
- * the cache, which is what a resource reload and F3+T call.</p>
+ * <p>An id is {@code namespace:path}, read through {@code CgIO} as
+ * {@code /assets/<namespace>/<path>.cgui} — so an override directory, a resource pack and the classpath
+ * are all tried, in that order. Parsed once and cached; {@link #reloadAll} drops the cache, which is
+ * what a resource reload and F3+T call.</p>
  *
- * <p>The builder and anything reading a file it already has use {@link #parse} instead — this class does
- * no workspace I/O, because the document layer that owns a file hands over the bytes.</p>
+ * <p><b>{@link #parse} is the headless half</b> and does no I/O: a dedicated server inflating a template
+ * into a panel, and the workbench editing a workspace file, both already have the bytes.</p>
  */
 public final class UiTemplates {
 
@@ -115,9 +115,12 @@ public final class UiTemplates {
             }
         }
 
-        return new UiTemplate(origin, format, strings(document, "stylesheets"),
+        UiTemplate template = new UiTemplate(origin, format, strings(document, "stylesheets"),
                 stringOr(document, "model"), stringOr(document, "package"), kindName,
-                objectOr(document, "preview"), root.getAsJsonObject());
+                TemplateParams.declare(document, origin), objectOr(document, "preview"),
+                root.getAsJsonObject());
+        template.validate();
+        return template;
     }
 
     /**
@@ -140,6 +143,24 @@ public final class UiTemplates {
         CACHE.put(assetId, template);
     }
 
+    /**
+     * Registers a document that declares {@code kind-name} as an element kind, so other documents place
+     * it by tag and a sheet styles it — Unity's Project tab, and it needs no Java.
+     *
+     * <pre>{@code
+     * UiTemplates.register(UiTemplates.load("mymod:ui/parts/plate"));   // "kind-name": "mymod:plate"
+     * }</pre>
+     *
+     * @return whether it registered; a document with no {@code kind-name} declares no kind
+     */
+    public static boolean register(UiTemplate template) {
+        Name kind = template.kindName();
+        if (kind == null) return false;
+        UIElementRegistry.register(kind, () -> new TemplateInstance(template.origin()),
+                NodeContract.INERT);
+        return true;
+    }
+
     // ── Reading ─────────────────────────────────────────────────────────────
 
     /** {@code mymod:ui/status} to {@code /assets/mymod/ui/status.cgui}. */
@@ -154,17 +175,12 @@ public final class UiTemplates {
 
     private static String read(String assetId) {
         String path = pathOf(assetId);
-        // THIS class's loader, never the context one: on 1.7.10 the context classloader is whatever the
-        // host left there, and LaunchWrapper's is not the one that defined these classes.
-        try (InputStream in = UiTemplates.class.getResourceAsStream(path)) {
-            if (in == null) throw new UiTemplateException(assetId, null, "no such document at " + path);
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            byte[] buffer = new byte[8192];
-            for (int read; (read = in.read(buffer)) > 0; ) out.write(buffer, 0, read);
-            return out.toString(StandardCharsets.UTF_8.name());
-        } catch (IOException unreadable) {
-            throw new UiTemplateException(assetId, null, "could not be read", unreadable);
-        }
+        // CgIO, like every other asset this project reads: it answers an override directory first, then
+        // the resource manager, then the classpath -- so a resource pack can ship a document and a dev
+        // run can point at a source tree, neither of which a raw classloader read would see.
+        String source = CgIO.loadSource(path);
+        if (source == null) throw new UiTemplateException(assetId, null, "no such document at " + path);
+        return source;
     }
 
     // ── Header helpers ──────────────────────────────────────────────────────

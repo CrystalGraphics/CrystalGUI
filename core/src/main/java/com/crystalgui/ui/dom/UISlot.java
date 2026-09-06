@@ -20,6 +20,16 @@ public class UISlot extends UIElement {
     /** Where a host's light children appear inside its shadow tree. */
     public static final Name NAME = Name.of("slot");
 
+    /**
+     * {@code <slot name="content">} — the slot's own name, as an attribute so it travels.
+     *
+     * <p>The field alone was not enough once a shadow tree could be <b>described</b>: a template writing
+     * a named slot decoded to a default one, and every slotted child landed in the wrong place or
+     * nowhere. Set it either way — {@link #setSlotName} writes the attribute and the attribute writes
+     * the field.</p>
+     */
+    public static final Attribute<String> SLOT_NAME = Attribute.of("name", String.class, "");
+
     private String slotName;
     private final List<UIElement> assigned = new ArrayList<>();
     private final List<UIElement> assignedView = Collections.unmodifiableList(assigned);
@@ -42,9 +52,18 @@ public class UISlot extends UIElement {
         String value = name == null ? "" : name;
         if (value.equals(slotName)) return this;
         slotName = value;
+        set(SLOT_NAME, value);
         ShadowRoot root = containingShadowRoot();
         if (root != null) root.markSlotsDirty();
         return this;
+    }
+
+    /** Keeps the field and the attribute one answer, whichever way the name arrived. */
+    @Override
+    public <T> UIElement set(Attribute<T> key, T value) {
+        UIElement self = super.set(key, value);
+        if (key == SLOT_NAME) setSlotName((String) value);
+        return self;
     }
 
     /** The light children of the host assigned here, in the host's order; empty when showing fallback. */

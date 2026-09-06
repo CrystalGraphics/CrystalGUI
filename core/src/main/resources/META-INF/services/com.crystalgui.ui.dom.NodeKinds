@@ -6,8 +6,10 @@
 #   6.3  com.crystalgui.workbench.chrome.ChromeKinds  (folded under the workbench at 6.7)
 #   6.1  com.crystalgui.desktop.DesktopKinds  (WindowIcon came early: Taskbar needs it)
 #   6.7  com.crystalgui.workbench.WorkbenchKinds
+#   L1.5 com.crystalgui.template.TemplateKinds  (the document loader is its own layer)
 com.crystalgui.widget.Widgets
 com.crystalgui.workbench.chrome.ChromeKinds
 com.crystalgui.desktop.DesktopKinds
 com.crystalgui.workbench.WorkbenchKinds
 com.crystalgui.app.AppKinds
+com.crystalgui.template.TemplateKinds

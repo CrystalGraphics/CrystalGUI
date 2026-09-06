@@ -1,0 +1,16 @@
+{
+  "cgui": 1,
+  "kind-name": "cguitest:plate",
+  "stylesheets": ["cguitest:plate"],
+  "params": { "title": { "type": "string", "default": "Plate" } },
+
+  "root": {
+    "kind": "element",
+    "class": "plate",
+    "children": [
+      { "kind": "text", "id": "label", "attrs": { "part": "label" }, "state": { "text": "$title" } },
+      { "kind": "text", "id": "lamp", "state": { "text": "off" } },
+      { "kind": "slot", "attrs": { "name": "content" } }
+    ]
+  }
+}
