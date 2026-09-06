@@ -14,8 +14,10 @@ import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The BACKDROP PRIMITIVE: what is behind an element, captured and blurred, once per frame.
@@ -63,20 +65,11 @@ final class CgUiBackdrop {
 
     void prepareFrame() {
         if (PROBE) probeFrame();
-        // THE WORKING SCALE IS DECIDED HERE, from the radius the previous frame asked for, because this
-        // is the one moment a target may be resized -- mid-paint is the incomplete-framebuffer hazard
-        // this method exists to avoid. The first frame a new radius appears therefore runs at the scale
-        // the old one chose, which is a correct blur at a slightly different quality for one frame;
-        // the radius comes from a stylesheet, so that frame is the one it changed on.
+        // From the radius the PREVIOUS frame asked for, so a pair is built here and never mid-paint.
+        // The first frame a new radius appears therefore runs at the scale the old one chose: a correct
+        // blur at a slightly different quality, for one frame.
         blurScale = scaleFor(blurRadiusPx);
-        int w = Math.max(1, Math.max(1, ctx.screenWidth) / blurScale);
-        int h = Math.max(1, Math.max(1, ctx.screenHeight) / blurScale);
-        for (CgFrameBuffer fbo : new CgFrameBuffer[] { blurA, blurB }) {
-            if (fbo.getWidth() != w || fbo.getHeight() != h) {
-                fbo.resize(w, h);
-                ctx.warmUpLayer(fbo);
-            }
-        }
+        targetsFor(blurScale);
     }
 
     /**
@@ -145,8 +138,44 @@ final class CgUiBackdrop {
      * rather than a compromise, because the output is by definition an image with no high frequencies
      * left in it.</p>
      */
-    private final CgFrameBuffer blurA = CgFrameBuffer.createOwned("cgui_blur_a", 1, 1, CgUiPaintContext.LAYER_FORMAT);
-    private final CgFrameBuffer blurB = CgFrameBuffer.createOwned("cgui_blur_b", 1, 1, CgUiPaintContext.LAYER_FORMAT);
+    /**
+     * One ping-pong pair per working scale, each built once and never rebuilt for a scale change.
+     *
+     * <p>A pair used to be resized whenever {@link #scaleFor} stepped, which is at a blur radius of
+     * exactly 12 and 24 -- and a target rebuilt under a live frame flickers the whole surface for a few
+     * frames, wherever the rebuild is done from. {@link #prepareFrame} moving it to frame start was not
+     * enough. Keeping a pair per scale means a radius change SELECTS a target instead of rebuilding one,
+     * and only a surface resize rebuilds anything.</p>
+     */
+    private final Map<Integer, CgFrameBuffer[]> blurTargets = new HashMap<>();
+
+    /**
+     * The pair for {@code scale}, built on first use at the surface's own fraction of that scale.
+     *
+     * <p>{@link #prepareFrame} calls this for the scale the passes will use, so the mid-paint call from
+     * {@link #blurredBackdrop} only ever reads back what is already there -- a pair is never built with
+     * our own bindings in flight.</p>
+     */
+    private CgFrameBuffer[] targetsFor(int scale) {
+        int w = Math.max(1, Math.max(1, ctx.screenWidth) / scale);
+        int h = Math.max(1, Math.max(1, ctx.screenHeight) / scale);
+        CgFrameBuffer[] pair = blurTargets.get(scale);
+        if (pair == null) {
+            pair = new CgFrameBuffer[] {
+                    CgFrameBuffer.createOwned("cgui_blur_a" + scale, w, h, CgUiPaintContext.LAYER_FORMAT),
+                    CgFrameBuffer.createOwned("cgui_blur_b" + scale, w, h, CgUiPaintContext.LAYER_FORMAT),
+            };
+            blurTargets.put(scale, pair);
+            for (CgFrameBuffer fbo : pair) ctx.warmUpLayer(fbo);
+        } else if (pair[0].getWidth() != w || pair[0].getHeight() != h) {
+            // Only a SURFACE resize reaches here; a radius change picks a different pair instead.
+            for (CgFrameBuffer fbo : pair) {
+                fbo.resize(w, h);
+                ctx.warmUpLayer(fbo);
+            }
+        }
+        return pair;
+    }
 
     /**
      * How much smaller than the surface the blur runs at this frame: 1, 2 or 4.
@@ -177,7 +206,7 @@ final class CgUiBackdrop {
         return scale;
     }
 
-    /** Which of {@link #blurA}/{@link #blurB} holds the finished blur for {@link #blurFrame}. */
+    /** Which of the working pair holds the finished blur for {@link #blurFrame}. */
     @Nullable
     private CgFrameBuffer blurResult;
 
@@ -507,6 +536,9 @@ final class CgUiBackdrop {
         float sigma = radiusPx / REACH_PER_SIGMA / scale;
         int taps = Math.max(1, Math.min(MAX_KERNEL_RADIUS, (int) Math.ceil(REACH_PER_SIGMA * sigma)));
 
+        CgFrameBuffer[] pair = targetsFor(scale);
+        CgFrameBuffer blurA = pair[0], blurB = pair[1];
+
         CgFrameBuffer result;
         if (scale > 1) {
             downsamplePass(captured, blurA, scale, fracW, fracH);
@@ -683,7 +715,10 @@ final class CgUiBackdrop {
     /** Frees the framebuffers this owns. They are {@code createOwned}, so no registry sweeps them. */
     void delete() {
         captureFbo.delete();
-        blurA.delete();
-        blurB.delete();
+        for (CgFrameBuffer[] pair : blurTargets.values()) {
+            pair[0].delete();
+            pair[1].delete();
+        }
+        blurTargets.clear();
     }
 }
