@@ -1,6 +1,15 @@
 package com.crystalgui.app.uibuilder;
 
 import java.util.List;
+import dev.vfyjxf.taffy.geometry.FloatRect;
+import com.crystalgui.ui.box.Box;
+import com.crystalgui.style.property.StyleProperty;
+import com.crystalgui.style.property.layout.LayoutProperties;
+import com.crystalgui.style.PseudoClasses;
+import com.crystalgui.app.uibuilder.inspect.MatchedRules;
+import com.crystalgui.app.uibuilder.inspect.LiveEdits;
+import java.util.Locale;
+import java.util.ArrayList;
 
 import javax.annotation.Nullable;
 
@@ -38,13 +47,19 @@ public final class BuilderInspectorSections {
 
     public static final String ELEMENT_TAB = "Element";
 
+    public static final String STYLE_TAB = "Style";
+
+    public static final String LAYOUT_TAB = "Layout";
+
     /** What the current selection IS, decided once so no two sections can both claim it. */
     private enum Subject {
         NONE, CANVAS, NODE, MULTI, INSTANCE
     }
 
-    private static final SectionSet SECTIONS =
-            SectionSet.of(new NodeSection(), new AttributesSection(), new StateSection());
+    private static final SectionSet SECTIONS = SectionSet.of(
+            new NodeSection(), new AttributesSection(), new StateSection(), new ForcedStatesSection(),
+            new MatchedRulesSection(), new InlineStyleSection(), new ComputedSection(),
+            new BoxModelSection(), new FlexContextSection());
 
     /**
      * Registers the sections, counted.
@@ -199,6 +214,244 @@ public final class BuilderInspectorSections {
                         String.valueOf(state.read(node)));
             }
         }
+    }
+
+    /** Shared by every section that describes one node. */
+    private abstract static class NodeAware implements InspectorSection {
+
+        @Override
+        public boolean accepts(DataContext context) {
+            Subject subject = subject(context);
+            return subject == Subject.NODE || subject == Subject.INSTANCE;
+        }
+
+        @Override
+        public String subjectKey(DataContext context) {
+            UIElement node = node(context);
+            return getClass().getSimpleName() + ":" + (node == null ? "" : System.identityHashCode(node));
+        }
+    }
+
+    /**
+     * <b>Forced pseudo-states</b> — Chrome's {@code :hov} panel.
+     *
+     * <p>A hover rule can only be seen while a pointer is on the element, which is exactly when nobody
+     * can read the pane describing it. Forcing the state is how it becomes readable.</p>
+     */
+    private static final class ForcedStatesSection extends NodeAware {
+
+        /** The states worth forcing. The rest are structural, and forcing one would describe a lie. */
+        private static final PseudoClasses[] FORCEABLE = {
+                PseudoClasses.HOVER, PseudoClasses.ACTIVE, PseudoClasses.FOCUS,
+                PseudoClasses.FOCUS_VISIBLE, PseudoClasses.CHECKED, PseudoClasses.DISABLED};
+
+        @Override
+        public String tab() {
+            return ELEMENT_TAB;
+        }
+
+        @Override
+        public int order() {
+            return 40;
+        }
+
+        @Override
+        public void build(InspectorForm form, DataContext context) {
+            UIElement node = node(context);
+            if (node == null) return;
+            form.header("Force state");
+            for (PseudoClasses pseudo : FORCEABLE) {
+                Boolean forced = node.forcedState(pseudo);
+                String name = ":" + pseudo.name().toLowerCase(Locale.ROOT).replace("_", "-");
+                form.row(ConfigDescriptor.bool("force" + pseudo.name(), name),
+                                Boolean.TRUE.equals(forced))
+                        .control().changed.connect(value ->
+                                node.forceState(pseudo, Boolean.TRUE.equals(value) ? Boolean.TRUE : null));
+            }
+        }
+    }
+
+    /** Every rule that reached this element, weakest first, with the beaten ones marked. */
+    private static final class MatchedRulesSection extends NodeAware {
+
+        @Override
+        public String tab() {
+            return STYLE_TAB;
+        }
+
+        @Override
+        public int order() {
+            return 10;
+        }
+
+        @Override
+        public void build(InspectorForm form, DataContext context) {
+            UIElement node = node(context);
+            if (node == null) return;
+            for (MatchedRules.Rule rule : MatchedRules.of(node)) {
+                form.header(rule.origin().name().toLowerCase(Locale.ROOT)
+                        + (rule.sheetIndex() < 0 ? ""
+                                : "  sheet " + rule.sheetIndex() + " rule " + rule.ruleOrder()));
+                for (MatchedRules.Declaration declaration : rule.declarations()) {
+                    // OVERRIDDEN, not hidden: that a declaration matched and lost is the fact this pane
+                    // exists to show. The strikethrough is the theme's; this says which rows get it.
+                    String label = declaration.won()
+                            ? declaration.property().name
+                            : declaration.property().name + "  (overridden)";
+                    form.row(ConfigDescriptor.info("matched." + rule.origin() + "." + rule.ruleOrder()
+                                    + "." + declaration.property().name, label),
+                            String.valueOf(declaration.value()));
+                }
+            }
+        }
+    }
+
+    /**
+     * What has been set inline on this element, editable — and gone at the next launch.
+     *
+     * <p>Unity's caveat, stated where it applies: a live pick has no document behind it, so an edit here
+     * changes the running screen and nothing else.</p>
+     */
+    private static final class InlineStyleSection extends NodeAware {
+
+        @Override
+        public String tab() {
+            return STYLE_TAB;
+        }
+
+        @Override
+        public int order() {
+            return 20;
+        }
+
+        @Override
+        public void build(InspectorForm form, DataContext context) {
+            UIElement node = node(context);
+            if (node == null) return;
+            List<StyleProperty<?>> inline = new ArrayList<>();
+            for (StyleProperty<?> property : node.getStyle().candidates.keySet()) {
+                if (LiveEdits.hasInline(node, property)) inline.add(property);
+            }
+            if (inline.isEmpty()) return;
+
+            form.header("Inline (this session only)");
+            for (StyleProperty<?> property : inline) {
+                form.row(ConfigDescriptor.text("inline." + property.name, property.name),
+                                String.valueOf(node.getStyle().getComputed(cast(property))))
+                        .control().changed.connect(value ->
+                                LiveEdits.setInline(node, cast(property), String.valueOf(value)));
+            }
+        }
+    }
+
+    /** Every property with a value, and what it resolved to. Collapsed: it is long by design. */
+    private static final class ComputedSection extends NodeAware {
+
+        @Override
+        public String tab() {
+            return STYLE_TAB;
+        }
+
+        @Override
+        public int order() {
+            return 30;
+        }
+
+        @Override
+        public void build(InspectorForm form, DataContext context) {
+            UIElement node = node(context);
+            if (node == null) return;
+            form.group("Computed", true);
+            List<StyleProperty<?>> properties = new ArrayList<>(node.getStyle().candidates.keySet());
+            properties.sort((a, b) -> a.name.compareTo(b.name));
+            for (StyleProperty<?> property : properties) {
+                form.row(ConfigDescriptor.info("computed." + property.name, property.name),
+                        String.valueOf(node.getStyle().getComputed(cast(property))));
+            }
+        }
+    }
+
+    /**
+     * The four box-model edges, as the layout RESOLVED them.
+     *
+     * <p>Null-safe by construction: a node that is hidden, frozen or not laid out yet has no box at all,
+     * which is an ordinary state rather than an error.</p>
+     */
+    private static final class BoxModelSection extends NodeAware {
+
+        @Override
+        public String tab() {
+            return LAYOUT_TAB;
+        }
+
+        @Override
+        public int order() {
+            return 10;
+        }
+
+        @Override
+        public void build(InspectorForm form, DataContext context) {
+            UIElement node = node(context);
+            Box box = node == null ? null : node.box();
+            if (box == null) {
+                form.row(ConfigDescriptor.info("box.none", "box"), "not laid out");
+                return;
+            }
+            form.header("Box");
+            form.row(ConfigDescriptor.info("box.size", "size"),
+                    round(box.width()) + " x " + round(box.height()));
+            form.row(ConfigDescriptor.info("box.margin", "margin"), edges(box.margin()));
+            form.row(ConfigDescriptor.info("box.border", "border"), edges(box.border()));
+            form.row(ConfigDescriptor.info("box.padding", "padding"), edges(box.padding()));
+            form.row(ConfigDescriptor.info("box.content", "content"),
+                    round(box.contentWidth()) + " x " + round(box.contentHeight()));
+        }
+    }
+
+    /** What the PARENT is doing to this node, which is where a flex surprise always comes from. */
+    private static final class FlexContextSection extends NodeAware {
+
+        @Override
+        public String tab() {
+            return LAYOUT_TAB;
+        }
+
+        @Override
+        public int order() {
+            return 20;
+        }
+
+        @Override
+        public void build(InspectorForm form, DataContext context) {
+            UIElement node = node(context);
+            if (node == null) return;
+            UIElement parent = node.parentElement();
+            form.header("Flex");
+            if (parent == null) {
+                form.row(ConfigDescriptor.info("flex.parent", "parent"), "none");
+                return;
+            }
+            form.row(ConfigDescriptor.info("flex.direction", "parent direction"),
+                    String.valueOf(parent.getStyle().getComputed(LayoutProperties.FLEX_DIRECTION)));
+            form.row(ConfigDescriptor.info("flex.grow", "grow"),
+                    String.valueOf(node.getStyle().getComputed(LayoutProperties.FLEX_GROW)));
+            form.row(ConfigDescriptor.info("flex.shrink", "shrink"),
+                    String.valueOf(node.getStyle().getComputed(LayoutProperties.FLEX_SHRINK)));
+        }
+    }
+
+    private static String edges(FloatRect rect) {
+        return round(rect.top) + " " + round(rect.right) + " "
+                + round(rect.bottom) + " " + round(rect.left);
+    }
+
+    private static String round(float value) {
+        return String.valueOf(Math.round(value * 100f) / 100f);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static StyleProperty<Object> cast(StyleProperty<?> property) {
+        return (StyleProperty<Object>) property;
     }
 
     /** The primary first, then the rest as declared. Package-visible so the order is asserted
