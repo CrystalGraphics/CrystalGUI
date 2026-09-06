@@ -491,6 +491,9 @@ public final class Workspace implements Disposable {
             // before reaching it. The watcher on the folder it moved INTO is covered by `path`; the
             // watcher on the file itself is covered only by `from`.
             Resource origin = change.from().isEmpty() ? null : Resource.parse(change.from());
+            if (origin != null && change.kind() == FsMessages.ChangeKind.RENAMED) {
+                moveStores(origin, resource);
+            }
             for (Watch watch : watches.values()) {
                 if (watch.covers(resource) || (origin != null && watch.covers(origin))) {
                     grouped.computeIfAbsent(watch, key -> new ArrayList<>()).add(change);
@@ -498,6 +501,20 @@ public final class Workspace implements Disposable {
             }
         }
         grouped.forEach((watch, changes) -> watch.onChanged.emit(changes));
+    }
+
+    /**
+     * Carries this client's own per-resource stores to where a file went.
+     *
+     * <p>Here rather than on the open document, because a file is usually renamed while nothing has it
+     * open — and then nothing is left to notice. The history simply vanishes from the renamed file, and
+     * a backup is offered on every launch as unsaved work for a path that no longer exists, which cannot
+     * be opened and so cannot be compared away either. This is the one place every change arrives,
+     * whether or not anything is watching the file it names.</p>
+     */
+    private void moveStores(Resource from, Resource to) {
+        if (backup != null) backup.rename(from, to);
+        if (history != null) history.rename(from, to);
     }
 
     @Override

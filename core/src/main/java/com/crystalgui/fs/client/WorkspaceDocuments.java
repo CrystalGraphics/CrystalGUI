@@ -377,9 +377,22 @@ public final class WorkspaceDocuments implements Disposable {
 
     // ── Backup and history ──────────────────────────────────────────────────────────────────────
 
+    /**
+     * Keeps the backup in step with whether there is anything to back up.
+     *
+     * <p>Clean means DISCARD and not merely "nothing to write": a save is not the only way a document
+     * stops holding unsaved work, since {@code contentVersion} is the content's identity and comes back
+     * when an undo returns to it. Returning early there left the pre-undo bytes on disk, to be offered
+     * on the next launch as work the author had taken back — and offered as a CONFLICT rather than
+     * discarded as identical if the file had moved meanwhile.</p>
+     */
     private void backup(Document document) {
         Backup store = workspace.backup();
-        if (store == null || !document.isDirty()) return;
+        if (store == null) return;
+        if (!document.isDirty()) {
+            store.discard(document.resource());
+            return;
+        }
         store.save(document.resource(), document.model().encode(), document.etag());
     }
 

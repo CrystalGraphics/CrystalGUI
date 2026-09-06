@@ -56,6 +56,25 @@ public final class Backup {
         storage.write(ResourceKeys.nameFor(resource), encode(record));
     }
 
+    /**
+     * Carries a backup to where its file went.
+     *
+     * <p>The record names the resource it belongs to, so this rewrites it rather than moving the file:
+     * a backup still claiming the old path would be restored to a document that has moved on from it.
+     * <b>The etag is kept</b> — it is the one this content was in step with, and the restore compares
+     * it against the file's to notice the file moved while the client was away, which is what happened.</p>
+     *
+     * <p>A backup already held for the destination is replaced. There is one record per resource and no
+     * merging two documents' unsaved text, and the file that moved is the one now living there.</p>
+     */
+    public void rename(Resource from, Resource to) {
+        if (from.equals(to) || !storage.isWritable()) return;
+        Entry entry = read(ResourceKeys.nameFor(from));
+        if (entry == null) return;
+        save(to, entry.content(), entry.etag());
+        storage.delete(ResourceKeys.nameFor(from));
+    }
+
     /** Drops one — what a successful save does. */
     public void discard(Resource resource) {
         storage.delete(ResourceKeys.nameFor(resource));
