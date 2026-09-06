@@ -147,6 +147,17 @@ public final class BoxTree {
     }
 
     /**
+     * As {@link #hitTest(float, float, Predicate)}, reaching into {@code hit-test: false} subtrees.
+     *
+     * <p>What an editor asks: which element is under the pointer, rather than which one would take the
+     * click. @see Box#pick</p>
+     */
+    public @Nullable Box pick(float worldX, float worldY, Predicate<Box> skip) {
+        composeIfDirty();
+        return root == null ? null : root.pick(worldX, worldY, skip);
+    }
+
+    /**
      * The transform from the document's own space to the SURFACE — the one definition of what
      * {@code uiScale} means here.
      *

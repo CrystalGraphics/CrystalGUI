@@ -7,6 +7,7 @@ import com.crystalgui.core.command.Command;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.undo.Edit;
+import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.config.inspector.InspectorForm;
 import com.crystalgui.widget.config.inspector.InspectorSection;
@@ -27,6 +28,13 @@ final class TestSurface {
     /** Selects whatever it is handed, gives every press to the surface, records no move. */
     static SurfacePolicy policy() {
         return new SurfacePolicy() {
+            private final UndoStack history = new UndoStack();
+
+            @Override
+            public UndoStack history() {
+                return history;
+            }
+
             @Override
             public UIElement itemFor(UIElement hit) {
                 return hit;

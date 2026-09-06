@@ -27,6 +27,8 @@ import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.undo.UndoCommands;
 import com.crystalgui.core.undo.UndoScope;
 import com.crystalgui.core.undo.UndoStack;
+import com.crystalgui.widget.surface.edit.Clipboard;
+import com.crystalgui.widget.surface.edit.Edits;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.UIElement;
@@ -40,7 +42,13 @@ import com.crystalgui.ui.service.Input;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 import org.joml.Vector2f;
+import com.crystalgui.core.undo.CompositeEdit;
 import com.crystalgui.widget.canvas.CanvasView;
+import com.crystalgui.widget.surface.Surface;
+import com.crystalgui.widget.surface.SurfacePolicy;
+import com.crystalgui.widget.surface.mode.Marquee;
+import com.crystalgui.widget.surface.mode.MoveGesture;
+import com.crystalgui.widget.surface.select.Picking;
 import com.crystalgui.widget.canvas.WorldRect;
 import lombok.Getter;
 
@@ -289,6 +297,14 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
      */
     private final UndoStack undoStack = new UndoStack();
 
+    /**
+     * The one door every change to this graph goes through — the engine's, over the stack above.
+     *
+     * <p>A transaction opened here is one undo step however many nodes it moved, which is what makes a
+     * forty-node drag one Ctrl+Z.</p>
+     */
+    private final Edits edits = new Edits(undoStack);
+
     /** @see UndoScope */
     @Override
     public UndoStack undoStack() {
@@ -301,8 +317,14 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
     /** Fires after any change to the edge set — connect, disconnect, or a node leaving with wires on it. */
     public final Signal.Action onConnectionsChanged = new Signal.Action();
 
-    /** The rubber band. A child of the VIEWPORT, not the plane — see {@link #marqueeElement()}. */
-    private final UIElement marquee = new UIElement();
+    /**
+     * The engine's gestures, over this view as a surface.
+     *
+     * <p>The band, the multi-item move and the picker are {@code widget.surface}'s — a graph and a UI
+     * builder want the same three and got them from the same place at L2. What stays here is what a
+     * graph means by them: {@link GraphPolicy}.</p>
+     */
+    private final Surface surface = new Surface(this);
 
     /** The wire under the pointer, or null. Drives the hover thickening — a wire cannot carry {@code
      * :hover} itself, having no element. */
@@ -310,11 +332,29 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
     @Nullable
     private GraphConnection hoveredWire;
 
-    private boolean marqueeActive;
-    private float marqueeStartX, marqueeStartY;
-    /** The selection to fall back on while a Shift/Alt marquee is in flight, so dragging the band
-     * bigger and smaller adds and removes rather than accumulating. */
-    private List<GraphNode> marqueeBaseline = List.of();
+    private final GraphPolicy policy = new GraphPolicy();
+
+    private final Picking picking = new Picking(new Picking.Surfaces() {
+        @Override
+        public UIDocument window() {
+            return document();
+        }
+
+        @Override
+        public List<UIElement> items() {
+            return List.copyOf(content().children());
+        }
+
+        @Override
+        public WorldRect boundsOf(UIElement item) {
+            return worldBoundsOf(item);
+        }
+
+        @Override
+        public UIElement itemFor(UIElement hit) {
+            return policy.itemFor(hit);
+        }
+    });
 
     public GraphView() {
         super(NAME);
@@ -338,14 +378,6 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
         // you reach one in every editor.
         setFocusPolicy(FocusPolicy.CLICK);
 
-        marquee.addClass(MARQUEE_CLASS);
-        // In the VIEWPORT, not the plane: a band drawn inside the transform would scale with the zoom,
-        // so its 1px border would be four physical pixels at 4x and invisible at 0.25x. Every editor
-        // draws the rubber band in screen space over a world-space test, and so does this.
-        marquee.setHitTest(false);
-        StyleGroup.defaultPipeline(marquee.getStyle().getLayoutGroup(),
-                l -> l.positionType(TaffyPosition.ABSOLUTE).display(TaffyDisplay.NONE));
-        append(marquee);
 
         this.events.getGroup(MouseEvent.Down.class).attachListener((el, event) -> {
             if (!isEnabled() || event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
@@ -419,11 +451,11 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
 
     /** The rubber-band element, for a theme or a test. */
     public UIElement marqueeElement() {
-        return marquee;
+        return marquee().element();
     }
 
     public boolean isMarqueeActive() {
-        return marqueeActive;
+        return marquee().isActive();
     }
 
     /** The layer that draws the wires. Exposed for a theme or a test to reach; it owns no state a
@@ -932,12 +964,12 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
             selection.prune(this);
             return this;
         }
-        undoStack.beginTransaction("delete node");
+        edits.begin("delete node");
         try {
             for (NodePort port : node.getPorts()) disconnectAll(port);
-            undoStack.execute(new AddNodeEdit(this, node, data, false));
+            edits.apply(new AddNodeEdit(this, node, data, false));
         } finally {
-            undoStack.endTransaction();
+            edits.end();
         }
         selection.prune(this);
         return this;
@@ -957,12 +989,12 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
         GraphConnection doomedWire = selection.wire();
         if (doomedNodes.isEmpty() && doomedWire == null) return 0;
 
-        undoStack.beginTransaction("delete");
+        edits.begin("delete");
         try {
             if (doomedWire != null) disconnect(doomedWire);
             for (GraphNode node : doomedNodes) removeNode(node);
         } finally {
-            undoStack.endTransaction();
+            edits.end();
         }
         selection.clear();
         return doomedNodes.size() + (doomedWire == null ? 0 : 1);
@@ -1008,7 +1040,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
         NodeWidgetFactory factory = nodeFactory != null
                 ? nodeFactory : NodeWidgetFactory.of(nodeLibrary).build();
 
-        undoStack.beginTransaction("paste");
+        edits.begin("paste");
         try {
             for (NodeData source : clip.nodes()) {
                 String id = GraphIds.generate();
@@ -1025,7 +1057,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
                 addNode(widget, placed.x(), placed.y());
 
                 NodeData stored = document.node(id);
-                if (stored != null) undoStack.push(new AddNodeEdit(this, widget, stored, true));
+                if (stored != null) edits.record(new AddNodeEdit(this, widget, stored, true));
                 pasted.add(widget);
             }
             for (EdgeData edge : clip.edges()) {
@@ -1037,7 +1069,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
                 if (out != null && in != null) connect(out, in);
             }
         } finally {
-            undoStack.endTransaction();
+            edits.end();
         }
 
         selection.replaceWith(pasted);
@@ -1099,6 +1131,46 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
             else view.attachNode(node, data);
         }
         @Override public String label() { return adding ? "add node" : "delete node"; }
+    }
+
+    /**
+     * What a fragment is here: a detached {@link GraphDocument} of the selected nodes and the wires
+     * between them.
+     *
+     * <p>The engine holds what was copied and owns the commands; this says what copying and pasting
+     * <em>mean</em> in a graph. @see Clipboard</p>
+     */
+    private final Clipboard<GraphDocument> clipboard = new Clipboard<GraphDocument>() {
+        @Override
+        public Class<GraphDocument> type() {
+            return GraphDocument.class;
+        }
+
+        @Override
+        @Nullable
+        public GraphDocument copy() {
+            return copySelection();
+        }
+
+        @Override
+        public void paste(GraphDocument clip, float worldX, float worldY) {
+            pasteAt(clip, worldX, worldY);
+        }
+
+        @Override
+        public void pasteBy(GraphDocument clip, float offsetX, float offsetY) {
+            GraphView.this.paste(clip, offsetX, offsetY);
+        }
+
+        @Override
+        public boolean isEmpty(GraphDocument clip) {
+            return clip == null || clip.nodeCount() == 0;
+        }
+    };
+
+    /** @see #clipboard */
+    public Clipboard<GraphDocument> clipboard() {
+        return clipboard;
     }
 
     /** Every node currently on the plane, in insertion order. */
@@ -1239,19 +1311,19 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
 
         GraphConnection existing = firstConnectionTo(input);
         if (existing == null) {
-            undoStack.execute(new ConnectEdit(this, edge, true));
+            edits.apply(new ConnectEdit(this, edge, true));
             return connection;
         }
         EdgeData existingEdge = edgeDataOf(existing);
         // The replace is ONE undo step, and that is the whole reason transactions exist: a user who
         // rewires an input did one thing, and a Ctrl+Z that put the old wire back while leaving the new
         // one would leave the input holding two edges — a state the model forbids.
-        undoStack.beginTransaction("reconnect");
+        edits.begin("reconnect");
         try {
-            if (existingEdge != null) undoStack.execute(new ConnectEdit(this, existingEdge, false));
-            undoStack.execute(new ConnectEdit(this, edge, true));
+            if (existingEdge != null) edits.apply(new ConnectEdit(this, existingEdge, false));
+            edits.apply(new ConnectEdit(this, edge, true));
         } finally {
-            undoStack.endTransaction();
+            edits.end();
         }
         return connection;
     }
@@ -1311,7 +1383,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
         if (!connections.contains(connection)) return false;
         EdgeData edge = edgeDataOf(connection);
         if (edge == null) return false;
-        undoStack.execute(new ConnectEdit(this, edge, false));
+        edits.apply(new ConnectEdit(this, edge, false));
         return true;
     }
 
@@ -1324,14 +1396,14 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
         if (doomed.isEmpty()) return 0;
         // One step: pulling a node's wires is one action, and undoing it half way would be a graph the
         // user never saw.
-        undoStack.beginTransaction("disconnect all");
+        edits.begin("disconnect all");
         try {
             for (GraphConnection connection : doomed) {
                 EdgeData edge = edgeDataOf(connection);
-                if (edge != null) undoStack.execute(new ConnectEdit(this, edge, false));
+                if (edge != null) edits.apply(new ConnectEdit(this, edge, false));
             }
         } finally {
-            undoStack.endTransaction();
+            edits.end();
         }
         return doomed.size();
     }
@@ -1376,51 +1448,6 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
                 if (connection.touches(port)) count++;
             }
             port.setConnectionCount(count);
-        }
-    }
-
-    /**
-     * Records a completed node move as one undo step.
-     *
-     * <p>Recorded at the <b>end</b> of the drag, not per frame: the position is written continuously
-     * while the pointer moves, and a history of four hundred one-pixel steps is not a history. So the
-     * move happens directly and the stack is told afterwards with {@link UndoStack#push} — which is
-     * exactly the case that method exists for, and the reason it exists alongside {@code execute}.</p>
-     *
-     * <p>A move that ended where it started records nothing. A Ctrl+Z that appears to do nothing is
-     * worse than one press too few.</p>
-     */
-    public void recordMove(GraphNode node, float fromX, float fromY, float toX, float toY) {
-        if (fromX == toX && fromY == toY) return;
-        if (node.getNodeId() == null) return;
-        undoStack.push(new MoveNodeEdit(this, node.getNodeId(), fromX, fromY, toX, toY));
-    }
-
-    /**
-     * Records a completed multi-node move as one undo step.
-     *
-     * <p>One transaction rather than one edit per node, because the user performed one drag. The
-     * per-node edits inside it are still individually correct, which is what lets a future
-     * align-or-distribute command reuse them.</p>
-     */
-    public void recordMoves(List<GraphNode> moved, List<float[]> origins, float dx, float dy) {
-        if (moved.isEmpty() || (dx == 0f && dy == 0f)) return;
-        if (moved.size() == 1) {
-            float[] origin = origins.get(0);
-            recordMove(moved.get(0), origin[0], origin[1], origin[0] + dx, origin[1] + dy);
-            return;
-        }
-        undoStack.beginTransaction("move " + moved.size() + " nodes");
-        try {
-            for (int i = 0; i < moved.size(); i++) {
-                float[] origin = origins.get(i);
-                String id = moved.get(i).getNodeId();
-                if (id == null) continue;
-                undoStack.push(new MoveNodeEdit(this, id,
-                        origin[0], origin[1], origin[0] + dx, origin[1] + dy));
-            }
-        } finally {
-            undoStack.endTransaction();
         }
     }
 
@@ -1475,75 +1502,86 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
             return true;
         }
 
-        boolean additive = isShiftHeld();
-        boolean subtractive = isAltHeld();
-        if (!additive && !subtractive) selection.clear();
-        marqueeBaseline = selection.nodes();
-
-        Vector2f local = toLocal(rawX, rawY);
-        marqueeStartX = local.x();
-        marqueeStartY = local.y();
-        marqueeActive = true;
-
-        Drag.start(this, rawX, rawY,
-                new Drag.Listener() {
-                    @Override
-                    public void onDragUpdate(float mx, float my, float sx, float sy, float dx, float dy) {
-                        updateMarquee(mx, my, additive, subtractive);
-                    }
-
-                    @Override
-                    public void onDragEnd(float mx, float my) {
-                        endMarquee();
-                    }
-
-                    @Override
-                    public void onDragCancel() {
-                        // Escape mid-band puts back what was selected before it started, rather than
-                        // leaving whatever the half-drawn rectangle happened to be over.
-                        selection.replaceWith(marqueeBaseline);
-                        endMarquee();
-                    }
-                });
+        marquee().begin(rawX, rawY, isShiftHeld(), isAltHeld());
         return true;
     }
 
-    private void updateMarquee(float localX, float localY, boolean additive, boolean subtractive) {
-        float x = Math.min(marqueeStartX, localX), y = Math.min(marqueeStartY, localY);
-        float w = Math.abs(localX - marqueeStartX), h = Math.abs(localY - marqueeStartY);
+    @Nullable
+    private Marquee marquee;
 
-        // ALREADY RELATIVE TO THIS BOX. The band is absolutely positioned inside this view, and a
-        // drag callback reports the pointer in the SOURCE's own space -- which since M6.1 has the
-        // source's origin at zero. This used to subtract `box().x()` because the old engine's
-        // accessors were absolute and the drag handed it one of those; doing it now shifts the band
-        // by however far this view sits inside its own parent.
-        final float left = x, top = y;
-        StyleGroup.inlinePipeline(marquee.getStyle().getLayoutGroup(),
-                l -> l.display(TaffyDisplay.FLEX).left(left).top(top).width(w).height(h));
+    @Nullable
+    private MoveGesture moveGesture;
 
-        Vector2f from = viewportToWorld(x, y);
-        Vector2f to = viewportToWorld(x + w, y + h);
-        List<GraphNode> inside = nodesTouching(WorldRect.of(from.x(), from.y(), to.x(), to.y()));
-
-        // Recomputed from the baseline every frame rather than accumulated, so shrinking the band takes
-        // nodes back out. An accumulating marquee only ever grows, which feels broken the first time you
-        // overshoot.
-        if (subtractive) {
-            List<GraphNode> kept = new ArrayList<>(marqueeBaseline);
-            kept.removeAll(inside);
-            selection.replaceWith(kept);
-        } else if (additive) {
-            List<GraphNode> combined = new ArrayList<>(marqueeBaseline);
-            for (GraphNode node : inside) if (!combined.contains(node)) combined.add(node);
-            selection.replaceWith(combined);
-        } else {
-            selection.replaceWith(inside);
-        }
+    /** The band. Built on first use, because it adds an overlay and a constructor is not the place. */
+    Marquee marquee() {
+        if (marquee == null) marquee = new Marquee(surface, picking, selection);
+        return marquee;
     }
 
-    private void endMarquee() {
-        marqueeActive = false;
-        StyleGroup.inlinePipeline(marquee.getStyle().getLayoutGroup(), l -> l.display(TaffyDisplay.NONE));
+    /** Dragging what is selected, as one undo step. @see MoveGesture */
+    public MoveGesture moveGesture() {
+        if (moveGesture == null) moveGesture = new MoveGesture(surface, policy, edits);
+        return moveGesture;
+    }
+
+    /**
+     * What a graph means by the engine's questions.
+     *
+     * <p>An item is a node; a press on a node's chrome is the surface's and one inside it is the tree's,
+     * or a port's value editor could not be typed in; and a move writes one position edit per node,
+     * composed into one step.</p>
+     */
+    private final class GraphPolicy implements SurfacePolicy {
+
+        @Override
+        public UndoStack history() {
+            return undoStack;
+        }
+
+        @Override
+        @Nullable
+        public UIElement itemFor(@Nullable UIElement hit) {
+            for (UIElement each = hit; each != null; each = each.parentElement()) {
+                if (each instanceof GraphNode node && node.parent() == content()) return node;
+            }
+            return null;
+        }
+
+        @Override
+        public PressOwner ownerOf(UIElement hit) {
+            // A NODE'S CHROME IS THE SURFACE'S AND WHAT IS INSIDE IT IS NOT. A port's default-value
+            // editor has to keep taking clicks, or a field inside a node cannot be typed in at all.
+            return hit instanceof GraphNode ? PressOwner.SURFACE : PressOwner.TREE;
+        }
+
+        @Override
+        public void markSelected(UIElement item, boolean selected) {
+            if (item instanceof GraphNode node) node.setSelected(selected);
+        }
+
+        /**
+         * Deleting is the graph's own: nodes go with the wires that touched them.
+         *
+         * <p>{@code deleteSelection} already does exactly that as one transaction, so this returns null
+         * and the command path stays where the edge cases already live.</p>
+         */
+        @Override
+        @Nullable
+        public Edit deleteEdit(List<UIElement> items) {
+            return null;
+        }
+
+        @Override
+        @Nullable
+        public Edit moveEdit(List<Move> moves) {
+            List<Edit> each = new ArrayList<>(moves.size());
+            for (Move move : moves) {
+                if (!(move.item() instanceof GraphNode node) || node.getNodeId() == null) continue;
+                each.add(new MoveNodeEdit(GraphView.this, node.getNodeId(),
+                        move.fromX(), move.fromY(), move.toX(), move.toY()));
+            }
+            return each.isEmpty() ? null : CompositeEdit.of("move", each.toArray(new Edit[0]));
+        }
     }
 
     /** World point -> the wire under it, or null. Delegates to the layer, which is the only thing that
@@ -1741,11 +1779,11 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
         // deriving a second set from the widget.
         document.addNode(data);
 
-        undoStack.beginTransaction("create " + offer.type().label());
+        edits.begin("create " + offer.type().label());
         try {
             addNode(node, pendingWorldX, pendingWorldY);
             NodeData placed = document.node(node.getNodeId());
-            if (placed != null) undoStack.push(new AddNodeEdit(this, node, placed, true));
+            if (placed != null) edits.record(new AddNodeEdit(this, node, placed, true));
             NodePort source = pendingFrom;
             if (source != null && offer.port() != null) {
                 for (NodePort port : node.getPorts()) {
@@ -1756,7 +1794,7 @@ public class GraphView extends CanvasView implements UndoScope, DataProvider {
                 }
             }
         } finally {
-            undoStack.endTransaction();
+            edits.end();
         }
         pendingFrom = null;
         selection.selectOnly(node);

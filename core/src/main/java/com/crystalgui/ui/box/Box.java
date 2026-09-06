@@ -545,14 +545,31 @@ public final class Box {
      * node, it does not punch a hole in the document.
      */
     public @Nullable Box hitTest(float worldX, float worldY, Predicate<Box> skip) {
-        if (!hitTestable()) return null;
+        return search(worldX, worldY, skip, true);
+    }
+
+    /**
+     * As {@link #hitTest(float, float, Predicate)}, but reaching <b>into</b> subtrees marked
+     * {@code hit-test: false}.
+     *
+     * <p>What an editor asks. A UI builder turns hit-testing off on the artboard so the thing being
+     * designed does not react to being designed — and then still has to know which element is under the
+     * pointer. "What is there" and "what would take this click" are different questions, and only one of
+     * them is what an editor means.</p>
+     */
+    public @Nullable Box pick(float worldX, float worldY, Predicate<Box> skip) {
+        return search(worldX, worldY, skip, false);
+    }
+
+    private @Nullable Box search(float worldX, float worldY, Predicate<Box> skip, boolean respectHitTest) {
+        if (respectHitTest && !hitTestable()) return null;
         Vector4f p = new Vector4f(worldX, worldY, 0f, 1f);
         worldToLocal.transform(p);
         boolean inside = p.x >= 0f && p.y >= 0f && p.x < width && p.y < height;
         if (!inside && clips()) return null;
         List<Box> order = children();
         for (int i = order.size() - 1; i >= 0; i--) {
-            Box hit = order.get(i).hitTest(worldX, worldY, skip);
+            Box hit = order.get(i).search(worldX, worldY, skip, respectHitTest);
             if (hit != null) return hit;
         }
         // SKIPPED means "not the answer", never "nor anything inside me". An inert node's children
