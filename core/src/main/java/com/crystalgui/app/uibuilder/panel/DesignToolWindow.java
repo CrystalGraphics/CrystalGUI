@@ -48,6 +48,12 @@ public final class DesignToolWindow extends UIElement {
         // it exists. Following only the panel left this empty from startup until something else moved --
         // and for a workspace restored with a .cgui already in front, nothing else ever does.
         connections.add(workbench.onDidOpenDocument().connect(path -> follow()));
+        // AND THE EDITOR SERVICE ITSELF, which is the one that knows when a tab has an editor rather than
+        // when the dock has a panel. A restored workspace announces its active panel while the document
+        // behind it is still arriving, and never announces again -- so a workbench that came back with a
+        // .cgui already in front showed an empty panel for the whole session.
+        connections.add(workbench.editors().onDidOpen.connect(tab -> follow()));
+        connections.add(workbench.editors().onDidChangeState.connect(tab -> follow()));
         follow();
     }
 

@@ -302,8 +302,10 @@ public final class ExplorerCommands {
                 .binding("F5")
                 .run(context -> {
                     Workbench workbench = workbenchFor(context);
-                    treeFor(context).source().invalidateAll();
-                    treeFor(context).treeView().refresh();
+                    ProjectFileTree tree = treeFor(context);
+                    if (tree == null) return;
+                    tree.source().invalidateAll();
+                    tree.treeView().refresh();
                 })
                 // No target needed any more -- it reloads the whole tree, so the only thing that could make
                 // it meaningless is having no project open at all.
@@ -495,7 +497,13 @@ public final class ExplorerCommands {
     private static CgPath destinationFor(Workbench workbench, CommandContext context) {
         CgPath selected = target(context);
         if (selected != null) return newParentFor(workbench, selected);
-        List<CgPath> roots = treeFor(context).source().roots();
+        // NO TREE IS NO DESTINATION, and this must not throw: it is reached from `enabledWhen`, which the
+        // command palette runs for EVERY command each time it opens. With focus anywhere but the explorer
+        // -- a builder canvas, an editor -- nothing answers PROJECT_TREE, and the palette died on
+        // Ctrl+Shift+P rather than merely listing this command as disabled.
+        ProjectFileTree tree = treeFor(context);
+        if (tree == null) return null;
+        List<CgPath> roots = tree.source().roots();
         return roots.isEmpty() ? null : roots.get(0);
     }
 
@@ -584,7 +592,9 @@ public final class ExplorerCommands {
     private static void confirmDelete(Workbench workbench, CommandContext context) {
         CgPath path = target(context);
         if (!isRenameable(path)) return;
-        boolean directory = treeFor(context).isDirectory(path);
+        ProjectFileTree tree = treeFor(context);
+        if (tree == null) return;
+        boolean directory = tree.isDirectory(path);
 
         // AND THE TAB GOES WITH IT. A delete arriving over the watch orphans an open document on
         // purpose, so a file removed by somebody else does not take an unread buffer with it -- but the

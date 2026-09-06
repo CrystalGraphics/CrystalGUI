@@ -10,6 +10,7 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
@@ -56,10 +57,12 @@ public final class TextEditGesture extends UIElement {
         super(NAME);
         this.document = document;
         addClass(OVERLAY_CLASS);
-        // ZERO-SIZED, for the reason ResizeHandles states: a full-size hittable layer over the canvas is
-        // the answer to every hit test that lands on background. The field is placed from this origin.
+        // FULL SIZE so the field has somewhere to be, and HIT_TRANSPARENT so the layer is never itself
+        // the answer to a hit test -- which is what a full-size layer over a canvas otherwise becomes.
         StyleGroup.defaultPipeline(getStyle().getLayoutGroup(),
-                l -> l.positionType(TaffyPosition.ABSOLUTE).left(0f).top(0f).width(0f).height(0f));
+                l -> l.positionType(TaffyPosition.ABSOLUTE).left(0f).top(0f)
+                        .widthPercent(100f).heightPercent(100f));
+        set(Attribute.HIT_TRANSPARENT, true);
         StyleGroup.defaultPipeline(field.getStyle().getLayoutGroup(),
                 l -> l.positionType(TaffyPosition.ABSOLUTE).left(0f).top(0f));
         append(field);
