@@ -37,7 +37,10 @@ public class CursorArtProbe {
     @Test
     public void dumpTheCursorArtwork() throws IOException {
         Files.createDirectories(OUT);
-        dump("rotate", CgCursorBitmaps.rotate());
+        dump("rotate-ne", CgCursorBitmaps.rotateNe());
+        dump("rotate-nw", CgCursorBitmaps.rotateNw());
+        dump("rotate-se", CgCursorBitmaps.rotateSe());
+        dump("rotate-sw", CgCursorBitmaps.rotateSw());
         dump("skew", CgCursorBitmaps.skew());
         dump("pivot", CgCursorBitmaps.pivot());
         dump("four-way", CgCursorBitmaps.fourWayArrow());

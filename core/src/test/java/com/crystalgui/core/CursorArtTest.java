@@ -90,7 +90,10 @@ public class CursorArtTest {
      */
     @Test
     public void theCurvedCursorsAreSmooth() {
-        assertSmooth("rotate", CgCursorBitmaps.rotate());
+        assertSmooth("rotate-ne", CgCursorBitmaps.rotateNe());
+        assertSmooth("rotate-nw", CgCursorBitmaps.rotateNw());
+        assertSmooth("rotate-se", CgCursorBitmaps.rotateSe());
+        assertSmooth("rotate-sw", CgCursorBitmaps.rotateSw());
         assertSmooth("skew", CgCursorBitmaps.skew());
         assertSmooth("pivot", CgCursorBitmaps.pivot());
     }
@@ -117,7 +120,9 @@ public class CursorArtTest {
     public void theCurvedCursorsStayOnTheCanvas() {
         int n = CgCursorBitmaps.SIZE;
         for (int[] art : new int[][] {
-                CgCursorBitmaps.rotate(), CgCursorBitmaps.skew(), CgCursorBitmaps.pivot() }) {
+                CgCursorBitmaps.rotateNe(), CgCursorBitmaps.rotateNw(),
+                CgCursorBitmaps.rotateSe(), CgCursorBitmaps.rotateSw(),
+                CgCursorBitmaps.skew(), CgCursorBitmaps.pivot() }) {
             for (int i = 0; i < n; i++) {
                 assertEquals("top row", 0, alpha(art[i]));
                 assertEquals("bottom row", 0, alpha(art[(n - 1) * n + i]));
