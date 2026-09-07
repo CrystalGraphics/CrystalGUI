@@ -16,6 +16,7 @@ import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.protocol.FsError;
 import com.crystalgui.fs.protocol.FsMessages;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -353,6 +354,25 @@ public final class WorkspaceDocuments implements Disposable {
                     done.fail(error);
                 })
                 .then(response -> {
+                    // A RELOAD THAT BRINGS BACK WHAT WE ALREADY HOLD IS NOT A RELOAD.
+                    //
+                    // `adopt` clears the undo history, and rightly: an entry recorded before a genuine
+                    // reload holds an inverse taken against content that has been replaced. But the file
+                    // arriving unchanged replaces nothing, and clearing there loses a session's undo for
+                    // no reason at all -- silently, since the tree looks identical afterwards. Reported
+                    // as "ctrl+z did nothing and that history just got lost", which is exactly how it
+                    // presents: nothing on screen moves, and there is no longer anything to undo.
+                    //
+                    // Reached by ordinary means. Every client hears about its own writes and `applyChange`
+                    // filters those by etag -- but a stat-derived etag that differs while the bytes do
+                    // not (a second writer, a touched mtime, a coalesced watch tick) walks straight past
+                    // that guard and lands here. The bytes are the only thing that actually settles it.
+                    if (Arrays.equals(response.bytes(), document.model().encode())) {
+                        document.markSaved(response.etag());
+                        discardBackup(document);
+                        done.resolve(null);
+                        return;
+                    }
                     document.adopt(response.bytes(), response.etag());
                     discardBackup(document);
                     done.resolve(null);

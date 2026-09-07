@@ -423,6 +423,56 @@ public class WorkspaceDocumentsTest {
     }
 
     /**
+     * <b>A reload that brings back what we already hold keeps the undo history.</b>
+     *
+     * <p>{@code adopt} clears the history, and rightly: an entry recorded before a genuine reload holds
+     * an inverse taken against content that has been replaced. But a file arriving UNCHANGED replaces
+     * nothing, and clearing there loses a session's undo for no reason and without a trace — the tree
+     * looks identical afterwards, so it presents as Ctrl+Z having quietly stopped working.</p>
+     *
+     * <p>Reached by ordinary means: every client hears about its own writes and {@code applyChange}
+     * filters those by etag, but an etag that differs while the bytes do not — a second writer, a
+     * touched mtime, a coalesced watch tick — walks past that guard and lands in a reload.</p>
+     */
+    @Test
+    public void aReloadThatChangesNothingKeepsTheHistory() {
+        Document document = open(MAIN);
+        type(document, "// mine");
+        documents.save(document);
+        pump();
+        assertFalse("the save did not settle", document.isDirty());
+        assertTrue("nothing to undo, so the test would pass for the wrong reason",
+                document.model().history().canUndo());
+
+        // The file as it now stands, handed back -- which is what a spurious change notification causes.
+        documents.reload(document);
+        pump();
+
+        assertTrue("a reload that changed nothing threw the history away",
+                document.model().history().canUndo());
+        assertTrue("and it must still actually undo", document.model().history().undo());
+    }
+
+    /** A reload that DOES bring different content still clears it, which is the rule being preserved. */
+    @Test
+    public void aRealReloadStillClearsTheHistory() {
+        Document document = open(MAIN);
+        type(document, "// mine");
+        documents.save(document);
+        pump();
+        assertTrue(document.model().history().canUndo());
+
+        // Somebody else's write, arriving as content we do not hold.
+        service.write(WorkspaceActor.LOCAL, MAIN_PATH,
+                "// theirs".getBytes(StandardCharsets.UTF_8), null);
+        documents.reload(document);
+        pump();
+
+        assertFalse("an inverse taken against replaced content must not survive",
+                document.model().history().canUndo());
+    }
+
+    /**
      * <b>Undoing back to the saved state discards the backup too.</b> A save is not the only way a
      * document stops holding unsaved work — {@code contentVersion} is the content's identity and comes
      * back when an undo returns to it — so a backup written on the way out has to be dropped on the way
