@@ -22,8 +22,23 @@ statusbarview {
     height: 22px;
     flex-grow: 0;
     flex-shrink: 0;
-    padding-left: 8px;
-    padding-right: 8px;
+    /* TIGHTER ON THE LEADING EDGE THAN THE TRAILING ONE, and not symmetrical for symmetry's sake. The
+     * left edge is where the TRAIL starts, and a path is read from its first segment -- so space in
+     * front of it is space before the sentence begins. The right edge ends in readouts, which want to
+     * stand off the corner.
+     *
+     * What is left in front of the first crumb after this is the icon's own doing: the glyph is drawn
+     * `overlay-fit: contain` inside its box and does not fill it, so the visible inset is this padding
+     * plus whatever margin the artwork carries. Below this, tighten the artwork rather than the bar. */
+    padding-left: 4px;
+    /* AND THE TRAILING EDGE STOPS WHERE THE PANELS DO. The bar runs the full width of the window while
+     * the content above it ends short of the rail on the right, so readouts flush to the bar's own edge
+     * sit past the column they belong under.
+     *
+     * Nothing trails the readouts to make this out of: the progress item is at the HEAD of that group,
+     * not its tail. So this is the whole of the trailing inset, and it is a number to look at rather
+     * than derive -- the rail's width is not something the sheet can ask for. */
+    padding-right: 24px;
     gap-all: 8px;
     overflow: hidden;
     /* THE SAME SURFACE AS THE RAILS, which is what makes it read as chrome rather than as the bottom of
@@ -58,10 +73,13 @@ statusbarview .__spacer__ {
 /* A DIVIDER BEFORE EVERY ITEM BUT THE FIRST, which is what makes four readouts read as four things
  * rather than one run-on line: at 12px of gap alone, `6:1 UTF-8 LF 4 spaces` scanned as a single phrase.
  * The divider itself is an element -- see `.__status-sep__` below for why it cannot be a border. */
+/* LEVEL WITH THE TRAIL, not a size of their own. These were 9px against the path's 7px, which put the
+ * ambient readouts -- a caret position, an indent, an encoding -- above the thing that says where you
+ * are. Everything in the bar is glanced at; nothing in it is a heading. */
 statusbarview .__status-item__ {
     flex-shrink: 0;
     white-space: nowrap;
-    font-size: 9px;
+    font-size: 7px;
     color: var(--statusbar-item-fg, #9DA0A8);
 }
 
