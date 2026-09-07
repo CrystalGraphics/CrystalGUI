@@ -16,6 +16,7 @@ import com.crystalgui.app.uibuilder.canvas.BuilderToolbar;
 import com.crystalgui.app.uibuilder.canvas.ResizeHandles;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.app.uibuilder.panel.HierarchyPanel;
+import com.crystalgui.widget.collection.tree.TreeView;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
@@ -153,6 +154,63 @@ public class BuilderEditingTest extends UiDocumentTestBase {
     }
 
     // ── L4.7 ────────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * <b>The hierarchy is a tree, not a list.</b>
+     *
+     * <p>It was drawing as one: {@code TreeView} writes the per-depth indent as {@code padding-left} at
+     * DEFAULT origin, and a user-agent rule setting the padding shorthand on the row overrode it, so
+     * every row lined up at the same x. A tree that has nesting and does not show it is a list.</p>
+     */
+    @Test
+    public void rowsAreIndentedByDepthAndCarryTheirFoldState() {
+        UIElement group = new UIElement().setId("group");
+        UIElement inner = new UIElement().setId("inner");
+        group.append(inner);
+        editor.document().root().append(group);
+        document.update(W, H);
+
+        HierarchyPanel hierarchy = new HierarchyPanel(editor.surface());
+        document.append(hierarchy);
+        document.update(W, H);
+        frame();
+
+        UIElement rootRow = templateFor(hierarchy, editor.document().root());
+        UIElement groupRow = templateFor(hierarchy, group);
+        assertNotNull(rootRow);
+        assertNotNull("the child of the root is not even a row", groupRow);
+        assertTrue("a deeper row must be indented further than its parent's",
+                groupRow.box().padding().left > rootRow.box().padding().left);
+
+        assertTrue("a row with children must say it can be opened",
+                groupRow.hasClass(TreeView.EXPANDED_CLASS) || groupRow.hasClass(TreeView.COLLAPSED_CLASS));
+        UIElement leafRow = templateFor(hierarchy, title);
+        assertTrue("and a row without them must say it cannot",
+                leafRow != null && leafRow.hasClass(TreeView.LEAF_CLASS));
+    }
+
+    /**
+     * The realised row element for a node, or null.
+     *
+     * <p>Found by asking the list which index an element is, rather than by index: a {@code ListView}
+     * realises a window, so the element for row <i>n</i> is whichever recycled template currently holds
+     * it and there is no positional lookup.</p>
+     */
+    private static UIElement templateFor(HierarchyPanel hierarchy, UIElement node) {
+        var rows = hierarchy.tree().visibleRows();
+        int wanted = -1;
+        for (int i = 0; i < rows.size(); i++) {
+            if (rows.get(i).item() == node) wanted = i;
+        }
+        if (wanted < 0) return null;
+        for (UIElement candidate : hierarchy.tree().composedSubtree()) {
+            if (candidate.hasClass(HierarchyPanel.ROW_CLASS)
+                    && hierarchy.tree().indexOfRowElement(candidate) == wanted) {
+                return candidate;
+            }
+        }
+        return null;
+    }
 
     /** The hierarchy shows the document's LIGHT tree — the root and what the file declares. */
     @Test
