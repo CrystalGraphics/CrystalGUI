@@ -18,6 +18,7 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.box.Measurable;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
@@ -29,6 +30,7 @@ import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.text.UIText;
 
 
+import dev.vfyjxf.taffy.style.AlignItems;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
@@ -46,9 +48,16 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
  * before and after. Recording per frame would put sixty steps in the history for one drag, and the
  * document's own rule is that a gesture that should be one step says so by being one edit.</p>
  *
- * <p><b>Double-click a handle to hug</b>: the size on that axis is withdrawn back to {@code auto}, so a
- * box that was pinned returns to content-sizing. It is Figma's <em>Hug contents</em> and the fastest way
- * out of a pinned inline size.</p>
+ * <p><b>Double-click a handle to hug</b>: the size on that axis returns to content-sizing. It is Figma's
+ * <em>Hug contents</em> and the fastest way out of a pinned inline size.</p>
+ *
+ * <p><b>Withdrawing the size is not enough on its own, and alone it does the opposite.</b> An item whose
+ * cross size is not definite is STRETCHED by {@code align-items}, so a hug that only cleared the width
+ * made the box fill its container — Figma's <em>Fill</em>. {@code fit-content} does not rescue it either;
+ * this engine stretches that as readily as {@code auto}. So the gesture also opts out of stretch, with
+ * {@code align-self: flex-start}, and only where the effective alignment WAS stretch — a box its parent
+ * centres is already unstretched and must keep its alignment. On the main axis the equivalent overrule is
+ * {@code flex-grow}, and hug withdraws that instead.</p>
  */
 public final class ResizeHandles extends UIElement {
 
@@ -194,7 +203,9 @@ public final class ResizeHandles extends UIElement {
         event.stopPropagation();
         event.preventDefault();
 
-        if (event.getDetail() >= 2) {
+        // EXACTLY TWO, never `>= 2`: the detail counts a click run without bound, so `>=` fires again on
+        // the third press and a triple-click could never begin a drag.
+        if (event.getDetail() == 2) {
             hug(node, spot);
             return;
         }
@@ -356,14 +367,68 @@ public final class ResizeHandles extends UIElement {
         return grow != null && grow > 0f;
     }
 
-    /** Back to {@code auto} on this handle's axes — Figma's <em>Hug contents</em>. */
+    /** @see ResizeHandles the note on why withdrawing the size is only half of this */
     private void hug(UIElement node, Spot spot) {
+        if (!hasContentToHug(node)) return;
         JsonElement before = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        boolean column = laysOutInColumn(node);
+        boolean touchesMain = column ? spot.yDirection() != 0 : spot.xDirection() != 0;
+        boolean touchesCross = column ? spot.xDirection() != 0 : spot.yDirection() != 0;
+        boolean stopStretch = touchesCross && wouldStretch(node);
+        boolean stopGrow = touchesMain && growsOnMainAxis(node);
+
         StyleGroup.inlinePipeline(node.getStyle().getLayoutGroup(), l -> {
             if (spot.xDirection() != 0) l.widthAuto();
             if (spot.yDirection() != 0) l.heightAuto();
+            if (stopStretch) l.alignSelf(AlignItems.FLEX_START);
+            if (stopGrow) l.flexGrow(0f);
         });
         commit(node, before);
+    }
+
+    /**
+     * Whether there is anything for a hug to size to.
+     *
+     * <p>Hugging an empty box is arithmetically right and unusable: the answer is zero, and a zero box
+     * puts all eight handles on the same point, so the gesture cannot be reversed by the gesture. The
+     * node is still reachable from the Design panel and the size is still typable in the Inspector, but a
+     * direct-manipulation affordance that destroys its own target is a trap whichever way out exists.</p>
+     *
+     * <p>Content is an IN-FLOW child or a node that measures itself — {@code UIText}, {@code Button} and
+     * every other widget that draws its own content has no child nodes at all and would otherwise read as
+     * empty. An out-of-flow child contributes nothing to a content size, so it does not count.</p>
+     */
+    static boolean hasContentToHug(UIElement node) {
+        if (node instanceof Measurable) return true;
+        for (UIElement child : node.composedChildren()) {
+            if (child.getStyle().computed().get(LayoutProperties.POSITION) != TaffyPosition.ABSOLUTE) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether the item would be stretched across the cross axis if it stated no size. */
+    private static boolean wouldStretch(UIElement node) {
+        AlignItems self = node.getStyle().computed().get(LayoutProperties.ALIGN_SELF);
+        if (self != null && self != AlignItems.AUTO) return self == AlignItems.STRETCH;
+        UIElement parent = node.parentElement();
+        AlignItems items = parent == null ? null
+                : parent.getStyle().computed().get(LayoutProperties.ALIGN_ITEMS);
+        // AUTO is a sentinel, not an answer -- unstated resolves to stretch, which is the case this
+        // whole method exists for.
+        return items == null || items == AlignItems.AUTO || items == AlignItems.STRETCH;
+    }
+
+    private static boolean laysOutInColumn(UIElement node) {
+        UIElement parent = node.parentElement();
+        return parent == null || parent.getStyle().computed()
+                .get(LayoutProperties.FLEX_DIRECTION) == FlexDirection.COLUMN;
+    }
+
+    /** Whether this handle's axis is the one the node's parent lays its children out along. */
+    private static boolean onMainAxis(UIElement node, Spot spot) {
+        return laysOutInColumn(node) ? spot.yDirection() != 0 : spot.xDirection() != 0;
     }
 
     /**
@@ -426,14 +491,10 @@ public final class ResizeHandles extends UIElement {
      */
     private void markOverruledHandles() {
         boolean overruled = target != null && growsOnMainAxis(target);
-        boolean column = target != null && target.parentElement() != null
-                && target.parentElement().getStyle().computed()
-                        .get(LayoutProperties.FLEX_DIRECTION) == FlexDirection.COLUMN;
         for (int i = 0; i < handles.size(); i++) {
             Spot spot = Spot.values()[i];
-            boolean onMainAxis = column ? spot.yDirection() != 0 : spot.xDirection() != 0;
             UIElement handle = handles.get(i);
-            boolean wanted = overruled && onMainAxis;
+            boolean wanted = overruled && onMainAxis(target, spot);
             if (handle.hasClass(OVERRULED_CLASS) != wanted) {
                 if (wanted) handle.addClass(OVERRULED_CLASS);
                 else handle.removeClass(OVERRULED_CLASS);

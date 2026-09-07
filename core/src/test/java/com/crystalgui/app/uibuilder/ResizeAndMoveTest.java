@@ -12,6 +12,8 @@ import com.crystalgui.app.uibuilder.canvas.Snap;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
 
+import dev.vfyjxf.taffy.style.AlignItems;
+import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
 /**
@@ -89,6 +91,49 @@ public class ResizeAndMoveTest extends UiDocumentTestBase {
 
         assertEquals("flush with the container is what somebody aiming at zero meant",
                 0f, snapped.x(), 0.01f);
+    }
+
+    /**
+     * <b>Withdrawing a size is not hugging, and on its own it does the opposite.</b>
+     *
+     * <p>Double-clicking a handle returns that axis to content-sizing. The obvious spelling — clear the
+     * width — is wrong: an item with no definite cross size is STRETCHED by {@code align-items}, so it
+     * fills its container. That is Figma's <em>Fill</em>, and it is what made a double-click on the
+     * middle-right handle blow a 278px box out to the full artboard width.</p>
+     *
+     * <p>{@code fit-content} does not rescue it: this engine stretches that as readily as {@code auto},
+     * which is measured below rather than assumed, since CSS says otherwise and the difference is
+     * invisible until something is wide enough to notice. Opting out of stretch is the operative half,
+     * and once it is done either spelling hugs.</p>
+     */
+    @Test
+    public void hugHasToOptOutOfStretch() {
+        UIElement column = new UIElement().layout(l -> l.width(400f).height(300f)
+                .flexDirection(FlexDirection.COLUMN));
+        UIElement cleared = child(column, l -> l.widthAuto());
+        UIElement fitted = child(column, l -> l.widthFitContent());
+        UIElement hugging = child(column, l -> l.widthAuto().alignSelf(AlignItems.FLEX_START));
+        document.append(column);
+        document.update(W, H);
+
+        assertEquals("no definite cross size is stretched — this is Fill, not Hug",
+                400f, cleared.box().width(), 0.5f);
+        assertEquals("fit-content is stretched here too, whatever CSS says about it",
+                400f, fitted.box().width(), 0.5f);
+        assertEquals("opting out of stretch is what actually hugs the content",
+                60f, hugging.box().width(), 0.5f);
+    }
+
+    /** A 60-wide child inside a node styled as asked, appended to {@code parent}. */
+    private static UIElement child(UIElement parent,
+                                   java.util.function.Consumer<com.crystalgui.style.LayoutGroup> style) {
+        UIElement node = new UIElement().layout(l -> {
+            l.height(20f);
+            style.accept(l);
+        });
+        node.append(new UIElement().layout(l -> l.width(60f).height(10f)));
+        parent.append(node);
+        return node;
     }
 
     /**
