@@ -89,6 +89,34 @@ public class ServiceWiringTest extends UiDocumentTestBase {
     }
 
     /**
+     * <b>A press a MODE consumed still dismisses.</b>
+     *
+     * <p>Light dismiss lives in the dispatch path, which a claimed press never reaches — so on a surface
+     * whose tool consumes every left press, as a designer's canvas does, an open menu could not be closed
+     * by clicking the very thing it was about. Who HANDLES a press and whether a press happened are
+     * different questions, and only the second one concerns the popover stack.</p>
+     */
+    @Test
+    public void aPressAModeConsumedStillLightDismisses() {
+        UIElement popup = livePopup();
+        document.input().pushMode(new InputMode() {
+            @Override
+            public String name() {
+                return "eats-everything";
+            }
+
+            @Override
+            public boolean pointerButton(int button, boolean pressed, float x, float y) {
+                return true;
+            }
+        });
+
+        press(400f, 400f);
+
+        assertTrue("the mode ate the press, not the question of what is open", closeRequested);
+    }
+
+    /**
      * And a press INSIDE it does not — the half that makes the first one safe rather than merely
      * present.
      */

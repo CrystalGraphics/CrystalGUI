@@ -618,8 +618,19 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         }
         if (event.button() == -1) return false;
 
+        // THE POPOVER STACK AS IT STOOD BEFORE ANYONE SAW THE PRESS. @see #button
+        int shownBefore = event.state() ? document.dismiss().showSeq() : 0;
         for (InputMode mode : modes()) {
-            if (mode.pointerButton(event.button(), event.state(), position.x, position.y)) return true;
+            if (mode.pointerButton(event.button(), event.state(), position.x, position.y)) {
+                // A CONSUMED PRESS STILL DISMISSES.
+                //
+                // Light dismiss lives in the dispatch path below, which a claimed press never reaches --
+                // so on a surface whose tool consumes every left press, an open menu could not be closed
+                // by clicking the thing it was about. Who HANDLES a press and whether a press happened
+                // are different questions, and only the second one concerns the popover stack.
+                if (event.state()) document.dismiss().lightDismiss(hoverTarget(), shownBefore);
+                return true;
+            }
         }
         return button(event);
     }
@@ -670,6 +681,17 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
             if (!anyButtonDown()) pendingGhost = null;
         }
         return false;
+    }
+
+    /**
+     * Whether a mouse button is held right now.
+     *
+     * <p>What a gesture starting from a mouse-down handler needs in order to know which button it is
+     * ABOUT: the press has already been dispatched by then, so the only record of it is here.</p>
+     */
+    public boolean isButtonDown(int button) {
+        ButtonState state = buttonState(button);
+        return state != null && state.isPressed();
     }
 
     private @Nullable ButtonState buttonState(int button) {

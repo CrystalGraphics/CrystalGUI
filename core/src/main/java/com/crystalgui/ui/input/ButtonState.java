@@ -79,6 +79,11 @@ public final class ButtonState {
         return dx * dx + dy * dy <= MULTI_CLICK_SLOP * MULTI_CLICK_SLOP;
     }
 
+    /** Whether this button is down right now. */
+    public boolean isPressed() {
+        return pressed;
+    }
+
     public void resetDetail() {
         this.detail = 0;
     }
