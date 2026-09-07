@@ -5,6 +5,9 @@ import java.util.List;
 import javax.annotation.Nullable;
 
 import com.crystalgui.app.uibuilder.BuilderSelection;
+import com.crystalgui.ui.input.keymap.Keymap;
+import com.crystalgui.widget.surface.SurfaceCommands;
+import com.crystalgui.app.uibuilder.BuilderCommands;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
@@ -170,6 +173,39 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
         // could not see it -- and Cut/Copy/Paste and anything resolving SURFACE went the same way.
         return super.getData(key);
     }
+
+    /**
+     * The engine's chords plus the builder's own, on this surface.
+     *
+     * <p>Two of these could not be declared on their commands. A bare arrow is application-wide there,
+     * so it would cost every list and text field its arrows; and {@code Escape} is already bound by the
+     * surface to Deselect, which WINS -- a scoped keymap is consulted before a command's own binding, so
+     * the builder's Select Parent never ran and Escape only ever deselected.</p>
+     *
+     * <p>Rebinding it here is what makes it reachable, and Select Parent deselects once it reaches the
+     * root, so the one key still does everything Deselect did.</p>
+     */
+    @Override
+    public Keymap keymapOrNull() {
+        if (builderKeymap == null) {
+            builderKeymap = new Keymap();
+            SurfaceCommands.bindDefaults(builderKeymap);
+            // UNBIND FIRST. `Keymap.bind` APPENDS and the EARLIER binding wins -- it says so, and warns
+            // about the conflict -- so binding over a default silently does nothing at all. Escape went
+            // on deselecting and Mod+A ran the engine's Select All, which after being taught to skip the
+            // page had nothing left to take: both keys read as broken by a change meant to fix them.
+            builderKeymap.unbind("Escape");
+            builderKeymap.bind("Escape", BuilderCommands.SELECT_PARENT);
+            builderKeymap.unbind("Mod+A");
+            builderKeymap.bind("Mod+A", BuilderCommands.SELECT_ALL);
+            builderKeymap.bind("Left", BuilderCommands.SELECT_PREVIOUS_SIBLING);
+            builderKeymap.bind("Right", BuilderCommands.SELECT_NEXT_SIBLING);
+        }
+        return builderKeymap;
+    }
+
+    /** @see #keymapOrNull */
+    private Keymap builderKeymap;
 
     @Override
     public UiBuilderDocument getDocument() {
