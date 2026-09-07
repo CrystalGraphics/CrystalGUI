@@ -1,6 +1,7 @@
 package com.crystalgui.widget.layout;
 
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.control.Button;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.style.property.layout.LayoutProperties;
@@ -242,6 +243,34 @@ public class TabViewTest extends UiDocumentTestBase {
         assertSame(third, tabView.getSelectedTab());
         key(CgKeyCodes.KEY_HOME);
         assertSame(first, tabView.getSelectedTab());
+    }
+
+    /**
+     * <b>An arrow pressed in a tab's CONTENT is not the strip's.</b>
+     *
+     * <p>The listener is on this root and bubbles — it has to be, since the focused element is a Tab
+     * child — and this root holds the panes as well as the strip, so a key pressed anywhere in the
+     * content reaches it exactly as one pressed on a tab does. Reported from the UI builder: an arrow in
+     * the design surface switched to the next open file.</p>
+     *
+     * <p>The rule is the one {@code FocusPolicy.CLICK_NOT_TABBABLE} states about this widget: a tablist
+     * is ONE tab stop and Left/Right moves within it. {@code SplitView} is the same shape and has always
+     * had its half — it returns unless a divider is focused.</p>
+     */
+    @Test
+    public void anArrowInsideATabsContentIsLeftAlone() {
+        Tab first = tab("one");
+        tab("two");
+        Button inside = new Button("in the content");
+        first.content().append(inside);
+        styleFrame();
+        document.focus().requestFocus(inside);
+        assertSame("the keyboard really is in the content", inside, document.focus().focused());
+
+        key(CgKeyCodes.KEY_RIGHT);
+        assertSame("the strip did not take a key aimed at what is focused",
+                first, tabView.getSelectedTab());
+        assertSame("...and the keyboard stayed where it was", inside, document.focus().focused());
     }
 
     /** A side strip stacks vertically, so up/down drives it and left/right is somebody else's key. */

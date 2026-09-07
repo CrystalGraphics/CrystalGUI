@@ -7,6 +7,7 @@ import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.serialization.StateMap;
+import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.scroll.Scroller;
 import com.crystalgui.widget.scroll.ScrollerView;
@@ -223,6 +224,12 @@ public class TabView extends UIElement {
         // listener on this root would never fire. Shape otherwise copied from SplitView.
         this.events.getGroup(KeyboardEvent.Down.class).attachListener((el, event) -> {
             if (!isEnabled() || tabs.isEmpty()) return;
+            // ...AND ONLY WHILE THE KEYBOARD IS IN THE STRIP, which is the other half of bubbling here:
+            // this root holds the PANES too, so a key pressed in a tab's content arrives exactly as one
+            // pressed on a tab does. An arrow in the UI builder's design surface switched to the next
+            // open file. SplitView is the same shape and has always had its half -- it returns unless a
+            // divider is focused.
+            if (!keyboardIsInStrip()) return;
             boolean vertical = tabSide.isVertical();
             int step;
             switch (event.getKeyCode()) {
@@ -251,6 +258,22 @@ public class TabView extends UIElement {
             // Consume, so Tab-traversal/activation doesn't also act on a key we handled.
             event.stopPropagation();
         }, false, true);
+    }
+
+    /**
+     * Whether the focus owner is the strip or something inside it.
+     *
+     * <p>Asked of the focus service rather than of the event's target: the strip and its tabs are
+     * structural, so a listener on this host sees a target retargeted to the host itself while slotted
+     * content keeps its own identity — two answers that cannot be compared.</p>
+     */
+    private boolean keyboardIsInStrip() {
+        UIDocument window = document();
+        if (window == null) return false;
+        for (UIElement at = window.focus().focused(); at != null; at = at.composedParent()) {
+            if (at == strip) return true;
+        }
+        return false;
     }
 
     /** Structure is fixed; content goes into {@link Tab#content()}. */
