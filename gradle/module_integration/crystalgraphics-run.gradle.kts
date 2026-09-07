@@ -117,6 +117,12 @@ val modClassesValue = (
 tasks.matching {
     it.name in setOf("runClient", "runServer", "prepareClientRun", "prepareServerRun")
 }.configureEach {
+    // AND THE LIST ITSELF IS AN INPUT, or the prepare tasks stay UP-TO-DATE across a change to it and
+    // the launch reads the folder list from the last build that happened to re-run them. Adding a root
+    // then costs a `--rerun` nobody knows to type, and the symptom is the change simply not being there:
+    // an editor missing every extension whose service file lost, on a build that compiled and copied
+    // everything correctly.
+    inputs.property("cgModClasses", modClassesValue)
     dependsOn(mergeDevServices)
     dependsOn(crystalGraphics.task(":mc1201:common:classes"))
     dependsOn(crystalGraphics.task(":mc1201:$loader:classes"))
