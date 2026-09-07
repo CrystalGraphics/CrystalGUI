@@ -55,14 +55,57 @@ fun mainSourceSet(project: Project) =
 // found nothing there, and tree-sitter loaded but was invisible to the grammars that call it. What may
 // NOT come along is :core, which :language depends on and which is already a root here -- one package
 // in two modules and the JVM refuses the layer outright, naming com.crystalgui.core.nav.
+/**
+ * ONE merged META-INF/services root, read before the others.
+ *
+ * :core and :language each ship a WorkbenchExtension service file, and FML's ModuleClassLoader answers
+ * a resource path from ONE root -- so two roots of one module means one file wins and the other's
+ * providers are silently absent. It presented as every CrystalEditor extension being offline except the
+ * one :language contributes. Merging by hand and putting the result first is the only lever a dev run
+ * has; the shipped jar uses ShadowJar's own mergeServiceFiles.
+ */
+val mergedServicesDir: File = layout.buildDirectory.dir("merged-services").get().asFile
+
+val mergeDevServices = tasks.register("mergeDevServices") {
+    group = "build"
+    description = "Unions :core's and :language's META-INF/services so neither shadows the other."
+    outputs.dir(mergedServicesDir)
+    doLast {
+        val sources = listOf(project(":core"), project(":mc1201:common"), project(":language"))
+            .map { owner -> File(mainSourceSet(owner).output.resourcesDir, "META-INF/services") }
+            .filter { it.isDirectory }
+        val byService = linkedMapOf<String, MutableList<String>>()
+        for (directory in sources) {
+            for (file in directory.listFiles().orEmpty()) {
+                val providers = byService.getOrPut(file.name) { mutableListOf() }
+                file.readLines()
+                    .map { it.substringBefore('#').trim() }
+                    .filter { it.isNotEmpty() && it !in providers }
+                    .forEach { providers.add(it) }
+            }
+        }
+        val out = File(mergedServicesDir, "META-INF/services")
+        out.mkdirs()
+        out.listFiles().orEmpty().forEach { it.delete() }
+        byService.forEach { (service, providers) ->
+            File(out, service).writeText(buildString {
+                appendLine("# Merged for the dev run by mergeDevServices; see its declaration.")
+                providers.forEach { appendLine(it) }
+            })
+        }
+    }
+}
+
 /** tree-sitter, which :language needs and which must live in the same module it does. */
 val treeSitterJars: List<File> = rootProject.file("lib/tree-sitter").listFiles()
     ?.filter { it.name.endsWith(".jar") }?.sorted() ?: emptyList()
 
 val modClassesValue = (
-    listOf(mainSourceSet(project), mainSourceSet(project(":core")), mainSourceSet(project(":mc1201:common")),
-           mainSourceSet(project(":language")))
-        .flatMap { modClasses("crystalgui", it) }
+    // The merged services FIRST, so it is the root that answers for META-INF/services.
+    modClasses("crystalgui", listOf(mergedServicesDir))
+        + listOf(mainSourceSet(project), mainSourceSet(project(":core")),
+                 mainSourceSet(project(":mc1201:common")), mainSourceSet(project(":language")))
+            .flatMap { modClasses("crystalgui", it) }
         + modClasses("crystalgui", treeSitterJars)
         + modClasses("crystalgraphics", File(crystalGraphics.projectDir, "mc1201/common"))
         + modClasses("crystalgraphics", File(crystalGraphics.projectDir, "mc1201/$loader"))
@@ -74,6 +117,7 @@ val modClassesValue = (
 tasks.matching {
     it.name in setOf("runClient", "runServer", "prepareClientRun", "prepareServerRun")
 }.configureEach {
+    dependsOn(mergeDevServices)
     dependsOn(crystalGraphics.task(":mc1201:common:classes"))
     dependsOn(crystalGraphics.task(":mc1201:$loader:classes"))
 

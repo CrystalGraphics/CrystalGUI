@@ -21,8 +21,9 @@ import com.crystalgui.text.syntax.LanguageRegistry;
  * {@link com.crystalgui.mc.client.ScriptService1201} exists for {@code cacheRoot()}, which is what lets
  * a band bundled in the jar be extracted and a missing one be fetched. Its other three members are
  * LaunchWrapper-shaped and 1.20.x has ModLauncher or Knot, neither of which exposes a transformed-bytes
- * call -- so live bytes fall back to the classloader, there are no mappings, and the Run panel is
- * absent. The plan recommended registering none at all, which would also have cost the engine bands.
+ * call -- so live bytes fall back to the classloader and there are no mappings. The Run panel still
+ * opens; {@code ScriptRuntimes.open} answers empty, so nothing in it runs. The plan recommended
+ * registering no service at all, which would also have cost the engine bands.
  */
 public final class LanguageStack1201 {
 
@@ -52,7 +53,7 @@ public final class LanguageStack1201 {
         }
         CrystalGuiCore.LOGGER.info("[cgui-1201] ScriptService answers cacheRoot only: 1.20.x has "
                 + "ModLauncher or Knot rather than LaunchWrapper, so there are no live bytes and no "
-                + "mappings, and the Run panel is absent");
+                + "mappings. The Run panel opens and ScriptRuntimes.open answers empty, so nothing runs");
     }
 
     private static boolean isPresent(String className) {
