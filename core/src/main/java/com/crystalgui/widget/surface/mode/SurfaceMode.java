@@ -46,7 +46,10 @@ final class SurfaceMode implements InputMode {
         if (!ctx.surface().contains(x, y)) return false;
         int modifiers = SelectTool.modifiersNow();
         if (!pressed) return tool.pointerUp(x, y, button, modifiers);
-        if (!ownedHere(x, y)) return false;
+        // A MODAL TOOL IS NOT ARBITRATED. Its handles can sit anywhere -- rotate a box near the edge of
+        // the page and half of them are over empty plane, where the policy answers TREE and the press was
+        // being declined before the tool saw it.
+        if (!tool.claimsEveryPress() && !ownedHere(x, y)) return false;
         // A CLAIMED PRESS STILL MOVES FOCUS. Modes are asked before the tree, so consuming here means
         // Focus.pressed never runs -- and the surface's own keys, which resolve it from the focused
         // element, stay dead however often you click it. A press the surface DECLINES falls through to
