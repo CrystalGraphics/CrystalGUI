@@ -31,11 +31,11 @@
  * Without these the bars exist as elements, get no width from anywhere, and simply do not draw — a
  * 100,000-row list that scrolls with no thumb to show where you are. The same trap made `Dropdown` lay
  * out at zero height until this file named it. */
-scrollerview,
-listview,
-treeview,
-tableview,
-texteditor {
+/* BY CLASS, for the reason the bars below already record: this was one tag per ScrollerView subclass,
+ * and a subclass answers its OWN tag -- so `configuratorpanel` matched none of them and the inspector
+ * was the one panel in the workbench that jumped rather than eased. Every subclass carries
+ * `ScrollerView.SCROLL_VIEW_CLASS`, so nothing has to be added here again. */
+.__scroll-view__ {
     scroll-behavior: smooth;
     scroll-duration: 0.18;
 }

@@ -1,6 +1,7 @@
 package com.crystalgui.widget.config;
 
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.text.UIText;
 import com.crystalgui.widget.control.Checkbox;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
@@ -307,7 +308,7 @@ public class ConfigKitTest extends UiDocumentTestBase {
      * separate CSS rules is exactly why this was found one screenshot at a time instead of all at once.
      */
     @Test
-    public void aFullWidthTitleClipsRatherThanWraps() {
+    public void aFullWidthTitleNeverWraps() {
         ConfiguratorPanel panel = openPanel();
         Configurator header = panel.add(ConfigDescriptor.header("Node Settings"), null);
         ConfiguratorGroup group = new ConfiguratorGroup("Advanced");
@@ -321,24 +322,32 @@ public class ConfigKitTest extends UiDocumentTestBase {
         // Scoped to `.__head__ text`, not a bare "text" query — an empty array ALSO shows a
         // `.__empty__` placeholder, itself a `text` tag, and the two must not be confused.
         UIElement arrayTitle = deepAll(array.control(), ".__head__ text").get(0);
+        // NOWRAP IS THE INVARIANT, and it survives the change below: a title on two lines breaks the
+        // band's rhythm whatever else is true, and it is also what makes a title's min-content its whole
+        // string, which is what lets the two that now GROW carry themselves out to the row.
         for (UIElement title : List.of(headerTitle, groupTitle, arrayTitle)) {
             assertEquals("must not wrap onto a second line",
                     com.crystalgui.style.property.visual.text.WhiteSpace.NOWRAP,
                     title.getStyle().getComputed(
                             com.crystalgui.style.property.StylePropertyRegistry.WHITE_SPACE));
-            assertEquals("must clip with an ellipsis instead",
-                    com.crystalgui.style.property.visual.text.TextOverflow.ELLIPSIS,
-                    title.getStyle().getComputed(
-                            com.crystalgui.style.property.StylePropertyRegistry.TEXT_OVERFLOW));
-            // The bug the first pass at this fix actually shipped: `text-overflow` decides what the
-            // clipped glyphs look like, it does not itself clip anything. Without `overflow: hidden`
-            // establishing the clip box, the title's own box shrinks correctly but the glyphs still
-            // paint at full width, bleeding out past it — a near-invisible sliver with ghost text
-            // escaping past it, not a wrapped line.
-            assertTrue("must actually clip, not just resolve an ellipsis value nothing enforces",
-                    title.getStyle().getComputed(
-                            com.crystalgui.style.property.StylePropertyRegistry.OVERFLOW).clips());
         }
+
+        // THE ARRAY'S HEAD STILL CLIPS, and is now the only one that does. A section heading and a
+        // group title each own a row, so a long one widens it and the panel scrolls to it -- see
+        // aLongHeadingIsNotClipped. An array's head sits INSIDE a control column with no row of its
+        // own to widen, so an ellipsis is still the honest answer there.
+        assertEquals("must clip with an ellipsis instead",
+                com.crystalgui.style.property.visual.text.TextOverflow.ELLIPSIS,
+                arrayTitle.getStyle().getComputed(
+                        com.crystalgui.style.property.StylePropertyRegistry.TEXT_OVERFLOW));
+        // The bug the first pass at this fix actually shipped: `text-overflow` decides what the
+        // clipped glyphs look like, it does not itself clip anything. Without `overflow: hidden`
+        // establishing the clip box, the title's own box shrinks correctly but the glyphs still
+        // paint at full width, bleeding out past it — a near-invisible sliver with ghost text
+        // escaping past it, not a wrapped line.
+        assertTrue("must actually clip, not just resolve an ellipsis value nothing enforces",
+                arrayTitle.getStyle().getComputed(
+                        com.crystalgui.style.property.StylePropertyRegistry.OVERFLOW).clips());
     }
 
     /**
@@ -584,5 +593,182 @@ public class ConfigKitTest extends UiDocumentTestBase {
         assertEquals("...at the checkbox token, not the kit height", 13f, c.height(), 0.5f);
         assertTrue("...and it must sit INSIDE the row, not define it",
                 c.height() < CTRL_H);
+    }
+
+    // ── The label column ────────────────────────────────────────────────────
+
+    /**
+     * <b>A narrow panel squeezes neither column — the row grows and the panel scrolls.</b>
+     *
+     * <p>The control column's basis is {@code width: 0}, so every pixel a narrow panel was short came
+     * off the VALUE while the label column held its full width beside it: "size" against a column two
+     * characters wide, with "COLUMN" broken over three lines.</p>
+     *
+     * <p>Both halves are now floored — the label at its own text, the control at {@code --cfg-ctrl-min}
+     * — so the row outgrows the panel instead, which is what the horizontal bar is for.</p>
+     */
+    @Test
+    public void aNarrowPanelSqueezesNeitherColumn() {
+        ConfiguratorPanel panel = openPanel();
+        Configurator row = panel.add(ConfigDescriptor.info("size", "size"), "64.0 x 24.0");
+
+        assertEquals("at a normally-docked width the column is Unity's flat 114px",
+                114f, labelWidth(row, 300f), 1f);
+
+        float narrowValue = valueWidth(row, 150f);
+        assertEquals("the label column gave way instead of the row growing",
+                114f, row.label().box().width(), 1f);
+        // Against the fact's OWN width rather than a fraction: "not squeezed" means the text still fits,
+        // and how much slack is left over is the panel's business.
+        UIText value = titleOrValueIn(row);
+        assertNotNull("the row has no value to measure", value);
+        assertTrue("the value column is narrower than the fact in it: " + narrowValue
+                + " vs " + value.box().width(), narrowValue >= value.box().width() - 0.01f);
+        assertTrue("the row never grew, so the squeeze had nowhere else to go: " + row.box().width(),
+                row.box().width() > 150f);
+    }
+
+    /** The `__value__` a fact draws, found through the composed tree since it is a shadow part. */
+    private static UIText titleOrValueIn(UIElement from) {
+        for (UIElement child : from.composedSubtree()) {
+            if (child instanceof UIText text && text.hasClass("__value__")) return text;
+        }
+        return null;
+    }
+
+    private float labelWidth(Configurator row, float panelWidth) {
+        return measure(row, panelWidth, row.label());
+    }
+
+    private float valueWidth(Configurator row, float panelWidth) {
+        return measure(row, panelWidth, row.inline());
+    }
+
+    private float measure(Configurator row, float panelWidth, UIElement of) {
+        root.layout(l -> l.width(panelWidth));
+        document.update(1200, 800);
+        assertNotNull("nothing laid out at " + panelWidth, of.box());
+        return of.box().width();
+    }
+
+    /**
+     * <b>A fact too wide for the panel makes the panel scroll, and stays on one line.</b>
+     *
+     * <p>It used to wrap, and the sheet argued for that. What the argument missed is how little it takes
+     * to trigger: not a rare long port list but "0.0 0.0 0.0 0.0" in a normally-docked panel, so most of
+     * the panel's height went on four-line rows saying four zeroes.</p>
+     *
+     * <p>Both halves are asserted, because either alone is a different bug. One line and no overflow is
+     * a value that was silently cut; overflow with a wrap is the row growing in both directions.</p>
+     */
+    @Test
+    public void aLongFactScrollsSidewaysRatherThanWrapping() {
+        ConfiguratorPanel panel = openPanel();
+        Configurator narrow = panel.add(ConfigDescriptor.info("short", "grow"), "0.0");
+        Configurator wide = panel.add(ConfigDescriptor.info("long", "margin"),
+                "0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0");
+
+        root.layout(l -> l.width(200f));
+        document.update(1200, 800);
+
+        assertNotNull("nothing laid out", wide.box());
+        float oneLine = narrow.box().height();
+        assertEquals("the long fact wrapped instead of running on: " + wide.box().height()
+                + " vs one line at " + oneLine, oneLine, wide.box().height(), 1f);
+        assertTrue("the row never grew past the panel, so there is nothing to scroll to: "
+                + wide.box().width(), wide.box().width() > 200f);
+
+        // AND A SHORT ROW STILL FILLS THE PANEL, which is what `min-width: 100%` is for: without it a
+        // row shrinks to its content and every hover band stops mid-panel.
+        assertTrue("a short row no longer spans the panel: " + narrow.box().width(),
+                narrow.box().width() >= 200f - 13f);
+    }
+
+    /**
+     * <b>A label too long for the column widens the row; it does not ellipsize.</b>
+     *
+     * <p>Same rule as the fact beside it, and the same reason: the panel scrolls, so an ellipsis hides
+     * what the scrollbar was going to reach. {@code outline-offset-bottom} became
+     * {@code outline-of...} in a docked panel, which is four rows that cannot be told apart.</p>
+     *
+     * <p>The mechanism is {@code min-width: auto} — Taffy's automatic minimum is the min-content size,
+     * and for {@code nowrap} text that is the whole string. It needs {@code overflow: visible} on the
+     * label: a scroll container's automatic minimum is zero, which would put the ellipsis back.</p>
+     */
+    @Test
+    public void aLongLabelWidensItsRowRatherThanEllipsizing() {
+        ConfiguratorPanel panel = openPanel();
+        // Longer than the 114px column, which is the case that overlapped: the label kept the
+        // column's width and painted its tail straight over the value.
+        String longest = "border-bottom-left-radius";
+        Configurator wide = panel.add(ConfigDescriptor.info("o", longest), "-1.0px");
+        // The basis, measured rather than restated: a label that fits sits at exactly `flex-basis`.
+        Configurator fits = panel.add(ConfigDescriptor.info("s", "width"), "90.0px");
+
+        root.layout(l -> l.width(200f));
+        document.update(1200, 800);
+
+        UIText label = wide.label();
+        assertNotNull("the row has no label", label);
+        assertEquals("the label was truncated even though the panel scrolls",
+                longest, label.displayedText());
+        assertTrue("the long label was held at the column basis (" + fits.label().box().width()
+                        + ") and painted over its value: " + label.box().width(),
+                label.box().width() > fits.label().box().width() + 1f);
+        // AND IT STILL HOLDS ITS VALUE OFF. The gutter is inside the label's box, so it survives the
+        // column shrinking to the text -- which is when it is the only separation left.
+        assertTrue("the label ran straight into its value: box " + label.box().width()
+                        + " vs content " + label.box().contentBoxWidth(),
+                label.box().width() - label.box().contentBoxWidth() >= 8f - 0.01f);
+    }
+
+    /**
+     * <b>A section heading is one line and never an ellipsis.</b>
+     *
+     * <p>Same rule as the rows under it, and it was the last thing still clipping: "Attributes" showed
+     * as "Attri..." in a docked panel while the horizontal bar underneath could have reached it.</p>
+     */
+    @Test
+    public void aLongHeadingIsNotClipped() {
+        ConfiguratorPanel panel = openPanel();
+        String heading = "Attributes and forced states";
+        Configurator row = panel.add(ConfigDescriptor.header(heading), null);
+
+        root.layout(l -> l.width(100f));
+        document.update(1200, 800);
+
+        UIText title = titleIn(row);
+        assertNotNull("the heading has no title element", title);
+        assertEquals("the heading was truncated even though the panel scrolls",
+                heading, title.displayedText());
+        assertTrue("the heading row never grew, so there is nothing to scroll to: "
+                + row.box().width(), row.box().width() > 100f);
+    }
+
+    private static UIText titleIn(UIElement from) {
+        if (from instanceof UIText text && text.hasClass("__title__")) return text;
+        for (UIElement child : from.composedSubtree()) {
+            if (child instanceof UIText text && text.hasClass("__title__")) return text;
+        }
+        return null;
+    }
+
+    /**
+     * <b>Every scroller eases, including the ones nobody remembered to name.</b>
+     *
+     * <p>The rule was a list of tags — {@code scrollerview, listview, treeview, tableview, texteditor} —
+     * and a widget's cascade identity is its own TAG, so {@code ConfiguratorPanel} matched none of them
+     * and the inspector was the one panel in the workbench that jumped while every other eased. The bars
+     * had already been moved off a tag list for exactly this; this rule had not.</p>
+     */
+    @Test
+    public void aPanelScrollsSmoothlyWithoutBeingNamedInTheSheet() {
+        ConfiguratorPanel panel = openPanel();
+        document.update(1200, 800);
+
+        assertEquals("a ScrollerView subclass the sheet does not name by tag scrolls instantly",
+                com.crystalgui.style.property.visual.ScrollBehavior.SMOOTH,
+                panel.getStyle().getComputed(
+                        com.crystalgui.style.property.StylePropertyRegistry.SCROLL_BEHAVIOR));
     }
 }

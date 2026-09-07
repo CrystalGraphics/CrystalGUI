@@ -21,8 +21,15 @@
 .__configurator-panel__ {
     flex-direction: column;
     background: var(--cfg-panel);
-    padding-left: var(--cfg-pad-x);
-    padding-right: var(--cfg-pad-x);
+    /* NO HORIZONTAL PADDING, and the two bands below no longer cancel it with a negative margin.
+     *
+     * A negative margin makes an item contribute nothing to its container's content size in this
+     * layout engine, so a heading wider than every row could not widen the row it sits in: it painted
+     * past the panel's right edge and was hard-clipped, with no ellipsis and nothing to scroll to.
+     * Measured on a 100px panel -- band 137px wide inside an 88px row.
+     *
+     * The inset lives on the row's PARTS instead (label's padding-left, control's padding-right), so a
+     * band is full-bleed by having nothing to cancel. */
     padding-top: var(--cfg-pad-y);
     padding-bottom: var(--cfg-pad-y);
     /* auto, not scroll. CSS `overflow: scroll` means ALWAYS SHOW, and that is what this said -- both
@@ -42,28 +49,81 @@
     padding-top: var(--cfg-pad-y);
     padding-bottom: var(--cfg-pad-y);
 }
-/* LEFT-aligned and fixed-width, which is what makes a stack of unlike controls read as a form: every
- * control starts on a common left edge however long its label is. Right-aligning the labels — which
- * several toolkits do — ragged-edges the controls instead, and a column that does not line up reads as
- * a pile. `flex-shrink: 1` so a long label ellipsizes rather than pushing the control off the row. */
+/* LEFT-aligned, which is what makes a stack of unlike controls read as a form: every control starts on
+ * a common left edge however long its label is. Right-aligning the labels — which several toolkits do —
+ * ragged-edges the controls instead, and a column that does not line up reads as a pile.
+ *
+ * A FRACTION OF THE ROW, capped, and not a flat `--cfg-label-w`.
+ *
+ * The cap is what a wide panel gets, so nothing moves at the width this panel is usually docked at.
+ * What the fraction buys is the narrow case. With a flat width the label column held its 114px however
+ * little room the row had, and since the control column's basis is `width: 0` the whole shortfall landed
+ * on the VALUE: a docked inspector dragged in showed "size" beside a column two characters wide, with
+ * "COLUMN" broken across three lines and 80px of empty label column next to it. `flex-shrink` cannot
+ * reach that — a row whose bases already fit its container never shrinks anything, and a value that
+ * WRAPS never reports wanting more — so the slack has to be given up by the declared width itself.
+ *
+ * `min-width: auto` is the floor, and it is the LABEL'S OWN TEXT. Taffy's automatic minimum size is
+ * the min-content size, which for `nowrap` text is the whole string — so the column shrinks toward the
+ * label and stops, and `outline-offset-bottom` makes its row wider than the panel instead of becoming
+ * `outline-of...`. Nothing in this panel truncates: the panel scrolls, so there is somewhere for a long
+ * row to go, and an ellipsis only hides what the scrollbar was going to reach.
+ *
+ * A flat pixel floor was the first attempt and is what this replaced -- 48px, which is below every
+ * label in the panel, so it only ever bought ellipsis. It needs `overflow: visible` here (the default):
+ * Taffy gives a scroll container an automatic minimum of ZERO, which is right for a box that clips and
+ * would silently put the ellipsis back. */
 .__configurator__ > .__label__ {
     color: var(--cfg-label-text);
-    width: var(--cfg-label-w);
-    min-width: var(--cfg-label-min);
+    /* ON `flex-basis`, NOT `width`, and that is the whole trick. CSS §4.5 computes the automatic minimum
+     * as min(specified size suggestion, content size suggestion) — so an item with a definite `width`
+     * clamps its own content minimum away, and `width: 114px` with `min-width: auto` sat at 114px with
+     * `border-bottom-left-radius` painting straight over its value. `width` stays auto; the basis is
+     * what sets the column, and §4.5 does not consult it.
+     *
+     * A FLAT WIDTH, not a fraction, which is what the token's own note argues for: Unity's column is
+     * ~114px in a 275px panel and ~114px in an 800px one. A `45%` basis capped by `max-width` was the
+     * previous shape and had the same overlap for a different reason -- `max-width` is applied after
+     * `min-width` here, so the cap won and the content minimum it was supposed to lose to did not.
+     * There is no cap now: `flex-grow: 0` is what stops the column growing with the panel, and
+     * `flex-shrink: 1` down to `min-width: auto` is what lets it give way on a narrow one. */
+    flex-basis: var(--cfg-label-w);
+    /* THE PANEL'S LEFT INSET, carried here now that the panel has none -- see its own note. */
+    padding-left: var(--cfg-pad-x);
+    /* INSIDE the box, so the content minimum includes it: a column shrunk to its label still holds the
+     * label off its value. Without it a narrow panel read as "margin0.0 0.0" -- the gap alone is 4px and
+     * what used to separate them was the column's leftover slack, which is exactly what shrinking spends.
+     */
+    padding-right: var(--cfg-label-gutter);
+    min-width: auto;
     flex-grow: 0;
     flex-shrink: 1;
-    text-overflow: ellipsis;
     white-space: nowrap;
 }
-/* The control column takes the rest. `width: 0` is the basis it grows FROM — this engine's flex-shrink
- * defaults to 0, so a content-sized column would keep whatever its widest control happened to need. */
+/* The control column takes the rest, growing from a CONTENT basis.
+ *
+ * `width: 0` here for a long time, with a note saying a content basis would make the column keep
+ * whatever its widest control needed. That is true and is now the point: a control is `width: 0` by the
+ * kit rule below, so this measures zero for every editable row and nothing changed — while a FACT
+ * carries its own width, and this is what lets it out to the row so the panel can scroll to it. Without
+ * it the row's min-content stops at this zero and a long value has nowhere to go. */
 .__configurator__ > .__inline__ {
-    width: 0;
+    width: auto;
     flex-grow: 1;
     flex-direction: row;
     align-items: center;
 }
-.__configurator__ > .__inline__ > .__config-control__ { width: 0; flex-grow: 1; }
+/* `min-width` is the floor a scrolling panel makes possible: a field squeezed to nothing is unusable
+ * and unreadable, and there is now somewhere for the row to go instead. Without it a docked inspector
+ * dragged in showed three capsules two characters wide -- the control column's basis is zero, so it
+ * absorbed every pixel the panel was short. */
+.__configurator__ > .__inline__ > .__config-control__ {
+    width: 0;
+    flex-grow: 1;
+    min-width: var(--cfg-ctrl-min);
+    /* The panel's right inset. @see `.__configurator-panel__`. */
+    padding-right: var(--cfg-pad-x);
+}
 
 /* ── THE KIT ────────────────────────────────────────────────────────────────────────────────────
  * One height for every control kind, so a panel of unlike controls sits on one rhythm. Their base
@@ -302,7 +362,9 @@
  * Indented, NOT bordered. A border per group turns a panel three levels deep into a stack of nested
  * boxes where the frames compete with the content; indentation reads as depth without adding a mark
  * per level. Unity indents; LDLib2 draws a box; this takes Unity's. */
-.__configurator-group__ { flex-direction: column; }
+.__configurator-group__ {
+    flex-direction: column;
+}
 /* THE BAND. A group header is a SEPARATOR, not another row — it has to say "everything below me
  * belongs to me" before you read a word of it, and on a flat panel the only thing that says that is a
  * change of surface. Originally Unity's own #383838-on-#2E2E2E (a hair lighter); the panel moved to
@@ -319,27 +381,22 @@
     cursor: pointer;
     background: var(--cfg-band);
     color: var(--cfg-label-text);
-    margin-left: -6px;
-    margin-right: -6px;
     padding-left: var(--cfg-pad-x);
     padding-right: var(--cfg-pad-x);
     margin-top: 2px;
     margin-bottom: 1px;
 }
-/* Ellipsis, not wrap. The default pixel font is narrow enough that "Advanced" always fit the band
- * regardless — width:0/flex-grow is what actually reserves the shrink-to space text-overflow clips
- * into, `flex-shrink:1` is what allows it to, and `white-space:nowrap` is what makes text-overflow
- * mean anything at all (ellipsis only applies to text that cannot wrap — see UIText's own note). A
- * wider theme font (ore.css's MinecraftRegular, vs. the default's pixel font) no longer fit, and
- * without this the title wrapped onto a second line instead of clipping — caught on ore.css, not on
- * default.css, because only ore.css's font is wide enough to overflow "Advanced" in a 130px panel. */
+/* NEITHER wrap NOR ellipsis: one line, and the band gets wider. This clipped, on the reasoning that a
+ * title too long for the band had nowhere to go — true when the panel did not scroll sideways. It does
+ * now, so "Attributes" became "Attri..." while the bar underneath could have reached it.
+ *
+ * `white-space: nowrap` still matters and for a second reason: it is what makes the min-content size
+ * the whole string, which is what carries the title out to the row. */
 .__configurator-group__ > .__head__ > .__title__ {
-    width: 0;
+    width: auto;
     flex-grow: 1;
-    flex-shrink: 1;
+    flex-shrink: 0;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 .__configurator-group__ > .__head__ > .__arrow__ {
     width: 8px;
@@ -393,28 +450,29 @@
  * that reads as "a section starts here" on a flat panel — but no arrow and nothing to click: a header
  * does not own content, so there is nothing to collapse. `-6px` bleeds it to the panel edge exactly like
  * the group head does, and for the same reason: a strip that stops short of the edge reads as a button. */
+/* Content-sized like `.__info__`, so a long heading carries its width out to the row rather than being
+ * clipped inside a column whose basis is zero. `flex-grow` still fills the band across a short one. */
 .__configurator__ > .__inline__ > .__config-control__.__header__ {
     flex-direction: row;
     align-items: center;
+    width: auto;
+    flex-shrink: 0;
     height: var(--cfg-ctrl-h);
     min-height: var(--cfg-ctrl-h);
     background: var(--cfg-band);
     color: var(--cfg-label-text);
-    margin-left: -6px;
-    margin-right: -6px;
     padding-left: var(--cfg-pad-x);
     padding-right: var(--cfg-pad-x);
 }
 /* Same fix, same reason as the group head's title just above — a header IS full width, so there is no
  * label column to have already solved this the way an ordinary row's `.__label__` does. */
+/* @see the group title above — same rule, same reason. */
 .__config-control__.__header__ .__title__ {
     font-size: var(--cfg-font);
-    width: 0;
+    width: auto;
     flex-grow: 1;
-    flex-shrink: 1;
+    flex-shrink: 0;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
 /* A FACT, not a field. `InfoControl` deliberately has no background and no border: the input chrome is
@@ -427,25 +485,34 @@
     flex-direction: row;
     align-items: center;
     min-height: var(--cfg-ctrl-h);
+    /* Content-sized, unlike the kit's `width: 0` control column: a fact is text and carries its own
+     * width out to the row. @see `.__value__` below. */
+    width: auto;
+    flex-shrink: 0;
 }
-/* WRAPS rather than ellipsizing, and the row grows to fit. A resolved port list -- "Position(vec3),
+/* ONE LINE, and the row grows sideways to hold it. A resolved port list -- "Position(vec3),
  * BaseColor(vec3), Alpha(float), AlphaClipThreshold(float)" -- is genuinely longer than any column this
  * panel will ever have, so truncating it hides the one thing the row exists to say.
  *
- * The alternative considered and rejected was making the panel scroll HORIZONTALLY. No inspector does
- * that -- not Unity, IntelliJ, VS Code or Blender -- because a sideways scrollbar in a properties panel
- * is a gesture nobody thinks to try, so the hidden text reads as absent rather than as off-screen. A
- * panel is a column of rows; when a row has more to say it gets taller, which is the one direction the
- * container already scrolls.
+ * This wrapped instead, and the note here argued for that: no inspector scrolls sideways, and a bar
+ * nobody thinks to drag makes hidden text read as absent. What the argument missed is how little it
+ * takes to trigger. A wrapped value is not a rare long port list; it is "0.0 0.0 0.0 0.0" in a docked
+ * panel, and "COLUMN" broken over three lines one drag narrower -- so the panel spent most of its
+ * width on rows four lines tall saying four zeroes. The bar is already there, on a container that
+ * already scrolls both ways; what was missing was anything to scroll to.
  *
- * The row's `min-height` keeps single-line facts on the kit rhythm, so only the long ones grow. */
+ * `width: auto` for a content basis and `flex-shrink: 0` so it keeps it: a shrinkable item contributes
+ * nothing to its row's min-content in this engine (min-size defaults to 0, not `auto`), so the row
+ * would collapse back to the viewport and the overflow would never become real.
+ *
+ * The row's `min-height` keeps single-line facts on the kit rhythm. */
 .__config-control__.__info__ .__value__ {
     font-size: var(--cfg-font);
     color: var(--cfg-value-text);
-    width: 0;
+    width: auto;
     flex-grow: 1;
-    flex-shrink: 1;
-    white-space: normal;
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 /* ── Arrays ─────────────────────────────────────────────────────────────────────────────────────

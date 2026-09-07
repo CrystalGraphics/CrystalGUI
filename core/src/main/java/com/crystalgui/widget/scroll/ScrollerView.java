@@ -132,6 +132,17 @@ public class ScrollerView extends UIElement {
     public static final Name NAME = Name.of("scrollerview");
 
     /** {@code scrollerview::part(v-scroller)} in a sheet. */
+    /**
+     * On every {@code ScrollerView}, so a sheet can reach one without naming its subclass.
+     *
+     * <p>The bars already learned this: a rule keyed on {@code scrollerview, listview, treeview,
+     * tableview, texteditor} misses {@code ConfiguratorPanel}, because a widget's cascade identity is
+     * its TAG and a subclass answers its own. Adding a subclass is one line somewhere else, nothing
+     * links the two, and the omission is silent — the inspector simply never scrolled smoothly while
+     * every other panel did.</p>
+     */
+    public static final String SCROLL_VIEW_CLASS = "__scroll-view__";
+
     public static final String V_SCROLLER_PART = "v-scroller";
     /** {@code scrollerview::part(h-scroller)}. */
     public static final String H_SCROLLER_PART = "h-scroller";
@@ -162,6 +173,7 @@ public class ScrollerView extends UIElement {
      */
     protected ScrollerView(Name name) {
         super(name);
+        addClass(SCROLL_VIEW_CLASS);
         StyleGroup.defaultPipeline(getStyle().getGeneralGroup(), g -> g.overflow(Overflow.AUTO));
 
         // A SLOT, which is what replaced `acceptsPublicChildren() == true`. A caller's children are
@@ -191,8 +203,23 @@ public class ScrollerView extends UIElement {
         //
         // Height is deliberately not a fixed size: the content must be free to exceed the viewport,
         // which is the whole point of a scroll container.
+        // WIDTH IS A MINIMUM TOO, for the same reason height is, and it was a SIZE -- which is what
+        // stopped every band, divider and selection stripe at the viewport's right edge the moment the
+        // content was wider than it. Scrolled right you saw rows running on under headers that had
+        // ended, because a `width: 100%` row resolved against the VIEW while the row beside it had
+        // grown past it.
+        //
+        // `min-width: 100%` keeps the case the note below is about -- content narrower than the view
+        // still fills it, so a caller's `width: 100%` row cannot collapse to its content -- and lets the
+        // slot grow to the widest row when something exceeds it, so everything in it lines up against
+        // one width rather than two.
+        // AND `align-self`, or the minimum above cannot be exceeded: a slot is this view's only flex
+        // child, so the view's own `align-items` STRETCHES it across the cross axis and a stretched item
+        // takes the container's size rather than its own content's. The minimum then never binds
+        // upwards, and the slot is the viewport's width however wide the content is.
         StyleGroup.defaultPipeline(viewport.getStyle().getLayoutGroup(),
-                l -> l.widthPercent(100f).minHeightPercent(100f));
+                l -> l.minWidthPercent(100f).minHeightPercent(100f)
+                        .alignSelf(AlignItems.FLEX_START));
         mirrorFlexContainer();
         shadow.append(viewport);
 
