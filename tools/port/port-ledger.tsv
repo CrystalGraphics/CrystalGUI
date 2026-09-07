@@ -376,13 +376,16 @@ PART	NotificationsView	action	B	4	confirmed	leaf in every rule, scoped by an anc
 PART	NotificationsView	action-secondary	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	NotificationsView	actions	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	NotificationsView	attribution	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	NotificationsView	attribution-dot	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	NotificationsView	attribution-text	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	NotificationsView	clear	B	0	confirmed	leaf in every rule
 PART	NotificationsView	close	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
-PART	NotificationsView	detail	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	NotificationsView	detail	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	NotificationsView	entry-head	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	NotificationsView	has-actions	B	1	proposed	a rule selects through it (1)
 PART	NotificationsView	head	B	0	confirmed	leaf in every rule
 PART	NotificationsView	message	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
-PART	NotificationsView	notification	B	18	confirmed	a rule selects through it (16)
+PART	NotificationsView	notification	B	21	confirmed	a rule selects through it (19)
 PART	NotificationsView	notification-list	B	0	confirmed	leaf in every rule
 PART	NotificationsView	notifications	B	0	confirmed	leaf in every rule
 PART	NotificationsView	notifications-empty	B	0	confirmed	leaf in every rule

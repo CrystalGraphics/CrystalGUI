@@ -164,7 +164,9 @@ notificationsview > .__notification-list__ {
  * is not. Below this the scroller still takes over, and then the right edge is genuinely off-view --
  * there is no width at which a thing past the viewport is also on screen. */
 notificationsview .__notification__ {
-    min-width: 130px;
+    /* RAISED WITH THE HEAD ROW when the attribution moved into it: the row now carries icon, heading,
+     * who and when, and 130 was measured against a row without the third of those. */
+    min-width: 160px;
     /* THE SPACE BETWEEN CARDS, on the card because the list cannot express it -- see the note above the
      * list. A margin rather than a gap also means the last card carries one, which is wanted here: it
      * keeps the stack off the panel's bottom edge the same way the first is kept off the head. */
@@ -182,18 +184,18 @@ notificationsview .__notification__ {
     flex-shrink: 0;
     background: var(--notification-bg, #2B2B2B);
     border-radius: 4px;
-    /* TIGHTER VERTICALLY THAN HORIZONTALLY, and the sides tuned against the HEAD ROW'S GAP rather than
-     * picked. The run is edge, glyph, heading; when the first step is bigger than the second it reads as
-     * a misalignment rather than as spacing.
+    /* ONE INSET ON ALL FOUR EDGES. The bottom was tighter than the top, from when the last line was the
+     * attribution and carried a margin of its own; that line is in the head row now, so the shorter
+     * bottom was left holding up nothing and simply read as lopsided.
      *
-     * The two are not the same measurement, which is why this needed an eye and not arithmetic: the gap
-     * is between boxes, while the glyph is drawn `overlay-fit: contain` inside a 10px box and does not
-     * fill it. So the visible inset is this padding plus whatever margin the SVG carries, and matching
-     * the numbers still looks uneven. If it ever needs to go below this, shrink the icon box or tighten
-     * the artwork -- do not keep spending the card's padding on it. */
+     * The sides are tuned against the HEAD ROW'S GAP rather than picked: the run is edge, glyph, heading,
+     * and when the first step is bigger than the second it reads as a misalignment rather than as
+     * spacing. The two are not the same measurement, which is why this needed an eye and not arithmetic
+     * -- the gap is between boxes, while the glyph is drawn `overlay-fit: contain` inside a 10px box and
+     * does not fill it, so the visible inset is this padding plus whatever margin the SVG carries. If it
+     * ever needs to go below this, shrink the icon box or tighten the artwork rather than keep spending
+     * the card's padding on it. */
     padding-all: 5px;
-    padding-top: 5px;
-    padding-bottom: 3px;
     gap-all: 4px;
 }
 
@@ -256,32 +258,74 @@ notificationsview .__notification__ {
     color: var(--notification-detail-fg, #9DA0A8);
     width: 100%;
     padding-left: 14px;
+    /* THE EXTRA SPACE BELOW A CARD LIVES HERE, not on the card, because it is only wanted under TEXT.
+     * Equal padding is not even at the two ends: the top edge sits above a 10px ICON standing proud of
+     * the 8px heading, so the eye reads that gap as larger than the number, while the bottom sits under
+     * 7px text with descenders and nothing standing proud of anything.
+     *
+     * On the card it also landed under the ACTIONS row, which has weight of its own and did not want it.
+     * Here it falls under the detail wherever the detail happens to end -- the card's own bottom when
+     * there is nothing after it, and the gap above the actions when there is. */
+    margin-bottom: 3px;
     /* SET APART FROM THE HEADING, and only from the heading. The card's 4px gap is what separates the
      * lines of the body from each other; this is on top of it, so the heading reads as a heading and the
      * detail and the attribution stay a block under it rather than three evenly spaced rows. */
     margin-top: 2px;
 }
 
-/* WHO, not what -- dimmer than the detail and set apart from it, because it answers a different
- * question and the eye goes looking for it separately. */
+/* WHO, not what. It sat under the detail as a third line of its own, which read as a third statement of
+ * equal weight and gave "on disk" more say than the change it describes. It belongs with the timestamp:
+ * both are about the event rather than about what happened. */
 .__notification__ .__attribution__ {
+    flex-direction: row;
+    align-items: center;
+    gap-all: 4px;
+    /* IN THE HEAD ROW, beside the timestamp, and never the thing that gives way: the heading is what
+     * elides when the card narrows. Both of these say something ABOUT the event rather than what it was,
+     * so they read as one cluster on the right. */
+    flex-shrink: 0;
+    margin-left: 6px;
+}
+
+/* A DRAWN MARK, not a character. It was a middle dot inside the string, which is two problems: a glyph
+ * that small is at the mercy of the font -- the bundled face has no U+2026, and a missing glyph draws a
+ * blank advance rather than failing, which is how a separator became a mystery gap in config-kit.css --
+ * and a character cannot be sized apart from the words beside it, so "make the dot bigger" had no
+ * answer at all.
+ *
+ * A rounded box needs no font and takes its own size. CgUiShape is the other way to draw a mark and its
+ * catalog has no circle; a radius at half the side already is one. */
+.__notification__ .__attribution-dot__ {
+    width: 3px;
+    height: 3px;
+    border-radius: 2px;
+    flex-shrink: 0;
+    background-color: var(--notification-attribution-fg, #8A8D95);
+}
+
+/* LIFTED off the old #7A7D85. It is the least important line and was dim enough to read as disabled
+ * rather than as quiet -- at 7px on this surface that is a legibility question, not an emphasis one.
+ * Still under the detail's #9DA0A8, which is what keeps the three lines in order. */
+.__notification__ .__attribution-text__ {
     font-size: 7px;
-    color: var(--notification-attribution-fg, #7A7D85);
-    width: 100%;
-    /* The same inset as the detail. @see .__detail__ */
-    padding-left: 14px;
-    /* Tight to the detail, deliberately: the two are one block and the space above the detail is what
-     * separates that block from the heading. */
-    margin-bottom: 1px;
+    color: var(--notification-attribution-fg, #8A8D95);
 }
 
 .__notification__ .__actions__ {
     flex-direction: row;
     gap-all: 12px;
     flex-shrink: 0;
-    /* The same inset again: a button row that starts under the glyph reads as belonging to the card
-     * rather than to the message. @see .__detail__ */
-    padding-left: 16px;
+    /* FLUSH WITH THE DETAIL, not merely clear of the glyph: the links read as belonging to the message
+     * they act on, and a two-pixel step between them and the text above is visible at this size.
+     * @see .__detail__ */
+    padding-left: 14px;
+}
+
+/* AND THE TEXT'S OWN BOTTOM SPACE GOES AWAY when a row of controls follows it. That margin exists to
+ * sit under a last LINE; here it only pushes the links away from the sentence they belong to, and the
+ * card's padding already holds them off its edge. */
+.__notification__.__has-actions__ .__detail__ {
+    margin-bottom: 0px;
 }
 
 /* PADDING IS LOAD-BEARING, not spacing. A UIText has no MeasureFunc, so it is sized by its own
@@ -294,12 +338,19 @@ notificationsview .__notification__ {
     font-size: 7px;
     color: var(--notifications-link-fg, #4A88C7);
     flex-shrink: 0;
-    padding-top: 2px;
     padding-bottom: 2px;
+    /* A LINK ANSWERS TO THE POINTER, whether or not it is under one at this instant -- the cursor is what
+     * the element IS, not a hover state, and putting it on :hover only would leave the shape to be
+     * resolved on the frame the pointer arrives. */
+    cursor: pointer;
 }
 
+/* UNDERLINED ON HOVER, which is the half that says "this is a link" rather than "this is blue text".
+ * IntelliJ underlines on hover rather than at rest for the same reason its balloons do: a row of
+ * permanently underlined actions reads as a paragraph of links, and there are usually two or three. */
 .__notification__ .__action__:hover {
     color: var(--notifications-link-hover-fg, #6BA5DE);
+    text-decoration-line: underline;
 }
 
 /* A SECONDARY ACTION, and "Don't show again". Quieter rather than hidden: VS Code puts its secondaries

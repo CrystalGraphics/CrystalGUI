@@ -89,9 +89,16 @@ public final class ChangeNotice {
         };
     }
 
-    /** {@code · alice}, or {@code · on disk} for a change nothing here asked for. */
+    /**
+     * Who, as a name: {@code alice}, or {@code on disk} for a change nothing here asked for.
+     *
+     * <p>The mark beside it is DRAWN rather than written. It was a {@code ·} in this string, and a
+     * character that small is at the mercy of the font: the bundled face has no U+2026 and a missing
+     * glyph draws a blank advance rather than failing, which is how a separator becomes a mystery gap
+     * elsewhere in this sheet. A rounded box needs no font and can be sized on its own.</p>
+     */
     static String attribution(String author) {
-        return "· " + (author == null || author.isEmpty() ? "on disk" : author);
+        return author == null || author.isEmpty() ? "on disk" : author;
     }
 
     /** The half a rename and a move share. */
