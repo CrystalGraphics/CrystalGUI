@@ -80,7 +80,10 @@ public final class WorkbenchOpener {
         if (existing != null) {
             existing.activate(ref);
             dock.syncGroups();
-            if (options.activates()) dock.setActiveGroup(dock.groupFor(existing));
+            if (options.activates()) {
+                dock.setActiveGroup(dock.groupFor(existing));
+                dock.focusPanel(ref);
+            }
             return existing;
         }
 
@@ -103,6 +106,7 @@ public final class WorkbenchOpener {
                 timed = FrameProfile.begin();
                 dock.setActiveGroup(dock.groupFor(target));
                 FrameProfile.step(timed, "dock.setActiveGroup");
+                dock.focusPanel(ref);
             }
             return target;
         }
@@ -122,6 +126,9 @@ public final class WorkbenchOpener {
         // The new pane is deliberately NOT made active even when asked. It has no group yet -- the
         // rebuild is deferred to the next frame -- so asking for one now yields null, and setting THAT
         // sends rebuild() down its "nothing is active" path, which picks leaves.get(0): the file tree.
+        // FOCUS CAN GO WHERE THE ACTIVE GROUP CANNOT: it is asked for by ref and applied a frame
+        // later, by which time the rebuild above has produced the group this pane lacks today.
+        if (options.activates()) dock.focusPanel(ref);
         dock.requestRebuild();
         return placed;
     }
@@ -196,18 +203,39 @@ public final class WorkbenchOpener {
         // "Recent" means recently used, not recently created -- and the branch that returns early is the
         // common one once a session has been running for a while.
         workbench.recentFiles.record(path);
-        DockPanelRef ref = refFor(path);
-        for (DockLeaf leaf : workbench.dock.layout().leaves()) {
-            if (leaf.indexOf(ref) < 0) continue;
-            leaf.activate(ref);
-            // syncGroups, not requestRebuild: only the selection changed, and this usually runs inside the
-            // click that asked for it -- a widget must never rebuild the elements it is being clicked on.
-            workbench.dock.syncGroups();
-            workbench.dock.setActiveGroup(workbench.dock.groupFor(leaf));
+        if (bringToFront(refFor(path))) {
             if (onOpened != null) onOpened.run();
             return;
         }
         openResource(Resource.of(path), onOpened);
+    }
+
+    /**
+     * Brings a ref that is <b>already in the layout</b> to the front, and puts the keyboard in it.
+     *
+     * <p>One definition, because there were three copies of it — here, in {@link #openResource} and in
+     * {@link #open} — and a fix for the missing focus landed in two of them while the third, which is
+     * the one a <b>session restore</b> calls, kept the bug. A restore's last act is "open the file that
+     * was in front", and the arrangement has already put that file's tab in the layout, so it takes this
+     * path and never goes near the open that reads a file.</p>
+     *
+     * <p>{@code syncGroups}, not {@code requestRebuild}: only the selection changed, and this usually
+     * runs inside the click that asked for it — a widget must never rebuild the elements it is being
+     * clicked on. Focus is asked for by ref and applied a frame later, since a restored tab is still
+     * showing the placeholder its document has not replaced. @see DockArea#focusPanel</p>
+     *
+     * @return whether the ref was there, so a caller knows not to open anything
+     */
+    private boolean bringToFront(DockPanelRef ref) {
+        for (DockLeaf leaf : workbench.dock.layout().leaves()) {
+            if (leaf.indexOf(ref) < 0) continue;
+            leaf.activate(ref);
+            workbench.dock.syncGroups();
+            workbench.dock.setActiveGroup(workbench.dock.groupFor(leaf));
+            workbench.dock.focusPanel(ref);
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -235,14 +263,7 @@ public final class WorkbenchOpener {
         DockPanelRef ref = workbench.refForResource(resource);
         // THE TAB FIRST, so a split, a drag and a layout restore all build the panel from the ref alone
         // and the read is the document store's business rather than this method's.
-        for (DockLeaf leaf : workbench.dock.layout().leaves()) {
-            if (leaf.indexOf(ref) < 0) continue;
-            // syncGroups, not requestRebuild: only the selection changed, and this usually runs inside
-            // the click that asked for it -- a widget must never rebuild the elements it is being
-            // clicked on.
-            leaf.activate(ref);
-            workbench.dock.syncGroups();
-            workbench.dock.setActiveGroup(workbench.dock.groupFor(leaf));
+        if (bringToFront(ref)) {
             workbench.editors.open(EditorInput.of(resource))
                     .then(tab -> workbench.runWhenReady(tab, onOpened));
             return;

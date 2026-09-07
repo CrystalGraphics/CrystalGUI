@@ -254,8 +254,24 @@ public final class ToolWindowManager {
      * @return true, always — it is open after this
      */
     public boolean showPanel(String typeId) {
+        return showPanel(typeId, true);
+    }
+
+    /**
+     * As above, saying whether the panel should also take the keyboard.
+     *
+     * <p><b>A gesture focuses; a restore does not.</b> {@code Alt+6} means "open Problems and put me in
+     * it", so the plain overload above focuses and that is the reference behaviour. But
+     * {@link #applyVisibility} shows every panel a session record remembers, one after another — and
+     * with each one focusing itself, the LAST tool window the restore happened to build ended up holding
+     * the keyboard on every launch. The active editor came back cold, so the status readouts and every
+     * panel that follows the editor were about the wrong thing until a tab was clicked.</p>
+     *
+     * @return true, always — it is open after this
+     */
+    public boolean showPanel(String typeId, boolean focus) {
         ToolWindowType type = typeOf(typeId);
-        if (type.isWindowed()) return showInFrame(typeId, type);
+        if (type.isWindowed()) return showInFrame(typeId, type, focus);
         DockRegion region = regionOf(typeId);
         RegionHost host = regions.host(region);
         if (host == null) {
@@ -308,7 +324,7 @@ public final class ToolWindowManager {
         // requestPointerFocus, never requestFocus: the latter rings, and a panel outlined on every
         // open is exactly the noise :focus-visible exists to remove.
         UIDocument window = container.document();
-        if (window != null) window.focus().requestPointerFocus(container);
+        if (focus && window != null) window.focus().requestPointerFocus(container);
         return true;
     }
 
@@ -520,7 +536,8 @@ public final class ToolWindowManager {
             // BOTH DIRECTIONS. Showing alone is not a restore: the workbench opens Project and Problems in
             // its constructor and the application opens the Inspector, all BEFORE a session is read -- so
             // a region the record says is hidden is simply never told, and comes back open every launch.
-            if (state.visible()) showPanel(state.typeId());
+            // NOT FOCUSING: putting back what was open is not asking for it. @see #showPanel(String, boolean)
+            if (state.visible()) showPanel(state.typeId(), false);
             else hidePanel(state.typeId());
         }
     }
@@ -676,7 +693,7 @@ public final class ToolWindowManager {
      * The one thing a frame knows that the container does not is its geometry, and that is precisely
      * what {@link ToolWindowState#floatingBounds()} exists to carry.</p>
      */
-    private boolean showInFrame(String typeId, ToolWindowType type) {
+    private boolean showInFrame(String typeId, ToolWindowType type, boolean focus) {
         ViewContainer container = containers.computeIfAbsent(typeId, this::buildContainer);
         if (container == null) return false;
         UIElement anchor = regions.root();
@@ -744,7 +761,8 @@ public final class ToolWindowManager {
         }
 
         toolWindows.put(placementOf(typeId).withVisible(true));
-        window.focus().requestPointerFocus(container);
+        // A restore puts a torn-out panel back too, and that is not a request for it either.
+        if (focus) window.focus().requestPointerFocus(container);
         return true;
     }
 

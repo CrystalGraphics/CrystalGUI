@@ -642,6 +642,12 @@ public class EditorServiceTest {
     /** A view with nothing in it, so the read-only question can be asked without a font stack. */
     private static final class RecordingView implements DocumentEditor {
         boolean readOnly;
+        boolean active;
+
+        @Override
+        public void activated(boolean isActive) {
+            active = isActive;
+        }
 
         @Override
         public UIElement view() {
@@ -652,5 +658,35 @@ public class EditorServiceTest {
         public void setReadOnly(boolean value) {
             readOnly = value;
         }
+    }
+
+    /**
+     * <b>A view is not told it is in front until it is on a surface.</b>
+     *
+     * <p>Every restored tab becomes active with no view to tell — the arrangement is applied while the
+     * documents are still crossing the wire — so the announcement has to be made later. The trap is
+     * making it as soon as the view EXISTS: a view says what it has to say by walking up from itself,
+     * resolving the status bar through its own data context, so telling a view the dock has not attached
+     * yet publishes nothing and reports nothing. The caret, indent, encoding and line ending were all
+     * computed and dropped, and came back only on a tab switch.</p>
+     *
+     * <p>So the rule is "once it can be heard", and this pins the half that can be asserted with no
+     * surface at all: while the view is detached, nothing is announced however often it is flushed. The
+     * other half — that it IS announced once attached — needs a real document and lives in
+     * {@code OpeningFocusesTheEditorTest}.</p>
+     */
+    @Test
+    public void aDetachedViewIsNotToldItIsInFront() {
+        registerViewedKind();
+        EditorService.Tab tab = open(MAIN);
+        editors.activate(tab);
+
+        // The view is built on first ask, which is what a restore's first paint does.
+        RecordingView view = (RecordingView) tab.editor();
+        assertNotNull(view);
+        assertFalse("it is on no surface, so it could publish nothing", view.active);
+
+        editors.flushPendingActivation();
+        assertFalse("...and it stays parked rather than being told into the void", view.active);
     }
 }

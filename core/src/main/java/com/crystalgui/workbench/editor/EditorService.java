@@ -123,6 +123,10 @@ public final class EditorService implements Disposable {
     @Nullable
     private Tab active;
 
+    /** A tab that has just been given a view and still has to be told it is in front. */
+    @Nullable
+    private Tab pendingActivation;
+
     public EditorService(Workspace workspace, WorkspaceDocuments documents, DocumentKinds kinds) {
         this.workspace = Objects.requireNonNull(workspace, "workspace");
         this.documents = Objects.requireNonNull(documents, "documents");
@@ -242,6 +246,30 @@ public final class EditorService implements Disposable {
             if (document != null && document.isDirty()) continue;
             close(tab);
         }
+    }
+
+    /**
+     * Tells a freshly-built view that it is in front, <b>once it is on a surface</b>.
+     *
+     * <p>Called every frame. A view announces what it has to say — the caret, the indentation, the
+     * encoding, the line separator — by resolving the status bar from its own position in the tree, so
+     * being told before the dock has attached it is the same as not being told at all, except that
+     * nothing reports it. Waiting on {@code view().document()} asks the only question that matters and
+     * needs no frame counting: the dock attaches content during the animation phase whether it built it
+     * outright or deferred a rebuild, so this lands on the first frame it can and stops.</p>
+     */
+    public void flushPendingActivation() {
+        Tab pending = pendingActivation;
+        if (pending == null) return;
+        // The tab moved on while its view was being built: there is nothing left to announce.
+        if (active != pending) {
+            pendingActivation = null;
+            return;
+        }
+        DocumentEditor view = pending.editor;
+        if (view == null || view.view().document() == null) return;
+        pendingActivation = null;
+        pending.setActive(true);
     }
 
     public void closeAll() {
@@ -422,6 +450,19 @@ public final class EditorService implements Disposable {
             // session. @see #captureViewState
             StateMap<?> stored = viewStates.get(input);
             if (stored != null) editor.readViewState(stored);
+            // AND TOLD IT IS IN FRONT, if it already is -- but NOT HERE. `setActive` runs when a tab
+            // BECOMES active and does nothing when the view is not built yet, which is every restored
+            // tab: the arrangement is applied while the documents are still crossing the wire. So the
+            // tab in front came back with no caret position, no indent, no encoding and no line ending,
+            // and switching away and back was what finally announced it -- a second activation, by
+            // which time there was a view to hear it.
+            //
+            // Announcing on this line is a frame too early, and silently so. A view says where it is in
+            // front BY WALKING UP FROM ITSELF -- `TextEditorView` resolves the status bar through its
+            // own data context -- and at this moment the view has just been constructed and the dock has
+            // not put it in the tree yet. Every readout was computed and dropped, which looks exactly
+            // like never having been told. @see #flushPendingActivation
+            if (active == this) pendingActivation = this;
             return editor;
         }
 
@@ -458,6 +499,14 @@ public final class EditorService implements Disposable {
 
         private void setActive(boolean isActive) {
             DocumentEditor view = editor;
+            // NOT INTO A VIEW THAT IS NOT ON A SURFACE YET. A view says what it has to say by walking up
+            // from itself -- the status bar is resolved through its own data context -- so telling it
+            // while the dock still has it detached publishes nothing and reports nothing. Parked, and
+            // said again on the first frame it can be heard. @see #flushPendingActivation
+            if (isActive && view != null && view.view().document() == null) {
+                pendingActivation = this;
+                return;
+            }
             if (view != null) view.activated(isActive);
             Document document = document();
             if (document != null && isActive) document.kind().contributeStatus(document);

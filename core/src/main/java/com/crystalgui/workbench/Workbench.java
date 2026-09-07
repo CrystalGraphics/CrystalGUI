@@ -1685,6 +1685,19 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     private Document activeStatusDocument;
 
     /**
+     * The VIEW that announcement reached, or null if there was none yet.
+     *
+     * <p>Latching on the document alone is not enough, and the gap is a real window rather than a
+     * theoretical one: a restored tab has its document before it has its editor, so the announcement is
+     * made into {@code null} and the document is recorded as told. Everything after that early-returns,
+     * and the readouts a view publishes for itself — the caret, the indentation, the encoding, the line
+     * separator — never appear. Switching to another tab and back was the only way to get them, because
+     * that is what changes the document and breaks the latch.</p>
+     */
+    @Nullable
+    private DocumentEditor activeStatusView;
+
+    /**
      * Announces which tab is in front, and sets the trail. <b>That is all it does.</b>
      *
      * <h3>What the workbench is and is not entitled to know</h3>
@@ -1702,16 +1715,19 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * <em>identity</em> — where the thing you are looking at lives — which is the dock's business and is
      * answerable for a document that has no content to report at all.</p>
      */
-    private void bindStatusToActiveTab() {
+    void bindStatusToActiveTab() {
         syncActiveTab();
         statusBar.breadcrumbs().setCrumbs(saveActions.trailFor(activeFilePath()));
 
         Document active = activeDocument();
-        if (active == activeStatusDocument) return;
+        // THE VIEW IS PART OF THE QUESTION, not just the document. @see #activeStatusView
+        DocumentEditor view = viewOf(active);
+        if (active == activeStatusDocument && view == activeStatusView) return;
         // DEACTIVATE FIRST. Both halves write status items, and a view that publishes before the
         // previous one has withdrawn would have its keys cleared a moment later by the tab it replaced.
         setViewActive(activeStatusDocument, false);
         activeStatusDocument = active;
+        activeStatusView = view;
         setViewActive(active, true);
     }
 
@@ -1736,10 +1752,16 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     }
 
     private void setViewActive(@Nullable Document document, boolean active) {
-        if (document == null) return;
-        EditorService.Tab tab = editors.tabFor(EditorInput.of(document.resource()));
-        DocumentEditor view = tab == null ? null : tab.editor();
+        DocumentEditor view = viewOf(document);
         if (view != null) view.activated(active);
+    }
+
+    /** The view showing {@code document}, or null — including when there is no document at all. */
+    @Nullable
+    private DocumentEditor viewOf(@Nullable Document document) {
+        if (document == null) return null;
+        EditorService.Tab tab = editors.tabFor(EditorInput.of(document.resource()));
+        return tab == null ? null : tab.editor();
     }
 
 
@@ -2066,6 +2088,8 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
             return false;
         }
         focusActiveEditorAfterClose();
+        // A VIEW BUILT THIS FRAME SAYS SO ON THE NEXT ONE, once the dock has it in the tree.
+        editors.flushPendingActivation();
         // A few directories a frame, until the workspace is walked. Go to File searches what this has
         // reached, so warming it in the background is what makes the first Ctrl+P useful rather than
         // empty -- and it warms the tree's own listing cache, so there is no second index to keep in step.
