@@ -93,6 +93,13 @@ class NotificationCard extends UIElement {
             append(detail);
         }
 
+        if (!notification.getAttribution().isEmpty()) {
+            UIText attribution = new UIText(notification.getAttribution());
+            attribution.addClass(NotificationsView.ATTRIBUTION_CLASS);
+            attribution.setHitTest(false);
+            append(attribution);
+        }
+
         boolean silenceable = notification.getNeverShowAgainId() != null;
         if (!notification.actions().isEmpty() || !notification.secondaryActions().isEmpty()
                 || silenceable) {

@@ -257,9 +257,11 @@ PART	GraphView	marquee	B	0	confirmed	leaf in every rule
 PART	HeaderControl	header	B	2	confirmed	a rule selects through it (1)
 PART	HeaderControl	title	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	HierarchyPanel	hierarchy	A	0	proposed	leaf in every rule
-PART	HierarchyPanel	hierarchy-content	B	2	proposed	a rule selects through it (1)
-PART	HierarchyPanel	hierarchy-row	A	2	proposed	leaf in every rule
-PART	HierarchyPanel	selected	C	8	proposed	state adjective
+PART	HierarchyPanel	hierarchy-content	B	3	proposed	a rule selects through it (1)
+PART	HierarchyPanel	hierarchy-row	A	1	proposed	leaf in every rule
+PART	HierarchyPanel	label	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	HierarchyPanel	selected	C	7	proposed	state adjective
+PART	HierarchyPanel	twisty	A	0	proposed	leaf in every rule
 PART	HoverHighlight	hover-highlight	A	0	proposed	leaf in every rule
 PART	InfoControl	info	B	2	confirmed	a rule selects through it (1)
 PART	InfoControl	value	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
@@ -373,13 +375,14 @@ PART	NotificationBalloons	hidden	C	1	confirmed	state adjective
 PART	NotificationsView	action	B	4	confirmed	leaf in every rule, scoped by an ancestor in 4
 PART	NotificationsView	action-secondary	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	NotificationsView	actions	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	NotificationsView	attribution	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	NotificationsView	clear	B	0	confirmed	leaf in every rule
 PART	NotificationsView	close	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	NotificationsView	detail	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	NotificationsView	entry-head	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	NotificationsView	head	B	0	confirmed	leaf in every rule
 PART	NotificationsView	message	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
-PART	NotificationsView	notification	B	17	confirmed	a rule selects through it (15)
+PART	NotificationsView	notification	B	18	confirmed	a rule selects through it (16)
 PART	NotificationsView	notification-list	B	0	confirmed	leaf in every rule
 PART	NotificationsView	notifications	B	0	confirmed	leaf in every rule
 PART	NotificationsView	notifications-empty	B	0	confirmed	leaf in every rule
@@ -408,7 +411,7 @@ PART	ProblemsPanel	problems	B	0	confirmed	leaf in every rule
 PART	ProblemsPanel	problems-body	B	0	confirmed	leaf in every rule
 PART	ProblemsPanel	problems-empty	B	0	confirmed	leaf in every rule
 PART	ProblemsPanel	problems-head	B	0	confirmed	leaf in every rule
-PART	ProblemsPanel	selected	C	8	confirmed	state adjective
+PART	ProblemsPanel	selected	C	7	confirmed	state adjective
 PART	ProblemsPanel	severity	B	4	confirmed	leaf in every rule, scoped by an ancestor in 4
 PART	ProblemsPanel	tab-count	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	ProblemsPanel	twisty	B	4	confirmed	leaf in every rule, scoped by an ancestor in 4
@@ -443,7 +446,7 @@ PART	PropertyPill	name	B	2	confirmed	leaf in every rule, scoped by an ancestor i
 PART	PropertyPill	property-pill	B	16	confirmed	a rule selects through it (15)
 PART	PropertyPill	rename	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	PropertyPill	renaming	B	2	confirmed	a rule selects through it (2)
-PART	PropertyPill	selected	C	8	confirmed	state adjective
+PART	PropertyPill	selected	C	7	confirmed	state adjective
 PART	PropertyPill	type	B	3	confirmed	leaf in every rule, scoped by an ancestor in 3
 PART	QuickFixBulbPart	quick-fix-bulb	B	0	confirmed	leaf in every rule
 PART	QuickPick	content	B	0	confirmed	leaf in every rule
@@ -707,7 +710,7 @@ PART	WindowPreview	preview-header	B	1	confirmed	leaf in every rule, scoped by an
 PART	WindowPreview	preview-title	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	WindowPreview	window-preview	B	14	confirmed	a rule selects through it (11)
 PART	WindowSwitcher	icon	B	2	confirmed	a rule selects through it (1)
-PART	WindowSwitcher	selected	C	8	confirmed	state adjective
+PART	WindowSwitcher	selected	C	7	confirmed	state adjective
 PART	WindowSwitcher	switcher-close	B	4	confirmed	leaf in every rule, scoped by an ancestor in 4
 PART	WindowSwitcher	switcher-entry	B	13	confirmed	a rule selects through it (10)
 PART	WindowSwitcher	switcher-header	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1

@@ -62,6 +62,9 @@ public class NotificationsView extends UIElement {
     public static final String TIME_CLASS = "__time__";
     public static final String DETAIL_CLASS = "__detail__";
     public static final String ACTIONS_CLASS = "__actions__";
+
+    /** The line naming who did it. @see Notification#withAttribution */
+    public static final String ATTRIBUTION_CLASS = "__attribution__";
     public static final String ACTION_CLASS = "__action__";
     /** A quieter action, and the "Don't show again" link. @see com.crystalgui.core.notify.Notification */
     public static final String ACTION_SECONDARY_CLASS = "__action-secondary__";

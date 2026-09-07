@@ -79,130 +79,24 @@ public final class ExplorerBinding {
     }
 
     /**
-     * Says what changed under a project root, and who did it.
+     * Tells somebody what changed under a project root, once per batch.
      *
-     * <p><b>Once per batch, never per file.</b> A tick is already coalesced, so a batch is one thing
-     * somebody did — and a rename of a directory, or a build rewriting a tree, would otherwise be one
-     * notification per file in it.</p>
+     * <p><b>Not your own doing.</b> The change itself still arrives — it is what updates this client's
+     * own tree and retargets its own tabs — and it is only the telling that would be absurd. Everything
+     * left is either somebody else on this workspace, named, or something outside it, which no
+     * filesystem event can put a name to.</p>
      *
-     * <p>Nothing is said about this client's own operations, and not by a filter here: the server does
-     * not send them back at all, because whoever asked already knows. So everything that arrives is
-     * either somebody else on this workspace, named, or something outside it, which no filesystem event
-     * can put a name to — {@code FileChange#byPeer} is the whole of that distinction.</p>
+     * <p>The wording is {@link ChangeNotice}'s, which is where the operation, the kind of thing and the
+     * place it happened are turned into something a person reads.</p>
      */
     private void announce(List<FsMessages.FileChange> changes) {
-        // NOT YOUR OWN DOING. The change itself still arrives -- it is what updates this client's own
-        // tree and retargets its own tabs -- and it is only the telling that would be absurd.
         String me = workbench.workspace.server().actor();
         List<FsMessages.FileChange> theirs = new ArrayList<>();
         for (FsMessages.FileChange change : changes) {
             if (me.isEmpty() || !me.equals(change.author())) theirs.add(change);
         }
-        changes = theirs;
-        if (changes.isEmpty()) return;
-        String who = soleAuthor(changes);
-
-        if (changes.size() > 1) {
-            Notifications.info(who.isEmpty()
-                    ? changes.size() + " files changed on disk"
-                    : who + " changed " + changes.size() + " files");
-            return;
-        }
-        FsMessages.FileChange only = changes.get(0);
-        Notifications.info(who.isEmpty()
-                ? subject(only) + " was " + past(only) + " on disk"
-                : who + " " + verb(only));
-    }
-
-    /** The one author behind a batch, or empty when it was outside the workspace or was several people. */
-    private static String soleAuthor(List<FsMessages.FileChange> changes) {
-        String who = changes.get(0).author();
-        for (FsMessages.FileChange change : changes) {
-            if (!change.author().equals(who)) return "";
-        }
-        return who;
-    }
-
-    /** {@code alice moved test.shadergraph to fah}. Package-private so the wording is testable. */
-    static String verb(FsMessages.FileChange change) {
-        return switch (change.kind()) {
-            case CREATED -> "added " + subject(change);
-            case DELETED -> "deleted " + subject(change);
-            case RENAMED -> moved(change) + " " + nameOf(change.from()) + destination(change);
-            case MODIFIED -> "changed " + subject(change);
-        };
-    }
-
-    /** The same, with the file as the subject: {@code test.shadergraph was moved to fah}. */
-    static String past(FsMessages.FileChange change) {
-        return switch (change.kind()) {
-            case CREATED -> "added";
-            case DELETED -> "deleted";
-            case RENAMED -> moved(change) + destination(change);
-            case MODIFIED -> "changed";
-        };
-    }
-
-    /**
-     * <b>A move and a rename are one event and read as two different things.</b>
-     *
-     * <p>RENAMED covers both, so describing it by the last segment alone said "renamed
-     * test.shadergraph to test.shadergraph" for every move -- the name is exactly what a move keeps.
-     * The parent directory is what tells them apart.</p>
-     */
-    private static String moved(FsMessages.FileChange change) {
-        return sameFolder(change) ? "renamed" : "moved";
-    }
-
-    /** Where it went: a new name, a new folder, or both. */
-    private static String destination(FsMessages.FileChange change) {
-        String name = nameOf(change.path());
-        if (sameFolder(change)) return " to " + name;
-        String folder = folderOf(change.path());
-        return name.equals(nameOf(change.from()))
-                ? " to " + folder
-                : " to " + folder + " as " + name;
-    }
-
-    private static boolean sameFolder(FsMessages.FileChange change) {
-        if (change.from().isEmpty()) return true;
-        return Objects.equals(CgPath.parse(change.from()).parent(),
-                CgPath.parse(change.path()).parent());
-    }
-
-    /**
-     * The folder something landed in, or the project root, which has no name of its own.
-     *
-     * <p>With its slash, so a destination cannot be read as a file: {@code moved to fah} and
-     * {@code moved to fah/} are the same words and only one of them says which it is.</p>
-     *
-     * <p><b>The whole path within the project, not the last segment.</b> A project has many folders
-     * called {@code java}, and naming one of them locates nothing -- which is the entire question a
-     * reader has when told something moved.</p>
-     */
-    private static String folderOf(String path) {
-        CgPath parent = CgPath.parse(path).parent();
-        return parent == null || parent.segments().isEmpty()
-                ? "the project root"
-                : parent.path() + "/";
-    }
-
-    /**
-     * What the change is about, with a folder marked as one.
-     *
-     * <p>A file says which it is by carrying an extension; a folder says nothing at all, so
-     * {@code coo was added} left a reader guessing at the one fact the row in the tree makes obvious.
-     * The server knows — it stat-ed the thing — so the change carries it rather than this guessing from
-     * the name, which would call every extensionless file a folder.</p>
-     */
-    private static String subject(FsMessages.FileChange change) {
-        String name = nameOf(change.path());
-        return change.directory() ? name + "/" : name;
-    }
-
-    /** The last segment, which is what somebody reading a notification recognises. */
-    private static String nameOf(String path) {
-        return path.isEmpty() ? path : CgPath.parse(path).name();
+        Notification notice = ChangeNotice.forChanges(theirs);
+        if (notice != null) Notifications.show(notice);
     }
 
     /**
