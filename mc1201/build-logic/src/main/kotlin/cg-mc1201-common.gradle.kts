@@ -27,6 +27,9 @@ dependencies {
     // holds a Taffy NodeId and a JOML Matrix4f as FIELDS, which resolve at class load. Without these
     // javac reports "cannot access UIDocument" rather than a missing dependency. plan/platform-mc1201.md 4.3.
     "compileOnly"(project(":taffy"))
+    // :language, for the ScriptService seam. compileOnly here and bundled by the loaders: this module
+    // names the interface, and whether the grammars and engines ship is the loaders' decision.
+    "compileOnly"(project(":language"))
     // Mixin compileOnly — both loaders bundle it at runtime; never shade it.
     "compileOnly"("org.spongepowered:mixin:${property("mc1201.mixin")}")
     // NOTE: mixin annotationProcessor is intentionally omitted here — legacyForge configures

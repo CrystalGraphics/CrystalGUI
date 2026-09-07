@@ -1,3 +1,4 @@
+import java.security.MessageDigest
 import org.gradle.process.CommandLineArgumentProvider
 import java.io.File
 import xyz.wagyourtail.jvmdg.gradle.task.DowngradeJar
@@ -55,6 +56,12 @@ dependencies {
     "compileOnly"(project(":taffy"))
     "runtimeOnly"(project(":taffy"))
 
+    // :language -- the grammars, ECJ and Rhino, plus the ScriptService seam. Bundled rather than
+    // omitted: the editor still opens every file without it, but it colours from core's word-list
+    // lexers and does not analyse, which is not the degradation somebody installing a code editor
+    // wants. plan/platform-mc1201.md 4.3.
+    "compileOnly"(project(":language"))
+
     // Minecraft supplies log4j and gson. :core pins modern ones runtimeOnly for its tests and the
     // harness, and those reach a loader -- where NeoForge requires {strictly 2.19.0}/{strictly 2.10.1}
     // and the conflict fails its entire runtime graph.
@@ -94,8 +101,170 @@ cgbuildlogic.configureShadowJarBundling(project)
 //
 // which reads as a packaging or classloader fault rather than as a missing build step.
 tasks.matching { it.name.startsWith("run") || it.name.startsWith("prepare") }.configureEach {
-    dependsOn(":core:classes", ":mc1201:common:classes")
+    dependsOn(":core:classes", ":mc1201:common:classes", ":language:classes")
 }
+
+// The engine band, for a DEV run only.
+//
+// EngineHost tries a configured directory, then a band bundled in the jar, then a download. A dev run
+// has no jar to bundle into, so without this it reaches the download arm and finds no manifest either:
+// "no engine jars for band JAVA_17 ... the editor will colour but not analyse". Pointing the first arm
+// at :language's own staged output is what mc1710 does, and it keeps the network out of a dev launch.
+tasks.withType<JavaExec>().matching { it.name.startsWith("run") }.configureEach {
+    dependsOn(":language:stageEngines")
+    systemProperty("crystalgui.engines.dir",
+        project(":language").layout.buildDirectory.dir("engines").get().asFile.absolutePath)
+}
+
+
+// -- The engine bands, in the shipped jar (L6) --------------------------------------------------
+//
+// A dev run gets its band from -Dcrystalgui.engines.dir above. A SHIPPED jar has no such property, so
+// without this it carries no bands at all and the editor colours without analysing -- a legitimate
+// degradation, and not the one somebody installing a code editor wants.
+//
+// Ported from mc1710 with ONE difference: it defaults to band 17 where mc1710 defaults to 8, because
+// that is what this Minecraft runs. EngineBand reads java.specification.version, so a host selecting a
+// band this jar does not carry falls through to the manifest and fetches it.
+/**
+ * JOML and fastutil, for the SHIPPED jar.
+ *
+ * Declared here by coordinate rather than resolved off :core or :taffy. Those declare JOML and Taffy
+ * `compileOnly` so they reach nobody transitively -- a jar built from :core's runtimeClasspath carried
+ * neither and said nothing -- and reading another project's compileClasspath at configuration time
+ * reaches across the composite build and fails outright. The versions are the same properties those
+ * projects read.
+ */
+val shippedLibs: Configuration by configurations.creating { isCanBeConsumed = false; isCanBeResolved = true }
+
+val engineBand8: Configuration by configurations.creating { isCanBeConsumed = false; isCanBeResolved = true }
+val engineBand11: Configuration by configurations.creating { isCanBeConsumed = false; isCanBeResolved = true }
+val engineBand17: Configuration by configurations.creating { isCanBeConsumed = false; isCanBeResolved = true }
+
+dependencies {
+    add("shippedLibs", "org.joml:joml:${rootProject.properties["jomlVersion"]}")
+    add("shippedLibs", "it.unimi.dsi:fastutil:${rootProject.properties["fastutil_version"]}")
+    add("engineBand8", project(path = ":language", configuration = "engineBand8Bundle"))
+    add("engineBand11", project(path = ":language", configuration = "engineBand11Bundle"))
+    add("engineBand17", project(path = ":language", configuration = "engineBand17Bundle"))
+}
+
+/** Which bands this jar CARRIES. `-PcgBundleBands=17`, `8,17`, or `none`. */
+val bundledBands: List<Int> = providers.gradleProperty("cgBundleBands").orNull
+    ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() && it != "none" }?.map { it.toInt() }
+    ?: listOf(17)
+
+fun configurationForBand(band: Int): Configuration = when (band) {
+    8 -> engineBand8
+    11 -> engineBand11
+    17 -> engineBand17
+    else -> throw GradleException("unknown engine band $band; known bands are 8, 11 and 17")
+}
+
+val bundleEngineBands = tasks.register<Sync>("bundleEngineBands") {
+    group = "build"
+    description = "Lays the selected bands' jars out as jar resources, with the index EngineBundle reads."
+    // The Sync's OWN destination is the bundle root and each band is a path INSIDE it: syncing straight
+    // into a band directory makes THAT the task output, so from(...) copies its contents and the
+    // assets/ prefix is silently gone.
+    into(layout.buildDirectory.dir("engine-bundle"))
+    for (band in bundledBands) {
+        into("assets/crystalgui/engines/$band") { from(configurationForBand(band)) }
+    }
+    doLast {
+        for (band in bundledBands) {
+            val directory = layout.buildDirectory
+                .dir("engine-bundle/assets/crystalgui/engines/$band").get().asFile
+            // SORTED: Sync copies in whatever order the filesystem reports, and two jars declaring one
+            // package would otherwise resolve differently per build host.
+            val jars = directory.listFiles()?.filter { it.name.endsWith(".jar") }?.map { it.name }?.sorted()
+                ?: emptyList()
+            directory.resolve("index.txt").writeText(buildString {
+                appendLine("# Band $band engine jars, in classpath order. Written by bundleEngineBands.")
+                jars.forEach { appendLine(it) }
+            })
+        }
+    }
+}
+
+/**
+ * One manifest per band: name, digest and where to fetch it -- what a host whose band is not bundled
+ * reads. A SEPARATE output tree from the bundle's, because that one is a Sync and a Sync deletes
+ * whatever is not in its source.
+ *
+ * The digest is computed from the file Gradle resolved rather than read from Maven's `.sha1`: it pins
+ * the exact bytes this build was tested against, needs no network, and verifies offline. MD5 because
+ * CacheFiles computes MD5 -- a corruption-and-drift check, never a security boundary.
+ */
+fun manifestFor(band: Int, configuration: Configuration) {
+    val directory = layout.buildDirectory
+        .dir("engine-manifests/assets/crystalgui/engines/$band").get().asFile
+    directory.mkdirs()
+    val rows = configuration.resolvedConfiguration.resolvedArtifacts.map { artifact ->
+        val id = artifact.moduleVersion.id
+        val path = id.group.replace('.', '/') + "/" + id.name + "/" + id.version
+        val digest = MessageDigest.getInstance("MD5")
+            .digest(artifact.file.readBytes()).joinToString("") { "%02x".format(it) }
+        artifact.file.name + "|" + digest + "|https://repo1.maven.org/maven2/" + path + "/" + artifact.file.name
+    }.sorted()
+    directory.resolve("manifest.txt").writeText(buildString {
+        appendLine("# Band $band engine jars: name|md5|url. Written by writeEngineManifests.")
+        rows.forEach { appendLine(it) }
+    })
+}
+
+val writeEngineManifests = tasks.register("writeEngineManifests") {
+    group = "build"
+    description = "Writes one name|md5|url manifest per engine band, for bands the jar does not carry."
+    outputs.dir(layout.buildDirectory.dir("engine-manifests"))
+    doLast {
+        manifestFor(8, engineBand8)
+        manifestFor(11, engineBand11)
+        manifestFor(17, engineBand17)
+    }
+}
+
+/**
+ * Fails the build if a bundled band's jars and its manifest disagree.
+ *
+ * They are written by different tasks from the same configuration, so they can drift -- and nothing at
+ * runtime would notice, because a bundled band is used as-is and the manifest is read only when a band
+ * is MISSING. The mismatch would surface as a download that always fails its digest on somebody else's
+ * machine, which is about as far from the cause as a symptom gets.
+ */
+val checkEngineManifest = tasks.register("checkEngineManifest") {
+    group = "verification"
+    description = "Fails if any bundled band's jars and its manifest disagree."
+    dependsOn(bundleEngineBands, writeEngineManifests)
+    doLast {
+        for (band in bundledBands) {
+            val bundled = layout.buildDirectory
+                .dir("engine-bundle/assets/crystalgui/engines/$band").get().asFile
+            val manifest = layout.buildDirectory
+                .file("engine-manifests/assets/crystalgui/engines/$band/manifest.txt").get().asFile
+            if (!manifest.isFile) throw GradleException("band $band has no manifest; run writeEngineManifests")
+            val declared = manifest.readLines().filter { it.isNotBlank() && !it.startsWith("#") }
+                .associate { row -> row.split("|").let { it[0] to it[1] } }
+            val present = (bundled.listFiles() ?: emptyArray()).filter { it.name.endsWith(".jar") }
+                .associate { jar ->
+                    jar.name to MessageDigest.getInstance("MD5")
+                        .digest(jar.readBytes()).joinToString("") { "%02x".format(it) }
+                }
+            val missing = present.keys - declared.keys
+            val extra = declared.keys - present.keys
+            val wrong = present.filter { (name, digest) -> declared[name]?.equals(digest) == false }.keys
+            if (missing.isNotEmpty() || extra.isNotEmpty() || wrong.isNotEmpty()) {
+                throw GradleException(
+                    "band $band's manifest does not describe its bundled jars." + "\n"
+                        + "  bundled but not declared: $missing" + "\n"
+                        + "  declared but not bundled: $extra" + "\n"
+                        + "  declared with a stale digest: $wrong")
+            }
+        }
+    }
+}
+
+tasks.named("check") { dependsOn(checkEngineManifest) }
 
 // The shipping jar, with every bundled class at Java 17.
 //

@@ -72,10 +72,14 @@ loom {
 // apply Loom. JAR bundling is the correct approach for Loom dev runs with multi-project mods.
 val coreJar   = project(":core").tasks.named<Jar>("jar").flatMap { it.archiveFile }
 val commonJar = project(":mc1201:common").tasks.named<Jar>("jar").flatMap { it.archiveFile }
+// Knot does not delegate com.crystalgui.* to the system classloader, so :language has to be IN the jar
+// like the others -- runtimeOnly alone leaves the grammars and the ScriptService seam unreachable.
+val languageJar = project(":language").tasks.named<Jar>("jar").flatMap { it.archiveFile }
 
 tasks.jar {
     from(zipTree(coreJar))
     from(zipTree(commonJar))
+    from(zipTree(languageJar))
 }
 
 // Extracts Fabric MC 1.20.1 sources and resources into build/mc-src for local navigation.
