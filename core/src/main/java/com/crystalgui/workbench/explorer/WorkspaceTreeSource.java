@@ -636,6 +636,16 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath>, Worksp
      * refused there rather than creating something. {@code U+0000} is the obvious choice and
      * {@link CgPath} rightly refuses it outright, which is how this was found.</p>
      */
+    /**
+     * Whether this is the row being NAMED rather than a file that exists.
+     *
+     * <p>Asked by anything that would act on a row as though there were a file behind it. There is not:
+     * the entry is created when the name is committed, and until then this path names nothing anywhere.</p>
+     */
+    public static boolean isPlaceholder(@Nullable CgPath path) {
+        return path != null && PENDING_NAME.equals(path.name());
+    }
+
     public CgPath beginPendingNew(CgPath parent, boolean directory) {
         endPendingNew();
         CgPath placeholder = parent.resolve(PENDING_NAME);
