@@ -190,6 +190,22 @@ public final class ContextMenu {
      */
     public static UIElement attach(UIElement on, CommandRegistry registry,
                                    Function<UIElement, ContextMenu> builder) {
+        return attach(on, registry, builder, false);
+    }
+
+    /**
+     * As {@link #attach(UIElement, CommandRegistry, Function)}, on the CAPTURE phase.
+     *
+     * <p>For a container that has to answer for its content rather than beside it. A designer's canvas is
+     * the case: what is drawn there is a document being edited, not widgets being used, and a button on
+     * it still consumes a press — so on the bubble phase the menu appeared over blank page and nowhere
+     * else, which is the opposite of the rule it is trying to keep.</p>
+     *
+     * <p>Not the default, and should not be: an inner element can only override a menu that is listening
+     * after it.</p>
+     */
+    public static UIElement attach(UIElement on, CommandRegistry registry,
+                                   Function<UIElement, ContextMenu> builder, boolean capture) {
         // ONE LIVE MENU PER ATTACHMENT SITE, and this is a correctness requirement rather than tidiness.
         //
         // Building a fresh Menu per press and leaving the last one in the tree crashed Taffy outright:
@@ -268,7 +284,7 @@ public final class ContextMenu {
             // CONSUMED, so a right-click does not also fall through to whatever the left button does --
             // selecting a row, starting a marquee, panning a canvas.
             event.stopPropagation();
-        }, false, true);
+        }, capture, true);
         return on;
     }
 

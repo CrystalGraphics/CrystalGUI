@@ -1,6 +1,7 @@
 package com.crystalgui.app.uibuilder.canvas;
 
 import java.util.List;
+import javax.annotation.Nullable;
 
 import com.crystalgui.app.uibuilder.BuilderOverlaysExtension;
 import com.crystalgui.app.uibuilder.BuilderSelection;
@@ -8,7 +9,10 @@ import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.canvas.transform.FreeTransformTool;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformBox;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformOptionsBar;
+import com.crystalgui.app.uibuilder.BuilderCommands;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
+import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.widget.surface.mode.ToolKind;
 import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.data.DataKey;
@@ -17,7 +21,6 @@ import com.crystalgui.serialization.StateMap;
 import com.crystalgui.template.UiTemplates;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.widget.surface.SurfaceEditor;
 import com.crystalgui.widget.surface.mode.SelectExtension;
 
 /**
@@ -125,6 +128,14 @@ public final class BuilderEditor implements DocumentEditor {
                 transformBox.cancel();
             }
         });
+        // RIGHT-CLICK ON THE CANVAS. Attached to the plane rather than to each element: a node on the
+        // artboard is the document's, not a widget of ours to hang listeners on, and in design mode it
+        // does not take hits at all -- so the element the event carries is the artboard however precisely
+        // the pointer is aimed. What was actually pointed at is the PICKER'S answer.
+        // ON THE CAPTURE PHASE. What is on the artboard is a document being edited rather than widgets
+        // being used, but a Button drawn there still consumes a press -- so listening after it meant the
+        // menu opened over blank page and over nothing else.
+        ContextMenu.attach(surface, CommandRegistry.global(), element -> menuFor(pointedAt()), true);
         this.options = new TransformOptionsBar(transformBox);
         transformBox.showNumbersIn(options);
         this.pane = new BuilderPane(toolbar, options, surface);
@@ -193,7 +204,36 @@ public final class BuilderEditor implements DocumentEditor {
         return textEditing.begin(selection().node());
     }
 
-    /** The eight resize handles on the selection. */
+    /** What the pointer is over, which is what a right-click is about. */
+    @Nullable
+    private UIElement pointedAt() {
+        return surface.picking().hovered();
+    }
+
+    /**
+     * The menu for whatever was right-clicked, or <b>null for nothing</b>.
+     *
+     * <p>The commands resolve from the SELECTION, so a menu offered over empty plane describes an element
+     * somewhere else entirely — you would be acting on something you cannot see from where you clicked.
+     * Right-click therefore acts on what is under the pointer, and selects it first when it is not
+     * already selected: the rule every file manager, Figma and Photoshop use.</p>
+     *
+     * <p><b>Already selected means left alone</b>, which is the half that is easy to miss — right-clicking
+     * inside a multi-selection to act on all of it must not collapse it to the one row under the
+     * pointer.</p>
+     */
+    @Nullable
+    public ContextMenu menuFor(@Nullable UIElement item) {
+        if (item == null) return null;
+        if (!selection().nodes().contains(item)) selection().selectOnly(item);
+        return ContextMenu.builder()
+                .item(BuilderCommands.COPY_ATTRIBUTES)
+                .item(BuilderCommands.PASTE_ATTRIBUTES)
+                .separator()
+                .item(BuilderCommands.FREE_TRANSFORM)
+                .item(BuilderCommands.CONVERT_TO_SIZE);
+    }
+
     /** The numbers behind a Free Transform, for a test. */
     public TransformOptionsBar options() {
         return options;
