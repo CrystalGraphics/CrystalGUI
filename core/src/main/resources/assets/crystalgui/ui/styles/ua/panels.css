@@ -81,7 +81,7 @@ statusbarview .__status-sep__ {
  * between them is COLOUR, which is what the note above describes. Lifting only the right-hand items
  * would have introduced a size split nobody chose, on a single line of chrome. */
 statusbarview .__left__ breadcrumbs .__crumb__ {
-    font-size: 8px;
+    font-size: 7px;
     color: var(--statusbar-crumb-fg, #8A8D94);
 }
 
@@ -90,6 +90,26 @@ statusbarview .__left__ breadcrumbs .__crumb__ {
 statusbarview .__left__ breadcrumbs {
     flex-shrink: 1;
     min-width: 0px;
+    /* TIGHTER IN A BAR THAN IN A HEADER. The widget's own sizes are a navigator header's, where a trail
+     * is the heading; here it runs along a 22px strip beside the readouts, and every segment costs an
+     * icon, a word and a chevron. Nothing below changes what a crumb IS -- only how much room it takes
+     * to say it -- which is why it is scoped here rather than written on the widget. */
+    gap-all: 2px;
+}
+
+/* A GLYPH THE SIZE OF THE TEXT BESIDE IT. 10px against 7px text read as an icon with a label rather than
+ * a labelled step. */
+statusbarview .__left__ breadcrumbs .__crumb-icon__ {
+    width: 10px;
+    height: 10px;
+    margin-right: 0px;
+}
+
+/* AND THE CHEVRON NO LARGER THAN WHAT IT SEPARATES. It was 12px against 10px icons -- punctuation drawn
+ * bigger than the words either side of it, which is what made the trail read as a row of arrows. */
+statusbarview .__left__ breadcrumbs .__crumb-sep__ {
+    width: 9px;
+    height: 9px;
 }
 
 /* ── Notifications ───────────────────────────────────────────────────────────────────────────────────

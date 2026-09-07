@@ -3,6 +3,7 @@ package com.crystalgui.workbench.chrome.status;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.render.texture.CgUiDrawable;
+import com.crystalgui.widget.display.SymbolIcon;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.text.UIText;
@@ -35,6 +36,15 @@ public class Breadcrumbs extends UIElement {
     public static final String ICON_CLASS = "__crumb-icon__";
     /** What {@link Crumb#iconClass()} is swapped under. The icons carry their own palette, so nothing tints it. */
     public static final String FILETYPE_PREFIX = "filetype-";
+
+    /**
+     * The other vocabulary a crumb's class can come from: what a DIRECTORY is, rather than what a file is.
+     *
+     * <p>Two prefixes and not one because a slot is swapped, not rebuilt: swapping {@code noderole-module}
+     * in under {@code filetype-} would leave it behind on the next trail, since nothing would then be
+     * looking for it to take away. The same reason {@code FilesRenderer} swaps its two separately.</p>
+     */
+    public static final String NODEROLE_PREFIX = SymbolIcon.NODEROLE_CLASS_PREFIX;
     public static final String SEPARATOR_CLASS = "__crumb-sep__";
 
     /** On the last segment — where you are, rather than somewhere you could go. */
@@ -149,8 +159,15 @@ public class Breadcrumbs extends UIElement {
             // SWAPPED, never added: a slot is a different file every time the trail moves, so adding
             // `filetype-java` without removing `filetype-md` leaves both on the element and the cascade
             // resolves whichever happens to win -- which reads as a random colour.
+            //
+            // BOTH VOCABULARIES, each under its own prefix. A crumb carries one class -- a file type or a
+            // node role -- and whichever it is, the other prefix has to be cleared or the previous
+            // trail's leaves a stale rule matching this slot.
+            String iconClass = crumb.iconClass() == null ? "" : crumb.iconClass();
             icon.swapPrefixedClass(FILETYPE_PREFIX,
-                    crumb.iconClass() == null ? "" : crumb.iconClass());
+                    iconClass.startsWith(FILETYPE_PREFIX) ? iconClass : "");
+            icon.swapPrefixedClass(NODEROLE_PREFIX,
+                    iconClass.startsWith(NODEROLE_PREFIX) ? iconClass : "");
         }
         for (int i = 0; i < separators.size(); i++) {
             separators.get(i).setDisplayed(i + 1 < shown.size());

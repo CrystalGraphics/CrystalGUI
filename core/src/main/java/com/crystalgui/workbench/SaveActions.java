@@ -5,6 +5,8 @@ import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.document.Document;
 import com.crystalgui.fs.CgPath;
+import com.crystalgui.fs.project.SourceRoots;
+import com.crystalgui.widget.display.SymbolIcon;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.client.WorkspaceDocuments;
@@ -24,6 +26,7 @@ import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import javax.annotation.Nullable;
 
 /**
@@ -60,23 +63,27 @@ public final class SaveActions {
      * one-segment trail reading just {@code manifest.mf}: true, and useless, because the one thing a
      * breadcrumb is for is saying where among several places you are.</p>
      */
-    static List<Breadcrumbs.Crumb> trailFor(@Nullable CgPath path) {
+    List<Breadcrumbs.Crumb> trailFor(@Nullable CgPath path) {
         if (path == null) return List.of();
         List<Breadcrumbs.Crumb> trail = new ArrayList<>();
-        trail.add(Breadcrumbs.Crumb.of(path.project()));
+        FileIconTheme theme = FileIconTheme.getDefault();
+        CgPath walked = CgPath.of(path.project(), "");
+        trail.add(directoryCrumb(path.project(), walked, theme));
         List<String> segments = path.segments();
         for (int i = 0; i < segments.size(); i++) {
             String name = segments.get(i);
-            // THE FILE GETS AN ICON; THE FOLDERS ABOVE IT DO NOT. IntelliJ draws a folder glyph on every
-            // directory crumb, and in a 22px bar that is four near-identical marks competing with the one
-            // that carries information -- the file's type is the thing you cannot read off the text.
-            if (i < segments.size() - 1) {
-                trail.add(Breadcrumbs.Crumb.of(name));
-                continue;
+            walked = walked.resolve(name);
+            if (i == segments.size() - 1) {
+                trail.add(new Breadcrumbs.Crumb(name, theme.drawableFor(name, false, false),
+                        theme.classFor(name, false)));
+                break;
             }
-            FileIconTheme theme = FileIconTheme.getDefault();
-            trail.add(new Breadcrumbs.Crumb(name, theme.drawableFor(name, false, false),
-                    theme.classFor(name, false)));
+            // A DIRECTORY GETS THE ICON FOR WHAT IT IS, not a folder glyph. This drew nothing at all on
+            // the way here, and the argument was sound while every directory wore the same mark: four
+            // near-identical glyphs in a 22px bar compete with the one that carries information. Asking
+            // `roleOf` answers a different question -- module, source root, package, folder -- and
+            // `src/main/java` reading as three distinct things is precisely what a trail is for.
+            trail.add(directoryCrumb(name, walked, theme));
         }
         return trail;
     }
@@ -304,6 +311,21 @@ public final class SaveActions {
     public boolean isDirty(CgPath path) {
         Document document = workbench.documents.get(Resource.of(path));
         return document != null && document.isDirty();
+    }
+
+    /**
+     * One directory crumb, wearing the glyph for what that directory IS.
+     *
+     * <p>The drawable is the theme's folder, and the class is what replaces it: {@code noderole-*} is a
+     * stylesheet rule and the drawable is written at DEFAULT origin, so the rule wins wherever one
+     * matches and the folder stands in where none does. The same arrangement {@code FilesRenderer} uses,
+     * and deliberately the same class vocabulary -- a package in the tree and a package in the trail
+     * cannot drift into two different pictures if there is only one rule.</p>
+     */
+    private Breadcrumbs.Crumb directoryCrumb(String name, CgPath at, FileIconTheme theme) {
+        SourceRoots.Role role = workbench.projectListing().roleOf(at);
+        return new Breadcrumbs.Crumb(name, theme.drawableFor(name, true, false),
+                SymbolIcon.classFor(role));
     }
 
     /** Every open file with unsaved changes, in no particular order. */

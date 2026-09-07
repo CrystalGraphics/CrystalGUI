@@ -156,7 +156,8 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
      * on one means asserting on geometry — the shape of test that breaks on a redesign and proves nothing
      * in the meantime.</p>
      */
-    static final String NODEROLE_PREFIX = "noderole-";
+    /** @see SymbolIcon#NODEROLE_CLASS_PREFIX */
+    static final String NODEROLE_PREFIX = SymbolIcon.NODEROLE_CLASS_PREFIX;
 
     /**
      * The decorations shown on rows. Empty until something registers a provider, which is why a tree with
