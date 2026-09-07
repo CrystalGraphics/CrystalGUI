@@ -205,6 +205,15 @@ notificationsview > .__notification-list__ {
     width: 100%;
 }
 
+/* WHO, not what -- dimmer than the detail and set apart from it, because it answers a different
+ * question and the eye goes looking for it separately. */
+.__notification__ .__attribution__ {
+    font-size: 7px;
+    color: var(--notification-attribution-fg, #7A7D85);
+    width: 100%;
+    margin-top: 2px;
+}
+
 .__notification__ .__actions__ {
     flex-direction: row;
     gap-all: 12px;

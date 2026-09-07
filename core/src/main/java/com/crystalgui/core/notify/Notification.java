@@ -77,6 +77,9 @@ public final class Notification {
      */
     @Getter private String detail = "";
 
+    /** @see #withAttribution */
+    @Getter private String attribution = "";
+
     /**
      * Which producer this came from — IntelliJ's {@code NotificationGroup}.
      *
@@ -142,6 +145,18 @@ public final class Notification {
     }
 
     /** The lines under the title. @see #getDetail() */
+    /**
+     * Who or what is behind this, as its own line under the detail.
+     *
+     * <p>Separate from the detail because it answers a different question and is read differently: the
+     * detail is what happened, this is who did it, and running the two together buries the name in a
+     * sentence rather than putting it where an eye goes looking for it.</p>
+     */
+    public Notification withAttribution(String text) {
+        this.attribution = text == null ? "" : text;
+        return this;
+    }
+
     public Notification withDetail(String text) {
         this.detail = text == null ? "" : text;
         return this;
