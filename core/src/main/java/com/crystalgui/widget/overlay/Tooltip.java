@@ -617,17 +617,27 @@ public class Tooltip extends UIElement {
         return window != null && window.input().mode(Drag.class) != null;
     }
 
-    /** Demotes and detaches from its anchor. The placement ticker drops itself on the next frame. */
+    /**
+     * Demotes and detaches from its anchor. The placement ticker drops itself on the next frame.
+     *
+     * <p><b>A tooltip that has never been shown can still be hidden</b>, and both entry points do
+     * exactly that: each answers a live drag with {@code return hide()} <em>before</em> joining a
+     * document, since a widget tooltips itself in its own constructor and the first join happens on the
+     * first hover. So hovering anything tooltipped while dragging a window threw, in the frame's own
+     * enter dispatch.</p>
+     */
     public Tooltip hide() {
         cancelPendingShow();
         this.anchor = null;
-        document().demote(this);
+        UIDocument window = document();
+        if (window != null) window.demote(this);
         setHidden(true);
         return this;
     }
 
     public boolean isShown() {
-        return anchor != null && document().isPromoted(this);
+        UIDocument window = document();
+        return anchor != null && window != null && window.isPromoted(this);
     }
 
     /**
