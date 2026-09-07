@@ -254,8 +254,7 @@ final class FilesRenderer implements TreeRenderer<CgPath> {
         // SWAPPED, never added: a template is a different row every time the view reuses it, so leaving
         // the previous row's role on the element lets the cascade resolve whichever rule happens to win.
         ProjectFileTree.swapPrefixedClass(parts.icon(), ProjectFileTree.NODEROLE_PREFIX,
-                role == null ? null : ProjectFileTree.NODEROLE_PREFIX
-                        + role.name().toLowerCase(Locale.ROOT).replace('_', '-'));
+                SymbolIcon.classFor(role));
 
         FileDecoration decoration = tree.getDecorations().resolve(item, directory);
         ProjectFileTree.swapPrefixedClass(template, ProjectFileTree.DECORATION_PREFIX,

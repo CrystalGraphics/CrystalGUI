@@ -161,6 +161,23 @@ public class SymbolIcon extends UIElement {
     public static final String FINAL_MARK_PART = "completion-mark-final";
 
     /** {@code completion-kind-interface} — what the stylesheet keys the glyph on. */
+    /**
+     * What a DIRECTORY is, as a class: {@code noderole-source-root}.
+     *
+     * <p>Here beside the kind and modifier prefixes because this is already where "what is this node"
+     * is answered -- {@link #describe(SourceRoots.Role)} is a few lines up. Two readers want it, the
+     * project tree and the status trail, and a package drawn one way in a tree and another in a
+     * breadcrumb is exactly what one rule in one place prevents.</p>
+     */
+    public static final String NODEROLE_CLASS_PREFIX = "noderole-";
+
+    /** @see #NODEROLE_CLASS_PREFIX */
+    @Nullable
+    public static String classFor(@Nullable SourceRoots.Role role) {
+        return role == null ? null
+                : NODEROLE_CLASS_PREFIX + role.name().toLowerCase(Locale.ROOT).replace('_', '-');
+    }
+
     public static final String KIND_CLASS_PREFIX = "completion-kind-";
 
     /** {@code completion-mod-abstract} — the one modifier that changes the glyph itself. */
