@@ -15,15 +15,21 @@ import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgraphics.platform.input.CgModifiers;
+
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.service.Drag;
+import com.crystalgui.widget.text.UIText;
 
 
+import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
 /**
@@ -50,6 +56,9 @@ public final class ResizeHandles extends UIElement {
 
     public static final String LAYER_CLASS = "__resize-handles__";
 
+    /** The live size readout shown while a handle is dragged. */
+    public static final String BADGE_CLASS = "__resize-badge__";
+
     /** Where a handle is, which is also its class and the axes it writes. */
     public enum Spot {
         TOP_LEFT(-1, -1), TOP(0, -1), TOP_RIGHT(1, -1),
@@ -72,6 +81,11 @@ public final class ResizeHandles extends UIElement {
         /** @see #xDirection */
         public int yDirection() {
             return y;
+        }
+
+        /** Whether this handle moves both axes, which is the only place an aspect ratio means anything. */
+        public boolean isCorner() {
+            return x != 0 && y != 0;
         }
 
         String cssClass() {
@@ -97,6 +111,11 @@ public final class ResizeHandles extends UIElement {
 
     private final List<UIElement> handles = new ArrayList<>();
 
+    /** The live readout during a drag. @see #showBadge */
+    private final UIElement badge = new UIElement();
+
+    private final UIText badgeText = new UIText();
+
     @Nullable
     private UIElement target;
 
@@ -108,6 +127,13 @@ public final class ResizeHandles extends UIElement {
         anchorWithoutCovering(this);
 
         for (Spot spot : Spot.values()) handles.add(buildHandle(spot));
+        badge.addClass(BADGE_CLASS);
+        badge.setHitTest(false);
+        badge.setDisplayed(false);
+        StyleGroup.defaultPipeline(badge.getStyle().getLayoutGroup(),
+                l -> l.positionType(TaffyPosition.ABSOLUTE).left(0f).top(0f));
+        badge.append(badgeText);
+        append(badge);
         // THE BUILDER'S SELECTION, for the reason SelectionOutline states: one source for everything a
         // reader sees, so the handles cannot end up on a different node from the one being described.
         connections.add(ctx.builderSelection().onChanged.connect(this::followSelection));
@@ -181,21 +207,42 @@ public final class ResizeHandles extends UIElement {
         float startHeight = box.height();
         JsonElement before = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
         float zoom = Math.max(0.0001f, ctx.surface().zoom());
+        showBadge(node, startWidth, startHeight);
 
         Drag.start(this, event.getPosition().x(), event.getPosition().y(), new Drag.Listener() {
             @Override
             public void onDragUpdate(float mx, float my, float sx, float sy, float dx, float dy) {
-                write(node, spot, startWidth + spot.xDirection() * dx / zoom,
-                        startHeight + spot.yDirection() * dy / zoom);
+                int modifiers = modifiersNow();
+                // ABOUT THE CENTRE doubles the delta: the handle moves one edge, and holding both edges
+                // apart by the same amount is what "about the centre" means for a box whose position is
+                // its parent's business.
+                float scale = CgModifiers.hasAlt(modifiers) ? 2f : 1f;
+                float width = startWidth + spot.xDirection() * dx / zoom * scale;
+                float height = startHeight + spot.yDirection() * dy / zoom * scale;
+
+                if (CgModifiers.hasShift(modifiers) && spot.isCorner()) {
+                    // FROM THE DOMINANT AXIS, so the box follows the direction the hand actually moved
+                    // rather than jumping when the smaller delta wins.
+                    float ratio = startHeight / Math.max(0.0001f, startWidth);
+                    if (Math.abs(width - startWidth) >= Math.abs(height - startHeight)) {
+                        height = width * ratio;
+                    } else {
+                        width = height / Math.max(0.0001f, ratio);
+                    }
+                }
+                write(node, spot, width, height);
+                showBadge(node, width, height);
             }
 
             @Override
             public void onDragEnd(float mx, float my) {
+                hideBadge();
                 commit(node, before);
             }
 
             @Override
             public void onDragCancel() {
+                hideBadge();
                 InlineStyleCodec.decodeInto(JsonOps.INSTANCE, before, node);
             }
         });
@@ -207,6 +254,42 @@ public final class ResizeHandles extends UIElement {
             if (spot.xDirection() != 0) l.width(Math.max(0f, Math.round(width)));
             if (spot.yDirection() != 0) l.height(Math.max(0f, Math.round(height)));
         });
+    }
+
+    /**
+     * The live size readout, and what the box is going to <b>ignore</b>.
+     *
+     * <p>A {@code flex-grow} child's main-axis size is the parent's to decide, so writing one from a
+     * handle produces a number the layout discards. The badge says so rather than letting the drag look
+     * broken — which is the same thing the pinned-size lint will offer to fix.</p>
+     */
+    private void showBadge(UIElement node, float width, float height) {
+        String text = Math.round(width) + " x " + Math.round(height);
+        if (growsOnMainAxis(node)) text += "   pinned - flex-grow ignored";
+        badgeText.setText(text);
+        badge.setDisplayed(true);
+    }
+
+    /**
+     * Whatever the platform reports now.
+     *
+     * <p>A drag callback carries no modifiers of its own — it reports where the pointer went, not what
+     * the other hand is doing — so a gesture that changes meaning under Shift or Alt has to ask. The
+     * engine's own Select tool asks the same way.</p>
+     */
+    private static int modifiersNow() {
+        var input = CgPlatform.input();
+        return input == null ? 0 : input.getCurrentModifiers();
+    }
+
+    private void hideBadge() {
+        badge.setDisplayed(false);
+    }
+
+    /** Whether the parent will overrule a size written on this node's main axis. */
+    private static boolean growsOnMainAxis(UIElement node) {
+        Float grow = node.getStyle().computed().get(LayoutProperties.FLEX_GROW);
+        return grow != null && grow > 0f;
     }
 
     /** Back to {@code auto} on this handle's axes — Figma's <em>Hug contents</em>. */
@@ -268,6 +351,32 @@ public final class ResizeHandles extends UIElement {
      * <p>Re-checked every frame rather than only when the selection changes, because the box appearing
      * and disappearing is not a selection change and nothing announces it.</p>
      */
+    /** The class on a handle whose axis the parent will overrule. @see #showBadge */
+    public static final String OVERRULED_CLASS = "__handle-overruled__";
+
+    /**
+     * Marks the handles whose axis the layout is going to ignore.
+     *
+     * <p>Drawn before the drag rather than explained after it: a {@code flex-grow} child's main-axis size
+     * is computed by its parent, so dragging that handle writes a number nothing reads.</p>
+     */
+    private void markOverruledHandles() {
+        boolean overruled = target != null && growsOnMainAxis(target);
+        boolean column = target != null && target.parentElement() != null
+                && target.parentElement().getStyle().computed()
+                        .get(LayoutProperties.FLEX_DIRECTION) == FlexDirection.COLUMN;
+        for (int i = 0; i < handles.size(); i++) {
+            Spot spot = Spot.values()[i];
+            boolean onMainAxis = column ? spot.yDirection() != 0 : spot.xDirection() != 0;
+            UIElement handle = handles.get(i);
+            boolean wanted = overruled && onMainAxis;
+            if (handle.hasClass(OVERRULED_CLASS) != wanted) {
+                if (wanted) handle.addClass(OVERRULED_CLASS);
+                else handle.removeClass(OVERRULED_CLASS);
+            }
+        }
+    }
+
     private void applyVisibility() {
         boolean wanted = target != null && target.box() != null;
         pendingVisibility = false;
@@ -299,6 +408,11 @@ public final class ResizeHandles extends UIElement {
             float y = rect[1] + (rect[3] * (spot.yDirection() + 1) * 0.5f) - half;
             handleBox.setTransform(Transform.translate(x, y));
         }
+        Box badgeBox = badge.box();
+        if (badgeBox != null) {
+            // BELOW THE BOX'S BOTTOM-LEFT, where it does not sit under the pointer that is dragging.
+            badgeBox.setTransform(Transform.translate(rect[0], rect[1] + rect[3] + half));
+        }
     }
 
     @Override
@@ -308,6 +422,7 @@ public final class ResizeHandles extends UIElement {
         if (DIAGNOSE) CrystalGuiCore.LOGGER.info("[handles] connected, registering afterLayout");
         document().animation().afterLayout(this, delta -> {
             applyVisibility();
+            markOverruledHandles();
             place();
             return true;
         });

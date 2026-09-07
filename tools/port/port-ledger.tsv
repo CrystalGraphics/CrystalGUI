@@ -341,6 +341,7 @@ PART	MergeView	merge-panes	B	4	confirmed	a rule selects through it (3)
 PART	MergeView	merge-status	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	MergeView	merge-toolbar	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	MoveGesture	moving	C	0	proposed	state adjective
+PART	MoveOutOfFlow	smart-guides	A	0	proposed	leaf in every rule
 PART	NavigatorView	nav-arrow	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	NavigatorView	nav-back	B	0	confirmed	leaf in every rule
 PART	NavigatorView	nav-detail	B	0	confirmed	leaf in every rule
@@ -470,6 +471,8 @@ PART	RegionHost	region-host	A	2	confirmed	leaf in every rule
 PART	RegionHost	region-primary	A	0	confirmed	leaf in every rule
 PART	RegionHost	region-secondary	A	0	confirmed	leaf in every rule
 PART	RegionHost	region-split	A	1	confirmed	leaf in every rule
+PART	ResizeHandles	handle-overruled	A	1	proposed	leaf in every rule
+PART	ResizeHandles	resize-badge	A	1	proposed	leaf in every rule
 PART	ResizeHandles	resize-handles	A	0	proposed	leaf in every rule
 PART	Resizer	resizer	A	1	proposed	leaf in every rule
 PART	RunConsoleView	over-link	A	0	proposed	leaf in every rule

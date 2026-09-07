@@ -147,6 +147,7 @@ editor scheme's.
 | `--breadcrumb-current-fg` | `var(--fg)` | base.css |
 | `--breadcrumb-link-fg` | `var(--link)` | base.css |
 | `--breadcrumb-sep-fg` | `var(--fg-hint)` | base.css |
+| `--builder-guide` | `var(--error)` | base.css |
 | `--builder-handle-bg` | `var(--fg-on-accent)` | base.css |
 | `--builder-hover` | `var(--accent-hover)` | base.css |
 | `--builder-page-bg` | `var(--surface-editor)` | base.css |
