@@ -10,7 +10,6 @@ import com.crystalgui.widget.config.ConfigControl;
 import java.util.ArrayList;
 import com.crystalgui.widget.config.ConfiguratorPanel;
 import com.crystalgui.widget.layout.Tab;
-import com.crystalgui.widget.scroll.ScrollerView;
 import com.crystalgui.widget.layout.TabView;
 
 import javax.annotation.Nullable;
@@ -69,9 +68,18 @@ public class Inspector extends UIElement {
      * a region whose height is whatever the user dragged it to, so it is the one that most needs to say
      * how much more there is.</p>
      */
-    private final Map<String, ScrollerView> hostsByName = new LinkedHashMap<>();
+    private final Map<String, UIElement> hostsByName = new LinkedHashMap<>();
 
-    /** On each tab's scrolling host. */
+    /**
+     * On the PANEL, which is the tab's scroller.
+     *
+     * <p>There used to be a second {@code ScrollerView} between the tab and the panel, and a
+     * {@code ConfiguratorPanel} is one itself — so the inspector was two nested scroll containers where
+     * every other panel in the workbench has one. Both symptoms of that were visible at once: the inner
+     * panel was sized to its content rather than to the tab, so its horizontal bar sat just under the
+     * last row instead of at the bottom of the region, and a wheel notch moved the inner one sideways
+     * and the outer one down. The project tree never showed either, having only ever had one.</p>
+     */
     public static final String SCROLL_CLASS = "__inspector-scroll__";
 
     public Inspector() {
@@ -433,7 +441,12 @@ public class Inspector extends UIElement {
 
     /** The form for a tab: its panel, emptied of rows but not of what it remembers. */
     private InspectorForm formFor(String tab) {
-        ConfiguratorPanel panel = panelsByTab.computeIfAbsent(tab, t -> new ConfiguratorPanel());
+        ConfiguratorPanel panel = panelsByTab.computeIfAbsent(tab, t -> {
+            ConfiguratorPanel made = new ConfiguratorPanel();
+            // IT IS THE SCROLLER NOW. @see #SCROLL_CLASS
+            made.addClass(SCROLL_CLASS);
+            return made;
+        });
         panel.clearRows();
         // Detached FIRST. The panel is still a child of the previous build's Tab content -- clearTabs()
         // drops the tabs, not the panel's parent pointer -- and re-adding it without this reparents from
@@ -472,16 +485,13 @@ public class Inspector extends UIElement {
     private Tab tabFor(String name) {
         return tabsByName.computeIfAbsent(name, n -> {
             Tab tab = tabs.addTab(n);
-            ScrollerView host = new ScrollerView();
-            host.addClass(SCROLL_CLASS);
-            tab.content().append(host);
-            hostsByName.put(n, host);
+            hostsByName.put(n, tab.content());
             return tab;
         });
     }
 
-    /** The tab's scrolling host, creating the tab if this is the first section to claim it. */
-    private ScrollerView hostFor(String name) {
+    /** Where a tab's panel goes, creating the tab if this is the first section to claim it. */
+    private UIElement hostFor(String name) {
         tabFor(name);
         return hostsByName.get(name);
     }

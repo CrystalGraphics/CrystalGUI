@@ -98,13 +98,28 @@
      * in 20 (0.50), and that single number is most of why ours read airy and theirs reads dense. */
     --cfg-row-h: 20px;         /* the row; a floor, never a cap */
     --cfg-ctrl-h: 18px;        /* the control inside it — the number that makes the kit a SET */
-    /* FIXED, not a percentage, and the correction is worth recording: at 300px our old 38% resolved to
-     * 114px, which is exactly Unity's — so it looked right and would have drifted at every other panel
-     * width. Unity's column does not scale; it is ~114px in a 275px panel and ~114px in an 800px one,
-     * which is why it reads as 41% in one screenshot and 26% in another. */
+    /* THE CAP on the label column, and a flat width everywhere it matters. Worth recording, because it
+     * has been both things: an old 38% resolved to 114px at 300px — exactly Unity's — so it looked right
+     * and drifted at every other panel width. Unity's column does not scale; it is ~114px in a 275px
+     * panel and ~114px in an 800px one, which is why it reads as 41% in one screenshot and 26% in
+     * another.
+     *
+     * `inspector.css` now declares the column as a fraction CAPPED at this, which is not that drift
+     * returning: at and above a normally-docked width the cap binds and the column is this number
+     * exactly. The fraction only takes over below it, where holding 114px meant the VALUE absorbed the
+     * entire shortfall. @see inspector.css `.__configurator__ > .__label__` */
     --cfg-label-w: 114px;
-    --cfg-label-min: 48px;     /* ...but never so narrow that a label is one character wide */
-    --cfg-gap: 4px;            /* label to control */
+    --cfg-gap: 4px;            /* label to control, and eight other places -- NOT the label gutter */
+    /* The label's own trailing space, carried INSIDE its box.
+     *
+     * `--cfg-gap` is the obvious home and is the wrong one twice over: it spaces vector cells, slider
+     * parts and asset rows too, and being outside the label it is not part of the column's basis, so
+     * widening it pushes every control right. This is inside, so a wide panel's column geometry is
+     * unchanged and a shrunk column still carries its gutter. */
+    --cfg-label-gutter: 8px;
+    /* The narrowest a field may be squeezed before the row gets wider instead. A text field below this
+     * shows one character and a dropdown shows none of its value. */
+    --cfg-ctrl-min: 72px;
     --cfg-pad-x: 6px;
     /* 1px, so adjacent control boxes are 2px apart. At 2px they were 4px apart and the gaps between
      * fields were doing much of the "spread out" impression on their own. */

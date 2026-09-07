@@ -366,11 +366,15 @@ public final class BuilderInspectorSections {
         public void build(InspectorForm form, DataContext context) {
             UIElement node = node(context);
             if (node == null) return;
-            form.group("Computed", true);
+            // THE FORM IT HANDS BACK, which is the whole point of the return value: `group` writes into
+            // the group's CONTENT, and rows added to `form` are siblings of the group rather than its
+            // children. The group was therefore always empty -- collapsing it hid nothing and its
+            // hundred-odd rows stayed on screen, so the twisty read as dead.
+            InspectorForm computed = form.group("Computed", true);
             List<StyleProperty<?>> properties = new ArrayList<>(node.getStyle().candidates.keySet());
             properties.sort((a, b) -> a.name.compareTo(b.name));
             for (StyleProperty<?> property : properties) {
-                form.row(ConfigDescriptor.info("computed." + property.name, property.name),
+                computed.row(ConfigDescriptor.info("computed." + property.name, property.name),
                         String.valueOf(node.getStyle().getComputed(cast(property))));
             }
         }
