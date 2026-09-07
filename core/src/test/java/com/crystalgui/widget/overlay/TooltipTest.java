@@ -640,6 +640,23 @@ public class TooltipTest extends UiDocumentTestBase {
         assertTrue("it kept speaking after the region stopped", isHidden(tip));
     }
 
+    /**
+     * <b>A tooltip that has never been shown can be hidden.</b>
+     *
+     * <p>Not hypothetical: both entry points answer a live drag with {@code return hide()}
+     * <em>before</em> joining a document, and a widget tooltips itself in its own constructor -- so the
+     * first join happens on the first hover. Hovering anything tooltipped while dragging a window threw
+     * inside the frame's own enter dispatch, taking the whole desktop down.</p>
+     */
+    @Test
+    public void hidingATooltipThatWasNeverShownDoesNotThrow() {
+        Tooltip tip = new Tooltip();
+        assertNull("nothing has joined it to a document", tip.document());
+        assertFalse("...and it is not shown", tip.isShown());
+        tip.hide();
+        assertFalse("still not shown, and nothing threw", tip.isShown());
+    }
+
     /** Whether the box is laid out at all \u2014 {@code display: none} is how a tooltip hides. */
     private static boolean isHidden(Tooltip tip) {
         return tip.getStyle().getComputed(LayoutProperties.DISPLAY) == TaffyDisplay.NONE;
