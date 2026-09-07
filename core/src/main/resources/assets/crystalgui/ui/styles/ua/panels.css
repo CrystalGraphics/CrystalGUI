@@ -171,19 +171,22 @@ notificationsview > .__notification-list__ {
  * long title give way rather than pushing the time off the card. */
 .__notification__ .__entry-head__ {
     flex-direction: row;
-    /* THE ICON SITS ON THE FIRST LINE, not in the middle of the block.
+    /* CENTRED ON THE HEADING, which is one line and can only be one line.
      *
-     * `center` is right while every message is one line and wrong the moment one wraps: a four-line
-     * message put the severity glyph level with line two and a half, floating beside the text rather than
-     * introducing it. Both references align it to the first baseline for the same reason — the icon says
-     * what KIND of thing this is, which you read before the words, not halfway through them. */
-    align-items: flex-start;
+     * This was `flex-start`, against a message that WRAPPED: a four-line one put the severity glyph level
+     * with line two and a half, floating beside the text rather than introducing it. The heading takes
+     * `white-space: nowrap` and an ellipsis now, so that case cannot arise -- and against a single line a
+     * 10px glyph beside 8px text reads as sitting high, which is what flex-start actually buys here. The
+     * detail and the attribution are their own rows below and are unaffected either way. */
+    align-items: center;
     gap-all: 6px;
     width: 100%;
 }
 
 .__notification__ .__message__ {
-    font-size: 7px;
+    /* A step above the detail, not level with it: the heading is the line you read first and the size
+     * says so along with the weight. */
+    font-size: 8px;
     /* THE OPERATION, and the one thing read at a glance -- "New File", "Directory Moved". The line under
      * it is the detail and the line under that is who; weight is what says which of the three to read
      * first. @see ChangeNotice */
@@ -355,10 +358,13 @@ notificationsview .__notifications-empty__ {
      *
      * IT USED TO BE A FILENAME AND 155 WAS RIGHT FOR ONE. It is a PATH now -- a file change says where it
      * happened, `README.md was moved to proj:src/main/java/com/example/util/` -- and a name-sized cap
-     * wrapped every one of those into a four-line stack against the corner. Sized to hold an ordinary
-     * package path on one line; deeper ones still wrap, which stays the right way round because a wrapped
-     * balloon grows upward and costs nothing. */
-    width: 420px;
+     * wrapped every one of those into a four-line stack against the corner.
+     *
+     * 280 holds an ordinary package path on one line and no more. 420 fitted a deeper one and was a
+     * banner across the editor for a message that is gone in seconds; a balloon is glanced at, not read,
+     * and its width is what it costs everything behind it. Deeper paths wrap, which stays the right way
+     * round because a wrapped balloon grows upward and costs nothing. */
+    width: 280px;
 }
 
 /* THE RESTING VALUE LIVES HERE, and that is what makes the fade work at all. A balloon arrives carrying
