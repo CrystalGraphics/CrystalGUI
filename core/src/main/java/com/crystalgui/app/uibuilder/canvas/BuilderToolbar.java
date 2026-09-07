@@ -40,6 +40,15 @@ public final class BuilderToolbar extends UIElement {
     /** On the preview button while preview is on. */
     public static final String ACTIVE_CLASS = "__active__";
 
+    /**
+     * On the preview button, always.
+     *
+     * <p>Everything else on this bar describes the page you are editing — its size, its scale, its
+     * theme. Preview is the one control that changes what the editor IS, so it sits apart from them,
+     * which is where IntelliJ puts the same switch on a Markdown file.</p>
+     */
+    public static final String PREVIEW_CLASS = "__preview__";
+
     /** The scales Minecraft itself offers, which is what a document will be seen at. */
     private static final int[] UI_SCALES = {1, 2, 3, 4};
 
@@ -91,6 +100,7 @@ public final class BuilderToolbar extends UIElement {
         if (active != null) theme.select(active);
         connections.add(theme.onSelectionChanged.connect(this::chooseTheme));
 
+        preview.addClass(PREVIEW_CLASS);
         preview.onPressed.connect(() -> setPreview(host.isDesignMode()));
 
         append(preset, scale, theme, preview);

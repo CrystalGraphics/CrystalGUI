@@ -157,7 +157,7 @@ editor scheme's.
 | `--builder-surface-bg` | `var(--surface-recessed)` | base.css |
 | `--builder-tag-fg` | `var(--fg-on-accent)` | base.css |
 | `--button-bg` | `var(--surface-raised)` | base.css |
-| `--builder-toolbar-bg` | `var(--surface-base)` | base.css |
+| `--button-border` | `var(--border-base)` | base.css |
 | `--button-disabled-bg` | `var(--surface-raised)` | base.css |
 | `--button-disabled-fg` | `var(--fg-disabled)` | base.css |
 | `--button-fg` | `var(--fg)` | base.css |

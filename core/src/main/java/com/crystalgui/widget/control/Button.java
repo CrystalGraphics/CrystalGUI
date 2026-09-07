@@ -77,6 +77,17 @@ public class Button extends UIElement {
     // is built out of. A reader arriving at a widget wants the first two; the part names matter only
     // once they are reading the constructor or writing a rule.
 
+    /**
+     * On a button that has TEXT in it, and absent from an icon-only one.
+     *
+     * <p>A sheet cannot ask whether a label is empty, and the difference matters: a labelled button is a
+     * control you read and click, while an icon-only one is chrome — a panel's hide mark, an activity
+     * bar's stripe, a tab's close. Styling the first as an outlined control and leaving the second bare
+     * is one rule with this class and an ever-growing list of chrome containers without it, which is the
+     * kind of list that goes stale the first time somebody adds a chrome button.</p>
+     */
+    public static final String LABELLED_CLASS = "__labelled__";
+
     /** The label's part name. {@code button::part(label)} in a sheet. */
     public static final String LABEL_PART = "label";
     /** The icon slot before the label. */
@@ -145,6 +156,7 @@ public class Button extends UIElement {
 
         this.shadow = attachShadow();
         this.label = new UIText(text == null ? "" : text);
+        markLabelled(text);
         label.set(Attribute.PART, LABEL_PART);
         label.setHitTest(false);
         shadow.append(label);
@@ -187,7 +199,14 @@ public class Button extends UIElement {
 
     public Button setText(String value) {
         label.setText(value);
+        markLabelled(value);
         return this;
+    }
+
+    /** @see #LABELLED_CLASS */
+    private void markLabelled(@Nullable String text) {
+        if (text == null || text.isEmpty()) removeClass(LABELLED_CLASS);
+        else addClass(LABELLED_CLASS);
     }
 
     /** The label node, for a subclass that needs to style or measure it. */

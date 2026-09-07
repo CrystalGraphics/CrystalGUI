@@ -51,7 +51,8 @@ theme {
     --breadcrumb-sep-fg: var(--fg-hint);
 
     --button-bg: var(--surface-raised);
-    --builder-toolbar-bg: var(--surface-base);
+    /* THE OUTLINE a workbench control wears instead of a fill. @see ua/workbench.css */
+    --button-border: var(--border-base);
     --button-disabled-bg: var(--surface-raised);
     --button-disabled-fg: var(--fg-disabled);
     --button-fg: var(--fg);
