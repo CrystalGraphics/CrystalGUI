@@ -257,6 +257,12 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
         this.tree = new TreeView<>(source);
         tree.addClass(TREE_CLASS);
         tree.setRenderer(new FilesRenderer(this));
+        // THE DOUBLE-CLICK IS THE LIST'S, not a listener on each row template: ListView raises activation
+        // from Enter and from a double-click alike, so a file opens the same way by either.
+        tree.onRowActivated.connect(index -> {
+            TreeRow<CgPath> row = tree.rowAt(index);
+            if (row != null) activate(row.item());
+        });
         // THE EXPLORER'S OWN CUT/COPY/PASTE, reclaimed from the list.
         //
         // ListView implements ClipboardActions so that every list gets Copy, and UiDataKeys.CLIPBOARD
@@ -597,25 +603,25 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
         return null;
     }
 
-    /** Expands a directory, or reports a file. */
+    /**
+     * Reports a file. A directory is folded by {@link TreeView} itself and never reaches here.
+     *
+     * <p>Both halves used to live here, and the directory one hand-rolled the deferral every tree needs:
+     * a re-flatten from inside the press recycles the row under the pointer, and {@code recycle()} blurs
+     * what it takes back — so folding a folder left it unselected while file rows selected perfectly, and
+     * it read as folders and files being styled differently.</p>
+     */
     void activate(CgPath path) {
-        if (source.isDirectory(path)) {
-            tree.setExpanded(path, !tree.isExpanded(path));
-            // DEFERRED to the next tick, never called here. This runs from the press that expanded the
-            // folder, and refreshing re-flattens the model -- which recycles every realised row, including
-            // the one under the pointer. recycle() BLURS what it takes back, so the focus that was about
-            // to select the clicked row never landed: folding a folder left it unselected while the file
-            // rows selected perfectly, which read as folders and files being styled differently.
-            //
-            // The engine's own rule, stated in DockArea.syncGroups and paid for by the table header: a
-            // widget must never rebuild the elements it is being clicked on.
-            pendingRefresh = true;
-            return;
-        }
+        // A ROW BEING NAMED IS NOT A FILE YET. Enter commits the name and activates the selected row in
+        // the same keystroke, so the placeholder went to the opener -- and its name is a control
+        // character no filesystem permits, chosen so that a path escaping this far would be refused
+        // rather than create something. It was, loudly, which is how this was found.
+        if (WorkspaceTreeSource.isPlaceholder(path)) return;
+        if (source.isDirectory(path)) return;
         onFileChosen.emit(path);
     }
 
-    /** Set by a fold, drained by the ticker — see {@link #activate}. */
+    /** Set by a listing or a decoration change, drained by the ticker. */
     private boolean pendingRefresh;
 
     /**
