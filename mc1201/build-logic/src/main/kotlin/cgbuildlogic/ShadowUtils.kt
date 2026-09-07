@@ -1,6 +1,8 @@
 package cgbuildlogic
 
+import org.gradle.api.Action
 import org.gradle.api.Project
+import org.gradle.api.file.CopySpec
 import org.gradle.api.tasks.AbstractCopyTask
 import org.gradle.api.tasks.bundling.Jar
 import java.io.File
@@ -58,11 +60,25 @@ fun configureShadowJarBundling(project: Project) {
                 relocate.invoke(this, "dev.vfyjxf.taffy", "com.crystalgui.shadow.dev.vfyjxf.taffy")
 
                 val copy = this as AbstractCopyTask
+
+                // META-INF/services IS TAKEN FROM ONE MERGED COPY, and excluded from every jar below.
+                //
+                // :core and :language each ship a WorkbenchExtension service file, and a copy keeps
+                // whichever arrived first while silently DROPPING the other -- with :core first the jar
+                // carried its eight extensions and lost the language Run panel. ShadowJar's own
+                // mergeServiceFiles does not help here, because these arrive through from(zipTree(...))
+                // and the duplicate is dropped by the copy before any transformer sees it.
+                //
+                // mergeDevServices already computes that union for the dev run, which has the same
+                // collision the other way round -- two roots of one module, one answering for the path.
+                // One merge, both consumers.
+                dependsOn("mergeDevServices")
                 for (path in listOf(":core", ":mc1201:common", ":language", ":taffy")) {
                     val jar: File = project(path).tasks.named("jar", Jar::class.java)
                         .get().archiveFile.get().asFile
-                    copy.from(zipTree(jar))
+                    copy.from(zipTree(jar), Action<CopySpec> { exclude("META-INF/services/**") })
                 }
+                copy.from(tasks.named("mergeDevServices"))
 
                 // JOML and fastutil, from the loader's own `shippedLibs` -- see its declaration for why
                 // they cannot be read off :core or :taffy.
