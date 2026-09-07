@@ -9,6 +9,7 @@ import javax.annotation.Nullable;
 import com.crystalgui.app.uibuilder.BuilderSelection;
 import com.crystalgui.app.uibuilder.canvas.BuilderContext;
 import com.crystalgui.core.collection.tree.TreeDataSource;
+import com.crystalgui.core.collection.list.SelectionMode;
 import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.style.StyleGroup;
@@ -122,6 +123,11 @@ public final class HierarchyPanel extends UIElement {
         // grows and layout takes longer every frame until the window stops responding -- which is what
         // "clicking a row breaks it until I restart" is. ProjectFileTree, QuickPick, ProblemsPanel and
         // ShaderGraphEditor all carry this wrapper; it is the pattern, not a workaround.
+        // MULTIPLE, which ListView already implements in full -- Ctrl to toggle, Shift for a range.
+        // This is configuration rather than code: the project tree gets the same behaviour from the same
+        // line, and chooseRows below has always taken a SET of indices. The panel simply never opted in,
+        // so the canvas could hold a set and the tree could only ever show one of it.
+        tree.setSelectionMode(SelectionMode.MULTIPLE);
         append(content);
         content.append(tree);
 
@@ -226,14 +232,21 @@ public final class HierarchyPanel extends UIElement {
      */
     private void followSelection() {
         if (syncing) return;
-        UIElement node = builder.builderSelection().node();
-        if (node == null) return;
+        List<UIElement> nodes = builder.builderSelection().nodes();
         withoutWritingBack(() -> {
-            for (UIElement at = node.parentElement(); at != null; at = at.parentElement()) {
-                tree.setExpanded(at, true);
+            // A CLEARED CANVAS CLEARS THE PANEL. Returning early on an empty selection left the tree
+            // highlighting a node nothing was selecting any more -- two answers to one question.
+            if (nodes.isEmpty()) {
+                tree.clearSelection();
+                return;
+            }
+            for (UIElement node : nodes) {
+                for (UIElement at = node.parentElement(); at != null; at = at.parentElement()) {
+                    tree.setExpanded(at, true);
+                }
             }
             tree.refresh();
-            selectRowFor(node);
+            selectRowsFor(nodes);
         });
     }
 
@@ -244,14 +257,30 @@ public final class HierarchyPanel extends UIElement {
      * hierarchy pointing at the previous node — one of the two halves of "the row says one thing and the
      * inspector another".</p>
      */
-    private void selectRowFor(UIElement node) {
+    /**
+     * Puts the tree's highlight on every node the canvas holds.
+     *
+     * <p>{@code select} REPLACES and {@code toggle} adds, so the first row establishes the set and the
+     * rest join it — which is also what stops a stale highlight surviving underneath a new selection.</p>
+     */
+    private void selectRowsFor(List<UIElement> nodes) {
         List<TreeRow<UIElement>> rows = tree.visibleRows();
-        for (int i = 0; i < rows.size(); i++) {
-            if (rows.get(i).item() == node) {
-                tree.select(i);
-                return;
+        boolean first = true;
+        for (UIElement node : nodes) {
+            for (int i = 0; i < rows.size(); i++) {
+                if (rows.get(i).item() != node) continue;
+                if (first) {
+                    tree.select(i);
+                    first = false;
+                } else {
+                    tree.toggle(i);
+                }
+                break;
             }
         }
+        // NOTHING ON SCREEN ANSWERED. Every selected node may be inside a collapsed branch, and leaving
+        // the previous highlight up would name a node that is not the one selected.
+        if (first) tree.clearSelection();
     }
 
     @Override
