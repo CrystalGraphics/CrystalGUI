@@ -4609,8 +4609,21 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         StyleGroup.inlinePipeline(bar.getStyle().getLayoutGroup(), l -> l.left(left).width(width));
     }
 
+    /**
+     * Where the first view line's top edge sits, in the space its box is laid out in — <b>zero</b>.
+     *
+     * <p>This returned {@code paddingTopOrZero()}, which counts the padding a second time. A view line is
+     * an absolutely positioned child and this engine lays those out from the parent's CONTENT box, so the
+     * padding has already moved the origin before any offset of ours is added. It was invisible while
+     * nothing wrote the editor a top padding -- the find bar is the only thing that does, and there the
+     * doubling put the first line a whole bar's height below the bar.</p>
+     *
+     * <p>Kept as a method rather than inlined as {@code 0}: the caret, the hit test and every view part
+     * derive their origin from this one statement of it, and a padded editor that did need an offset
+     * would need it in exactly one place.</p>
+     */
     float textOriginY() {
-        return paddingTopOrZero();
+        return 0f;
     }
 
     /**
@@ -5249,6 +5262,11 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * {@code top}.</p>
      */
     public void setTopChromeInset(float inset) {
+        // AND IT REALLY IS NEEDED, unlike the padding term textOriginY drops -- which is worth saying
+        // because the two look like the same double-count and are not. A view line is laid out from the
+        // editor's CONTENT box, so the chrome's padding has already moved it; the scroller's bar is not,
+        // so nothing has moved this. Made a no-op on the assumption they matched and the bar ran up
+        // behind the find bar, which is the shape of the bug this method was written to fix, inverted.
         StyleGroup.inlinePipeline(verticalScroller().getStyle().getLayoutGroup(), l -> l.top(inset));
     }
 
