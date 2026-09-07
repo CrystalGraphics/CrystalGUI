@@ -53,6 +53,9 @@ public final class BuilderCommands {
      */
     public static final String SELECT_ALL = "uibuilder.selectAll";
 
+    /** @see #SELECT_ALL */
+    private static final String SELECT_ALL_LABEL = "Select All";
+
     /** @see #SELECT_NEXT_SIBLING */
     public static final String SELECT_PREVIOUS_SIBLING = "uibuilder.selectPreviousSibling";
 
@@ -112,13 +115,8 @@ public final class BuilderCommands {
         // cost every list and every text field its own arrows. They are bound in the builder surface's
         // keymap instead, where they are live only while focus is on the canvas -- the same reason the
         // engine's `F` and `A` are bound there rather than here.
-        registry.register(Command.of(SELECT_ALL, "Select All")
-                .run(context -> {
-                    BuilderEditor builder = builderOf(context);
-                    if (builder != null) {
-                        builder.selection().replaceWith(builder.document().root().children());
-                    }
-                })
+        registry.register(Command.of(SELECT_ALL, SELECT_ALL_LABEL)
+                .run(BuilderCommands::selectAll)
                 .enabledWhen(BuilderCommands::hasBuilder));
 
         registry.register(Command.of(SELECT_PREVIOUS_SIBLING, "Select Previous Sibling")
@@ -128,6 +126,35 @@ public final class BuilderCommands {
         registry.register(Command.of(SELECT_NEXT_SIBLING, "Select Next Sibling")
                 .run(context -> selectSibling(context, 1))
                 .enabledWhen(context -> hasBuilder(context) && selectionOf(context) != null));
+    }
+
+    /**
+     * Everything alongside what is selected, or the top level when nothing is.
+     *
+     * <h3>Siblings, not descendants</h3>
+     *
+     * <p>A selection holding both an ancestor and a descendant makes the next action apply twice: a move
+     * shifts the parent, carrying the child, and then shifts the child again; a delete removes a node and
+     * then its already-removed subtree. Editors keep a selection to its topmost members for exactly that
+     * reason, so "everything in the document" is a hazard one keystroke away rather than a feature.</p>
+     *
+     * <h3>Scoped to where you are</h3>
+     *
+     * <p>Inside a container, "all" means the things beside you — which is what Figma's own Select All
+     * takes, and what makes it useful more than once: pressing it at the top level and pressing it inside
+     * a row should not give the same answer. With nothing selected there is no container to be in, and it
+     * falls back to the document's top level.</p>
+     */
+    private static void selectAll(CommandContext context) {
+        BuilderEditor builder = builderOf(context);
+        if (builder == null) return;
+        UIElement node = selectionOf(context);
+        UIElement parent = node == null ? null : node.parentElement();
+        // The artboard is the page rather than a container in the document, so its "children" are the
+        // root -- selecting that is selecting everything by another name. The root's own children are
+        // the top level either way.
+        if (parent == null || parent == builder.artboard()) parent = builder.document().root();
+        builder.selection().replaceWith(parent.children());
     }
 
     /** @see #SELECT_NEXT_SIBLING */
