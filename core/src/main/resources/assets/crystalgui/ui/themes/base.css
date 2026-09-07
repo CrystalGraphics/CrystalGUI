@@ -43,6 +43,7 @@ theme {
     --builder-tag-fg: var(--fg-on-accent);
     --builder-toolbar-bg: var(--surface-base);
     --builder-handle-bg: var(--fg-on-accent);
+    --builder-guide: var(--error);
 
     --breadcrumb-current-fg: var(--fg);
     --breadcrumb-link-fg: var(--link);

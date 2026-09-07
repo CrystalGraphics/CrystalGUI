@@ -57,6 +57,7 @@ public final class BuilderEditor implements DocumentEditor {
     private final BuilderSurface surface;
     private final BuilderToolbar toolbar;
     private final ResizeHandles handles;
+    private final MoveOutOfFlow moveGesture;
     private final TextEditGesture textEditing;
     private final BuilderPane pane;
 
@@ -88,6 +89,9 @@ public final class BuilderEditor implements DocumentEditor {
         // which is right for something that only draws and fatal for eight handles that have to take a
         // press. They are not a toggle in any editor either, so nothing is lost by not being a kind.
         surface.surface().addOverlay(handles);
+        this.moveGesture = new MoveOutOfFlow(surface, document);
+        surface.surface().addOverlay(moveGesture);
+        surface.movesWith(moveGesture);
         this.textEditing = new TextEditGesture(document);
         surface.surface().addOverlay(textEditing);
         // DESIGN-TIME CHROME, so it goes with the mode. The overlays registered as kinds are hidden by
@@ -124,6 +128,11 @@ public final class BuilderEditor implements DocumentEditor {
     /** @see BuilderSelection */
     public BuilderSelection selection() {
         return surface.builderSelection();
+    }
+
+    /** Dragging an out-of-flow node, with snapping and its guides. */
+    public MoveOutOfFlow moveGesture() {
+        return moveGesture;
     }
 
     /** In-place text editing — the field that opens over a {@code text} node. */

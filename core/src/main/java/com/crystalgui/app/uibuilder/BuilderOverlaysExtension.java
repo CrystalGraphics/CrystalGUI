@@ -3,10 +3,12 @@ package com.crystalgui.app.uibuilder;
 import com.crystalgui.app.uibuilder.canvas.BuilderContext;
 import com.crystalgui.app.uibuilder.canvas.HoverHighlight;
 import com.crystalgui.app.uibuilder.canvas.SelectionOutline;
+import com.crystalgui.app.uibuilder.canvas.TreeSelectTool;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.widget.surface.SurfaceContext;
 import com.crystalgui.widget.surface.extension.SurfaceExtension;
+import com.crystalgui.widget.surface.mode.ToolKind;
 import com.crystalgui.widget.surface.overlay.OverlayKind;
 
 /**
@@ -38,6 +40,13 @@ public final class BuilderOverlaysExtension implements SurfaceExtension {
         if (!(surface instanceof BuilderContext builder)) return () -> { };
 
         ConnectionGroup connections = new ConnectionGroup();
+        // THE BUILDER'S OWN SELECT, made current in place of the engine's. It composes SelectTool rather
+        // than forking it -- what a tree adds is that a press on a POSITIONED node is a move.
+        Disposable tool = surface.registerTool(ToolKind.of(TreeSelectTool.ID, "Select")
+                .icon("crystalgui:cursor")
+                .command("uibuilder.tool.select", "V")
+                .tool(TreeSelectTool::new));
+        surface.modes().use(TreeSelectTool.ID);
         Disposable hover = surface.registerOverlay(OverlayKind.of(HOVER, "Hover highlight")
                 .visibleByDefault()
                 .element(HoverHighlight::new));
@@ -56,6 +65,7 @@ public final class BuilderOverlaysExtension implements SurfaceExtension {
             connections.disconnectAll();
             selection.dispose();
             hover.dispose();
+            tool.dispose();
         };
     }
 }

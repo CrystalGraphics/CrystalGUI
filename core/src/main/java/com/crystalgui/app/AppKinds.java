@@ -6,6 +6,7 @@ import com.crystalgui.app.uibuilder.canvas.BuilderPane;
 import com.crystalgui.app.uibuilder.canvas.BuilderSurface;
 import com.crystalgui.app.uibuilder.canvas.BuilderToolbar;
 import com.crystalgui.app.uibuilder.canvas.HoverHighlight;
+import com.crystalgui.app.uibuilder.canvas.MoveOutOfFlow;
 import com.crystalgui.app.uibuilder.canvas.ResizeHandles;
 import com.crystalgui.app.uibuilder.canvas.SelectionOutline;
 import com.crystalgui.app.uibuilder.canvas.TextEditGesture;
@@ -52,6 +53,7 @@ public final class AppKinds implements NodeKinds {
         UIElementRegistry.registerTag(BuilderToolbar.NAME, NodeContract.INERT);
         UIElementRegistry.registerTag(ResizeHandles.NAME, NodeContract.INERT);
         UIElementRegistry.registerTag(TextEditGesture.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(MoveOutOfFlow.NAME, NodeContract.INERT);
         UIElementRegistry.registerTag(DesignToolWindow.NAME, NodeContract.INERT);
         UIElementRegistry.registerTag(HierarchyPanel.NAME, NodeContract.INERT);
     }

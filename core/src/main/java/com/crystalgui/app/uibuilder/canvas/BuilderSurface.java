@@ -83,6 +83,25 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
         });
     }
 
+    /**
+     * The gesture a press on a positioned node hands off to.
+     *
+     * <p>Set after construction for the reason {@link #ownedBy} is: the editor builds both and neither
+     * can name the other from inside its own field initialiser.</p>
+     */
+    void movesWith(MoveOutOfFlow gesture) {
+        this.moveGesture = gesture;
+    }
+
+    /** @see #movesWith */
+    @Nullable
+    public MoveOutOfFlow moveGesture() {
+        return moveGesture;
+    }
+
+    @Nullable
+    private MoveOutOfFlow moveGesture;
+
     @Override
     public boolean isDesignMode() {
         return artboard.isDesignMode();

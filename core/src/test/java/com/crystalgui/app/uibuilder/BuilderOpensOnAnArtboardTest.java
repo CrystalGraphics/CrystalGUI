@@ -14,6 +14,7 @@ import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
+import com.crystalgui.app.uibuilder.canvas.TreeSelectTool;
 import com.crystalgui.widget.surface.mode.SelectExtension;
 
 /**
@@ -61,8 +62,14 @@ public class BuilderOpensOnAnArtboardTest extends UiDocumentTestBase {
 
         assertTrue("the artboard is an item on the plane, not a painted rectangle",
                 editor.surface().surface().items().contains(editor.artboard()));
-        assertEquals("one tool, and it is Select", 1, editor.surface().tools().size());
-        assertEquals(SelectExtension.TOOL, editor.surface().tools().get(0).id());
+        // TWO TOOLS NOW, and the builder's is the current one: it composes the engine's Select and adds
+        // the one thing a tree needs -- a press on a POSITIONED node is a move, not a selection.
+        assertTrue("the engine's Select is still registered",
+                editor.surface().tools().stream()
+                        .anyMatch(kind -> SelectExtension.TOOL.equals(kind.id())));
+        assertTrue("and the builder's own is too",
+                editor.surface().tools().stream()
+                        .anyMatch(kind -> TreeSelectTool.ID.equals(kind.id())));
         assertTrue("and nothing the builder has not written yet",
                 editor.surface().insertSources().isEmpty());
     }
