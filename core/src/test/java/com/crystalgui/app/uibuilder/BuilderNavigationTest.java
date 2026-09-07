@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import org.junit.Test;
 
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
+import com.crystalgui.app.uibuilder.panel.HierarchyPanel;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
@@ -215,6 +216,50 @@ public class BuilderNavigationTest extends UiDocumentTestBase {
                 node.box().localToWorld(), node.box().width() * 0.5f, node.box().height() * 0.5f);
         tool.pointerUp(at.x(), at.y(), com.crystalgraphics.platform.input.CgMouseCodes.LEFT_BUTTON, 0);
         document.update(W, H);
+    }
+
+    /**
+     * <b>The Design panel holds a set, both ways.</b>
+     *
+     * <p>Nothing had to move upstream for this: {@code ListView} implements MULTIPLE in full — Ctrl to
+     * toggle, Shift for a range — which is why the project tree gets it from one line. This panel simply
+     * never opted in, so the canvas could hold a set while the tree showed one of it.</p>
+     */
+    @Test
+    public void thePanelAndTheCanvasAgreeAboutASet() {
+        open();
+        HierarchyPanel panel = new HierarchyPanel(editor.surface());
+        UIElement side = new UIElement().layout(l -> l.width(200).height(300));
+        side.append(panel);
+        document.append(side);
+        document.update(W, H);
+
+        // CANVAS -> PANEL.
+        editor.selection().replaceWith(java.util.List.of(first, second));
+        document.update(W, H);
+        assertEquals("the tree showed one of a set", 2, panel.tree().getSelectedIndices().size());
+
+        // PANEL -> CANVAS, which has always taken a set of indices.
+        panel.tree().onSelectionChanged.emit(java.util.Set.of(
+                rowOf(panel, second), rowOf(panel, third)));
+        document.update(W, H);
+        assertEquals(2, editor.selection().nodes().size());
+        assertTrue(editor.selection().nodes().contains(third));
+
+        // AND A CLEARED CANVAS CLEARS THE PANEL, which used to leave a stale highlight naming a node
+        // nothing was selecting any more.
+        editor.selection().clear();
+        document.update(W, H);
+        assertTrue("the tree kept a highlight after the canvas cleared",
+                panel.tree().getSelectedIndices().isEmpty());
+    }
+
+    private static int rowOf(HierarchyPanel panel, UIElement node) {
+        var rows = panel.tree().visibleRows();
+        for (int i = 0; i < rows.size(); i++) {
+            if (rows.get(i).item() == node) return i;
+        }
+        throw new AssertionError("no row for " + node);
     }
 
     private void run(String commandId) {
