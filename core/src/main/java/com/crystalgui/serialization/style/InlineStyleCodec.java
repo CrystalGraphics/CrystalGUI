@@ -78,6 +78,25 @@ public final class InlineStyleCodec {
     }
 
     /** Applies a previously encoded style map to {@code element}, at INLINE origin. */
+    /**
+     * Makes the element's inline style <b>exactly</b> the encoded map, dropping anything else it holds.
+     *
+     * <p>{@link #decodeInto} merges, which is right for a description that adds to what is there and
+     * wrong for anything that has to restore a remembered state: undoing an edit that ADDED a property
+     * would write back the old values and leave the new property standing. In the builder that read as
+     * "Ctrl+Z did nothing" on the first transform or the first resize of a node with no inline style —
+     * the visible half of the edit was the added property, and it was the half undo could not reach.</p>
+     *
+     * <pre>{@code
+     * InlineStyleCodec.replaceInto(JsonOps.INSTANCE, remembered, node);   // exactly `remembered`
+     * }</pre>
+     */
+    public static <T> void replaceInto(DynamicOps<T> ops, T encoded, Styleable element) {
+        element.getStyle().removeCandidates(slot -> slot.origin() == StyleOrigin.INLINE);
+        decodeInto(ops, encoded, element);
+    }
+
+    /** Adds every property in the map at {@code INLINE} origin, leaving anything else untouched. */
     public static <T> void decodeInto(DynamicOps<T> ops, T encoded, Styleable element) {
         for (var entry : ops.getMapValue(encoded).entrySet()) {
             String name = ops.getStringValue(entry.getKey());
