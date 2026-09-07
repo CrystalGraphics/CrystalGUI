@@ -612,12 +612,14 @@ public class ConfigKitTest extends UiDocumentTestBase {
         ConfiguratorPanel panel = openPanel();
         Configurator row = panel.add(ConfigDescriptor.info("size", "size"), "64.0 x 24.0");
 
-        assertEquals("at a normally-docked width the column is Unity's flat 114px",
-                114f, labelWidth(row, 300f), 1f);
+        // 88, from --cfg-label-w, restated rather than read: it is where a SHORT label's value starts.
+        // A label wider than it pushes its own row out instead -- aLongLabelWidensItsRowRatherThanEllipsizing.
+        assertEquals("the column a short label's value lines up against", 88f,
+                labelWidth(row, 300f), 1f);
 
         float narrowValue = valueWidth(row, 150f);
         assertEquals("the label column gave way instead of the row growing",
-                114f, row.label().box().width(), 1f);
+                88f, row.label().box().width(), 1f);
         // Against the fact's OWN width rather than a fraction: "not squeezed" means the text still fits,
         // and how much slack is left over is the panel's business.
         UIText value = titleOrValueIn(row);
