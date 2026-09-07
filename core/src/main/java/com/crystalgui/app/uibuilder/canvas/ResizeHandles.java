@@ -8,6 +8,7 @@ import javax.annotation.Nullable;
 
 import com.google.gson.JsonElement;
 
+import com.crystalgui.app.uibuilder.canvas.transform.FreeTransformTool;
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.core.CrystalGuiCore;
@@ -17,6 +18,9 @@ import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.transform.Transform;
+import org.joml.Matrix4f;
+import org.joml.Vector2f;
+
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.box.Measurable;
 import com.crystalgui.ui.dom.Attribute;
@@ -210,6 +214,12 @@ public final class ResizeHandles extends UIElement {
             return;
         }
 
+        // WHICH GESTURE TOOK THE PRESS. If this appears while the transform box is up, the two are not
+        // disjoint and nothing about the transform maths is the explanation.
+        if (DIAGNOSE) {
+            CrystalGuiCore.LOGGER.info("[handles] RESIZE BEGIN spot={} node={} transformToolCurrent={}",
+                    spot, node, FreeTransformTool.isCurrent(ctx));
+        }
         float startWidth = box.width();
         float startHeight = box.height();
         // WHERE IT STARTED, read ONCE. holdOppositeEdge writes an inset derived from these, and reading
@@ -219,7 +229,13 @@ public final class ResizeHandles extends UIElement {
         float startX = box.x();
         float startY = box.y();
         JsonElement before = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
-        float zoom = Math.max(0.0001f, ctx.surface().zoom());
+        // THE WHOLE CHAIN, not just the zoom. These handles are placed through the node's localToWorld,
+        // which carries its `transform` -- so on a scaled element they sit on the drawn edges while a
+        // delta divided by the zoom alone moves the box by the transform's factor too much. A styled
+        // `transform: scale(2)` breaks them exactly as a committed Free Transform does; the gesture is
+        // not the cause, the missing conversion is. Pinned at the press, since it is what the drag is
+        // measured against.
+        Matrix4f toViewport = CanvasRects.layoutFrame(node, this);
         showBadge(node, startWidth, startHeight);
 
         Drag.start(this, event.getPosition().x(), event.getPosition().y(), new Drag.Listener() {
@@ -230,8 +246,11 @@ public final class ResizeHandles extends UIElement {
                 // apart by the same amount is what "about the centre" means for a box whose position is
                 // its parent's business.
                 float scale = CgModifiers.hasAlt(modifiers) ? 2f : 1f;
-                float width = startWidth + spot.xDirection() * dx / zoom * scale;
-                float height = startHeight + spot.yDirection() * dy / zoom * scale;
+                Vector2f moved = toViewport == null
+                        ? new Vector2f(dx, dy)
+                        : CanvasRects.toLocalDelta(toViewport, dx, dy);
+                float width = startWidth + spot.xDirection() * moved.x * scale;
+                float height = startHeight + spot.yDirection() * moved.y * scale;
 
                 if (CgModifiers.hasShift(modifiers) && spot.isCorner()) {
                     float[] locked = lockAspect(startWidth, startHeight, width, height);
@@ -507,7 +526,10 @@ public final class ResizeHandles extends UIElement {
         // preview. BuilderEditor hides them when the mode flips, but this runs every frame from an
         // afterLayout hook and re-showed them on the next one -- a one-shot instruction losing to a
         // standing rule. The rule has to state the whole condition.
-        boolean wanted = ctx.isDesignMode() && target != null && target.box() != null;
+        boolean wanted = ctx.isDesignMode() && target != null && target.box() != null
+                // The transform box owns the element while it is up, and its own handles are on the
+                // gesture; these track the transformed BOUNDS, so both sets show and disagree.
+                && !FreeTransformTool.isCurrent(ctx);
         pendingVisibility = false;
         if (isDisplayed() != wanted) setDisplayed(wanted);
     }
@@ -521,7 +543,12 @@ public final class ResizeHandles extends UIElement {
      */
     private void place() {
         Box own = box();
-        float[] rect = CanvasRects.of(target, this);
+        // THE LAYOUT BOX, not the drawn one. These handles write `width` and `height`, and a gesture has
+        // to be drawn on the thing it edits: placed through localToWorld they wrap the element as
+        // TRANSFORMED, so a scaled element gets a handle box identical to the transform box's and the
+        // two gestures become indistinguishable -- which is what "they are still shared" was. Now a
+        // scaled element shows its real size inside its drawing, which is the honest picture.
+        float[] rect = CanvasRects.ofLayout(target, this);
         if (DIAGNOSE) {
             CrystalGuiCore.LOGGER.info("[handles] place target={} targetBox={} ownBox={} rect={}",
                     target, target == null ? null : target.box(), own,

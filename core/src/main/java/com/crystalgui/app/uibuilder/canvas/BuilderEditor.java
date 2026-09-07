@@ -5,7 +5,10 @@ import java.util.List;
 import com.crystalgui.app.uibuilder.BuilderOverlaysExtension;
 import com.crystalgui.app.uibuilder.BuilderSelection;
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
+import com.crystalgui.app.uibuilder.canvas.transform.FreeTransformTool;
+import com.crystalgui.app.uibuilder.canvas.transform.TransformBox;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
+import com.crystalgui.widget.surface.mode.ToolKind;
 import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.document.DocumentEditor;
@@ -59,6 +62,8 @@ public final class BuilderEditor implements DocumentEditor {
     private final BuilderSurface surface;
     private final BuilderToolbar toolbar;
     private final ResizeHandles handles;
+
+    private final TransformBox transformBox;
     private final MoveOutOfFlow moveGesture;
     private final TextEditGesture textEditing;
     private final BuilderPane pane;
@@ -96,12 +101,26 @@ public final class BuilderEditor implements DocumentEditor {
         surface.movesWith(moveGesture);
         this.textEditing = new TextEditGesture(document);
         surface.surface().addOverlay(textEditing);
+        // FREE TRANSFORM (L4.5a). Mounted directly like the handles rather than as an overlay kind: it
+        // is a live gesture, not a view a designer turns on, and it draws nothing at all while down.
+        this.transformBox = new TransformBox(surface, document);
+        surface.surface().addOverlay(transformBox);
+        // NO ICON: nothing reads one yet (the tool strip is L9.7), and naming a file that is not there
+        // is a claim the build cannot check.
+        surface.registerTool(ToolKind.of(FreeTransformTool.ID, "Free Transform")
+                .tool(context -> new FreeTransformTool(context, transformBox)));
         // DESIGN-TIME CHROME, so it goes with the mode. The overlays registered as kinds are hidden by
         // BuilderOverlaysExtension; the handles are mounted directly and would otherwise stay on screen
         // over a UI that is being used.
         surface.onDidChangeDesignMode.connect(design -> {
             handles.setDisplayed(Boolean.TRUE.equals(design) && handles.target() != null);
-            if (!Boolean.TRUE.equals(design)) textEditing.cancel();
+            if (!Boolean.TRUE.equals(design)) {
+                textEditing.cancel();
+                // CANCEL, not commit: leaving design mode is not an intent to keep a half-made
+                // transform, and the preview would otherwise sit over a UI being used.
+                if (transformBox.isActive()) surface.modes().use(TreeSelectTool.ID);
+                transformBox.cancel();
+            }
         });
         this.pane = new BuilderPane(toolbar, surface);
         // The document's own sheets, once there is a window to put them on. Installing them here would
@@ -170,6 +189,11 @@ public final class BuilderEditor implements DocumentEditor {
     }
 
     /** The eight resize handles on the selection. */
+    /** The Free Transform box, for a test and for the options bar. */
+    public TransformBox transformBox() {
+        return transformBox;
+    }
+
     public ResizeHandles handles() {
         return handles;
     }

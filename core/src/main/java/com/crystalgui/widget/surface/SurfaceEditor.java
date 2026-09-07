@@ -220,6 +220,11 @@ public class SurfaceEditor extends CanvasView
             public UIElement itemFor(UIElement hit) {
                 return SurfaceEditor.this.policy.itemFor(hit);
             }
+
+            @Override
+            public UIElement pickAt(UIElement painted, float rawX, float rawY) {
+                return SurfaceEditor.this.policy.pickAt(painted, rawX, rawY);
+            }
         });
         this.geometry = new Geometry(surface);
         this.overlays = new OverlayLayer(this);

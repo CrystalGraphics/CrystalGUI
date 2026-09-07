@@ -105,7 +105,7 @@ public final class HoverHighlight extends UIElement {
     private void placeTag() {
         Box own = box();
         Box tagBox = tag.box();
-        float[] rect = CanvasRects.of(target, this);
+        float[] rect = CanvasRects.ofLayout(target, this);
         if (own == null || tagBox == null) return;
         if (rect == null) {
             tagBox.setTransform(null);
@@ -137,7 +137,7 @@ public final class HoverHighlight extends UIElement {
     @Override
     public void paintContent(CgUiPaintContext paint, Box box) {
         if (box == null) return;
-        float[] rect = CanvasRects.of(target, this);
+        float[] rect = CanvasRects.ofLayout(target, this);
         if (rect == null) return;
         CanvasRects.outline(paint, rect, THICKNESS,
                 getStyle().computed().get(StylePropertyRegistry.COLOR));

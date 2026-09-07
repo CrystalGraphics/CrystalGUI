@@ -50,6 +50,12 @@ public final class Picking {
         /** The item an arbitrary element belongs to, or null — the consumer's policy. */
         @Nullable
         UIElement itemFor(@Nullable UIElement hit);
+
+        /** The consumer's correction to what the box tree found — see {@code SurfacePolicy.pickAt}. */
+        @Nullable
+        default UIElement pickAt(@Nullable UIElement painted, float rawX, float rawY) {
+            return painted;
+        }
     }
 
     public Picking(Surfaces surfaces) {
@@ -67,7 +73,7 @@ public final class Picking {
         UIDocument window = surfaces.window();
         if (window == null) return null;
         Box box = window.boxes().pick(rawX, rawY, ignored -> false);
-        return box == null ? null : box.node();
+        return surfaces.pickAt(box == null ? null : box.node(), rawX, rawY);
     }
 
     /** The item under a raw pointer position, or null — {@link #elementAt} through the policy. */

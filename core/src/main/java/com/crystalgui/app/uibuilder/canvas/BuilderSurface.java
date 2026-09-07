@@ -209,6 +209,9 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
             // Select All, after being taught to skip the page, had nothing left to take here.
             builderKeymap.unbind("Mod+A");
             builderKeymap.bind("Mod+A", BuilderCommands.SELECT_ALL);
+            // Photoshop's, and what a designer's hands already know. Here rather than on the command so
+            // it cannot reach a text field somewhere else in the application.
+            builderKeymap.bind("Mod+T", BuilderCommands.FREE_TRANSFORM);
         }
         return builderKeymap;
     }

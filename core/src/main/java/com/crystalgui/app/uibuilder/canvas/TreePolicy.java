@@ -109,8 +109,52 @@ public final class TreePolicy implements SurfacePolicy {
         return false;
     }
 
+    /**
+     * The deepest element in the artboard whose LAYOUT box holds the pointer.
+     *
+     * <p>Design-time picking is measured on the same rectangle every other piece of chrome is drawn on.
+     * The engine's hit test answers about what is PAINTED, which is right for a running UI and wrong for
+     * a designer: a {@code transform} is not something the layout engine knows about, so selecting by it
+     * means dragging a rectangle Taffy cannot reason about — the ordering and stability the box tree
+     * gives you stop applying, and an element may as well be absolutely positioned.</p>
+     *
+     * <p>Deepest wins, and later siblings beat earlier ones, which together are paint order — the same
+     * rule the box tree's own pick uses, applied to a different rectangle.</p>
+     */
+    @Override
     @Nullable
+    public UIElement pickAt(@Nullable UIElement painted, float rawX, float rawY) {
+        // ONLY THE DOCUMENT'S OWN CONTENT. A resize handle, an overlay, the toolbar -- anything that is
+        // not inside the artboard -- answers for itself, exactly as it did before. Substituting here
+        // unconditionally locked all of it out: a press on a handle resolved to the artboard element
+        // behind it, so the tool selected that element and consumed the press before the handle's own
+        // listener could run. Handles stopped dragging and a corner selected the parent.
+        if (painted != null && !insideArtboard(painted)) return painted;
+        UIElement found = deepestAt(artboard, rawX, rawY);
+        return found != null ? found : painted;
+    }
+
+    /** Whether this element is part of what is being edited, rather than something drawn over it. */
+    private boolean insideArtboard(UIElement node) {
+        for (UIElement each = node; each != null; each = parentOf(each)) {
+            if (each == artboard || artboard.contains(each)) return true;
+        }
+        return false;
+    }
+
+    @Nullable
+    private static UIElement deepestAt(UIElement node, float x, float y) {
+        if (!node.isDisplayed()) return null;
+        List<UIElement> children = node.composedChildren();
+        for (int i = children.size() - 1; i >= 0; i--) {
+            UIElement found = deepestAt(children.get(i), x, y);
+            if (found != null) return found;
+        }
+        return CanvasRects.layoutContains(node, x, y) ? node : null;
+    }
+
     /** @see #itemFor the note on crossing a shadow boundary */
+    @Nullable
     private static UIElement parentOf(UIElement node) {
         return node.composedParent();
     }
