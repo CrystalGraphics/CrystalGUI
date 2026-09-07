@@ -49,6 +49,24 @@ public final class Attribute<T> {
      */
     public static final Attribute<Boolean> HIT_TRANSPARENT =
             of("hit-transparent", Boolean.class, false);
+
+    /**
+     * This subtree wants presses that carry a modifier, so a window-level gesture must not take them.
+     *
+     * <p>A desktop claims {@code Alt+drag} to move a window from anywhere inside it — the Linux WM
+     * staple, and the answer for a window whose title bar is covered or off-screen. It has to be taken
+     * on the CAPTURE phase to mean "anywhere", which means it reaches content before content does.</p>
+     *
+     * <p>That is right until the content wants the same modifier. A design canvas spends Alt on resizing
+     * from the centre and on suspending snap — so holding Alt and pressing a resize handle moved the
+     * WINDOW, and the only way to resize from the centre was to press first and add Alt afterwards.</p>
+     *
+     * <p>Set on the container, not the control: everything inside a canvas is in the same argument, and
+     * a list of individual widgets is a list that goes stale. The desktop gesture still works everywhere
+     * else in the window.</p>
+     */
+    public static final Attribute<Boolean> KEEPS_MODIFIER_PRESS =
+            of("keeps-modifier-press", Boolean.class, false);
     /** The name of the slot a light child asks to be placed in; empty for the default slot. */
     /**
      * A focus navigation scope: a dialog, a window frame, a pane. Tab is trapped inside whichever

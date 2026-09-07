@@ -4,6 +4,7 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.UIElement;
 import org.joml.Vector2f;
 import com.crystalgui.ui.service.Drag;
@@ -150,12 +151,27 @@ final class WindowMove {
             var input = CgPlatform.input();
             if (mask == 0 || input == null) return;
             if ((input.getCurrentModifiers() & mask) != mask) return;
+            // UNLESS THE CONTENT SPENDS THAT MODIFIER TOO. This listener is on the capture phase so that
+            // "anywhere in the window" is true, which means it reaches content before content does -- and
+            // a design canvas uses Alt for resizing from the centre and for suspending snap. Holding Alt
+            // and pressing a resize handle moved the window instead, so the only way to resize from the
+            // centre was to press first and add Alt afterwards. @see Attribute#KEEPS_MODIFIER_PRESS
+            if (keepsModifierPress(event.getTarget())) return;
             event.stopPropagation();
             // Raised first, because a press that never reaches the frame's own activation would
             // otherwise move a window without bringing it forward.
             desktop.activate(frame);
             beginMove(event.getPosition().x(), event.getPosition().y(), 1);
         }, true, false);
+    }
+
+    /** @see Attribute#KEEPS_MODIFIER_PRESS */
+    private static boolean keepsModifierPress(@Nullable Object target) {
+        if (!(target instanceof UIElement element)) return false;
+        for (UIElement walk = element; walk != null; walk = walk.parentElement()) {
+            if (Boolean.TRUE.equals(walk.get(Attribute.KEEPS_MODIFIER_PRESS))) return true;
+        }
+        return false;
     }
 
     /**
