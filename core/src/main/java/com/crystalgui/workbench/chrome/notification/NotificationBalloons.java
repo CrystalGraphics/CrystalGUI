@@ -97,6 +97,18 @@ public class NotificationBalloons extends UIElement {
         float remaining;
         boolean leaving;
 
+        /**
+         * Whether this has been through a style pass while transparent.
+         *
+         * <p>The reveal cannot simply happen on the next TICK, because a tick is not a frame boundary: a
+         * notification that arrives from off-thread work is drained at the TOP of the frame, before the
+         * animation phase, so its balloon was added and revealed inside one pass and the cascade never
+         * saw the transparent state. One from a click survived only because input dispatches at the END
+         * of a frame, after this hook has already run -- so whether a balloon faded in depended on where
+         * its cause entered the frame.</p>
+         */
+        boolean settled;
+
         Live(NotificationCard card) {
             this.card = card;
             this.remaining = LINGER_MS;
@@ -279,7 +291,16 @@ public class NotificationBalloons extends UIElement {
             // REVEALED ON THE FRAME AFTER IT WAS ADDED, never in the same one. Adding the element and
             // removing the class together is a single style pass, so the cascade never sees the
             // transparent state and there is nothing to ease from -- the balloon simply appears.
+            //
+            // ONE TICK IS NOT ONE FRAME, which is what this flag is for. A notification drained from
+            // off-thread work lands at the TOP of the frame, ahead of the animation phase, so `show` and
+            // this hook ran in the same pass and the balloon popped in; one from a click reached here
+            // only after this hook had run, and faded. The flag makes the wait a real frame either way.
             if (!entry.leaving && entry.card.hasClass(HIDDEN_CLASS)) {
+                if (!entry.settled) {
+                    entry.settled = true;
+                    continue;
+                }
                 entry.card.removeClass(HIDDEN_CLASS);
                 continue;
             }

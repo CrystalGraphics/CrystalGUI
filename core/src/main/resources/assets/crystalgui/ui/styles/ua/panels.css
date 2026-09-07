@@ -110,12 +110,17 @@ notificationsview > .__head__ {
     padding-bottom: 6px;
 }
 
+/* THE ONE THING HERE THAT MAY GIVE WAY. `min-width: 0` lets it shrink; without the nowrap it spends that
+ * on WRAPPING, and at a narrow panel "Timeline" came apart into one character per line. Truncation is the
+ * right answer for a heading whose words are already known -- the cards below scroll instead. */
 notificationsview > .__head__ > .__title__ {
     font-size: 7px;
     color: var(--notifications-title-fg, #9DA0A8);
     flex-grow: 1;
     flex-shrink: 1;
     min-width: 0px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 /* A LINK, not a button — matching the entries' own actions, which is what IntelliJ does throughout this
@@ -130,12 +135,40 @@ notificationsview .__clear__:hover {
     color: var(--notifications-link-hover-fg, #6BA5DE);
 }
 
+/* NO `gap-all` HERE, and it is not an omission: a ScrollerView puts a caller's children in a SLOT in its
+ * own shadow tree, so a gap on the view falls between that slot and the bars -- which are absolutely
+ * positioned and contribute nothing -- and never between the cards. It sat here reading as the spacing
+ * and doing nothing at all, which is worse than absent. The cards space themselves; see below. */
 notificationsview > .__notification-list__ {
     width: 100%;
     height: 0px;
     flex-grow: 1;
     flex-direction: column;
-    gap-all: 4px;
+}
+
+/* THE PANEL'S COPY OF A CARD, and only the panel's. A balloon is capped by its layer, so it wants none of
+ * this -- which is why it is scoped rather than written on the shared card rule.
+ *
+ * A FLOOR, NOT A FIXED WIDTH. The card follows the panel down and its lines re-wrap as it goes, which is
+ * what a narrowing panel should do; below this it stops, becomes wider than the viewport, and the
+ * scroller picks up from there. A card measured for horizontal scroll is measured by its OWN box --
+ * getScrollWidth reads direct children only -- so this floor is what the extent is made of.
+ *
+ * Without it there was no floor at all: the card shrank with the panel until the detail was coming apart
+ * one character per line, and the scroller had nothing wider than itself to scroll.
+ *
+ * SET BY THE HEAD ROW, not by the detail. Past the floor the card is wider than the viewport, and what
+ * hangs off the right is its rounded corner and its timestamp -- so a floor chosen to fit the DETAIL
+ * (180) left an ordinary panel showing a card cut down its right side with no time on it. This fits
+ * icon, an elided heading and the timestamp; the detail wraps, which it is allowed to do and the head row
+ * is not. Below this the scroller still takes over, and then the right edge is genuinely off-view --
+ * there is no width at which a thing past the viewport is also on screen. */
+notificationsview .__notification__ {
+    min-width: 130px;
+    /* THE SPACE BETWEEN CARDS, on the card because the list cannot express it -- see the note above the
+     * list. A margin rather than a gap also means the last card carries one, which is wanted here: it
+     * keeps the stack off the panel's bottom edge the same way the first is kept off the head. */
+    margin-bottom: 6px;
 }
 
 /* One card, WHEREVER IT IS DRAWN. Scoped to the card and not to the panel, because the history and the
@@ -149,13 +182,18 @@ notificationsview > .__notification-list__ {
     flex-shrink: 0;
     background: var(--notification-bg, #2B2B2B);
     border-radius: 4px;
-    /* TIGHTER VERTICALLY THAN HORIZONTALLY. A card is a stack of short lines, so 8px above and below the
-     * first and last of them reads as a gap the card cannot fill, while the same 8px at the sides is the
-     * margin that keeps text off the rounded corner. `padding-all` could not express the difference — it
-     * is one number for four edges — which is why they were equal rather than chosen. */
-    padding-all: 8px;
-    padding-top: 4px;
-    padding-bottom: 4px;
+    /* TIGHTER VERTICALLY THAN HORIZONTALLY, and the sides tuned against the HEAD ROW'S GAP rather than
+     * picked. The run is edge, glyph, heading; when the first step is bigger than the second it reads as
+     * a misalignment rather than as spacing.
+     *
+     * The two are not the same measurement, which is why this needed an eye and not arithmetic: the gap
+     * is between boxes, while the glyph is drawn `overlay-fit: contain` inside a 10px box and does not
+     * fill it. So the visible inset is this padding plus whatever margin the SVG carries, and matching
+     * the numbers still looks uneven. If it ever needs to go below this, shrink the icon box or tighten
+     * the artwork -- do not keep spending the card's padding on it. */
+    padding-all: 5px;
+    padding-top: 5px;
+    padding-bottom: 3px;
     gap-all: 4px;
 }
 
@@ -179,7 +217,7 @@ notificationsview > .__notification-list__ {
      * 10px glyph beside 8px text reads as sitting high, which is what flex-start actually buys here. The
      * detail and the attribution are their own rows below and are unaffected either way. */
     align-items: center;
-    gap-all: 6px;
+    gap-all: 4px;
     width: 100%;
 }
 
@@ -206,10 +244,22 @@ notificationsview > .__notification-list__ {
     padding-right: 4px;
 }
 
+/* HUNG OFF THE HEADING'S TEXT EDGE, not the card's. The icon column is the severity glyph (10px) plus
+ * the head row's gap (6px), so everything under the heading is inset by that and the whole card reads as
+ * one block of text with a glyph beside it rather than three rows starting in two different places.
+ * IntelliJ's balloons align the same way, actions included.
+ *
+ * PADDING, NEVER MARGIN: box-sizing is border-box here, so this comes out of the 100% instead of adding
+ * to it -- a margin would push the line 16px past the card's own edge. */
 .__notification__ .__detail__ {
     font-size: 7px;
     color: var(--notification-detail-fg, #9DA0A8);
     width: 100%;
+    padding-left: 14px;
+    /* SET APART FROM THE HEADING, and only from the heading. The card's 4px gap is what separates the
+     * lines of the body from each other; this is on top of it, so the heading reads as a heading and the
+     * detail and the attribution stay a block under it rather than three evenly spaced rows. */
+    margin-top: 2px;
 }
 
 /* WHO, not what -- dimmer than the detail and set apart from it, because it answers a different
@@ -218,13 +268,20 @@ notificationsview > .__notification-list__ {
     font-size: 7px;
     color: var(--notification-attribution-fg, #7A7D85);
     width: 100%;
-    margin-top: 2px;
+    /* The same inset as the detail. @see .__detail__ */
+    padding-left: 14px;
+    /* Tight to the detail, deliberately: the two are one block and the space above the detail is what
+     * separates that block from the heading. */
+    margin-bottom: 1px;
 }
 
 .__notification__ .__actions__ {
     flex-direction: row;
     gap-all: 12px;
     flex-shrink: 0;
+    /* The same inset again: a button row that starts under the glyph reads as belonging to the card
+     * rather than to the message. @see .__detail__ */
+    padding-left: 16px;
 }
 
 /* PADDING IS LOAD-BEARING, not spacing. A UIText has no MeasureFunc, so it is sized by its own
@@ -356,15 +413,15 @@ notificationsview .__notifications-empty__ {
      * The binding case is the DETAIL line, not the title: titles here are one or two words ("Opened",
      * "Save failed"), and the detail is the longest thing a balloon routinely carries.
      *
-     * IT USED TO BE A FILENAME AND 155 WAS RIGHT FOR ONE. It is a PATH now -- a file change says where it
-     * happened, `README.md was moved to proj:src/main/java/com/example/util/` -- and a name-sized cap
-     * wrapped every one of those into a four-line stack against the corner.
+     * A FILE CHANGE SAYS WHERE IT HAPPENED, so the detail is now a path rather than a filename --
+     * `README.md was moved to proj:src/main/java/com/example/util/`. Widening to fit one was tried and
+     * is wrong: at 420 a balloon was a banner across the editor, at 280 still half of it, for a message
+     * that is gone in seconds and is glanced at rather than read.
      *
-     * 280 holds an ordinary package path on one line and no more. 420 fitted a deeper one and was a
-     * banner across the editor for a message that is gone in seconds; a balloon is glanced at, not read,
-     * and its width is what it costs everything behind it. Deeper paths wrap, which stays the right way
-     * round because a wrapped balloon grows upward and costs nothing. */
-    width: 280px;
+     * So the cap stays name-sized and a path WRAPS, which was the original reasoning and survives the
+     * detail getting longer: a wrapped balloon grows upward, away from the corner, and costs nothing.
+     * A balloon's width is what it takes from everything behind it; its height is free. */
+    width: 180px;
 }
 
 /* THE RESTING VALUE LIVES HERE, and that is what makes the fade work at all. A balloon arrives carrying
