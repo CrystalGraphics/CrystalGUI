@@ -134,10 +134,6 @@ public final class ResizeHandles extends UIElement {
                 l -> l.positionType(TaffyPosition.ABSOLUTE).left(0f).top(0f));
         badge.append(badgeText);
         append(badge);
-        // THE BUILDER'S SELECTION, for the reason SelectionOutline states: one source for everything a
-        // reader sees, so the handles cannot end up on a different node from the one being described.
-        connections.add(ctx.builderSelection().onChanged.connect(this::followSelection));
-        followSelection();
     }
 
     /** What the handles are on, or null when the selection is not exactly one node. */
@@ -418,6 +414,8 @@ public final class ResizeHandles extends UIElement {
     @Override
     protected void connected() {
         super.connected();
+        connections.add(ctx.builderSelection().onChanged.connect(this::followSelection));
+        followSelection();
         if (document() == null) return;
         if (DIAGNOSE) CrystalGuiCore.LOGGER.info("[handles] connected, registering afterLayout");
         document().animation().afterLayout(this, delta -> {
