@@ -1,15 +1,19 @@
 package com.crystalgui.app.uibuilder;
 
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
+import com.crystalgui.app.uibuilder.attributes.StyleAttributes;
 import com.crystalgui.app.uibuilder.canvas.TextEditGesture;
 import com.crystalgui.app.uibuilder.canvas.transform.FreeTransformTool;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformBox;
 import com.crystalgui.app.uibuilder.live.PickMode;
+import com.crystalgui.core.attribute.AttributeClipboard;
+import com.crystalgui.core.attribute.AttributeSet;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.widget.overlay.PasteAttributesDialog;
 import java.util.List;
 
 import com.crystalgui.ui.dom.UIElement;
@@ -85,6 +89,22 @@ public final class BuilderCommands {
      * and a one-off Problems path here would be deleted by it.</p>
      */
     public static final String CONVERT_TO_SIZE = "uibuilder.convertToSize";
+
+    /**
+     * Picks up an element's inline style, for {@link #PASTE_ATTRIBUTES} to put on another.
+     *
+     * <p>The engine's {@code AttributeCarrier} does the carrying, so this is one line and every other
+     * surface gets the same feature by answering the same seam.</p>
+     */
+    public static final String COPY_ATTRIBUTES = "uibuilder.copyAttributes";
+
+    /**
+     * Puts the copied properties on this element, asking which ones first.
+     *
+     * <p>Premiere's and Resolve's window. It asks once per copy: tick <em>Don't show until next copy</em>
+     * and the same choice is applied silently until something else is copied.</p>
+     */
+    public static final String PASTE_ATTRIBUTES = "uibuilder.pasteAttributes";
 
     /** @see #SELECT_NEXT_SIBLING */
     public static final String SELECT_PREVIOUS_SIBLING = "uibuilder.selectPreviousSibling";
@@ -169,10 +189,42 @@ public final class BuilderCommands {
                         && builderOf(context).transformBox().hasSomethingToRepeat()
                         && selectionOf(context) != null));
 
+        registry.register(Command.of(COPY_ATTRIBUTES, "Copy Attributes")
+                .run(context -> AttributeClipboard.put(
+                        new StyleAttributes(selectionOf(context)).copyAttributes()))
+                .enabledWhen(context -> hasBuilder(context) && selectionOf(context) != null));
+
+        registry.register(Command.of(PASTE_ATTRIBUTES, "Paste Attributes")
+                .run(BuilderCommands::pasteAttributes)
+                .enabledWhen(context -> hasBuilder(context) && selectionOf(context) != null
+                        && AttributeClipboard.pending(StyleAttributes.DOMAIN) != null));
+
         registry.register(Command.of(CONVERT_TO_SIZE, "Convert to Size")
                 .run(context -> builderOf(context).transformBox().convertToSize(selectionOf(context)))
                 .enabledWhen(context -> hasBuilder(context)
                         && TransformBox.isScaleStandingInForSize(selectionOf(context))));
+    }
+
+    /**
+     * Asks which properties, unless the last paste of this copy said not to.
+     *
+     * <p>The window is opened rather than shown-and-waited-on: a modal dialog here would mean blocking
+     * the frame thread that draws it.</p>
+     */
+    private static void pasteAttributes(CommandContext context) {
+        BuilderEditor builder = builderOf(context);
+        UIElement node = selectionOf(context);
+        if (builder == null || node == null) return;
+        AttributeSet copied = AttributeClipboard.pending(StyleAttributes.DOMAIN);
+        if (copied == null) return;
+
+        StyleAttributes target = new StyleAttributes(node);
+        if (AttributeClipboard.remembersAChoice()) {
+            target.applyAsEdit(builder.document(), AttributeClipboard.remembered(copied));
+            return;
+        }
+        PasteAttributesDialog.open(builder.surface(), copied, StyleAttributes.describe(node),
+                chosen -> target.applyAsEdit(builder.document(), chosen));
     }
 
     /** @see #FREE_TRANSFORM */

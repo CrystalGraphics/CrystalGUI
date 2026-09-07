@@ -213,6 +213,10 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
             // it cannot reach a text field somewhere else in the application.
             builderKeymap.bind("Mod+T", BuilderCommands.FREE_TRANSFORM);
             builderKeymap.bind("Mod+Shift+T", BuilderCommands.TRANSFORM_AGAIN);
+            // Alt alone, leaving Ctrl+C and Ctrl+V free for the plain copy/paste that will eventually
+            // take whole elements.
+            builderKeymap.bind("Alt+C", BuilderCommands.COPY_ATTRIBUTES);
+            builderKeymap.bind("Alt+V", BuilderCommands.PASTE_ATTRIBUTES);
         }
         return builderKeymap;
     }
