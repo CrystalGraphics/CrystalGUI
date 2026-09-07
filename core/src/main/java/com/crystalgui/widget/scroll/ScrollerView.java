@@ -5,6 +5,7 @@ import dev.vfyjxf.taffy.style.AlignContent;
 import dev.vfyjxf.taffy.style.AlignItems;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.Overflow;
@@ -174,6 +175,20 @@ public class ScrollerView extends UIElement {
     protected ScrollerView(Name name) {
         super(name);
         addClass(SCROLL_VIEW_CLASS);
+        // CLICKING A SCROLLING PANEL FOCUSES IT, which is what makes the arrows scroll it and what tells
+        // the chrome around it that it is the panel you are working in.
+        //
+        // `ListView` and `TextEditor` each set exactly this on themselves, and the base they share set
+        // nothing -- so a subclass that did not remember got no focus at all. `Focus.pressed` walks up to
+        // the nearest ancestor that takes focus on click and blurs when it finds none, so a press on the
+        // inspector's body cleared the focus owner outright: its tab went grey, because a tab is tinted
+        // from `:focus-within` on the container and there was no longer any focus within anything.
+        //
+        // NOT_TABBABLE deliberately, unlike those two: they are things you Tab TO, and making every
+        // scrolling box in the application a tab stop would put a stop on each popup host and panel
+        // body between the ones a keyboard user actually wants. A subclass that IS a destination sets
+        // its own policy and overrides this -- both of them already do.
+        setFocusPolicy(FocusPolicy.CLICK_NOT_TABBABLE);
         StyleGroup.defaultPipeline(getStyle().getGeneralGroup(), g -> g.overflow(Overflow.AUTO));
 
         // A SLOT, which is what replaced `acceptsPublicChildren() == true`. A caller's children are

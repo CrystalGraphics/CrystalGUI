@@ -580,9 +580,20 @@ public class UIElement extends UINode implements EventTarget, Styleable {
         return focusVisible;
     }
 
+    /**
+     * <b>Focused, or containing what is</b> — the CSS definition, and the {@code or} is load-bearing.
+     *
+     * <p>{@code Focus} sets the flag walking up from the focus owner's {@code composedParent}, so the
+     * owner itself never carries it. Reading the flag alone therefore answered "a DESCENDANT has focus",
+     * which is a different question and silently wrong for any container that takes focus itself: a
+     * click on the inspector's body focuses its {@code ViewContainer} (it is {@code FocusPolicy.CLICK}),
+     * and {@code viewcontainer:focus-within tab:checked} then failed to match — so the panel had focus
+     * and its tab still went grey, which reads as the tint being broken rather than as the predicate
+     * asking the wrong thing.</p>
+     */
     @Override
     public final boolean isFocusWithin() {
-        return focusWithin;
+        return focusWithin || focused;
     }
 
     /** The store: every candidate at every origin. An author writes inline through it; the engine never writes. */
