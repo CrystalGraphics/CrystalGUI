@@ -138,6 +138,26 @@ public final class TransformBox extends UIElement {
 
     private final Deque<TransformGesture.State> redone = new ArrayDeque<>();
 
+    /** The most recent press, KEPT after release: what a typed number is understood to be about. */
+    private Grip lastGrip = Grip.NONE;
+
+    @Nullable
+    private TransformOptionsBar options;
+
+    /** What the last commit wrote, for Transform Again. @see #transformAgain */
+    @Nullable
+    private Again again;
+
+    /**
+     * A committed transform, with its pivot kept as FRACTIONS.
+     *
+     * <p>Fractions because the whole point is to apply it to something else, and something else is a
+     * different size — an absolute pivot carried over would land outside the next element, which is the
+     * same fault the commit path had before it started writing percentages.</p>
+     */
+    private record Again(Transform transform, float pivotX, float pivotY) {
+    }
+
     public TransformBox(BuilderContext ctx, UiBuilderDocument document) {
         super(NAME);
         this.ctx = ctx;
@@ -284,6 +304,9 @@ public final class TransformBox extends UIElement {
         JsonElement after = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
         if (DIAGNOSE) CrystalGuiCore.LOGGER.info("[transform] commit before={} after={}", was, after);
         if (after.equals(was)) return;
+        again = new Again(gesture.toTransform(),
+                fraction(gesture.originX(), gesture.width()),
+                fraction(gesture.originY(), gesture.height()));
         document.apply(new BuilderEdit.SetInlineStyle(node, was, after));
     }
 
@@ -503,6 +526,103 @@ public final class TransformBox extends UIElement {
         return true;
     }
 
+    /** Whether there is a transform to apply again. */
+    public boolean hasSomethingToRepeat() {
+        return again != null;
+    }
+
+    /**
+     * Applies the last committed transform to another node, as one edit.
+     *
+     * <p>Illustrator's Ctrl+D and Photoshop's Ctrl+Shift+T. <b>The transform itself, not a delta between
+     * two states</b>: composing a delta out of an op LIST is not a matter of subtraction — two transforms
+     * with the same matrix can have different ops — and the case anyone actually repeats is a fresh
+     * element wanting the same treatment as the last one.</p>
+     *
+     * @return whether anything was written
+     */
+    public boolean transformAgain(@Nullable UIElement node) {
+        Again repeat = again;
+        if (repeat == null || node == null || node.box() == null) return false;
+        JsonElement was = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        StyleGroup.inlinePipeline(node.getStyle().getGeneralGroup(), g -> {
+            g.transform(repeat.transform());
+            g.transformOriginX(LengthPercent.percent(repeat.pivotX()));
+            g.transformOriginY(LengthPercent.percent(repeat.pivotY()));
+        });
+        JsonElement after = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        if (after.equals(was)) return false;
+        document.apply(new BuilderEdit.SetInlineStyle(node, was, after));
+        return true;
+    }
+
+    /**
+     * Whether this node's transform is a scale standing in for a size.
+     *
+     * <p>A scale on a STATIC element is almost always a mistake: it makes the box lie about its size to
+     * everything that reads one — the layout, a sibling's alignment, the inspector — and it scales the
+     * text with it. A scale on something that moves is the opposite, and is what the property is for, so
+     * the test is deliberately narrow: nothing but a scale, and a real one.</p>
+     */
+    public static boolean isScaleStandingInForSize(@Nullable UIElement node) {
+        if (node == null || node.box() == null) return false;
+        Transform transform = node.getStyle().computed().get(StylePropertyRegistry.TRANSFORM);
+        if (transform == null || transform.isIdentity()) return false;
+        boolean scaled = false;
+        for (Transform.Op op : transform.ops()) {
+            if (op.kind() != Transform.Kind.SCALE) return false;
+            if (op.fx() != 1f || op.fy() != 1f) scaled = true;
+        }
+        return scaled;
+    }
+
+    /**
+     * Rewrites a scale as {@code width}/{@code height} and clears the transform, as one edit.
+     *
+     * @return whether anything was written
+     */
+    public boolean convertToSize(@Nullable UIElement node) {
+        if (!isScaleStandingInForSize(node)) return false;
+        Box box = node.box();
+        Transform transform = node.getStyle().computed().get(StylePropertyRegistry.TRANSFORM);
+        float scaleX = 1f;
+        float scaleY = 1f;
+        for (Transform.Op op : transform.ops()) {
+            scaleX *= op.fx();
+            scaleY *= op.fy();
+        }
+        float width = Math.abs(box.width() * scaleX);
+        float height = Math.abs(box.height() * scaleY);
+
+        JsonElement was = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        StyleGroup.inlinePipeline(node.getStyle().getGeneralGroup(), g -> g.transform(Transform.IDENTITY));
+        StyleGroup.inlinePipeline(node.getStyle().getLayoutGroup(),
+                l -> l.width(Math.round(width)).height(Math.round(height)));
+        JsonElement after = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        if (after.equals(was)) return false;
+        document.apply(new BuilderEdit.SetInlineStyle(node, was, after));
+        return true;
+    }
+
+    private static float fraction(float pixels, float extent) {
+        return extent < 1e-4f ? 0.5f : pixels / extent;
+    }
+
+    /** @see #lastGrip */
+    public Grip lastGrip() {
+        return lastGrip;
+    }
+
+    /** The bar showing this gesture's numbers, once the editor has built it. */
+    public void showNumbersIn(TransformOptionsBar options) {
+        this.options = options;
+    }
+
+    @Nullable
+    public TransformOptionsBar options() {
+        return options;
+    }
+
     /** How many adjustments can still be stepped back. For a test. */
     public int undoDepth() {
         return undone.size();
@@ -519,6 +639,7 @@ public final class TransformBox extends UIElement {
         // nothing actually moved -- a press that turns out to be a click should not cost an undo.
         undone.push(gesture.snapshot());
         redone.clear();
+        lastGrip = grip;
         gesture.press(grip);
         Matrix4f frame = frame();
         pressOuter = frame == null ? null : frame.mul(gesture.outer());

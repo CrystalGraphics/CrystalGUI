@@ -25,10 +25,12 @@ import com.crystalgraphics.platform.input.CgCursor;
 import com.crystalgui.app.uibuilder.canvas.TreeSelectTool;
 import com.crystalgui.app.uibuilder.canvas.transform.FreeTransformTool;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformBox;
+import com.crystalgui.app.uibuilder.canvas.transform.TransformOptionsBar;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformGesture.Grip;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformGesture.Kind;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.core.dispose.Disposable;
+import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.property.visual.transform.Transform;
@@ -528,6 +530,116 @@ public class FreeTransformTest extends UiDocumentTestBase {
                 new FreeTransformTool(editor.surface(), box()).claimsEveryPress());
         assertFalse("and an ordinary tool must not — a marquee belongs to the page",
                 new TreeSelectTool(editor.surface()).claimsEveryPress());
+    }
+
+    /** <b>The bar shows what a drag did, and a typed number reaches the gesture.</b> */
+    @Test
+    public void theOptionsBarWorksBothWays() {
+        enterFreeTransform();
+        document.update(W, H);
+        TransformOptionsBar bar = editor.options();
+
+        box().press(new Grip(Kind.SCALE, Spot.BOTTOM_RIGHT));
+        box().gesture().scaleTo(new Vector2f(node.box().width() * 2f,
+                node.box().height() * 2f), false, false);
+        box().release();
+        bar.sync();
+        assertEquals("the bar has to show what the drag did",
+                200d, bar.fieldFor(Kind.SCALE).getValue(), 0.5d);
+
+        // Through the FIELD, which is what typing does: setValue is the programmatic path and
+        // deliberately does not announce, or a sync would be read straight back as an edit.
+        bar.fieldFor(Kind.ROTATE).field().setText("90");
+        assertEquals("and a typed angle has to reach the gesture",
+                Math.PI / 2d, box().gesture().rotation(), 0.001d);
+        assertTrue("nothing typed may reach the document either", box().isActive());
+    }
+
+    /**
+     * <b>The reference widget decides what a typed number holds still.</b>
+     *
+     * <p>A drag knows which handle it grabbed and holds the opposite edge; a typed 300% knows nothing, so
+     * the 3×3 grid is the answer and the bar applies it.</p>
+     */
+    @Test
+    public void theReferencePointHoldsStillWhenTyping() {
+        enterFreeTransform();
+        document.update(W, H);
+        TransformOptionsBar bar = editor.options();
+        bar.setAnchor(-1, -1);
+
+        Vector2f before = box().gesture().apply(0f, 0f);
+        bar.fieldFor(Kind.SCALE).field().setText("300");
+        Vector2f after = box().gesture().apply(0f, 0f);
+
+        assertEquals("the top-left was chosen, so the top-left stays", before.x, after.x, 0.01f);
+        assertEquals(before.y, after.y, 0.01f);
+        assertEquals(3f, box().gesture().scaleX(), 0.01f);
+    }
+
+    /** <b>Transform Again gives the next element the last one's treatment.</b> */
+    @Test
+    public void transformAgainRepeatsTheLastCommit() {
+        UIElement second = new UIElement().layout(l -> l.width(60f).height(30f));
+        model.root().append(second);
+        document.update(W, H);
+
+        assertFalse("nothing committed yet", box().hasSomethingToRepeat());
+        enterFreeTransform();
+        document.update(W, H);
+        box().gesture().press(new Grip(Kind.ROTATE, null));
+        box().gesture().rotateBy(0.4f, false);
+        box().commit();
+        document.update(W, H);
+
+        assertTrue(box().hasSomethingToRepeat());
+        assertTrue(box().transformAgain(second));
+        document.update(W, H);
+
+        Transform repeated = second.getStyle().computed().get(StylePropertyRegistry.TRANSFORM);
+        assertNotNull("the second element got nothing", repeated);
+        assertEquals("and it is the same transform", written().toString(), repeated.toString());
+
+        LengthPercent pivot =
+                second.getStyle().computed().get(StylePropertyRegistry.TRANSFORM_ORIGIN_X);
+        assertNotNull(pivot);
+        assertEquals("the pivot has to be a fraction of the NEW box, not the old one's pixels",
+                30f, pivot.resolve(60f), 0.5f);
+    }
+
+    /**
+     * <b>Convert to Size rewrites a scale as width and height.</b>
+     *
+     * <p>Narrow on purpose: a scale on something that MOVES is what the property is for, so only a
+     * transform that is nothing but a scale is offered the conversion.</p>
+     */
+    @Test
+    public void convertToSizeRewritesAScaleAsABox() {
+        StyleGroup.inlinePipeline(node.getStyle().getGeneralGroup(),
+                g -> g.transform(Transform.scale(2f, 3f)));
+        document.update(W, H);
+        float width = node.box().width();
+        float height = node.box().height();
+
+        assertTrue(TransformBox.isScaleStandingInForSize(node));
+        assertTrue(box().convertToSize(node));
+        document.update(W, H);
+
+        assertEquals("the size the scale was faking", width * 2f, node.box().width(), 0.5f);
+        assertEquals(height * 3f, node.box().height(), 0.5f);
+        assertTrue("and the transform is gone", written() == null || written().isIdentity());
+        assertFalse("so there is nothing left to convert", TransformBox.isScaleStandingInForSize(node));
+    }
+
+    /** A rotation is not a size standing in for anything, so it is left alone. */
+    @Test
+    public void aRotationIsNotOfferedTheConversion() {
+        StyleGroup.inlinePipeline(node.getStyle().getGeneralGroup(),
+                g -> g.transform(Transform.rotate(0.4f)));
+        document.update(W, H);
+
+        assertFalse(TransformBox.isScaleStandingInForSize(node));
+        assertFalse(box().convertToSize(node));
     }
 
     /** Leaving the tool keeps the work — Photoshop's rule, and the safe one. */

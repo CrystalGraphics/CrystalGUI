@@ -7,6 +7,7 @@ import com.crystalgui.app.uibuilder.BuilderSelection;
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.canvas.transform.FreeTransformTool;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformBox;
+import com.crystalgui.app.uibuilder.canvas.transform.TransformOptionsBar;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.widget.surface.mode.ToolKind;
 import com.crystalgui.core.undo.Edit;
@@ -64,6 +65,8 @@ public final class BuilderEditor implements DocumentEditor {
     private final ResizeHandles handles;
 
     private final TransformBox transformBox;
+
+    private final TransformOptionsBar options;
     private final MoveOutOfFlow moveGesture;
     private final TextEditGesture textEditing;
     private final BuilderPane pane;
@@ -122,7 +125,9 @@ public final class BuilderEditor implements DocumentEditor {
                 transformBox.cancel();
             }
         });
-        this.pane = new BuilderPane(toolbar, surface);
+        this.options = new TransformOptionsBar(transformBox);
+        transformBox.showNumbersIn(options);
+        this.pane = new BuilderPane(toolbar, options, surface);
         // The document's own sheets, once there is a window to put them on. Installing them here would
         // reach a file from a constructor that a server also runs.
         surface.onDidConnect.connect(this::installSheets);
@@ -189,6 +194,11 @@ public final class BuilderEditor implements DocumentEditor {
     }
 
     /** The eight resize handles on the selection. */
+    /** The numbers behind a Free Transform, for a test. */
+    public TransformOptionsBar options() {
+        return options;
+    }
+
     /** The Free Transform box, for a test and for the options bar. */
     public TransformBox transformBox() {
         return transformBox;

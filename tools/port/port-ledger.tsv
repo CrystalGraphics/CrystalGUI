@@ -110,6 +110,8 @@ PART	Breadcrumbs	crumb-sep	B	0	confirmed	leaf in every rule
 PART	BuilderPane	builder-pane	A	0	proposed	leaf in every rule
 PART	BuilderToolbar	active	C	3	proposed	state adjective
 PART	BuilderToolbar	builder-toolbar	A	0	proposed	leaf in every rule
+PART	BuilderToolbar	preview	A	0	proposed	leaf in every rule
+PART	Button	labelled	A	0	proposed	leaf in every rule
 PART	CanvasView	content	B	0	confirmed	leaf in every rule
 PART	CanvasView	panning	C	2	confirmed	state adjective
 PART	CategoryHeader	arrow	B	4	confirmed	leaf in every rule, scoped by an ancestor in 4
@@ -484,7 +486,7 @@ PART	Resizer	resizer	A	1	proposed	leaf in every rule
 PART	RunConsoleView	over-link	A	0	proposed	leaf in every rule
 PART	RunConsoleView	run-console	A	0	proposed	leaf in every rule
 PART	RunIndicators	running	A	0	proposed	leaf in every rule
-PART	RunPanel	on	C	2	proposed	state adjective
+PART	RunPanel	on	C	3	proposed	state adjective
 PART	RunPanel	run-action	A	0	proposed	leaf in every rule
 PART	RunPanel	run-bar	A	0	proposed	leaf in every rule
 PART	RunPanel	run-body	A	0	proposed	leaf in every rule
@@ -507,9 +509,10 @@ PART	RunRail	run-rail-glyph	A	10	proposed	leaf in every rule, scoped by an ances
 PART	RunRail	run-rail-name	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	RunRail	run-rail-time	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	Scroller	vertical	C	12	confirmed	state adjective
+PART	ScrollerView	scroll-view	A	1	proposed	leaf in every rule
 PART	SearchField	focused	C	1	confirmed	state adjective
 PART	SearchField	not-found	B	2	confirmed	a rule selects through it (1)
-PART	SearchField	on	C	2	confirmed	state adjective
+PART	SearchField	on	C	3	confirmed	state adjective
 PART	SearchField	search-field	B	14	confirmed	a rule selects through it (6)
 PART	SearchField	search-option	A	4	confirmed	leaf in every rule
 PART	SearchReplaceBar	expanded	C	1	confirmed	state adjective
@@ -654,6 +657,14 @@ PART	ToolWindowFrame	floating	C	0	confirmed	state adjective
 PART	ToolWindowFrame	tool-window	B	10	confirmed	a rule selects through it (9)
 PART	ToolWindowFrame	windowed	C	0	confirmed	state adjective
 PART	Tooltip	wait	A	1	proposed	leaf in every rule
+PART	TransformBox	transform-box	A	0	proposed	leaf in every rule
+PART	TransformOptionsBar	on	C	3	proposed	state adjective
+PART	TransformOptionsBar	transform-anchor	B	2	proposed	a rule selects through it (1)
+PART	TransformOptionsBar	transform-anchor-cell	A	2	proposed	leaf in every rule
+PART	TransformOptionsBar	transform-field	B	2	proposed	a rule selects through it (1)
+PART	TransformOptionsBar	transform-label	A	1	proposed	leaf in every rule
+PART	TransformOptionsBar	transform-options	A	0	proposed	leaf in every rule
+PART	TransformOptionsBar	transform-size	A	1	proposed	leaf in every rule
 PART	TreeSearch	dimmed	C	1	confirmed	state adjective
 PART	TreeSearch	find-bar	B	32	confirmed	a rule selects through it (31)
 PART	TreeSearch	find-close	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
@@ -664,7 +675,7 @@ PART	TreeSearch	find-next	B	5	confirmed	leaf in every rule, scoped by an ancesto
 PART	TreeSearch	find-prev	B	5	confirmed	leaf in every rule, scoped by an ancestor in 5
 PART	TreeSearch	match	C	2	confirmed	state adjective
 PART	TreeSearch	off	C	2	confirmed	state adjective
-PART	TreeSearch	on	C	3	confirmed	state adjective
+PART	TreeSearch	on	C	4	confirmed	state adjective
 PART	TreeSearch	option-match-case	B	1	confirmed	leaf in every rule
 PART	TreeSearch	option-regex	B	1	confirmed	leaf in every rule
 PART	TreeSearch	option-words	B	1	confirmed	leaf in every rule
@@ -674,7 +685,7 @@ PART	TreeView	collapsed	C	4	confirmed	state adjective
 PART	TreeView	expanded	C	0	confirmed	state adjective
 PART	TreeView	leaf	C	0	confirmed	state adjective
 PART	UIElement	user-sized-height	B	1	proposed	a rule selects through it (1)
-PART	UIElement	user-sized-width	B	2	proposed	a rule selects through it (1)
+PART	UIElement	user-sized-width	A	1	proposed	leaf in every rule
 PART	UIText	syntax	C	54	confirmed	leaf in every rule
 PART	VectorControl	axis	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	VectorControl	vector	B	4	confirmed	a rule selects through it (3)
