@@ -81,6 +81,16 @@ import org.joml.Vector2f;
  * could not spell (M2).</p>
  */
 public class UIElement extends UINode implements EventTarget, Styleable {
+    
+    /**
+     * A plain container — the {@code <div>} of this engine, and what the no-argument constructor
+     * makes.
+     *
+     * <p>Named {@code element} rather than {@code node} because it is what a <em>stylesheet</em>
+     * writes: this is the tag a type selector matches, and {@code element { }} is the rule an author
+     * means. The Java type is a node because a document and a shadow root are ones too.</p>
+     */
+    public static final Name NAME = Name.of("element");
 
     private String id = "";
 
@@ -134,16 +144,6 @@ public class UIElement extends UINode implements EventTarget, Styleable {
 
     public final EventListenerGroup<UIElement, FocusEvent.Focus> onFocus = events.getGroup(FocusEvent.Focus.class);
     public final EventListenerGroup<UIElement, FocusEvent.Blur> onBlur = events.getGroup(FocusEvent.Blur.class);
-
-    /**
-     * A plain container — the {@code <div>} of this engine, and what the no-argument constructor
-     * makes.
-     *
-     * <p>Named {@code element} rather than {@code node} because it is what a <em>stylesheet</em>
-     * writes: this is the tag a type selector matches, and {@code element { }} is the rule an author
-     * means. The Java type is a node because a document and a shadow root are ones too.</p>
-     */
-    public static final Name NAME = Name.of("element");
 
     public UIElement() {
         this(NAME);
