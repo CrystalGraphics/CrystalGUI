@@ -196,7 +196,12 @@ public class FocusServiceTest {
 
         document.focus().requestFocus(control);
         assertTrue(panel.isFocusWithin());
-        assertFalse("the owner is focused, not focus-WITHIN", control.isFocusWithin());
+        // THE OWNER COUNTS TOO -- CSS defines :focus-within as focused OR containing focus, and the
+        // engine's flag is only the second half (Focus sets it walking up from the owner's parent).
+        // Reading the flag alone excluded every container that takes focus ITSELF: a click on a panel's
+        // body focuses its ViewContainer, and `viewcontainer:focus-within tab:checked` then failed to
+        // match, so the panel held focus while its tab went grey.
+        assertTrue("the owner is within its own focus", control.isFocusWithin());
 
         document.focus().clear();
         document.focus().blurIfFocused(control);
