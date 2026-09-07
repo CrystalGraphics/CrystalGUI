@@ -314,12 +314,32 @@ public final class Box {
      */
     public float scrollWidth() {
         float declared = node.scrollExtent(true);
-        return declared >= 0f ? declared : contentWidth;
+        return declared >= 0f ? declared : withoutLeadingBorder(contentWidth, border.left);
     }
 
     public float scrollHeight() {
         float declared = node.scrollExtent(false);
-        return declared >= 0f ? declared : contentHeight;
+        return declared >= 0f ? declared : withoutLeadingBorder(contentHeight, border.top);
+    }
+
+    /**
+     * A MEASURED extent is Taffy's, from the BORDER box origin, so it carries the leading border.
+     *
+     * <p>The DOM's {@code scrollWidth} is content plus padding and excludes the border, and everything
+     * that compares against it here — {@link #maxScrollLeft}, a scrollbar's thumb — uses
+     * {@link #clientWidth}, which takes BOTH borders off. Left in, the leading border counted as content
+     * and every bordered scroll container reported exactly {@code border.left} pixels of overflow it did
+     * not have. Real overflow was over-reported by the same amount.</p>
+     *
+     * <p>Found from a one-pixel sideways jump of the whole UI-builder view on right-click: focus moving
+     * to a context menu ran {@code scrollIntoView}, which scrolled that phantom pixel, and moving focus
+     * back scrolled it home.</p>
+     *
+     * <p>A DECLARED extent is not adjusted — a virtualised list states its content in content
+     * coordinates and never knew about the border.</p>
+     */
+    private static float withoutLeadingBorder(float measured, float leadingBorder) {
+        return Math.max(0f, measured - leadingBorder);
     }
 
     /**
