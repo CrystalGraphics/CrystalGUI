@@ -33,7 +33,20 @@ public final class TreePolicy implements SurfacePolicy {
         return artboard.model().history();
     }
 
-    /** Anything inside the artboard is an item; the artboard itself and the plane are not. */
+    /**
+     * Anything inside the artboard is an item; the artboard itself and the plane are not.
+     *
+     * <p><b>Outward through the COMPOSED tree</b>, which is the one paint and hit-testing walk. A widget's
+     * insides are a shadow tree, and a {@code ShadowRoot}'s light parent is null by design — so a walk up
+     * light parents from a slider's track reached the shadow root and stopped, and answered null. The
+     * slider was hoverable over its own padding and dead over every part of it that draws: the track, the
+     * fill, the knob. A checkbox was hoverable down its left and right margins only.</p>
+     *
+     * <p>The {@code contains} test is what keeps this precise rather than merely outward: it is the LIGHT
+     * tree's, so the walk stops at the first node the document actually owns. A caller's content slotted
+     * into a widget is such a node and answers as itself on the first step, before any host is
+     * considered.</p>
+     */
     @Override
     @Nullable
     public UIElement itemFor(@Nullable UIElement hit) {
@@ -44,9 +57,25 @@ public final class TreePolicy implements SurfacePolicy {
         return null;
     }
 
+    /**
+     * <b>Outward through the composed tree, exactly as {@link #itemFor} is</b> — the two answer about the
+     * same hit and must agree about it.
+     *
+     * <p>They did not. This asked the LIGHT tree alone, so a press landing on a slider's track or a
+     * checkbox's mark — a shadow part, which no light walk from the artboard reaches — was reported as
+     * the widget's own business and the surface declined it. Hovering had already been taught to cross
+     * the boundary, which left the canvas in the state that reads as most broken: the outline follows
+     * the pointer over a widget and clicking there selects nothing.</p>
+     *
+     * <p>The artboard itself is SURFACE, and that is not an edge case: a press on blank page is how you
+     * deselect and where a marquee starts, so answering TREE there would take both away.</p>
+     */
     @Override
     public PressOwner ownerOf(UIElement hit) {
-        return artboard.contains(hit) ? PressOwner.SURFACE : PressOwner.TREE;
+        for (UIElement each = hit; each != null; each = each.composedParent()) {
+            if (artboard.contains(each)) return PressOwner.SURFACE;
+        }
+        return PressOwner.TREE;
     }
 
     /**
@@ -81,7 +110,8 @@ public final class TreePolicy implements SurfacePolicy {
     }
 
     @Nullable
+    /** @see #itemFor the note on crossing a shadow boundary */
     private static UIElement parentOf(UIElement node) {
-        return node.parent() instanceof UIElement parent ? parent : null;
+        return node.composedParent();
     }
 }
