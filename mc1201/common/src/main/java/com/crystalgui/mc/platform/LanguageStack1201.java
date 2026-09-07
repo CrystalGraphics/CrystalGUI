@@ -17,12 +17,12 @@ import com.crystalgui.text.syntax.LanguageRegistry;
  * configurations are indistinguishable on screen, so the only thing separating "this deployment ships
  * no grammars" from "a contributor failed to load" is a line saying which one this is.</p>
  *
- * <p><b>No {@code ScriptService} is registered here.</b> The 1.7.10 one answers three
- * LaunchWrapper-shaped questions -- the live bytes of a runtime class, the runtime name for an on-disk
- * one, and the mapping coordinates -- and 1.20.x has ModLauncher or Knot instead, neither of which
- * exposes a transformed-bytes call. So {@code ScriptRuntimes.open} answers empty and the Run panel is
- * absent: a supported configuration rather than a fault, and live resolution is its own follow-up.
- * {@code plan/platform-mc1201.md} §3.7.</p>
+ * <p><b>A {@code ScriptService} IS registered, and it answers one question.</b>
+ * {@link com.crystalgui.mc.client.ScriptService1201} exists for {@code cacheRoot()}, which is what lets
+ * a band bundled in the jar be extracted and a missing one be fetched. Its other three members are
+ * LaunchWrapper-shaped and 1.20.x has ModLauncher or Knot, neither of which exposes a transformed-bytes
+ * call -- so live bytes fall back to the classloader, there are no mappings, and the Run panel is
+ * absent. The plan recommended registering none at all, which would also have cost the engine bands.
  */
 public final class LanguageStack1201 {
 
@@ -50,8 +50,9 @@ public final class LanguageStack1201 {
                     + "Rhino; source files colour from core's built-in lexers and are not analysed. "
                     + "Contributors: {}", contributors);
         }
-        CrystalGuiCore.LOGGER.info("[cgui-1201] no ScriptService: ModLauncher and Knot expose no "
-                + "transformed-bytes call, so ScriptRuntimes.open answers empty and the Run panel is absent");
+        CrystalGuiCore.LOGGER.info("[cgui-1201] ScriptService answers cacheRoot only: 1.20.x has "
+                + "ModLauncher or Knot rather than LaunchWrapper, so there are no live bytes and no "
+                + "mappings, and the Run panel is absent");
     }
 
     private static boolean isPresent(String className) {

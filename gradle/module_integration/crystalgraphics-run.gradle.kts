@@ -45,11 +45,25 @@ fun mainSourceSet(project: Project) =
     project.extensions.getByType(SourceSetContainer::class.java)["main"]
 
 // Setting MOD_CLASSES REPLACES what ModDevGradle derived from mods{} rather than adding to it, so the
-// crystalgui half is derived from the same source sets that block names -- adding one there cannot
-// silently drop it here.
+// crystalgui half names the same source sets that block does. THE TWO LISTS ARE MAINTAINED BY HAND AND
+// NOTHING CHECKS THEM AGAINST EACH OTHER: a source set added to mods{} alone is silently dropped here,
+// and presents at runtime as a NoClassDefFoundError for a class that is compiled, declared and on disk.
+// :language was added to mods{} first and cost four launches proving every other link was sound.
+//
+// EVERYTHING :language NEEDS AT RUNTIME BELONGS IN THIS MODULE TOO. The library classpath below is a
+// different layer and the mod's own classloader does not reach it: LanguageRegistry's ServiceLoader
+// found nothing there, and tree-sitter loaded but was invisible to the grammars that call it. What may
+// NOT come along is :core, which :language depends on and which is already a root here -- one package
+// in two modules and the JVM refuses the layer outright, naming com.crystalgui.core.nav.
+/** tree-sitter, which :language needs and which must live in the same module it does. */
+val treeSitterJars: List<File> = rootProject.file("lib/tree-sitter").listFiles()
+    ?.filter { it.name.endsWith(".jar") }?.sorted() ?: emptyList()
+
 val modClassesValue = (
-    listOf(mainSourceSet(project), mainSourceSet(project(":core")), mainSourceSet(project(":mc1201:common")))
+    listOf(mainSourceSet(project), mainSourceSet(project(":core")), mainSourceSet(project(":mc1201:common")),
+           mainSourceSet(project(":language")))
         .flatMap { modClasses("crystalgui", it) }
+        + modClasses("crystalgui", treeSitterJars)
         + modClasses("crystalgraphics", File(crystalGraphics.projectDir, "mc1201/common"))
         + modClasses("crystalgraphics", File(crystalGraphics.projectDir, "mc1201/$loader"))
     ).joinToString(";")

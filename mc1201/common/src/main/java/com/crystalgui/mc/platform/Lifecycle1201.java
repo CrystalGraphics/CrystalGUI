@@ -11,6 +11,7 @@ import com.crystalgui.mc.client.CgUiHud1201;
 import com.crystalgui.mc.example.MachineExample1201;
 import com.crystalgui.mc.example.MachineExampleClient1201;
 import com.crystalgui.mc.client.CgUiKeybinds1201;
+import com.crystalgui.mc.client.ScriptService1201;
 import com.crystalgui.mc.net.Connections1201;
 import com.crystalgui.mc.net.ServerSmoke1201;
 import com.crystalgui.mc.net.WorkspaceHost1201;
@@ -55,6 +56,9 @@ public final class Lifecycle1201 {
      * {@link CgUiKeybinds1201#all()} must be read AFTER this runs.
      */
     public static void bootstrapClient() {
+        // Before the announcement: the engine source asks this service where it may write, so a band
+        // bundled in the jar or fetched for this host has nowhere to go until it is registered.
+        ScriptService1201.install();
         // Behind the loading screen, where the registry's discovery costs nobody anything.
         LanguageStack1201.announce();
         MachineExampleClient1201.registerClient();
