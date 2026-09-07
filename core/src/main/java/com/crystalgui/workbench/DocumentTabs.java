@@ -113,6 +113,11 @@ public final class DocumentTabs {
         DocumentState placeholder = workbench.placeholders.get(ref);
         if (tab.editor() != null) {
             if (placeholder != null) workbench.dock.rebuildPanel(ref);
+            // A TAB THAT HAS JUST GAINED A VIEW IS A TAB THAT CAN NOW BE TOLD IT IS IN FRONT. The status
+            // binding is driven by the active PANEL moving, and on a restore the panel stops moving long
+            // before the document lands -- so the announcement was made when there was nothing to hear
+            // it and the latch recorded it as done.
+            workbench.bindStatusToActiveTab();
             return;
         }
         if (placeholder != null && placeholder != tab.state()) workbench.dock.rebuildPanel(ref);

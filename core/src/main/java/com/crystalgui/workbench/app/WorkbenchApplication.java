@@ -435,6 +435,13 @@ public class WorkbenchApplication extends UIElement
         if (focusGiven) return;
         UIDocument surface = document();
         if (surface == null) return;
+        // NOT WHILE THE DOCK IS ALREADY ARRANGING IT. A restore ends by opening the file that was in
+        // front, which asks the dock for focus and then WAITS -- the view is still being read. Landing
+        // on the group here both pre-empts that and kills it, since the request stands down the moment
+        // the keyboard is somewhere else; the symptom was an active editor that came back cold while
+        // the last tool window the restore happened to build held the keyboard, so the status readouts
+        // and every panel that follows focus were about the wrong thing until a tab was clicked.
+        if (workbench.dock().hasPendingFocus()) return;
         DockGroup group = workbench.dock().activeGroup();
         if (group == null) return;
         if (surface.focus().focused() == null) {

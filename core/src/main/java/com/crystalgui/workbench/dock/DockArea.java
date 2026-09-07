@@ -416,10 +416,30 @@ public class DockArea extends UIElement {
 
     public void rebuildPanel(DockPanelRef panel) {
         for (DockGroup group : groups.values()) {
-            if (group.builtContentFor(panel) == null) continue;
+            UIElement built = group.builtContentFor(panel);
+            if (built == null) continue;
+            // THE KEYBOARD FOLLOWS THE REPLACEMENT, because a rebuild detaches the element holding it.
+            // The caller that makes this load-bearing is a placeholder becoming the editor it stood for:
+            // a restored tab is focused while its document is still crossing the wire, so without this
+            // the file arrives on screen and takes no keystroke.
+            // ...and if it settled on the GROUP because this panel had nothing to offer, ask again: the
+            // replacement is usually a placeholder becoming the real view, which does.
+            UIDocument surface = document();
+            boolean onTheGroup = surface != null && surface.focus().focused() == group;
+            if (holdsFocus(built) || onTheGroup) requestPanelFocus(panel, null);
             group.forgetContent(panel);
             requestRebuild();
         }
+    }
+
+    /** Whether the focus owner is inside {@code subtree} — the walk {@code Focus} itself uses. */
+    private boolean holdsFocus(UIElement subtree) {
+        UIDocument window = document();
+        if (window == null) return false;
+        for (UIElement at = window.focus().focused(); at != null; at = at.composedParent()) {
+            if (at == subtree) return true;
+        }
+        return false;
     }
 
     /**
@@ -491,6 +511,48 @@ public class DockArea extends UIElement {
     private DockPanelRef pendingFocus;
 
     /**
+     * Who held the keyboard when {@link #pendingFocus} was asked for.
+     *
+     * <p>What lets a request that has to WAIT tell "still nobody else's" from "the user has since
+     * clicked somewhere". @see #applyPendingFocus</p>
+     */
+    @Nullable
+    private UIElement focusAtRequest;
+
+    /** Whether {@link #pendingFocus} has been brought to the front — once per request, not per retry. */
+    private boolean pendingFocusFronted;
+
+    private void requestPanelFocus(@Nullable DockPanelRef panel, @Nullable UIElement heldBy) {
+        pendingFocus = panel;
+        focusAtRequest = heldBy;
+        pendingFocusFronted = false;
+    }
+
+    /**
+     * Puts the keyboard in {@code panel}, once the tree it is in has been built.
+     *
+     * <p>A frame later, deliberately — the deferral a drop needs, for the same reason. At the moment an
+     * open returns, a tab that was just added has no built content to focus, a panel dropped into a NEW
+     * pane has no group at all, and a restored tab is showing the placeholder its document has not yet
+     * replaced. {@link #tickFrame} drains this on EVERY frame rather than only after a rebuild, so a
+     * caller never has to know whether one was queued.</p>
+     */
+    /**
+     * Whether a panel is waiting for the keyboard.
+     *
+     * <p>True across every frame a request spends waiting for a view, which is what an application's
+     * own opening focus has to stand back for. @see #focusPanel</p>
+     */
+    public boolean hasPendingFocus() {
+        return pendingFocus != null;
+    }
+
+    public void focusPanel(@Nullable DockPanelRef panel) {
+        UIDocument window = document();
+        requestPanelFocus(panel, window == null ? null : window.focus().focused());
+    }
+
+    /**
      * Brings the dropped panel to the front and puts the keyboard in it.
      *
      * <h3>Two separate things were wrong, and they look like one</h3>
@@ -512,15 +574,38 @@ public class DockArea extends UIElement {
     private void applyPendingFocus() {
         DockPanelRef panel = pendingFocus;
         if (panel == null) return;
-        pendingFocus = null;
-        if (!activatePanel(panel)) return;
         UIDocument window = document();
         if (window == null) return;
+        if (!pendingFocusFronted) {
+            if (!activatePanel(panel)) {
+                pendingFocus = null;
+                return;
+            }
+            pendingFocusFronted = true;
+        }
         DockLeaf leaf = layout.leafContaining(panel);
         DockGroup group = leaf == null ? null : groupFor(leaf);
         Tab tab = group == null ? null : group.tabFor(panel);
         UIElement inside = tab == null ? null : window.focus().firstFocusableIn(tab.content());
-        if (inside != null) window.focus().requestPointerFocus(inside);
+        // NOTHING IN IT CAN HOLD FOCUS, so land on the GROUP -- which is what a click on the same empty
+        // area already does, and why the group is CLICK_NOT_TABBABLE. A binary file's view is two
+        // labels; so is any viewer with nothing to operate. Making each such view focusable in turn
+        // would be one fix per kind for a rule that belongs to panels, and the next viewer would arrive
+        // without it.
+        if (inside == null && tab != null && group != null && window.focus().focusable(group)) {
+            inside = group;
+        }
+        if (inside != null) {
+            pendingFocus = null;
+            window.focus().requestPointerFocus(inside);
+            return;
+        }
+        // NOTHING TO FOCUS YET, and that is a state a restore spends whole seconds in: the panel is
+        // showing the placeholder the document has not replaced, and the view is precisely what this
+        // request is waiting for. So it survives to the next frame -- and dies the moment the keyboard
+        // lands anywhere else, which is what keeps a click during a slow read from being yanked back.
+        // Leaving the layout is the other end: no leaf, nothing left to wait for.
+        if (leaf == null || window.focus().focused() != focusAtRequest) pendingFocus = null;
     }
 
     /**
@@ -728,7 +813,7 @@ public class DockArea extends UIElement {
         // whatever drove it: a drag, a "move tab to the next group" command, a menu. Putting it on the
         // listener leaves every other route dropping a panel nobody is working on -- and leaves the only
         // testable seam unable to see it, since a fixture cannot easily stage a cross-window drag.
-        pendingFocus = payload.panel();
+        focusPanel(payload.panel());
         // A reorder inside one strip is a MOVE, not a detach-and-reinsert. Going through detach would
         // remove the panel, find the leaf empty, and collapse the pane the user is dragging within --
         // which for a single-tab group deletes the thing being reordered.
@@ -748,7 +833,7 @@ public class DockArea extends UIElement {
         DockNode moved = detach(payload);
         if (moved == null) {
             // A refused drop must not move the active panel either.
-            pendingFocus = null;
+            requestPanelFocus(null, null);
             return null;
         }
 

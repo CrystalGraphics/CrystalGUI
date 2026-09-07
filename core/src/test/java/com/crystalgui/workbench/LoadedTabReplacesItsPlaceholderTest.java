@@ -37,6 +37,7 @@ import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.texteditor.TextEditor;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
@@ -156,6 +157,54 @@ public class LoadedTabReplacesItsPlaceholderTest extends UiDocumentTestBase {
                         + "read was in flight", tab.editor().view(), onScreen);
         assertTrue("...and that editor holds the file", onScreen instanceof TextEditor);
         assertEquals("class Main { }\n", ((TextEditor) onScreen).getText());
+    }
+
+    /**
+     * <b>A restored tab takes the keyboard when its view arrives — not when it was asked for.</b>
+     *
+     * <p>Opening activates the panel and asks for focus, and on a restore there is nothing yet to give
+     * it to: the tab is showing the placeholder its read has not replaced, and {@code firstFocusableIn}
+     * answers null over an empty element. A request applied once and discarded therefore does nothing
+     * for precisely the tabs a session restores, which is how the active editor came back cold — every
+     * panel that follows focus (the inspector, the design view) sat empty until the user clicked a tab,
+     * and the status readouts came from whatever had focus instead, which was the last tool window the
+     * restore happened to build.</p>
+     */
+    @Test
+    public void aRestoredTabTakesTheKeyboardWhenItsViewArrives() {
+        workbench.open(DockInput.of(workbench.refFor(FILE)));
+
+        frameAndPump();
+        assertFalse("nothing to focus while the read is in flight",
+                document.focus().focused() instanceof TextEditor);
+
+        for (int i = 0; i < 12; i++) frameAndPump();
+
+        UIElement focused = document.focus().focused();
+        assertNotNull("the keyboard went somewhere", focused);
+        assertSame("...and it is the editor the read produced",
+                contentOf(workbench.refFor(FILE)), focused);
+    }
+
+    /**
+     * <b>...and a click during the read wins.</b> The counter-control, and the reason the wait has an
+     * end other than success: a request that outlived the user would yank the keyboard out of whatever
+     * they moved to, seconds after they moved there.
+     */
+    @Test
+    public void aClickWhileTheReadIsInFlightKeepsTheKeyboard() {
+        workbench.open(DockInput.of(workbench.refFor(FILE)));
+        frameAndPump();
+
+        Button elsewhere = new Button("elsewhere");
+        document.append(elsewhere);
+        frame();
+        document.focus().requestPointerFocus(elsewhere);
+
+        for (int i = 0; i < 12; i++) frameAndPump();
+
+        assertNotNull("the read still landed", contentOf(workbench.refFor(FILE)));
+        assertSame("the keyboard stayed where it was put", elsewhere, document.focus().focused());
     }
 
     /**
