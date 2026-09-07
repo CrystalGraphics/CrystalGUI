@@ -1199,6 +1199,39 @@ shadergraphsettingspanel {
 
 /* ── Workbench ──
  * The project editor's shell: a dock, a file tree, and the panels a host adds to it. */
+/* ── A WORKBENCH CONTROL IS AN OUTLINE, NOT A FILL ───────────────────────────────────────────────
+ *
+ * The engine's `button, dropdown` carries `--button-bg`, a raised grey, which is right for a dialog's
+ * OK button -- a thing you are meant to reach for -- and wrong for chrome. A toolbar is a row of
+ * controls sitting on a panel, and filling each one turns the row into a strip of grey lozenges that
+ * competes with the content below it; IntelliJ, VS Code and Blender all draw toolbar controls as an
+ * outline over the panel's own surface for the same reason.
+ *
+ * The border is what the tabs already use, and reserved in BOTH states rather than added on hover, so
+ * nothing in the row moves when one lights up -- the same rule, for the same reason, as `tab`'s.
+ *
+ * SCOPED TO `workbench`, which is the shell and not the engine: a dialog, a menu or a mod's own UI is
+ * outside it and keeps the filled button it was designed with. A control that wants the fill back says
+ * so on itself; this is a default, not a ban.
+ *
+ * AND ONLY A LABELLED ONE. An icon-only button is chrome, not a control you read -- a panel's hide mark,
+ * an activity bar's stripe, a tab's close -- and an outline around each turns the frame into a grid of
+ * empty boxes. `Button` carries `__labelled__` when it has text, because a sheet cannot ask whether a
+ * label is empty and the alternative is a list of every chrome container, which goes stale the first
+ * time somebody adds a chrome button. @see Button#LABELLED_CLASS
+ */
+workbench button.__labelled__,
+workbench dropdown {
+    background: #00000000;
+    border-width: 1px;
+    border-color: var(--button-border, #393B40);
+    /* The engine's 2px is what a FILLED control needs -- its edge is a colour change, and the label can
+     * sit close to it. An outline is a line, and a label against a line reads as cramped at the same
+     * number, so the inset goes up with the change of instrument. */
+    padding-left: 6px;
+    padding-right: 6px;
+}
+
 workbench {
     width: 100%;
     flex-grow: 1;
