@@ -120,6 +120,33 @@ public class BuilderNavigationTest extends UiDocumentTestBase {
         assertTrue("Escape left the set selected", editor.selection().nodes().isEmpty());
     }
 
+    /**
+     * <b>Select All takes the things beside you, not the whole document.</b>
+     *
+     * <p>A selection holding both an ancestor and a descendant makes the next action apply twice — a move
+     * shifts the parent, carrying the child, then shifts the child again — so "everything" is a hazard
+     * rather than a feature. Scoping to the container also makes the key useful more than once: at the
+     * top level and inside a row it should not give the same answer.</p>
+     */
+    @Test
+    public void selectAllIsScopedToWhereYouAre() {
+        open();
+        // INSIDE a container: the siblings, not the document.
+        editor.selection().selectOnly(second);
+        run(BuilderCommands.SELECT_ALL);
+        assertEquals("inside a row, Select All should take that row's children",
+                3, editor.selection().nodes().size());
+        assertTrue(editor.selection().nodes().contains(first));
+        assertFalse("it must not climb out to the top level",
+                editor.selection().nodes().contains(parent));
+
+        // NOTHING SELECTED: there is no container to be in, so the top level.
+        editor.selection().clear();
+        run(BuilderCommands.SELECT_ALL);
+        assertTrue("with nothing selected it should take the top level",
+                editor.selection().nodes().contains(parent));
+    }
+
     /** <b>The page is not a thing you can select.</b> Ctrl+A used to hand back the artboard. */
     @Test
     public void selectAllLeavesThePageAlone() {
@@ -260,6 +287,38 @@ public class BuilderNavigationTest extends UiDocumentTestBase {
             if (rows.get(i).item() == node) return i;
         }
         throw new AssertionError("no row for " + node);
+    }
+
+    /**
+     * <b>The canvas keeps modifier presses, so the desktop's Alt+drag does not take them.</b>
+     *
+     * <p>That gesture is a capture-phase listener on the window frame — which is what makes "drag
+     * anywhere inside the window" true, and what makes it reach content before content does. The canvas
+     * spends Alt on resizing from the centre and on suspending snap, so holding Alt and pressing a resize
+     * handle moved the WINDOW: the only way to resize from the centre was to press first and add Alt
+     * afterwards.</p>
+     *
+     * <p>Asserted on the declaration because the gesture it guards needs a desktop, a frame and a real
+     * pointer to exercise. The line is what a refactor would drop; the behaviour is verified by using
+     * it.</p>
+     */
+    @Test
+    public void theCanvasClaimsModifierPresses() {
+        open();
+        assertTrue("the desktop's Alt+drag will take presses meant for the canvas",
+                Boolean.TRUE.equals(editor.surface().get(
+                        com.crystalgui.ui.dom.Attribute.KEEPS_MODIFIER_PRESS)));
+
+        // Found by walking OUT from whatever was pressed, so it covers the handles and every widget on
+        // the page rather than a list of individual controls that would go stale.
+        boolean foundFromChild = false;
+        for (UIElement at = first; at != null; at = at.parentElement()) {
+            if (Boolean.TRUE.equals(at.get(com.crystalgui.ui.dom.Attribute.KEEPS_MODIFIER_PRESS))) {
+                foundFromChild = true;
+                break;
+            }
+        }
+        assertTrue("a press on something in the document does not reach the claim", foundFromChild);
     }
 
     private void run(String commandId) {
