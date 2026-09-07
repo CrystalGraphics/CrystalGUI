@@ -4,6 +4,7 @@ import com.crystalgui.style.ComputedStyle;
 import com.crystalgui.style.TaffyBridge;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.layout.LayoutProperties;
+import com.crystalgui.style.property.layout.length.LPSize;
 import dev.vfyjxf.taffy.style.AlignContent;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
@@ -154,7 +155,21 @@ public final class BoxStyle {
         bridge.setBorderBottom(c.isSet(LayoutProperties.BORDER_BOTTOM) ? c.get(LayoutProperties.BORDER_BOTTOM) : LengthPercentageAuto.ZERO);
 
         // Gaps: shorthand first, longhands over it, and a reset first so a withdrawn gap is withdrawn.
-        bridge.gap.setAll(LengthPercentageAuto.ZERO);
+        //
+        // EVERY INPUT TO ITS OWN "UNSET" VALUE, and AUTO for the three longhands rather than ZERO.
+        // `LPSizeData` resolves an axis as: the longhand if it is not auto, else `gap-all` if it is not
+        // auto, else `gap`'s size -- so resetting `all` to ZERO pinned it non-auto and made the last
+        // branch unreachable. `gap: 10` then parsed, cascaded, reported `isSet`, and laid out at zero
+        // for good, which is why every sheet here uses `gap-all` and the one rule that reached for the
+        // CSS spelling silently did nothing. Measured: children at x = 5, 77, 149 with `gap: 10` on a
+        // 72px-wide row of three, and 5, 87, 169 with `gap-all: 10px`.
+        //
+        // Only `all` was reset, so a withdrawn `gap-row` or `gap-column` also lingered; all four are
+        // reset now, which is the same rule applied to the same number of inputs.
+        bridge.gap.setAll(LengthPercentageAuto.AUTO);
+        bridge.gap.setVertical(LengthPercentageAuto.AUTO);
+        bridge.gap.setHorizontal(LengthPercentageAuto.AUTO);
+        bridge.gap.setSize(LPSize.ZERO);
         if (c.isSet(LayoutProperties.GAP)) bridge.gap.setSize(c.get(LayoutProperties.GAP));
         if (c.isSet(LayoutProperties.GAP_ALL)) bridge.gap.setAll(c.get(LayoutProperties.GAP_ALL));
         if (c.isSet(LayoutProperties.GAP_ROW)) bridge.gap.setVertical(c.get(LayoutProperties.GAP_ROW));
