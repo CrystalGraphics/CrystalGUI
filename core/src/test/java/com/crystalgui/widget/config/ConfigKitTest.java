@@ -511,11 +511,17 @@ public class ConfigKitTest extends UiDocumentTestBase {
                         + "engages and this is just a slower way to draw a uniform border",
                 field.getStyle().getGeneralGroup().borderTopColor(),
                 field.getStyle().getGeneralGroup().borderBottomColor());
-        assertEquals("a checked box must not be the base sheet's semantic green — the kit draws a "
-                        + "real checkmark on the SAME dark field colour instead of colour-swapping",
-                0xFF1E1E1E, backgroundOf(deepAll(bool.control(), "." + Checkbox.MARK_PART).get(0)));
-
+        // NOT the base sheet's green FACE, which is the half of this that has always been true; what
+        // changed is the neutral it lands on. The mark is an outline now -- an empty face with the
+        // shell's own control border -- so the assertion is that nothing FILLS it, rather than that it
+        // fills with --cfg-field. @see ua/inspector.css
         UIElement mark = deepAll(bool.control(), "." + Checkbox.MARK_PART).get(0);
+        assertEquals("a checked box must not fill — the tick carries the state, so a column of rows "
+                        + "does not become a column of status lights",
+                0, (backgroundOf(mark) >>> 24) & 0xFF);
+        assertEquals("and it has an edge to be an empty box of, or it reads as a floating checkmark",
+                1f, mark.box().border().left, 0.01f);
+
         var overlay = mark.getStyle().getGeneralGroup().overlay();
         assertTrue("the on/off distinction must be the vector checkmark, not a colour swap",
                 overlay instanceof com.crystalgui.render.texture.CgUiShape

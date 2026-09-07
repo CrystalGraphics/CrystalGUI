@@ -1232,6 +1232,78 @@ workbench dropdown {
     padding-right: 6px;
 }
 
+/* AND IT STILL HAS TO ANSWER THE POINTER. The rule above is a compound of two types and a class, so it
+ * outweighs `button:hover` — which meant clearing the fill cleared every hover in the shell with it, in
+ * dialogs as much as in toolbars, and left the row a picture. The states are restated here rather than
+ * the base rule being weakened, because the outline is a different instrument: its ground is the panel's
+ * own surface, not `--surface-raised`, so it wants the neutral ladder the panel is measured against. */
+workbench button.__labelled__:hover,
+workbench dropdown:hover {
+    background: var(--workbench-control-hover-bg, #2E3033);
+}
+workbench button.__labelled__:active,
+workbench dropdown:active {
+    background: var(--workbench-control-pressed-bg, #35373B);
+}
+/* Disabled keeps the outline and loses the label, so it reads as unavailable rather than as absent —
+ * the engine's `button:disabled` would otherwise put the FILL back on the one control that must not
+ * invite a press. */
+workbench button.__labelled__:disabled,
+workbench dropdown:disabled {
+    background: #00000000;
+}
+
+/* ── AND A CHECKBOX IS THE SAME CONTROL, SMALLER ─────────────────────────────────────────────────
+ *
+ * The mark is a 12px button: the same empty face, the same border, the same two pointer states. It was
+ * a filled grey square, which is the engine's default and reads as a control from a different toolkit
+ * the moment it sits in a row beside one of the outlined ones above.
+ *
+ * THE TICK CARRIES THE STATE, NOT THE FACE. The engine's default fills the whole mark green, which in
+ * a column of rows is a column of green squares — it reads as a status light per row rather than as a
+ * set of things you chose. A green checkmark in the same empty box the unticked ones have says the one
+ * thing that changed and nothing else, which is what VS Code, GitHub and IntelliJ all draw.
+ *
+ * `shape()` has no palette of its own — it is a stroke, so it follows the element's `color`
+ * (CgUiShape#followsTextColor). Colouring the tick is therefore a `color`, not a second drawable.
+ *
+ * THE EXPLICIT `background` IN THE CHECKED RULE IS NOT REDUNDANT: the base sheet's
+ * `checkbox:checked::part(mark)` sets the green fill at a weight this beats, and a rule that only says
+ * `color` would leave that fill standing underneath the tick.
+ *
+ * ORDER: checked FIRST, then the pointer states. They are the same weight, so the later wins the tie —
+ * which is what lets a ticked box still light up under the pointer while keeping its green tick.
+ *
+ * THE INSPECTOR HAS A TWIN OF THIS, kept in step deliberately rather than shared — `ua/inspector.css`
+ * has to outrank the config kit's own `--cfg-field` rule at a weight this cannot reach, and it applies
+ * to a kit standing on its own outside any workbench. Same reasoning as the mask panel's pair there. */
+workbench checkbox .__mark__,
+workbench checkbox::part(mark) {
+    background: #00000000;
+    border-width: 1px;
+    border-color: var(--button-border, #393B40);
+    border-radius: var(--radius-control, 2px);
+}
+workbench checkbox:checked .__mark__,
+workbench checkbox:checked::part(mark) {
+    background: #00000000;
+    color: var(--checkbox-checked-fg, #5FAD65);
+    overlay: shape("checkmark");
+}
+workbench checkbox:hover .__mark__,
+workbench checkbox:hover::part(mark) {
+    background: var(--workbench-control-hover-bg, #2E3033);
+}
+workbench checkbox:active .__mark__,
+workbench checkbox:active::part(mark) {
+    background: var(--workbench-control-pressed-bg, #35373B);
+}
+workbench checkbox:disabled .__mark__,
+workbench checkbox:disabled::part(mark) {
+    background: #00000000;
+    border-color: var(--button-border, #393B40);
+}
+
 workbench {
     width: 100%;
     flex-grow: 1;
@@ -2133,40 +2205,20 @@ dialog.__conflict__ .__conflict-actions__ {
 dialog.__preferences__ {
     width: 720px;
     height: 480px;
-    /* Transparent while closed, opaque once `__open__` lands. THE PAIR is what gives the transition a
-     * value to start from: a box coming out of `display: none` has no previous opacity to interpolate
-     * from, which is the problem `@starting-style` exists to solve on the web. `menu .__items__` uses the
-     * same arrangement for the same reason.
+    /* NO TRANSITION OF ITS OWN ANY MORE. This restated the base `dialog` fade purely to be slower than
+     * it; the default is 240ms now, which is the number this window wanted, so the override would say
+     * nothing and would be one more place to forget when the default moves. @see ua/overlays.css
      *
-     * 120ms, matching the menus. The window is placed one frame after it opens (see Preferences.centre),
-     * and it is held at opacity 0 through that frame at IMPORTANT origin -- so the fade begins from where
-     * the window actually is, rather than showing it in the corner and sliding. The two compose: the hold
-     * outranks this rule, and dropping the hold hands the property back here.
-     *
-     * `display` IS IN THE LIST, and that is what makes the fade OUT exist. display is discrete, so
-     * without naming it the box snaps to `none` on the frame the close happens and takes the opacity
-     * transition with it -- the window faded in and vanished. Naming it keeps the element laid out for
-     * the same duration and hides it at the end: CSS `transition-behavior: allow-discrete`, implemented
-     * in the style engine (LayoutProperties.DISPLAY) rather than in Dialog, so anything can fade out by
-     * saying so.
-     *
-     * ONE LIST, not two declarations: `transition` is a single property whose value is the whole list, so
-     * a second declaration REPLACES this one rather than adding to it. */
-    opacity: 0;
-    transition: opacity 240ms ease, display 240ms ease;
+     * The one-frame hold at IMPORTANT origin in Preferences.centre still composes with the inherited
+     * rule: the window is placed the frame after it opens, and holding opacity at 0 through that frame
+     * means the fade begins from where the window actually is rather than showing it in the corner and
+     * sliding. */
     /* Resizable, because the label column is the thing people run out of and no default width is right
      * for every language. `resize` is a real CSS property here and Dialog already routes its handles
      * through its own position, so this is the whole of it. */
     resize: both;
     min-width: 480px;
     min-height: 320px;
-}
-
-/* 0, not auto: flex-shrink is 0 in this engine, so a growing child keeps its content size and overflows
- * the dialog instead of scrolling inside it -- which is exactly what happened, and read as a missing
- * scrollbar rather than as a panel that had never been given a height to overflow. See AGENTS.md. */
-dialog.__preferences__.__open__ {
-    opacity: 1;
 }
 
 dialog.__preferences__ .__configurator-panel__ {
