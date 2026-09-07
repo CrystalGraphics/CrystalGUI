@@ -4,6 +4,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
+import com.crystalgui.app.uibuilder.canvas.transform.TransformOptionsBar;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
@@ -32,7 +33,7 @@ public final class BuilderPane extends UIElement implements DataProvider {
 
     private final BuilderSurface surface;
 
-    BuilderPane(BuilderToolbar toolbar, BuilderSurface surface) {
+    BuilderPane(BuilderToolbar toolbar, TransformOptionsBar options, BuilderSurface surface) {
         super(NAME);
         this.surface = surface;
         addClass(PANE_CLASS);
@@ -44,7 +45,9 @@ public final class BuilderPane extends UIElement implements DataProvider {
                 l -> l.widthPercent(100f).heightPercent(100f).flexDirection(FlexDirection.COLUMN));
         StyleGroup.defaultPipeline(surface.getStyle().getLayoutGroup(),
                 l -> l.widthPercent(100f).height(0f).flexGrow(1f));
-        append(toolbar, surface);
+        // BETWEEN the two, which is where Photoshop puts it and why it is not on the canvas: the
+        // numbers describe the selection and would otherwise sit on top of it.
+        append(toolbar, options, surface);
     }
 
     /** The plane, for a caller that has the pane and wants what is in it. */

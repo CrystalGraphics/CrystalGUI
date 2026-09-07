@@ -122,6 +122,70 @@ buildertoolbar {
  * @see `workbench button, workbench dropdown` in ua/workbench.css -- and a copy of that rule scoped to
  * this toolbar would be a second place to change it and a second place to forget. */
 
+/* ── Free Transform options bar ──────────────────────────────────────────────────────────────────────
+ *
+ * The toolbar's twin, one row lower: same height, same ground, same 4px gaps, because it IS a second
+ * toolbar and reads as one strip broken in two if it is not. Shown only while the box is up, which the
+ * widget decides -- a bar that was merely empty would still take its 22px out of the canvas. */
+transformoptions {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    gap: 4;
+    padding-left: 4px;
+    padding-right: 4px;
+    min-height: var(--panel-header-h, 22px);
+    background: var(--panel-bg, #2B2B2B);
+}
+
+.__transform-field__ {
+    flex-direction: row;
+    align-items: center;
+    gap: 3;
+}
+
+/* The label is also the scrub handle -- pressing it and sliding changes the number -- so it carries the
+ * cursor that says so, exactly as an inspector row label does. */
+.__transform-label__ {
+    color: var(--tree-dimmed-fg, #9DA0A8);
+    cursor: slide-arrow;
+}
+
+.__transform-field__ > numbercontrol {
+    width: 52;
+}
+
+.__transform-size__ {
+    color: var(--tree-dimmed-fg, #9DA0A8);
+}
+
+/* ── The reference point ─────────────────────────────────────────────────────────────────────────────
+ *
+ * Photoshop's 3x3: which point of the box a TYPED number is measured against. Nine cells rather than a
+ * dropdown because the thing being chosen is a position, and a picture of the box is the only spelling
+ * that does not need reading. */
+.__transform-anchor__ {
+    flex-direction: column;
+    gap: 1;
+    padding-right: 4px;
+}
+
+.__transform-anchor__ > * {
+    flex-direction: row;
+    gap: 1;
+}
+
+.__transform-anchor-cell__ {
+    width: 4;
+    height: 4;
+    background-color: var(--builder-selected-parent, #55607A);
+    cursor: pointer;
+}
+
+.__transform-anchor-cell__.__on__ {
+    background-color: var(--builder-selected, #3574F0);
+}
+
 buildertoolbar > dropdown {
     min-width: 72;
 }

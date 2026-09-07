@@ -212,6 +212,7 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
             // Photoshop's, and what a designer's hands already know. Here rather than on the command so
             // it cannot reach a text field somewhere else in the application.
             builderKeymap.bind("Mod+T", BuilderCommands.FREE_TRANSFORM);
+            builderKeymap.bind("Mod+Shift+T", BuilderCommands.TRANSFORM_AGAIN);
         }
         return builderKeymap;
     }

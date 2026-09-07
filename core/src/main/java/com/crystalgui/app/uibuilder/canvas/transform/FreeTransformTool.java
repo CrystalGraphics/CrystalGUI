@@ -15,7 +15,10 @@ import com.crystalgui.app.uibuilder.canvas.TreeSelectTool;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformGesture.Grip;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformGesture.Kind;
 import com.crystalgui.widget.surface.SurfaceContext;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
+import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.surface.mode.Tool;
 
 /**
@@ -172,11 +175,32 @@ public final class FreeTransformTool implements Tool {
     @Override
     public boolean keyPressed(int key, int modifiers, boolean repeat) {
         if (!box.isActive()) return false;
+        // A MODE IS ASKED BEFORE THE TREE, so swallowing everything left no text field in the application
+        // typeable while the box was up -- the options bar's own numbers included, which is the one thing
+        // that has to work here. A field with focus gets its keys back; the modal claim is over the
+        // CANVAS, not over the keyboard.
+        if (typingIntoAField()) return false;
         if (key == CgKeyCodes.KEY_ESCAPE) {
             box.cancel();
             backToSelect();
             return true;
         }
+        // BLENDER'S TRICK: type a number and it lands in the field for whatever was last grabbed, so a
+        // gesture can be finished exactly without the hand leaving the canvas to find the box. The first
+        // character seeds the field and takes focus; everything after it is ordinary typing, because a
+        // focused field gets its keys back above.
+        String typed = digit(key);
+        if (typed != null && !CgModifiers.hasCtrl(modifiers)) {
+            TransformOptionsBar bar = box.options();
+            if (bar != null) {
+                TextField field = bar.fieldFor(box.lastGrip().kind()).field();
+                field.setText(typed);
+                UIDocument window = box.document();
+                if (window != null) window.focus().requestFocus(field);
+                return true;
+            }
+        }
+
         // THE GESTURE'S OWN HISTORY, not the document's. Nothing has been written yet -- the whole
         // transform is one edit made on commit -- so a Ctrl+Z falling through would undo whatever was
         // done BEFORE the box opened, which is never what the hand meant. Still swallowed once the
@@ -198,6 +222,28 @@ public final class FreeTransformTool implements Tool {
         // EVERYTHING ELSE IS SWALLOWED. A modal gesture that let an arrow key through would nudge the
         // selection out from under a live preview, and the two writes are on different channels.
         return true;
+    }
+
+    /** The character a key stands for, or null when it is not part of a number. */
+    @Nullable
+    private static String digit(int key) {
+        if (key >= CgKeyCodes.KEY_1 && key <= CgKeyCodes.KEY_9) {
+            return String.valueOf((char) ('1' + (key - CgKeyCodes.KEY_1)));
+        }
+        if (key == CgKeyCodes.KEY_0) return "0";
+        if (key == CgKeyCodes.KEY_MINUS) return "-";
+        if (key == CgKeyCodes.KEY_PERIOD) return ".";
+        return null;
+    }
+
+    /** @see #keyPressed */
+    private boolean typingIntoAField() {
+        UIDocument window = box.document();
+        if (window == null) return false;
+        for (UIElement at = window.focus().focused(); at != null; at = at.composedParent()) {
+            if (at instanceof TextField) return true;
+        }
+        return false;
     }
 
     private void backToSelect() {

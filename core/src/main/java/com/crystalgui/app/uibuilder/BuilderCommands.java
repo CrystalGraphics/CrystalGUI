@@ -3,6 +3,7 @@ package com.crystalgui.app.uibuilder;
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.canvas.TextEditGesture;
 import com.crystalgui.app.uibuilder.canvas.transform.FreeTransformTool;
+import com.crystalgui.app.uibuilder.canvas.transform.TransformBox;
 import com.crystalgui.app.uibuilder.live.PickMode;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
@@ -65,6 +66,25 @@ public final class BuilderCommands {
      * and Taffy never sees it. Bound in the surface keymap, since it means nothing anywhere else.</p>
      */
     public static final String FREE_TRANSFORM = "uibuilder.freeTransform";
+
+    /**
+     * Illustrator's Ctrl+D, Photoshop's Ctrl+Shift+T: give this element the last one's treatment.
+     *
+     * <p>The transform itself rather than a delta between two states — composing a delta out of an op
+     * LIST is not subtraction, and the case anyone repeats is a fresh element wanting what the last one
+     * got.</p>
+     */
+    public static final String TRANSFORM_AGAIN = "uibuilder.transformAgain";
+
+    /**
+     * Rewrites a scale as {@code width}/{@code height}.
+     *
+     * <p>A scale on a static element makes its box lie about its size to everything that reads one — the
+     * layout, a sibling's alignment, the inspector — and scales its text with it. This is the one-click
+     * way out, and it is deliberately a COMMAND rather than a lint row: the lint harness is L4.11/L4.12,
+     * and a one-off Problems path here would be deleted by it.</p>
+     */
+    public static final String CONVERT_TO_SIZE = "uibuilder.convertToSize";
 
     /** @see #SELECT_NEXT_SIBLING */
     public static final String SELECT_PREVIOUS_SIBLING = "uibuilder.selectPreviousSibling";
@@ -142,6 +162,17 @@ public final class BuilderCommands {
         registry.register(Command.of(FREE_TRANSFORM, "Free Transform")
                 .run(context -> builderOf(context).surface().modes().use(FreeTransformTool.ID))
                 .enabledWhen(BuilderCommands::canFreeTransform));
+
+        registry.register(Command.of(TRANSFORM_AGAIN, "Transform Again")
+                .run(context -> builderOf(context).transformBox().transformAgain(selectionOf(context)))
+                .enabledWhen(context -> hasBuilder(context)
+                        && builderOf(context).transformBox().hasSomethingToRepeat()
+                        && selectionOf(context) != null));
+
+        registry.register(Command.of(CONVERT_TO_SIZE, "Convert to Size")
+                .run(context -> builderOf(context).transformBox().convertToSize(selectionOf(context)))
+                .enabledWhen(context -> hasBuilder(context)
+                        && TransformBox.isScaleStandingInForSize(selectionOf(context))));
     }
 
     /** @see #FREE_TRANSFORM */

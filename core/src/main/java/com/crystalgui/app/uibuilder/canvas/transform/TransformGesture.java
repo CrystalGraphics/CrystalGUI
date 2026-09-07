@@ -495,6 +495,54 @@ public final class TransformGesture {
                 m.m01() * x + m.m11() * y + m.m31());
     }
 
+    // ---------------------------------------------------------------- typed in, rather than dragged
+
+    /**
+     * Setters for the options bar, which states a value instead of arriving at one.
+     *
+     * <p>None of them holds anything still. A drag knows which edge it grabbed and can hold the opposite
+     * one; a typed number does not, so <b>which point stays put is the reference widget's answer</b> and
+     * the caller applies it — see {@code TransformOptionsBar}. Putting an anchor rule in here would give
+     * two of them, disagreeing.</p>
+     */
+    public void setScale(float scaleX, float scaleY) {
+        sx = clampScale(scaleX);
+        sy = clampScale(scaleY);
+    }
+
+    /** @see #setScale */
+    public void setRotation(float radians) {
+        rotation = radians;
+    }
+
+    /** @see #setScale */
+    public void setSkew(float radiansX, float radiansY) {
+        skewX = radiansX;
+        skewY = radiansY;
+    }
+
+    /** @see #setScale */
+    public void setTranslate(float x, float y) {
+        tx = x;
+        ty = y;
+    }
+
+    /** Moves by a delta, which is how a caller puts a reference point back. @see #setScale */
+    public void nudgeTranslate(float dx, float dy) {
+        tx += dx;
+        ty += dy;
+    }
+
+    /** Places the pivot, compensating so the box does not slide. @see #pivotTo */
+    public void setOrigin(float x, float y) {
+        pivotTo(new Vector2f(x, y), false);
+    }
+
+    /** Where a point in the node's own pixels lands under the whole gesture. */
+    public Vector2f apply(float x, float y) {
+        return transformPoint(matrix(), x, y);
+    }
+
     public float width() {
         return width;
     }
