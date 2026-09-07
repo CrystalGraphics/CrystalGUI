@@ -163,12 +163,16 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
     public final Signal.Value<Set<Integer>> onSelectionChanged = new Signal.Value<>();
 
     /**
-     * Fires when a row is <b>activated</b> — Enter on the focused row.
+     * Fires when a row is <b>activated</b> — Enter on the focused row, or a double-click on it.
      *
      * <p>Distinct from {@link #onSelectionChanged} on purpose, and every list eventually needs both:
      * arrowing through a file list changes the selection constantly, and none of those are "open this
-     * file". Selection is where you are; activation is what you decided. A double-click belongs here too,
-     * and a renderer can raise it from its own template listener.</p>
+     * file". Selection is where you are; activation is what you decided.</p>
+     *
+     * <p><b>The double-click is raised here rather than by each renderer.</b> It used to be a template
+     * listener every consumer wrote for itself, which is one line to forget: the Design panel connected
+     * this signal and nothing ever emitted it, so its rows folded from Enter and not from a double-click,
+     * and it read as the tree being a picture rather than a control.</p>
      */
     public final Signal.Value<Integer> onRowActivated = new Signal.Value<>();
 
@@ -687,7 +691,20 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
                 // still knows its subject: it reads the row under the pointer directly.
                 if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
                 int index2 = indexOfRowElement(tracked);
-                if (index2 >= 0) pressRow(index2);
+                if (index2 < 0) return;
+                pressRow(index2);
+                // ON THE SECOND PRESS, not on the release: the detail counter is what makes a
+                // double-click a double-click, and it lives on the press. A consumer that rebuilds the
+                // model from here is rebuilding it mid-dispatch, which is why TreeView's own handler
+                // defers -- see TreeView#requestToggle.
+                //
+                // EXACTLY TWO, never `>= 2`. ButtonState counts a run without bound -- a third press
+                // inside the interval is detail 3, a fourth is 4 -- so `>= 2` activates once per press
+                // from the second onwards. Activation drives a TOGGLE for every tree, so that reads as
+                // double-clicking a branch to fold it and a third click opening it straight back up. An
+                // idempotent consumer (TextField's select-word) is unharmed by the loose test and keeps
+                // it; anything that flips state cannot be.
+                if (event.getDetail() == 2) onRowActivated.emit(index2);
             }, false, true);
             tracked.onMouseUp.attachListener((el, event) -> {
                 if (event.getDetail() == Input.KEYBOARD_DETAIL) return;

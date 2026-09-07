@@ -14,6 +14,7 @@ import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.widget.collection.tree.TreeRenderer;
 import com.crystalgui.widget.collection.tree.TreeView;
 import com.crystalgui.widget.text.UIText;
@@ -127,10 +128,6 @@ public final class HierarchyPanel extends UIElement {
         // SELECTION, not activation: a single click on a row is choosing that node, and activation is
         // the double-click that will open a template. The two are separate signals for exactly this.
         connections.add(tree.onSelectionChanged.connect(this::chooseRows));
-        // ACTIVATION FOLDS. A row's twisty has no hit target of its own yet -- the create menu records the
-        // same gap -- so opening a branch is the row's double-click, and requestToggle owns the deferral:
-        // folding from inside a press recycles the row the press landed on.
-        connections.add(tree.onRowActivated.connect(this::toggleRow));
         connections.add(builder.builderSelection().onChanged.connect(this::followSelection));
         connections.add(builder.getDocument().onChanged().connect(this::refresh));
     }
@@ -163,11 +160,23 @@ public final class HierarchyPanel extends UIElement {
         }
     }
 
-    private void toggleRow(Integer index) {
-        if (index == null) return;
-        List<TreeRow<UIElement>> rows = tree.visibleRows();
-        if (index < 0 || index >= rows.size()) return;
-        tree.requestToggle(rows.get(index).item());
+    /**
+     * Folds the row a twisty belongs to.
+     *
+     * <p>The row is found by asking the list which index this element currently holds, never by
+     * remembering one: a {@code ListView} recycles a fixed window of templates, so the row a template
+     * stands for changes under it as the list scrolls.</p>
+     */
+    private void foldFromTwisty(UIElement row, MouseEvent.Down event) {
+        int index = tree.indexOfRowElement(row);
+        TreeRow<UIElement> at = index < 0 ? null : tree.rowAt(index);
+        // A LEAF'S TWISTY IS A SPACER, kept so labels line up -- a press on it is the row's.
+        if (at == null || !at.expandable()) return;
+        // STOPPED before ListView's own row handler, which is on the bubble phase: opening a branch is
+        // not choosing it, and a second click there would fold it straight back through activation.
+        event.stopPropagation();
+        event.preventDefault();
+        tree.requestToggleAt(index);
     }
 
     private void chooseRows(Set<Integer> indices) {
@@ -245,6 +254,12 @@ public final class HierarchyPanel extends UIElement {
             row.addClass(ROW_CLASS);
             UIElement twisty = new UIElement();
             twisty.addClass(TWISTY_CLASS);
+            // ITS OWN HIT TARGET. A chevron that only responds to the row's double-click is a picture of
+            // a tree control; every reference folds on a single click of the twisty and selects on a click
+            // of the row, and the two must not be the same gesture. The press is claimed so it never
+            // reaches the list -- opening a branch is not choosing it.
+            twisty.events.getGroup(MouseEvent.Down.class)
+                    .attachListener((element, event) -> foldFromTwisty(row, event), false, false);
             row.append(twisty);
             UIText label = new UIText();
             label.addClass(LABEL_CLASS);

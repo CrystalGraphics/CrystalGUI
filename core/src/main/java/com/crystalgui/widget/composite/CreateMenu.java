@@ -372,11 +372,9 @@ public class CreateMenu<N, T> extends Popover {
     private void activateRow(int index) {
         TreeRow<N> row = tree.rowAt(index);
         if (row == null || rows == null) return;
+        // TreeView folds the category itself. What is left here is the scroll: the row stays where the
+        // hand left it rather than the list jumping to wherever the restored selection lands.
         if (rows.isCategory(row.item())) {
-            tree.toggleExpanded(row.item());
-            // Re-assert the highlight. Expanding rebuilds the flattened model wholesale and the list
-            // drops any selection a model change invalidated, so without this, opening a folder
-            // unhighlights the very row you are standing on.
             highlight(index);
             return;
         }

@@ -25,7 +25,6 @@ import com.crystalgui.text.diagnostic.ProblemsTreeSource;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.input.FocusPolicy;
-import com.crystalgui.ui.service.Input;
 import com.crystalgui.ui.service.AnchoredPlacement;
 import com.crystalgui.widget.collection.tree.TreeRenderer;
 import com.crystalgui.widget.collection.tree.TreeSearch;
@@ -682,12 +681,9 @@ public class ProblemsPanel extends UIElement implements DataProvider, HeaderCont
         if (tree == null || index < 0) return;
         TreeRow<ProblemNode> row = tree.rowAt(index);
         if (row == null) return;
-        // A FILE HEADING IS NOT A DESTINATION. Activating one opens it, which is what a tree already does
-        // with a twisty -- so choosing it would be a second way to spell "expand".
-        if (row.item().isFile()) {
-            tree.toggleExpanded(row.item());
-            return;
-        }
+        // A FILE HEADING IS NOT A DESTINATION -- there is no line to jump to. TreeView folds it for us;
+        // this only has to decline to emit.
+        if (row.item().isFile()) return;
         onProblemChosen.emit(row.item());
     }
 
@@ -818,30 +814,12 @@ public class ProblemsPanel extends UIElement implements DataProvider, HeaderCont
                 requestFold(node);
             }, false, false);
 
-            // DOUBLE CLICK NAVIGATES; a single click only selects. It has to be raised here because
-            // `onRowActivated` is Enter only -- its javadoc says so, and says a renderer raises the
-            // pointer half from its own template. Without this the panel was keyboard-navigable and
-            // completely inert to the mouse.
+            // NO DOUBLE-CLICK LISTENER. ListView raises onRowActivated from one, which is where this
+            // used to be raised by hand -- and raising it here as well now navigates twice.
             //
-            // Two clicks rather than one for the reason `FilesRenderer` already records: one press has to
-            // mean "this is the row I am talking about", because a press is how you aim the selection, a
-            // Shift-range, or anything a command resolves from it. Navigating on that same press means a
-            // problem cannot be selected without also being jumped to.
-            //
-            // ONLY FOR A PROBLEM ROW. A file heading is not a destination -- chooseRow says as much and
-            // folds it instead -- and the chevron already spells that.
-            //
-            // The keyboard guard is not optional: Space and Enter on a focused element synthesise the same
-            // MouseEvent.Down a real click would, so without it Enter would activate twice.
-            row.onMouseDown.attachListener((element, event) -> {
-                if (event.getDetail() == Input.KEYBOARD_DETAIL) return;
-                if (event.getDetail() < 2) return;
-                ProblemNode node = rowItems.get(row);
-                if (node == null || node.isFile() || tree == null) return;
-                int index = tree.indexOfRowElement(row);
-                if (index >= 0) tree.onRowActivated.emit(index);
-            }, false, false);
-
+            // Two clicks rather than one, for the reason FilesRenderer records: one press has to mean
+            // "this is the row I am talking about", because a press is how you aim the selection, a
+            // Shift-range, or anything a command resolves from it.
             UIElement icon = new UIElement();
             icon.addClass(ICON_CLASS);
             icon.setHitTest(false);

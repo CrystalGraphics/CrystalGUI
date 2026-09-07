@@ -241,6 +241,41 @@ public class DesignPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase {
         frameAndPump();
     }
 
+    /**
+     * <b>The twisty folds the branch, and does not choose it.</b>
+     *
+     * <p>Reported as "now it's just a view, I can't actually fold them". Both halves matter: a chevron
+     * that folds and also selects makes opening a branch indistinguishable from choosing it, so the
+     * inspector and the canvas jump to whatever was opened.</p>
+     */
+    @Test
+    public void pressingTheTwistyFoldsWithoutSelecting() {
+        workbench.open(DockInput.of(workbench.refFor(FILE)));
+        for (int i = 0; i < 16; i++) frameAndPump();
+
+        var tree = panel().hierarchy().tree();
+        int before = tree.visibleRows().size();
+        assertTrue("nothing to fold", before >= 2);
+
+        clickOn(twistyOfRow(0));
+        // requestToggle defers to the next tick, and the re-flatten is a frame after that.
+        for (int i = 0; i < 4; i++) frameAndPump();
+
+        assertTrue("the branch never folded: still " + tree.visibleRows().size() + " rows",
+                tree.visibleRows().size() < before);
+        assertNull("folding a branch is not choosing it", builder().selection().node());
+    }
+
+    /** The chevron of a realised row — found through the list, since rows are recycled. */
+    private UIElement twistyOfRow(int index) {
+        UIElement row = panel().hierarchy().tree().realisedRows().get(index);
+        assertNotNull("row " + index + " is not realised", row);
+        for (UIElement child : row.composedSubtree()) {
+            if (child.hasClass("__twisty__")) return child;
+        }
+        throw new AssertionError("the row has no twisty to press");
+    }
+
     /** With nothing open it is empty, which is the state it must not be stuck in. */
     @Test
     public void withNoBuilderInFrontItIsEmpty() {

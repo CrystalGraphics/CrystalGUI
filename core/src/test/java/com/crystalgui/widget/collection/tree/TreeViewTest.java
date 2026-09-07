@@ -465,4 +465,110 @@ public class TreeViewTest extends UiDocumentTestBase {
                 "c", tree.rowAt(tree.getSelectedIndices().iterator().next()).item());
     }
 
+    // ── Activation folds ────────────────────────────────────────────────────
+
+    /**
+     * <b>A double-click on a branch folds it, and the tree owns that.</b>
+     *
+     * <p>Five consumers wrote this for themselves and no two spelled it the same way — two of them from
+     * inside the press, which re-flattens under the element being dispatched through. The Design panel
+     * connected the signal to a fold and nothing ever raised it, which is what made a tree behave like a
+     * picture of one.</p>
+     */
+    @Test
+    public void aDoubleClickOnABranchFoldsIt() {
+        build();
+        tree.setExpanded("a", true);
+        settle();
+        assertEquals(List.of("a", "a1", "a2", "b", "c"), visible());
+
+        doubleClickRow(0);
+        assertEquals("the branch never folded", List.of("a", "b", "c"), visible());
+
+        doubleClickRow(0);
+        assertEquals("and it does not open again", List.of("a", "a1", "a2", "b", "c"), visible());
+    }
+
+    /**
+     * <b>A third click does not open it again.</b>
+     *
+     * <p>{@code ButtonState} counts a click run without bound, so a triple-click is detail 3 — and the
+     * obvious {@code detail >= 2} activates on every press from the second onwards. Folding is a toggle,
+     * so that is a branch that shuts on the second click and reopens on the third.</p>
+     */
+    @Test
+    public void athirdClickDoesNotUnfoldIt() {
+        build();
+        tree.setExpanded("a", true);
+        settle();
+
+        UIElement row = tree.realisedRows().get(0);
+        press(row, 1);
+        press(row, 2);
+        press(row, 3);
+        settle();
+
+        assertEquals("the third click of the run folded it back open", List.of("a", "b", "c"), visible());
+
+        press(row, 4);
+        settle();
+        assertEquals("nor does a fourth", List.of("a", "b", "c"), visible());
+    }
+
+    /** Enter is the keyboard half of the same gesture, and always was. */
+    @Test
+    public void enterOnABranchFoldsItToo() {
+        build();
+        tree.setExpanded("a", true);
+        settle();
+
+        tree.setFocusedIndex(0);
+        settle();
+        key(CgKeyCodes.KEY_RETURN);
+
+        assertEquals(List.of("a", "b", "c"), visible());
+    }
+
+    /**
+     * <b>A leaf's activation is the consumer's.</b>
+     *
+     * <p>A file tree opens a file from it; swallowing it here would make every such tree inert to the
+     * mouse.</p>
+     */
+    @Test
+    public void activatingALeafIsLeftAlone() {
+        build();
+        List<Integer> activated = new ArrayList<>();
+        tree.onRowActivated.connect(activated::add);
+
+        doubleClickRow(2); // "c" — a leaf
+        assertEquals("the leaf's activation never reached its consumer", List.of(2), activated);
+        assertEquals("and nothing folded", List.of("a", "b", "c"), visible());
+    }
+
+    /** Off, for a tree where activating a branch means something else. */
+    @Test
+    public void aTreeMayDeclineToFoldOnActivation() {
+        build();
+        tree.setFoldsOnActivate(false);
+        tree.setExpanded("a", true);
+        settle();
+
+        doubleClickRow(0);
+        assertEquals(List.of("a", "a1", "a2", "b", "c"), visible());
+    }
+
+    /** Two presses on the realised row, the second carrying the detail that makes it a double-click. */
+    private void doubleClickRow(int index) {
+        UIElement row = tree.realisedRows().get(index);
+        assertNotNull("row " + index + " is not realised", row);
+        press(row, 1);
+        press(row, 2);
+        settle();
+    }
+
+    private void press(UIElement row, int detail) {
+        document.input().send(row, new com.crystalgui.ui.event.MouseEvent.Down(
+                row, new com.crystalgui.core.data.ReadOnlyVec2f(new org.joml.Vector2f()), 0, detail));
+    }
 }
