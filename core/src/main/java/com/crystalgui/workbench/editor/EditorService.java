@@ -78,6 +78,16 @@ public final class EditorService implements Disposable {
     public final Signal.Value<Tab> onDidOpen = new Signal.Value<>();
 
     /** A tab closed. */
+    /**
+     * The content is in — this tab's document exists and its model holds the file.
+     *
+     * <p>Not {@link #onDidOpen}, which is the tab APPEARING: that fires while the read is still in
+     * flight, so at it there is no document, {@link Tab#editor()} answers null, and anything derived
+     * from the content has nothing to act on. Everything that has to wait for the bytes — a restored
+     * caret or camera, a diagnostic pass, a panel re-seeding itself — waits for this one.</p>
+     */
+    public final Signal.Value<Tab> onDidLoad = new Signal.Value<>();
+
     public final Signal.Value<Tab> onDidClose = new Signal.Value<>();
 
     /** A tab's state moved — what a tab strip redraws its decoration from. */
@@ -148,6 +158,9 @@ public final class EditorService implements Disposable {
                 })
                 .then(reference -> {
                     tab.bind(reference);
+                    // AFTER THE BIND, which is the whole point of the signal: before it there is no
+                    // document on this tab and `editor()` answers null.
+                    onDidLoad.emit(tab);
                     activate(tab);
                     opened.resolve(tab);
                 });
