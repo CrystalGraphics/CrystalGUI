@@ -1,5 +1,8 @@
 package com.crystalgui.app.uibuilder.canvas.transform;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
+
 import javax.annotation.Nullable;
 
 import org.joml.Matrix4f;
@@ -129,6 +132,11 @@ public final class TransformBox extends UIElement {
     private float hoverY;
 
     private boolean dragging;
+
+    /** One entry per completed adjustment. @see #undoStep */
+    private final Deque<TransformGesture.State> undone = new ArrayDeque<>();
+
+    private final Deque<TransformGesture.State> redone = new ArrayDeque<>();
 
     public TransformBox(BuilderContext ctx, UiBuilderDocument document) {
         super(NAME);
@@ -314,6 +322,8 @@ public final class TransformBox extends UIElement {
         // rest of the session.
         dragging = false;
         hoverX = Float.NaN;
+        undone.clear();
+        redone.clear();
         gesture.release();
         pressOuter = null;
         setDisplayed(false);
@@ -467,12 +477,48 @@ public final class TransformBox extends UIElement {
     }
 
     /**
+     * Steps back one adjustment <b>without leaving the box</b>.
+     *
+     * <p>Photoshop's rule, and the reason it is not the document's undo: nothing has reached the document
+     * yet. The whole gesture is one edit, written on commit, so while the box is up the only history that
+     * exists is the one kept here — and a Ctrl+Z falling through to the document would undo whatever was
+     * done BEFORE the transform started, which is never what the hand meant.</p>
+     *
+     * @return whether there was anything to step back
+     */
+    public boolean undoStep() {
+        if (!active || undone.isEmpty()) return false;
+        redone.push(gesture.snapshot());
+        gesture.restore(undone.pop());
+        preview();
+        return true;
+    }
+
+    /** @see #undoStep */
+    public boolean redoStep() {
+        if (!active || redone.isEmpty()) return false;
+        undone.push(gesture.snapshot());
+        gesture.restore(redone.pop());
+        preview();
+        return true;
+    }
+
+    /** How many adjustments can still be stepped back. For a test. */
+    public int undoDepth() {
+        return undone.size();
+    }
+
+    /**
      * Begins a drag on whatever {@link #grip} answered.
      *
      * <p>Pins the viewport mapping a scale is measured through, for the reason {@link #toScaleSpace}
      * gives. Pinned here rather than recomputed there so there is exactly one moment it is taken.</p>
      */
     public void press(Grip grip) {
+        // BEFORE the drag, so stepping back lands where the hand started. Discarded again on release if
+        // nothing actually moved -- a press that turns out to be a click should not cost an undo.
+        undone.push(gesture.snapshot());
+        redone.clear();
         gesture.press(grip);
         Matrix4f frame = frame();
         pressOuter = frame == null ? null : frame.mul(gesture.outer());
@@ -559,6 +605,7 @@ public final class TransformBox extends UIElement {
     }
 
     public void release() {
+        if (!undone.isEmpty() && undone.peek().equals(gesture.snapshot())) undone.pop();
         gesture.release();
         pressOuter = null;
     }

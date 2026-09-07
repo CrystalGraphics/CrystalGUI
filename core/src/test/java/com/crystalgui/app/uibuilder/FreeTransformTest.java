@@ -33,6 +33,7 @@ import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.testsupport.UiDocumentTestBase;
+import com.crystalgui.widget.surface.SurfacePolicy;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.control.Button;
@@ -453,6 +454,80 @@ public class FreeTransformTest extends UiDocumentTestBase {
         document.update(W, H);
         assertTrue("the box did not reopen", box().isActive());
         assertEquals("a fresh box is not holding a gesture", Kind.NONE, box().gesture().grip().kind());
+    }
+
+    /**
+     * <b>Ctrl+Z steps back one adjustment and stays in the box.</b>
+     *
+     * <p>Photoshop's rule. It cannot be the document's undo: the whole transform is a single edit written
+     * on commit, so while the box is up nothing of it has reached the document — a Ctrl+Z falling through
+     * would undo whatever happened BEFORE the transform started.</p>
+     */
+    @Test
+    public void ctrlZStepsBackOneAdjustmentWithoutLeaving() {
+        long clean = model.version();
+        enterFreeTransform();
+        document.update(W, H);
+
+        box().press(new Grip(Kind.SCALE, Spot.BOTTOM_RIGHT));
+        box().gesture().scaleTo(new Vector2f(200f, 100f), false, false);
+        box().release();
+        float afterFirst = box().gesture().scaleX();
+
+        box().press(new Grip(Kind.ROTATE, Spot.TOP_RIGHT));
+        box().gesture().rotateBy(0.5f, false);
+        box().release();
+        assertEquals(2, box().undoDepth());
+
+        assertTrue(box().undoStep());
+        assertEquals("the rotation should be gone", 0f, box().gesture().rotation(), 0.001f);
+        assertEquals("and the scale before it untouched", afterFirst, box().gesture().scaleX(), 0.001f);
+        assertTrue("the box has to stay up", box().isActive());
+        assertEquals("and nothing may reach the document", clean, model.version());
+
+        assertTrue(box().undoStep());
+        assertTrue("back to where it opened", box().gesture().isIdentity());
+        assertFalse("nothing left to step back", box().undoStep());
+
+        assertTrue("and forward again", box().redoStep());
+        assertEquals(afterFirst, box().gesture().scaleX(), 0.001f);
+    }
+
+    /** A press that turns out to be a click must not cost a step. */
+    @Test
+    public void aPressThatMovedNothingIsNotAStep() {
+        enterFreeTransform();
+        document.update(W, H);
+
+        box().press(new Grip(Kind.SCALE, Spot.BOTTOM_RIGHT));
+        box().release();
+
+        assertEquals(0, box().undoDepth());
+        assertFalse(box().undoStep());
+    }
+
+    /**
+     * <b>A handle off the page still takes a press.</b>
+     *
+     * <p>{@code SurfaceMode} offers a press only where the policy says the surface owns it, and outside
+     * the artboard {@code TreePolicy} answers TREE — right for a marquee, which belongs to the page, and
+     * wrong for a modal box whose handles are wherever the gesture has put them. Rotate an element near
+     * the edge and half of them are over empty plane, where they did nothing at all.</p>
+     */
+    @Test
+    public void aModalToolClaimsPressesOffThePage() {
+        Artboard artboard = new Artboard(model);
+        document.append(artboard);
+        UIElement offThePage = new UIElement().layout(l -> l.width(4f).height(4f));
+        document.append(offThePage);
+        document.update(W, H);
+
+        assertEquals("the gate the box has to be exempt from",
+                SurfacePolicy.PressOwner.TREE, new TreePolicy(artboard).ownerOf(offThePage));
+        assertTrue("so the tool has to claim everything",
+                new FreeTransformTool(editor.surface(), box()).claimsEveryPress());
+        assertFalse("and an ordinary tool must not — a marquee belongs to the page",
+                new TreeSelectTool(editor.surface()).claimsEveryPress());
     }
 
     /** Leaving the tool keeps the work — Photoshop's rule, and the safe one. */

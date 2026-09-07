@@ -87,6 +87,15 @@ public final class FreeTransformTool implements Tool {
      * work. A tool that cancelled here would throw the gesture away when the user clicked another tool,
      * and a live preview left behind with no box to reach it is worse than both.</p>
      */
+    /**
+     * <b>Yes.</b> The box is modal over one selection, and its handles are wherever the gesture has put
+     * them — often over empty plane once the element is rotated or scaled up.
+     */
+    @Override
+    public boolean claimsEveryPress() {
+        return true;
+    }
+
     @Override
     public void deactivated() {
         box.commit();
@@ -166,6 +175,19 @@ public final class FreeTransformTool implements Tool {
         if (key == CgKeyCodes.KEY_ESCAPE) {
             box.cancel();
             backToSelect();
+            return true;
+        }
+        // THE GESTURE'S OWN HISTORY, not the document's. Nothing has been written yet -- the whole
+        // transform is one edit made on commit -- so a Ctrl+Z falling through would undo whatever was
+        // done BEFORE the box opened, which is never what the hand meant. Still swallowed once the
+        // gesture is back at its start, so it cannot reach past the modal state either.
+        if (key == CgKeyCodes.KEY_Z && CgModifiers.hasCtrl(modifiers)) {
+            if (CgModifiers.hasShift(modifiers)) box.redoStep();
+            else box.undoStep();
+            return true;
+        }
+        if (key == CgKeyCodes.KEY_Y && CgModifiers.hasCtrl(modifiers)) {
+            box.redoStep();
             return true;
         }
         if (key == CgKeyCodes.KEY_RETURN || key == CgKeyCodes.KEY_NUMPADENTER) {
