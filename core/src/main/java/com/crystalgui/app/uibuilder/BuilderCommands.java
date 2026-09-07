@@ -8,6 +8,8 @@ import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.ui.dom.UIDocument;
+import java.util.List;
+
 import com.crystalgui.ui.dom.UIElement;
 
 import javax.annotation.Nullable;
@@ -39,6 +41,28 @@ public final class BuilderCommands {
     public static final String SELECT_PARENT = "uibuilder.selectParent";
 
     public static final String SELECT_CHILD = "uibuilder.selectChild";
+
+    /**
+     * The builder's own Select All.
+     *
+     * <p>The engine's takes everything on the PLANE, which in a graph is the nodes and here is the
+     * artboard and nothing else -- the document's tree lives inside the page rather than beside it. So
+     * Ctrl+A put eight handles on the page and described it in the inspector, and filtering the page out
+     * left it selecting nothing at all. "Everything" in a builder is the top level of the document,
+     * which is what Figma's own Select All takes.</p>
+     */
+    public static final String SELECT_ALL = "uibuilder.selectAll";
+
+    /** @see #SELECT_NEXT_SIBLING */
+    public static final String SELECT_PREVIOUS_SIBLING = "uibuilder.selectPreviousSibling";
+
+    /**
+     * Along the row, which is the third direction a tree has and the one that was missing.
+     *
+     * <p>Parent and first-child alone walk a spine: you can go up and down but never across, so reaching
+     * the fourth of five children means going up and clicking. Every tree UI binds all three.</p>
+     */
+    public static final String SELECT_NEXT_SIBLING = "uibuilder.selectNextSibling";
 
     /** Registers them, and hands back the way to withdraw them. */
     public static Disposable register() {
@@ -81,13 +105,53 @@ public final class BuilderCommands {
                 .binding("Enter")
                 .run(context -> selectRelative(context, false))
                 .enabledWhen(context -> hasBuilder(context) && selectionOf(context) != null));
+
+        // NO `binding` ON THESE TWO. A bare arrow declared on a command is application-wide, which would
+        // cost every list and every text field its own arrows. They are bound in the builder surface's
+        // keymap instead, where they are live only while focus is on the canvas -- the same reason the
+        // engine's `F` and `A` are bound there rather than here.
+        registry.register(Command.of(SELECT_ALL, "Select All")
+                .run(context -> {
+                    BuilderEditor builder = builderOf(context);
+                    if (builder != null) {
+                        builder.selection().replaceWith(builder.document().root().children());
+                    }
+                })
+                .enabledWhen(BuilderCommands::hasBuilder));
+
+        registry.register(Command.of(SELECT_PREVIOUS_SIBLING, "Select Previous Sibling")
+                .run(context -> selectSibling(context, -1))
+                .enabledWhen(context -> hasBuilder(context) && selectionOf(context) != null));
+
+        registry.register(Command.of(SELECT_NEXT_SIBLING, "Select Next Sibling")
+                .run(context -> selectSibling(context, 1))
+                .enabledWhen(context -> hasBuilder(context) && selectionOf(context) != null));
+    }
+
+    /** @see #SELECT_NEXT_SIBLING */
+    private static void selectSibling(CommandContext context, int step) {
+        BuilderEditor builder = builderOf(context);
+        UIElement node = selectionOf(context);
+        if (builder == null || node == null) return;
+        UIElement parent = node.parentElement();
+        if (parent == null) return;
+        List<UIElement> siblings = parent.children();
+        int at = siblings.indexOf(node);
+        if (at < 0) return;
+        // CLAMPED, NOT WRAPPED. Wrapping in a tree means the last child's "next" is its own first
+        // sibling, which reads as the selection jumping backwards for no reason.
+        int next = at + step;
+        if (next < 0 || next >= siblings.size()) return;
+        builder.selection().selectOnly(siblings.get(next));
     }
 
     /**
      * Up to the parent, or down to the first child.
      *
-     * <p>Stops at the document root going up — selecting the artboard would be selecting the page rather
-     * than anything in the document, and there is no edit that means.</p>
+     * <p>Going up past the document root DESELECTS rather than doing nothing. Escape is one key with one
+     * meaning — "out of this" — and a step that silently refuses at the top is a key that stops working
+     * where it is most expected to. It also makes the builder's Escape a superset of the surface's plain
+     * Deselect, which is what lets one binding serve both.</p>
      */
     private static void selectRelative(CommandContext context, boolean up) {
         BuilderEditor builder = builderOf(context);
@@ -95,7 +159,11 @@ public final class BuilderCommands {
         if (node == null) return;
         UIElement next = up ? node.parentElement()
                 : (node.children().isEmpty() ? null : node.children().get(0));
-        if (next == null || next == builder.artboard()) return;
+        if (next == null || next == builder.artboard()) {
+            // Only going UP means "out of everything"; going down off a leaf means nothing at all.
+            if (up) builder.selection().selectOnly(null);
+            return;
+        }
         builder.selection().selectOnly(next);
     }
 

@@ -201,6 +201,12 @@ public final class ResizeHandles extends UIElement {
 
         float startWidth = box.width();
         float startHeight = box.height();
+        // WHERE IT STARTED, read ONCE. holdOppositeEdge writes an inset derived from these, and reading
+        // the LIVE box instead fed its own output back in: each frame moved the origin, the next frame
+        // measured from the moved origin and moved it again, so the box shot off screen on the smallest
+        // movement. A gesture measures from where it began, never from what it has already done.
+        float startX = box.x();
+        float startY = box.y();
         JsonElement before = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
         float zoom = Math.max(0.0001f, ctx.surface().zoom());
         showBadge(node, startWidth, startHeight);
@@ -226,7 +232,20 @@ public final class ResizeHandles extends UIElement {
                         width = height / Math.max(0.0001f, ratio);
                     }
                 }
+                // A BOX HAS NO NEGATIVE SIZE, and clamping only inside `write` was not enough: the badge
+                // read the unclamped number and reported "-64 x -62" while the box sat at zero, so the
+                // readout disagreed with the thing it was describing. Clamped once, here, and everything
+                // downstream sees the same figure.
+                width = Math.max(MIN_SIZE, width);
+                height = Math.max(MIN_SIZE, height);
                 write(node, spot, width, height);
+                // AND THE EDGE YOU GRABBED FOLLOWS THE POINTER. Writing a size alone anchors the box at
+                // its own origin, so dragging the LEFT handle left grew it to the RIGHT -- the top-left
+                // handle resized towards the bottom-right, which is the one thing a corner handle must
+                // never do. Only an out-of-flow node can be held in place: its inset is ours to write.
+                // An in-flow one is positioned by its parent, so its origin is not ours to move and the
+                // box still grows from where the layout put it.
+                holdOppositeEdge(node, spot, startX, startY, width - startWidth, height - startHeight);
                 showBadge(node, width, height);
             }
 
@@ -244,11 +263,38 @@ public final class ResizeHandles extends UIElement {
         });
     }
 
+    /** One pixel, not zero: a box with no extent cannot be grabbed again to undo the drag. */
+    private static final float MIN_SIZE = 1f;
+
+    /**
+     * Keeps the edge OPPOSITE the handle where it was, by moving the node's own inset.
+     *
+     * <p>Only for a node the builder positions — one in flow has no inset of its own, and its origin is
+     * the parent's to decide. @see MoveOutOfFlow#isMovable</p>
+     */
+    private static void holdOppositeEdge(UIElement node, Spot spot,
+                                         float startX, float startY, float growX, float growY) {
+        if (!MoveOutOfFlow.isMovable(node)) return;
+        UIElement parent = node.parentElement();
+        Box parentBox = parent == null ? null : parent.box();
+        if (parentBox == null) return;
+
+        // The edge that must not move is the one the handle is NOT on: dragging the left edge pins the
+        // right, so the left inset absorbs the whole size change. Everything here is measured from the
+        // START of the gesture -- see the note where startX is taken.
+        boolean rightAnchored = MoveOutOfFlow.anchorsRight(node);
+        boolean bottomAnchored = MoveOutOfFlow.anchorsBottom(node);
+        StyleGroup.inlinePipeline(node.getStyle().getLayoutGroup(), l -> {
+            if (spot.xDirection() < 0 && !rightAnchored) l.left(Math.round(startX - growX));
+            if (spot.yDirection() < 0 && !bottomAnchored) l.top(Math.round(startY - growY));
+        });
+    }
+
     /** Writes the axes this handle owns, and only those — a side handle must not pin the other one. */
     private static void write(UIElement node, Spot spot, float width, float height) {
         StyleGroup.inlinePipeline(node.getStyle().getLayoutGroup(), l -> {
-            if (spot.xDirection() != 0) l.width(Math.max(0f, Math.round(width)));
-            if (spot.yDirection() != 0) l.height(Math.max(0f, Math.round(height)));
+            if (spot.xDirection() != 0) l.width(Math.max(MIN_SIZE, Math.round(width)));
+            if (spot.yDirection() != 0) l.height(Math.max(MIN_SIZE, Math.round(height)));
         });
     }
 
@@ -374,7 +420,11 @@ public final class ResizeHandles extends UIElement {
     }
 
     private void applyVisibility() {
-        boolean wanted = target != null && target.box() != null;
+        // DESIGN MODE IS PART OF THE ANSWER, and leaving it out is why handles came back during a
+        // preview. BuilderEditor hides them when the mode flips, but this runs every frame from an
+        // afterLayout hook and re-showed them on the next one -- a one-shot instruction losing to a
+        // standing rule. The rule has to state the whole condition.
+        boolean wanted = ctx.isDesignMode() && target != null && target.box() != null;
         pendingVisibility = false;
         if (isDisplayed() != wanted) setDisplayed(wanted);
     }

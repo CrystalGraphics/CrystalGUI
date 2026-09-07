@@ -11,6 +11,7 @@ import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.ClipboardActions;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
+import java.util.ArrayList;
 import com.crystalgui.ui.input.keymap.Keymap;
 import com.crystalgui.widget.canvas.WorldRect;
 import com.crystalgui.widget.surface.edit.Clipboard;
@@ -62,8 +63,14 @@ public final class SurfaceCommands {
                 .run(context -> with(context, SurfaceCommands::delete))
                 .enabledWhen(context -> hasSelection(surfaceOf(context))));
         registry.register(Command.of(SELECT_ALL, "Select All")
-                .run(context -> with(context, surface ->
-                        surface.selection().replaceWith(surface.surface().items())))
+                // THROUGH THE POLICY, exactly as a marquee is. `items()` is everything ON the plane,
+                // which is not the same as everything a gesture may take: a UI builder places its
+                // ARTBOARD there -- the page the tree is laid out on -- and answers null for it, because
+                // selecting the page is not an edit. Asking items() directly put eight resize handles
+                // on the page frame and described it in the inspector. Picking.touching carries the
+                // same note; this was the other caller that had not learned it.
+                .run(context -> with(context, surface -> surface.selection().replaceWith(
+                        selectableIn(surface))))
                 .enabledWhen(context -> surfaceOf(context) != null));
         registry.register(Command.of(DESELECT, "Deselect")
                 .run(context -> with(context, surface -> surface.selection().clear()))
@@ -100,6 +107,16 @@ public final class SurfaceCommands {
      * <p>Bare letters and {@code Delete} are scoped by being bound here; the clipboard chords are
      * modified, so they keep working while something inside an item has focus.</p>
      */
+    /** Everything on the plane that the consumer's policy says is a thing. @see SurfacePolicy#itemFor */
+    private static List<UIElement> selectableIn(SurfaceEditor surface) {
+        SurfacePolicy policy = surface.policy(SurfacePolicy.class);
+        List<UIElement> taken = new ArrayList<>();
+        for (UIElement item : surface.surface().items()) {
+            if (policy.itemFor(item) == item) taken.add(item);
+        }
+        return taken;
+    }
+
     public static void bindDefaults(Keymap keymap) {
         keymap.bind("Delete", DELETE);
         keymap.bind("Backspace", DELETE);
