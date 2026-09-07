@@ -293,7 +293,7 @@ public final class WatchHub {
                 if (hint != CgFileEvent.Kind.CREATED || lastEtag.containsKey(path)) return null;
                 lastEtag.put(path, "");
                 return new FsMessages.FileChange(
-                        path.toString(), FsMessages.ChangeKind.CREATED, "");
+                        path.toString(), FsMessages.ChangeKind.CREATED, "", "", "", true);
             }
             String now = entry.etag();
             if (known && now.equals(last)) return null;
@@ -319,7 +319,10 @@ public final class WatchHub {
             // why such a move arrives as a delete and a create rather than as one RENAMED.
             if (last != null) etagBefore.put(path.toString(), last);
             lastEtag.put(path, null);
-            return new FsMessages.FileChange(path.toString(), FsMessages.ChangeKind.DELETED, "");
+            // A DIRECTORY IS WHAT WE RECORDED IT AS. It is gone, so nothing can be asked about it now;
+            // the empty etag is the marker the directory branch above wrote when it first appeared.
+            return new FsMessages.FileChange(path.toString(), FsMessages.ChangeKind.DELETED, "", "", "",
+                    "".equals(last));
         }
     }
 

@@ -503,13 +503,18 @@ public final class FsMessages {
      *               <b>outside the workspace</b>, not unknown: a change the server performed always
      *               names its actor
      */
-    public record FileChange(String path, ChangeKind kind, String etag, String from, String author) {
+    public record FileChange(String path, ChangeKind kind, String etag, String from, String author,
+                             boolean directory) {
+        public FileChange(String path, ChangeKind kind, String etag, String from, String author) {
+            this(path, kind, etag, from, author, false);
+        }
+
         public FileChange(String path, ChangeKind kind, String etag, String from) {
-            this(path, kind, etag, from, "");
+            this(path, kind, etag, from, "", false);
         }
 
         public FileChange(String path, ChangeKind kind, String etag) {
-            this(path, kind, etag, "", "");
+            this(path, kind, etag, "", "", false);
         }
 
         /** Whether somebody on this workspace did it, as opposed to something outside it. */
@@ -518,7 +523,7 @@ public final class FsMessages {
         }
 
         public FileChange by(String who) {
-            return new FileChange(path, kind, etag, from, who == null ? "" : who);
+            return new FileChange(path, kind, etag, from, who == null ? "" : who, directory);
         }
     }
 
@@ -531,6 +536,7 @@ public final class FsMessages {
                     .optional(ETAG, Codecs.STRING, value.etag(), "")
                     .optional("from", Codecs.STRING, value.from(), "")
                     .optional("author", Codecs.STRING, value.author(), "")
+                    .optional("directory", Codecs.BOOL, value.directory(), false)
                     .build();
         }
 
@@ -541,7 +547,8 @@ public final class FsMessages {
                     in.field("kind", Codecs.enumOf(ChangeKind.class)),
                     in.optional(ETAG, Codecs.STRING, ""),
                     in.optional("from", Codecs.STRING, ""),
-                    in.optional("author", Codecs.STRING, ""));
+                    in.optional("author", Codecs.STRING, ""),
+                    in.optional("directory", Codecs.BOOL, false));
         }
     };
 

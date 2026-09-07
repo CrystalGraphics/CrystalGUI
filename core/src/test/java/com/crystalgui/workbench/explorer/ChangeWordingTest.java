@@ -55,4 +55,16 @@ public class ChangeWordingTest {
         assertEquals("moved README.md to fah/ as NOTES.md", ExplorerBinding.verb(change));
         assertEquals("moved to fah/ as NOTES.md", ExplorerBinding.past(change));
     }
+
+    /** A file says which it is by having an extension; a folder has to be told. */
+    @Test
+    public void aFolderIsMarkedAsOne() {
+        FsMessages.FileChange folder = new FsMessages.FileChange(
+                "proj:coo", FsMessages.ChangeKind.CREATED, "", "", "", true);
+        assertEquals("added coo/", ExplorerBinding.verb(folder));
+
+        FsMessages.FileChange file = new FsMessages.FileChange(
+                "proj:coo.txt", FsMessages.ChangeKind.CREATED, "etag", "", "", false);
+        assertEquals("added coo.txt", ExplorerBinding.verb(file));
+    }
 }
