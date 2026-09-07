@@ -184,6 +184,10 @@ notificationsview > .__notification-list__ {
 
 .__notification__ .__message__ {
     font-size: 7px;
+    /* THE OPERATION, and the one thing read at a glance -- "New File", "Directory Moved". The line under
+     * it is the detail and the line under that is who; weight is what says which of the three to read
+     * first. @see ChangeNotice */
+    font-weight: bold;
     color: var(--notification-message-fg, #DFE1E5);
     flex-grow: 1;
     flex-shrink: 1;
@@ -347,10 +351,14 @@ notificationsview .__notifications-empty__ {
      * the card empty. Dropping the timestamp (below) is what made a sensible width possible at all.
      *
      * The binding case is the DETAIL line, not the title: titles here are one or two words ("Opened",
-     * "Save failed") while the detail is a filename, which is the longest thing a balloon routinely
-     * carries. 155 leaves that line about 110px, which covers an ordinary name and wraps a very long one
-     * — the right way round, since a wrapped balloon grows upward and costs nothing. */
-    width: 155px;
+     * "Save failed"), and the detail is the longest thing a balloon routinely carries.
+     *
+     * IT USED TO BE A FILENAME AND 155 WAS RIGHT FOR ONE. It is a PATH now -- a file change says where it
+     * happened, `README.md was moved to proj:src/main/java/com/example/util/` -- and a name-sized cap
+     * wrapped every one of those into a four-line stack against the corner. Sized to hold an ordinary
+     * package path on one line; deeper ones still wrap, which stays the right way round because a wrapped
+     * balloon grows upward and costs nothing. */
+    width: 420px;
 }
 
 /* THE RESTING VALUE LIVES HERE, and that is what makes the fade work at all. A balloon arrives carrying
