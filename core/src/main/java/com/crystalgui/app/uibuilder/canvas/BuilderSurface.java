@@ -8,6 +8,7 @@ import com.crystalgui.app.uibuilder.BuilderSelection;
 import com.crystalgui.ui.input.keymap.Keymap;
 import com.crystalgui.widget.surface.SurfaceCommands;
 import com.crystalgui.app.uibuilder.BuilderCommands;
+import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
@@ -49,6 +50,9 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
         super(NAME, new TreePolicy(artboard), enabled);
         this.document = document;
         this.artboard = artboard;
+        // ALT IS OURS INSIDE THE CANVAS: resize from the centre, and suspend snapping during a move.
+        // Without this the desktop's Alt+drag takes the press first and moves the window instead.
+        set(Attribute.KEEPS_MODIFIER_PRESS, true);
         bridgeSelections();
         // LAST: an extension activated any earlier gets a surface whose document and artboard are null.
         ensureExtensions();
