@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -185,8 +186,11 @@ public final class UIDocument extends UIElement {
     @Nullable
     private UIElement topLayerNode;
 
-    /** Nodes promoted to the top layer, in the order they were promoted. */
-    private final LinkedHashSet<UIElement> promoted = new LinkedHashSet<>();
+    /**
+     * Promoted nodes in the order they were promoted, each against the host it asked for — or {@code
+     * this} standing for "the top layer", which may not have been built yet when the promotion is made.
+     */
+    private final LinkedHashMap<UIElement, UIElement> promoted = new LinkedHashMap<>();
 
     /**
      * Promotes {@code node} into the top layer — or RAISES it if already promoted.
@@ -205,26 +209,58 @@ public final class UIDocument extends UIElement {
      * idempotent call rather than a remove/add dance every caller has to get right.</p>
      */
     public void promote(UIElement node) {
+        promote(node, null);
+    }
+
+    /**
+     * Promotes {@code node} into {@code host} rather than into the top layer.
+     *
+     * <p>Everything above holds; only the destination differs. <b>The top layer is not the only place a
+     * box may be hosted out to</b> — it paints after the whole main tree, which is right for a menu and
+     * wrong for anything that should sit UNDER a compositor's chrome: a dialog escaping the panel that
+     * raised it still belongs beneath the taskbar, exactly as a window does. Promoting it into the work
+     * area gets both, because hosting decides the containing block and the paint order together.</p>
+     *
+     * @param host where to host it, or null for the top layer
+     */
+    public void promote(UIElement node, @Nullable UIElement host) {
         Objects.requireNonNull(node, "node");
         if (node == this) throw new IllegalArgumentException("the document cannot be promoted");
-        topLayerNode();
+        // THE DOCUMENT MEANS THE TOP LAYER, and saying so here is what makes `this` safe as the stored
+        // sentinel. The two are the same request -- both span the whole surface -- and a caller reaching
+        // this way is one whose work area is the document because no compositor declared another. Left
+        // apart, `promote(node, document)` recorded a host the sync could not tell from "top layer" and
+        // then found no top layer to use, because nothing had built one: the promotion was dropped in
+        // silence and the node simply stayed in flow.
+        UIElement into = host == null ? this : host;
+        if (into == this) topLayerNode();
         promoted.remove(node);
-        promoted.add(node);
+        promoted.put(node, into);
         fireStructureChanged();
+    }
+
+    /**
+     * Where {@code node} was promoted to, or null for the top layer — and null when it is not promoted
+     * at all, which no caller distinguishes because they ask {@link #isPromoted} first.
+     */
+    @Nullable
+    public UIElement promotionHost(UIElement node) {
+        UIElement host = promoted.get(node);
+        return host == this ? null : host;
     }
 
     /** Takes {@code node} out of the top layer, restoring ordinary layout, paint and hit-testing. */
     public void demote(UIElement node) {
-        if (promoted.remove(node)) fireStructureChanged();
+        if (promoted.remove(node) != null) fireStructureChanged();
     }
 
     public boolean isPromoted(UIElement node) {
-        return promoted.contains(node);
+        return promoted.containsKey(node);
     }
 
     /** What is promoted, bottom-most first. The box tree's, on every sync. */
     public Collection<UIElement> promotedNodes() {
-        return Collections.unmodifiableCollection(promoted);
+        return Collections.unmodifiableCollection(promoted.keySet());
     }
 
     /** The layer's node if one has been built, never building it. The box tree's, per sync. */
@@ -315,6 +351,30 @@ public final class UIDocument extends UIElement {
         }
         return this;
     }
+
+    /**
+     * <b>The area a floating overlay may travel in</b> — a compositor's work area when there is one,
+     * else the whole surface.
+     *
+     * <p>Separate from where the overlay PAINTS, and deliberately: a dialog belongs above every window,
+     * which is what the top layer is for, but it must not be draggable over the taskbar — the same
+     * split {@code WindowFrame} makes between its parent and its {@code resizeContainingBlock}.</p>
+     *
+     * <p>Answered by the document rather than looked up, because the layer that needs it may not name a
+     * compositor. Falls back to this the moment the declared area leaves the tree, so a suspended
+     * desktop needs no withdrawal of its own.</p>
+     */
+    public UIElement workArea() {
+        return workArea != null && workArea.document() == this ? workArea : this;
+    }
+
+    /** Declared by a compositor about its own work area. @see #workArea() */
+    public void setWorkArea(@Nullable UIElement area) {
+        this.workArea = area;
+    }
+
+    @Nullable
+    private UIElement workArea;
 
     /** Parents an overlay somewhere legal and returns it. Use this rather than a bare append. */
     public <T extends UIElement> T addOverlay(T overlay, @Nullable UIElement near) {

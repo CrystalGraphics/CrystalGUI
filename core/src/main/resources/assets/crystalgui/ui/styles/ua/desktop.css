@@ -101,6 +101,21 @@ desktop .__windows__ {
     overflow: visible;
 }
 
+/* THE DIALOG BAND — the work area exactly, and nothing of its own.
+ *
+ * Absolute, so it does not take a share of the layer it covers: the window layer is a flex column and
+ * an in-flow sibling would push the frames it is meant to sit over. Its z-index is Java's
+ * (Desktop.DIALOG_BAND), because it has to be stated in the same counter `raise` writes into and a
+ * sheet cannot know what that counter is up to. @see Desktop#overlayLayer */
+desktop .__overlays__ {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+}
+
 /* ── The taskbar ────────────────────────────────────────────────────────────────────────────────
  * A BAR, NOT AN ISLAND. Full width, flat, nearly opaque, entries centred — Windows 11's taskbar, the
  * shape every desktop has converged on and the one a player already knows how to read.

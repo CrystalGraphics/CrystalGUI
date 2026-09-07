@@ -54,6 +54,15 @@ public final class Box {
     boolean appliedHosted;
     /** Order in which overrides were declared, so two popups hosted on the root stack in the order they opened. */
     int hostedSequence;
+    /**
+     * Whether {@link BoxTree}'s promotion pass is what set {@link #hostOverride}.
+     *
+     * <p>That pass is the only writer of a promotion host and so must be the only eraser, and it cannot
+     * recognise its own work by comparing against one layer any more — a promotion may name the
+     * compositor's work area as readily as the top layer. Asking whether it was promoted is the question
+     * it actually needs, so it is the one recorded.</p>
+     */
+    boolean hostedByPromotion;
     /** The boxes hosted here, in insertion order: natural children first, then overrides by sequence. */
     final List<Box> hosted = new ArrayList<>();
     private @Nullable List<Box> paintOrder;

@@ -32,6 +32,7 @@ import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.easing.Easing;
 import com.crystalgui.style.easing.ProgressFunctions;
+import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.overlay.ContextMenu;
@@ -122,6 +123,12 @@ public class Desktop extends UIElement implements DataProvider {
 
     private final WindowLayer windows = new WindowLayer();
 
+    /** @see #overlayLayer() */
+    private final UIElement overlayLayer = new UIElement();
+
+    /** The geometry class for the dialog band — {@code desktop .__overlays__}. */
+    public static final String OVERLAY_LAYER_CLASS = "__overlays__";
+
     /**
      * How many windows the cascade has placed since it last wrapped — Win32's {@code CW_USEDEFAULT},
      * which offsets each successive window by a caption height and starts over when it walks off.
@@ -210,6 +217,19 @@ public class Desktop extends UIElement implements DataProvider {
         // failing: no clamp, no cascade, windows written wherever they were asked to go.
         windows.addClass(WINDOW_LAYER_CLASS);
         append(windows);
+        // INSIDE THE WORK AREA, ABOVE EVERY WINDOW IN IT. A free dialog needs three things at once and
+        // this is the one place all three are true: the work area's geometry, so it clamps where a
+        // window clamps; a paint position after every frame, which is a z-index because that is how
+        // windows stack (@see #raise); and still UNDER the taskbar, which follows from being in the
+        // layer the bar is laid out below rather than in the top layer, which paints after everything.
+        //
+        // Hit-transparent, so it is a stacking context and not a full-size sheet over the work area --
+        // the codebase's most-repeated failure, and the reason the snap preview beside it is too.
+        overlayLayer.addClass(OVERLAY_LAYER_CLASS);
+        overlayLayer.set(Attribute.HIT_TRANSPARENT, true);
+        StyleGroup.defaultPipeline(overlayLayer.getStyle().getGeneralGroup(),
+                g -> g.zIndex(DIALOG_BAND));
+        windows.hostOverlays(overlayLayer);
         // AFTER the layer, so the strip is laid out below it. That order IS the work area: the taskbar is
         // laid out rather than overlaid, so what is left for windows needs no bar-shaped subtraction
         // anywhere -- maximise (W6) fills the layer, drags clamp at it, and W13's fullscreen hiding the
@@ -348,6 +368,12 @@ public class Desktop extends UIElement implements DataProvider {
      * it without redesign" meant when always-on-top was refused for having no consumer.
      */
     static final int PINNED_BAND = 1 << 20;
+
+    /**
+     * Above every window, pinned ones included. A dialog is transient and asked for; an always-on-top
+     * window is a standing preference, and a preference does not outrank a question being put.
+     */
+    static final int DIALOG_BAND = PINNED_BAND << 1;
 
     /** Hands out stacking order. Monotonic, so a raise is O(1) and never touches another window. */
     private int raiseCounter;
@@ -610,6 +636,10 @@ public class Desktop extends UIElement implements DataProvider {
         UIDocument current = document();
         if (current == null) return;
         lastDocument = current;
+        // WHAT THE TASKBAR LEAVES, told to the document so a layer that may not name a compositor can
+        // still be clamped by one -- a Dialog is the case. It stays true for a suspend without being
+        // withdrawn: the layer goes out of the tree with us, and workArea() falls back on its own.
+        current.setWorkArea(overlayLayer);
         // ARMED ON THE WAY IN: a desktop attached after persistTo -- which is every host, since
         // persistTo is called on a fresh one -- would otherwise have no window to register its
         // one-shot restore pass with.
@@ -1665,6 +1695,16 @@ public class Desktop extends UIElement implements DataProvider {
         return windows;
     }
 
+    /**
+     * Where a free-floating overlay is hosted — the band inside the work area, above every window.
+     *
+     * <p>What {@link UIDocument#workArea()} answers on a desktop, so a {@code Dialog} lands here without
+     * naming a compositor. It covers the work area exactly and holds nothing of its own.</p>
+     */
+    public UIElement overlayLayer() {
+        return overlayLayer;
+    }
+
     /** Every live window, visible or hidden — the model, not the tree. @see WindowRegistry */
     public WindowRegistry registry() {
         return registry;
@@ -1810,9 +1850,25 @@ public class Desktop extends UIElement implements DataProvider {
         @Nullable
         private UIElement hosted;
 
+        /**
+         * The second exemption: the band free dialogs are hosted into. @see Desktop#overlayLayer()
+         *
+         * <p>A field of its own rather than a widened test, for the reason the one above gives — the
+         * layer says which nodes it is making an exception for, and two named ones stay as legible as
+         * one. Both are the compositor's own furniture; neither is reachable by an application.</p>
+         */
+        @Nullable
+        private UIElement overlays;
+
+        void hostOverlays(UIElement layer) {
+            if (layer.parent() == this) return;
+            overlays = layer;
+            append(layer);
+        }
+
         @Override
         public UIElement insertAt(int index, UIElement child) {
-            if (!(child instanceof WindowFrame) && child != hosted) {
+            if (!(child instanceof WindowFrame) && child != hosted && child != overlays) {
                 throw new UnsupportedOperationException(
                         "The desktop's window layer holds WindowFrames — use Desktop.addWindow(frame)");
             }
@@ -1830,6 +1886,7 @@ public class Desktop extends UIElement implements DataProvider {
         public boolean remove(UIElement child) {
             boolean removed = super.remove(child);
             if (removed && child == hosted) hosted = null;
+            if (removed && child == overlays) overlays = null;
             if (removed && !(child instanceof WindowFrame)) return true;
             if (removed) {
                 frames.remove(child);
