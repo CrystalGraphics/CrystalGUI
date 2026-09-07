@@ -1,0 +1,509 @@
+package com.crystalgui.app.uibuilder.canvas.transform;
+
+import javax.annotation.Nullable;
+
+import org.joml.Matrix4f;
+import org.joml.Vector2f;
+import org.joml.Vector3f;
+
+import com.google.gson.JsonElement;
+
+import com.crystalgui.app.uibuilder.canvas.BuilderContext;
+import com.crystalgui.app.uibuilder.canvas.CanvasRects;
+import com.crystalgui.app.uibuilder.canvas.ResizeHandles.Spot;
+import com.crystalgui.app.uibuilder.canvas.transform.TransformGesture.Grip;
+import com.crystalgui.app.uibuilder.canvas.transform.TransformGesture.Kind;
+import com.crystalgui.app.uibuilder.document.BuilderEdit;
+import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
+import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.texture.CgUiRoundedRect;
+import com.crystalgui.serialization.JsonOps;
+import com.crystalgui.serialization.style.InlineStyleCodec;
+import com.crystalgui.style.StyleGroup;
+import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.property.visual.border.LengthPercent;
+import com.crystalgui.style.property.visual.transform.Transform;
+import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.Attribute;
+import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.dom.UIElement;
+
+import dev.vfyjxf.taffy.style.TaffyPosition;
+
+/**
+ * The Free Transform box — what the gesture looks like, and where it is written.
+ *
+ * <p>{@link TransformGesture} owns every number; this owns the element, the pixels and the undo entry.
+ * It is driven by {@code FreeTransformTool} and is live only while that tool is current.</p>
+ *
+ * <h3>Preview through the compositor, commit through the cascade</h3>
+ *
+ * <p>While the box is up the transform is written as {@code Box.setTransform} — the compositor override,
+ * which sits above the cascade and is withdrawn with a {@code null}. Nothing is recorded, so cancel has
+ * nothing to undo: it drops the override and the element is exactly what the stylesheet says. Only Enter
+ * writes inline style, as one {@link BuilderEdit.SetInlineStyle}. That is the engine's own split between
+ * what animates and what rests.</p>
+ *
+ * <h3>The frame is measured with the node's own transform removed</h3>
+ *
+ * <p>A gesture that measured against the box as drawn would be reading its own output: rotating would
+ * rotate the frame the angle is measured in, and the box would spin away from the pointer. The frame is
+ * the node's {@code localToWorld} with the transform right-multiplied out of it, so it still carries the
+ * pan, the zoom, the artboard's scale and every ancestor's transform — and none of this one's.</p>
+ */
+public final class TransformBox extends UIElement {
+
+    public static final Name NAME = Name.of("transformbox");
+
+    public static final String LAYER_CLASS = "__transform-box__";
+
+    /** {@code -Dcrystalgui.builder.diagnose=true} — one line per drag and per commit. */
+    private static final boolean DIAGNOSE = Boolean.getBoolean("crystalgui.builder.diagnose");
+
+    /** How close a pointer has to be to a handle, in viewport pixels. */
+    private static final float GRAB = 7f;
+
+    /** The band outside a corner that rotates instead of scaling. */
+    private static final float ROTATE_BAND = 18f;
+
+    /**
+     * Matched to {@code ResizeHandles.SIZE}, so the two gestures read as the same family of chrome.
+     *
+     * <p>Solid accent, where a resize handle is white with an accent ring — the whole visual difference
+     * between the two, at the same size and shape. No ring of its own: a white one was tried and reads
+     * as a third kind of chrome rather than as the same dot filled in.</p>
+     */
+    private static final float HANDLE_SIZE = 6f;
+
+    /** Fully rounded, so the square is a circle at any size. @see #HANDLE_SIZE */
+    private final CgUiRoundedRect dot = new CgUiRoundedRect()
+            .setCornerRadius(HANDLE_SIZE * 0.5f, HANDLE_SIZE * 0.5f);
+
+    private static final float PIVOT_SIZE = 9f;
+
+    private final BuilderContext ctx;
+
+    private final UiBuilderDocument document;
+
+    private final TransformGesture gesture = new TransformGesture();
+
+    @Nullable
+    private UIElement target;
+
+    @Nullable
+    private JsonElement before;
+
+    private boolean active;
+
+    /** @see #press */
+    @Nullable
+    private Matrix4f pressOuter;
+
+    public TransformBox(BuilderContext ctx, UiBuilderDocument document) {
+        super(NAME);
+        this.ctx = ctx;
+        this.document = document;
+        addClass(LAYER_CLASS);
+        set(Attribute.HIT_TEST, false);
+        set(Attribute.HIT_TRANSPARENT, true);
+        setDisplayed(false);
+        StyleGroup.defaultPipeline(getStyle().getLayoutGroup(),
+                l -> l.positionType(TaffyPosition.ABSOLUTE).left(0f).top(0f)
+                        .widthPercent(100f).heightPercent(100f));
+    }
+
+    /** The numbers, for the options bar and for a test. */
+    public TransformGesture gesture() {
+        return gesture;
+    }
+
+    /** What is being transformed, or null when the box is down. */
+    @Nullable
+    public UIElement target() {
+        return target;
+    }
+
+    public boolean isActive() {
+        return active;
+    }
+
+    /**
+     * Opens the box on a node.
+     *
+     * @return whether it opened — false for a node with no laid-out box, which has nothing to transform
+     */
+    public boolean begin(@Nullable UIElement node) {
+        Box box = node == null ? null : node.box();
+        if (box == null) return false;
+        target = node;
+        before = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        gesture.reset(box.width(), box.height(),
+                node.getStyle().computed().get(StylePropertyRegistry.TRANSFORM),
+                resolvedOriginX(node, box), resolvedOriginY(node, box));
+        active = true;
+        setDisplayed(true);
+        preview();
+        if (DIAGNOSE) report("begin");
+        return true;
+    }
+
+    /** Writes the gesture as one edit and closes the box. */
+    public void commit() {
+        UIElement node = target;
+        JsonElement was = before;
+        boolean changed = active && node != null && was != null;
+        withdrawPreview();
+        close();
+        if (!changed) return;
+
+        StyleGroup.inlinePipeline(node.getStyle().getGeneralGroup(), g -> {
+            g.transform(gesture.toTransform());
+            g.transformOriginX(asFraction(gesture.originX(), gesture.width()));
+            g.transformOriginY(asFraction(gesture.originY(), gesture.height()));
+        });
+        JsonElement after = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        if (DIAGNOSE) CrystalGuiCore.LOGGER.info("[transform] commit before={} after={}", was, after);
+        if (after.equals(was)) return;
+        document.apply(new BuilderEdit.SetInlineStyle(node, was, after));
+    }
+
+    /**
+     * The pivot as a FRACTION of the box, never as pixels.
+     *
+     * <p>An absolute origin is measured against the size the element had when it was written, and
+     * nothing rewrites it when the element is later resized. Found in a running harness: a button
+     * committed at 230 wide carried {@code transform-origin-x: 115}, was resized to 59, and kept an
+     * origin sitting well outside itself — so every later scale mostly TRANSLATED the box instead of
+     * growing it, and the gesture looked like it was doing something else entirely.</p>
+     *
+     * <p>CSS's own default is {@code 50%} for the same reason.</p>
+     */
+    private static LengthPercent asFraction(float pixels, float extent) {
+        return LengthPercent.percent(extent < 1e-4f ? 0.5f : pixels / extent);
+    }
+
+    /**
+     * Drops the box, writing nothing.
+     *
+     * <p>Nothing to restore: the preview was never in the cascade, so withdrawing the override IS the
+     * undo. That is the whole reason the two channels are kept apart.</p>
+     */
+    public void cancel() {
+        withdrawPreview();
+        close();
+    }
+
+    private void close() {
+        active = false;
+        target = null;
+        before = null;
+        gesture.release();
+        setDisplayed(false);
+    }
+
+    private void withdrawPreview() {
+        Box box = target == null ? null : target.box();
+        if (box == null) return;
+        box.setTransform(null);
+        box.setTransformOrigin(null, null);
+    }
+
+    /** Shows the current gesture without recording it. */
+    public void preview() {
+        Box box = target == null ? null : target.box();
+        if (box == null) return;
+        box.setTransform(gesture.toTransform());
+        box.setTransformOrigin(gesture.originX(), gesture.originY());
+    }
+
+    // ---------------------------------------------------------------- spaces
+
+    /**
+     * The node's pre-transform local space mapped into this overlay's.
+     *
+     * @see TransformBox the note on why the node's own transform is removed
+     */
+    @Nullable
+    private Matrix4f frame() {
+        return CanvasRects.layoutFrame(target, this);
+    }
+
+    private static float resolvedOriginX(UIElement node, Box box) {
+        LengthPercent origin = node.getStyle().computed().get(StylePropertyRegistry.TRANSFORM_ORIGIN_X);
+        return origin == null ? box.width() * 0.5f : origin.resolve(box.width());
+    }
+
+    private static float resolvedOriginY(UIElement node, Box box) {
+        LengthPercent origin = node.getStyle().computed().get(StylePropertyRegistry.TRANSFORM_ORIGIN_Y);
+        return origin == null ? box.height() * 0.5f : origin.resolve(box.height());
+    }
+
+    /** A node-local point in this overlay's space, with NO gesture applied — where the element sits. */
+    @Nullable
+    public Vector2f toViewportUntransformed(float localX, float localY) {
+        Matrix4f frame = frame();
+        return frame == null ? null : apply(frame, localX, localY);
+    }
+
+    /** A node-local point in this overlay's space, with the whole gesture applied. */
+    @Nullable
+    public Vector2f toViewport(float localX, float localY) {
+        Matrix4f frame = frame();
+        if (frame == null) return null;
+        return apply(frame.mul(gesture.matrix()), localX, localY);
+    }
+
+    /**
+     * A viewport point in the space {@code scaleTo} wants: after rotation and skew, before scale.
+     *
+     * <p><b>Measured through the mapping as it was at the PRESS, never the live one.</b> That mapping
+     * contains the translate, and holding the anchor still WRITES the translate on every frame — so a
+     * live one moves the space the scale is measured in by the correction it applied last frame. A
+     * stationary pointer then keeps producing a new answer: one axis collapses and the other runs away.
+     * It is the same defect the resize handles had, where the opposite edge was held by reading the box
+     * being written; a gesture measures from where it began.</p>
+     */
+    @Nullable
+    private Vector2f toScaleSpace(float viewportX, float viewportY) {
+        Matrix4f mapping = pressOuter;
+        if (mapping == null) return null;
+        return apply(new Matrix4f(mapping).invert(), viewportX, viewportY);
+    }
+
+    /** A viewport point in the node's own pixels — where the pivot is placed. */
+    @Nullable
+    private Vector2f toNodeSpace(float viewportX, float viewportY) {
+        Matrix4f frame = frame();
+        if (frame == null) return null;
+        return apply(frame.mul(gesture.matrix()).invert(), viewportX, viewportY);
+    }
+
+    /** A viewport DELTA in the node's own pixels — what a move and a skew are measured in. */
+    @Nullable
+    private Vector2f toNodeDelta(float dx, float dy) {
+        Matrix4f frame = frame();
+        if (frame == null) return null;
+        Matrix4f inverse = frame.invert();
+        return new Vector2f(inverse.m00() * dx + inverse.m10() * dy,
+                inverse.m01() * dx + inverse.m11() * dy);
+    }
+
+    private static Vector2f apply(Matrix4f m, float x, float y) {
+        Vector3f out = m.transformPosition(new Vector3f(x, y, 0f));
+        return new Vector2f(out.x, out.y);
+    }
+
+    // ---------------------------------------------------------------- gestures
+
+    /**
+     * What a press at this point would do.
+     *
+     * <p>Ctrl over an EDGE is a skew; Ctrl over a corner is Photoshop's Distort, which is refused — a free
+     * corner is a non-affine map and {@code Transform} is a matrix. It falls back to a scale rather than
+     * doing nothing, so the handle still works with a finger on Ctrl.</p>
+     */
+    public Grip grip(float viewportX, float viewportY, boolean skewModifier) {
+        if (!active) return Grip.NONE;
+        Vector2f pivot = toViewport(gesture.originX(), gesture.originY());
+        if (pivot != null && pivot.distance(viewportX, viewportY) <= PIVOT_SIZE) {
+            return new Grip(Kind.PIVOT, null);
+        }
+
+        Spot nearest = null;
+        float best = Float.MAX_VALUE;
+        for (Spot spot : Spot.values()) {
+            Vector2f at = handleAt(spot);
+            if (at == null) continue;
+            float distance = at.distance(viewportX, viewportY);
+            if (distance < best) {
+                best = distance;
+                nearest = spot;
+            }
+        }
+        if (nearest == null) return Grip.NONE;
+
+        if (best <= GRAB) {
+            if (skewModifier && !nearest.isCorner()) return new Grip(Kind.SKEW, nearest);
+            return new Grip(Kind.SCALE, nearest);
+        }
+        // OUTSIDE A CORNER ROTATES, which is the one grip with no handle drawn for it: the band is the
+        // affordance, as it is in every editor that has this box.
+        if (nearest.isCorner() && best <= GRAB + ROTATE_BAND) return new Grip(Kind.ROTATE, nearest);
+
+        Vector2f local = toNodeSpace(viewportX, viewportY);
+        if (local != null && local.x >= 0f && local.y >= 0f
+                && local.x <= gesture.width() && local.y <= gesture.height()) {
+            return new Grip(Kind.MOVE, null);
+        }
+        return Grip.NONE;
+    }
+
+    /** Where a handle is drawn, in this overlay's space. */
+    @Nullable
+    public Vector2f handleAt(Spot spot) {
+        Vector2f corner = gesture.corner(spot);
+        return toViewport(corner.x, corner.y);
+    }
+
+    /**
+     * Begins a drag on whatever {@link #grip} answered.
+     *
+     * <p>Pins the viewport mapping a scale is measured through, for the reason {@link #toScaleSpace}
+     * gives. Pinned here rather than recomputed there so there is exactly one moment it is taken.</p>
+     */
+    public void press(Grip grip) {
+        gesture.press(grip);
+        Matrix4f frame = frame();
+        pressOuter = frame == null ? null : frame.mul(gesture.outer());
+    }
+
+    /**
+     * Continues the drag.
+     *
+     * @param viewportX where the pointer is now, in this overlay's space
+     * @param dx        how far it has come since the press, in the same space
+     */
+    public void dragTo(float viewportX, float viewportY, float dx, float dy,
+                       boolean aspect, boolean aboutPivot) {
+        if (!active) return;
+        switch (gesture.grip().kind()) {
+            case SCALE -> {
+                Vector2f point = toScaleSpace(viewportX, viewportY);
+                if (point != null) gesture.scaleTo(point, aspect, aboutPivot);
+            }
+            case ROTATE -> {
+                Float delta = angleDelta(viewportX, viewportY, dx, dy);
+                if (delta != null) gesture.rotateBy(delta, aspect);
+            }
+            case SKEW -> {
+                Vector2f delta = toNodeDelta(dx, dy);
+                if (delta != null) gesture.skewBy(delta.x, delta.y);
+            }
+            case MOVE -> {
+                Vector2f delta = toNodeDelta(dx, dy);
+                if (delta != null) gesture.moveBy(delta.x, delta.y, aspect);
+            }
+            case PIVOT -> {
+                Vector2f point = toNodeSpace(viewportX, viewportY);
+                if (point != null) gesture.pivotTo(point, !aboutPivot);
+            }
+            case NONE -> {
+                return;
+            }
+        }
+        preview();
+        if (DIAGNOSE) report("drag");
+    }
+
+    /** What the gesture and the layout each say, so the two can be told apart in a running harness. */
+    private void report(String what) {
+        Box box = target == null ? null : target.box();
+        if (box == null) return;
+        CrystalGuiCore.LOGGER.info(
+                "[transform] {} grip={} layout={}x{} world={}x{} scale={}x{} translate={},{} rot={}deg"
+                        + " inline={}",
+                what, gesture.grip().kind(), box.width(), box.height(),
+                worldSpan(box, box.width(), 0f), worldSpan(box, 0f, box.height()),
+                gesture.scaleX(), gesture.scaleY(), gesture.translateX(), gesture.translateY(),
+                (float) Math.toDegrees(gesture.rotation()),
+                InlineStyleCodec.encode(JsonOps.INSTANCE, target));
+    }
+
+    private static float worldSpan(Box box, float localX, float localY) {
+        Vector2f from = apply(new Matrix4f(box.localToWorld()), 0f, 0f);
+        Vector2f to = apply(new Matrix4f(box.localToWorld()), localX, localY);
+        return from.distance(to);
+    }
+
+    /**
+     * How far round the pivot the pointer has travelled, measured on SCREEN.
+     *
+     * <p>An angle is the one quantity that comes back from the viewport unchanged by the rotation being
+     * edited, so measuring it here and handing the gesture a delta is what stops the box chasing itself.
+     * </p>
+     */
+    @Nullable
+    private Float angleDelta(float viewportX, float viewportY, float dx, float dy) {
+        Vector2f pivot = toViewport(gesture.originX(), gesture.originY());
+        if (pivot == null) return null;
+        double now = Math.atan2(viewportY - pivot.y, viewportX - pivot.x);
+        double then = Math.atan2(viewportY - dy - pivot.y, viewportX - dx - pivot.x);
+        return (float) (now - then);
+    }
+
+    public void release() {
+        gesture.release();
+        pressOuter = null;
+    }
+
+    // ---------------------------------------------------------------- painting
+
+    @Override
+    public void paintContent(CgUiPaintContext paint, Box box) {
+        if (!active || box == null) return;
+        int colour = getStyle().computed().get(StylePropertyRegistry.COLOR);
+
+        // THE LAYOUT BOX, as the reference the transform is read against -- where the element actually
+        // sits, and where it will still be when the transform is removed. Skipped while the gesture is
+        // identity, since the two outlines then coincide exactly and the second one only thickens the
+        // first.
+        if (!gesture.isIdentity()) {
+            int reference = getStyle().computed().get(StylePropertyRegistry.BORDER_COLOR);
+            Vector2f[] base = {
+                    toViewportUntransformed(0f, 0f),
+                    toViewportUntransformed(gesture.width(), 0f),
+                    toViewportUntransformed(gesture.width(), gesture.height()),
+                    toViewportUntransformed(0f, gesture.height())};
+            if (base[0] != null && base[1] != null && base[2] != null && base[3] != null) {
+                for (int i = 0; i < 4; i++) edge(paint, base[i], base[(i + 1) % 4], reference);
+            }
+        }
+
+        Vector2f[] corners = {
+                toViewport(0f, 0f),
+                toViewport(gesture.width(), 0f),
+                toViewport(gesture.width(), gesture.height()),
+                toViewport(0f, gesture.height())};
+        for (Vector2f corner : corners) {
+            if (corner == null) return;
+        }
+        for (int i = 0; i < 4; i++) {
+            edge(paint, corners[i], corners[(i + 1) % 4], colour);
+        }
+
+        dot.setFillColor(colour);
+        for (Spot spot : Spot.values()) {
+            Vector2f at = handleAt(spot);
+            if (at == null) continue;
+            dot.draw(paint, 0f, 0f, at.x - HANDLE_SIZE * 0.5f, at.y - HANDLE_SIZE * 0.5f,
+                    HANDLE_SIZE, HANDLE_SIZE);
+        }
+
+        Vector2f pivot = toViewport(gesture.originX(), gesture.originY());
+        if (pivot != null) {
+            paint.fillRect(pivot.x - PIVOT_SIZE * 0.5f, pivot.y - 0.5f, PIVOT_SIZE, 1f, colour);
+            paint.fillRect(pivot.x - 0.5f, pivot.y - PIVOT_SIZE * 0.5f, 1f, PIVOT_SIZE, colour);
+        }
+    }
+
+    /**
+     * One side of the box, at any angle.
+     *
+     * <p>Through the pose stack rather than as an axis-aligned fill: the box is rotated and skewed, and
+     * four {@code fillRect}s can only draw the box it used to be. The rect is one pixel tall in the
+     * rotated frame, which is what keeps the outline a hairline at every angle.</p>
+     */
+    private static void edge(CgUiPaintContext paint, Vector2f from, Vector2f to, int colour) {
+        float dx = to.x - from.x;
+        float dy = to.y - from.y;
+        float length = (float) Math.sqrt(dx * dx + dy * dy);
+        if (length < 0.01f) return;
+        paint.getPoseStack().pushPose();
+        paint.getPoseStack().last().pose()
+                .translate(from.x, from.y, 0f)
+                .rotateZ((float) Math.atan2(dy, dx));
+        paint.fillRect(0f, -0.5f, length, 1f, colour);
+        paint.getPoseStack().popPose();
+    }
+}

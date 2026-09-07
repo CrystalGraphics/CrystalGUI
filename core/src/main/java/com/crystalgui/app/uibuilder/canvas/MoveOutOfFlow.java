@@ -207,7 +207,7 @@ public final class MoveOutOfFlow extends UIElement {
         if (box == null || guides.isEmpty() || moving == null) return;
         UIElement parent = moving.parentElement();
         if (parent == null) return;
-        float[] area = CanvasRects.of(parent, this);
+        float[] area = CanvasRects.ofLayout(parent, this);
         if (area == null) return;
         float zoom = Math.max(0.0001f, ctx.surface().zoom());
         int colour = getStyle().computed().get(StylePropertyRegistry.COLOR);

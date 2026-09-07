@@ -2,6 +2,7 @@ package com.crystalgui.app.uibuilder;
 
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.canvas.TextEditGesture;
+import com.crystalgui.app.uibuilder.canvas.transform.FreeTransformTool;
 import com.crystalgui.app.uibuilder.live.PickMode;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
@@ -55,6 +56,15 @@ public final class BuilderCommands {
 
     /** @see #SELECT_ALL */
     private static final String SELECT_ALL_LABEL = "Select All";
+
+    /**
+     * Photoshop's Ctrl+T — the transform box over {@code transform}, not over the layout.
+     *
+     * <p>Beside the resize handles rather than instead of them, and the difference is what each one
+     * writes: a resize changes what the box IS and reflows its siblings, a transform changes how it SITS
+     * and Taffy never sees it. Bound in the surface keymap, since it means nothing anywhere else.</p>
+     */
+    public static final String FREE_TRANSFORM = "uibuilder.freeTransform";
 
     /** @see #SELECT_NEXT_SIBLING */
     public static final String SELECT_PREVIOUS_SIBLING = "uibuilder.selectPreviousSibling";
@@ -126,6 +136,21 @@ public final class BuilderCommands {
         registry.register(Command.of(SELECT_NEXT_SIBLING, "Select Next Sibling")
                 .run(context -> selectSibling(context, 1))
                 .enabledWhen(context -> hasBuilder(context) && selectionOf(context) != null));
+
+        // ONE NODE, AND A LAID-OUT ONE. The tool cannot refuse a bad selection from inside `activated`
+        // without re-entering the mode stack mid-change, so the gate is here where it costs nothing.
+        registry.register(Command.of(FREE_TRANSFORM, "Free Transform")
+                .run(context -> builderOf(context).surface().modes().use(FreeTransformTool.ID))
+                .enabledWhen(BuilderCommands::canFreeTransform));
+    }
+
+    /** @see #FREE_TRANSFORM */
+    private static boolean canFreeTransform(CommandContext context) {
+        if (!hasBuilder(context)) return false;
+        BuilderEditor builder = builderOf(context);
+        if (builder == null || !builder.surface().isDesignMode()) return false;
+        UIElement node = selectionOf(context);
+        return node != null && node.box() != null;
     }
 
     /**

@@ -4,6 +4,7 @@ import java.util.List;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.app.uibuilder.canvas.transform.FreeTransformTool;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.box.Box;
@@ -48,11 +49,18 @@ public final class SelectionOutline extends UIElement {
     @Override
     public void paintContent(CgUiPaintContext paint, Box box) {
         if (box == null) return;
+        // THE TRANSFORM BOX REPLACES THIS while it is up: it outlines the same element, through the
+        // gesture, and two outlines on one node read as two selections.
+        if (FreeTransformTool.isCurrent(builder)) return;
         // THE BUILDER'S SELECTION, which is the one the inspector and the hierarchy read. The engine's
         // item set is what a GESTURE moves and is kept in step by the plane -- but "in step" is a
         // property that can fail, and when it did the canvas outlined one node while the inspector
         // described another. One source for everything a reader sees; the other stays an implementation
         // detail of dragging.
+        // THE LAYOUT BOX, as the resize handles are. This marks WHICH element is selected and what its
+        // geometry is, and a transformed element draws somewhere other than it measures: outlining the
+        // drawn bounds put the selection on the render size while the handles sat on the real one, so
+        // one piece of chrome contradicted the other.
         List<UIElement> selected = builder.builderSelection().nodes();
         if (selected.isEmpty()) return;
 
@@ -66,7 +74,7 @@ public final class SelectionOutline extends UIElement {
             if (parent != null) CanvasRects.outline(paint, parent, THICKNESS, parentStroke);
         }
         for (UIElement node : selected) {
-            CanvasRects.outline(paint, CanvasRects.of(node, this), THICKNESS, accent);
+            CanvasRects.outline(paint, CanvasRects.ofLayout(node, this), THICKNESS, accent);
         }
     }
 
@@ -87,8 +95,8 @@ public final class SelectionOutline extends UIElement {
     private float[] parentRectWorthDrawing(UIElement node) {
         UIElement parent = node.parentElement();
         if (parent == null || parent == builder.artboard()) return null;
-        float[] rect = CanvasRects.of(parent, this);
-        float[] own = CanvasRects.of(node, this);
+        float[] rect = CanvasRects.ofLayout(parent, this);
+        float[] own = CanvasRects.ofLayout(node, this);
         if (rect == null || own == null) return rect;
         return sameRect(rect, own) ? null : rect;
     }

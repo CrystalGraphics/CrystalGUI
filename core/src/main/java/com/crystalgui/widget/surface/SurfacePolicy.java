@@ -65,6 +65,30 @@ public interface SurfacePolicy {
     @Nullable
     UIElement itemFor(@Nullable UIElement hit);
 
+    /**
+     * A chance to correct what the box tree found under the pointer.
+     *
+     * <p>The default returns it unchanged. A consumer whose chrome is drawn on something other than the
+     * painted box has to correct it here, or the mouse selects one rectangle while the outline marks
+     * another.</p>
+     *
+     * <p><b>A REFINEMENT, not a replacement.</b> The hit tells you what the pointer is over — a handle, a
+     * toolbar, an overlay — and answering the question from scratch loses all of it: the surface's own
+     * chrome stops taking presses, because a walk of the edited content never reaches anything that is
+     * not edited content.</p>
+     *
+     * <pre>{@code
+     * public UIElement pickAt(UIElement painted, float rawX, float rawY) {
+     *     if (!isMine(painted)) return painted;                 // chrome answers for itself
+     *     return deepestWhoseLayoutBoxContains(rawX, rawY);
+     * }
+     * }</pre>
+     */
+    @Nullable
+    default UIElement pickAt(@Nullable UIElement painted, float rawX, float rawY) {
+        return painted;
+    }
+
     /** Whether the engine handles a press on {@code hit}, or the tree under it does. */
     PressOwner ownerOf(UIElement hit);
 

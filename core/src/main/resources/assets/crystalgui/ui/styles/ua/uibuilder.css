@@ -165,6 +165,20 @@ resizehandles > * {
     border-radius: 3px;
 }
 
+/* ── Free Transform ──────────────────────────────────────────────────────────────────────────────────
+ *
+ * ONE COLOUR, and everything is drawn from it. The box paints itself -- its outline is rotated and
+ * skewed, which four child elements cannot be -- so the only thing the sheet has to give it is `color`,
+ * which paintContent reads. It shares the selection accent deliberately: the transform box replaces the
+ * selection outline while it is up, and a second hue would read as a second thing being selected. */
+transformbox {
+    color: var(--builder-selected, #3574F0);
+    /* The LAYOUT box, drawn under the live one as a compass: where the element sits, and where it goes
+     * back to when the transform is removed. Deliberately the quieter of the two -- it is a reference,
+     * and a second line as loud as the gesture's own reads as two things being transformed. */
+    border-color: var(--builder-selected-parent, #55607A);
+}
+
 .__handle-top-left__, .__handle-bottom-right__ { cursor: nwse-resize; }
 .__handle-top-right__, .__handle-bottom-left__ { cursor: nesw-resize; }
 .__handle-top__, .__handle-bottom__ { cursor: ns-resize; }
