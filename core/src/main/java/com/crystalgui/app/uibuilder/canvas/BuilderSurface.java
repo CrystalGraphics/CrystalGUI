@@ -160,7 +160,15 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
         // an empty selection therefore shadowed the document-level LiveSubject outright, so live inspect
         // reported nothing for exactly the file type it exists for. Silence lets the walk reach it.
         if (key == BuilderEditor.BUILDER_SELECTION) return selection.statesNothing() ? null : selection;
-        return null;
+        // AND THEN THE SURFACE'S OWN, which this used to end by returning null instead of asking for.
+        //
+        // An override that answers its own keys and drops the rest does not fall through to its
+        // supertype -- it IS the provider the walk found, and the walk stops at the first one that
+        // answers. So everything SurfaceEditor answers was silently unreachable through this surface:
+        // the undo stack above all, which is how a command finds a history. Ctrl+Z was disabled on the
+        // builder for exactly that reason -- the stack existed, the edits were in it, and the command
+        // could not see it -- and Cut/Copy/Paste and anything resolving SURFACE went the same way.
+        return super.getData(key);
     }
 
     @Override
