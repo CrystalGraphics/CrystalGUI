@@ -164,6 +164,12 @@ designtoolwindow, hierarchypanel {
     flex-direction: column;
 }
 
+/* On the TREE rather than the row, for the reason projectfiletree gives: `color` inherits, so one
+ * declaration reaches every label and every chevron below it. */
+hierarchypanel {
+    color: var(--tree-fg, #FFFFFF);
+}
+
 /* THE TREE NEEDS THE FILL IDIOM, not a percentage -- `height: 100%` inside a parent that is still
  * distributing gives it nothing, and the panel then looks empty while its rows exist. The project tree
  * states exactly these three for the same reason. */
@@ -173,14 +179,19 @@ designtoolwindow, hierarchypanel {
     flex-grow: 1;
 }
 
-/* NO padding-left HERE. TreeView writes the per-depth indent as `padding-left` at DEFAULT origin, so a
- * user-agent rule setting the shorthand overrides it and every row lines up at the same x -- a tree that
- * has nesting and does not show it. The horizontal inset belongs on the content instead. */
+/* THE PROJECT TREE'S OWN STYLING, deliberately: two trees in the same sidebar reading differently is
+ * the panel telling you they are different kinds of thing, which they are not. Same row height, same
+ * twisty, same selection pair, same tokens -- so a theme moves both together.
+ *
+ * NO padding-left. TreeView writes `padding-left: depth * indentPerDepth` at DEFAULT origin and this
+ * sheet is USER_AGENT, which is higher, so a constant here pins every row at the same inset however deep
+ * it is. `projectfiletree` carries the same comment, having shipped the same bug. Inset goes on the
+ * content box instead. */
 .__hierarchy-row__ {
     flex-direction: row;
     align-items: center;
-    padding-top: 1;
-    padding-bottom: 1;
+    height: 20px;
+    padding-right: 4px;
     gap-all: 3;
 }
 
@@ -189,20 +200,24 @@ designtoolwindow, hierarchypanel {
     padding-right: 4;
 }
 
-/* The twisty, exactly as the create menu draws its own: one shape rotated rather than two, so open and
- * closed are one drawable state; a leaf keeps the box and draws nothing so labels stay in a column. */
+/* Two shapes rather than one rotated, matching the project tree exactly -- the twisty is chrome, and a
+ * leaf keeps the slot and draws nothing so every label at a depth starts at the same x. */
 hierarchypanel .__twisty__ {
-    width: 9px;
-    height: 9px;
+    width: 12px;
+    height: 12px;
     flex-shrink: 0;
+    color: var(--tree-twisty-fg, #FFFFFF);
+}
+
+hierarchypanel .__collapsed__ .__twisty__ {
     overlay: shape("chevron-right");
 }
 
-hierarchypanel .__expanded__ > .__twisty__ {
-    transform: rotate(90deg);
+hierarchypanel .__expanded__ .__twisty__ {
+    overlay: shape("chevron-down");
 }
 
-hierarchypanel .__leaf__ > .__twisty__ {
+hierarchypanel .__leaf__ .__twisty__ {
     overlay: none;
 }
 
@@ -215,9 +230,18 @@ hierarchypanel .__hierarchy-row__ .__label__ {
     text-overflow: ellipsis;
 }
 
-.__hierarchy-row__.__selected__ {
-    background-color: var(--builder-selected, #3574F0);
-    color: var(--builder-tag-fg, #FFFFFF);
+/* THE UNFOCUSED STATE IS THE BASE RULE, as the project tree writes it: a selection answers "which row
+ * will the keys act on", so a panel that does not hold focus must not say it in the same voice as one
+ * that does. `.__focused__` is put on the list by ListView while focus is inside it -- a class, because
+ * the engine has no `:focus-within`. */
+hierarchypanel .__hierarchy-row__.__selected__ {
+    background-color: var(--tree-selected-inactive-bg, #3A3D41);
+    color: var(--tree-selected-inactive-fg, #CCCCCC);
+}
+
+hierarchypanel .__focused__ .__hierarchy-row__.__selected__ {
+    background-color: var(--tree-selected-bg, #2F5F9E);
+    color: var(--tree-selected-fg, #FFFFFF);
 }
 
 

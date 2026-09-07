@@ -559,7 +559,7 @@ public class NavigatorView<T> extends UIElement {
                 int at = tree.indexOfRowElement(element.parentElement());
                 if (at < 0) return;
                 event.stopPropagation();
-                tree.toggleExpandedAt(at);
+                tree.requestToggleAt(at);
             }, false, true);
             row.append(arrow);
 

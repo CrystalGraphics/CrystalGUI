@@ -80,7 +80,40 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
         // a caller handing in a list would be handing in something we overwrite.
         super(NAME, new ObservableList<>());
         this.source = source;
+        // ACTIVATION FOLDS, and it belongs here rather than in each tree.
+        //
+        // Five consumers wrote this for themselves and no two agreed: two called setExpanded and two
+        // called toggleExpanded -- both of which re-flatten IMMEDIATELY, from inside the very press that
+        // asked, recycling the row the press landed on -- and each then hand-rolled a different repair for
+        // the damage (a pendingRefresh field, a re-asserted highlight, a deferred refresh flag). The fifth
+        // connected the signal to a fold that nothing raised. That is not five preferences; it is one
+        // behaviour every tree wants, implemented five times.
+        onRowActivated.connect(this::foldOnActivate);
         refresh();
+    }
+
+    /**
+     * Whether a double-click or Enter on a branch folds it. On by default.
+     *
+     * <p>Off for a tree where activating a branch means something else entirely — opening it in a
+     * different view, say. A tree that turns this off keeps the twisty, which is the aimed gesture.</p>
+     */
+    @Getter
+    private boolean foldsOnActivate = true;
+
+    public TreeView<T> setFoldsOnActivate(boolean folds) {
+        this.foldsOnActivate = folds;
+        return this;
+    }
+
+    /** @see #foldsOnActivate */
+    private void foldOnActivate(@Nullable Integer index) {
+        if (!foldsOnActivate || index == null) return;
+        TreeRow<T> row = rowAt(index);
+        // A LEAF IS A DESTINATION, not a branch: activating one is the consumer's to answer, and this
+        // must not swallow it.
+        if (row == null || !row.expandable()) return;
+        requestToggle(row.item());
     }
 
     public TreeView<T> setRenderer(TreeRenderer<T> renderer) {
@@ -288,6 +321,18 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
             if (row != null && Objects.equals(row.item(), item)) return i;
         }
         return -1;
+    }
+
+    /**
+     * By flattened row index, applied next frame — <b>what a twisty press must call</b>.
+     *
+     * <p>{@link #toggleExpandedAt} is the immediate one and is wrong from inside an event: it re-flattens
+     * under the element being dispatched through. This is {@link #requestToggle} for a caller that has an
+     * index rather than an item, which a renderer always does.</p>
+     */
+    public TreeView<T> requestToggleAt(int index) {
+        TreeRow<T> row = rowAt(index);
+        return row == null ? this : requestToggle(row.item());
     }
 
     /** By flattened row index — what a renderer's own twisty listener calls, since a row knows its index

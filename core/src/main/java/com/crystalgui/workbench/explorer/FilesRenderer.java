@@ -152,29 +152,23 @@ final class FilesRenderer implements TreeRenderer<CgPath> {
             if (event.getDetail() == Input.KEYBOARD_DETAIL) return;
             CgPath item = tree.itemForRow(row);
             if (item == null || !tree.source().isDirectory(item)) return;
-            tree.treeView().setExpanded(item, !tree.treeView().isExpanded(item));
-            // Deferred, for the reason activate() spells out: this runs from the press that folded
-            // the row, and refreshing recycles every realised row including the one under the pointer.
-            tree.requestRefresh();
+            // STOPPED, which this listener only claimed to do before. ListView's own row handler is
+            // attached to the BUBBLE phase, so a press here reached it regardless and selected the folder
+            // -- and now that a double-click raises activation, a second one would fold the row a second
+            // time and land back where it started.
+            event.stopPropagation();
+            tree.treeView().requestToggleAt(tree.treeView().indexOfRowElement(row));
         }, false, false);
 
         tree.dnd().installRowDrag(row);
-        row.onMouseDown.attachListener((element, event) -> {
-            CgPath item = tree.itemForRow(row);
-            if (item == null) return;
-            // DOUBLE CLICK FOR BOTH, folders included. A folder used to toggle on a single click,
-            // which is VS Code's rule and reads well until the tree also has to support selecting --
-            // there, one click has to mean "this is the row I am talking about", because a press is
-            // how you aim Delete, Rename, a drag, or a Shift-range. Folding on that same press means
-            // you cannot select a folder without also opening it, and every attempt to Shift-click a
-            // range across one re-flattens the model mid-gesture.
-            //
-            // IntelliJ, whose Project view this panel is modelled on, resolves it exactly this way:
-            // the chevron folds on one click, the ROW folds on two. Ours has no separate chevron hit
-            // target yet -- the +/- is part of the label's text -- so the row's double click is the
-            // whole affordance for now.
-            if (event.getDetail() >= 2) tree.activate(item);
-        }, false, false);
+        // NO DOUBLE-CLICK LISTENER HERE. ListView raises onRowActivated from one, TreeView folds a branch
+        // on it, and ProjectFileTree opens a file on it.
+        //
+        // IntelliJ, whose Project view this panel is modelled on, splits the two gestures exactly this
+        // way: the chevron folds on one click, the ROW folds on two. A folder used to fold on a single
+        // click, which is VS Code's rule and reads well until the tree also has to support selecting --
+        // there, one click has to mean "this is the row I am talking about", because a press is how you
+        // aim Delete, Rename, a drag or a Shift-range.
         return row;
     }
 
