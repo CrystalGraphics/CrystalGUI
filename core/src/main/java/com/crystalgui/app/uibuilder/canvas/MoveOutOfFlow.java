@@ -53,6 +53,9 @@ public final class MoveOutOfFlow extends UIElement {
     /** How close counts, in SCREEN pixels — so it feels the same at every zoom. */
     private static final float TOLERANCE = 6f;
 
+    /** Matched to {@code SelectionOutline}'s: the two mark the same edge and must read as one line. */
+    private static final float GUIDE_THICKNESS = 1f;
+
     private final BuilderContext ctx;
 
     private final UiBuilderDocument document;
@@ -209,13 +212,25 @@ public final class MoveOutOfFlow extends UIElement {
         float zoom = Math.max(0.0001f, ctx.surface().zoom());
         int colour = getStyle().computed().get(StylePropertyRegistry.COLOR);
 
+        // CENTRED ON THE LINE IT MARKS, not starting at it.
+        //
+        // A guide and the selection outline mark the same edge and have to look like one line. The
+        // outline hugs its box from OUTSIDE, so it occupies the pixel before the edge; a guide drawn
+        // from the coordinate occupies the pixel after it, and the two sit side by side as a two-pixel
+        // band where a reader expects one. They coincided before the outline moved out, which is why
+        // this only started reading as crooked then.
+        //
+        // Half the stroke, so the coordinate stays the guide's CENTRE at any zoom -- which is also what
+        // makes it agree with an edge it aligned to on the far side of the canvas, where there is no
+        // outline to match and the true line is all there is.
+        float half = GUIDE_THICKNESS * 0.5f;
         for (Snap.Guide guide : guides) {
             if (guide.vertical()) {
-                paint.fillRect(area[0] + guide.at() * zoom, area[1] + guide.from() * zoom,
-                        1f, Math.max(1f, (guide.to() - guide.from()) * zoom), colour);
+                paint.fillRect(area[0] + guide.at() * zoom - half, area[1] + guide.from() * zoom,
+                        GUIDE_THICKNESS, Math.max(1f, (guide.to() - guide.from()) * zoom), colour);
             } else {
-                paint.fillRect(area[0] + guide.from() * zoom, area[1] + guide.at() * zoom,
-                        Math.max(1f, (guide.to() - guide.from()) * zoom), 1f, colour);
+                paint.fillRect(area[0] + guide.from() * zoom, area[1] + guide.at() * zoom - half,
+                        Math.max(1f, (guide.to() - guide.from()) * zoom), GUIDE_THICKNESS, colour);
             }
         }
     }
