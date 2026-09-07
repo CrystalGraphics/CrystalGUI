@@ -125,11 +125,35 @@ public final class HierarchyPanel extends UIElement {
         append(content);
         content.append(tree);
 
+    }
+
+    /**
+     * Every subscription this panel holds, remade each time it joins a tree.
+     *
+     * <p><b>Here rather than in the constructor, and paired with {@code disconnected}.</b> That method
+     * drops every connection -- which it must, since one outliving its node is what the engine's
+     * ownership rule exists to prevent -- so a subscription made once at construction is gone the first
+     * time this panel leaves the tree and is never remade. The dock takes a tool window out for
+     * ordinary reasons: hiding it, rebuilding a layout, replacing the panel behind a tab.</p>
+     *
+     * <p>All three go at once, which is why it presents as the panel dying rather than as one feature
+     * failing: rows stop selecting anything, the tree stops following the canvas, and it stops rebuilding
+     * when the document changes. Nothing re-registers, so it stays dead until the process restarts --
+     * reported exactly that way. {@code ResizeHandles} had the same defect for the same reason.</p>
+     */
+    @Override
+    protected void connected() {
+        super.connected();
         // SELECTION, not activation: a single click on a row is choosing that node, and activation is
         // the double-click that will open a template. The two are separate signals for exactly this.
         connections.add(tree.onSelectionChanged.connect(this::chooseRows));
         connections.add(builder.builderSelection().onChanged.connect(this::followSelection));
         connections.add(builder.getDocument().onChanged().connect(this::refresh));
+        // WHAT IT MISSED WHILE IT WAS OUT. The document may have been edited, and the canvas selection
+        // moved, with nothing listening -- so a panel that comes back showing the tree it left with is
+        // showing a stale one.
+        refresh();
+        followSelection();
     }
 
     /** The tree, for a test and for whoever wants to expand a branch. */
