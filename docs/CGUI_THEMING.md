@@ -161,9 +161,10 @@ editor scheme's.
 | `--button-disabled-bg` | `var(--surface-raised)` | base.css |
 | `--button-disabled-fg` | `var(--fg-disabled)` | base.css |
 | `--button-fg` | `var(--fg)` | base.css |
-| `--button-hover-bg` | `var(--hover-bg)` | base.css |
+| `--button-hover-bg` | `var(--pressed-bg)` | base.css |
 | `--button-pressed-bg` | `var(--pressed-bg)` | base.css |
 | `--checkbox-checked-bg` | `var(--success)` | base.css |
+| `--checkbox-checked-fg` | `var(--success-icon)` | base.css |
 | `--checkbox-disabled-bg` | `var(--surface-raised)` | base.css |
 | `--checkbox-mark-bg` | `var(--surface-raised)` | base.css |
 | `--checkbox-mark-hover-bg` | `var(--hover-bg)` | base.css |
@@ -211,13 +212,14 @@ editor scheme's.
 | `--dialog-backdrop` | `#00000080` | crystal-dark.css |
 | `--dialog-bg` | `var(--surface-panel)` | base.css |
 | `--dialog-border` | `var(--border-base)` | base.css |
-| `--dialog-close-bg` | `var(--surface-overlay)` | base.css |
-| `--dialog-close-fg` | `var(--fg)` | base.css |
+| `--dialog-close-fg` | `var(--fg-secondary)` | base.css |
 | `--dialog-close-hover-bg` | `var(--error)` | base.css |
+| `--dialog-close-hover-fg` | `var(--fg-on-accent)` | base.css |
 | `--dialog-fg` | `var(--fg)` | base.css |
 | `--dialog-picker-bg` | `#2E2E2E76` | crystal-dark.css |
 | `--dialog-pulse-border` | `var(--accent)` | base.css |
-| `--dialog-title-bg` | `var(--surface-raised)` | base.css |
+| `--dialog-title-bg` | `var(--surface-base)` | base.css |
+| `--dialog-title-fg` | `var(--fg)` | base.css |
 | `--diff-added-bg` | `#2EA04326` | crystal-dark.css |
 | `--diff-added-fg` | `#2EA04359` | crystal-dark.css |
 | `--diff-changed-bg` | `#58A6FF1F` | crystal-dark.css |
@@ -713,4 +715,6 @@ editor scheme's.
 | `--window-title-bg` | `var(--surface-base)` | base.css |
 | `--window-title-fg` | `var(--fg-secondary)` | base.css |
 | `--workbench-bg` | `var(--surface-base)` | base.css |
+| `--workbench-control-hover-bg` | `var(--hover-bg)` | base.css |
+| `--workbench-control-pressed-bg` | `var(--pressed-bg)` | base.css |
 <!-- TOKENS:END -->

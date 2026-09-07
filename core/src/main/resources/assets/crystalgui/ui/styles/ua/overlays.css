@@ -187,7 +187,35 @@ dialog {
      * so the engine eases toward it and the cleanup retargets it back. Both ends name the same transform
      * function, because a list that does not line up snaps at the halfway point instead of lerping. */
     transform: scale(1, 1);
-    transition: transform 120ms ease-out, outline-color 120ms ease-out;
+    /* FADED IN AND OUT BY DEFAULT, where a dialog used to appear and vanish on a single frame.
+     *
+     * THE PAIR IS THE MECHANISM: `opacity: 0` here and `1` on `.__open__` below. A box coming out of
+     * `display: none` has no previous opacity to interpolate from — the problem `@starting-style` exists
+     * to solve on the web — so the closed state has to be a real declared value rather than an absence.
+     *
+     * `display` IS IN THE LIST, and it is what makes the fade OUT exist at all. display is discrete, so
+     * without naming it the box snaps to `none` on the frame the close happens and takes the opacity
+     * transition down with it: the dialog fades in and then vanishes. Naming it holds the element laid
+     * out for the same duration and hides it at the end — CSS `transition-behavior: allow-discrete`,
+     * implemented in the style engine (LayoutProperties.DISPLAY) rather than in `Dialog`, so this is a
+     * default any sheet can restate and nothing in Java can disagree with.
+     *
+     * ONE LIST, not two declarations: `transition` is a single property whose value is the whole list,
+     * so a second declaration REPLACES this one rather than adding to it.
+     *
+     * OPACITY ALONE, no scale. Every other overlay that appears here — menus, the notification balloon,
+     * Preferences — fades and does not move, and a dialog is the one overlay that can be DRAGGED: a
+     * scale runs through the same compositor transform the pulse and the window animator write, and two
+     * writers on one property is the arrangement this engine documents as the way to lose a gesture. */
+    opacity: 0;
+    /* The two entries in front belong to the blocked-modal pulse and stay in the list at their own
+     * 120ms: that is a twitch saying "the click did nothing", not an appearance, and it has to be over
+     * before the eye goes looking for a cause. */
+    transition: transform 120ms ease-out, outline-color 120ms ease-out, opacity 240ms ease, display 240ms ease;
+}
+
+dialog.__open__ {
+    opacity: 1;
 }
 
 /* Says "this dialog is why that click did nothing" — Windows' own answer, and the thing that keeps
@@ -213,20 +241,24 @@ dialog.__picker__ {
  * sheet, rather than a number picked just for this one bar. Against a 10px title, 16 read as a band of
  * dead air above and below the text; 14 is the smallest this convention already commits to. */
 dialog .__title-bar__ {
-    height: 16px;
+    /* THE FRAME'S CAPTION, to the pixel. A dialog and a window sit side by side on the same desktop, so
+     * a caption of a different height and a different grey reads as one of them being wrong rather than
+     * as the two being different kinds of thing. 20px is the frame's own derivation: a 16px control plus
+     * the 2px above and below it. `min-height`, not `height`, so a longer title can still grow it. */
+    min-height: 20px;
     width: 100%;
-    padding-left: 4px;
-    /* 7px, not 2 — the close button sat flush enough against the bar's own edge that it read as
-     * overflowing past it rather than sitting inside it. 5px more breathing room pulls it in. */
-    padding-right: 4px;
-    padding-top: 1px;
+    padding-left: 6px;
+    /* NO RIGHT PADDING. The close button stretches to the caption's full height and sits flush against
+     * its end, exactly as the frame's controls do -- the hover fill is meant to reach the corner. */
+    padding-right: 0px;
     /* Explicit `row`: this engine's Taffy default is COLUMN, not CSS's `row` (see AGENTS.md), so
      * without this the close button stacks underneath the title instead of beside it. */
     flex-direction: row;
     align-items: center;
     /* Title left, close button hard right, whatever the dialog's width. */
     justify-content: space-between;
-    background: var(--dialog-title-bg, #393939);
+    background: var(--dialog-title-bg, #26282B);
+    color: var(--dialog-title-fg, #DFE1E5);
 }
 
 /* ── Popovers, menus and dropdowns ──────────────────────────────────────────────────────────────
@@ -643,6 +675,9 @@ dialog .__backdrop__ {
  *   overflow        — clips the glyphs the ellipsis stands in for, on exactly the box it measured
  *                     against. */
 dialog .__title-bar__ .__label__ {
+    /* A caption names the window it is on, and at the same weight as the content below it the two read
+     * as one column of text broken by a rule. */
+    font-weight: bold;
     flex-grow: 1;
     flex-basis: 0;
     min-width: 0;
@@ -674,31 +709,40 @@ dialog .__content__ {
  * to touch, the same "won a specificity fight nobody knew was happening" trap `colorselector`'s own
  * comments document repeatedly. One more class component (specificity 21) settles it outright. */
 dialog .__title-bar__ .__close__ {
-    width: 10px;
-    min-height: 11px;
-    height: 11px;
-    padding-all: 0;
-    justify-content: center;
-    align-items: center;
-    /* Same neutral raised grey the menu/dropdown chrome uses (`popover, menu, dropdown .__menu__`,
-     * `--cfg-popup`) — not the title bar's own #55606E blue-grey, which was the last of it here. */
-    background: var(--dialog-close-bg, #4B4B4B);
-    /* The close button is still a `Button` underneath, and the base `button, dropdown { color: #222222 }`
-     * rule is a SPECIFIED value on that element, not an inherited one — so the dark colour every unthemed
-     * button gets by default wins over `dialog`'s inherited #DDDDDD regardless of how light the title bar
-     * around it is. The "x" was rendering almost invisibly dark-on-dark; this restates the same light grey
-     * the rest of the title bar already uses, matching the label instead of the base button rule. */
-    color: var(--dialog-close-fg, #DDDDDD);
-    text-align: center;
+    /* THE FRAME'S CLOSE CONTROL, rule for rule -- see `.__window__ .__title-bar__ .__close__` in
+     * desktop.css, whose comment carries the derivation of every number. Transparent until hovered, when
+     * it fills red to the caption's edges; the mark is the same `crystalgui:x` icon rather than a typed
+     * "x", which is why the glyph-centring correction that used to live here is gone with it.
+     *
+     * Scoped through `.__title-bar__` and not just `dialog .__close__`: the shorter form ties on
+     * specificity (11) with the config kit's `.__config-control__ button`, and a Dialog opened from
+     * ColorControl is a genuine DOM descendant of it -- promotion moves a dialog's Taffy parent, never
+     * its DOM parent, so the cascade reaches straight through. On a tie the later rule wins and the kit
+     * is declared after this one, so the button silently inherited an 18px floor no edit here appeared
+     * to touch. One more class component settles it outright. */
+    width: var(--activity-bar-w, 20px);
+    align-self: stretch;
+    min-height: 0px;
+    min-width: 0px;
+    padding-left: 4px;
+    padding-right: 4px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    flex-shrink: 0;
+    border-radius: 0px;
+    background: none;
+    /* No token: there is nothing to theme about being invisible, and a component token may only
+     * derive from the system vocabulary, which has no word for `transparent`. */
+    background-color: transparent;
+    overlay: icon("crystalgui:x");
+    overlay-origin: content-box;
+    overlay-fit: contain;
+    color: var(--dialog-close-fg, #9DA0A8);
 }
-/* Centring the BOX (`justify-content`/`align-items` above) is not the same as centring the INK — a
- * pixel font's glyph carries its own asymmetric leading inside its line box (see ore.css's own
- * `text-offset-y` note, which measures the same effect on a 14px button), so a perfectly centred text
- * box still shows the "x" sitting visibly high. `text-offset-y` nudges the glyph itself at paint time
- * without moving the box or the click target. Scoped to just this button — default.css otherwise stays
- * font-agnostic and applies no such correction globally; retune this if the bundled font ever changes. */
-dialog .__title-bar__ .__close__ text {
-    text-offset-y: -1px;
+
+dialog .__title-bar__ .__close__:hover {
+    color: var(--dialog-close-hover-fg, #FFFFFF);
+    background-color: var(--dialog-close-hover-bg, #F14C4C);
 }
 dialog .__title-bar__ .__close__:hover {
     background: var(--dialog-close-hover-bg, #C05050);
@@ -854,3 +898,150 @@ canvasview.__panning__, graphview.__panning__ { cursor: grabbing; }
  * holds for the whole drag no matter how far outside the letter the pointer travels. The class is still
  * set, as a hook for a theme that wants to show the gesture. */
 .__scrub-handle__ { cursor: slide-arrow; }
+
+/* ── Paste Attributes ────────────────────────────────────────────────────────────────────────────────
+ *
+ * Premiere's and Resolve's window: a checkbox per copied property under the group its owner filed it in.
+ * The indent is the whole of the hierarchy -- a group and its members are ordinary checkboxes, so nothing
+ * but the offset says which owns which, and it has to be unmistakable at one glance. */
+dialog.__paste-attributes__ {
+    /* Wide enough for THREE columns of property names, which is what makes the wrap useful at all: at
+     * two the window is nearly as tall as a plain list and the indent has bought nothing. */
+    min-width: 380;
+}
+
+/* ONE STEP DOWN, everywhere inside. This window is a dense list of property names rather than prose, and
+ * at the shared 10 it reads as heavier than the dialog it sits in.
+ *
+ * THREE RULES, because font-size does not effectively inherit here: `ua/core.css` opens with
+ * `* { font-size: 10 }`, which is a candidate on every element, so setting it on the dialog alone reaches
+ * nothing. The descendant rule outspecifies that for the light tree, and the two `::part` rules are for
+ * the labels of Checkbox and Button, which live in shadow trees an ordinary selector cannot enter. */
+dialog.__paste-attributes__,
+dialog.__paste-attributes__ * {
+    font-size: 9;
+}
+
+dialog.__paste-attributes__ checkbox::part(label),
+dialog.__paste-attributes__ button::part(label) {
+    font-size: 9;
+}
+
+/* FROM and TO, each a dimmed key beside the name it is about. The key column is fixed so the two names
+ * line up: ragged, the pair reads as two unrelated sentences rather than as one before-and-after. */
+.__paste-header__ {
+    width: 100%;
+    gap: 2;
+}
+
+.__paste-line__ {
+    align-items: center;
+    gap: 6;
+}
+
+.__paste-key__ {
+    width: 34;
+    color: var(--tree-dimmed-fg, #9DA0A8);
+}
+
+.__paste-value__ {
+    color: var(--dialog-fg, #FFFFFF);
+    font-weight: bold;
+}
+
+/* The rule under the header: above it is WHAT is being pasted, below it is HOW MUCH of it. */
+.__paste-rule__ {
+    width: 100%;
+    height: 1;
+    margin-top: 8px;
+    margin-bottom: 8px;
+    background-color: var(--dialog-border, #43454A);
+}
+
+/* THE HEADING, above its box and in bold. Resolve's arrangement: inside the box it becomes the first
+ * cell of the grid and stops looking like a heading at all. */
+.__paste-group__ {
+    font-weight: bold;
+    margin-top: 8px;
+    margin-bottom: 4px;
+    /* Indented to the box's own content, so the heading and the first property share a left edge. */
+    margin-left: 4px;
+}
+
+/* THE GRID: the properties of one group, three across, boxed so it is unmistakable which heading owns
+ * them. An indent cannot do that job here -- a wrapped row's second line starts back at the left.
+ *
+ * 31%, not 33%. Three at a third plus the gaps between them is over the width, and since flex-shrink
+ * defaults to 0 in this engine nothing gives: the third item wraps and every row holds two. */
+.__paste-section__ {
+    width: 100%;
+    border-width: 1px;
+    border-color: var(--dialog-border, #43454A);
+    border-radius: 4px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    padding-left: 18px;
+    padding-right: 6px;
+    /* ENOUGH TO SEPARATE AND NO MORE: the box and the heading above it already carry the separation. */
+    margin-bottom: 4px;
+    /* COLUMNS, not even gaps -- and the two cannot both be had.
+     *
+     * Spreading items to fill the row is only "even" when the row is full: a group of two then puts one
+     * against each edge, and nothing lines up with the group above or below it. Fixed thirds cost a
+     * trailing gap on a short row and buy alignment down the whole window, which is what makes a list of
+     * property names scannable at all.
+     *
+     * The gap is on the ROW axis only. A column gap would come out of the same hundred percent the
+     * thirds are measured in, so three would no longer fit and the last would wrap. */
+    gap-row: 7px;
+    gap-column: 0;
+}
+
+/* A THIRD EACH, with the breathing room as padding INSIDE the column rather than as a gap between them --
+ * border-box, so it comes out of the third and cannot push the third item onto the next row.
+ *
+ * Past that width the label truncates, which needs the shrink said out loud: flex-shrink defaults to 0
+ * in this engine, so without it the text would simply overflow its own box. */
+.__paste-item__ {
+    width: 33%;
+    padding-right: 8px;
+}
+
+.__paste-item__::part(label) {
+    flex-shrink: 1;
+    text-overflow: ellipsis;
+}
+
+/* MORE AIR BETWEEN THE BOX AND ITS WORD than a bare checkbox wants. These are property names read as a
+ * list rather than one label answering one control, and at the stock 2px the tick crowds the first
+ * letter. */
+.__paste-group__,
+.__paste-item__,
+.__paste-remember__ {
+    gap-all: 3px;
+}
+
+/* NOT a property: a question about the WINDOW rather than about the copy, which is why it sits on the
+ * button row and not under the last group of checkboxes. */
+.__paste-remember__ {
+    align-self: center;
+}
+
+.__paste-actions__ {
+    width: 100%;
+    align-items: center;
+    /* The standing choice at one end, the two ways out at the other. */
+    justify-content: space-between;
+    margin-top: 12px;
+}
+
+.__paste-buttons__ {
+    gap: 6;
+}
+
+/* WIDER THAN THEIR WORDS. A dialog's two ways out are aimed at rather than read, and Cancel being the
+ * longer word should not make it the larger target. */
+.__paste-buttons__ > button {
+    min-width: 76;
+    justify-content: center;
+}

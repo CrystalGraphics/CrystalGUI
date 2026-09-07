@@ -102,7 +102,7 @@ PART	BlackboardPanel	head	B	4	confirmed	a rule selects through it (2)
 PART	BlackboardPanel	subtitle	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	BlackboardPanel	title	B	5	confirmed	leaf in every rule, scoped by an ancestor in 5
 PART	BlackboardPanel	titles	B	5	confirmed	a rule selects through it (4)
-PART	BooleanControl	boolean	B	12	confirmed	a rule selects through it (11)
+PART	BooleanControl	boolean	B	10	confirmed	a rule selects through it (9)
 PART	Breadcrumbs	crumb	B	0	confirmed	leaf in every rule
 PART	Breadcrumbs	crumb-current	B	0	confirmed	leaf in every rule
 PART	Breadcrumbs	crumb-icon	B	0	confirmed	leaf in every rule
@@ -150,7 +150,7 @@ PART	CompletionPopup	completion-mark-static	B	2	confirmed	leaf in every rule
 PART	CompletionPopup	completion-options	B	2	confirmed	leaf in every rule
 PART	CompletionPopup	completion-params	B	2	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	CompletionPopup	completion-row	B	2	confirmed	leaf in every rule
-PART	ConfigControl	config-control	B	75	confirmed	a rule selects through it (65)
+PART	ConfigControl	config-control	B	73	confirmed	a rule selects through it (63)
 PART	Configurator	configurator	B	6	confirmed	a rule selects through it (5)
 PART	Configurator	inline	C	4	confirmed	state adjective
 PART	Configurator	label	B	5	confirmed	leaf in every rule, scoped by an ancestor in 5
@@ -179,10 +179,11 @@ PART	CreateMenu	title-bar	A	0	proposed	leaf in every rule
 PART	CreateMenu	twisty	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	DesignToolWindow	design-panel	A	0	proposed	leaf in every rule
 PART	Desktop	live	C	1	confirmed	state adjective
+PART	Desktop	overlays	A	0	proposed	leaf in every rule
 PART	Desktop	snap-preview	B	1	confirmed	leaf in every rule
 PART	Desktop	windows	B	0	confirmed	leaf in every rule
 PART	Dialog	backdrop	B	0	confirmed	leaf in every rule
-PART	Dialog	close	B	7	confirmed	a rule selects through it (1)
+PART	Dialog	close	B	7	confirmed	leaf in every rule, scoped by an ancestor in 7
 PART	Dialog	content	B	0	confirmed	leaf in every rule
 PART	Dialog	label	B	4	confirmed	leaf in every rule, scoped by an ancestor in 4
 PART	Dialog	open	C	1	confirmed	state adjective
@@ -399,6 +400,18 @@ PART	NumberControl	scrub-handle	B	1	confirmed	leaf in every rule
 PART	NumberControl	scrubbing	C	0	confirmed	leaf in every rule
 PART	PageStack	page	B	0	confirmed	leaf in every rule
 PART	PageStack	page-placeholder	B	0	confirmed	leaf in every rule
+PART	PasteAttributesDialog	paste-actions	A	1	proposed	leaf in every rule
+PART	PasteAttributesDialog	paste-attributes	B	5	proposed	a rule selects through it (3)
+PART	PasteAttributesDialog	paste-buttons	B	2	proposed	a rule selects through it (1)
+PART	PasteAttributesDialog	paste-group	A	2	proposed	leaf in every rule
+PART	PasteAttributesDialog	paste-header	A	1	proposed	leaf in every rule
+PART	PasteAttributesDialog	paste-item	A	3	proposed	leaf in every rule
+PART	PasteAttributesDialog	paste-key	A	1	proposed	leaf in every rule
+PART	PasteAttributesDialog	paste-line	A	1	proposed	leaf in every rule
+PART	PasteAttributesDialog	paste-remember	A	2	proposed	leaf in every rule
+PART	PasteAttributesDialog	paste-rule	A	1	proposed	leaf in every rule
+PART	PasteAttributesDialog	paste-section	A	1	proposed	leaf in every rule
+PART	PasteAttributesDialog	paste-value	A	1	proposed	leaf in every rule
 PART	Popover	open	C	1	confirmed	state adjective
 PART	Preferences	preferences	B	4	confirmed	a rule selects through it (2)
 PART	Preferences	preferences-panel	B	0	confirmed	leaf in every rule
@@ -700,7 +713,7 @@ PART	ViewContainer	view-content	B	6	confirmed	a rule selects through it (4)
 PART	WindowFrame	active	C	3	confirmed	state adjective
 PART	WindowFrame	caption-adopted	C	2	confirmed	state adjective
 PART	WindowFrame	caption-chrome	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
-PART	WindowFrame	close	B	7	confirmed	a rule selects through it (1)
+PART	WindowFrame	close	B	7	confirmed	leaf in every rule, scoped by an ancestor in 7
 PART	WindowFrame	content	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	WindowFrame	controls	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	WindowFrame	fullscreen	C	1	confirmed	state adjective

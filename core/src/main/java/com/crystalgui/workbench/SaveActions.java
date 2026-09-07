@@ -26,7 +26,6 @@ import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import javax.annotation.Nullable;
 
 /**
@@ -246,7 +245,7 @@ public final class SaveActions {
         cancel.onPressed.connect(dialog::close);
 
         window.addOverlay(dialog, workbench);
-        dialog.onClosed.connect(dialog::removeSelf);
+        dialog.removeWhenClosed();
         dialog.showModal();
         window.focus().requestFocus(cancel);
     }

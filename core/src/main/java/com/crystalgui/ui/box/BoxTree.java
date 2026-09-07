@@ -364,25 +364,36 @@ public final class BoxTree {
         if (topLayer != null) {
             topLayer.setStacksByInsertion(true);
             topLayer.stackingOnly = true;
-            // BOTH DIRECTIONS, and the withdrawal is the half that is easy to miss: this pass is the
-            // only writer of a top-layer override, so it must also be the only eraser. Applying
-            // promotions alone leaves a demoted box hosted where the LAST sync put it -- demote()
-            // would appear to do nothing, and only for a node that had been promoted before.
-            // Scoped to overrides pointing at the top layer, so a mirror's or an owned window's
-            // host -- set through Box.setHost, which is still the general mechanism -- is untouched.
-            for (Box box : inOrder) {
-                if (box.hostOverride == topLayer && !document.isPromoted(box.node)) {
-                    box.hostOverride = null;
-                    box.hostedSequence = 0;
-                }
+        }
+        // BOTH DIRECTIONS, and the withdrawal is the half that is easy to miss: this pass is the
+        // only writer of a promotion override, so it must also be the only eraser. Applying
+        // promotions alone leaves a demoted box hosted where the LAST sync put it -- demote()
+        // would appear to do nothing, and only for a node that had been promoted before.
+        //
+        // Recognised by the FLAG rather than by comparing against the top layer, because a promotion
+        // may name any host -- the compositor's work area is the second real answer, for a dialog that
+        // must escape its panel and still sit under the taskbar. A mirror's or an owned window's host,
+        // set through Box.setHost, carries no flag and is untouched.
+        for (Box box : inOrder) {
+            if (box.hostedByPromotion && !document.isPromoted(box.node)) {
+                box.hostOverride = null;
+                box.hostedSequence = 0;
+                box.hostedByPromotion = false;
             }
-            int sequence = 0;
-            for (UIElement node : document.promotedNodes()) {
-                Box box = boxes.get(node);
-                if (box == null || box == topLayer) continue;
-                box.hostOverride = topLayer;
-                box.hostedSequence = ++sequence;
-            }
+        }
+        int sequence = 0;
+        for (UIElement node : document.promotedNodes()) {
+            Box box = boxes.get(node);
+            if (box == null) continue;
+            UIElement wanted = document.promotionHost(node);
+            Box host = wanted == null ? topLayer : boxes.get(wanted);
+            // A HOST THAT IS NOT LAID OUT YET IS NOT AN ERROR, it is a frame too early: the promotion
+            // stands and the next sync applies it. Hosting a box on itself, or on one inside it, is
+            // refused outright -- a cycle here hangs the compose walk rather than drawing wrongly.
+            if (host == null || host == box || hosts(box, host)) continue;
+            box.hostOverride = host;
+            box.hostedSequence = ++sequence;
+            box.hostedByPromotion = true;
         }
         // Hosting: natural children first in document order, then overrides in the order declared.
         for (Box box : inOrder) {
@@ -663,4 +674,12 @@ public final class BoxTree {
     int nextHostedSequence() {
         return ++hostedSequence;
     }
+    /** Whether {@code box} already hosts {@code host}, at any depth — the cycle a promotion must refuse. */
+    private static boolean hosts(Box box, Box host) {
+        for (Box walk = host; walk != null; walk = walk.hostOverride != null ? walk.hostOverride : walk.naturalHost) {
+            if (walk == box) return true;
+        }
+        return false;
+    }
+
 }

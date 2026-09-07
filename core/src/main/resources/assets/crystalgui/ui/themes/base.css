@@ -56,10 +56,24 @@ theme {
     --button-disabled-bg: var(--surface-raised);
     --button-disabled-fg: var(--fg-disabled);
     --button-fg: var(--fg);
-    --button-hover-bg: var(--hover-bg);
+    /* NOT --hover-bg, which is tuned to lift a list ROW off --surface-base. A button's own ground is
+     * --surface-raised, and against that the row-hover value is a three-value step -- invisible, so
+     * every button in the application appeared to have no hover state at all. A hover has to be measured
+     * from the surface it is lifting, and a button starts one step up.
+     *
+     * PRESSED IS LEFT ALONE. Moving it up a step as well to keep the two distinct changed how every
+     * pressed and toggled button in the application looked, which is a much larger claim than the one
+     * bug being fixed here. The two now share a colour: a press is transient and reads as one from the
+     * pointer being down, while a hover has nothing else to announce it. */
+    --button-hover-bg: var(--pressed-bg);
     --button-pressed-bg: var(--pressed-bg);
 
     --checkbox-checked-bg: var(--success);
+    /* THE TICK'S colour, where --checkbox-checked-bg is the FACE's — the shell draws a green checkmark
+     * in the same empty box an unticked one has, rather than filling the mark (@see ua/workbench.css).
+     * `--success-icon` and not `--success`: the icon role is the full-strength green, defined for a
+     * drawn mark rather than for a word on a background, and a 12px stroke needs every bit of it. */
+    --checkbox-checked-fg: var(--success-icon);
     --checkbox-disabled-bg: var(--surface-raised);
     --checkbox-mark-bg: var(--surface-raised);
     --checkbox-mark-hover-bg: var(--hover-bg);
@@ -109,11 +123,19 @@ theme {
     /* The blocked pulse borrows the accent, because it is an ANSWER to a click rather than an error: the
      * dialog is saying "over here", not "you did something wrong". Red would read as the latter. */
     --dialog-pulse-border: var(--accent);
-    --dialog-close-bg: var(--surface-overlay);
-    --dialog-close-fg: var(--fg);
+    /* THE SAME DERIVATIONS THE WINDOW FRAME'S CAPTION USES, one for one -- a dialog is a window with
+     * less furniture, and the two sit side by side on the same desktop, so a caption of a nearly-but-not
+     * quite matching grey reads as a mistake rather than a distinction.
+     *
+     * Restated from the system vocabulary rather than pointed at `--window-*`: a component token derives
+     * into the system tokens and never into another component's, which `baseIsDerivationOnly` enforces.
+     * Keep these in step with `--window-title-active-*` and `--window-close-hover-*` below. */
+    --dialog-close-fg: var(--fg-secondary);
     --dialog-close-hover-bg: var(--error);
+    --dialog-close-hover-fg: var(--fg-on-accent);
     --dialog-fg: var(--fg);
-    --dialog-title-bg: var(--surface-raised);
+    --dialog-title-bg: var(--surface-base);
+    --dialog-title-fg: var(--fg);
 
     --dock-active-border: var(--accent-soft);
     --dock-bg: var(--surface-panel);
@@ -641,6 +663,11 @@ theme {
     --tree-fg: var(--fg);
     --tree-twisty-fg: var(--fg-secondary);
     --workbench-bg: var(--surface-base);
+    /* A SHELL CONTROL IS AN OUTLINE, so its two states are the neutral ladder measured against the
+     * PANEL it sits on -- not the `--button-*` family, which is tuned for a filled face on
+     * --surface-raised and comes out a step too high over a panel. @see ua/workbench.css */
+    --workbench-control-hover-bg: var(--hover-bg);
+    --workbench-control-pressed-bg: var(--pressed-bg);
     --panel-header-sep: var(--surface-base);
 
     --tab-active-border: var(--border-base);

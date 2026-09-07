@@ -11,9 +11,11 @@ import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.WidgetContracts;
+import com.crystalgui.core.window.WindowClamp;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UINode;
 import java.util.List;
 import com.crystalgui.ui.event.CloseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -33,11 +35,15 @@ import lombok.Getter;
  * engine's {@code Document} analogue and reusing the word would be actively misleading.</p>
  *
  * <h3>Two entry points, and the difference is not cosmetic</h3>
- * <p>{@link #show()} is modeless, {@link #showModal()} is modal, and per the HTML spec only the modal
- * form joins the top layer. A modeless dialog stays in ordinary flow and ordinary stacking, which is the
- * right model for editor panels: several coexist, they order themselves against each other and against
- * page content by {@code z-index}, and none outranks the whole UI. A modal is the opposite by design —
- * it outranks everything and makes everything else {@link UIElement#isInert() inert}.</p>
+ * <p>{@link #show()} is modeless and {@link #showModal()} is modal. What separates them is INERTNESS: a
+ * modal outranks everything and makes everything else {@link UIElement#isInert() inert}, where several
+ * modeless dialogs coexist and order themselves against each other by {@code z-index}.</p>
+ *
+ * <p><b>Both are hosted out of whatever raised them, which is a divergence from the spec</b>, where only
+ * the modal form joins the top layer and a modeless one stays in ordinary flow. The web has no movable
+ * dialog; this one is DRAGGED, and left in flow its containing block is the panel that opened it — so it
+ * clamped to that rectangle and was clipped by it. {@link #promoteIfFree} says where it goes instead and
+ * why that is not the top layer either.</p>
  *
  * <h3>Escape closes a modal, and only a modal</h3>
  * <p>Only {@code showModal()} "establishes a close watcher" — the machinery that turns a close request
@@ -206,7 +212,9 @@ public class Dialog extends UIElement {
         content.addClass(CONTENT_CLASS);
         appendStructural(content);
 
-        closeButton = new Button("x");
+        // NO LABEL: the mark is an `overlay` icon from the sheet, the same one the window frame's close
+        // control uses. A typed "x" beside it would draw twice.
+        closeButton = new Button();
         closeButton.addClass(CLOSE_CLASS);
         closeButton.attachListener(this::close);
         titleBar.append(closeButton);
@@ -285,14 +293,42 @@ public class Dialog extends UIElement {
      * descendant (the "focus delegate"), else the dialog itself. There is no {@code autofocus}
      * attribute here, so that tier is skipped — a caller that wants a specific control focused should
      * request it after showing.</p>
+     *
+     * <p><b>It is hosted out of whatever raised it</b>, for the one reason that has nothing to do with
+     * modality: a dialog is DRAGGED. Left in ordinary flow its containing block is the panel that opened
+     * it, so it clamps to that rectangle and is clipped by it — a dialog raised from an editor could not
+     * be moved out of the editor. Where it goes instead is {@link #promoteIfFree}'s business.</p>
+     *
+     * <p>Hosting is a paint and layout fact recorded on the node; the light tree is untouched, so the
+     * dialog is still a descendant of whatever opened it as far as the cascade is concerned and a sheet
+     * scoped to a shell still reaches inside it.</p>
      */
     public Dialog show() {
         if (open) return this;
         open = true;
         applyOpenState();
+        promoteIfFree();
         startClampTicker();
         runFocusingSteps();
         return this;
+    }
+
+    /**
+     * Hosts this dialog out of whatever raised it — <b>into the work area, not the top layer</b>.
+     *
+     * <p>Both escape the panel that opened it, which is the point; they differ in what the dialog then
+     * sits under. The top layer paints after the entire main tree, so a dialog there floats over the
+     * taskbar — somewhere no window can go, and the compositor's chrome is exactly the thing a dialog
+     * should not cover. The work area is where windows live, so hosting there gives the same clipping,
+     * the same clamp and the same paint order a {@code WindowFrame} has, for free.</p>
+     *
+     * <p>{@code workArea()} answers the document itself when nothing declared one, which is both the
+     * right fallback and the reason this needs no knowledge of a desktop.</p>
+     */
+    private void promoteIfFree() {
+        if (owned) return;
+        UIDocument window = document();
+        if (window != null) window.promote(this, window.workArea());
     }
 
     /**
@@ -453,11 +489,42 @@ public class Dialog extends UIElement {
                 l -> l.display(modal ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
     }
 
+    /**
+     * <b>Coming back into the tree restores what leaving it took away.</b>
+     *
+     * <p>A detach is not a close. {@link UINode} forgets a departing node from all five services and
+     * demotes it, and says why: promotion is the document's record, so a node that left while promoted
+     * would be re-hosted the moment it returned — right for a hide, wrong for a close, and it cannot
+     * tell which is happening. So the node that CAN tell says so on the way back.</p>
+     *
+     * <p>This is reached by minimising a window with a dialog open: the frame detaches, the dialog goes
+     * with it, and without this it came back in ordinary flow — confined to the panel it was raised from
+     * and no longer draggable off it — with its clamp hook dropped by {@code Animation.forget} as well,
+     * so nothing re-placed it either.</p>
+     */
+    @Override
+    protected void connected() {
+        super.connected();
+        if (!open) return;
+        promoteIfFree();
+        // THE HOOK WENT WITH THE DETACH, so the flag guarding against a second one has to go too, or
+        // the guard prevents the only restart that matters.
+        clampTickerRunning = false;
+        startClampTicker();
+    }
+
     /** Closes the dialog and hands focus back to whatever held it beforehand. */
     public Dialog close() {
         if (!open) return this;
         open = false;
         applyOpenState();
+
+        // IT STAYS PROMOTED, and that is what lets it fade OUT. Demoting here put the dialog back in the
+        // flow of whatever raised it on the very frame the close began -- so it jumped inside that
+        // panel's rectangle and was clipped away, which looked exactly like a dialog that vanished
+        // instead of fading. A closed dialog costs nothing where it is: `display: none` gives it no box,
+        // so the sync skips it, and the detach path demotes for real (@see UINode). Nor does it stale the
+        // stacking order, because show() re-promotes and that raises.
 
         if (modal) {
             modal = false;
@@ -466,8 +533,7 @@ public class Dialog extends UIElement {
             if (modalWindow != null) {
                 modalWindow.focus().popModal(this);
                 modalWindow.dismiss().popCloseWatcher(this);
-                document().demote(this);
-                if (backdrop != null) document().demote(backdrop);
+                if (backdrop != null) modalWindow.demote(backdrop);
             }
             // AND THE OWNER'S SLOT LETS GO OF ITS BOX -- a full-size owned surface hit-tests, so one
             // left open with nothing showing swallows every click on the window's own content. The
@@ -489,6 +555,7 @@ public class Dialog extends UIElement {
         focusBeforeOpen = null;
 
         onClosed.emit();
+        if (removeWhenClosed) removeOnceItHasGone();
         return this;
     }
 
@@ -504,19 +571,146 @@ public class Dialog extends UIElement {
      * this frame, as it always did.</p>
      */
     private void applyOpenState() {
+        boolean showing = open && presented;
         // A CLASS as well as the display write, because a stylesheet cannot see an IMPORTANT-origin
         // layout value. @see #OPEN_CLASS
-        if (open) addClass(OPEN_CLASS);
+        if (showing) revealAfterLayout();
         else removeClass(OPEN_CLASS);
 
+        // UNHITTABLE THE MOMENT IT STOPS SHOWING, which `display: none` used to do on its own and no
+        // longer does: the sheet's fade names `display` in its transition list, so the box stays laid
+        // out for the length of the fade. Without this a just-closed dialog goes on swallowing every
+        // click over its own rectangle for as long as the fade lasts -- invisibly, which is this
+        // codebase's most-repeated failure and the one an owned modal's full-size content is worst at.
+        setHitTest(showing);
         StyleGroup.inlinePipeline(getStyle().getLayoutGroup(),
-                l -> l.display(open ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
+                l -> l.display(showing ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
+    }
+
+    /**
+     * Adds {@link #OPEN_CLASS} on the first frame this dialog has a box — <b>not on the frame it opens</b>.
+     *
+     * <p>That one frame's delay is the whole of why a dialog fades in rather than appearing. Opening
+     * writes {@code display: flex} and the class together, so the opacity would go from 0 to 1 on the
+     * very frame the box first exists — and a property whose old value belonged to an element that was
+     * not laid out has nothing to interpolate from. It snapped, every time, however the sheet was
+     * written. This is CSS's {@code @starting-style} problem and this is the same answer
+     * {@code Preferences.centre} and {@code InputDialog}'s prompt already reached for their own
+     * placement: be laid out, invisibly, for exactly one frame.</p>
+     *
+     * <p>Post-layout, so it lands on a frame where the box is real; one-shot, and it re-checks that the
+     * dialog is still showing, because a dialog opened and closed inside a frame must not reveal itself
+     * on the way out.</p>
+     */
+    private void revealAfterLayout() {
+        if (hasClass(OPEN_CLASS) || revealPending) return;
+        UIDocument window = document();
+        // NO WINDOW MEANS NO FRAMES, so there is nothing to wait for and waiting would hide it forever.
+        if (window == null) {
+            addClass(OPEN_CLASS);
+            return;
+        }
+        revealPending = true;
+        window.animation().afterLayout(this, delta -> {
+            revealPending = false;
+            if (open && presented) addClass(OPEN_CLASS);
+            return false;
+        });
+    }
+
+    /**
+     * Declares this dialog <b>single-use</b>: it leaves the tree once it has finished closing.
+     *
+     * <pre>{@code
+     * Dialog dialog = new Dialog("Paste Attributes").removeWhenClosed();
+     * }</pre>
+     *
+     * <p><b>Use this rather than {@code onClosed.connect(dialog::removeSelf)}</b>, which four callers
+     * were doing and which quietly cancels the close animation: {@code onClosed} fires at the END of
+     * {@link #close()}, so the dialog left the tree on the very frame the fade was meant to begin — no
+     * box, nothing to fade, and the detach demotes it as well. It looked like the sheet had no fade-out
+     * in it at all.</p>
+     *
+     * <p>A dialog that says nothing stays parented and is re-shown from where it is, which is the right
+     * default for one a panel keeps.</p>
+     */
+    public Dialog removeWhenClosed() {
+        removeWhenClosed = true;
+        return this;
+    }
+
+    /** @see #removeWhenClosed() */
+    private boolean removeWhenClosed;
+
+    /**
+     * Leaves the tree on the first frame this dialog genuinely has no box.
+     *
+     * <p>Which is what "finished closing" means: {@code display} is in the sheet's transition list, so
+     * the box outlives the close by the length of the fade and asking the BOX is the only way to know
+     * the fade has landed without this class knowing a duration the sheet owns.</p>
+     */
+    private void removeOnceItHasGone() {
+        UIDocument window = document();
+        // NO WINDOW MEANS NO FRAMES to wait for, and waiting would leave it parented for good.
+        if (window == null) {
+            removeSelf();
+            return;
+        }
+        window.animation().afterLayout(this, delta -> {
+            if (open) return false;          // shown again while it was fading -- it stays
+            if (box() != null) return true;  // still laid out, so still on its way out
+            removeSelf();
+            return false;
+        });
+    }
+
+    /** @see #revealAfterLayout() */
+    private boolean revealPending;
+
+    /**
+     * Whether this dialog is on screen <b>right now</b>, as distinct from {@link #isOpen()}.
+     *
+     * <p>A window that minimises takes its dialogs with it, and they have to leave WITH THE GESTURE: the
+     * frame detaches when the flight lands, so a dialog left to that blinked out after the window had
+     * already gone — read as the dialog not being part of the window at all.</p>
+     */
+    private boolean presented = true;
+
+    /**
+     * Takes this dialog off screen without closing it — declared by whatever owns its presence.
+     *
+     * <pre>{@code
+     * frame.minimize();   // un-presents every open dialog inside it, then flies
+     * frame.show(true);   // presents them again, where they were
+     * }</pre>
+     *
+     * <p><b>Not {@link #close()}</b>, and the difference is everything a person would lose: closing runs
+     * the close watchers, hands focus back and forgets the choice. This only stops it being drawn, so it
+     * comes back with its checkboxes as they were left. The sheet's fade applies either way, because
+     * both routes are the same two writes.</p>
+     */
+    public Dialog setPresented(boolean presented) {
+        if (this.presented == presented) return this;
+        this.presented = presented;
+        applyOpenState();
+        return this;
+    }
+
+    /** @see #setPresented(boolean) */
+    public boolean isPresented() {
+        return presented;
     }
 
 
     // ── Position ────────────────────────────────────────────────────────────
 
-    /** Places the dialog against its containing block, clamped so it cannot be put out of reach. */
+    /**
+     * Places the dialog, clamped so a caption's worth of it always stays reachable.
+     *
+     * <p>A dialog obeys a window's rule here rather than one of its own.</p>
+     *
+     * @see WindowClamp
+     */
     public Dialog moveTo(float left, float top) {
         placed = true;
         applyPosition(left, top);
@@ -604,37 +798,57 @@ public class Dialog extends UIElement {
     }
 
     /**
-     * Writes the position, clamped into the containing block.
+     * Writes the position, clamped so a caption's worth stays inside the containing block.
      *
      * <p>Clamping is ours — no spec covers it, because the web has no movable window. It matches what
      * OS window managers do, and the alternative (proportional re-anchoring) can drift a window
      * somewhere the user never put it.</p>
+     *
+     * <p><b>Not fully inside.</b> {@link WindowClamp} says how far off the edge is allowed and why, and
+     * it is shared with {@code WindowFrame} rather than restated: a dialog and a window are dragged by
+     * the same gesture and a user who has learnt one edge behaviour has learnt both.</p>
      *
      * <p>{@code INLINE} origin, matching CSS {@code resize}'s mandated behaviour for the size it
      * writes. Keeping the two consistent means one rule covers both: user-driven geometry is inline,
      * so an author's {@code !important} still wins.</p>
      */
     private void applyPosition(float left, float top) {
-        // THE CONTAINING BLOCK IS THE BOX'S HOST, and asking the box is what makes that true for both
-        // cases at once: a dialog promoted to the top layer is hosted by the document, and one owned by
-        // a window is an out-of-flow child of the frame and hosted by it. The two diverge exactly here
-        // -- the standing rule that a promoted node's containing block is not its node parent -- and
-        // neither is named. This used to read `document()` with a note that at 6.6 it would become the
-        // WindowFrame; 6.6 landed and the note stayed, so every owned modal was clamped, and centred,
-        // against the whole screen rather than against the window it belongs to.
+        // THE CONTAINING BLOCK IS THE BOX'S HOST, and asking the box is what makes that true for every
+        // case at once: a free dialog is hosted where `promoteIfFree` put it -- a desktop's overlay
+        // band, or the top layer when nothing declared one -- and an owned one is an out-of-flow child
+        // of its frame, hosted by it. They diverge exactly here, which is the standing rule that a
+        // promoted node's containing block is not its node parent, and none of the three is named.
+        //
+        // Asking the document where the work area is instead would be a SECOND mechanism that has to
+        // agree with the first, and it would be the wrong answer for an owned dialog.
+        //
+        // This used to read `document()` with a note that at 6.6 it would become the WindowFrame; 6.6
+        // landed and the note stayed, so every owned modal was clamped, and centred, against the whole
+        // screen rather than against the window it belongs to.
         Box self = box();
         Box containerBox = self == null ? null : self.host();
-        float maxLeft = Float.MAX_VALUE, maxTop = Float.MAX_VALUE;
-        // UNCLAMPED until both have been laid out, rather than clamped to zero: a dialog positioned
+        Box bar = titleBar.box();
+        float caption = bar == null ? 0f : bar.height();
+        float clampedLeft = left;
+        float clampedTop = top;
+        // UNCLAMPED until everything has been laid out, rather than clamped to zero: a dialog positioned
         // before its first layout would otherwise be pinned to the corner and stay there, which is
         // the shape the standing row warns about -- "zero-sized" and "never laid out" are different
         // facts and only one of them is a constraint.
-        if (containerBox != null && self != null) {
-            maxLeft = Math.max(0f, containerBox.width() - self.width());
-            maxTop = Math.max(0f, containerBox.height() - self.height());
+        if (containerBox != null && self != null && self.width() > 0f && caption > 0f
+                && containerBox.width() > 0f && containerBox.height() > 0f) {
+            // A CAPTION'S WORTH STAYS, which is a window's rule and not a dialog's own -- so it is
+            // WindowClamp's, stated once for both. Fully inside was the obvious rule and the wrong one:
+            // a dialog wider than the panel it covers could not be pushed aside to read what is under
+            // its right-hand half, because the only way to do that is to let its left overhang.
+            clampedLeft = WindowClamp.left(left, self.width(), containerBox.width(), caption);
+            // NEVER the moving exception. That headroom exists so a dragged caption can reach the top
+            // edge and trigger a snap zone; a dialog has none to reach, so letting its title bar leave
+            // the top would only make it undraggable.
+            clampedTop = WindowClamp.top(top, containerBox.height(), caption, false);
         }
-        final float clampedLeft = Math.min(Math.max(0f, left), maxLeft);
-        final float clampedTop = Math.min(Math.max(0f, top), maxTop);
+        final float writtenLeft = clampedLeft;
+        final float writtenTop = clampedTop;
 
         // The position lives HERE, in fields — never read back out of the resolved layout box.
         //
@@ -643,11 +857,11 @@ public class Dialog extends UIElement {
         // dialog the box was still the zero-sized `display: none` one. Reading it gave 0, and the
         // ticker wrote that straight back — every reopened dialog snapped to the corner, and with
         // two of them stacked exactly on top of each other only the upper one appeared to drag.
-        posLeft = clampedLeft;
-        posTop = clampedTop;
+        posLeft = writtenLeft;
+        posTop = writtenTop;
 
         StyleGroup.inlinePipeline(getStyle().getLayoutGroup(),
-                l -> l.left(clampedLeft).top(clampedTop));
+                l -> l.left(writtenLeft).top(writtenTop));
     }
 
     /**

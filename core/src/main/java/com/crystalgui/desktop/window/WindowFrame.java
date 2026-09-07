@@ -2,6 +2,7 @@ package com.crystalgui.desktop.window;
 
 import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.window.WindowClamp;
 import com.crystalgui.core.window.WindowPolicy;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
@@ -11,6 +12,7 @@ import com.crystalgui.desktop.motion.WindowGeometryAnimation;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.data.DataKey;
@@ -1314,6 +1316,20 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
         }
     }
 
+    /**
+     * Shows or hides every dialog raised inside this window, without closing any of them.
+     *
+     * <p><b>Findable at all only because hosting is not parenting</b>: a free dialog is hosted out to
+     * the desktop's overlay band for layout and paint, and is still a descendant of whatever opened it
+     * — the same arrangement that keeps a shell's own styling reaching inside it. The COMPOSED tree, so
+     * a dialog raised from inside a shadow-hosting widget is reached too.</p>
+     */
+    private void presentOwnedDialogs(boolean presented) {
+        for (UINode node : composedSubtree()) {
+            if (node instanceof Dialog dialog && dialog.isOpen()) dialog.setPresented(presented);
+        }
+    }
+
     /** The end of one tool window's cascade — see {@link #cascadeHideOwnedToolWindows}. */
     private void finishHideWithOwner() {
         try {
@@ -1622,6 +1638,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
             // Same ordering as minimise -- this hide is a continuation, so the panels are told now --
             // and CLOSE rather than MINIMIZE, because that is the animation this window is playing.
             cascadeHideOwnedToolWindows(Departure.CLOSE);
+            presentOwnedDialogs(false);
             animator.playClose(this::hide);
             return true;
         }
@@ -1704,6 +1721,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
         // AFTER this window is back, so they stack above it rather than being raised against a window
         // that is not on the layer yet. @see #hiddenWithOwner
         showOwnedToolWindows();
+        presentOwnedDialogs(true);
 
         // SHOWN WHILE THE DESKTOP IS OFF SCREEN MEANS PINNED. The switcher is the path that found this:
         // Ctrl+Tab reaches a pinned window's keyboard, and the registry keeps HIDDEN windows, so cycling
@@ -2293,6 +2311,12 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
         // sails into the taskbar and its tool windows blink out afterwards, which reads as them not being
         // part of the gesture. @see #cascadeHideOwnedToolWindows
         cascadeHideOwnedToolWindows(Departure.MINIMIZE);
+        // AND THE DIALOGS, for the same reason and at the same moment. A dialog raised inside this
+        // window is hosted OUT of it -- into the desktop's overlay band, so it can be dragged past the
+        // panel that raised it -- which means it does not fly with the frame. Left to `hide()`, which is
+        // this animation's continuation, it sat still through the whole flight and blinked out after the
+        // window had already landed in the taskbar. @see Dialog#setPresented
+        presentOwnedDialogs(false);
         animator.playMinimize(this::hide);
     }
 
@@ -2628,7 +2652,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
         // entirely -- which is survivable there because something re-places the panel every frame, and
         // would strand a window here on the one frame that matters, its first.
         if (areaWidth > 0f && areaHeight > 0f && frameWidth > 0f && caption > 0f) {
-            clampedLeft = clamp(left, caption - frameWidth, areaWidth - caption);
+            clampedLeft = WindowClamp.left(left, frameWidth, areaWidth, caption);
             // THE CAPTION MAY RISE ABOVE THE WORK AREA WHILE BEING DRAGGED, and only while.
             //
             // The resting rule is that a title bar stays reachable, so a window cannot park above the
@@ -2643,7 +2667,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
             // and no more. Windows does the same -- drag a window up and its title bar goes off the top
             // while the cursor reaches the edge. reclamp() on drag end brings back anything that did not
             // snap. @see WindowMove
-            clampedTop = clamp(top, moving ? -caption : 0f, areaHeight - caption);
+            clampedTop = WindowClamp.top(top, areaHeight, caption, moving);
         }
 
         placedLeft = clampedLeft;
@@ -2657,9 +2681,4 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
                 l -> l.left(writtenLeft).top(writtenTop));
     }
 
-    /** {@code lo} is allowed to exceed {@code hi} — a window narrower than its own caption — and the
-     * upper bound wins, which keeps the title bar on screen rather than the body. */
-    private static float clamp(float value, float lo, float hi) {
-        return Math.max(Math.min(lo, hi), Math.min(value, hi));
-    }
 }

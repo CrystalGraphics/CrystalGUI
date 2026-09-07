@@ -145,7 +145,7 @@ public final class ConflictDialog {
         // window-scoped modality will change: the host becomes the nearest window frame's own overlay
         // slot rather than the global one, and every caller that went through here retargets for free.
         window.addOverlay(dialog, from);
-        dialog.onClosed.connect(dialog::removeSelf);
+        dialog.removeWhenClosed();
         dialog.showModal();
 
         // AFTER showModal, per Dialog's own instruction: the focusing steps take the first focusable

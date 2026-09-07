@@ -157,8 +157,8 @@ public class DialogManagerTest extends UiDocumentTestBase {
         assertEquals(DialogManager.DEFAULT_CASCADE_STEP * 2f, left(c), 0.5f);
     }
 
-    /** Dialogs clamp themselves to their container, so a long cascade stops at the edge instead of
-     * marching a document out of reach. No wrap logic needed in the manager. */
+    /** Dialogs clamp themselves to the surface, so a long cascade stops at the edge instead of
+     * marching a dialog out of reach. No wrap logic needed in the manager. */
     @Test
     public void aLongCascadeClampsInsteadOfLeavingTheStage() {
         Dialog last = null;
@@ -172,8 +172,10 @@ public class DialogManagerTest extends UiDocumentTestBase {
         frame();
         frame();
 
-        assertTrue("must stay inside the stage, was " + left(last),
-                left(last) + 120f <= 400f + 0.5f);
+        // The 16px the fixture gives every title bar: the cascade stops with a caption still on the
+        // surface, rather than marching the fortieth dialog off the right-hand side.
+        assertTrue("a caption's worth must stay on the surface, was " + left(last),
+                left(last) <= W - 16f + 0.5f);
     }
 
     // ── Membership ──────────────────────────────────────────────────────────

@@ -61,6 +61,9 @@ public class DialogTest extends UiDocumentTestBase {
         frame();
     }
 
+    /** The title bar the fixture pins, which is what the clamp is stated in. */
+    private static final float CAPTION = 16f;
+
     private float left() {
         return (dialog.box().worldX() - root.box().worldX()) / uiScale();
     }
@@ -256,48 +259,80 @@ public class DialogTest extends UiDocumentTestBase {
 
     /**
      * Clamping is <b>ours</b> — no spec covers it, because the web has no movable document. It matches
-     * OS document managers, and the alternative (proportional re-anchoring) can drift a document
-     * somewhere the user never put it.
+     * OS window managers, and the alternative (proportional re-anchoring) can drift a dialog somewhere
+     * the user never put it.
+     *
+     * <p><b>The limit is the SCREEN, not the panel that raised it.</b> A dialog is dragged, so hosting
+     * it in the flow of whatever opened it made that panel its containing block — a dialog raised from
+     * an editor could not be moved out of the editor's own rectangle. {@code show()} promotes for
+     * exactly this, which is the same freedom a window frame has on the desktop.</p>
      */
     @Test
-    public void aDialogCannotBeDraggedOutOfItsContainer() {
+    public void aDialogCannotBeDraggedOffTheScreen() {
         dialog.moveTo(0f, 0f);
         settle();
 
         dragTitleBarBy(9999f, 9999f);
 
-        assertEquals("clamped to the right edge", 400f - 120f, left(), 0.5f);
-        assertEquals("clamped to the bottom edge", 300f - 80f, top(), 0.5f);
+        assertEquals("a caption's worth stays on the SURFACE, not on the 400x300 host",
+                W - CAPTION, left(), 0.5f);
+        assertEquals("…and the same at the bottom", H - CAPTION, top(), 0.5f);
     }
 
+    /** The half the rule above is for: the host is no longer a wall. */
     @Test
-    public void aDialogCannotBeDraggedAboveOrLeftOfItsContainer() {
+    public void aDialogCanBeDraggedOutOfThePanelThatRaisedIt() {
+        dialog.moveTo(0f, 0f);
+        settle();
+
+        dragTitleBarBy(500f, 350f);
+
+        assertTrue("the host is 400 wide, so this is only reachable if it is not the limit",
+                left() > 400f);
+        assertTrue("…and 300 tall", top() > 300f);
+    }
+
+    /**
+     * <b>Left overhangs; the top does not.</b>
+     *
+     * <p>The asymmetry is a window manager's, and {@link com.crystalgui.core.window.WindowClamp} carries
+     * the reason: a title bar pushed off the top is a dialog nobody can drag back down, where one pushed
+     * off the left is still there to grab.</p>
+     */
+    @Test
+    public void aDialogOverhangsTheLeftButNeverRisesAboveTheTop() {
         dialog.moveTo(30f, 30f);
         settle();
 
         dragTitleBarBy(-9999f, -9999f);
 
-        assertEquals(0f, left(), 0.5f);
-        assertEquals(0f, top(), 0.5f);
+        assertEquals("all but a caption may leave to the left", CAPTION - 120f, left(), 0.5f);
+        assertEquals("the caption stays reachable", 0f, top(), 0.5f);
     }
 
-    /** A dialog parked near an edge must stay reachable when the container shrinks under it. */
+    /**
+     * A dialog parked near an edge must stay reachable when the surface shrinks under it.
+     *
+     * <p>The SURFACE, since {@link #aDialogCannotBeDraggedOffTheScreen} — a window being made smaller,
+     * not a panel. Shrinking the panel that raised it is no longer a constraint at all, which is the
+     * point of promoting.</p>
+     */
     @Test
-    public void shrinkingTheContainerReClampsTheDialog() {
+    public void shrinkingTheSurfaceReClampsTheDialog() {
         dialog.show();
-        dialog.moveTo(280f, 220f); // hard against the bottom-right of a 400x300 root
+        dialog.moveTo(W - 120f, H - 80f); // hard against the bottom-right of the surface
         settle();
 
-        root.layout(l -> l.width(200).height(150));
-        // updateWithoutPainting, not settle(): re-clamping is carried by a per-frame ticker, because
-        // shrinking the CONTAINER does not change this element's own box and so never fires its
-        // layout callback. settle() runs style + layout but no tickers, so it cannot see this.
+        viewport(200f, 150f);
+        // frames, not settle(): re-clamping is carried by a per-frame ticker, because shrinking the
+        // CONTAINING BLOCK does not change this element's own box and so never fires its layout
+        // callback. settle() runs style + layout but no tickers, so it cannot see this.
         frame();
         frame();
 
-        assertTrue("must not be stranded outside the shrunken container, was " + left(),
-                left() + 120f <= 200f + 0.5f);
-        assertTrue("…vertically too, was " + top(), top() + 80f <= 150f + 0.5f);
+        assertTrue("must not be stranded off the shrunken surface, was " + left(),
+                left() <= 200f - CAPTION + 0.5f);
+        assertTrue("…vertically too, was " + top(), top() <= 150f - CAPTION + 0.5f);
     }
 
     /**

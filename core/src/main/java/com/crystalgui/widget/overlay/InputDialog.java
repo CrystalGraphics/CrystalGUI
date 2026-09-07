@@ -128,7 +128,7 @@ public final class InputDialog {
         cancel.onPressed.connect(dialog::close);
 
         window.addOverlay(dialog, from);
-        dialog.onClosed.connect(dialog::removeSelf);
+        dialog.removeWhenClosed();
         dialog.showModal();
         // AFTER showModal, per Dialog's own instruction: the focusing steps take the first focusable
         // descendant, and here that is the button that destroys something.
