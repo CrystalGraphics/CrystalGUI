@@ -2,10 +2,14 @@ package com.crystalgui.app.uibuilder.canvas.transform;
 
 import org.joml.Vector2f;
 
+import javax.annotation.Nullable;
+
+import com.crystalgraphics.platform.input.CgCursor;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 
+import com.crystalgui.app.uibuilder.canvas.ResizeHandles.Spot;
 import com.crystalgui.app.uibuilder.canvas.TreeSelectTool;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformGesture.Grip;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformGesture.Kind;
@@ -90,6 +94,7 @@ public final class FreeTransformTool implements Tool {
     @Override
     public void deactivated() {
         box.commit();
+        ctx.cursors().clear();
     }
 
     @Override
@@ -107,11 +112,44 @@ public final class FreeTransformTool implements Tool {
 
     @Override
     public boolean pointerMoved(float rawX, float rawY, int modifiers) {
-        if (!dragging) return box.isActive();
         Vector2f at = ctx.surface().toViewportPoint(rawX, rawY);
+        if (!dragging) {
+            // THE CURSOR IS THE AFFORDANCE for two of these. Rotate lives in the band just outside a
+            // corner and skew is a modifier on a handle that otherwise scales: neither draws anything of
+            // its own, so a pointer that did not change shape would leave both undiscoverable.
+            ctx.cursors().set(cursorFor(box.grip(at.x, at.y, CgModifiers.hasCtrl(modifiers))));
+            return box.isActive();
+        }
         box.dragTo(at.x, at.y, at.x - pressX, at.y - pressY,
                 CgModifiers.hasShift(modifiers), CgModifiers.hasAlt(modifiers));
         return true;
+    }
+
+    /** What the pointer says a press would do here. */
+    @Nullable
+    private static CgCursor cursorFor(Grip grip) {
+        Spot spot = grip.spot();
+        switch (grip.kind()) {
+            case ROTATE:
+                return CgCursor.ROTATE;
+            case SKEW:
+                return CgCursor.SKEW;
+            case PIVOT:
+                return CgCursor.PIVOT;
+            case MOVE:
+                return CgCursor.MOVE;
+            case SCALE:
+                if (spot == null) return null;
+                // The corner's own diagonal, as a resize handle would say. Not rotated with the gesture:
+                // a cursor has four diagonals to offer and a box has any angle, so following it would
+                // snap between two shapes partway through a rotation and say nothing useful.
+                if (spot.xDirection() == 0) return CgCursor.NS_RESIZE;
+                if (spot.yDirection() == 0) return CgCursor.EW_RESIZE;
+                return spot.xDirection() == spot.yDirection()
+                        ? CgCursor.NWSE_RESIZE : CgCursor.NESW_RESIZE;
+            default:
+                return null;
+        }
     }
 
     @Override
