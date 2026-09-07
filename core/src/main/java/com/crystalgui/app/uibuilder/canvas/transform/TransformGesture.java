@@ -213,6 +213,34 @@ public final class TransformGesture {
     }
 
     /**
+     * Every number this class holds, so a step of the gesture can be put back.
+     *
+     * <p>A record, so two states compare by value — which is how a drag that moved nothing is told from
+     * one that did, without anybody having to remember to say so.</p>
+     */
+    public record State(float tx, float ty, float sx, float sy, float rotation,
+                        float skewX, float skewY, float originX, float originY) {
+    }
+
+    public State snapshot() {
+        return new State(tx, ty, sx, sy, rotation, skewX, skewY, originX, originY);
+    }
+
+    /** Puts a snapshot back, and ends any grip with it: the next drag measures from here. */
+    public void restore(State state) {
+        tx = state.tx();
+        ty = state.ty();
+        sx = state.sx();
+        sy = state.sy();
+        rotation = state.rotation();
+        skewX = state.skewX();
+        skewY = state.skewY();
+        originX = state.originX();
+        originY = state.originY();
+        grip = Grip.NONE;
+    }
+
+    /**
      * Notes what is being dragged and the values every later call measures from.
      *
      * <p>No pointer position: each gesture below states the space it wants and takes either a delta or a
