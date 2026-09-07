@@ -198,4 +198,39 @@ public class WatcherReachesTheClientTest {
                     change.path().contains(".cgui-"));
         }
     }
+
+    /**
+     * <b>A new folder reaches the client too.</b>
+     *
+     * <p>A directory was dropped outright, on the reasoning that what changes inside it is what matters
+     * and those arrive as events for the things inside. True of its CONTENTS and not of the folder
+     * itself: making one on disk put no row in the tree, while making a file beside it did.</p>
+     */
+    @Test
+    public void aCreatedDirectoryReachesTheClient() throws IOException {
+        Files.createDirectory(root.resolve("newfolder"));
+        assertTrue("a folder appearing under a watched root",
+                await("newfolder", FsMessages.ChangeKind.CREATED));
+    }
+
+    /**
+     * <b>...and its mtime is not news.</b> A parent's timestamp moves whenever a child is added, so a
+     * directory reported by etag would make every file created inside a folder a change to the folder.
+     */
+    @Test
+    public void addingAFileDoesNotReportItsFolderAsWell() throws IOException {
+        Path folder = root.resolve("holder");
+        Files.createDirectory(folder);
+        assertTrue(await("holder", FsMessages.ChangeKind.CREATED));
+        heard.clear();
+
+        Files.write(folder.resolve("Inside.java"),
+                "class Inside {}".getBytes(StandardCharsets.UTF_8));
+        assertTrue(await("Inside.java", FsMessages.ChangeKind.CREATED));
+
+        for (FsMessages.FileChange change : heard) {
+            assertFalse("the folder itself did not change: " + change.path(),
+                    change.path().endsWith("holder"));
+        }
+    }
 }

@@ -283,7 +283,18 @@ public final class WatchHub {
         String last = lastEtag.get(path);
         try {
             CgFileEntry entry = service.stat(actor, path);
-            if (entry.isDirectory()) return null;
+            if (entry.isDirectory()) {
+                // A DIRECTORY'S OWN APPEARANCE IS NEWS; its mtime is not. A parent's timestamp moves
+                // whenever a child is added, so reporting a directory by etag would make every file
+                // created inside a folder a change to the folder as well -- what is inside it is
+                // already found by the events for the things inside it. So this reports one only when
+                // the WATCHER SAW IT APPEAR, which is the same evidence a deletion is trusted on.
+                // Dropping it outright meant a new folder never reached the tree while a new file did.
+                if (hint != CgFileEvent.Kind.CREATED || lastEtag.containsKey(path)) return null;
+                lastEtag.put(path, "");
+                return new FsMessages.FileChange(
+                        path.toString(), FsMessages.ChangeKind.CREATED, "");
+            }
             String now = entry.etag();
             if (known && now.equals(last)) return null;
             boolean created = last == null;
