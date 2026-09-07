@@ -20,6 +20,8 @@ import com.crystalgui.app.uibuilder.canvas.Artboard;
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.canvas.ResizeHandles.Spot;
 import com.crystalgui.app.uibuilder.canvas.TreePolicy;
+import com.crystalgraphics.platform.input.CgCursor;
+
 import com.crystalgui.app.uibuilder.canvas.TreeSelectTool;
 import com.crystalgui.app.uibuilder.canvas.transform.FreeTransformTool;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformBox;
@@ -407,6 +409,50 @@ public class FreeTransformTest extends UiDocumentTestBase {
         assertEquals("the pivot's own mark", Kind.PIVOT, box().grip(centre.x, centre.y, false).kind());
         assertEquals("well clear of the crosshair, so it is box and means Move",
                 Kind.MOVE, box().grip(centre.x + 8f, centre.y, false).kind());
+    }
+
+    /** Ctrl over an EDGE advertises a skew; over a corner it stays a scale, since a distort is refused. */
+    @Test
+    public void ctrlOverAnEdgeAdvertisesASkew() {
+        enterFreeTransform();
+        document.update(W, H);
+        Vector2f edge = box().handleAt(Spot.TOP);
+        Vector2f corner = box().handleAt(Spot.TOP_RIGHT);
+        assertNotNull(edge);
+        assertNotNull(corner);
+
+        assertEquals(CgCursor.SKEW, TransformBox.cursorFor(box().grip(edge.x, edge.y, true)));
+        assertEquals("without the modifier it is still a scale",
+                CgCursor.NS_RESIZE, TransformBox.cursorFor(box().grip(edge.x, edge.y, false)));
+        assertEquals("a free corner is not affine, so Ctrl there stays a scale",
+                CgCursor.NESW_RESIZE, TransformBox.cursorFor(box().grip(corner.x, corner.y, true)));
+    }
+
+    /**
+     * <b>A gesture never outlives the box it was made on.</b>
+     *
+     * <p>The drag flag used to survive {@code close()}, so a drag that ended without a release — which
+     * {@code SurfaceMode} produces for any drag finished off the canvas — left the next Ctrl+T opening
+     * onto a box that believed it was mid-drag. The per-frame cursor is skipped while dragging, so every
+     * cursor on the canvas stayed dead for the rest of the session.</p>
+     */
+    @Test
+    public void aBoxNeverOpensBelievingItIsMidDrag() {
+        enterFreeTransform();
+        document.update(W, H);
+        box().press(new Grip(Kind.SCALE, Spot.BOTTOM_RIGHT));
+        box().setDragging(true);
+
+        // Left without a release, exactly as a drag off the edge of the canvas leaves it.
+        box().commit();
+        editor.surface().modes().use(TreeSelectTool.ID);
+        document.update(W, H);
+
+        editor.selection().selectOnly(node);
+        enterFreeTransform();
+        document.update(W, H);
+        assertTrue("the box did not reopen", box().isActive());
+        assertEquals("a fresh box is not holding a gesture", Kind.NONE, box().gesture().grip().kind());
     }
 
     /** Leaving the tool keeps the work — Photoshop's rule, and the safe one. */

@@ -161,6 +161,20 @@ public final class TransformGesture {
         return matrixOf(build(false));
     }
 
+    /**
+     * The rotation alone, about the origin.
+     *
+     * <p>The frame a skew's pointer delta has to be measured in: a lean runs along the box's OWN axes,
+     * so on a rotated box a screen delta has to come back through the rotation before it means anything.
+     * Scale and skew are deliberately left out — the lever already carries the scale, and a skew
+     * measured through itself is a feedback loop.</p>
+     */
+    public Matrix4f rotationMatrix() {
+        Transform t = rotation == 0f ? Transform.IDENTITY : Transform.IDENTITY.then(
+                Transform.Op.rotate(rotation));
+        return matrixOf(t);
+    }
+
     /** The whole transform as a matrix about the origin. */
     public Matrix4f matrix() {
         return matrixOf(toTransform());
@@ -325,22 +339,75 @@ public final class TransformGesture {
     /**
      * Skews along the dragged edge, by a pointer delta in the node's own pixels.
      *
+     * <h3>Photoshop's rule, which is also Paint.NET's and Illustrator's</h3>
+     *
+     * <p><b>The dragged edge follows the pointer and the OPPOSITE edge stays where it is.</b> Everything
+     * below falls out of that one sentence, and none of it is what a naive reading of CSS
+     * {@code skew()} gives you:</p>
+     *
+     * <ul>
+     *   <li>the lever is the box's FULL extent, not the half from the pivot to the edge. Anchoring the
+     *       far edge means the near one carries the whole displacement, so a half lever moved the box
+     *       twice as fast as the hand;</li>
+     *   <li>{@code skew(ax)} shifts x by {@code tan(ax)·(y - originY)}, so dragging the TOP edge right
+     *       needs a NEGATIVE angle — points above the origin move right only when the tangent is
+     *       negative. The sign therefore follows which edge is held, which is exactly
+     *       {@code spot.yDirection()};</li>
+     *   <li>tangents add, angles do not. Continuing a skew already in progress means
+     *       {@code atan(tan(was) + delta)}, and adding the angles instead makes the lean creep away from
+     *       the pointer as it steepens;</li>
+     *   <li>a skew about the origin moves BOTH edges apart, so the translate absorbs the far one — the
+     *       same compensation a scale needs, and for the same reason.</li>
+     * </ul>
+     *
      * <p>A corner is refused by the tool: a free corner is a non-affine distort and {@code Transform} is
      * a matrix.</p>
+     *
+     * @param aboutPivot Alt — lean about the pivot instead, so both edges travel and neither is held
      */
-    public void skewBy(float dx, float dy) {
+    public void skewBy(float dx, float dy, boolean aboutPivot) {
         Spot spot = grip.spot();
         if (spot == null) return;
-        if (spot.yDirection() != 0) {
-            // The further the edge is from the pivot, the less angle the same travel is worth, which is
-            // what keeps the lean tracking the hand instead of accelerating away from it.
-            float lever = Math.max(1f, Math.abs(corner(spot).y - originY));
-            skewX = pressSkewX + (float) Math.atan((dx * -spot.yDirection()) / lever);
+        // SCALED, because the skew is applied to already-scaled coordinates -- scale is the innermost op,
+        // so the lever a lean acts over is the box as DRAWN, not as laid out. Left unscaled, a 2x box
+        // moved its edge twice as fast as the pointer.
+        if (spot.yDirection() != 0 && height > 1e-4f) {
+            float extent = height * Math.max(1e-3f, Math.abs(sy));
+            float lever = aboutPivot
+                    ? Math.max(1f, Math.abs(corner(spot).y - originY) * Math.abs(sy)) : extent;
+            skewX = (float) Math.atan(Math.tan(pressSkewX) + spot.yDirection() * dx / lever);
         }
-        if (spot.xDirection() != 0) {
-            float lever = Math.max(1f, Math.abs(corner(spot).x - originX));
-            skewY = pressSkewY + (float) Math.atan((dy * spot.xDirection()) / lever);
+        if (spot.xDirection() != 0 && width > 1e-4f) {
+            float extent = width * Math.max(1e-3f, Math.abs(sx));
+            float lever = aboutPivot
+                    ? Math.max(1f, Math.abs(corner(spot).x - originX) * Math.abs(sx)) : extent;
+            skewY = (float) Math.atan(Math.tan(pressSkewY) + spot.xDirection() * dy / lever);
         }
+        if (!aboutPivot) holdStill(anchor(spot, false));
+    }
+
+    /**
+     * Puts the translate back so one point has not moved since the press.
+     *
+     * <p>{@link #anchor} answers the opposite corner for a corner spot and the opposite EDGE'S MIDPOINT
+     * for an edge spot, which is what a skew has to hold: the far edge stays parallel to itself, so
+     * holding its centre holds all of it.</p>
+     */
+    private void holdStill(Vector2f point) {
+        Vector2f was = withoutTranslate(pressSx, pressSy, pressRotation, pressSkewX, pressSkewY, point);
+        Vector2f now = withoutTranslate(sx, sy, rotation, skewX, skewY, point);
+        tx = pressTx + (was.x - now.x);
+        ty = pressTy + (was.y - now.y);
+    }
+
+    /** Where a point lands under everything but the translate, which is what the translate then fixes. */
+    private Vector2f withoutTranslate(float scaleX, float scaleY, float rotate,
+                                      float leanX, float leanY, Vector2f point) {
+        Transform t = Transform.IDENTITY;
+        if (rotate != 0f) t = t.then(Transform.Op.rotate(rotate));
+        if (leanX != 0f || leanY != 0f) t = t.then(Transform.Op.skew(leanX, leanY));
+        if (scaleX != 1f || scaleY != 1f) t = t.then(Transform.Op.scale(scaleX, scaleY));
+        return transformPoint(matrixOf(t), point.x, point.y);
     }
 
     /**

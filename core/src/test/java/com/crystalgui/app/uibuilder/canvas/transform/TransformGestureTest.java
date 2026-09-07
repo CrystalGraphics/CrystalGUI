@@ -208,15 +208,94 @@ public class TransformGestureTest {
         assertEquals(50f, gesture.translateY(), 0.01f);
     }
 
-    /** A skew leans the box without moving the edge it was dragged from. */
+    /**
+     * <b>The dragged edge follows the pointer and the opposite edge does not move.</b>
+     *
+     * <p>Photoshop's convention, and Paint.NET's. Asserted on where the two edges LAND rather than on the
+     * sign of the angle, because the angle is the part that is easy to get backwards and impossible to
+     * read: {@code skew(ax)} shifts x by {@code tan(ax)·(y - originY)}, so pulling the top edge right is
+     * a NEGATIVE ax, and an assertion that the angle went up would have passed the whole time the gesture
+     * ran the wrong way.</p>
+     */
     @Test
-    public void skewingAnEdgeLeansTheBox() {
+    public void draggingAnEdgeMovesItAndHoldsTheOther() {
         TransformGesture gesture = centred();
         gesture.press(new Grip(Kind.SKEW, Spot.TOP));
-        gesture.skewBy(25f, 0f);
+        gesture.skewBy(25f, 0f, false);
 
-        assertTrue("dragging the top edge right should lean the box", gesture.skewXRadians() > 0f);
-        assertEquals("a horizontal edge drag must not skew the other axis",
-                0f, gesture.skewYRadians(), 0.0001f);
+        assertEquals("the dragged edge has to end up under the pointer",
+                W / 2f + 25f, map(gesture, W / 2f, 0f).x, 0.01f);
+        assertEquals("the opposite edge moved, so the box leaned about its middle instead",
+                W / 2f, map(gesture, W / 2f, H).x, 0.01f);
+        assertEquals("a horizontal edge drag must not move anything vertically",
+                0f, map(gesture, W / 2f, 0f).y, 0.01f);
+    }
+
+    /** The other axis, which is the same rule turned ninety degrees. */
+    @Test
+    public void draggingASideEdgeLeansTheOtherWay() {
+        TransformGesture gesture = centred();
+        gesture.press(new Grip(Kind.SKEW, Spot.RIGHT));
+        gesture.skewBy(0f, 20f, false);
+
+        assertEquals(H / 2f + 20f, map(gesture, W, H / 2f).y, 0.01f);
+        assertEquals("the left edge is the anchor", H / 2f, map(gesture, 0f, H / 2f).y, 0.01f);
+    }
+
+    /** Alt leans about the pivot instead: both edges travel and neither is held. */
+    @Test
+    public void altSkewsAboutThePivot() {
+        TransformGesture gesture = centred();
+        gesture.press(new Grip(Kind.SKEW, Spot.TOP));
+        gesture.skewBy(25f, 0f, true);
+
+        float top = map(gesture, W / 2f, 0f).x;
+        float bottom = map(gesture, W / 2f, H).x;
+        assertTrue("the top should still lead the drag", top > W / 2f);
+        assertEquals("about the pivot, the two edges move by equal and opposite amounts",
+                W / 2f - (top - W / 2f), bottom, 0.01f);
+    }
+
+    /**
+     * <b>The edge keeps pace with the hand however big the box is DRAWN.</b>
+     *
+     * <p>Scale is the innermost op, so a skew acts on already-scaled coordinates and the lever it leans
+     * over is the box as drawn rather than as laid out. Measured against the unscaled extent, a 2x box
+     * moved its edge twice as fast as the pointer.</p>
+     */
+    @Test
+    public void aSkewOnAScaledBoxStillTracksThePointer() {
+        TransformGesture gesture = centred();
+        gesture.press(new Grip(Kind.SCALE, Spot.BOTTOM_RIGHT));
+        gesture.scaleTo(new Vector2f(2f * W, 2f * H), false, false);
+        assertEquals("the fixture wanted exactly twice", 2f, gesture.scaleX(), 0.01f);
+        float before = map(gesture, W / 2f, 0f).x;
+
+        gesture.press(new Grip(Kind.SKEW, Spot.TOP));
+        gesture.skewBy(25f, 0f, false);
+
+        assertEquals(before + 25f, map(gesture, W / 2f, 0f).x, 0.01f);
+        assertEquals("and the far edge is still the anchor",
+                map(gesture, W / 2f, H).x, map(gesture, W / 2f, H).x, 0.01f);
+    }
+
+    /**
+     * <b>Tangents add; angles do not.</b>
+     *
+     * <p>Continuing a lean already in progress is {@code atan(tan(was) + delta)}. Adding the angles makes
+     * the edge fall behind the pointer as the lean steepens — invisible at a few degrees and obvious at
+     * thirty, which is the worst way for it to be wrong.</p>
+     */
+    @Test
+    public void aSecondSkewStillLandsUnderThePointer() {
+        TransformGesture gesture = centred();
+        gesture.press(new Grip(Kind.SKEW, Spot.TOP));
+        gesture.skewBy(30f, 0f, false);
+
+        gesture.press(new Grip(Kind.SKEW, Spot.TOP));
+        gesture.skewBy(30f, 0f, false);
+
+        assertEquals("the edge has to be sixty across after two drags of thirty",
+                W / 2f + 60f, map(gesture, W / 2f, 0f).x, 0.01f);
     }
 }
