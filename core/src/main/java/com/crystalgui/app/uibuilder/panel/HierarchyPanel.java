@@ -54,6 +54,12 @@ public final class HierarchyPanel extends UIElement {
     /** On the row whose node is selected. */
     public static final String SELECTED_CLASS = "__selected__";
 
+    /** The open/closed marker. Its appearance is CSS's, off {@code TreeView}'s own state classes. */
+    public static final String TWISTY_CLASS = "__twisty__";
+
+    /** The row's name. */
+    public static final String LABEL_CLASS = "__label__";
+
     private final BuilderContext builder;
 
     private final ConnectionGroup connections = new ConnectionGroup();
@@ -89,7 +95,12 @@ public final class HierarchyPanel extends UIElement {
             }
         });
         tree.setRenderer(new RowRenderer());
-        tree.setExpanded(builder.getDocument().root(), true);
+        // THE ROOT AND ITS CHILDREN. A tree that opens fully collapsed shows one row and reads as a
+        // panel that failed to load; opening everything buries the shape in a document of any size. One
+        // level is what both references settle on.
+        UIElement root = builder.getDocument().root();
+        tree.setExpanded(root, true);
+        for (UIElement child : root.children()) tree.setExpanded(child, true);
         // THE FILL IDIOM, at DEFAULT origin so a sheet still decides. Without it the tree lays out at
         // zero height: the rows exist, the panel is the right size, and nothing is drawn -- which reads
         // as "the panel is empty" and is why asserting on visibleRows() could not see it. The project
@@ -116,6 +127,10 @@ public final class HierarchyPanel extends UIElement {
         // SELECTION, not activation: a single click on a row is choosing that node, and activation is
         // the double-click that will open a template. The two are separate signals for exactly this.
         connections.add(tree.onSelectionChanged.connect(this::chooseRows));
+        // ACTIVATION FOLDS. A row's twisty has no hit target of its own yet -- the create menu records the
+        // same gap -- so opening a branch is the row's double-click, and requestToggle owns the deferral:
+        // folding from inside a press recycles the row the press landed on.
+        connections.add(tree.onRowActivated.connect(this::toggleRow));
         connections.add(builder.builderSelection().onChanged.connect(this::followSelection));
         connections.add(builder.getDocument().onChanged().connect(this::refresh));
     }
@@ -146,6 +161,13 @@ public final class HierarchyPanel extends UIElement {
         } finally {
             syncing = was;
         }
+    }
+
+    private void toggleRow(Integer index) {
+        if (index == null) return;
+        List<TreeRow<UIElement>> rows = tree.visibleRows();
+        if (index < 0 || index >= rows.size()) return;
+        tree.requestToggle(rows.get(index).item());
     }
 
     private void chooseRows(Set<Integer> indices) {
@@ -208,18 +230,33 @@ public final class HierarchyPanel extends UIElement {
     /** One row: the name, and whether it is the selected node. */
     private final class RowRenderer implements TreeRenderer<UIElement> {
 
+        /**
+         * A twisty and a label.
+         *
+         * <p>The twisty keeps its box on a leaf and simply draws nothing, so a label at a given depth
+         * starts at the same x whether or not its row can be opened — which is what makes a column of
+         * siblings line up. What it looks like is entirely CSS: {@code TreeView} puts
+         * {@code __expanded__} / {@code __collapsed__} / {@code __leaf__} on the row, so no Java here
+         * decides how a row's state is drawn.</p>
+         */
         @Override
         public UIElement createTemplate() {
             UIElement row = new UIElement();
             row.addClass(ROW_CLASS);
-            row.append(new UIText());
+            UIElement twisty = new UIElement();
+            twisty.addClass(TWISTY_CLASS);
+            row.append(twisty);
+            UIText label = new UIText();
+            label.addClass(LABEL_CLASS);
+            row.append(label);
             return row;
         }
 
         @Override
         public void bind(UIElement node, TreeRow<UIElement> row, int index, UIElement template) {
-            UIElement first = template.children().isEmpty() ? null : template.children().get(0);
-            if (first instanceof UIText label) label.setText(describe(node));
+            for (UIElement child : template.children()) {
+                if (child instanceof UIText label) label.setText(describe(node));
+            }
             boolean selected = builder.builderSelection().contains(node);
             if (selected != template.hasClass(SELECTED_CLASS)) {
                 if (selected) template.addClass(SELECTED_CLASS);

@@ -173,10 +173,46 @@ designtoolwindow, hierarchypanel {
     flex-grow: 1;
 }
 
+/* NO padding-left HERE. TreeView writes the per-depth indent as `padding-left` at DEFAULT origin, so a
+ * user-agent rule setting the shorthand overrides it and every row lines up at the same x -- a tree that
+ * has nesting and does not show it. The horizontal inset belongs on the content instead. */
 .__hierarchy-row__ {
     flex-direction: row;
     align-items: center;
-    padding: 1 4 1 4;
+    padding-top: 1;
+    padding-bottom: 1;
+    gap-all: 3;
+}
+
+.__hierarchy-content__ {
+    padding-left: 4;
+    padding-right: 4;
+}
+
+/* The twisty, exactly as the create menu draws its own: one shape rotated rather than two, so open and
+ * closed are one drawable state; a leaf keeps the box and draws nothing so labels stay in a column. */
+hierarchypanel .__twisty__ {
+    width: 9px;
+    height: 9px;
+    flex-shrink: 0;
+    overlay: shape("chevron-right");
+}
+
+hierarchypanel .__expanded__ > .__twisty__ {
+    transform: rotate(90deg);
+}
+
+hierarchypanel .__leaf__ > .__twisty__ {
+    overlay: none;
+}
+
+hierarchypanel .__hierarchy-row__ .__label__ {
+    flex-grow: 1;
+    flex-shrink: 1;
+    width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 .__hierarchy-row__.__selected__ {
