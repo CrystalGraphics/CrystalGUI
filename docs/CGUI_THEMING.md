@@ -125,7 +125,7 @@ editor scheme's.
 | `--activitybar-item-focused-fg` | `var(--fg-on-accent)` | base.css |
 | `--activitybar-item-hover-bg` | `#46484b` | crystal-dark.css |
 | `--activitybar-separator` | `var(--divider)` | base.css |
-| `--balloon-bg` | `var(--surface-raised)` | base.css |
+| `--balloon-bg` | `var(--surface-base)` | base.css |
 | `--balloon-border` | `var(--border-base)` | base.css |
 | `--balloon-hover-bg` | `var(--hover-bg)` | base.css |
 | `--banner-border` | `var(--divider)` | base.css |
@@ -156,8 +156,8 @@ editor scheme's.
 | `--builder-selected-parent` | `var(--border-strong)` | base.css |
 | `--builder-surface-bg` | `var(--surface-recessed)` | base.css |
 | `--builder-tag-fg` | `var(--fg-on-accent)` | base.css |
-| `--builder-toolbar-bg` | `var(--surface-base)` | base.css |
 | `--button-bg` | `var(--surface-raised)` | base.css |
+| `--builder-toolbar-bg` | `var(--surface-base)` | base.css |
 | `--button-disabled-bg` | `var(--surface-raised)` | base.css |
 | `--button-disabled-fg` | `var(--fg-disabled)` | base.css |
 | `--button-fg` | `var(--fg)` | base.css |
@@ -394,7 +394,7 @@ editor scheme's.
 | `--nodemenu-separator-fg` | `var(--fg-disabled)` | base.css |
 | `--nodemenu-title-bg` | `var(--surface-raised)` | base.css |
 | `--nodemenu-twisty-fg` | `var(--fg-secondary)` | base.css |
-| `--notification-bg` | `var(--surface-raised)` | base.css |
+| `--notification-bg` | `var(--surface-base)` | base.css |
 | `--notification-close-fg` | `var(--fg-hint)` | base.css |
 | `--notification-close-hover-bg` | `var(--hover-bg)` | base.css |
 | `--notification-close-hover-fg` | `var(--fg)` | base.css |
