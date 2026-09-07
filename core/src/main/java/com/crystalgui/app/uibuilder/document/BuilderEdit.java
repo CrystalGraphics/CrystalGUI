@@ -35,6 +35,19 @@ import com.crystalgui.ui.dom.UINode;
  */
 public sealed interface BuilderEdit extends Edit {
 
+    /**
+     * The node this edit is about, or null for one that is not about a node.
+     *
+     * <p>Every variant but {@code SetHeader} has a {@code node} component, so the record's own accessor
+     * satisfies this and only the exception says anything. What reads it is the canvas, which selects
+     * what an undo just changed — a reversal you cannot see is indistinguishable from a key that did
+     * nothing.</p>
+     */
+    @Nullable
+    default UIElement node() {
+        return null;
+    }
+
     /** Adds a node at an index. */
     record Insert(UIElement parent, UIElement node, int index) implements BuilderEdit {
 

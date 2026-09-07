@@ -4,7 +4,9 @@ import java.util.List;
 
 import com.crystalgui.app.uibuilder.BuilderOverlaysExtension;
 import com.crystalgui.app.uibuilder.BuilderSelection;
+import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
+import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.serialization.StateMap;
@@ -110,6 +112,24 @@ public final class BuilderEditor implements DocumentEditor {
         // is not showing. resync() is a no-op unless the root instance actually changed, which is why it
         // can hang off the ordinary change signal.
         document.onChanged().connect(this::adoptNewTree);
+        // AND SHOW WHAT AN UNDO JUST DID. A reversal you cannot see is indistinguishable from a key that
+        // did nothing -- especially on a canvas, where the changed node may be scrolled off or simply
+        // one of forty that look alike. Selecting it puts the outline, the handles and the inspector on
+        // the thing that moved, which is the whole answer to "what did that undo?".
+        document.history().onDidStep.connect(this::selectWhatStepped);
+    }
+
+    /** @see #BuilderEditor the note on the history's step signal */
+    private void selectWhatStepped(Edit edit) {
+        UIElement node = edit instanceof BuilderEdit builderEdit ? builderEdit.node() : null;
+        // A REMOVED NODE IS NOT SELECTABLE, and an undone Insert is exactly that. `contains` is the
+        // document's own light-tree question, so this asks whether the node is still in the tree at all
+        // rather than trusting the edit to have left it there.
+        if (node == null || !document.root().contains(node) && node != document.root()) {
+            surface.builderSelection().selectOnly(null);
+            return;
+        }
+        surface.builderSelection().selectOnly(node);
     }
 
     public UiBuilderDocument document() {

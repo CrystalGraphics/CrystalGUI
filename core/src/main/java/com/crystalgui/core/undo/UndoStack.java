@@ -121,6 +121,18 @@ public final class UndoStack {
      */
     public final Signal.Action onChanged = new Signal.Action();
 
+    /**
+     * The edit an undo or a redo just moved.
+     *
+     * <p>{@link #onChanged} says the history is different; this says WHAT it stepped over, which is what
+     * a view needs to show the change. Both references do it: IntelliJ moves the caret to the undone
+     * edit, and a canvas without it undoes something off-screen and looks like it did nothing.</p>
+     *
+     * <p>Not fired for a push — an edit being made is already visible; it is the reversal that arrives
+     * without the user's hand on it.</p>
+     */
+    public final Signal.Value<Edit> onDidStep = new Signal.Value<>();
+
     private record Transaction(String label, List<Edit> edits) {
     }
 
@@ -293,6 +305,7 @@ public final class UndoStack {
         // A step that was just undone must not absorb the next edit — they are unrelated by definition.
         mergeRunOpen = false;
         onChanged.emit();
+        onDidStep.emit(edit);
         return true;
     }
 
@@ -311,6 +324,7 @@ public final class UndoStack {
         undoStack.push(edit);
         mergeRunOpen = false;
         onChanged.emit();
+        onDidStep.emit(edit);
         return true;
     }
 

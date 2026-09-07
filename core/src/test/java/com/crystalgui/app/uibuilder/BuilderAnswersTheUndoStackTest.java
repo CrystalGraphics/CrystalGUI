@@ -104,6 +104,54 @@ public class BuilderAnswersTheUndoStackTest extends UiDocumentTestBase {
         assertEquals("undo did not put the box back", 40f, node.box().width(), 0.01f);
     }
 
+    /**
+     * <b>An undo selects what it changed.</b>
+     *
+     * <p>A reversal you cannot see is indistinguishable from a key that did nothing — on a canvas the
+     * changed node may be scrolled off, or one of forty that look alike. Selecting it puts the outline,
+     * the handles and the inspector on the thing that moved.</p>
+     */
+    @Test
+    public void anUndoSelectsTheNodeItChanged() {
+        UiBuilderDocument model = openBuilder();
+        BuilderEditor editor = editorFor(model);
+        UIElement node = model.root().children().get(0);
+
+        var before = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        node.layout(l -> l.width(99));
+        model.apply(new BuilderEdit.SetInlineStyle(node, before,
+                InlineStyleCodec.encode(JsonOps.INSTANCE, node)));
+        // Deliberately selecting something else, so the assertion cannot pass by the selection simply
+        // never having moved.
+        editor.selection().selectOnly(null);
+        document.update(W, H);
+
+        model.history().undo();
+        document.update(W, H);
+        assertSame("an undo left the canvas showing nothing that changed",
+                node, editor.selection().node());
+    }
+
+    /** A redo says what it put back, for the same reason. */
+    @Test
+    public void aRedoSelectsItToo() {
+        UiBuilderDocument model = openBuilder();
+        BuilderEditor editor = editorFor(model);
+        UIElement node = model.root().children().get(0);
+
+        var before = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        node.layout(l -> l.width(99));
+        model.apply(new BuilderEdit.SetInlineStyle(node, before,
+                InlineStyleCodec.encode(JsonOps.INSTANCE, node)));
+        model.history().undo();
+        editor.selection().selectOnly(null);
+        document.update(W, H);
+
+        model.history().redo();
+        document.update(W, H);
+        assertSame(node, editor.selection().node());
+    }
+
     private UiBuilderDocument openBuilder() {
         UIElementRegistry.bootstrap();
         UiBuilderDocument model = new UiBuilderDocument(
