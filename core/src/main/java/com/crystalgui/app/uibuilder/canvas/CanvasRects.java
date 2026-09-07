@@ -57,15 +57,39 @@ public final class CanvasRects {
 
     /** Draws {@code thickness} px of outline just inside a rectangle, as four fills. */
     public static void outline(CgUiPaintContext ctx, float[] rect, float thickness, int argb) {
-        if (rect == null || rect[2] <= 0f || rect[3] <= 0f) return;
+        for (float[] side : outlineSides(rect, thickness)) {
+            ctx.fillRect(side[0], side[1], side[2], side[3], argb);
+        }
+    }
+
+    /**
+     * The four strokes of an outline, <b>hugging the rectangle from OUTSIDE it</b>.
+     *
+     * <p>They were drawn inside, which means an outline covers the outermost pixels of the very thing it
+     * is pointing at. Invisible on a box with padding and obvious on one whose content reaches its edge:
+     * a slider's thumb sits flush against the control's left edge at minimum, so the selection stroke
+     * ran through it and it read as the thumb spilling out of its own box. Nothing was spilling —
+     * measured, the thumb is 10px wide at x=0 inside a 150px control — the stroke was simply on top
+     * of it.</p>
+     *
+     * <p>Outside also removes the clamp the inside version needed: two strokes on a box thinner than
+     * twice the thickness used to overlap and paint the whole thing solid, so the thickness had to be
+     * halved on a small box and a 2px-tall element got a 1px outline. A ring drawn outside never
+     * overlaps itself.</p>
+     *
+     * <p>Separate from the painting so it can be asserted without a GL context.</p>
+     */
+    public static float[][] outlineSides(@Nullable float[] rect, float t) {
+        if (rect == null || rect[2] <= 0f || rect[3] <= 0f) return new float[0][];
         float x = rect[0];
         float y = rect[1];
         float width = rect[2];
         float height = rect[3];
-        float t = Math.min(thickness, Math.min(width, height) * 0.5f);
-        ctx.fillRect(x, y, width, t, argb);
-        ctx.fillRect(x, y + height - t, width, t, argb);
-        ctx.fillRect(x, y + t, t, height - t - t, argb);
-        ctx.fillRect(x + width - t, y + t, t, height - t - t, argb);
+        return new float[][] {
+                {x - t, y - t, width + t + t, t},        // top, across the corners
+                {x - t, y + height, width + t + t, t},   // bottom, likewise
+                {x - t, y, t, height},                   // left, between them
+                {x + width, y, t, height},               // right
+        };
     }
 }
