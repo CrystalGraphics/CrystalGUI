@@ -131,7 +131,14 @@ public final class FreeTransformTool implements Tool {
         Spot spot = grip.spot();
         switch (grip.kind()) {
             case ROTATE:
-                return CgCursor.ROTATE;
+                // THE BEND THAT HUGS THIS CORNER. One shape for all four would curl away from three of
+                // them, and a rotate cursor pointing at nothing is worse than none: it is the only thing
+                // telling you the band is there at all.
+                if (spot == null) return CgCursor.ROTATE_NE;
+                if (spot.yDirection() < 0) {
+                    return spot.xDirection() > 0 ? CgCursor.ROTATE_NE : CgCursor.ROTATE_NW;
+                }
+                return spot.xDirection() > 0 ? CgCursor.ROTATE_SE : CgCursor.ROTATE_SW;
             case SKEW:
                 return CgCursor.SKEW;
             case PIVOT:
