@@ -98,17 +98,21 @@
      * in 20 (0.50), and that single number is most of why ours read airy and theirs reads dense. */
     --cfg-row-h: 20px;         /* the row; a floor, never a cap */
     --cfg-ctrl-h: 18px;        /* the control inside it — the number that makes the kit a SET */
-    /* THE CAP on the label column, and a flat width everywhere it matters. Worth recording, because it
-     * has been both things: an old 38% resolved to 114px at 300px — exactly Unity's — so it looked right
-     * and drifted at every other panel width. Unity's column does not scale; it is ~114px in a 275px
-     * panel and ~114px in an 800px one, which is why it reads as 41% in one screenshot and 26% in
-     * another.
+    /* WHERE A SHORT LABEL'S VALUE STARTS, and nothing else -- the column is a flex BASIS floored at
+     * `min-width: auto`, so a label wider than this pushes its own row out and the number never
+     * truncates anything. @see inspector.css `.__configurator__ > .__label__`
      *
-     * `inspector.css` now declares the column as a fraction CAPPED at this, which is not that drift
-     * returning: at and above a normally-docked width the cap binds and the column is this number
-     * exactly. The fraction only takes over below it, where holding 114px meant the VALUE absorbed the
-     * entire shortfall. @see inspector.css `.__configurator__ > .__label__` */
-    --cfg-label-w: 114px;
+     * 114px was Unity's, measured off its inspector, and it is the wrong reference for this panel:
+     * Unity labels a property "Cast Shadows", ours labels it `border-bottom-left-radius-x`. With the
+     * floor doing the work for the long ones, the flat number only decides how far a SHORT label's
+     * value is pushed away from it -- and at 114 an `id` row put its value most of a column away while
+     * a `border-bottom-left-radius-x` row sat tight against its own. The same panel read as two
+     * different layouts.
+     *
+     * 88 is the widest label the Layout and Element tabs actually use (`parent direction`, 74px, plus
+     * the 8px gutter), so those tabs still line up in one column and only the genuinely long names in
+     * Computed step out. Lower than that and every tab is ragged; higher buys nothing but distance. */
+    --cfg-label-w: 88px;
     --cfg-gap: 4px;            /* label to control, and eight other places -- NOT the label gutter */
     /* The label's own trailing space, carried INSIDE its box.
      *
