@@ -300,7 +300,11 @@ public final class EditorFind {
             // the content -- `top: 0` means the top of the DOCUMENT, so the bar scrolled away and left the
             // editor behind it. `setScrollExempt` is what holds a decoration still while the text moves.
             bar.setScrollExempt(true);
-            bar.layout(l -> l.positionType(TaffyPosition.ABSOLUTE).top(0f).left(0f).widthPercent(100f));
+            // NO WIDTH: the bar is stretched between left and right insets by syncEditorInset, which is
+            // the only thing that knows the editor's padding -- and `width: 100%` would resolve against
+            // the CONTENT box, leaving the padding at both edges showing the editor's own ground beside
+            // the bar. @see SearchReplaceBar#syncEditorInset
+            bar.layout(l -> l.positionType(TaffyPosition.ABSOLUTE).top(0f).left(0f));
             bar.setDisplayed(false);
             editor.append(bar);
             bar.onClosed.connect(() -> {

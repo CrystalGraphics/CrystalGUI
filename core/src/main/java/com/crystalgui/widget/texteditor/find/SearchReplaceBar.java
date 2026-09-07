@@ -547,9 +547,34 @@ public class SearchReplaceBar extends UIElement {
      */
     private void syncEditorInset() {
         float inset = isOpen() ? boxHeight(this) : 0f;
-        if (Math.abs(inset - appliedInset) < 0.5f) return;
+        // THE EDITOR'S WIDTH IS PART OF THE ANSWER, so it is part of what makes this run again: the bar
+        // is stretched to the editor's BORDER box below, and a box measured once stops matching the
+        // first time the pane is resized.
+        Box editorBox = editor.box();
+        float width = editorBox == null ? 0f : editorBox.width();
+        if (Math.abs(inset - appliedInset) < 0.5f && Math.abs(width - appliedWidth) < 0.5f) return;
         appliedInset = inset;
+        appliedWidth = width;
         StyleGroup.inlinePipeline(editor.getStyle().getLayoutGroup(), l -> l.paddingTop(inset));
+        // AND BACK UP BY THE SAME AMOUNT, because the strip is the bar's own doing.
+        //
+        // An absolutely positioned child is laid out from its parent's CONTENT box on this engine, not
+        // from the padding box CSS names -- so `top: 0` means "under the padding", and the padding here
+        // is exactly the bar's height. The two are circular: the bar reserves a strip and is then pushed
+        // off the edge by the strip it reserved, which reads as a band of empty document between the tab
+        // strip and the bar. Reported as exactly that.
+        //
+        // Written here rather than once in EditorFind.bar(), for the reason the note below already gives
+        // about the scrollbar: this offset IS the inset, and a copy of the number that is not updated
+        // beside it is a copy that goes stale the first time the replace row changes the height.
+        // ...AND OUT TO BOTH EDGES, for the same reason in the other axis. A percentage width resolves
+        // against the CONTENT box, so the editor's own padding stayed uncovered at each side and its
+        // ground showed through beside the bar -- a strip the width of the padding, running the bar's
+        // full height, which reads as a rail down the editor rather than as a gap in the chrome.
+        float padLeft = editor.paddingLeft();
+        float full = editorBox == null ? 0f : editorBox.width();
+        StyleGroup.inlinePipeline(getStyle().getLayoutGroup(),
+                l -> l.top(-inset).left(-padLeft).width(full));
         // AND THE SCROLLBAR, which padding alone does not move. The bar is pinned to the editor's padding
         // box with `top: 0`, so growing the padding pushes the text down and leaves the scrollbar starting
         // where it always did -- underneath this widget, with its top section unreachable. Both halves of
@@ -559,6 +584,9 @@ public class SearchReplaceBar extends UIElement {
     }
 
     private float appliedInset = -1f;
+
+    /** The editor width the bar was last stretched to. @see #syncEditorInset */
+    private float appliedWidth = -1f;
 
     /**
      * Lines the two boxes up by matching the find row's trailing group to the replace row's.
