@@ -495,8 +495,34 @@ public class DockArea extends UIElement {
             syncGroups();
             FrameProfile.step(timed, "dock.syncGroups (deferred)");
         }
+        applyCloseFocus();
         applyPendingFocus();
         return true;
+    }
+
+    /**
+     * A close left the keyboard nowhere, and the panel that took its place should have it.
+     *
+     * <p>Set by {@link #closePanelDiscardingImpl} and spent here, after this frame's rebuild — which is
+     * what makes it answerable at all: the surviving leaf's front panel is only decided by that rebuild,
+     * and a leaf that emptied has no group to ask until the tree above it has been rebuilt.</p>
+     *
+     * <p><b>Only into a vacancy.</b> The request is made against no holder, so it stands while the
+     * keyboard is unclaimed and stands down the moment anything else has it: closing a background tab
+     * from a menu, or closing one while the caret is somewhere else entirely, leaves focus where the
+     * user put it. Filling, never taking.</p>
+     */
+    private boolean fillFocusAfterClose;
+
+    private void applyCloseFocus() {
+        if (!fillFocusAfterClose) return;
+        fillFocusAfterClose = false;
+        UIDocument window = document();
+        // SOMEBODY ELSE HAS IT, so there is no vacancy to fill.
+        if (window == null || window.focus().focused() != null) return;
+        DockGroup group = activeGroup();
+        DockPanelRef next = group == null ? null : group.leaf().activePanel();
+        if (next != null) requestPanelFocus(next, null);
     }
 
     /**
@@ -939,6 +965,12 @@ public class DockArea extends UIElement {
         FrameProfile.step(timed, "close.layout.closePanel"
                 + (shapeChanged ? " (the leaf went too)" : " (the leaf stands)"));
         if (!removed) return;
+        // AND SOMEBODY HAS TO ANSWER "NOW WHO HAS THE KEYBOARD?". Closing detaches the element that had
+        // it and the focus service is right to forget a detached one, so without this Ctrl+W ends with
+        // the caret in no editor at all. Resolved on a later frame rather than here: the panel that takes
+        // this one's place is chosen by a rebuild that has not run yet, and when the whole LEAF goes the
+        // group that inherits does not exist yet either. @see #applyCloseFocus
+        fillFocusAfterClose = true;
         // AND THE BUILT WIDGET GOES WITH IT.
         //
         // `DockGroup.contentFor` memoises per DockPanelRef, and a ref is a VALUE -- reopening the same

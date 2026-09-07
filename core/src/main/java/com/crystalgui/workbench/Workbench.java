@@ -885,16 +885,13 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // Not registered on a Disposable: the signal belongs to the dock, this workbench owns the dock, so
         // the subscription cannot outlive either -- an ownership registration here would be ceremony.
         lifetime.add(dock.onDidChangeActivePanel.connect(panel -> {
-            // THE MOMENT THE REBUILD HAS HAPPENED, which is what a close was waiting for. The frame
-            // countdown below is a backstop for the case this signal never comes -- closing a tab that
-            // was not the active one leaves the active panel where it was and announces nothing.
-            focusActiveEditorAfterClose();
-        // ANYTHING ASKED FOR BEFORE IT COULD BE SHOWN. The one-shot hook in connected() covers the frame
-        // the workbench joins a window; nothing covered a panel asked for AFTER that and before its
-        // region existed -- which is what a server opening a tool window does. Free when the set is
-        // empty, which is every frame but the few that matter. @see ToolWindowManager#retryPendingShows
-        if (toolWindowManager != null) toolWindowManager.retryPendingShows();
-                bindStatusToActiveTab();
+            // ANYTHING ASKED FOR BEFORE IT COULD BE SHOWN. The one-shot hook in connected() covers the
+            // frame the workbench joins a window; nothing covered a panel asked for AFTER that and
+            // before its region existed -- which is what a server opening a tool window does. Free when
+            // the set is empty, which is every frame but the few that matter.
+            // @see ToolWindowManager#retryPendingShows
+            if (toolWindowManager != null) toolWindowManager.retryPendingShows();
+            bindStatusToActiveTab();
         }));
         // The rails' :checked state follows the dock's structure and nothing else, so they can subscribe
         // now. Their BUTTONS wait for a window -- see onWindowChanged.
@@ -908,9 +905,6 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // ...AND ITS PLACEHOLDER RECORD, which is keyed by a ref and would otherwise outlive the
         // panel and be read against whatever reopened under the same name.
         lifetime.add(dock.onDidClosePanel.connect(placeholders::remove));
-        // AND THE EDITOR THAT TOOK OVER GETS THE FOCUS THE CLOSED ONE HAD. Spent a frame later -- see
-        // focusActiveEditorPending.
-        lifetime.add(dock.onDidClosePanel.connect(panel -> focusActiveEditorPending = FOCUS_AFTER_CLOSE_FRAMES));
         /*
          * A TAB'S VIEW ARRIVING IS A PANEL THAT HAS TO BE BUILT AGAIN.
          *
@@ -1594,72 +1588,6 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * to a diagnostic's line - have nothing to do with a document that has no lines.</p>
      */
     @Nullable
-    /**
-     * A tab was closed and the editor that took its place has not been focused yet.
-     *
-     * <p>@see #focusActiveEditorAfterClose</p>
-     */
-    private int focusActiveEditorPending;
-
-    /**
-     * Puts the focus the closed tab held onto the editor that replaced it.
-     *
-     * <h3>Why this is needed at all</h3>
-     *
-     * <p>Closing a tab detaches the editor that had focus, and {@code UIInputHandler} correctly forgets a
-     * detached element — so the focus owner becomes <b>null</b> and the keyboard goes nowhere. Every part
-     * is behaving: the dock does not know what a document is, and the input handler is right to drop a
-     * reference to something that left the tree. Nobody was left holding the question "and now who has
-     * it?", which is why Ctrl+W ended with the caret in no editor at all.</p>
-     *
-     * <h3>A frame later, and only when nobody else took it</h3>
-     *
-     * <p>Deferred because {@code requestRebuild} only sets a flag: at the moment the close is announced
-     * the strip has not been rebuilt and the panel that is about to become active has not been retargeted,
-     * so there is nothing yet to focus.</p>
-     *
-     * <p>Gated on the focus owner being <b>null</b>, which is what keeps this from being the auto-focus
-     * coupling that was just taken out of the project tree. Closing a background tab from a menu, or
-     * closing one while the caret is in the terminal, leaves focus exactly where the user put it — this
-     * only fills a vacuum, it never takes.</p>
-     */
-    private void focusActiveEditorAfterClose() {
-        if (focusActiveEditorPending <= 0) return;
-        UIDocument window = document();
-        if (window == null) return;
-        // SOMEBODY ELSE HAS IT, so there is no vacancy to fill and nothing more to wait for.
-        if (window.focus().focused() != null) {
-            focusActiveEditorPending = 0;
-            return;
-        }
-        // A FEW FRAMES, not one. `requestRebuild` only sets a flag, and the dock rebuilds from its own
-        // tick -- which may run after this one. Spending the request on the first frame therefore asked
-        // `activeEditor()` before the strip had been rebuilt and the pane retargeted, got null, and threw
-        // the request away: Ctrl+W left the focus nowhere, which is exactly what it did before any of this
-        // was written. Counting down instead means the frame ordering between two tickers does not have to
-        // be assumed.
-        focusActiveEditorPending--;
-        TextEditor editor = activeEditor();
-        if (editor == null || editor.document() == null) return;
-        focusActiveEditorPending = 0;
-        window.focus().requestFocus(editor);
-    }
-
-    /**
-     * How many frames a close may take to settle before the focus request is dropped.
-     *
-     * <p>Bounded on purpose: this is covering an ordering between two tickers, not waiting for I/O, and
-     * holding the request open indefinitely would mean pouncing on the first vacancy that appeared long
-     * afterwards.</p>
-     *
-     * <p><b>Twelve rather than four, and the difference was a flaky test.</b> Four covered the ordering on
-     * an idle JVM and not on a loaded one: {@code closingTheFocusedTabFocusesTheEditorThatReplacesIt}
-     * passed alone and failed in the full suite, which is the shape of a race rather than of a wrong
-     * answer. The rebuild is what is being waited for and it takes as long as it takes; the bound exists
-     * to stop the request outliving the close, not to express how long a rebuild should need.</p>
-     */
-    private static final int FOCUS_AFTER_CLOSE_FRAMES = 12;
-
     public TextEditor activeEditor() {
         return editorFor(activeResource());
     }
@@ -2087,7 +2015,6 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
             ticking = false;
             return false;
         }
-        focusActiveEditorAfterClose();
         // A VIEW BUILT THIS FRAME SAYS SO ON THE NEXT ONE, once the dock has it in the tree.
         editors.flushPendingActivation();
         // A few directories a frame, until the workspace is walked. Go to File searches what this has
