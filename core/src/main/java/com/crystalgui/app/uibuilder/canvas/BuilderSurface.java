@@ -190,16 +190,21 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
         if (builderKeymap == null) {
             builderKeymap = new Keymap();
             SurfaceCommands.bindDefaults(builderKeymap);
-            // UNBIND FIRST. `Keymap.bind` APPENDS and the EARLIER binding wins -- it says so, and warns
-            // about the conflict -- so binding over a default silently does nothing at all. Escape went
-            // on deselecting and Mod+A ran the engine's Select All, which after being taught to skip the
-            // page had nothing left to take: both keys read as broken by a change meant to fix them.
-            builderKeymap.unbind("Escape");
-            builderKeymap.bind("Escape", BuilderCommands.SELECT_PARENT);
-            builderKeymap.unbind("Mod+A");
-            builderKeymap.bind("Mod+A", BuilderCommands.SELECT_ALL);
+            // ALL FOUR DIRECTIONS ON THE ARROWS, and Escape left to mean what it means everywhere else.
+            //
+            // Select Parent was on Escape and Select Child on Enter, which cost Escape its only job:
+            // deselecting. Worse, it did not even do the new one for a MULTI-selection -- Select Parent
+            // asks for THE selected node and a set has none -- so Escape did nothing at all there.
+            // A tree has four directions and the arrows have four keys; that is the whole argument.
+            builderKeymap.bind("Up", BuilderCommands.SELECT_PARENT);
+            builderKeymap.bind("Down", BuilderCommands.SELECT_CHILD);
             builderKeymap.bind("Left", BuilderCommands.SELECT_PREVIOUS_SIBLING);
             builderKeymap.bind("Right", BuilderCommands.SELECT_NEXT_SIBLING);
+            // UNBIND FIRST. `Keymap.bind` APPENDS and the EARLIER binding wins -- it says so, and warns
+            // about the conflict -- so binding over a default silently does nothing at all. The engine's
+            // Select All, after being taught to skip the page, had nothing left to take here.
+            builderKeymap.unbind("Mod+A");
+            builderKeymap.bind("Mod+A", BuilderCommands.SELECT_ALL);
         }
         return builderKeymap;
     }

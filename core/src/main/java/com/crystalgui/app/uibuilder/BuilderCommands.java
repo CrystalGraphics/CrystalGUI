@@ -96,13 +96,15 @@ public final class BuilderCommands {
                 })
                 .enabledWhen(BuilderCommands::hasBuilder));
 
+        // NO `binding` ON ANY OF THE FOUR. A bare key declared on a command is application-wide: Escape
+        // and Enter here took them from every dialog and text field, and an arrow would take them from
+        // every list. They are bound in the builder surface's keymap, live only while focus is on the
+        // canvas -- the same reason the engine's own `F` and `A` are bound there.
         registry.register(Command.of(SELECT_PARENT, "Select Parent")
-                .binding("Escape")
                 .run(context -> selectRelative(context, true))
                 .enabledWhen(context -> hasBuilder(context) && selectionOf(context) != null));
 
         registry.register(Command.of(SELECT_CHILD, "Select First Child")
-                .binding("Enter")
                 .run(context -> selectRelative(context, false))
                 .enabledWhen(context -> hasBuilder(context) && selectionOf(context) != null));
 
@@ -148,10 +150,10 @@ public final class BuilderCommands {
     /**
      * Up to the parent, or down to the first child.
      *
-     * <p>Going up past the document root DESELECTS rather than doing nothing. Escape is one key with one
-     * meaning — "out of this" — and a step that silently refuses at the top is a key that stops working
-     * where it is most expected to. It also makes the builder's Escape a superset of the surface's plain
-     * Deselect, which is what lets one binding serve both.</p>
+     * <p>Stops at the document root, clamped exactly as the siblings are: selecting the artboard would
+     * be selecting the page rather than anything in the document, and there is no edit that means. It
+     * does NOT deselect there — Escape is the key that clears, and an arrow that empties the selection
+     * when it runs out of tree is a different verb wearing a navigation key.</p>
      */
     private static void selectRelative(CommandContext context, boolean up) {
         BuilderEditor builder = builderOf(context);
@@ -159,11 +161,7 @@ public final class BuilderCommands {
         if (node == null) return;
         UIElement next = up ? node.parentElement()
                 : (node.children().isEmpty() ? null : node.children().get(0));
-        if (next == null || next == builder.artboard()) {
-            // Only going UP means "out of everything"; going down off a leaf means nothing at all.
-            if (up) builder.selection().selectOnly(null);
-            return;
-        }
+        if (next == null || next == builder.artboard()) return;
         builder.selection().selectOnly(next);
     }
 
