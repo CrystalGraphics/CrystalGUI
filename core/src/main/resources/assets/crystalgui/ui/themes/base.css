@@ -16,7 +16,9 @@ theme {
     --activitybar-bg: var(--surface-base);
     --activitybar-separator: var(--divider);
 
-    --balloon-bg: var(--surface-raised);
+    /* THE BASE SURFACE, not the raised one. A balloon floats over the editor rather than sitting in a
+     * panel, and `raised` read as a lighter patch pasted on top of it. @see --notification-bg */
+    --balloon-bg: var(--surface-base);
     --balloon-border: var(--border-base);
     --balloon-hover-bg: var(--hover-bg);
 
@@ -41,7 +43,6 @@ theme {
     --builder-selected: var(--accent);
     --builder-selected-parent: var(--border-strong);
     --builder-tag-fg: var(--fg-on-accent);
-    --builder-toolbar-bg: var(--surface-base);
     --builder-handle-bg: var(--fg-on-accent);
     --builder-guide: var(--error);
 
@@ -50,6 +51,7 @@ theme {
     --breadcrumb-sep-fg: var(--fg-hint);
 
     --button-bg: var(--surface-raised);
+    --builder-toolbar-bg: var(--surface-base);
     --button-disabled-bg: var(--surface-raised);
     --button-disabled-fg: var(--fg-disabled);
     --button-fg: var(--fg);
@@ -319,7 +321,9 @@ theme {
     --nodemenu-title-bg: var(--surface-raised);
     --nodemenu-twisty-fg: var(--fg-secondary);
 
-    --notification-bg: var(--surface-raised);
+    /* One card, one surface, wherever it is drawn -- a balloon and a row in the timeline are the same
+     * thing and reading as two would be the tell that they are separately styled. @see --balloon-bg */
+    --notification-bg: var(--surface-base);
     --notification-close-fg: var(--fg-hint);
     --notification-close-hover-bg: var(--hover-bg);
     --notification-close-hover-fg: var(--fg);
