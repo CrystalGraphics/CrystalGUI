@@ -52,8 +52,10 @@ public final class Snap {
         float height = box.height();
         List<Guide> guides = new ArrayList<>();
 
-        Axis horizontal = new Axis(x, width, tolerance);
-        Axis vertical = new Axis(y, height, tolerance);
+        // EACH AXIS KNOWS WHERE THE MOVING BOX SITS ON THE OTHER ONE, so a guide can be drawn from the
+        // box to the thing it lined up with. @see Axis#consider
+        Axis horizontal = new Axis(x, width, tolerance, y, y + height);
+        Axis vertical = new Axis(y, height, tolerance, x, x + width);
 
         // The parent's content box first, so an edge-aligned child beats a sibling that happens to be
         // the same distance away -- "flush with the container" is the alignment somebody meant.
@@ -93,13 +95,19 @@ public final class Snap {
         private final float extent;
         private final float tolerance;
 
+        /** Where the MOVING box sits on the other axis. @see #consider */
+        private final float crossFrom;
+        private final float crossTo;
+
         private float best = Float.MAX_VALUE;
         private float adjusted;
         private float line;
         private float from;
         private float to;
 
-        Axis(float wanted, float extent, float tolerance) {
+        Axis(float wanted, float extent, float tolerance, float crossFrom, float crossTo) {
+            this.crossFrom = crossFrom;
+            this.crossTo = crossTo;
             this.wanted = wanted;
             this.extent = extent;
             this.tolerance = tolerance;
@@ -114,14 +122,26 @@ public final class Snap {
             consider(centre - extent * 0.5f, centre, spanFrom, spanTo);
         }
 
+        /**
+         * <b>The span reaches from the moving box to what it aligned to</b>, rather than covering only
+         * the target.
+         *
+         * <p>A guide drawn over the target alone is a line with nothing on it: snap a box to a small
+         * sibling on the far side of the canvas and you get a stub floating in space, and the only way
+         * to know what it is a border OF is to go looking. Reaching across says it — one line touching
+         * both things is the whole sentence, and it is what every editor with smart guides draws.</p>
+         *
+         * <p>Union rather than the target's span, because the target may sit inside the moving box's own
+         * extent as easily as beyond it.</p>
+         */
         private void consider(float candidate, float guideAt, float spanFrom, float spanTo) {
             float distance = Math.abs(candidate - wanted);
             if (distance > tolerance || distance >= best) return;
             best = distance;
             adjusted = candidate;
             line = guideAt;
-            from = spanFrom;
-            to = spanTo;
+            from = Math.min(spanFrom, crossFrom);
+            to = Math.max(spanTo, crossTo);
         }
 
         boolean taken() {
