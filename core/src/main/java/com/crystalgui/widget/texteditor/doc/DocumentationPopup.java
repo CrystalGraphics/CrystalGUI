@@ -1,6 +1,10 @@
 package com.crystalgui.widget.texteditor.doc;
 
 import com.crystalgui.core.async.FrameProfile;
+import com.crystalgui.style.StyleGroup;
+import com.crystalgui.style.property.StyleProperty;
+import com.crystalgui.style.property.layout.LayoutProperties;
+import dev.vfyjxf.taffy.style.TaffyDimension;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.lang.Signature;
 import com.crystalgui.fs.Resource;
@@ -1049,6 +1053,8 @@ public final class DocumentationPopup extends Popover {
         body.setDocument(parsed);
         FrameProfile.step(timed, "doc.setDocument");
         bodyShown = !body.isEmpty();
+        contentLength = (docs == null ? 0 : docs.length()) + definitionText().length();
+        sizeToContentLength();
         // THE RULE FOLLOWS THE BAND IT DIVIDES. Left visible with no body under it, it draws a line
         // across the bottom of the popup that reads as a band which failed to load -- the same reason
         // the body itself hides rather than showing empty.
@@ -1218,6 +1224,76 @@ public final class DocumentationPopup extends Popover {
     /** Retained, because {@code attach} adds rather than replaces. @see #refreshFooterTooltip */
     @Nullable
     private Tooltip footerTooltip;
+
+    /**
+     * How wide this popup opens, as a function of how much there is to read.
+     *
+     * <p>Ported from IntelliJ Community's {@code DocumentationEditorPane#getPreferredContentWidth}
+     * ({@code platform/lang-impl/src/com/intellij/codeInsight/documentation/}, Apache 2.0). Its shape,
+     * and its two thresholds: below {@value #NARROW_CHARS} characters the box opens at its floor, above
+     * {@value #WIDE_CHARS} at its ceiling, and between them it ramps linearly. JetBrains' own comment
+     * records where the numbers come from — <i>"these values were calculated based on experiments with
+     * varied content and manual resizing to comfortable width"</i> — which is the whole reason to port
+     * the curve rather than derive one: it is a convention, not an answer.</p>
+     *
+     * <h3>The endpoints are the SHEET's</h3>
+     *
+     * <p>Read from the cascaded {@code min-width} and {@code max-width} rather than written here, so the
+     * pixel values stay where every other size in this project lives and a theme can move them. Java
+     * owns the curve between them and nothing else. If either bound is not a definite length — a theme
+     * wrote a percentage, or released one for a box the reader has dragged — there is no ramp to draw
+     * and the box is left to size itself.</p>
+     *
+     * <p>A width at DEFAULT origin, which is what makes a drag still win: {@code UIResizer} writes at
+     * INLINE, four origins above this one.</p>
+     */
+    private static final int NARROW_CHARS = 200;
+
+    /** @see #sizeToContentLength */
+    private static final int WIDE_CHARS = 1000;
+
+    /** How much there is to read in the popup as it stands. @see #sizeToContentLength */
+    private int contentLength;
+
+    private void sizeToContentLength() {
+        Float floor = definiteLength(getStyle().getComputed(LayoutProperties.MIN_WIDTH));
+        Float ceiling = definiteLength(getStyle().getComputed(LayoutProperties.MAX_WIDTH));
+        // NOTHING TO INTERPOLATE BETWEEN, which is the ordinary state twice over: before the first
+        // cascade reaches this element, and while a drag has the bounds released. Both are answered by
+        // leaving the box alone -- the first because computedChanged asks again the moment they land,
+        // the second because a width the reader chose is not this method's to overwrite.
+        if (floor == null || ceiling == null || ceiling <= floor) return;
+        float t = Math.max(0f, Math.min(1f,
+                (contentLength - (float) NARROW_CHARS) / (WIDE_CHARS - NARROW_CHARS)));
+        float width = floor + t * (ceiling - floor);
+        StyleGroup.defaultPipeline(getStyle().getLayoutGroup(), l -> l.width(width));
+    }
+
+
+
+    /**
+     * The bounds arriving is what the ramp is waiting for.
+     *
+     * <p>A popup is filled in the same call that attaches it, so on the very first open nothing has
+     * cascaded yet and both bounds still read as {@code auto} — no ramp, and the box fell back to the
+     * ceiling for a one-line summary. Asked again when either bound resolves, which is also what makes a
+     * theme that moves them take effect without a reopen.</p>
+     */
+    @Override
+    public void computedChanged(StyleProperty<?> property, @Nullable Object oldValue,
+                                @Nullable Object newValue) {
+        super.computedChanged(property, oldValue, newValue);
+        if (property == LayoutProperties.MIN_WIDTH || property == LayoutProperties.MAX_WIDTH) {
+            sizeToContentLength();
+        }
+    }
+
+    /** A dimension's pixels, or null when it is anything the ramp cannot interpolate. */
+    @Nullable
+    private static Float definiteLength(@Nullable TaffyDimension dimension) {
+        return dimension == null || dimension.getType() != TaffyDimension.Type.LENGTH
+                ? null : dimension.getValue();
+    }
 
     private void renderFooter(SymbolInfo symbol) {
         DeclarationSite site = symbol == null ? null : symbol.declaration();

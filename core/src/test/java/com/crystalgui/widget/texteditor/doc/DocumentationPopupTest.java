@@ -617,8 +617,9 @@ public class DocumentationPopupTest extends UiDocumentTestBase {
     @Test
     public void theWidthFloorLiftsOnceTheReaderHasDraggedIt() {
         show(field("entryPoint", "Method", SymbolModifier.STATIC));
+        // 250 is the sheet's floor. What this test is about is the line below.
         assertTrue("the floor is not holding the popup open: " + popup.box().width(),
-                popup.box().width() >= 420f);
+                popup.box().width() >= 250f);
 
         // What a drag does: write the width at INLINE, and record that the reader took the axis.
         StyleGroup.inlinePipeline(popup.getStyle().getLayoutGroup(), l -> l.width(180f));

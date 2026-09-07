@@ -1435,7 +1435,35 @@ documentationpopup {
      * popup below this width is unreadable. That is true of a box that arrived narrow by accident and
      * false of one somebody deliberately dragged: the height already resizes to nothing and nobody
      * minds, because pulling an edge is a statement about what you want. */
-    min-width: 420px;
+    min-width: 250px;
+    /* AND A CEILING, for the same reason as the floor and with the same escape hatch.
+     *
+     * The long comment above rejects `max-width` on the reasoning that the widest LINE is short by
+     * construction. That is true of the DECLARATION, which the engine breaks across lines, and false of
+     * the documentation BODY -- one prose string with no break the layout has to honour, so its
+     * max-content width is the whole paragraph on a single line. An auto-width box takes the space that
+     * asks for, so the popup opened as wide as the window; `left` then clamped to 0, because a box that
+     * wide no longer fits beside its anchor. Measured: 1200x86 in a 1200-wide viewport, against 60px for
+     * a plain popover in the same frame.
+     *
+     * The trap that comment records is real -- a cap applied to a box somebody has dragged makes the
+     * handle look dead -- and it is answered here the way the floor already answers it, by standing down
+     * the moment the reader takes hold of the edge. @see the __user-sized-width__ rule below
+     *
+     * INTELLIJ'S ENDPOINTS AT THIS SHEET'S MEASURE, which is not IntelliJ's pixels.
+     *
+     * Theirs are `docPopupPreferredMinWidth` 300 and `docPopupPreferredMaxWidth` 500 in
+     * `DocumentationHtmlUtil`, and their comment is the reason to take them rather than invent a pair --
+     * "these values were calculated based on experiments with varied content and manual resizing to
+     * comfortable width". But what those numbers encode is a MEASURE, in characters per line, and they
+     * are set against a ~13px body font. This sheet's body inherits `* { font-size: 10 }`, so 500px here
+     * is about 120 characters where 500px there is about 90 -- past the width prose stops being
+     * comfortable to read, which is what a popup at the ceiling looked like.
+     *
+     * Scaling theirs by 10/13 lands near 230 and 385; these are 250 and 350, settled by looking at
+     * real symbols in the harness rather than by finishing the arithmetic. The pair before this was 420
+     * and 720, which had the ratio the wrong way round -- a bigger box for a smaller font. */
+    max-width: 350px;
     /* Over the completion popup's 900 -- Ctrl+Q with a list open should read over it, not under it. */
     z-index: 910;
 }
@@ -1450,6 +1478,10 @@ documentationpopup {
  * origin. The cascade is where a constraint belongs. @see UIElement#USER_SIZED_WIDTH_CLASS */
 documentationpopup.__user-sized-width__ {
     min-width: 0;
+    /* ...and the ceiling goes with the floor. `auto` is this property's own "no cap": max-width is
+     * applied after width whatever origin the width came from, so leaving it would silently win over a
+     * drag and the popup would refuse to be pulled wider. */
+    max-width: auto;
 }
 
 /* THE PROBLEM BAND — the message, then the one action worth showing without being asked.
@@ -1784,27 +1816,15 @@ documentationpopup .__doc-separator__ {
  * The body no longer scrolls itself: a scrollbar inside one band scrolls the prose while leaving a long
  * `implements` list pinned above it, which is how you end up unable to reach what the declaration pushed
  * off the bottom. */
-/* FILLS WHAT THE POPUP GIVES IT, rather than carrying a cap of its own.
- *
- * It was `max-height: 260px`, which works exactly until the popup is resized: the box grows, the scroller
- * does not, and the drag appears to do nothing below the first 260px. The popup's own `max-height` is the
- * one height bound — Taffy resolves the box against it and then distributes what is left, so the fill
- * idiom has the definite parent it needs — and `UIResizer` releases that bound on a vertical drag, which
- * is what lets both the box and this grow together. */
-/* ONCE THE READER HAS TAKEN THE WIDTH, the prose follows the box again.
- *
- * The cap above exists to stop prose SIZING the popup; it has no business limiting a popup somebody has
- * deliberately dragged wider. Without this, widening left the paragraphs at their old measure with a
- * growing empty margin beside them -- which is the failure `.__doc-body__` was already carrying a note
- * about, from the last time a cap was tried here. */
-documentationpopup.__user-sized-width__ .__doc-body__ {
-    max-width: auto;
-}
-
 documentationpopup .__doc-scroll__ {
     flex-direction: column;
     width: 100%;
-    max-height: 260px;
+    /* HOW MUCH DOCUMENTATION YOU GET BEFORE IT SCROLLS, and it is a screen-space number rather than a
+     * derived one. IntelliJ's `docPopupMaxHeight` is 500, and unlike the widths beside it that figure is
+     * NOT scaled to this sheet's smaller font: a measure in characters per line is what font size
+     * changes, while a height is how much of the editor a popup is allowed to cover. 260 covered most of
+     * it and spilled past the bottom. Released on a vertical drag by the rule below. */
+    max-height: 200px;
     overflow: auto;
     gap-all: 3px;
 }
@@ -1829,29 +1849,25 @@ documentationpopup.__user-sized-height__ .__doc-scroll__ {
  * `color` genuinely does inherit and stays here, where it covers bullets and headings too. */
 documentationpopup .__doc-body__ {
     color: var(--doc-body-fg, #DFE1E5);
-    /* THE PROSE DOES NOT WIDEN THE POPUP, which is what the old engine got for nothing.
+    /* THE PROSE DOES NOT WIDEN THE POPUP, and it is the BOX that now says so.
      *
-     * There, `UIText` had no measure function -- it re-wrapped after layout against the box it had been
-     * given -- so a paragraph contributed NOTHING to any ancestor's width and the box was sized by the
-     * declaration alone. Measured on the old engine with eight paragraphs of ordinary prose: the popup
-     * settles at exactly 420, its `min-width`. On this engine text is `Measurable` and answers
-     * max-content, so the same paragraphs reported their whole unwrapped length and dragged the box out
-     * to the full width of the surface -- every sentence edge to edge, wrapping once at the screen.
+     * On the old engine `UIText` had no measure function -- it re-wrapped after layout against the box it
+     * had been given -- so a paragraph contributed nothing to any ancestor's width and the popup was
+     * sized by its declaration alone. On this engine text is `Measurable` and answers max-content, so the
+     * same paragraphs reported their whole unwrapped length and dragged the box out to the full width of
+     * the surface.
      *
-     * 402 is DERIVED, not chosen: the popup's floor is 420 and its padding 9 a side, so a body that stops
-     * there is a body that cannot push the box past the floor. The same fixture now measures 420 on this
-     * engine.
+     * That was answered here, with `max-width: 402px` on this band -- derived as the popup's 420 floor
+     * less its 9px padding a side, so a body that stopped there could not push the box past the floor.
+     * It worked, and it stopped being true the moment the popup got a width of its OWN: the width now
+     * comes from the content-length ramp, and an explicit width cannot be widened by content, so there is
+     * nothing left for a cap on the prose to prevent.
      *
-     * A LENGTH, and that is load-bearing -- `UIText.measure` clamps its wrap width by `max-width` only
-     * when `isLength()`, so a percentage is ignored and `max-width: 100%` here changed nothing at all
-     * (measured: 798 on an 800px surface). It is also why this belongs on the band the text is in rather
-     * than on the popup: a cap on the BOX is applied after `width` whatever origin the width came from,
-     * so it would silently beat a resize drag -- the trap this file's `min-width` note already records. */
-    max-width: 402px;
-    /* NO `max-width`. It capped the prose at 300px, so widening the popup left the paragraphs at their
-     * old measure with a growing empty margin beside them — the box resized and the text did not. The
-     * width now comes entirely from the box, whose floor is `min-width` above and whose ceiling is the
-     * user's drag. */
+     * What the cap did instead was the failure the paragraph below already records about the 300px one
+     * before it -- the box grew and the text did not, leaving a widening empty margin beside every
+     * paragraph. Measured in the harness: a 645px popup with its body pinned at 402, filling only when a
+     * drag released the cap. So the prose takes its measure from the box, which is what `width: 100%`
+     * has always said here. @see DocumentationPopup#sizeToContentLength */
     width: 100%;
     /* LOOSER THAN THE BANDS ABOVE IT, and the two want opposite things.
      *
