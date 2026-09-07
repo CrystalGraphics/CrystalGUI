@@ -32,7 +32,9 @@ import org.joml.Vector4f;
  *   <li><b>The source and its subtree are never a drop target.</b></li>
  *   <li><b>The drag ends when the button that STARTED it is released</b>, not button 0. A
  *   middle-button pan would otherwise never be told its button came up while the implicit capture
- *   release still fired, leaving a live drag eating every move with no button held.</li>
+ *   release still fired, leaving a live drag eating every move with no button held. The convenience
+ *   overloads of {@code start} read which button is HELD rather than assuming the left one — see
+ *   {@link #heldButton}.</li>
  * </ol>
  *
  * <h3>One divergence, stated</h3>
@@ -117,14 +119,36 @@ public final class Drag implements InputMode {
 
     /** A positional drag: no payload, no threshold, live from the first movement. */
     public static Drag start(UIElement source, float surfaceX, float surfaceY, Listener listener) {
-        return start(source, surfaceX, surfaceY, CgMouseCodes.LEFT_BUTTON, null, 0f, listener);
+        return start(source, surfaceX, surfaceY, heldButton(source), null, 0f, listener);
     }
 
     /** A payload drag at the default threshold: nothing fires until the pointer has really moved. */
     public static Drag startWithPayload(UIElement source, float surfaceX, float surfaceY,
                                         Object payload, Listener listener) {
-        return start(source, surfaceX, surfaceY, CgMouseCodes.LEFT_BUTTON, payload,
+        return start(source, surfaceX, surfaceY, heldButton(source), payload,
                 DEFAULT_THRESHOLD_PX, listener);
+    }
+
+    /**
+     * Whichever button is down as the drag begins, falling back to the left.
+     *
+     * <p><b>Read, not assumed.</b> These overloads used to declare LEFT, and a gesture begun from any
+     * other button then waited for a left release that was never coming — it stayed live with nothing
+     * held, eating every move until something else cancelled it. Reported against the builder's resize
+     * handles and the split view's divider, which is every caller of these overloads rather than a fault
+     * in either widget: neither checks the button, and neither should have to.</p>
+     *
+     * <p>A gesture starts from a mouse-down handler, so the press has already been dispatched and the
+     * only record of which button it was is the input service's.</p>
+     */
+    private static int heldButton(UIElement source) {
+        UIDocument window = source.document();
+        Input input = window == null ? null : window.input();
+        if (input == null) return CgMouseCodes.LEFT_BUTTON;
+        if (input.isButtonDown(CgMouseCodes.LEFT_BUTTON)) return CgMouseCodes.LEFT_BUTTON;
+        if (input.isButtonDown(CgMouseCodes.RIGHT_BUTTON)) return CgMouseCodes.RIGHT_BUTTON;
+        if (input.isButtonDown(CgMouseCodes.MIDDLE_BUTTON)) return CgMouseCodes.MIDDLE_BUTTON;
+        return CgMouseCodes.LEFT_BUTTON;
     }
 
     /**
