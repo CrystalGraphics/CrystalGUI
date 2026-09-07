@@ -110,7 +110,7 @@ public final class ExplorerBinding {
         }
         FsMessages.FileChange only = changes.get(0);
         Notifications.info(who.isEmpty()
-                ? nameOf(only.path()) + " was " + past(only) + " on disk"
+                ? subject(only) + " was " + past(only) + " on disk"
                 : who + " " + verb(only));
     }
 
@@ -126,10 +126,10 @@ public final class ExplorerBinding {
     /** {@code alice moved test.shadergraph to fah}. Package-private so the wording is testable. */
     static String verb(FsMessages.FileChange change) {
         return switch (change.kind()) {
-            case CREATED -> "added " + nameOf(change.path());
-            case DELETED -> "deleted " + nameOf(change.path());
+            case CREATED -> "added " + subject(change);
+            case DELETED -> "deleted " + subject(change);
             case RENAMED -> moved(change) + " " + nameOf(change.from()) + destination(change);
-            case MODIFIED -> "changed " + nameOf(change.path());
+            case MODIFIED -> "changed " + subject(change);
         };
     }
 
@@ -185,6 +185,19 @@ public final class ExplorerBinding {
         return parent == null || parent.segments().isEmpty()
                 ? "the project root"
                 : parent.path() + "/";
+    }
+
+    /**
+     * What the change is about, with a folder marked as one.
+     *
+     * <p>A file says which it is by carrying an extension; a folder says nothing at all, so
+     * {@code coo was added} left a reader guessing at the one fact the row in the tree makes obvious.
+     * The server knows — it stat-ed the thing — so the change carries it rather than this guessing from
+     * the name, which would call every extensionless file a folder.</p>
+     */
+    private static String subject(FsMessages.FileChange change) {
+        String name = nameOf(change.path());
+        return change.directory() ? name + "/" : name;
     }
 
     /** The last segment, which is what somebody reading a notification recognises. */
