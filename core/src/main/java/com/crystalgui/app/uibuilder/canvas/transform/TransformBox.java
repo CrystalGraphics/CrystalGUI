@@ -61,8 +61,6 @@ public final class TransformBox extends UIElement {
     /** {@code -Dcrystalgui.builder.diagnose=true} — one line per drag and per commit. */
     private static final boolean DIAGNOSE = Boolean.getBoolean("crystalgui.builder.diagnose");
 
-    /** How close a pointer has to be to a handle, in viewport pixels. */
-    private static final float GRAB = 7f;
 
     /** The band outside a corner that rotates instead of scaling. */
     private static final float ROTATE_BAND = 18f;
@@ -76,11 +74,32 @@ public final class TransformBox extends UIElement {
      */
     private static final float HANDLE_SIZE = 6f;
 
+    /**
+     * How close a pointer has to be to a handle to scale by it — <b>the dot's own radius, not more.</b>
+     *
+     * <p>It was seven, which is a fourteen-pixel circle around a six-pixel dot, and the cost is not that
+     * scaling is easy to hit: it is that rotate cannot begin until the pointer is clear of it. Rotate has
+     * no mark of its own, so every pixel this claims is taken from the only affordance rotate has, and
+     * the band started a good ten pixels out from the corner instead of at the edge of the dot.</p>
+     *
+     * <p>Half the dot plus a pixel of tolerance, so the scale zone is what the eye sees plus a hair.</p>
+     */
+    private static final float GRAB = HANDLE_SIZE * 0.5f + 1f;
+
     /** Fully rounded, so the square is a circle at any size. @see #HANDLE_SIZE */
     private final CgUiRoundedRect dot = new CgUiRoundedRect()
             .setCornerRadius(HANDLE_SIZE * 0.5f, HANDLE_SIZE * 0.5f);
 
     private static final float PIVOT_SIZE = 9f;
+
+    /**
+     * How close a press has to be to the pivot, and it is NOT {@link #PIVOT_SIZE}.
+     *
+     * <p>That is the crosshair's whole span, so using it as a radius claimed a circle twice the width of
+     * the mark: the pivot cursor appeared over empty box and the crosshair could be grabbed from nowhere
+     * near it. Half the span is the mark's own reach.</p>
+     */
+    private static final float PIVOT_GRAB = PIVOT_SIZE * 0.5f;
 
     private final BuilderContext ctx;
 
@@ -306,7 +325,7 @@ public final class TransformBox extends UIElement {
     public Grip grip(float viewportX, float viewportY, boolean skewModifier) {
         if (!active) return Grip.NONE;
         Vector2f pivot = toViewport(gesture.originX(), gesture.originY());
-        if (pivot != null && pivot.distance(viewportX, viewportY) <= PIVOT_SIZE) {
+        if (pivot != null && pivot.distance(viewportX, viewportY) <= PIVOT_GRAB) {
             return new Grip(Kind.PIVOT, null);
         }
 
@@ -327,15 +346,18 @@ public final class TransformBox extends UIElement {
             if (skewModifier && !nearest.isCorner()) return new Grip(Kind.SKEW, nearest);
             return new Grip(Kind.SCALE, nearest);
         }
-        // OUTSIDE A CORNER ROTATES, which is the one grip with no handle drawn for it: the band is the
-        // affordance, as it is in every editor that has this box.
-        if (nearest.isCorner() && best <= GRAB + ROTATE_BAND) return new Grip(Kind.ROTATE, nearest);
-
         Vector2f local = toNodeSpace(viewportX, viewportY);
-        if (local != null && local.x >= 0f && local.y >= 0f
-                && local.x <= gesture.width() && local.y <= gesture.height()) {
-            return new Grip(Kind.MOVE, null);
+        boolean inside = local != null && local.x >= 0f && local.y >= 0f
+                && local.x <= gesture.width() && local.y <= gesture.height();
+
+        // OUTSIDE A CORNER ROTATES, and OUTSIDE is half the rule rather than a detail of it: the band is
+        // the only affordance rotate has, so it has to be somewhere a press means nothing else. Reaching
+        // inside the box, it stole the corner region from Move -- pressing near a corner to drag the
+        // element spun it instead.
+        if (!inside && nearest.isCorner() && best <= GRAB + ROTATE_BAND) {
+            return new Grip(Kind.ROTATE, nearest);
         }
+        if (inside) return new Grip(Kind.MOVE, null);
         return Grip.NONE;
     }
 

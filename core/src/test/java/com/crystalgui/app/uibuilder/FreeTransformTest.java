@@ -375,6 +375,40 @@ public class FreeTransformTest extends UiDocumentTestBase {
                         inside.box().x() + 2f, inside.box().y() + 2f));
     }
 
+    /**
+     * <b>What a press means where, which is the whole of what the cursor promises.</b>
+     *
+     * <p>Rotate has no handle drawn for it — the band outside a corner IS the affordance — so it has to
+     * live somewhere a press means nothing else. Reaching inside the box it took the corner region from
+     * Move, and pressing near a corner to drag the element spun it instead. The pivot had the mirror
+     * fault: its grab radius was the crosshair's whole span rather than half of it, so it claimed a
+     * circle twice the width of the mark and could be picked up from empty box.</p>
+     */
+    @Test
+    public void eachRegionMeansOneThing() {
+        enterFreeTransform();
+        document.update(W, H);
+        Vector2f corner = box().handleAt(Spot.BOTTOM_RIGHT);
+        Vector2f centre = box().toViewport(node.box().width() / 2f, node.box().height() / 2f);
+        assertNotNull(corner);
+        assertNotNull(centre);
+
+        assertEquals("on the handle itself", Kind.SCALE,
+                box().grip(corner.x, corner.y, false).kind());
+        assertEquals("just outside the corner", Kind.ROTATE,
+                box().grip(corner.x + 12f, corner.y + 12f, false).kind());
+        // THE BOUNDARY, which is the whole complaint: a grab radius wider than the dot does not make
+        // scaling easier to hit, it pushes rotate out of reach. Six pixels clear of a six-pixel dot has
+        // to be rotate already.
+        assertEquals("rotate has to begin at the edge of the dot, not well clear of it",
+                Kind.ROTATE, box().grip(corner.x + 4.5f, corner.y + 4.5f, false).kind());
+        assertEquals("a press well inside the box moves it, however near a corner it is",
+                Kind.MOVE, box().grip(corner.x - 14f, corner.y - 14f, false).kind());
+        assertEquals("the pivot's own mark", Kind.PIVOT, box().grip(centre.x, centre.y, false).kind());
+        assertEquals("well clear of the crosshair, so it is box and means Move",
+                Kind.MOVE, box().grip(centre.x + 8f, centre.y, false).kind());
+    }
+
     /** Leaving the tool keeps the work — Photoshop's rule, and the safe one. */
     @Test
     public void switchingToolsCommits() {
