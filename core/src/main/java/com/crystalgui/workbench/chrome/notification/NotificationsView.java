@@ -65,6 +65,20 @@ public class NotificationsView extends UIElement {
 
     /** The line naming who did it. @see Notification#withAttribution */
     public static final String ATTRIBUTION_CLASS = "__attribution__";
+
+    /** The drawn mark on that line -- a rounded box, not a character. */
+    public static final String ATTRIBUTION_DOT_CLASS = "__attribution-dot__";
+
+    /** The name itself, so the mark and the word can be sized apart. */
+    public static final String ATTRIBUTION_TEXT_CLASS = "__attribution-text__";
+
+    /**
+     * Carried by a card that ends in an action row rather than in text.
+     *
+     * <p>The space under a card is wanted below a LINE OF TEXT and not below a row of controls, which
+     * carries weight of its own -- and no selector can ask what a card ends with, so the card says.</p>
+     */
+    public static final String HAS_ACTIONS_CLASS = "__has-actions__";
     public static final String ACTION_CLASS = "__action__";
     /** A quieter action, and the "Don't show again" link. @see com.crystalgui.core.notify.Notification */
     public static final String ACTION_SECONDARY_CLASS = "__action-secondary__";

@@ -80,8 +80,9 @@ public class ChangeNoticeTest {
     /** Who is a line of its own, and nothing outside the workspace can be given a name. */
     @Test
     public void whoIsItsOwnLine() {
-        assertEquals("· alice", ChangeNotice.attribution("alice"));
-        assertEquals("· on disk", ChangeNotice.attribution(""));
-        assertEquals("· on disk", ChangeNotice.attribution(null));
+        // The name only -- the mark beside it is drawn, so it cannot go missing with the font.
+        assertEquals("alice", ChangeNotice.attribution("alice"));
+        assertEquals("on disk", ChangeNotice.attribution(""));
+        assertEquals("on disk", ChangeNotice.attribution(null));
     }
 }

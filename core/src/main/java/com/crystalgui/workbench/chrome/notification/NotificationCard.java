@@ -77,6 +77,29 @@ class NotificationCard extends UIElement {
         head.addClass(NotificationsView.ENTRY_HEAD_CLASS);
         head.append(icon);
         head.append(message);
+        // BESIDE THE TIMESTAMP, because it is the same kind of thing: both say something ABOUT the event
+        // rather than what it was, and both are read at a glance or not at all. On its own line under the
+        // detail it read as a third statement of equal weight, which gave "on disk" more say than the
+        // change it describes.
+        if (!notification.getAttribution().isEmpty()) {
+            UIElement attribution = new UIElement();
+            attribution.addClass(NotificationsView.ATTRIBUTION_CLASS);
+            attribution.setHitTest(false);
+
+            // A DRAWN MARK. It was a middle dot inside the string, which put it at the mercy of the font
+            // -- a missing glyph draws a blank advance rather than failing -- and left it unsizeable,
+            // since a character takes its line's font size or nothing.
+            UIElement mark = new UIElement();
+            mark.addClass(NotificationsView.ATTRIBUTION_DOT_CLASS);
+            mark.setHitTest(false);
+            attribution.append(mark);
+
+            UIText who = new UIText(notification.getAttribution());
+            who.addClass(NotificationsView.ATTRIBUTION_TEXT_CLASS);
+            who.setHitTest(false);
+            attribution.append(who);
+            head.append(attribution);
+        }
         head.append(time);
         append(head);
         this.head = head;
@@ -93,16 +116,10 @@ class NotificationCard extends UIElement {
             append(detail);
         }
 
-        if (!notification.getAttribution().isEmpty()) {
-            UIText attribution = new UIText(notification.getAttribution());
-            attribution.addClass(NotificationsView.ATTRIBUTION_CLASS);
-            attribution.setHitTest(false);
-            append(attribution);
-        }
-
         boolean silenceable = notification.getNeverShowAgainId() != null;
         if (!notification.actions().isEmpty() || !notification.secondaryActions().isEmpty()
                 || silenceable) {
+            addClass(NotificationsView.HAS_ACTIONS_CLASS);
             UIElement actions = new UIElement();
             actions.addClass(NotificationsView.ACTIONS_CLASS);
             for (Notification.Action action : notification.actions()) {
