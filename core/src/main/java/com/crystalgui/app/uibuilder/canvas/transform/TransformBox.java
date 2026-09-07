@@ -8,6 +8,10 @@ import org.joml.Vector3f;
 
 import com.google.gson.JsonElement;
 
+import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgraphics.platform.input.CgCursor;
+import com.crystalgraphics.platform.input.CgModifiers;
+
 import com.crystalgui.app.uibuilder.canvas.BuilderContext;
 import com.crystalgui.app.uibuilder.canvas.CanvasRects;
 import com.crystalgui.app.uibuilder.canvas.ResizeHandles.Spot;
@@ -119,6 +123,13 @@ public final class TransformBox extends UIElement {
     @Nullable
     private Matrix4f pressOuter;
 
+    /** Where the pointer was last seen, so the cursor can be re-decided without it moving. */
+    private float hoverX = Float.NaN;
+
+    private float hoverY;
+
+    private boolean dragging;
+
     public TransformBox(BuilderContext ctx, UiBuilderDocument document) {
         super(NAME);
         this.ctx = ctx;
@@ -130,6 +141,87 @@ public final class TransformBox extends UIElement {
         StyleGroup.defaultPipeline(getStyle().getLayoutGroup(),
                 l -> l.positionType(TaffyPosition.ABSOLUTE).left(0f).top(0f)
                         .widthPercent(100f).heightPercent(100f));
+    }
+
+    /**
+     * Re-decides the cursor every frame while the box is up.
+     *
+     * <p>Not on pointer movement alone: <b>Ctrl turns a scale handle into a skew handle</b>, and a
+     * modifier arriving while the hand is still is exactly when nothing moves. Pressing Ctrl over an edge
+     * left the resize cursor showing until the pointer was nudged, which is the one moment the cursor is
+     * meant to be answering a question.</p>
+     *
+     * <p>Owned by this node, so it stops when the node leaves the tree.</p>
+     */
+    @Override
+    protected void connected() {
+        super.connected();
+        document().animation().afterLayout(this, delta -> {
+            refreshCursor();
+            // TRUE KEEPS IT RUNNING. The hook lives as long as the node, which is the whole life of the
+            // canvas -- the box being down is a state it reads, not a reason to unregister.
+            return true;
+        });
+    }
+
+    /** Notes where the pointer is; the cursor itself is decided per frame. @see #connected */
+    public void hoverAt(float viewportX, float viewportY) {
+        hoverX = viewportX;
+        hoverY = viewportY;
+    }
+
+    /** Whether a gesture is in progress, in which case the cursor is the one that was pressed. */
+    public void setDragging(boolean dragging) {
+        this.dragging = dragging;
+    }
+
+    private void refreshCursor() {
+        if (!active || dragging || Float.isNaN(hoverX)) return;
+        ctx.cursors().set(cursorFor(grip(hoverX, hoverY, CgModifiers.hasCtrl(modifiersNow()))));
+    }
+
+    private static int modifiersNow() {
+        var input = CgPlatform.input();
+        return input == null ? 0 : input.getCurrentModifiers();
+    }
+
+    /**
+     * What the pointer says a press would do here.
+     *
+     * <p>Lives beside {@link #grip} rather than in the tool: the two answer the same question, and a
+     * grip whose cursor is decided somewhere else is a grip that can advertise the wrong gesture.</p>
+     */
+    @Nullable
+    public static CgCursor cursorFor(Grip grip) {
+        Spot spot = grip.spot();
+        switch (grip.kind()) {
+            case ROTATE:
+                // THE BEND THAT HUGS THIS CORNER. One shape for all four would curl away from three of
+                // them, and a rotate cursor pointing at nothing is worse than none: it is the only thing
+                // telling you the band is there at all.
+                if (spot == null) return CgCursor.ROTATE_NE;
+                if (spot.yDirection() < 0) {
+                    return spot.xDirection() > 0 ? CgCursor.ROTATE_NE : CgCursor.ROTATE_NW;
+                }
+                return spot.xDirection() > 0 ? CgCursor.ROTATE_SE : CgCursor.ROTATE_SW;
+            case SKEW:
+                return CgCursor.SKEW;
+            case PIVOT:
+                return CgCursor.PIVOT;
+            case MOVE:
+                return CgCursor.MOVE;
+            case SCALE:
+                if (spot == null) return null;
+                // The corner's own diagonal, as a resize handle would say. Not rotated with the gesture:
+                // a cursor has four diagonals to offer and a box has any angle, so following it would
+                // snap between two shapes partway through a rotation and say nothing useful.
+                if (spot.xDirection() == 0) return CgCursor.NS_RESIZE;
+                if (spot.yDirection() == 0) return CgCursor.EW_RESIZE;
+                return spot.xDirection() == spot.yDirection()
+                        ? CgCursor.NWSE_RESIZE : CgCursor.NESW_RESIZE;
+            default:
+                return null;
+        }
     }
 
     /** The numbers, for the options bar and for a test. */
@@ -217,7 +309,13 @@ public final class TransformBox extends UIElement {
         active = false;
         target = null;
         before = null;
+        // AND THE GESTURE FLAGS. A drag left armed outlives the box otherwise -- the next Ctrl+T opens
+        // onto a box that believes it is mid-drag, which silently disables the per-frame cursor for the
+        // rest of the session.
+        dragging = false;
+        hoverX = Float.NaN;
         gesture.release();
+        pressOuter = null;
         setDisplayed(false);
     }
 
@@ -399,8 +497,14 @@ public final class TransformBox extends UIElement {
                 if (delta != null) gesture.rotateBy(delta, aspect);
             }
             case SKEW -> {
-                Vector2f delta = toNodeDelta(dx, dy);
-                if (delta != null) gesture.skewBy(delta.x, delta.y);
+                // THROUGH THE ROTATION, unlike a move: a move writes the outermost op, so a screen delta
+                // is already in its terms, while a lean runs along the box's own axes.
+                Matrix4f frame = frame();
+                if (frame != null) {
+                    Vector2f delta = CanvasRects.toLocalDelta(
+                            frame.mul(gesture.rotationMatrix()), dx, dy);
+                    gesture.skewBy(delta.x, delta.y, aboutPivot);
+                }
             }
             case MOVE -> {
                 Vector2f delta = toNodeDelta(dx, dy);

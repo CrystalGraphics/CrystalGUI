@@ -5,6 +5,7 @@ import org.joml.Vector2f;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.platform.input.CgCursor;
+import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
@@ -14,6 +15,7 @@ import com.crystalgui.app.uibuilder.canvas.TreeSelectTool;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformGesture.Grip;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformGesture.Kind;
 import com.crystalgui.widget.surface.SurfaceContext;
+import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.surface.mode.Tool;
 
 /**
@@ -47,12 +49,6 @@ public final class FreeTransformTool implements Tool {
     private final SurfaceContext ctx;
 
     private final TransformBox box;
-
-    private boolean dragging;
-
-    private float pressX;
-
-    private float pressY;
 
     /**
      * Whether the transform box is the current tool on this surface.
@@ -97,6 +93,15 @@ public final class FreeTransformTool implements Tool {
         ctx.cursors().clear();
     }
 
+    /**
+     * Begins a gesture, through {@code Drag} rather than by tracking the release itself.
+     *
+     * <p><b>Pointer capture is the point.</b> {@code SurfaceMode} only delivers a release while the
+     * pointer is inside the surface, so a drag finished off the canvas never reported up: the gesture
+     * stayed armed with the button long since released, kept transforming on every move, and — because
+     * the cursor is not re-decided mid-drag — took every other cursor down with it until the tool was
+     * left. Capture ends the drag wherever it ends.</p>
+     */
     @Override
     public boolean pointerDown(float rawX, float rawY, int button, int modifiers) {
         if (button != CgMouseCodes.LEFT_BUTTON) return true;
@@ -104,67 +109,55 @@ public final class FreeTransformTool implements Tool {
         Grip grip = box.grip(at.x, at.y, CgModifiers.hasCtrl(modifiers));
         if (grip.is(Kind.NONE)) return true;
         box.press(grip);
-        dragging = true;
-        pressX = at.x;
-        pressY = at.y;
+        box.setDragging(true);
+
+        final float fromX = at.x;
+        final float fromY = at.y;
+        Drag.start(box, rawX, rawY, new Drag.Listener() {
+            @Override
+            public void onDragUpdate(float mx, float my, float sx, float sy, float dx, float dy) {
+                // The deltas arrive in the SOURCE element's space, and the source is the overlay the box
+                // measures everything else in -- so they need no conversion.
+                int live = modifiersNow();
+                box.dragTo(fromX + dx, fromY + dy, dx, dy,
+                        CgModifiers.hasShift(live), CgModifiers.hasAlt(live));
+            }
+
+            @Override
+            public void onDragEnd(float mx, float my) {
+                finish();
+            }
+
+            @Override
+            public void onDragCancel() {
+                finish();
+            }
+
+            private void finish() {
+                box.setDragging(false);
+                box.release();
+            }
+        });
         return true;
+    }
+
+    /**
+     * A drag callback carries no modifiers of its own, so Shift and Alt are asked for live.
+     *
+     * <p>The engine's own Select tool and the out-of-flow move both ask the same way.</p>
+     */
+    private static int modifiersNow() {
+        var input = CgPlatform.input();
+        return input == null ? 0 : input.getCurrentModifiers();
     }
 
     @Override
     public boolean pointerMoved(float rawX, float rawY, int modifiers) {
         Vector2f at = ctx.surface().toViewportPoint(rawX, rawY);
-        if (!dragging) {
-            // THE CURSOR IS THE AFFORDANCE for two of these. Rotate lives in the band just outside a
-            // corner and skew is a modifier on a handle that otherwise scales: neither draws anything of
-            // its own, so a pointer that did not change shape would leave both undiscoverable.
-            ctx.cursors().set(cursorFor(box.grip(at.x, at.y, CgModifiers.hasCtrl(modifiers))));
-            return box.isActive();
-        }
-        box.dragTo(at.x, at.y, at.x - pressX, at.y - pressY,
-                CgModifiers.hasShift(modifiers), CgModifiers.hasAlt(modifiers));
-        return true;
-    }
-
-    /** What the pointer says a press would do here. */
-    @Nullable
-    private static CgCursor cursorFor(Grip grip) {
-        Spot spot = grip.spot();
-        switch (grip.kind()) {
-            case ROTATE:
-                // THE BEND THAT HUGS THIS CORNER. One shape for all four would curl away from three of
-                // them, and a rotate cursor pointing at nothing is worse than none: it is the only thing
-                // telling you the band is there at all.
-                if (spot == null) return CgCursor.ROTATE_NE;
-                if (spot.yDirection() < 0) {
-                    return spot.xDirection() > 0 ? CgCursor.ROTATE_NE : CgCursor.ROTATE_NW;
-                }
-                return spot.xDirection() > 0 ? CgCursor.ROTATE_SE : CgCursor.ROTATE_SW;
-            case SKEW:
-                return CgCursor.SKEW;
-            case PIVOT:
-                return CgCursor.PIVOT;
-            case MOVE:
-                return CgCursor.MOVE;
-            case SCALE:
-                if (spot == null) return null;
-                // The corner's own diagonal, as a resize handle would say. Not rotated with the gesture:
-                // a cursor has four diagonals to offer and a box has any angle, so following it would
-                // snap between two shapes partway through a rotation and say nothing useful.
-                if (spot.xDirection() == 0) return CgCursor.NS_RESIZE;
-                if (spot.yDirection() == 0) return CgCursor.EW_RESIZE;
-                return spot.xDirection() == spot.yDirection()
-                        ? CgCursor.NWSE_RESIZE : CgCursor.NESW_RESIZE;
-            default:
-                return null;
-        }
-    }
-
-    @Override
-    public boolean pointerUp(float rawX, float rawY, int button, int modifiers) {
-        if (!dragging) return box.isActive();
-        dragging = false;
-        box.release();
-        return true;
+        box.hoverAt(at.x, at.y);
+        // THE CURSOR IS DECIDED PER FRAME, not here: Ctrl turns a scale handle into a skew handle, and a
+        // modifier arriving while the hand is still would otherwise show the wrong shape until nudged.
+        return box.isActive();
     }
 
     @Override
