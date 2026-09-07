@@ -223,14 +223,9 @@ public final class ResizeHandles extends UIElement {
                 float height = startHeight + spot.yDirection() * dy / zoom * scale;
 
                 if (CgModifiers.hasShift(modifiers) && spot.isCorner()) {
-                    // FROM THE DOMINANT AXIS, so the box follows the direction the hand actually moved
-                    // rather than jumping when the smaller delta wins.
-                    float ratio = startHeight / Math.max(0.0001f, startWidth);
-                    if (Math.abs(width - startWidth) >= Math.abs(height - startHeight)) {
-                        height = width * ratio;
-                    } else {
-                        width = height / Math.max(0.0001f, ratio);
-                    }
+                    float[] locked = lockAspect(startWidth, startHeight, width, height);
+                    width = locked[0];
+                    height = locked[1];
                 }
                 // A BOX HAS NO NEGATIVE SIZE, and clamping only inside `write` was not enough: the badge
                 // read the unclamped number and reported "-64 x -62" while the box sat at zero, so the
@@ -261,6 +256,33 @@ public final class ResizeHandles extends UIElement {
                 InlineStyleCodec.decodeInto(JsonOps.INSTANCE, before, node);
             }
         });
+    }
+
+    /**
+     * The size a corner drag takes with the aspect ratio held, as {@code {width, height}}.
+     *
+     * <p><b>A projection, with no branch in it.</b> A corner under an aspect lock can only travel along
+     * the box's own diagonal, so the answer is the point on that line nearest the one the hand asked for
+     * — a least-squares projection, continuous everywhere by construction.</p>
+     *
+     * <p>Two branching versions came before it and both burst. The first compared raw pixel deltas and
+     * applied the aspect RATIO to the winner: different units, so the arms disagreed exactly where they
+     * swapped. The second compared the proposed SCALES, which is continuous only while both sit on the
+     * same side of 1 — on a corner drag where one axis grows as the other shrinks they straddle it, and
+     * the swap jumped from x1.05 to x0.95.</p>
+     *
+     * <p>A purely horizontal drag therefore moves the corner LESS than the pointer, which is correct
+     * rather than sluggish: the corner is constrained to the diagonal, so only the component along it
+     * counts.</p>
+     */
+    static float[] lockAspect(float startWidth, float startHeight, float width, float height) {
+        float w = Math.max(MIN_SIZE, startWidth);
+        float h = Math.max(MIN_SIZE, startHeight);
+        float scale = 1f + (w * (width - startWidth) + h * (height - startHeight)) / (w * w + h * h);
+        // Both sides stay whole: clamping each axis afterwards would hold the size and lose the shape,
+        // which is the one thing this method exists to keep.
+        scale = Math.max(scale, MIN_SIZE / Math.min(w, h));
+        return new float[]{w * scale, h * scale};
     }
 
     /** One pixel, not zero: a box with no extent cannot be grabbed again to undo the drag. */
