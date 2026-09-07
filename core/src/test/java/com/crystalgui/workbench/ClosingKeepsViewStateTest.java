@@ -2,6 +2,7 @@ package com.crystalgui.workbench;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 import java.nio.file.Paths;
 import java.util.List;
@@ -180,5 +181,47 @@ public class ClosingKeepsViewStateTest extends UiDocumentTestBase {
         assertEquals("writes=" + ProbeEditor.writes + " reads=" + ProbeEditor.reads
                         + " -- a reopen replays what the close captured",
                 "where I left it", reopened.value);
+    }
+
+    /**
+     * <b>And a relaunch does too — a session record puts the editor back.</b>
+     *
+     * <p>This is the half that was dead. {@code WorkbenchSession} parks each file's view state and
+     * applies it on {@code Workbench.onDidOpenDocument} — and <b>nothing emitted that signal</b>. Five
+     * consumers, no emitter: quitting and relaunching lost every camera and caret while closing a tab
+     * and reopening it kept them, which is exactly backwards from the note above.</p>
+     *
+     * <p>The record is a real one, taken from the live workbench and then edited to say something the
+     * in-session cache does not. Both paths end at {@code readViewState}, so a record that merely agreed
+     * with the cache would pass whether or not the session half ran at all.</p>
+     */
+    @Test
+    public void aRestoredSessionPutsTheEditorBack() {
+        workbench.openFile(FILE);
+        pump();
+        ProbeEditor first = editor();
+        assertNotNull("the probe editor opened", first);
+        first.value = "in session";
+
+        WorkbenchSession session = new WorkbenchSession(workbench);
+        String record = session.toJson(1200, 800).replace("in session", "from the last run");
+        assertTrue("the record does not carry the probe's state at all: " + record,
+                record.contains("from the last run"));
+
+        DockPanelRef panel = openPanel();
+        assertNotNull("the tab is on screen", panel);
+        workbench.dock().closePanel(panel);
+        pump();
+
+        assertTrue("the record was refused", session.fromJson(record));
+        workbench.openFile(FILE);
+        pump();
+
+        ProbeEditor restored = editor();
+        assertNotNull("it opened again", restored);
+        // "in session" is what the close cached, and is what this answered while the signal had no
+        // emitter -- the record was read, parked, and never applied to anything.
+        assertEquals("the session record was parked and never applied",
+                "from the last run", restored.value);
     }
 }

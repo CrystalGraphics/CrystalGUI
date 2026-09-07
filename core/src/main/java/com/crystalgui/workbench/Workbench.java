@@ -929,6 +929,20 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
          * only when what is ON SCREEN is not the view the tab now has.
          */
         lifetime.add(editors.onDidChangeState.connect(documentTabs::refreshPanelForTab));
+        // AND THE ANNOUNCEMENT NOTHING WAS MAKING. `onDidOpenDocument` had five subscribers and no
+        // emitter at all: a restored camera or caret, the Inspector re-seeding, Problems following the
+        // front tab, presence, and the project tree revealing the active file were all connected to a
+        // signal that never fired. Every one of them failed the same silent way -- the feature simply
+        // did nothing, with no error anywhere -- which is why it survived five consumers.
+        //
+        // Here rather than inside EditorService, which does not name a workbench, and off `onDidLoad`
+        // rather than `onDidOpen` because the javadoc's contract is the CONTENT arriving: at tab
+        // creation the read is still in flight and `editor()` answers null, so every listener would run
+        // against a tab with nothing in it.
+        lifetime.add(editors.onDidLoad.connect(tab -> {
+            CgPath path = tab.resource().asPath();
+            if (path != null) onDidOpenDocument.emit(path);
+        }));
         // PRESENCE MOVES WITHOUT THE TAB MOVING. It was refreshed on a tab change alone, which was
         // enough while nothing ever pushed one -- somebody else opening the file you are looking at
         // changes the answer and changes nothing about which tab is in front.
