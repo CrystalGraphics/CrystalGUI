@@ -40,6 +40,19 @@ public interface Tool {
     default void deactivated() {
     }
 
+    /**
+     * Whether every press on the surface is this tool's, wherever it lands.
+     *
+     * <p>Ordinarily a press is offered only where the consumer's policy says the SURFACE owns it — a
+     * marquee belongs to the page, not to the empty plane around it. A modal tool is the exception, and
+     * the exception is the whole of what modal means: a Free Transform box whose handles have been
+     * rotated off the edge of the page still has to take a press on them, and the press cannot be
+     * arbitrated by what happens to be underneath because the answer is "nothing".</p>
+     */
+    default boolean claimsEveryPress() {
+        return false;
+    }
+
     /** @return whether this tool consumed the press. */
     default boolean pointerDown(float rawX, float rawY, int button, int modifiers) {
         return false;
