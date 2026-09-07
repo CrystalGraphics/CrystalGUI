@@ -75,26 +75,48 @@ public class BuilderNavigationTest extends UiDocumentTestBase {
     }
 
     /**
-     * <b>Escape steps out, and deselects once there is nowhere left to step.</b>
+     * <b>Up and Down walk the other two directions, and stop at the ends.</b>
      *
-     * <p>It used to only ever deselect: the surface binds Escape to Deselect and a scoped keymap is
-     * consulted before a command's own binding, so Select Parent never ran. Rebinding it needs the step
-     * to still clear at the root, or one key would do less than it did before.</p>
+     * <p>They were on Escape and Enter, which cost Escape its only job and took Enter from every text
+     * field — a bare key declared on a command is application-wide. A tree has four directions and the
+     * arrows have four keys.</p>
      */
     @Test
-    public void escapeStepsOutThenClears() {
+    public void theArrowsWalkUpAndDown() {
         open();
         editor.selection().selectOnly(first);
 
         run(BuilderCommands.SELECT_PARENT);
         assertSame(parent, editor.selection().node());
 
+        run(BuilderCommands.SELECT_CHILD);
+        assertSame("down goes to the first child", first, editor.selection().node());
+
+        run(BuilderCommands.SELECT_PARENT);
         run(BuilderCommands.SELECT_PARENT);
         assertSame("the root is still part of the document", model.root(), editor.selection().node());
 
+        // CLAMPED, like the siblings. Escape is the key that clears; an arrow that empties the selection
+        // when it runs out of tree is a different verb wearing a navigation key.
         run(BuilderCommands.SELECT_PARENT);
-        assertNull("past the root there is nothing to select, so it clears",
-                editor.selection().node());
+        assertSame("up past the root should stop, not deselect",
+                model.root(), editor.selection().node());
+    }
+
+    /**
+     * <b>Escape clears a selection, including one of several.</b>
+     *
+     * <p>It was rebound to Select Parent, which asks for THE selected node — a set has none — so Escape
+     * did nothing at all on a multi-selection, and nothing but step on a single one.</p>
+     */
+    @Test
+    public void escapeDeselects() {
+        open();
+        editor.selection().replaceWith(java.util.List.of(first, second));
+        assertEquals(2, editor.selection().nodes().size());
+
+        run(com.crystalgui.widget.surface.SurfaceCommands.DESELECT);
+        assertTrue("Escape left the set selected", editor.selection().nodes().isEmpty());
     }
 
     /** <b>The page is not a thing you can select.</b> Ctrl+A used to hand back the artboard. */
@@ -125,8 +147,10 @@ public class BuilderNavigationTest extends UiDocumentTestBase {
     public void theBuilderKeysResolveToTheBuilderCommands() {
         open();
         var keymap = editor.surface().keymapOrNull();
-        assertEquals("Escape still deselects instead of stepping out",
-                BuilderCommands.SELECT_PARENT, commandFor(keymap, "Escape"));
+        assertEquals("Escape must keep its own job: clearing the selection",
+                com.crystalgui.widget.surface.SurfaceCommands.DESELECT, commandFor(keymap, "Escape"));
+        assertEquals(BuilderCommands.SELECT_PARENT, commandFor(keymap, "Up"));
+        assertEquals(BuilderCommands.SELECT_CHILD, commandFor(keymap, "Down"));
         assertEquals("Mod+A still runs the engine's Select All, which takes nothing here",
                 BuilderCommands.SELECT_ALL, commandFor(keymap, "Mod+A"));
         assertEquals(BuilderCommands.SELECT_NEXT_SIBLING, commandFor(keymap, "Right"));
@@ -139,6 +163,58 @@ public class BuilderNavigationTest extends UiDocumentTestBase {
             if (binding.getChord().equals(parsed)) return binding.getCommandId();
         }
         return null;
+    }
+
+    /**
+     * <b>A plain click on one of several selected collapses to it.</b>
+     *
+     * <p>The press cannot decide: collapsing there would make dragging a set impossible, since the press
+     * that starts the drag would first throw the set away. So it defers — and nothing was settling it, so
+     * shift-clicking three and then clicking one left all three picked with no way back to one.</p>
+     *
+     * <p>Release settles it, unless a real drag ran. {@code isActivated}, not {@code isDragging}: a drag
+     * is armed on mouse-down, so testing the latter would suppress the collapse always.</p>
+     */
+    @Test
+    public void aPlainClickCollapsesAMultiSelection() {
+        open();
+        var tool = editor.surface().modes().current();
+
+        clickOn(tool, first, false);
+        assertEquals(1, editor.selection().nodes().size());
+
+        clickOn(tool, second, true);
+        assertEquals("shift did not add to the selection", 2, editor.selection().nodes().size());
+
+        // THE PRESS KEEPS THE SET, so a drag from here would move both.
+        press(tool, first, false);
+        assertEquals("the press collapsed the set, so a set could never be dragged",
+                2, editor.selection().nodes().size());
+
+        // AND THE RELEASE COLLAPSES IT.
+        release(tool, first);
+        assertEquals("a plain click left the whole set selected", 1, editor.selection().nodes().size());
+        assertSame(first, editor.selection().node());
+    }
+
+    private void clickOn(com.crystalgui.widget.surface.mode.Tool tool, UIElement node, boolean shift) {
+        press(tool, node, shift);
+        release(tool, node);
+    }
+
+    private void press(com.crystalgui.widget.surface.mode.Tool tool, UIElement node, boolean shift) {
+        org.joml.Vector2f at = com.crystalgui.core.data.Transform2D.apply(
+                node.box().localToWorld(), node.box().width() * 0.5f, node.box().height() * 0.5f);
+        tool.pointerDown(at.x(), at.y(), com.crystalgraphics.platform.input.CgMouseCodes.LEFT_BUTTON,
+                shift ? com.crystalgraphics.platform.input.CgModifiers.SHIFT : 0);
+        document.update(W, H);
+    }
+
+    private void release(com.crystalgui.widget.surface.mode.Tool tool, UIElement node) {
+        org.joml.Vector2f at = com.crystalgui.core.data.Transform2D.apply(
+                node.box().localToWorld(), node.box().width() * 0.5f, node.box().height() * 0.5f);
+        tool.pointerUp(at.x(), at.y(), com.crystalgraphics.platform.input.CgMouseCodes.LEFT_BUTTON, 0);
+        document.update(W, H);
     }
 
     private void run(String commandId) {

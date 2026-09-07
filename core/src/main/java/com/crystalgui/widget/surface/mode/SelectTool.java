@@ -6,6 +6,9 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 
+import javax.annotation.Nullable;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.service.Drag;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.surface.SurfaceContext;
 import com.crystalgui.widget.surface.SurfacePolicy;
@@ -61,8 +64,50 @@ public final class SelectTool implements Tool {
      * @see SelectTool the class note on why the second half matters
      */
     private void press(UIElement item, boolean additive) {
-        if (additive) ctx.selection().toggle(item);
-        else if (!ctx.selection().contains(item)) ctx.selection().selectOnly(item);
+        pendingSelectOnRelease = null;
+        if (additive) {
+            ctx.selection().toggle(item);
+        } else if (!ctx.selection().contains(item)) {
+            ctx.selection().selectOnly(item);
+        } else {
+            // ALREADY SELECTED, SO THE PRESS DECIDES NOTHING YET. Collapsing here would make it
+            // impossible to drag a set: the press that starts the drag would first throw the set away.
+            // Collapsing NEVER leaves the selection stuck instead -- shift-click three, click one, and
+            // all three stay picked with no way back to one. The release settles it. @see #pointerUp
+            pendingSelectOnRelease = item;
+        }
+    }
+
+    /** @see #pointerUp */
+    @Nullable
+    private UIElement pendingSelectOnRelease;
+
+    /**
+     * <b>A click that turned out not to be a drag collapses the selection to what it hit.</b>
+     *
+     * <p>{@code isActivated}, not {@code isDragging}. A drag is ARMED on mouse-down, so {@code isDragging}
+     * is true for every ordinary click and testing it would suppress the collapse always — which is the
+     * bug this fixes, from the other end. {@code isActivated} only becomes true once the pointer has
+     * passed the threshold, which is exactly "this turned out to be a drag". {@code ListView} carries the
+     * same note, having had the same defect.</p>
+     */
+    @Override
+    public boolean pointerUp(float rawX, float rawY, int button, int modifiers) {
+        UIElement pending = pendingSelectOnRelease;
+        pendingSelectOnRelease = null;
+        if (button != CgMouseCodes.LEFT_BUTTON || pending == null) return false;
+        if (ctx.picking().itemAt(rawX, rawY) != pending) return false;
+        if (dragActivated()) return false;
+        ctx.selection().selectOnly(pending);
+        return true;
+    }
+
+    /** Whether a real drag ran — a live one is an InputMode on this engine, not a controller to ask. */
+    private boolean dragActivated() {
+        UIElement element = ctx.surface().element();
+        UIDocument window = element == null ? null : element.document();
+        Drag drag = window == null ? null : window.input().mode(Drag.class);
+        return drag != null && drag.isActivated();
     }
 
     @Override
