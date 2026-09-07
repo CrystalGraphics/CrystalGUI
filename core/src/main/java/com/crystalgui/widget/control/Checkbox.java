@@ -128,6 +128,7 @@ public class Checkbox extends UIElement {
         this.label.set(Attribute.PART, LABEL_PART);
         this.label.setHitTest(false);
         shadow.append(this.label);
+        showLabel();
 
         attachDefaultListener(onMouseUp, (node, event) -> {
             // The LEFT button only -- see Button, where a right-click activating the control was a
@@ -164,7 +165,23 @@ public class Checkbox extends UIElement {
         // shadow tree onto this Checkbox -- whose contract carries the label. Doing both would be
         // harmless (the dirty set dedups) and would imply the wiring is per-widget when it is not.
         label.setText(value);
+        showLabel();
         return this;
+    }
+
+    /**
+     * Takes an empty label OUT of the layout rather than laying out a zero-wide one.
+     *
+     * <p>A zero-wide box is still a box: the row's {@code gap} is still opened before it and the root's
+     * trailing padding is still spent after it, so an unlabelled checkbox measured 16x12 for a 12px mark
+     * — three dead pixels to the right of the only thing it draws. Harmless at a control's own size and
+     * very visible on a canvas that draws a selection box around it, which is where it was reported.</p>
+     *
+     * <p>{@code display: none} rather than a zero width, for the reason {@code tabview .__strip__} gives
+     * about its own empty state: a sized-away box still sits in the line and still spends the gap.</p>
+     */
+    private void showLabel() {
+        label.setDisplayed(!label.text().isEmpty());
     }
 
     /** The mark node, for a subclass that needs to style or measure it. */
