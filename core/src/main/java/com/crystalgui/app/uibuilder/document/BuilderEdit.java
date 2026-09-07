@@ -219,8 +219,15 @@ public sealed interface BuilderEdit extends Edit {
             write(from);
         }
 
+        /**
+         * REPLACE, never merge.
+         *
+         * <p>Both directions of this edit are "the inline style was exactly this", so a merge leaves
+         * behind whatever the other direction added — which is undo appearing to do nothing whenever the
+         * edit's visible half was a property the node did not have before.</p>
+         */
         private void write(@Nullable JsonElement value) {
-            InlineStyleCodec.decodeInto(JsonOps.INSTANCE,
+            InlineStyleCodec.replaceInto(JsonOps.INSTANCE,
                     value == null ? new JsonObject() : value, node);
         }
 
