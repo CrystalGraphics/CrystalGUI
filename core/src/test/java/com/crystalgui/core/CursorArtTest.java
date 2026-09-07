@@ -53,12 +53,16 @@ public class CursorArtTest {
     }
 
     /**
-     * Every cursor here is <b>1-bit</b>: fully opaque or fully gone, no partial coverage.
+     * Every <b>straight-edged</b> cursor is 1-bit: fully opaque or fully gone, no partial coverage.
      *
-     * <p>Not a limitation to work around — it is what the artwork is drawn for. A 32&times;32 cursor is
+     * <p>Not a limitation to work around — it is what that artwork is drawn for. A 32&times;32 cursor is
      * about twenty pixels of shape, and at that size a crisp one-pixel outline beats a soft one; the
      * anti-aliased attempt rasterised two pixels thick on diagonals and read as ragged. It also means the
      * art needs no 8-bit-alpha capability from the driver, which is one fewer thing to degrade.</p>
+     *
+     * <p><b>The curved three are excluded, and the list here is the statement of that.</b> An arc has no
+     * orientation that aliases cleanly, so a mask draws it as a chain of blocks — the rule is about the
+     * kind of edge, not a blanket ban, and {@link #theCurvedCursorsAreSmooth} asserts the other half.</p>
      */
     @Test
     public void allArtworkIsOneBit() {
@@ -67,6 +71,58 @@ public class CursorArtTest {
             for (int px : art) {
                 int a = alpha(px);
                 assertTrue("must be fully on or fully off, was " + a, a == 0 || a == 255);
+            }
+        }
+    }
+
+    /**
+     * <b>The curved three carry partial coverage, which is the whole reason they are drawn differently.</b>
+     *
+     * <p>The counterpart to {@link #allArtworkIsOneBit}: an arc rasterised as a mask reads as a staircase,
+     * so the curves are built from signed distance fields instead. Asserted as "there are grey pixels"
+     * because that is exactly what a well-meaning simplification back to a boolean body would remove, and
+     * the result would still be a recognisable cursor — just a dated-looking one.</p>
+     *
+     * <p><b>Rotate is a hybrid and carries far fewer</b>: its arc is a field, but its two arrowheads are
+     * the resize arrows' own mask, because a quarter turn ends on the axes and an axis-aligned head has
+     * nothing but orientations that alias cleanly. So the bound is low enough to admit a short curve and
+     * still fail a shape with no curve left in it at all.</p>
+     */
+    @Test
+    public void theCurvedCursorsAreSmooth() {
+        assertSmooth("rotate", CgCursorBitmaps.rotate());
+        assertSmooth("skew", CgCursorBitmaps.skew());
+        assertSmooth("pivot", CgCursorBitmaps.pivot());
+    }
+
+    /** @see #theCurvedCursorsAreSmooth */
+    private static void assertSmooth(String name, int[] art) {
+        assertEquals(CgCursorBitmaps.SIZE * CgCursorBitmaps.SIZE, art.length);
+        int opaque = 0;
+        int partial = 0;
+        for (int px : art) {
+            int a = alpha(px);
+            if (a == 255) opaque++;
+            else if (a > 0) partial++;
+        }
+        assertTrue(name + ": nothing was drawn at all", opaque > 60);
+        assertTrue(name + ": covers far too much of the canvas to be a cursor, was " + opaque,
+                opaque < 700);
+        assertTrue(name + ": no partial coverage — the curve has been flattened back to a mask, was "
+                + partial, partial > 12);
+    }
+
+    /** Nothing may touch the border: a cursor clipped by its own canvas looks broken at the screen edge. */
+    @Test
+    public void theCurvedCursorsStayOnTheCanvas() {
+        int n = CgCursorBitmaps.SIZE;
+        for (int[] art : new int[][] {
+                CgCursorBitmaps.rotate(), CgCursorBitmaps.skew(), CgCursorBitmaps.pivot() }) {
+            for (int i = 0; i < n; i++) {
+                assertEquals("top row", 0, alpha(art[i]));
+                assertEquals("bottom row", 0, alpha(art[(n - 1) * n + i]));
+                assertEquals("left column", 0, alpha(art[i * n]));
+                assertEquals("right column", 0, alpha(art[i * n + n - 1]));
             }
         }
     }
