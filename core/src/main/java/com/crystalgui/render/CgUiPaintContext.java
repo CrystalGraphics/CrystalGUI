@@ -45,9 +45,12 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Deque;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -754,6 +757,7 @@ public final class CgUiPaintContext {
      */
     public void endFrame() {
         if (!frameActive) return;
+        sweepRetained();
 
         // No explicit unbind: CgQuadRenderer owns bind/unbind (see CgUiRenderer#useMaterial), and the
         // PROGRAM slot saved by beginFrame's CgGlScope restores whatever program was bound before the
@@ -1545,6 +1549,124 @@ public final class CgUiPaintContext {
         return layerFboPool.acquire(depth, width, height, Math.max(1, screenWidth), Math.max(1, screenHeight));
     }
 
+    // ── Retained layers ──────────────────────────────────────────────────────
+
+    /** Retained targets are owned outright, so this is the whole ceiling on what retention costs. */
+    private static final long RETAINED_BUDGET_BYTES = 48L * 1024L * 1024L;
+
+    /** Frames a retained layer may go unasked-for before it is freed. At 60Hz, five seconds. */
+    private static final long RETAINED_IDLE_FRAMES = 300L;
+
+    private final Map<Object, RetainedLayer> retained = new LinkedHashMap<>();
+    private long retainedBytes;
+    private int retainedCreated;
+    private boolean retentionSuspended;
+
+    /**
+     * Runs {@code body} with {@link #retain} answering null throughout.
+     *
+     * <p>For a pass that draws the same subtree somewhere else — a window photographing itself. A
+     * retained layer remembers WHERE it was drawn, and a second pass at other coordinates would keep
+     * overwriting the live one's picture with the copy's and then the copy's with the live one's.</p>
+     */
+    public void withoutRetention(Runnable body) {
+        boolean was = retentionSuspended;
+        retentionSuspended = true;
+        try {
+            body.run();
+        } finally {
+            retentionSuspended = was;
+        }
+    }
+
+    /**
+     * The kept texture for a subtree, or null when it is not worth keeping one.
+     *
+     * <p>Ask before painting a layer. A returned layer whose {@link RetainedLayer#isFresh()} is true
+     * already holds the picture for {@code revision} at {@code region} and can be composited straight
+     * back; one that is not fresh is a target to paint into, followed by
+     * {@link RetainedLayer#painted()}.</p>
+     *
+     * @param key      what the caller retains under, compared by identity — a box, in practice
+     * @param revision what the subtree looks like now. @see com.crystalgui.ui.box.Box#subtreeRevision
+     * @return null when the budget is spent, in which case paint into a pooled target as usual
+     */
+    @Nullable
+    public RetainedLayer retain(Object key, LayerRegion region, long revision) {
+        if (retentionSuspended) return null;
+        RetainedLayer layer = retained.remove(key);
+        if (layer != null) {
+            // Re-inserted so iteration order stays least-recently-used first, for the sweep below.
+            retained.put(key, layer);
+            layer.lastFrame = frameId;
+            boolean fits = layer.fbo().getWidth() >= region.width() && layer.fbo().getHeight() >= region.height();
+            if (fits) {
+                // A LAYER THAT MOVED IS REDRAWN, not slid: the region is where it was composited FROM as
+                // well as to, and everything in it was drawn at that origin.
+                boolean fresh = layer.revision == revision && layer.region.equals(region);
+                layer.region = region;
+                layer.setFresh(fresh, revision);
+                FrameProfile.count(fresh ? "layers-reused" : "layers-repainted", 1);
+                return layer;
+            }
+            drop(key, layer);
+        }
+
+        int width = bucket(region.width()), height = bucket(region.height());
+        long bytes = (long) width * height * 4L;
+        if (retainedBytes + bytes > RETAINED_BUDGET_BYTES && !evictUntil(bytes)) return null;
+
+        CgFrameBuffer fbo = CgFrameBuffer.createOwned("cgui_retained_" + retainedCreated++, width, height, LAYER_FORMAT);
+        warmUpLayer(fbo);
+        layer = new RetainedLayer(fbo, region, revision);
+        layer.lastFrame = frameId;
+        layer.setFresh(false, revision);
+        retained.put(key, layer);
+        retainedBytes += bytes;
+        FrameProfile.count("layers-retained-new", 1);
+        return layer;
+    }
+
+    /** Rounded up so an element resizing by a pixel a frame does not reallocate its texture every frame. */
+    private static int bucket(int size) {
+        return Math.max(64, (Math.max(1, size) + 63) & ~63);
+    }
+
+    /** Frees least-recently-used layers until {@code wanted} bytes fit, or gives up. */
+    private boolean evictUntil(long wanted) {
+        Iterator<Map.Entry<Object, RetainedLayer>> entries = retained.entrySet().iterator();
+        while (entries.hasNext() && retainedBytes + wanted > RETAINED_BUDGET_BYTES) {
+            Map.Entry<Object, RetainedLayer> entry = entries.next();
+            if (entry.getValue().lastFrame == frameId) break;   // in use this very frame
+            release(entry.getValue());
+            entries.remove();
+        }
+        return retainedBytes + wanted <= RETAINED_BUDGET_BYTES;
+    }
+
+    /** Frees anything nothing has asked for in a while. Called once a frame, from {@link #endFrame}. */
+    private void sweepRetained() {
+        if (retained.isEmpty()) return;
+        Iterator<Map.Entry<Object, RetainedLayer>> entries = retained.entrySet().iterator();
+        while (entries.hasNext()) {
+            Map.Entry<Object, RetainedLayer> entry = entries.next();
+            // Ordered least-recently-used first, so the first live one ends the sweep.
+            if (frameId - entry.getValue().lastFrame < RETAINED_IDLE_FRAMES) break;
+            release(entry.getValue());
+            entries.remove();
+        }
+    }
+
+    private void drop(Object key, RetainedLayer layer) {
+        retained.remove(key);
+        release(layer);
+    }
+
+    private void release(RetainedLayer layer) {
+        retainedBytes -= (long) layer.fbo().getWidth() * layer.fbo().getHeight() * 4L;
+        layer.fbo().delete();
+    }
+
     /**
      * Cold-draws a fully transparent, immediately-discarded quad into a freshly-created layer FBO
      * via {@link #layerBlitMaterial}, once, right when that FBO is created.
@@ -1659,6 +1781,14 @@ public final class CgUiPaintContext {
      */
     public CgFrameBuffer beginLayerFbo(CgFrameBuffer fbo, boolean clear) {
         return beginLayerFbo(fbo, clear, null);
+    }
+
+    /**
+     * As {@link #beginLayerFbo(LayerRegion)}, into a target the caller keeps — a
+     * {@link RetainedLayer}'s.
+     */
+    public CgFrameBuffer beginLayerFbo(CgFrameBuffer fbo, LayerRegion region) {
+        return beginLayerFbo(fbo, true, region);
     }
 
     /**
@@ -2002,6 +2132,9 @@ public final class CgUiPaintContext {
         layerStack.clear();
 
         layerFboPool.deleteAll();
+        for (RetainedLayer layer : retained.values()) layer.fbo().delete();
+        retained.clear();
+        retainedBytes = 0L;
 
         // Same reasoning as the layer pool above — createOwned bypasses CgFrameBufferRegistry, so
         // nothing else ever frees these. Not nulled out afterward (they're final, built once in the

@@ -673,6 +673,77 @@ public class UIElement extends UINode implements EventTarget, Styleable {
         return InkOverflow.NONE;
     }
 
+    /**
+     * Says this element will paint differently on the next frame, for a reason the engine cannot see.
+     *
+     * <pre>{@code
+     * private void blinkCaret() {
+     *     caretVisible = !caretVisible;
+     *     repaint();                      // nothing else changed; the tree would not know
+     * }
+     * }</pre>
+     *
+     * <p>Geometry, style, transforms and scroll are already noticed — a change to any of them damages
+     * this element by itself and needs no call. This is for state that only {@link #paintContent} or
+     * {@link #paintDecoration} reads.</p>
+     *
+     * <p>Cheap and idempotent: several calls between two frames cost one. Free before the element has a
+     * box, since a node outside a document is not painting anything yet.</p>
+     */
+    public void repaint() {
+        Box box = box();
+        if (box != null) box.requestRepaint();
+    }
+
+    /**
+     * Whether this class draws anything of its own — whether it overrides either paint hook.
+     *
+     * <p>Asked once per class and cached. Derived rather than declared on purpose: a flag for every
+     * widget to override is a flag somebody eventually forgets, and what forgetting costs here is a
+     * widget that draws nothing under a fade, or one that freezes inside a retained layer. Neither
+     * fails loudly.</p>
+     */
+    public final boolean paintsItsOwnContent() {
+        return PAINTS_ITS_OWN.get(getClass());
+    }
+
+    /**
+     * Whether what this node paints can change without the box tree noticing.
+     *
+     * <p>The engine sees geometry, style, transforms and scroll. It does not see a caret blinking, a
+     * canvas being rewritten, or a live preview — so anything painting by hand is assumed dynamic, and
+     * a subtree containing one is never kept between frames.</p>
+     *
+     * <pre>{@code
+     * // A label's picture is a function of its text and its style, and both are things the tree sees --
+     * // as long as every other route into what it draws calls repaint().
+     * @Override public boolean paintsDynamically() { return false; }
+     * }</pre>
+     *
+     * <p>Overriding this to {@code false} is a promise that every change to what {@link #paintContent}
+     * draws either goes through the cascade, changes the box, or calls {@link #repaint}. Breaking the
+     * promise shows up as a frozen widget, and only inside a fade or a rounded clip.</p>
+     */
+    public boolean paintsDynamically() {
+        return paintsItsOwnContent();
+    }
+
+    private static final ClassValue<Boolean> PAINTS_ITS_OWN = new ClassValue<>() {
+        @Override
+        protected Boolean computeValue(Class<?> type) {
+            return overrides(type, "paintContent") || overrides(type, "paintDecoration");
+        }
+
+        private boolean overrides(Class<?> type, String method) {
+            try {
+                return type.getMethod(method, CgUiPaintContext.class, Box.class)
+                        .getDeclaringClass() != UIElement.class;
+            } catch (NoSuchMethodException impossible) {
+                return true;   // declared right here; if it cannot be found, assume the worst
+            }
+        }
+    };
+
 
     /** A layout-affecting value changed: the box under it must be laid out again. */
     @Override
