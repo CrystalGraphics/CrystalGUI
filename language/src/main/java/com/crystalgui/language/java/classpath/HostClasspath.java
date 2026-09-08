@@ -1,14 +1,18 @@
 package com.crystalgui.language.java.classpath;
 
 import java.io.File;
+import java.lang.module.ResolvedModule;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -58,6 +62,14 @@ public final class HostClasspath {
         addUrlsOf(loader, entries);
         addReflectiveSources(loader, entries);
         addSystemProperty(entries);
+        try {
+            addModuleLayers(loader, entries);
+        } catch (LinkageError noModuleSystem) {
+            // ModuleLayer is Java 9+, and mc1710 downgrades this class to Java 8 bytecode for a host
+            // that may genuinely be on Java 8 -- where entering the method above cannot resolve it.
+            // Caught at the CALL, because that is where resolution happens; a guard inside the method
+            // would already have failed. "This route has nothing", like every other route's absence.
+        }
         // LAST, so an application jar shadowing a platform class still wins.
         addJavaClassLibrary(entries);
 
@@ -145,6 +157,54 @@ public final class HostClasspath {
                 if (path != null) into.add(path);
             }
         }
+    }
+
+    /**
+     * <b>The module graph, for a modular host that publishes no classpath.</b>
+     *
+     * <p>A host whose classes live in a module graph need supply neither of the things the routes above
+     * ask for: its loader is a {@code ModuleClassLoader}, which is no {@code URLClassLoader} and exposes
+     * no {@code getSources()}.</p>
+     *
+     * <p><b>ModLauncher does populate {@code java.class.path}</b> — measured at 125 entries on 1.20.x,
+     * against nothing from here — so this contributes nothing on the one modular host in the build. It
+     * is kept because that is ModLauncher's choice rather than a guarantee, and an empty classpath
+     * surfaces four layers away as {@code java.lang.Object cannot be resolved}.</p>
+     *
+     * <p>Every module reachable from this class's own layer and its parents, by its {@code location()}.
+     * <b>Only {@code file:} locations</b>: a JDK module reports {@code jrt:/java.base}, which is not a
+     * classpath entry and is {@link #addJavaClassLibrary}'s business instead.</p>
+     *
+     * <p>Written against {@code java.lang.ModuleLayer} alone, so it names no loader and holds for any
+     * modular host rather than for this one -- the same reason the reflective route above exists.</p>
+     */
+    private static void addModuleLayers(ClassLoader loader, Set<String> into) {
+        Set<ModuleLayer> seen = new LinkedHashSet<>();
+        collectLayers(HostClasspath.class.getModule().getLayer(), seen);
+        collectLayers(ModuleLayer.boot(), seen);
+        // The loader's own module too: a host may load us from a layer we are not a member of.
+        if (loader != null) collectLayers(loader.getUnnamedModule().getLayer(), seen);
+
+        for (ModuleLayer layer : seen) {
+            for (ResolvedModule module : layer.configuration().modules()) {
+                Optional<URI> location = module.reference().location();
+                if (!location.isPresent()) continue;
+                URI uri = location.get();
+                if (!"file".equalsIgnoreCase(uri.getScheme())) continue;
+                try {
+                    into.add(Paths.get(uri).toAbsolutePath().toString());
+                } catch (RuntimeException notAPath) {
+                    // A location that is a URI but not a filesystem path contributes nothing, which is
+                    // the same answer every other route gives for something it cannot read.
+                }
+            }
+        }
+    }
+
+    /** {@code layer} and everything above it, once each. */
+    private static void collectLayers(ModuleLayer layer, Set<ModuleLayer> into) {
+        if (layer == null || !into.add(layer)) return;
+        for (ModuleLayer parent : layer.parents()) collectLayers(parent, into);
     }
 
     /**

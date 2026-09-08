@@ -7,8 +7,11 @@ import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.window.SystemMenu;
 import com.crystalgui.desktop.window.WindowFrame;
+import com.crystalgui.fs.Resource;
+import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.workbench.Workbench;
 
 import com.crystalgui.mc.platform.Lifecycle1201;
 
@@ -54,6 +57,7 @@ public final class ClientProbe1201 {
         MINIMISE, SHOOT_MINIMISE_MID, SHOOT_MINIMISED,
         RESTORE, SHOOT_RESTORE_MID, SHOOT_RESTORED,
         JUMP_LIST, SHOOT_JUMP_LIST,
+        OPEN_JAVA, SHOOT_JAVA,
         PIN, OPEN_CHAT, OVERLAY_CLICK, SHOOT_OVERLAY,
         HUD_GRABBED_CLICK,
         QUIT, DONE
@@ -70,6 +74,9 @@ public final class ClientProbe1201 {
 
     /** The class a taskbar entry wears; the anchor a real right-click would present from. */
     private static final String ENTRY_CLASS = "__entry__";
+
+    /** The sample workspace's Java file -- what makes the language stack say anything at all. */
+    private static final String JAVA_PROBE_FILE = "workspace:src/main/java/com/example/Main.java";
 
     /** Called once per client tick. Cheap when off: one static boolean read. */
     public static void tick() {
@@ -191,6 +198,28 @@ public final class ClientProbe1201 {
             }
             case SHOOT_JUMP_LIST:
                 shoot("jump-list");
+                step = Step.OPEN_JAVA;
+                waitTicks = SETTLE;
+                break;
+            case OPEN_JAVA: {
+                // The language stack says nothing until a Java file is analysed, and the restored session
+                // opens whatever was last open -- which is not this on a fresh workspace.
+                if (CgUiScreen1201.editorWorkbench() == null) {
+                    say("no workbench; cannot open a java file");
+                    step = Step.PIN;
+                    return;
+                }
+                say("opening " + JAVA_PROBE_FILE);
+                CgUiScreen1201.editorWorkbench().editors().open(Resource.parse(JAVA_PROBE_FILE));
+                step = Step.SHOOT_JAVA;
+                // The open is a round trip to the workspace, and the first analysis has to open an
+                // engine band before it can answer anything.
+                waitTicks = SETTLE * 4;
+                break;
+            }
+            case SHOOT_JAVA:
+                shoot("java-open");
+                reportJavaDiagnostics();
                 step = Step.PIN;
                 waitTicks = SETTLE;
                 break;
@@ -298,6 +327,24 @@ public final class ClientProbe1201 {
         step = Step.DONE;
         say("routine complete; stopping the client");
         Minecraft.getInstance().stop();
+    }
+
+    /**
+     * The analysed file's diagnostics, as text.
+     *
+     * <p>A count is legible in a screenshot and the messages are not, and the difference decides what
+     * to look at: sixteen errors from a broken classpath and sixteen from a typo photograph the same.
+     * This layer degrades silently by design, so the run has to say what it concluded.</p>
+     */
+    private static void reportJavaDiagnostics() {
+        Workbench workbench = CgUiScreen1201.editorWorkbench();
+        if (workbench == null) return;
+        List<Diagnostic> problems = workbench.markers().read(Resource.parse(JAVA_PROBE_FILE));
+        say(problems.size() + " diagnostic(s) on " + JAVA_PROBE_FILE);
+        for (Diagnostic problem : problems) {
+            say("  " + problem.severity() + " " + problem.start().row() + ":"
+                    + problem.start().column() + " " + problem.message());
+        }
     }
 
     private static void say(String what) {

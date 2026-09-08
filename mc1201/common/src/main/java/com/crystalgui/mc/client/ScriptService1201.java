@@ -28,10 +28,10 @@ import net.minecraft.client.Minecraft;
  *
  * <p><b>The other three members are declined honestly.</b> {@code liveBytes()} must answer with what
  * will actually execute — transformers and mixins included — and 1.20.x has ModLauncher or Knot rather
- * than LaunchWrapper, neither of which exposes a transformed-bytes call. Reading the classloader is
- * what {@code NONE} already does and its own javadoc says that lies on a Minecraft host, so this
- * inherits that answer rather than dressing it up. No mappings and no namespace probe follow from the
- * same absence. {@code plan/platform-mc1201.md} §3.7.</p>
+ * than LaunchWrapper, neither of which exposes a transformed-bytes call. So it answers
+ * {@link ReadableView.ByteSource#NONE}, and the engine reads that as no live tier: resolution goes
+ * straight to the classpath, as it does in the harness. No mappings and no namespace probe follow from
+ * the same absence. {@code plan/platform-mc1201.md} §3.7.</p>
  */
 public final class ScriptService1201 implements ScriptService {
 
@@ -61,7 +61,10 @@ public final class ScriptService1201 implements ScriptService {
 
     @Override
     public ReadableView.ByteSource liveBytes() {
-        return ScriptService.NONE.liveBytes();
+        // NOT `ScriptService.NONE.liveBytes()`, which is a classloader view: a classloader answers for
+        // the JDK, so `java.*` resolved from the live tier and ECJ -- module-aware from compliance 9 --
+        // discarded every answer as not coming from `java.base`.
+        return ReadableView.ByteSource.NONE;
     }
 
     @Override

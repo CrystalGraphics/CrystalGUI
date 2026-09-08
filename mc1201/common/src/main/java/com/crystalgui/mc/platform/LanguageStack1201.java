@@ -21,9 +21,10 @@ import com.crystalgui.text.syntax.LanguageRegistry;
  * {@link com.crystalgui.mc.client.ScriptService1201} exists for {@code cacheRoot()}, which is what lets
  * a band bundled in the jar be extracted and a missing one be fetched. Its other three members are
  * LaunchWrapper-shaped and 1.20.x has ModLauncher or Knot, neither of which exposes a transformed-bytes
- * call -- so live bytes fall back to the classloader and there are no mappings. The Run panel still
- * opens; {@code ScriptRuntimes.open} answers empty, so nothing in it runs. The plan recommended
- * registering no service at all, which would also have cost the engine bands.
+ * call -- so it answers {@code ByteSource.NONE} for live bytes, and the engine reads that as no live
+ * tier at all. There are no mappings. The Run panel still opens; {@code ScriptRuntimes.open} answers
+ * empty, so nothing in it runs. The plan recommended registering no service at all, which would also
+ * have cost the engine bands.</p>
  */
 public final class LanguageStack1201 {
 

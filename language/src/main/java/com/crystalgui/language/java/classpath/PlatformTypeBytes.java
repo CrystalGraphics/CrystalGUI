@@ -93,6 +93,12 @@ public final class PlatformTypeBytes implements TypeBytes {
                     + "-Dcrystalgui.language.noLiveBytes -- diagnosis only");
             return TypeBytes.NONE;
         }
+        // A SERVICE IS NOT AUTOMATICALLY A LIVE RUNTIME. `cacheRoot()` is reason enough to register
+        // one -- extracting or downloading an engine band asks it where it may write -- and a host that
+        // registers for that alone has no transformed bytes to offer. Treating it as live puts a
+        // classloader view ahead of the classpath for every name, the JDK included.
+        ReadableView.ByteSource live = platform.liveBytes();
+        if (live == ReadableView.ByteSource.NONE) return TypeBytes.NONE;
         // SAID OUT LOUD, ONCE PER ENGINE, and it earns the line. "Live" and "inert" produce identical
         // behaviour for every script that only touches classes which are also on disk -- which is most
         // of them -- so without this there is no way to tell from a log whether §15.5 A is working or
@@ -100,8 +106,7 @@ public final class PlatformTypeBytes implements TypeBytes {
         // fix, and it survived a full test suite and a working client.
         System.err.println("[crystalgui] resolving against the live runtime through "
                 + platform.getClass().getName());
-        return new PlatformTypeBytes(platform.liveBytes(),
-                PlatformTypeBytes.class.getClassLoader());
+        return new PlatformTypeBytes(live, PlatformTypeBytes.class.getClassLoader());
     }
 
     @Override
