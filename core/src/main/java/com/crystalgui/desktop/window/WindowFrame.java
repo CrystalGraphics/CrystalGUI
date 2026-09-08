@@ -488,7 +488,10 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
         StyleGroup.defaultPipeline(getStyle().getLayoutGroup(),
                 l -> l.positionType(TaffyPosition.ABSOLUTE).flexDirection(FlexDirection.COLUMN));
 
-        titleLabel = new UIText(title == null ? "" : title);
+        // THE FIELD TOO, not the label alone: getTitle answers from the field so a caption that draws
+        // no title still HAS one, and this constructor does not go through setTitle.
+        this.title = title == null ? "" : title;
+        titleLabel = new UIText(this.title);
         titleLabel.addClass(TITLE_CLASS);
         // FALLS THROUGH TO THE BAR. The move listener below is target-only, so a press that lands on the
         // title text would otherwise begin nothing at all -- and "the title bar drags except where the
@@ -927,8 +930,32 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
         return this;
     }
 
+    /**
+     * Whether the caption shows the title at all. Shown by default.
+     *
+     * <p>For a window whose ICON already says what it is: an application's main window carries its
+     * product icon, and a caption reading <i>Crystal Editor</i> beside the Crystal Editor logo says it
+     * twice. The title is still SET -- the taskbar entry, the window switcher and the icon's monogram
+     * fallback all read it -- it simply is not drawn here.</p>
+     */
+    public WindowFrame setTitleShown(boolean shown) {
+        this.titleShown = shown;
+        // EMPTIED, NEVER HIDDEN. The label carries `flex-grow: 1; flex-basis: 0` and is therefore what
+        // pushes the window controls to the far edge -- `display: none` took the spacer out with the
+        // text, and pin, minimise, maximise and close collapsed against the menu bar.
+        titleLabel.setText(shown ? title : "");
+        return this;
+    }
+
+    /** @see #setTitleShown */
+    private boolean titleShown = true;
+
+    /** What the window is called, whether or not the caption draws it. @see #setTitleShown */
+    private String title = "";
+
     public WindowFrame setTitle(String title) {
-        titleLabel.setText(title == null ? "" : title);
+        this.title = title == null ? "" : title;
+        titleLabel.setText(titleShown ? this.title : "");
         // The monogram is the title's initial, and the taskbar entry carries the title too.
         refreshIcon();
         if (owner != null) owner.registry().changed();
@@ -936,7 +963,9 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
     }
 
     public String getTitle() {
-        return titleLabel.getText();
+        // THE STORED ONE, not the label's: a window whose caption draws no title still HAS one, and
+        // the taskbar entry, the window switcher and the icon's monogram all ask here.
+        return title;
     }
 
     // ── Owned windows ───────────────────────────────────────────────────────
