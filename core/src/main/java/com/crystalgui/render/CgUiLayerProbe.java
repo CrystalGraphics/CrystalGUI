@@ -27,6 +27,15 @@ import com.crystalgui.core.CrystalGuiCore;
  * <p>{@link #contents} and {@link #atOwner} rebind the framebuffer and stall the pipeline, so nothing
  * here may run in an ordinary frame. Sampling is one frame in {@code EVERY} and stops after
  * {@code BUDGET} lines; call {@link #frame()} or every reader returns an empty string.</p>
+ *
+ * <p><b>{@link #atOwner} takes the owner's rect in the TARGET's own pixels, and a pooled layer no
+ * longer shares the screen's origin.</b> A layer is allocated for its element and its pixel {@code
+ * (0,0)} is that region's corner, so an owner rect recorded in screen coordinates samples the wrong
+ * place inside one -- subtract the region's origin before {@link #ownerRect}. Caller-owned targets (a
+ * snapshot, the backdrop capture) are unaffected: those have no region and no shift.</p>
+ *
+ * <p><b>Nothing calls this today.</b> It is kept because a rewritten layer path is exactly what it was
+ * written to diagnose, not because anything depends on it.</p>
  */
 public final class CgUiLayerProbe {
 
