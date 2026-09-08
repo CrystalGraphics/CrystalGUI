@@ -814,6 +814,10 @@ public final class SvgDocument {
         int[] end = op.coloursEnd();
         float[] axes = op.gradients();
         boolean ramp = !flat && start != null && end != null && axes != null;
+        // The feather is submitted in LOGICAL units and the pose scales it with the points, so a band
+        // meant to be one device pixel wide has to be divided out here -- at uiScale 2 it was two, and
+        // every pixel-aligned edge of a 16px icon read as 0.16 / 0.84 / 0.84 / 0.16 instead of 0 / 1 / 1 / 0.
+        float device = ctx.deviceScale();
 
         for (int i = 0; i < t.length; i += 6) {
             int triangle = i / 6;
@@ -878,7 +882,7 @@ public final class SvgDocument {
                 float edgeLength = (float) Math.sqrt(ex * ex + ey * ey);
                 if (edgeLength > 1e-9f) {
                     float area2 = Math.abs(ex * (oy - sy) - ey * (ox - sx));
-                    featherPx = Math.min(SILHOUETTE_FEATHER, area2 / edgeLength * scale);
+                    featherPx = Math.min(SILHOUETTE_FEATHER, area2 / edgeLength * scale * device);
                     // ...and below half a pixel, drop it entirely rather than taper. See MINIMUM_FEATHER.
                     if (featherPx < MINIMUM_FEATHER) featherPx = 0f;
                 }
@@ -892,7 +896,7 @@ public final class SvgDocument {
                             ? (upper[triangle]
                                     ? CgVectorRenderer.EDGE_P1_P2 : CgVectorRenderer.EDGE_P2_P0)
                             : CgVectorRenderer.EDGE_NONE)
-                    .feather(featherPx)
+                    .feather(featherPx / device)
                     .submit();
         }
         }
