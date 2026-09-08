@@ -282,6 +282,18 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
     private float widestRealised;
 
     /**
+     * The width last written to every row, or {@code -1} for "nothing written yet".
+     *
+     * <p><b>The extent moves when the VIEWPORT does, not only when a row gets longer</b>, and that is
+     * what this exists to notice. {@link #measureWidestRealisedRow} used to re-write the rows only when
+     * the running maximum grew, so widening the list left every already-realised row at the width it was
+     * born with — the selection bar stopped mid-panel while rows scrolled into view afterwards spanned
+     * it properly. The project tree hid it behind a {@code min-width: 100%} in its own sheet, which
+     * floors the symptom rather than fixing the width being stale.</p>
+     */
+    private float appliedRowWidth = -1f;
+
+    /**
      * Lets rows keep their natural width and scroll sideways, instead of ellipsizing — VS Code's
      * {@code workbench.list.horizontalScrolling}.
      *
@@ -295,6 +307,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
         if (enabled) addClass(HORIZONTAL_CLASS);
         else removeClass(HORIZONTAL_CLASS);
         widestRealised = 0f;
+        appliedRowWidth = -1f;
         applyRowWidths();
         return this;
     }
@@ -348,8 +361,12 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
             Box rowBox = row.box();
             if (rowBox != null) widest = Math.max(widest, rowBox.scrollWidth());
         }
-        if (widest <= widestRealised) return;
-        widestRealised = widest;
+        if (widest > widestRealised) widestRealised = widest;
+        // AGAINST THE EXTENT, which is max(viewport, widest) — so a list dragged wider re-writes its rows
+        // even though no row got longer. Comparing the maximum alone is what left them stale.
+        float extent = scrollExtent(true);
+        if (Math.abs(extent - appliedRowWidth) < 0.5f) return;
+        appliedRowWidth = extent;
         applyRowWidths();
     }
 
@@ -428,6 +445,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
         // A NEW MODEL IS A NEW SET OF NAMES. The running maximum only grows within one generation, so
         // without this a collapsed folder's longest name would keep the horizontal range open forever.
         widestRealised = 0f;
+        appliedRowWidth = -1f;
         markTreeDirty();
     }
 
