@@ -56,7 +56,16 @@ public final class FrameProfile {
             Long.getLong("crystalgui.frameprofile.floor", 8L) * 1_000_000L;
 
     /** At most one report per this many nanos, however many frames are slow. */
-    private static final long REPORT_EVERY_NANOS = 1_000_000_000L;
+    /**
+     * At most one report per this many nanos, however many frames are slow.
+     *
+     * <p>{@code -Dcrystalgui.frameprofile.every=0} reports every frame, which is what a statistic wants:
+     * one sample a second is a dozen frames out of fifteen hundred, and a median taken from a dozen
+     * samples of a distribution this skewed carries an error as large as the difference being measured.
+     * It costs a log line per frame, so it is for a measured run rather than for watching.</p>
+     */
+    private static final long REPORT_EVERY_NANOS =
+            Long.getLong("crystalgui.frameprofile.every", 1000L) * 1_000_000L;
 
     private static final Map<String, Long> PHASES = new LinkedHashMap<>();
     private static final Map<String, Integer> COUNTS = new LinkedHashMap<>();
