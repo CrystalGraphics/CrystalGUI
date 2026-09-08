@@ -34,6 +34,25 @@ public enum AttributeGroup {
     /** How it responds: cursor, overflow, scrolling, transitions, stacking. */
     BEHAVIOUR("Behaviour");
 
+    /**
+     * Where a section with this label belongs, for ordering the Paste Attributes window.
+     *
+     * <p>A label this enum does not know goes AFTER all of them, and those are the value-kind sections —
+     * Glass, Gradient, Sprite — which a {@link com.crystalgui.serialization.style.StyleParts} names from
+     * the value rather than from the property. The fixed taxonomy first and the value's own kinds after
+     * it: a reader looking for {@code width} should not have to find Layout somewhere in the middle
+     * because a gradient sorted above it.</p>
+     *
+     * <p>Unknown labels keep their arrival order among themselves rather than being sorted by name — a
+     * heading is not the thing being looked up, and the sections then follow the properties.</p>
+     */
+    public static int orderOf(String label) {
+        for (AttributeGroup group : values()) {
+            if (group.label.equals(label)) return group.ordinal();
+        }
+        return values().length;
+    }
+
     private final String label;
 
     AttributeGroup(String label) {

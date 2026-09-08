@@ -22,6 +22,7 @@ import com.crystalgui.core.attribute.AttributeClipboard;
 import com.crystalgui.core.attribute.AttributeSet;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.property.visual.texture.TextureValue;
 import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
@@ -62,6 +63,30 @@ public class AttributeTransferTest extends UiDocumentTestBase {
         AttributeClipboard.clear();
     }
 
+    /**
+     * <b>Sections come in the declared taxonomy's order, with the value-kind ones after it.</b>
+     *
+     * <p>A set's group order is the order its entries arrive in, and they arrive in property order — so
+     * a section's place was decided by the NAME of whichever property happened to come first in it.
+     * {@code background} holding a glass put "Glass" at the top, {@code height} put "Layout" second and
+     * {@code mask} put "Gradient" third: Layout sandwiched between two value-kind sections by
+     * alphabetical accident, on a window whose whole job is to be scanned.</p>
+     */
+    @Test
+    public void theSectionsAreOrderedByTheTaxonomyRatherThanByPropertyName() {
+        UIElement element = new UIElement().layout(l -> l.width(40f).height(40f));
+        StyleGroup.inlinePipeline(element.getStyle().getGeneralGroup(), g -> g
+                .background(new TextureValue("glass(12, #2B2D3088)").compute())
+                .mask(new TextureValue("linear-gradient(45deg, #FF0000FF, #0000FFFF)").compute())
+                .overlay(new TextureValue("grid(16, #6EDCD024)").compute()));
+        model.root().append(element);
+        document.update(W, H);
+
+        List<String> groups = new ArrayList<>(new StyleAttributes(element).copyAttributes().groups());
+        assertEquals("Layout first, then the kinds the values happen to be: " + groups,
+                List.of("Layout", "Glass", "Gradient", "Grid"), groups);
+    }
+
     /** What was typed onto the element, grouped the way a person looks for it. */
     @Test
     public void aCopyCarriesTheInlineStyleGrouped() {
@@ -73,11 +98,14 @@ public class AttributeTransferTest extends UiDocumentTestBase {
         for (AttributeSet.Entry entry : copied.entries()) ids.add(entry.slot().id());
         assertTrue("the width was typed on, so it travels: " + ids, ids.contains("width"));
         assertTrue(ids.contains("opacity"));
-        assertTrue(ids.contains("transform"));
+        // A FUNCTION AT A TIME, not `transform` whole -- the fixture scales, so that is the one part
+        // its value carries. @see TransformPartsTest
+        assertTrue("transform comes apart: " + ids, ids.contains("transform/scale"));
 
         assertEquals(AttributeGroup.LAYOUT.label(), AttributeGroup.of("width").label());
         assertEquals(AttributeGroup.APPEARANCE.label(), AttributeGroup.of("opacity").label());
-        assertEquals(AttributeGroup.TRANSFORM.label(), AttributeGroup.of("transform").label());
+        assertTrue("and the functions are filed under the property they belong to: " + copied.groups(),
+                copied.groups().contains("Transform"));
     }
 
     /**
