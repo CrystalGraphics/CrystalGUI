@@ -96,14 +96,17 @@ public final class BoxPainter {
             // else, so a childless box was opening a layer, drawing into it and compositing it back at
             // opacity 1 -- the whole apparatus for an identity. Rounded `overflow: hidden` is on almost
             // every surface in this UI, and most of the leaves wearing it have no children at all.
-            mask = mask && !box.children().isEmpty();
+            if (mask && box.children().isEmpty() && !CgUiPaintContext.LEGACY_LAYERS) {
+                FrameProfile.count("masks-elided", 1);
+                mask = false;
+            }
             boolean needsLayer = opacity < 1f || mask;
 
             // AND AN OPACITY THAT CANNOT SELF-OVERLAP folds into the draw instead of flattening a
             // subtree -- Skia's rule, and Flutter's advice to colour a container rather than wrap it in
             // an `Opacity`. Group opacity differs from per-primitive opacity only where two primitives
             // cover the same pixel; where there is only one, they are the same number.
-            if (needsLayer && !mask && foldsOpacity(box, style, node)) {
+            if (needsLayer && !mask && !CgUiPaintContext.LEGACY_LAYERS && foldsOpacity(box, style, node)) {
                 FrameProfile.count("layers-elided", 1);
                 ctx.withLayerOpacity(opacity, () -> {
                     paintSelf(box, style, ctx, radii);

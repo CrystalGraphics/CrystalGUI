@@ -44,8 +44,16 @@ public final class FrameProfile {
      * whose numbers cannot be compared. */
     public static final boolean ENABLED = Boolean.getBoolean("crystalgui.frameprofile");
 
-    /** Report a frame only if it cost more than this. 120Hz is 8.3ms, so this is "missed the budget". */
-    private static final long SLOW_NANOS = 8_000_000L;
+    /**
+     * Report a frame only if it cost more than this. 120Hz is 8.3ms, so the default is "missed the
+     * budget".
+     *
+     * <p>{@code -Dcrystalgui.frameprofile.floor=0} reports every frame the rate limit allows, which is
+     * what a COMPARISON wants: a change that made frames fast enough to stop being reported is
+     * indistinguishable here from a probe that was never switched on.</p>
+     */
+    private static final long SLOW_NANOS =
+            Long.getLong("crystalgui.frameprofile.floor", 8L) * 1_000_000L;
 
     /** At most one report per this many nanos, however many frames are slow. */
     private static final long REPORT_EVERY_NANOS = 1_000_000_000L;
