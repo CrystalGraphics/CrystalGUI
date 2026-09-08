@@ -52,6 +52,18 @@ public interface StyleParts<V> {
     List<Part> parts();
 
     /**
+     * The pieces THIS value has, when they depend on it.
+     *
+     * <p>{@link #parts()} answers for the KIND — transform's four functions are the same four whatever a
+     * transform holds. A background's layers are not: they are positional and there may be any number of
+     * them, so the list is the value's rather than the type's. Defaults to {@link #parts()} for everything
+     * whose pieces are fixed.</p>
+     */
+    default List<Part> parts(V value) {
+        return parts();
+    }
+
+    /**
      * Whether {@code value} is fully described by its parts — <b>all of it, or none of it</b>.
      *
      * <p>Answering false means the whole property is offered as one slot instead. That is not a fussy

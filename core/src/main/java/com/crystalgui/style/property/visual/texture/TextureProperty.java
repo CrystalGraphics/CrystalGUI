@@ -5,6 +5,7 @@ import com.crystalgui.render.texture.CgUiCrossFade;
 import com.crystalgui.render.texture.ArgbMath;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.CgUiQuad;
+import com.crystalgui.render.texture.CgUiLayers;
 import com.crystalgui.render.texture.CgUiShape;
 import lombok.experimental.Accessors;
 
@@ -62,6 +63,18 @@ public class TextureProperty extends StyleProperty<CgUiDrawable> {
         if (source != null) return source;
         if (value instanceof CgUiQuad quad) return ArgbMath.toCss(quad.getColorArgb());
         if (value instanceof CgUiShape shape) return "shape(\"" + CgUiShape.cssName(shape.kind()) + "\")";
+        // A STACK IS ITS LAYERS, written the same way and comma-joined. It needs this rather than a
+        // remembered source because a stack is BUILT in Java whenever one layer is pasted onto another
+        // element -- `DrawableParts.mergePart` assembles a new one, and the merged value is re-encoded
+        // on the spot, which threw.
+        if (value instanceof CgUiLayers layers) {
+            StringBuilder out = new StringBuilder();
+            for (CgUiDrawable layer : layers.layers()) {
+                if (out.length() > 0) out.append(", ");
+                out.append(write(layer));
+            }
+            return out.toString();
+        }
         throw new IllegalStateException("A " + value.getClass().getSimpleName() + " for '" + name
                 + "' was built in Java rather than parsed from CSS, so there is no CSS to write for it."
                 + " Set it from a stylesheet or an inline style, or give it a source.");

@@ -117,7 +117,7 @@ public final class StyleAttributes implements AttributeCarrier {
         // drop the rest in silence, so ticking every box would not reproduce the source.
         if (!parts.divides(decoded)) return false;
         boolean any = false;
-        for (StyleParts.Part part : parts.parts()) {
+        for (StyleParts.Part part : parts.parts(decoded)) {
             JsonElement encoded = parts.encodePart(JsonOps.INSTANCE, decoded, part.id());
             if (encoded == null) continue;
             // NAMED AFTER THE PROPERTY when the part has no label of its own: the section already says
