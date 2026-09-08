@@ -7,6 +7,8 @@ import com.crystalgui.language.platform.ScriptService;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.language.platform.ScriptServices;
 
+import java.util.function.BooleanSupplier;
+
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.FieldVisitor;
@@ -15,6 +17,13 @@ import org.objectweb.asm.Opcodes;
 
 /**
  * Which namespace this runtime speaks, decided by asking it — and the mapping that follows.
+ *
+ * <h3>This module drives the acquisition; a platform only says how to run it</h3>
+ *
+ * <p>Nothing outside {@code language/} needs to call anything. The first {@link #current()} probes,
+ * applies a cached mapping on the calling thread, and hands a genuine download to
+ * {@link ScriptService#runInBackground} — which is the one part a host knows better, since
+ * {@code JobScheduler} is drained by {@code UIDocument.frame} and by nothing else.</p>
  *
  * <h3>Probed, never configured</h3>
  *
@@ -60,49 +69,17 @@ public final class PlatformMappings {
     }
 
     /**
-     * Acquires the mapping <b>on the calling thread</b>, reporting into {@code progress}.
-     *
-     * <p>Public so a client can drive it from a job of its own and get a progress bar for free:</p>
-     *
-     * <pre>{@code
-     * scheduler.job(key, JobLane.BACKGROUND, ctx -> {
-     *     PlatformMappings.begin(ctx.progress());
-     *     return null;
-     * }).submit();
-     * }</pre>
-     *
-     * <h3>Why this is not simply a {@code JobScheduler} job inside here</h3>
-     *
-     * <p>That was the plan and it is wrong, for a reason worth writing down: <b>{@code UIWindow.paintFrame}
-     * is the only thing that drains the scheduler.</b> A dedicated server runs scripts, needs readable
-     * names to compile them, and has no window — so a mapping fetch submitted as a job there would sit in
-     * the queue for ever and nothing would say why. Threading is therefore the caller's decision: a client
-     * calls this from a job, and anything headless gets the lazy daemon-thread path below.</p>
-     *
-     * <p>Idempotent. The second caller returns immediately rather than fetching again.</p>
-     */
-    public static void begin(Progress progress) {
-        if (!claim()) return;
-        acquireClaimed(progress);
-    }
-
-    /**
      * <b>Takes ownership of the acquisition, without doing it.</b> True if this caller now owns it.
      *
-     * <p>Exists to close a race that was a coin flip. A client wants the fetch inside a job so it reports
-     * into the status bar — but a job does not run until {@code JobScheduler.drain()}, which is the first
-     * CrystalGUI paint, and anything touching {@link #current()} before that would start the lazy daemon
-     * path instead. Both paths acquire correctly; only one of them draws a bar, and which one won was
-     * decided by whatever happened to ask first.</p>
+     * <p>One artifact per process, so whoever takes the claim owes the work. Not public: a host states
+     * the what, the where and the how, and {@link #current()} decides when — this is the split between
+     * that decision and the work it commits to, and the in-package test asserts it.</p>
      *
-     * <p>Claiming at registration — long before any paint — makes it deterministic: the lazy path finds
-     * the work already owned and returns.</p>
-     *
-     * <p><b>A claim is a promise to do it.</b> Claiming and then never calling
-     * {@link #acquireClaimed} leaves the mapping permanently unacquired, with {@code current()} answering
-     * identity for ever and nothing to say why. Only claim where the follow-through is certain.</p>
+     * <p><b>A claim is a promise to do it.</b> Claiming and then not following through leaves the mapping
+     * permanently unacquired, with {@code current()} answering identity for ever and nothing to say
+     * why.</p>
      */
-    public static boolean claim() {
+    static boolean claim() {
         synchronized (PlatformMappings.class) {
             if (started) return false;
             started = true;
@@ -110,49 +87,27 @@ public final class PlatformMappings {
         }
     }
 
-    /** Does the work a {@link #claim()} promised, reporting into {@code progress}. */
-    public static void acquireClaimed(Progress progress) {
-        acquireClaimed(progress, () -> false);
-    }
-
     /**
-     * The same, stoppable.
+     * Probe, apply what is cached, and hand a download to the host — so a first {@code current()} never
+     * blocks its caller.
      *
-     * <p>This one runs inside a job — {@code ClientProxy} submits it — so unlike the engine band it has a
-     * flag to hand over, and a first launch's mapping fetch is genuinely cancellable rather than merely
-     * marked so.</p>
-     */
-    public static void acquireClaimed(Progress progress, java.util.function.BooleanSupplier cancelled) {
-        ScriptService needsFetch = decide();
-        if (needsFetch != null) {
-            fetch(needsFetch, progress == null ? Progress.NONE : progress, cancelled);
-        }
-    }
-
-    /** The lazy path: a daemon thread, so a first {@code current()} never blocks its caller. */
-    /**
-     * The lazy path: a daemon thread, so a first {@code current()} never blocks its caller.
-     *
-     * <p>Daemon, because mapping data must never be the reason a game cannot exit. One-shot, because there
-     * is exactly one artifact to acquire per process.</p>
+     * <p>One-shot: there is exactly one artifact to acquire per process, and {@link #claim()} is what
+     * makes that true however many threads ask at once.</p>
      */
     private static void startLazily() {
-        ScriptService needsFetch;
         if (!claim()) return;
         // THE DECISION INLINE, THE FETCH ON A THREAD. A mapping already cached is applied before this
         // returns, so the caller's very next current() sees it -- which is the difference between the
         // editor opening with readable names and opening with runtime ones and correcting itself.
-        needsFetch = decide();
+        ScriptService needsFetch = decide();
         if (needsFetch == null) return;
 
-        // Daemon, because mapping data must never be the reason a game cannot exit. One-shot, because
-        // there is exactly one artifact to acquire per process.
-        // UNCANCELLABLE, and that is the lazy path's nature rather than an omission: nobody asked for
-        // it, nothing is watching it, and there is no job to press an × on.
-        Thread worker = new Thread(() -> fetch(needsFetch, Progress.NONE, () -> false),
-                "crystalgui-mappings");
-        worker.setDaemon(true);
-        worker.start();
+        // THE HOST SAYS HOW, THIS SAYS WHEN. A platform states the what, the where and the how; deciding
+        // that a fetch is owed is this module's job and used to be copied into every loader. The default
+        // is a daemon thread, so a dedicated server is correct with no code at all, and a host with a UI
+        // overrides it to get a progress bar. @see ScriptService#runInBackground
+        needsFetch.runInBackground("Downloading Minecraft mappings",
+                (progress, cancelled) -> fetch(needsFetch, progress, cancelled));
     }
 
     /**
@@ -174,21 +129,9 @@ public final class PlatformMappings {
      * {@code Minecraft.getMinecraft()} against a runtime that only has {@code func_71410_x} and died with
      * {@code NoSuchMethodError}. A cache read is a parse and costs nothing; there is no reason for it to be
      * anywhere but here.</p>
-     *
-     * @see #fetchClaimed
      */
-    public static ScriptService decideClaimed() {
+    static ScriptService decideClaimed() {
         return decide();
-    }
-
-    /**
-     * The network half of a {@link #claim()}, for a caller that ran {@link #decideClaimed} itself.
-     *
-     * <p>Pass whatever {@code decideClaimed} handed back; it is never null there.</p>
-     */
-    public static void fetchClaimed(ScriptService platform, Progress progress,
-                                    java.util.function.BooleanSupplier cancelled) {
-        fetch(platform, progress == null ? Progress.NONE : progress, cancelled);
     }
 
     private static ScriptService decide() {
@@ -251,7 +194,7 @@ public final class PlatformMappings {
      * sweep is honest where a bar would be invented.</p>
      */
     private static void fetch(ScriptService platform, Progress progress,
-                              java.util.function.BooleanSupplier cancelled) {
+                              BooleanSupplier cancelled) {
         MappingCoordinates coordinates = platform.mappings();
         progress.begin("Downloading Minecraft mappings", -1);
         progress.detail(coordinates.cacheKey());

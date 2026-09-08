@@ -1,10 +1,15 @@
 package com.crystalgui.mc.platform.service.script;
 
+import com.crystalgui.core.async.JobKey;
+import com.crystalgui.core.async.JobLane;
+import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.storage.StorageLayout;
 import com.crystalgui.language.map.ReadableView;
 import com.crystalgui.language.platform.MappingCoordinates;
 import com.crystalgui.language.platform.NamespaceProbe;
 import com.crystalgui.language.platform.ScriptService;
+
+import cpw.mods.fml.common.FMLCommonHandler;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -81,6 +86,31 @@ public final class ScriptService1710 implements ScriptService {
     @Override
     public ReadableView.ByteSource liveBytes() {
         return LaunchWrapperBytes.SOURCE;
+    }
+
+    /**
+     * A job on a client, a daemon thread on a server — and the side has to be asked.
+     *
+     * <p>{@code JobScheduler} is drained by {@code UIDocument.frame} and by nothing else, so a job
+     * submitted on a dedicated server is never run. This service is deliberately side-agnostic (its
+     * other four members are installation-level facts), which makes this the one member that has to
+     * know: a client gets a progress bar and a cancel, a server gets the default thread.</p>
+     *
+     * <p>Submitting on both is not a hypothetical mistake — it is what the mod's {@code init} did, and
+     * {@code init} fires on both sides. An obfuscated server with no cached mapping waited for one for
+     * ever, and nothing said why.</p>
+     */
+    @Override
+    public void runInBackground(String title, BackgroundWork work) {
+        if (!FMLCommonHandler.instance().getEffectiveSide().isClient()) {
+            ScriptService.super.runInBackground(title, work);
+            return;
+        }
+        JobScheduler.shared().job(JobKey.of(ScriptService1710.class, title), JobLane.BACKGROUND,
+                context -> {
+                    work.run(context.progress(), context::isCancelled);
+                    return null;
+                }).submit();
     }
 
     /**

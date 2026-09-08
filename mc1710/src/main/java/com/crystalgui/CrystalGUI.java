@@ -1,12 +1,7 @@
 package com.crystalgui;
 
 import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgui.core.async.JobKey;
-import com.crystalgui.core.async.JobLane;
-import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.text.syntax.LanguageRegistry;
-import com.crystalgui.language.map.PlatformMappings;
-import com.crystalgui.language.platform.ScriptService;
 import com.crystalgui.language.platform.ScriptServices;
 import com.crystalgui.mc.ClientProxy;
 import com.crystalgui.mc.CommonProxy;
@@ -138,41 +133,12 @@ public class CrystalGUI {
         // and not the languages, which is the whole point of the service.
         LanguageRegistry.bootstrap();
 
-        // The service itself is now SIDE-AGNOSTIC (Phase 4 A5): cacheRoot() takes the config
-        // directory Forge hands over at preInit instead of reading Minecraft.getMinecraft(), so a
-        // dedicated server can hold one. The four other members were always installation-level facts.
+        // NOTHING DRIVES THE MAPPING FROM HERE, and that is the correction. `language/` decides a
+        // fetch is owed and asks this service HOW to run it; the loader's answer is
+        // `ScriptService1710.runInBackground`. A platform states the what, the where and the how.
         //
-        // What is still client-shaped is BELOW, not above: the mappings fetch is submitted as a job
-        // so it reports into a status bar. A server wanting mappings would acquire them without one.
-
-        // DECIDED HERE, FETCHED LATER -- and the split is the whole point.
-        //
-        // This used to put BOTH halves in the job, on the reasoning that a claim made here is always
-        // honoured because the job is already submitted. The second half of that sentence is the part that
-        // was not true: a job only starts when something calls `JobScheduler.shared().drain()`, and the
-        // only thing that does is `UIWindow.advanceFrame`. So the acquisition was owed to a frame, which is
-        // a promise a mod's init has no business making -- a dedicated server never paints one, and even a
-        // client owes it to a window that may not exist yet.
-        //
-        // What made it costly is that `decide()` needs no frame and no network. It reads an already
-        // downloaded mapping off disk, which is a parse. On `runObfClient` with mcp_stable/12 complete in
-        // the config directory, the claim was taken, the job was submitted, and nothing ever ran: no
-        // mapping line in any log of any run, every compiled script cached under a key ending
-        // `-identity-8`, and `Minecraft.getMinecraft()` reaching a runtime that has only `func_71410_x`.
-        // The data was on the disk the whole time.
-        //
-        // So the cache is applied on this thread, and only a genuine download is handed to a job -- which
-        // is what gives it a progress bar, and is the one half worth deferring.
-        if (PlatformMappings.claim()) {
-            ScriptService needsFetch = PlatformMappings.decideClaimed();
-            if (needsFetch != null) {
-                JobScheduler.shared().job(JobKey.of(PlatformMappings.class, "mappings"),
-                        JobLane.BACKGROUND, context -> {
-                            PlatformMappings.fetchClaimed(needsFetch, context.progress(),
-                                    context::isCancelled);
-                            return null;
-                        }).submit();
-            }
-        }
+        // It also fixes a real defect: this ran from `init`, which fires on BOTH sides, so a dedicated
+        // server submitted a job that only `UIDocument.frame` could ever drain. An obfuscated server
+        // with no cached mapping waited for one for ever with nothing to say why.
     }
 }
