@@ -577,11 +577,36 @@ through to `CgUiCrossFade` now, since `background` can only ever hold a `CgUiQua
 
 ## 8. Visual Layers (Opacity Isolation + Masking)
 
-`opacity < 1` and `overflow: hidden` (when auto-detected to `OverflowClip.MASK` — see
-`UINode.resolveOverflowClip()`) both route through an offscreen "visual layer" — a screen-sized
-FBO from a small pool `CgUiPaintContext` owns (`beginLayerFbo`/`endLayerFbo`/`blitLayer`/
-`compositeMask`, `core/src/main/java/com/crystalgui/render/CgUiPaintContext.java`). Ordinary elements
-(opacity 1, no mask) skip this entirely — same direct-draw path as always, zero overhead.
+`opacity < 1` and a rounded or masked `overflow: hidden` both route through an offscreen "visual
+layer" (`beginLayerFbo`/`endLayerFbo`/`blitLayer`/`compositeMask`,
+`core/src/main/java/com/crystalgui/render/CgUiPaintContext.java`). Ordinary elements (opacity 1, no
+mask) skip this entirely — same direct-draw path as always, zero overhead.
+
+**A layer is the size of what goes in it**, not the size of the display. `BoxPainter` takes the
+subtree's [ink bounds](#ink-bounds) through the pose, intersects them with the live clip, and opens a
+`LayerRegion`; the allocation, the clear and the composite are all sized from it, and the target comes
+from `LayerPool` bucketed by size and kept per surface. **The layer's pixel `(0,0)` is the region's
+corner**, so the painter shifts its base matrix by the region's negated origin and the clip stack is
+shifted with it — a caller opening a layer by hand has to do the same.
+
+**Ink bounds** are Blink's visual overflow: `Box.inkX0..inkY1`, composed bottom-up in `BoxTree`
+alongside the world matrices, from each box's border box grown by its outline, by whatever
+`UIElement.inkOverflow()` declares, and by its children's — truncated to the padding box wherever
+`overflow` clips. **A widget that paints outside its own box and does not declare it is clipped, and
+only inside a layer**, which is the one failure worth knowing about here.
+
+**Two layers are never opened at all.** A mask over a childless box did nothing — the multiply only
+ever applied to the children's layer — and an `opacity` whose box paints at most one primitive folds
+into the draw through `_LayerOpacity` instead of flattening anything. The fold is refused for any node
+that overrides a paint hook, because CrystalGraphics' text material carries no `_LayerOpacity` and a
+folded label would ignore the fade.
+
+**And a layer whose subtree did not change is not painted again.** `Box.subtreeRevision` is composed
+in the same walk as the ink bounds; `CgUiPaintContext.retain` keeps the texture, and a layer still
+holding the revision it was drawn at is composited straight back. Retention is refused for any subtree
+containing a node whose `paintsDynamically()` is true (the default for anything overriding a paint
+hook) or a `backdrop-filter`, whose subject is not in this tree at all. `UIElement.repaint()` is the
+door for a widget whose picture changes without moving a box.
 
 **Why an offscreen layer at all**: without one, overlapping translucent children blend against
 whatever's already drawn one at a time, then each gets faded independently — the classic
@@ -589,13 +614,10 @@ double-blend seam at the overlap. Isolating the whole subtree in its own buffer 
 the *result* as one unit, avoids that (the same reason real browsers isolate `opacity`-bearing
 stacking contexts).
 
-**Why the layer is screen-sized, not element-sized**: background/children/overlay all draw using
-the same absolute screen coordinates (`runtimeCache.getX()/getY()`) they always do — no translation
-math needed — because the layer FBO spans the whole screen and starts fully transparent; only the
-element's own footprint ends up with real pixels in it. Matches LDLib2's own `PictureInPictureState`-based
-visual-layers implementation (sibling checkout at `../LDLib2`, under
-`src/main/java/.../gui/ui/rendering/`), which uses the same technique for the same reason on top of
-Minecraft's `PictureInPictureRenderer`.
+> **The layer used to be screen-sized**, on the reasoning that every draw then used the same absolute
+> coordinates and nothing needed translating. It cost a full-screen clear and a full-screen composite
+> for a 20×20 element at `opacity: 0.9`, which is what `LayerRegion` replaced; the translation it
+> avoided is one matrix multiply in `BoxPainter`. Skia's `saveLayer` takes bounds for the same reason.
 
 **`OverflowClip.MASK`** (`UINode.the paint walk` — reached via `overflow: hidden` auto-detecting
 to mask, not an author-chosen `clip:` value anymore; see `UINode.resolveOverflowClip()`)
