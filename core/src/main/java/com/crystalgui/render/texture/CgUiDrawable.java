@@ -37,6 +37,22 @@ public interface CgUiDrawable {
     void draw(CgUiPaintContext ctx, float mouseX, float mouseY, float x, float y, float width, float height);
 
     /**
+     * Whether {@link #draw} covers any pixel at most once — the contract above, stated so the few
+     * drawables that break it can say so.
+     *
+     * <p>Read where the answer changes what is drawn rather than only how fast: an element at
+     * {@code opacity: 0.5} painting ONE primitive can multiply the opacity into that draw, and one
+     * painting two overlapping primitives cannot — group opacity and per-primitive opacity are the same
+     * number until two draws meet, and then {@code 0.5} over {@code 0.5} is {@code 0.75} apart and
+     * {@code 0.5} together. Answering true wrongly makes an element visibly darker at the overlap.</p>
+     *
+     * <p>A stack, a cross-fade and a multi-path vector are the three kinds that answer false.</p>
+     */
+    default boolean drawsOnePrimitive() {
+        return true;
+    }
+
+    /**
      * Natural (unscaled) width in pixels, or {@code -1} when this drawable has no inherent size —
      * solid colours and SDF shapes are defined by whatever rect they're handed, so they report -1.
      *

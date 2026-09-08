@@ -133,6 +133,15 @@ public final class Box {
     // every one of these is affine and 2D, so the other ten never move.
     float wasWidth = Float.NaN, wasHeight = Float.NaN;
     int wasChildCount = -1;
+
+    /** Whether anything in this subtree moved on the current compose pass. @see BoxTree#composeInk */
+    boolean subtreeChanged;
+
+    /** What this box paints in its OWN space, refreshed only when its signature moves. */
+    float localInkL, localInkT, localInkR, localInkB;
+
+    /** {@link #retainable} for this box alone, ignoring what it hosts. Style-derived, so cached. */
+    boolean selfRetainable;
     float wasM00, wasM01, wasM10, wasM11, wasM30 = Float.NaN, wasM31;
     @Nullable ComputedStyle wasStyle;
 

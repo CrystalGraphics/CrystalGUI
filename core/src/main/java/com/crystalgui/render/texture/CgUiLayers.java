@@ -40,6 +40,12 @@ import com.crystalgui.render.CgUiPaintContext;
  */
 public final class CgUiLayers implements CgUiDrawable, CornerRadiusAware {
 
+    /** A stack is layers over layers, by definition. @see CgUiDrawable#drawsOnePrimitive */
+    @Override
+    public boolean drawsOnePrimitive() {
+        return false;
+    }
+
     /** In CSS order: index 0 is drawn last and therefore appears on top. */
     private final List<CgUiDrawable> layers;
 

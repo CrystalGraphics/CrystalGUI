@@ -152,7 +152,7 @@ public final class BoxPainter {
                     : ctx.beginLayerFbo(region);
             paintSelf(box, style, ctx, radii);
             node.paintContent(ctx, box);
-            if (mask && !box.children().isEmpty()) {
+            if (mask) {
                 CgFrameBuffer childrenFbo = ctx.beginLayerFbo(inside);
                 paintChildren(box, ctx, inner, false);
                 CgFrameBuffer maskFbo = ctx.beginLayerFbo(inside);
@@ -198,9 +198,13 @@ public final class BoxPainter {
         if (style.get(StylePropertyRegistry.BACKDROP_FILTER) != null) return false;
 
         int primitives = 0;
-        if (style.get(StylePropertyRegistry.BACKGROUND) != CgUiDrawable.EMPTY
-                || style.isSet(StylePropertyRegistry.BACKGROUND_COLOR)) primitives++;
-        if (style.get(StylePropertyRegistry.OVERLAY) != CgUiDrawable.EMPTY) primitives++;
+        CgUiDrawable background = style.get(StylePropertyRegistry.BACKGROUND);
+        CgUiDrawable overlay = style.get(StylePropertyRegistry.OVERLAY);
+        // A drawable that covers a pixel twice is already two primitives on its own -- a stack, a
+        // cross-fade, a vector whose paths cross. @see CgUiDrawable#drawsOnePrimitive
+        if (!background.drawsOnePrimitive() || !overlay.drawsOnePrimitive()) return false;
+        if (background != CgUiDrawable.EMPTY || style.isSet(StylePropertyRegistry.BACKGROUND_COLOR)) primitives++;
+        if (overlay != CgUiDrawable.EMPTY) primitives++;
         LengthPercent stroke = style.get(StylePropertyRegistry.OUTLINE_WIDTH);
         if (style.get(StylePropertyRegistry.OUTLINE) != CgUiDrawable.EMPTY
                 || stroke != null && stroke.resolve(box.width()) > 0f) primitives++;
