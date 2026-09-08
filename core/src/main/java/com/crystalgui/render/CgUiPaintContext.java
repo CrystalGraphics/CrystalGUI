@@ -206,6 +206,17 @@ public final class CgUiPaintContext {
     /** The backdrop primitive — capture, blur, and the region logic that keeps it affordable. */
     private final CgUiBackdrop backdrop;
 
+    /** Rasterised icon fills, kept across frames. @see SvgRasterCache */
+    private final SvgRasterCache svgRaster;
+
+    /**
+     * A material standing in for {@code gui_curve.shader} on the curve path, or null. Set only inside
+     * {@link #withCurveMaterial}, which is how the raster cache accumulates coverage additively through
+     * the same renderer and the same pose everything else uses.
+     */
+    @Nullable
+    private CgMaterial curveMaterialOverride;
+
     /** One axis of the separable blur per bind. @see #backdropFor */
     /** Package-private: {@link CgUiBackdrop} owns every use of it. */
     final CgMaterial blurMaterial;
@@ -390,6 +401,7 @@ public final class CgUiPaintContext {
         this.downsampleMaterial = CgMaterial.load("crystalgui:shaders/gui_downsample.shader");
         // AFTER the materials: it holds them, and a field initialiser would run before they exist.
         this.backdrop = new CgUiBackdrop(this);
+        this.svgRaster = new SvgRasterCache(this);
         this.whitePixel = (CgTexture2D) CgFallbackTextures.WHITE_1x1;
         this.textRenderer = CgTextRenderer.createManualSized().poseStack(this.poseStack)
                                           .restoreStateWith(() -> {
@@ -850,6 +862,11 @@ public final class CgUiPaintContext {
         poseStack.popPose();
 
         if (!poseStack.clear()) throw new IllegalStateException("Unpopped stack(s) in UI frame");
+
+        // THE OTHER HALF OF THE FRAME THE DOCUMENT OPENED, and last of all so the resolve and the
+        // composite above are in it. Reports and clears; a no-op when nothing opened one, which is
+        // every headless document. @see UIDocument#frame
+        FrameProfile.frameEnd();
     }
 
     // ── Public draw API ─────────────────────────────────────────────────────
@@ -1091,6 +1108,24 @@ public final class CgUiPaintContext {
     }
 
     /**
+     * Starts a filled quad with exact-area antialiasing on the edges it marks soft — what a scanline
+     * tessellation submits per band cell. Same material path as {@link #curve()} and
+     * {@link #triangle()}, so mixing the three costs nothing.
+     *
+     * <pre>{@code
+     * ctx.filledQuad().points(x0, y0, x1, y1, x2, y2, x3, y3)
+     *         .softEdges(CgVectorRenderer.QUAD_LEFT | CgVectorRenderer.QUAD_RIGHT)
+     *         .color(argb).submit();
+     * }</pre>
+     *
+     * <p><b>Never call {@code .pose(...)} on the result</b> — same rule as {@link #quad()}.</p>
+     */
+    public CgVectorRenderer.Quad filledQuad() {
+        beginCurvePath();
+        return renderer.filledQuad();
+    }
+
+    /**
      * Makes the quad path current, flushing and unbinding the curve path if it was.
      *
      * <p>Rebinds {@link #currentMaterial} rather than {@link #boxModelMaterial}: a {@link
@@ -1125,8 +1160,59 @@ public final class CgUiPaintContext {
         // Layer opacity is a material property, so it has to be re-applied on the material actually
         // being bound — the value living on boxModelMaterial says nothing about this one.
         curveMaterial.applyProperties(b -> b.set1f("_LayerOpacity", layerOpacity));
-        renderer.useCurveMaterial(curveMaterial);
+        renderer.useCurveMaterial(activeCurveMaterial());
         currentTexture = null;
+    }
+
+    private CgMaterial activeCurveMaterial() {
+        return curveMaterialOverride != null ? curveMaterialOverride : curveMaterial;
+    }
+
+    /**
+     * Runs {@code body} with the curve path drawing through {@code material} instead of
+     * {@code gui_curve.shader}. Everything the path does otherwise — the pose, the flushes, the switch
+     * away from quads and text — is unchanged, so a body submits curves, triangles and quads exactly as
+     * it would anywhere else.
+     */
+    void withCurveMaterial(CgMaterial material, Runnable body) {
+        flush();
+        CgMaterial saved = curveMaterialOverride;
+        curveMaterialOverride = material;
+        if (activePath == InstancePath.CURVE) renderer.useCurveMaterial(material);
+        try {
+            body.run();
+            flush();
+        } finally {
+            curveMaterialOverride = saved;
+            if (activePath == InstancePath.CURVE) {
+                curveMaterial.applyProperties(b -> b.set1f("_LayerOpacity", layerOpacity));
+                renderer.useCurveMaterial(activeCurveMaterial());
+            }
+        }
+    }
+
+    /** Where a small icon's fills are rasterised once and drawn from. */
+    public SvgRasterCache svgRaster() {
+        return svgRaster;
+    }
+
+    /** The premultiplied composite material. @see #blitLayer */
+    CgMaterial layerBlitMaterial() {
+        return layerBlitMaterial;
+    }
+
+    /** Lifts every clip rect until {@link #resumeScissor}; for a draw into a target the clips do not describe. */
+    int[] suspendScissor() {
+        flush();
+        int[] saved = scissorStack.suspend();
+        reapplyScissorFor(targetHeight());
+        return saved;
+    }
+
+    void resumeScissor(int[] saved) {
+        flush();
+        scissorStack.resume(saved);
+        reapplyScissorFor(targetHeight());
     }
 
     /**
@@ -1523,7 +1609,18 @@ public final class CgUiPaintContext {
      *
      * @return the region, empty when the bounds fall outside the clip
      */
+    /**
+     * {@code -Dcrystalgui.layers.legacy=true} — layers behave as they did before they were bounded:
+     * the size of the target, never elided, never kept between frames.
+     *
+     * <p>For measuring, and for telling a rendering fault apart from a compositing one in a single run.
+     * Same shape as CrystalGraphics' {@code -Dcrystalgraphics.state.noDedup}, and for the same reason:
+     * an optimisation that cannot be turned off cannot be blamed or acquitted.</p>
+     */
+    public static final boolean LEGACY_LAYERS = Boolean.getBoolean("crystalgui.layers.legacy");
+
     public LayerRegion layerRegion(float x0, float y0, float x1, float y1) {
+        if (LEGACY_LAYERS) return new LayerRegion(0, 0, targetWidth(), targetHeight());
         // The enclosing REGION where there is one, not the buffer: a pooled target is bucketed, so
         // its slack is space the enclosing composite will never read and a child sized into it would
         // be allocating for pixels that cannot reach the screen.
@@ -1600,7 +1697,7 @@ public final class CgUiPaintContext {
      */
     @Nullable
     public RetainedLayer retain(Object key, LayerRegion region, long revision) {
-        if (retentionSuspended) return null;
+        if (retentionSuspended || LEGACY_LAYERS) return null;
         RetainedLayer layer = retained.remove(key);
         if (layer != null) {
             // Re-inserted so iteration order stays least-recently-used first, for the sweep below.
@@ -2174,6 +2271,7 @@ public final class CgUiPaintContext {
 
         // createOwned, so no registry sweeps these — the same reason the layer pool is freed here.
         backdrop.delete();
+        svgRaster.delete();
 
         renderer.delete();
         textRenderer.delete();

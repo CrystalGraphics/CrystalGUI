@@ -434,6 +434,10 @@ public final class UIDocument extends UIElement {
      * is what makes hover correct on a frame where a reflow moved something under a still pointer.</p>
      */
     public void frame(float deltaSeconds, float width, float height) {
+        // A FRAME STARTS HERE AND ENDS IN THE PAINT CONTEXT, because the host drives the two halves
+        // separately: this is animation, style and layout, and the paint that follows is a call the
+        // host makes itself. @see CgUiPaintContext#endFrame
+        FrameProfile.frameBegin();
         if (JobScheduler.hasShared()) {
             FrameProfile.count("jobs-busy", JobScheduler.shared().runningCount());
             JobScheduler.shared().drain();
