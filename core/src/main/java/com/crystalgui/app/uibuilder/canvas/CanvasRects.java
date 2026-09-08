@@ -8,6 +8,7 @@ import org.joml.Vector3f;
 
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.texture.CgUiRoundedRect;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.ui.box.Box;
@@ -180,21 +181,35 @@ public final class CanvasRects {
         return Transform2D.apply(space.worldToLocal(), world.x, world.y);
     }
 
-    /** Draws {@code thickness} px of outline just inside a rectangle, as four fills. */
-    public static void outline(CgUiPaintContext ctx, float[] rect, float thickness, int argb) {
-        for (float[] side : outlineSides(rect, thickness)) {
-            ctx.fillRect(side[0], side[1], side[2], side[3], argb);
-        }
+    /**
+     * Draws {@code thickness} px of outline hugging a rectangle from OUTSIDE it.
+     *
+     * <p><b>One SDF ring, not four fills.</b> Four axis-aligned quads are exact on whole pixels and
+     * ragged everywhere else, and a design canvas is everywhere else: pan and zoom put every edge on a
+     * fraction, and the quad path has no coverage term to soften one with. The rounded-rect material
+     * computes coverage from the distance field, so the ring is smooth at any position and any zoom --
+     * the same reason the CSS {@code outline} the engine draws goes through it. It is also one draw
+     * call rather than four, and no two strokes overlap at the corners to blend twice.</p>
+     */
+    public static void outline(CgUiPaintContext ctx, @Nullable float[] rect, float thickness, int argb) {
+        float[] ring = outlineRing(rect, thickness);
+        if (ring == null) return;
+        CgUiRoundedRect stroke = new CgUiRoundedRect();
+        // A transparent interior carrying the stroke's rgb, so the shader's edge-to-fill mix has no dark
+        // fringe to bleed. @see BoxPainter#paintRounded, which does the same for the same reason.
+        stroke.setFillColor(argb & 0x00FFFFFF);
+        stroke.setBorder(thickness, argb);
+        stroke.draw(ctx, ring[0], ring[1], ring[2], ring[3]);
     }
 
     /**
-     * The four strokes of an outline, <b>hugging the rectangle from OUTSIDE it</b>.
+     * The rectangle an outline occupies, <b>outside</b> the one it points at.
      *
-     * <p>They were drawn inside, which means an outline covers the outermost pixels of the very thing it
-     * is pointing at. Invisible on a box with padding and obvious on one whose content reaches its edge:
-     * a slider's thumb sits flush against the control's left edge at minimum, so the selection stroke
-     * ran through it and it read as the thumb spilling out of its own box. Nothing was spilling —
-     * measured, the thumb is 10px wide at x=0 inside a 150px control — the stroke was simply on top
+     * <p>It used to be drawn inside, which means an outline covers the outermost pixels of the very
+     * thing it is pointing at. Invisible on a box with padding and obvious on one whose content reaches
+     * its edge: a slider's thumb sits flush against the control's left edge at minimum, so the selection
+     * stroke ran through it and it read as the thumb spilling out of its own box. Nothing was spilling
+     * -- measured, the thumb is 10px wide at x=0 inside a 150px control -- the stroke was simply on top
      * of it.</p>
      *
      * <p>Outside also removes the clamp the inside version needed: two strokes on a box thinner than
@@ -203,18 +218,14 @@ public final class CanvasRects {
      * overlaps itself.</p>
      *
      * <p>Separate from the painting so it can be asserted without a GL context.</p>
+     *
+     * @return {x, y, width, height} of the ring itself, whose stroke runs inward from its own edge, or
+     *         null when there is nothing to ring
      */
-    public static float[][] outlineSides(@Nullable float[] rect, float t) {
-        if (rect == null || rect[2] <= 0f || rect[3] <= 0f) return new float[0][];
-        float x = rect[0];
-        float y = rect[1];
-        float width = rect[2];
-        float height = rect[3];
-        return new float[][] {
-                {x - t, y - t, width + t + t, t},        // top, across the corners
-                {x - t, y + height, width + t + t, t},   // bottom, likewise
-                {x - t, y, t, height},                   // left, between them
-                {x + width, y, t, height},               // right
-        };
+    @Nullable
+    public static float[] outlineRing(@Nullable float[] rect, float t) {
+        if (rect == null || rect[2] <= 0f || rect[3] <= 0f) return null;
+        return new float[]{rect[0] - t, rect[1] - t, rect[2] + t + t, rect[3] + t + t};
     }
 }
+

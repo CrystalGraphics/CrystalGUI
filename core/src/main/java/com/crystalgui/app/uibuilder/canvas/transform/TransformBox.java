@@ -780,28 +780,28 @@ public final class TransformBox extends UIElement {
 
         Vector2f pivot = toViewport(gesture.originX(), gesture.originY());
         if (pivot != null) {
-            paint.fillRect(pivot.x - PIVOT_SIZE * 0.5f, pivot.y - 0.5f, PIVOT_SIZE, 1f, colour);
-            paint.fillRect(pivot.x - 0.5f, pivot.y - PIVOT_SIZE * 0.5f, 1f, PIVOT_SIZE, colour);
+            float arm = PIVOT_SIZE * 0.5f;
+            edge(paint, new Vector2f(pivot.x - arm, pivot.y), new Vector2f(pivot.x + arm, pivot.y), colour);
+            edge(paint, new Vector2f(pivot.x, pivot.y - arm), new Vector2f(pivot.x, pivot.y + arm), colour);
         }
     }
 
     /**
      * One side of the box, at any angle.
      *
-     * <p>Through the pose stack rather than as an axis-aligned fill: the box is rotated and skewed, and
-     * four {@code fillRect}s can only draw the box it used to be. The rect is one pixel tall in the
-     * rotated frame, which is what keeps the outline a hairline at every angle.</p>
+     * <p><b>A stroke, not a rotated fill.</b> Four {@code fillRect}s can only draw the box this one used
+     * to be, so it was drawn as a one-pixel rect inside a rotated pose — which is geometrically right
+     * and the worst case there is for a quad: a hairline at 30 degrees has no whole pixel anywhere along
+     * it, and the quad path carries no coverage term to soften one with. The stroke path computes
+     * coverage from the segment's distance field, so the edge is smooth at every angle and every zoom
+     * without a multisampled target underneath it.</p>
      */
     private static void edge(CgUiPaintContext paint, Vector2f from, Vector2f to, int colour) {
         float dx = to.x - from.x;
         float dy = to.y - from.y;
-        float length = (float) Math.sqrt(dx * dx + dy * dy);
-        if (length < 0.01f) return;
-        paint.getPoseStack().pushPose();
-        paint.getPoseStack().last().pose()
-                .translate(from.x, from.y, 0f)
-                .rotateZ((float) Math.atan2(dy, dx));
-        paint.fillRect(0f, -0.5f, length, 1f, colour);
-        paint.getPoseStack().popPose();
+        if (dx * dx + dy * dy < 0.0001f) return;
+        // Half-width: `width` is the half, so this is the same one logical pixel as before -- and it
+        // stays one LOGICAL pixel, because the pose scales stroke widths as it scales everything else.
+        paint.curve().line(from.x, from.y, to.x, to.y).width(0.5f).color(colour).submit();
     }
 }
