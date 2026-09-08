@@ -70,6 +70,17 @@ final class PortDefaultEditor {
      * between two distinct dots rather than two dots touching with nothing visible between them. */
     private static final float GAP = 16f;
 
+    /**
+     * How far {@link #paintStub} reaches LEFT of the node that draws it — what {@link GraphNode}
+     * declares as its ink overflow, so a layer opened over the node is sized to include the stub.
+     *
+     * <p>{@link #GAP} is the span itself; the rest is the two dots the segment is trimmed between,
+     * which sit either side of the node's own edge.</p>
+     */
+    static float stubReach() {
+        return GAP + DOT_OVERLAP;
+    }
+
     /** How far LEFT of the box's own right edge the dot's centre sits — how much of the dot visually
      * overlaps the box, Unity's own "the dot is part of the widget" look rather than a mark floating in
      * open canvas beside it. */

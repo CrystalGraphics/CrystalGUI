@@ -47,6 +47,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 import javax.annotation.Nullable;
+import com.crystalgui.ui.box.InkOverflow;
 import org.joml.Vector2f;
 
 /**
@@ -644,6 +645,32 @@ public class UIElement extends UINode implements EventTarget, Styleable {
 
     /** As {@link #paintContent}, after the children and before {@code overlay}/{@code outline}. */
     public void paintDecoration(CgUiPaintContext ctx, Box box) {
+    }
+
+    /**
+     * How far {@link #paintContent}/{@link #paintDecoration} draw OUTSIDE this element's border box,
+     * as four positive margins in the element's own space.
+     *
+     * <p>The box model's own overspill â€” an outline, a mask offset â€” is read from the cascade and needs
+     * no declaration. This is for a node that draws by hand: a selection frame with handles at its
+     * corners, a glow, a wire leaving the node it starts at.</p>
+     *
+     * <pre>{@code
+     * // Eight 8px handles centred on the corners: 4px of each sits outside.
+     * @Override public InkOverflow inkOverflow() { return InkOverflow.uniform(4f); }
+     * }</pre>
+     *
+     * <p><b>What it costs to leave unstated.</b> The painter allocates a layer at the size of the ink
+     * it was told about, so an undeclared overspill inside an {@code opacity} or masked ancestor is
+     * clipped away â€” and only there, which reads as the effect breaking the widget rather than as a
+     * missing declaration here. Nothing outside a layer is affected, so this is invisible until it is
+     * not.</p>
+     *
+     * @return the four margins; {@link InkOverflow#NONE} for a node that stays inside its box, which
+     *         is nearly all of them
+     */
+    public InkOverflow inkOverflow() {
+        return InkOverflow.NONE;
     }
 
 

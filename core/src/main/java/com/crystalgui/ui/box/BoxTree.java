@@ -1,5 +1,6 @@
 package com.crystalgui.ui.box;
 
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.ComputedStyle;
 import com.crystalgui.style.property.StylePropertyRegistry;
@@ -25,6 +26,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
 import javax.annotation.Nullable;
+import dev.vfyjxf.taffy.geometry.FloatRect;
 import org.joml.Matrix4f;
 
 /**
@@ -324,7 +326,9 @@ public final class BoxTree {
      * surface transform. Layout first -- the painter draws what {@link #layout} composed.
      */
     public void paint(CgUiPaintContext ctx) {
+        long timed = FrameProfile.begin();
         BoxPainter.paint(this, ctx);
+        FrameProfile.end(timed, "paint:tree");
     }
 
     // ── Sync ─────────────────────────────────────────────────────────────────
@@ -639,6 +643,7 @@ public final class BoxTree {
                 transform.applyTo(box.localToWorld, 0f, 0f, box.width, box.height, 0f, 0f);
                 box.localToWorld.invert(box.worldToLocal);
                 for (Box child : box.hosted) compose(child, box.localToWorld, box.scrollLeft(), box.scrollTop());
+                composeInk(box);
                 return;
             }
             ComputedStyle style = box.node.computedStyle();
@@ -654,6 +659,71 @@ public final class BoxTree {
         }
         box.localToWorld.invert(box.worldToLocal);
         for (Box child : box.hosted) compose(child, box.localToWorld, box.scrollLeft(), box.scrollTop());
+        composeInk(box);
+    }
+
+    private final float[] inkLocal = new float[4];
+    private final float[] inkClip = new float[4];
+
+    /**
+     * Composes {@link Box#inkX0 ink bounds} for one box, bottom-up â€” what it paints itself, plus what
+     * its subtree paints, clipped to the padding box wherever {@code overflow} says so.
+     *
+     * <p>Runs from {@link #compose} after the children, because a parent's ink is a function of theirs.
+     * The union is done in WORLD space rather than in each box's own: a child's ink is already an
+     * axis-aligned bound, and re-bounding it through the parent's inverse and back would grow it at
+     * every level of a rotated tree.</p>
+     */
+    private void composeInk(Box box) {
+        BoxPainter.localInk(box, inkLocal);
+        worldAabb(box, inkLocal[0], inkLocal[1], inkLocal[2], inkLocal[3], inkLocal);
+        box.inkX0 = inkLocal[0];
+        box.inkY0 = inkLocal[1];
+        box.inkX1 = inkLocal[2];
+        box.inkY1 = inkLocal[3];
+        if (box.hosted.isEmpty()) return;
+
+        float x0 = Float.MAX_VALUE, y0 = Float.MAX_VALUE, x1 = -Float.MAX_VALUE, y1 = -Float.MAX_VALUE;
+        for (Box child : box.hosted) {
+            if (!child.hasInk()) continue;
+            x0 = Math.min(x0, child.inkX0);
+            y0 = Math.min(y0, child.inkY0);
+            x1 = Math.max(x1, child.inkX1);
+            y1 = Math.max(y1, child.inkY1);
+        }
+        if (x1 <= x0 || y1 <= y0) return;
+
+        if (box.clips()) {
+            // The PADDING box, which is what both clip paths use -- BoxPainter's scissor and the
+            // default `overflow: hidden` mask alike.
+            FloatRect b = box.border;
+            worldAabb(box, b.left, b.top,
+                    Math.max(b.left, box.width - b.right), Math.max(b.top, box.height - b.bottom), inkClip);
+            x0 = Math.max(x0, inkClip[0]);
+            y0 = Math.max(y0, inkClip[1]);
+            x1 = Math.min(x1, inkClip[2]);
+            y1 = Math.min(y1, inkClip[3]);
+            if (x1 <= x0 || y1 <= y0) return;
+        }
+        box.inkX0 = Math.min(box.inkX0, x0);
+        box.inkY0 = Math.min(box.inkY0, y0);
+        box.inkX1 = Math.max(box.inkX1, x1);
+        box.inkY1 = Math.max(box.inkY1, y1);
+    }
+
+    /** The world-space axis-aligned bound of a rect given in {@code box}'s own space. */
+    private static void worldAabb(Box box, float left, float top, float right, float bottom, float[] out) {
+        Matrix4f m = box.localToWorld;
+        float m00 = m.m00(), m10 = m.m10(), m30 = m.m30();
+        float m01 = m.m01(), m11 = m.m11(), m31 = m.m31();
+        float ax = m00 * left + m10 * top + m30, ay = m01 * left + m11 * top + m31;
+        float bx = m00 * right + m10 * top + m30, by = m01 * right + m11 * top + m31;
+        float cx = m00 * right + m10 * bottom + m30, cy = m01 * right + m11 * bottom + m31;
+        float dx = m00 * left + m10 * bottom + m30, dy = m01 * left + m11 * bottom + m31;
+        out[0] = Math.min(Math.min(ax, bx), Math.min(cx, dx));
+        out[1] = Math.min(Math.min(ay, by), Math.min(cy, dy));
+        out[2] = Math.max(Math.max(ax, bx), Math.max(cx, dx));
+        out[3] = Math.max(Math.max(ay, by), Math.max(cy, dy));
     }
 
     // ── Dirtying ─────────────────────────────────────────────────────────────

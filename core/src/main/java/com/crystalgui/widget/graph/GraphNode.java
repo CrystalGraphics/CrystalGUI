@@ -2,6 +2,7 @@ package com.crystalgui.widget.graph;
 
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.box.InkOverflow;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.graph.port.PortType;
@@ -346,6 +347,16 @@ public class GraphNode extends UIElement {
         GraphView view = graphView();
         if (view == null) return;
         for (NodePort port : inputPorts) view.paintPortEditorStub(ctx, port, this);
+    }
+
+    /**
+     * The port stubs {@link #paintDecoration} draws, which reach left of the node to the default
+     * editors hanging off it. @see PortDefaultEditor#stubReach
+     */
+    @Override
+    public InkOverflow inkOverflow() {
+        return inputPorts.isEmpty() ? InkOverflow.NONE
+                : new InkOverflow(PortDefaultEditor.stubReach(), 0f, 0f, 0f);
     }
 
     /** Ports and chrome are structure. A caller's element goes in {@link #preview()} or through
