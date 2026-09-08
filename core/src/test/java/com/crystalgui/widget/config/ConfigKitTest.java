@@ -610,8 +610,10 @@ public class ConfigKitTest extends UiDocumentTestBase {
      * off the VALUE while the label column held its full width beside it: "size" against a column two
      * characters wide, with "COLUMN" broken over three lines.</p>
      *
-     * <p>Both halves are now floored — the label at its own text, the control at {@code --cfg-ctrl-min}
-     * — so the row outgrows the panel instead, which is what the horizontal bar is for.</p>
+     * <p>Both halves are floored — the label at its own text, the control at {@code --cfg-ctrl-min} — so
+     * neither column absorbs the shortfall. What overflows instead is the FACT'S OWN TEXT, and the panel
+     * scrolls to reach it: the row itself stays viewport-wide, because a row that carried its own width
+     * put the panel's layout in a loop it could not settle. @see ua/inspector.css `.__inline__`</p>
      */
     @Test
     public void aNarrowPanelSqueezesNeitherColumn() {
@@ -626,14 +628,18 @@ public class ConfigKitTest extends UiDocumentTestBase {
         float narrowValue = valueWidth(row, 150f);
         assertEquals("the label column gave way instead of the row growing",
                 88f, row.label().box().width(), 1f);
-        // Against the fact's OWN width rather than a fraction: "not squeezed" means the text still fits,
-        // and how much slack is left over is the panel's business.
+        // NOT SQUEEZED means the value keeps its own width and is reachable -- not that the column is
+        // wide enough to contain it. The text overflows the column and the panel scrolls to it, which is
+        // the same outcome by a different mechanism; asserting the column contained it was asserting the
+        // mechanism, and it is the mechanism that had to change.
         UIText value = titleOrValueIn(row);
         assertNotNull("the row has no value to measure", value);
-        assertTrue("the value column is narrower than the fact in it: " + narrowValue
-                + " vs " + value.box().width(), narrowValue >= value.box().width() - 0.01f);
-        assertTrue("the row never grew, so the squeeze had nowhere else to go: " + row.box().width(),
-                row.box().width() > 150f);
+        assertEquals("the fact was truncated rather than left to overflow",
+                "64.0 x 24.0", value.displayedText());
+        assertTrue("the value is squeezed below its own text: " + narrowValue
+                + " vs " + value.box().width(), value.box().width() > narrowValue - 0.01f);
+        assertTrue("the panel does not scroll far enough to reach the value: "
+                + panel.box().scrollWidth(), panel.box().scrollWidth() > 150f);
     }
 
     /** The `__value__` a fact draws, found through the composed tree since it is a shadow part. */
@@ -683,8 +689,11 @@ public class ConfigKitTest extends UiDocumentTestBase {
         float oneLine = narrow.box().height();
         assertEquals("the long fact wrapped instead of running on: " + wide.box().height()
                 + " vs one line at " + oneLine, oneLine, wide.box().height(), 1f);
-        assertTrue("the row never grew past the panel, so there is nothing to scroll to: "
-                + wide.box().width(), wide.box().width() > 200f);
+        // THE PANEL'S EXTENT, not the row's width. The row is viewport-wide now and it is the fact's own
+        // text that overflows it -- see the class note on `.__inline__`. What matters to a reader is
+        // unchanged: there is somewhere to scroll to.
+        assertTrue("the panel never grew past its viewport, so there is nothing to scroll to: "
+                + panel.box().scrollWidth(), panel.box().scrollWidth() > 200f);
 
         // AND A SHORT ROW STILL FILLS THE PANEL, which is what `min-width: 100%` is for: without it a
         // row shrinks to its content and every hover band stops mid-panel.
@@ -749,8 +758,8 @@ public class ConfigKitTest extends UiDocumentTestBase {
         assertNotNull("the heading has no title element", title);
         assertEquals("the heading was truncated even though the panel scrolls",
                 heading, title.displayedText());
-        assertTrue("the heading row never grew, so there is nothing to scroll to: "
-                + row.box().width(), row.box().width() > 100f);
+        assertTrue("the panel never grew past its viewport, so there is nothing to scroll to: "
+                + panel.box().scrollWidth(), panel.box().scrollWidth() > 100f);
     }
 
     private static UIText titleIn(UIElement from) {

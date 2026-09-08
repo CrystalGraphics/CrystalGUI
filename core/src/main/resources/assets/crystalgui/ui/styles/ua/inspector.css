@@ -100,15 +100,28 @@
     flex-shrink: 1;
     white-space: nowrap;
 }
-/* The control column takes the rest, growing from a CONTENT basis.
+/* The control column takes the rest, from a DEFINITE basis — and the zero is what makes the panel's
+ * layout terminate.
  *
- * `width: 0` here for a long time, with a note saying a content basis would make the column keep
- * whatever its widest control needed. That is true and is now the point: a control is `width: 0` by the
- * kit rule below, so this measures zero for every editable row and nothing changed — while a FACT
- * carries its own width, and this is what lets it out to the row so the panel can scroll to it. Without
- * it the row's min-content stops at this zero and a long value has nowhere to go. */
+ * It was `width: auto` so a long FACT could carry its own width out to the row. That works, and it also
+ * closes a loop: the row is stretched to the panel's CONTENT width, that width is whatever the widest
+ * row asked for, and an editable field inside is `flex-grow: 1` over a zero basis — so the field's width
+ * is free space that depends on a width that depends on the field. Both answers are self-consistent (the
+ * field fills its column at ~1364px, or the column is measured with no free space and the field sits at
+ * its ~66px content size), the engine lays out ONCE, and whichever pass wrote the box last is what you
+ * saw. Hovering forced another pass, so every field snapped narrow as the pointer entered the panel and
+ * back as it left — with the computed `flex-grow: 1` and `width: 0` identical in both states.
+ *
+ * A definite basis removes the loop rather than damping it. `align-self: flex-start` with
+ * `min-width: 100%` was tried first, to size a row by its own content instead of by its widest sibling,
+ * and does NOT work: the percentage resolves against the scroll content box, so the row is stretched to
+ * the same 1462px and the loop is untouched.
+ *
+ * WHAT THE AUTO BASIS BOUGHT IS NOT LOST. The panel's scroll extent still reaches a long fact — measured
+ * at 1462.5 with the rows at 315 — because it is the fact's own TEXT that overflows now rather than the
+ * row that carries it. What changed is the mechanism, not whether you can scroll to read the value. */
 .__configurator__ > .__inline__ {
-    width: auto;
+    width: 0;
     flex-grow: 1;
     flex-direction: row;
     align-items: center;
@@ -463,12 +476,17 @@
  * that reads as "a section starts here" on a flat panel — but no arrow and nothing to click: a header
  * does not own content, so there is nothing to collapse. `-6px` bleeds it to the panel edge exactly like
  * the group head does, and for the same reason: a strip that stops short of the edge reads as a button. */
-/* Content-sized like `.__info__`, so a long heading carries its width out to the row rather than being
- * clipped inside a column whose basis is zero. `flex-grow` still fills the band across a short one. */
+/* FILLS ITS COLUMN, where it used to be content-sized so a long heading could carry its width out to the
+ * row. The column's basis is definite now, so nothing is carried out of it and a content-sized band
+ * simply stopped where its text did — a grey strip half way across the panel.
+ *
+ * Filling reaches the viewport's edge; ConfiguratorPanel.stretchSectionBands takes it the rest of the
+ * way, across the scrollable width. */
 .__configurator__ > .__inline__ > .__config-control__.__header__ {
     flex-direction: row;
     align-items: center;
-    width: auto;
+    width: 0;
+    flex-grow: 1;
     flex-shrink: 0;
     height: var(--cfg-ctrl-h);
     min-height: var(--cfg-ctrl-h);
