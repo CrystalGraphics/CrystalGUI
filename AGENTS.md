@@ -776,7 +776,7 @@ Obtained via `CgUiPaintContext.getInstance()`, **not** owned per-`UIDocument`. E
 > expression, never hold it.
 | Clip | `pushScissor` / `popScissor` |
 | Material | `withMaterial(material, body)` |
-| Layers | `withLayerOpacity(opacity, body)`, `beginLayerFbo()` / `endLayerFbo()`, `blitLayer(fbo, opacity)`, `compositeMask(subtreeFbo, maskFbo)` |
+| Layers | `withLayerOpacity(opacity, body)`, `beginLayerFbo(region)` / `endLayerFbo()`, `blitLayer(fbo, opacity, region)`, `compositeMask(subtreeFbo, maskFbo, region)`, `layerRegion(...)`, `retain(key, region, revision)` |
 | Lifecycle | `hasInstance()`, `destroy()` |
 
 > **`destroy()` must be called on GL-context destruction.** The instance is `static`, so it outlives
@@ -787,6 +787,16 @@ Obtained via `CgUiPaintContext.getInstance()`, **not** owned per-`UIDocument`. E
 > the fallback white pixel, font atlases), since those are swept by `CgGraphicsLifecycle.destroyContext()`
 > and freeing them here would be a double free. Use `hasInstance()` to check without *causing*
 > construction.
+
+> **A layer is the size of what goes in it, and one whose subtree did not change is not painted
+> again.** `BoxPainter` sizes every layer from the subtree's ink bounds (`Box.inkX0..inkY1`, composed
+> bottom-up in `BoxTree` — Blink's visual overflow, with `UIElement.inkOverflow()` for a widget that
+> paints past its own box), clipped to the live scissor; the allocation, the clear and the composite all
+> address that `LayerRegion`, and **the layer's pixel (0,0) is the region's corner**. `Box.subtreeRevision`
+> is composed in the same walk, and `CgUiPaintContext.retain` keeps the texture across frames — refused
+> for any subtree with a `backdrop-filter` or a node whose `paintsDynamically()` is true, which is the
+> default for anything overriding a paint hook. `UIElement.repaint()` is the door for a widget whose
+> picture changes without moving a box. Full account in `docs/CGUI_STYLE_RENDER_PIPELINE.md` §8.
 
 > **Opacity isolation and masking go through an FBO layer pass, not a flat multiply.** The
 > tint-vs-layer-opacity distinction is the thing most likely to be got wrong here — read
