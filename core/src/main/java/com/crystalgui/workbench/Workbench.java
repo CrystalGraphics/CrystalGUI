@@ -1645,7 +1645,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      */
     void bindStatusToActiveTab() {
         syncActiveTab();
-        statusBar.breadcrumbs().setCrumbs(saveActions.trailFor(activeFilePath()));
+        statusBar.breadcrumbs().setCrumbs(saveActions.trailFor(activeResource()));
 
         Document active = activeDocument();
         // THE VIEW IS PART OF THE QUESTION, not just the document. @see #activeStatusView
