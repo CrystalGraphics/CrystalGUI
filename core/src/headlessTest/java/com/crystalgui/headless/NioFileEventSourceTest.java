@@ -133,6 +133,31 @@ public class NioFileEventSourceTest {
                 await(CgFileEvent.Kind.MODIFIED, CgPath.of(PROJECT, "src/Main.java")));
     }
 
+    /**
+     * <b>An editor's own scratch beside a document is not a change.</b>
+     *
+     * <p>Reported from the harness: saving one file over the wire announced <b>2 Changes</b>. The
+     * second was {@code baba~}, the backup the editor wrote beside {@code baba} and removed again
+     * -- a real event about a file that is not a document. Ours was already filtered here; every
+     * other editor writing into this workspace leaves its own.</p>
+     */
+    @Test
+    public void anEditorsBackupFileIsNotReported() throws IOException {
+        open();
+        Path backup = root.resolve("src/Main.java~");
+        Files.write(backup, "old".getBytes(StandardCharsets.UTF_8));
+        Files.delete(backup);
+        // A REAL CHANGE ALONGSIDE IT, so this cannot pass by the watcher having reported nothing.
+        Files.write(root.resolve("src/Main.java"), "class Main { }".getBytes(StandardCharsets.UTF_8));
+
+        assertTrue("the save itself must still be reported",
+                await(CgFileEvent.Kind.MODIFIED, CgPath.of(PROJECT, "src/Main.java")));
+        for (CgFileEvent event : seen) {
+            assertFalse("the editor's backup was announced as a change: " + event.path(),
+                    String.valueOf(event.path()).endsWith("~"));
+        }
+    }
+
     @Test
     public void aDeletedFileIsReported() throws IOException {
         open();
