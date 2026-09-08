@@ -1,5 +1,6 @@
 package com.crystalgui.widget.texteditor;
 
+import com.crystalgui.core.data.CommandTarget;
 import com.crystalgui.core.command.ClipboardCommands;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.command.Command;
@@ -111,11 +112,17 @@ public final class EditorCommands {
      *
      * <p>Walks up rather than requiring the source to <em>be</em> the editor, because a command invoked
      * from a menu item carries that item as its source. The same shape as {@code UndoScope.nearest}.</p>
+     *
+     * <p>Walks {@code commandParent()}, not the light parent: a widget's own parts live in its SHADOW
+     * tree, and a light walk from one stops dead at the boundary. That is what broke {@code Mod+wheel}
+     * zoom — the wheel resolves from the HOVER target, which inside an editor is its viewport slot, so
+     * this answered null, the enablement predicate said no, and the binding read as disabled. The
+     * keyboard bindings kept working because focus is the editor itself.</p>
      */
     @Nullable
     public static TextEditor nearest(@Nullable UIElement from) {
-        for (UIElement element = from; element != null; element = element.parentElement()) {
-            if (element instanceof TextEditor editor) return editor;
+        for (CommandTarget at = from; at != null; at = at.commandParent()) {
+            if (at instanceof TextEditor editor) return editor;
         }
         return null;
     }
