@@ -3,6 +3,7 @@ package com.crystalgui.workbench.dock;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
@@ -919,6 +920,47 @@ public class DockArea extends UIElement {
      */
     private java.util.function.Predicate<DockPanelRef> closeGuard = panel -> true;
 
+    /**
+     * The icon and the application a window torn out of this dock wears.
+     *
+     * <p>A tab dragged into a window of its own is still the product it came from, and nothing else can
+     * say which product that is -- the dock knows panels, not applications -- so the application hands
+     * both down at launch. Without the icon the frame monogrammed the first letter of its own title and
+     * a torn-out {@code Main.java} opened under a red S; without the application its taskbar entry
+     * grouped with the windows belonging to nobody, and that group sorts FIRST, so it landed to the
+     * LEFT of the editor it came out of. @see WindowRegistry#taskbarOrder</p>
+     */
+    @Nullable
+    private String tornWindowIcon;
+
+    /** @see #tornWindowIcon */
+    @Nullable
+    private ApplicationKind tornWindowApplication;
+
+    /** @see #tornWindowIcon */
+    public DockArea setTornWindowIcon(@Nullable String icon) {
+        this.tornWindowIcon = icon;
+        return this;
+    }
+
+    /** @see #tornWindowIcon */
+    @Nullable
+    public String tornWindowIcon() {
+        return tornWindowIcon;
+    }
+
+    /** @see #tornWindowIcon */
+    public DockArea setTornWindowApplication(@Nullable ApplicationKind kind) {
+        this.tornWindowApplication = kind;
+        return this;
+    }
+
+    /** @see #tornWindowIcon */
+    @Nullable
+    public ApplicationKind tornWindowApplication() {
+        return tornWindowApplication;
+    }
+
     /** @see #closeGuard */
     public DockArea setCloseGuard(@Nullable java.util.function.Predicate<DockPanelRef> guard) {
         this.closeGuard = guard == null ? panel -> true : guard;
@@ -1227,6 +1269,8 @@ public class DockArea extends UIElement {
                 : DockLayout.of((DockBranch) moved, DockOrientation.HORIZONTAL);
         String title = payload.panel() != null ? registry.windowTitleOf(payload.panel()) : "";
         DockWindow frame = new DockWindow(registry, torn, title);
+        if (tornWindowIcon != null) frame.setIcon(tornWindowIcon);
+        if (tornWindowApplication != null) frame.setApplication(tornWindowApplication);
 
         var pointer = window.input().pointer();
         var local = window.toLocal(pointer.x(), pointer.y());

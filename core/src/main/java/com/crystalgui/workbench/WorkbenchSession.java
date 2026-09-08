@@ -522,6 +522,11 @@ public final class WorkbenchSession {
         pendingWindows.clear();
         for (TornOutWindow record : opening) {
             DockWindow frame = new DockWindow(workbench.panels(), record.layout(), record.title());
+            // A REOPENED TORN-OUT WINDOW IS THE SAME WINDOW. @see DockArea#tornWindowIcon
+            String tornIcon = workbench.dock().tornWindowIcon();
+            if (tornIcon != null) frame.setIcon(tornIcon);
+            var tornApp = workbench.dock().tornWindowApplication();
+            if (tornApp != null) frame.setApplication(tornApp);
             // BEFORE the open, so it appears at the size and place it is meant to be rather than flying
             // in at a default and jumping -- Desktop.addWindow's own note, from the other side.
             frame.resizeTo(record.width(), record.height());

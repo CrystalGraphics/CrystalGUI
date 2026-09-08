@@ -100,6 +100,10 @@ public final class CrystalEditor {
             .launch(context -> WorkbenchApplication.of(context)
                     .with(EXTENSIONS)
                     .title("Crystal Editor")
+                    // THE LOGO IS THE NAME. The caption carries this product's icon, and spelling it
+                    // out beside it says the same thing twice. Still SET, because the taskbar entry and
+                    // the window switcher read it. @see WindowFrame#setTitleShown
+                    .withoutWindowTitle()
                     .key("editor:main")
                     .policy(WindowPolicy.HIDE_ON_CLOSE)
                     .start());

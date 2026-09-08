@@ -182,6 +182,7 @@ public class WorkbenchApplication extends UIElement
         @Nullable
         private String icon;
         private WindowPolicy policy = WindowPolicy.HIDE_ON_CLOSE;
+        private boolean titleShown = true;
 
         private Builder(LaunchContext context) {
             this.context = context;
@@ -216,6 +217,17 @@ public class WorkbenchApplication extends UIElement
         }
 
         /** Defaults to the manifest's. */
+        /**
+         * Draws no title in the caption -- for a product whose ICON already says what it is.
+         *
+         * <p>The title is still set: the taskbar entry, the window switcher and the icon's own
+         * monogram fallback all read it. @see WindowFrame#setTitleShown</p>
+         */
+        public Builder withoutWindowTitle() {
+            this.titleShown = false;
+            return this;
+        }
+
         public Builder icon(String namespacedIcon) {
             this.icon = namespacedIcon;
             return this;
@@ -278,8 +290,19 @@ public class WorkbenchApplication extends UIElement
         window.setApplication(kind).markApplicationMain();
         window.setPolicy(builder.policy);
         if (builder.key != null) window.setKey(builder.key);
+        window.setTitleShown(builder.titleShown);
         String iconName = builder.icon != null ? builder.icon : kind.icon();
-        if (iconName != null) window.setIcon(iconName);
+        if (iconName != null) {
+            window.setIcon(iconName);
+            // AND WHATEVER THIS DOCK TEARS OUT WEARS IT TOO. A tab dragged into a window of its own is
+            // still this product -- it monogrammed the first letter of its own title instead, so a
+            // torn-out Main.java opened under a red S.
+            workbench.dock().setTornWindowIcon(iconName);
+        }
+        // AND WHOSE IT IS, which keeps its taskbar entry beside this product's own windows rather than
+        // in the group belonging to nobody -- a group that sorts FIRST, so a torn-out tab landed to the
+        // LEFT of the editor it came out of.
+        workbench.dock().setTornWindowApplication(kind);
         // setContent, not content().append -- it is what ADOPTS the workbench's menu bar into the
         // caption, so the window has one header rather than two stacked on each other.
         window.setContent(this);

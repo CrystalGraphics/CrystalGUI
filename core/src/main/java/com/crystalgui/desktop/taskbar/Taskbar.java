@@ -133,6 +133,17 @@ public class Taskbar extends UIElement {
      */
     public static final String ANIMATING_CLASS = "__animating__";
 
+    /**
+     * On an entry with nothing to write beside its icon.
+     *
+     * <p>An entry is an icon and a label in a row, so an empty label leaves the icon against the
+     * leading padding with the gap and the trailing padding still spent after it -- 22px of space
+     * around a 16px icon, most of it on one side. A window may legitimately have no title, so this is
+     * a shape an entry HAS rather than a state to avoid: the sheet centres the icon and closes the
+     * padding up around it.</p>
+     */
+    public static final String ICONIC_CLASS = "__iconic__";
+
     /** Window → its entry. Insertion-ordered so a rebuild of the child list keeps open order. */
     private final Map<WindowFrame, Button> entryOf = new LinkedHashMap<>();
 
@@ -351,6 +362,7 @@ public class Taskbar extends UIElement {
             index++;
 
             entry.setText(frame.getTitle());
+            setClass(entry, ICONIC_CLASS, frame.getTitle().isEmpty());
             applyIcon(entry, frame.iconName());
             setClass(entry, ACTIVE_CLASS, frame == active);
             setClass(entry, HIDDEN_CLASS, frame.state() == WindowState.HIDDEN);

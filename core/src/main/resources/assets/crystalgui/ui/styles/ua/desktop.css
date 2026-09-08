@@ -249,6 +249,21 @@ taskbar .__entry__ {
     transition: background-color 120ms ease-out, color 120ms ease-out;
 }
 
+/* AN ENTRY WITH NO LABEL is an icon, and is shaped like one.
+ *
+ * The entry is a row of icon then label, so an empty label still spends the gap after the icon and the
+ * trailing padding after that -- 6 + 7 + 9 around a 16px glyph, and all of the surplus on its right.
+ * Reported as an icon's worth of space on either side, which is close to exactly what it is.
+ *
+ * Equal padding and no gap, so the icon is centred by the box rather than by an alignment that would
+ * also move it once a label arrives. @see Taskbar#ICONIC_CLASS */
+taskbar .__entry__.__iconic__ {
+    padding-left: 5px;
+    padding-right: 5px;
+    gap: 0px;
+    justify-content: center;
+}
+
 /* AN ENTRY MID-RAMP, arriving or leaving. TaskbarEntryMotion narrows it below its own label's width, so
  * without this the label spills over its neighbour for most of the motion. CLIP, never HIDDEN: hidden
  * would make a taskbar button a scroll container.
@@ -645,6 +660,20 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background-color: var(--window-i
     border-radius: 3px;
     flex-shrink: 0;
     margin-right: 4px;
+}
+
+/* A TORN-OUT TAB'S OWN WINDOW is a document that used to be a tab, so its caption is chrome over a
+ * document rather than the frame of an application: it takes the panel surface the tab strip sits on,
+ * and its title sits a step below the caption of a real application window.
+ *
+ * Scoped to `.__dock-window__`, which DockWindow adds for exactly this -- it inherits
+ * `WindowFrame.NAME`, so the tag cannot tell the two apart. */
+.__dock-window__ > .__title-bar__ {
+    background: var(--surface-panel, #191A1C);
+}
+
+.__dock-window__ > .__title-bar__ > .__title__ {
+    font-size: 9;
 }
 
 .__window__ > .__title-bar__ > .__title__ {
