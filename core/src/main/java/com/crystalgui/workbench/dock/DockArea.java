@@ -921,21 +921,37 @@ public class DockArea extends UIElement {
     private java.util.function.Predicate<DockPanelRef> closeGuard = panel -> true;
 
     /**
-     * The icon and the application a window torn out of this dock wears.
+     * The icon a window torn out of this dock wears. Null leaves it to the frame's own fallback.
      *
-     * <p>A tab dragged into a window of its own is still the product it came from, and nothing else can
-     * say which product that is -- the dock knows panels, not applications -- so the application hands
-     * both down at launch. Without the icon the frame monogrammed the first letter of its own title and
-     * a torn-out {@code Main.java} opened under a red S; without the application its taskbar entry
-     * grouped with the windows belonging to nobody, and that group sorts FIRST, so it landed to the
-     * LEFT of the editor it came out of. @see WindowRegistry#taskbarOrder</p>
+     * <p>A tab dragged into a window of its own is still the product it came from, and nothing else
+     * can say which product that is -- the dock knows panels, not applications. So the application
+     * hands it down at launch. Without it the frame monogrammed the first letter of its own title,
+     * and a torn-out {@code Main.java} opened under a red S.</p>
      */
     @Nullable
     private String tornWindowIcon;
 
-    /** @see #tornWindowIcon */
+    /**
+     * The application a window torn out of this dock belongs to.
+     *
+     * <p>Which is what puts its taskbar entry beside the rest of that product's windows rather than
+     * in the group of windows belonging to nobody -- and that group is FIRST, so a tab torn out of
+     * the editor landed to the LEFT of the editor that spawned it. @see WindowRegistry#taskbarOrder</p>
+     */
     @Nullable
     private ApplicationKind tornWindowApplication;
+
+    /** @see #tornWindowApplication */
+    public DockArea setTornWindowApplication(@Nullable ApplicationKind kind) {
+        this.tornWindowApplication = kind;
+        return this;
+    }
+
+    /** @see #tornWindowApplication */
+    @Nullable
+    public ApplicationKind tornWindowApplication() {
+        return tornWindowApplication;
+    }
 
     /** @see #tornWindowIcon */
     public DockArea setTornWindowIcon(@Nullable String icon) {
@@ -947,18 +963,6 @@ public class DockArea extends UIElement {
     @Nullable
     public String tornWindowIcon() {
         return tornWindowIcon;
-    }
-
-    /** @see #tornWindowIcon */
-    public DockArea setTornWindowApplication(@Nullable ApplicationKind kind) {
-        this.tornWindowApplication = kind;
-        return this;
-    }
-
-    /** @see #tornWindowIcon */
-    @Nullable
-    public ApplicationKind tornWindowApplication() {
-        return tornWindowApplication;
     }
 
     /** @see #closeGuard */

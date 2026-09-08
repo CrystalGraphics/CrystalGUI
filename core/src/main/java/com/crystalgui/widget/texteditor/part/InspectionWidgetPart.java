@@ -179,10 +179,10 @@ public final class InspectionWidgetPart extends EditorViewPart {
      * A severity's icon and its number, as one unit.
      *
      * <p>A container rather than two siblings on the panel, because the icon and the count <b>are</b> one
-     * thing: {@code gap-all} applies between every pair of children, so laying them out flat would put the
+     * thing: {@code gap} applies between every pair of children, so laying them out flat would put the
      * same space inside a chip as between two of them. The panel therefore uses margins on the chips and
      * no gap of its own — which is also required because a chip hidden with {@code display: none}
-     * <em>still counts</em> for a {@code gap-all}, so a clean file would have carried three phantom gaps.</p>
+     * <em>still counts</em> for a {@code gap}, so a clean file would have carried three phantom gaps.</p>
      */
     private static UIElement countChip(String severityClass) {
         UIElement chip = new UIElement();

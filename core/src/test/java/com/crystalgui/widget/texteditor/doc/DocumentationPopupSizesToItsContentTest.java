@@ -41,7 +41,7 @@ public class DocumentationPopupSizesToItsContentTest extends UiDocumentTestBase 
     private static final float FLOOR = 250f;
     private static final float CEILING = 350f;
 
-    /** `padding-all: 9px` on the popup. */
+    /** `padding: 9px` on the popup. */
     private static final float POPUP_PADDING = 9f;
 
     private static String prose(int length) {

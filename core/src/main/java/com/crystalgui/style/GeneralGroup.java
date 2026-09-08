@@ -2,6 +2,7 @@ package com.crystalgui.style;
 
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.render.texture.CgUiDrawable;
+import com.crystalgui.render.texture.CgUiBackdropFilter;
 import com.crystalgui.style.property.visual.BoxOrigin;
 import com.crystalgui.style.property.visual.DrawableAlign;
 import com.crystalgui.style.property.visual.DrawableFit;
@@ -55,12 +56,12 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         return this;
     }
 
-    public DrawableFit overlayFit() {
-        return getValueSave(StylePropertyRegistry.OVERLAY_FIT);
+    public DrawableFit overlaySize() {
+        return getValueSave(StylePropertyRegistry.OVERLAY_SIZE);
     }
 
-    public GeneralGroup overlayFit(DrawableFit fit) {
-        set(StylePropertyRegistry.OVERLAY_FIT, fit);
+    public GeneralGroup overlaySize(DrawableFit fit) {
+        set(StylePropertyRegistry.OVERLAY_SIZE, fit);
         return this;
     }
 
@@ -411,6 +412,16 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         return this;
     }
 
+    /** What is done to whatever shows through, drawn UNDER this element's own background. */
+    public CgUiBackdropFilter backdropFilter() {
+        return getValueSave(StylePropertyRegistry.BACKDROP_FILTER);
+    }
+
+    public GeneralGroup backdropFilter(CgUiBackdropFilter filter) {
+        set(StylePropertyRegistry.BACKDROP_FILTER, filter);
+        return this;
+    }
+
     public CgUiDrawable mask() {
         return getValueSave(StylePropertyRegistry.MASK);
     }
@@ -431,12 +442,12 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         return this;
     }
 
-    public DrawableFit maskFit() {
-        return getValueSave(StylePropertyRegistry.MASK_FIT);
+    public DrawableFit maskSize() {
+        return getValueSave(StylePropertyRegistry.MASK_SIZE);
     }
 
-    public GeneralGroup maskFit(DrawableFit fit) {
-        set(StylePropertyRegistry.MASK_FIT, fit);
+    public GeneralGroup maskSize(DrawableFit fit) {
+        set(StylePropertyRegistry.MASK_SIZE, fit);
         return this;
     }
 

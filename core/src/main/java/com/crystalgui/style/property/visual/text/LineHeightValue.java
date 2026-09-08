@@ -17,7 +17,7 @@ import java.util.Locale;
  * and the existing float interpolator still applies to two numeric endpoints. A dedicated
  * {@code normal | <number>} union type would have neither until a codec was written for it. The
  * {@code NaN}-as-keyword idiom is already established here by {@code AutoFloatProperty}, which uses it
- * for {@code flex} and {@code aspect-rate}.</p>
+ * for {@code flex} and {@code aspect-ratio}.</p>
  *
  * <p><b>Resolving the sentinel needs a font, so it must not happen here.</b> {@link #doCompute} runs
  * during cascade resolution, which a dedicated server performs with no CrystalGraphics on the classpath

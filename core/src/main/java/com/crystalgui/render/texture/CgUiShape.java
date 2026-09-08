@@ -25,7 +25,7 @@ import com.crystalgui.render.CgUiPaintContext;
  * <h3>Clamped to a centered square — no intrinsic size</h3>
  * <p>Unlike a texture-backed drawable, a shape has no natural pixel dimensions to report: it is
  * parametric, computed fresh from whatever rect {@link #draw} is handed. So there is no
- * {@code overlay-fit: none} story here (that needs an intrinsic size to size <em>from</em>) — a
+ * {@code overlay-size: none} story here (that needs an intrinsic size to size <em>from</em>) — a
  * shape works out {@code min(width, height)} and draws itself, centered, inside that square. Give
  * the element an explicit {@code width}/{@code height} and the shape follows.</p>
  * <p><b>The square clamp is load-bearing, not cosmetic.</b> Every kind's geometry is defined in a

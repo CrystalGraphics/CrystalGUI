@@ -19,7 +19,7 @@
 .machine-panel {
     padding: 12px;
     flex-direction: column;
-    gap-all: 8px;
+    gap: 8px;
     /* Wide enough for a demo entry's second line to sit on one row. At 320px every outcome
        sentence wrapped to three lines and the strip was taller than the machine above it. */
     width: 560px;
@@ -28,7 +28,7 @@
 .machine-row {
     flex-direction: row;
     align-items: center;
-    gap-all: 8px;
+    gap: 8px;
 }
 
 .machine-title {
@@ -98,7 +98,7 @@
 /* One entry: the button row, then the sentence under it. */
 .machine-demo {
     flex-direction: column;
-    gap-all: 2px;
+    gap: 2px;
     padding-top: 4px;
     padding-bottom: 4px;
 }
@@ -182,7 +182,7 @@
 .machine-engine {
     display: none;
     flex-direction: column;
-    gap-all: 6px;
+    gap: 6px;
     padding: 8px;
     margin-left: 12px;
     background-color: #232323;
@@ -234,7 +234,7 @@
  */
 .machine-streams {
     flex-direction: row;
-    gap-all: 12px;
+    gap: 12px;
     margin-top: 10px;
 }
 
@@ -242,14 +242,14 @@
     width: 0;
     flex-grow: 1;
     height: 180px;
-    gap-all: 3px;
+    gap: 3px;
     overflow: auto;
 }
 
 .machine-slot {
     flex-direction: row;
     align-items: center;
-    gap-all: 6px;
+    gap: 6px;
     height: 20px;
 }
 

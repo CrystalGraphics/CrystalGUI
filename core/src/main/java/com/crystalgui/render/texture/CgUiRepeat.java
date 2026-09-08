@@ -40,7 +40,7 @@ public enum CgUiRepeat {
      * <p>Degenerate inputs collapse to 1 (i.e. stretch): a non-positive source size, or {@link #SPACE}
      * when not even one tile fits. CSS says {@code space} draws nothing in that case; falling back is
      * both friendlier and consistent with how the rest of this engine degrades (e.g.
-     * {@code overlay-fit} falls back to {@code fill} when a drawable has no intrinsic size).</p>
+     * {@code overlay-size} falls back to {@code fill} when a drawable has no intrinsic size).</p>
      */
     public float tileCount(float span, float src) {
         if (this == STRETCH || src <= 0f || span <= 0f) return 1f;

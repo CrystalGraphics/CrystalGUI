@@ -121,7 +121,7 @@ public class SearchField extends UIElement {
     /**
      * Created on the first {@link #addOption}, never before.
      *
-     * <p>Not a permanent child hidden with {@code display: none}: the row carries {@code gap-all}, and a
+     * <p>Not a permanent child hidden with {@code display: none}: the row carries {@code gap}, and a
      * hidden child still counts for a gap, so every existing consumer — the palette, the create menu, the
      * Blackboard — silently gained a few pixels and the Blackboard's overflow tests caught it. Not
      * existing is the only spelling of "costs nothing" that is actually free.</p>

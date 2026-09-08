@@ -18,7 +18,7 @@ import com.crystalgui.ui.dom.UIElement;
  * obvious on a canvas that draws a selection box around one.</p>
  *
  * <p>The root carried {@code height: 12px} — the MARK's number, applied to the whole control — with
- * {@code padding-all: 1px} inside it. So the mark filled the root and spilled over its own padding, and
+ * {@code padding: 1px} inside it. So the mark filled the root and spilled over its own padding, and
  * a 13px label sat at y = -0.5 and overflowed the control top and bottom.</p>
  *
  * <p>And an empty label was laid out as a zero-wide box rather than not at all, which still opens the

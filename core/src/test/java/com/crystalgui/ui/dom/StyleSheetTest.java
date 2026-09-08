@@ -100,7 +100,7 @@ public class StyleSheetTest extends UiDocumentTestBase {
 
     @Test
     public void marginAllHorizontalVerticalAliasesExpandCorrectly() {
-        var all = StyleSheet.parse(".a { margin-all: 3px; }").getRules().get(0).declarations();
+        var all = StyleSheet.parse(".a { margin: 3px; }").getRules().get(0).declarations();
         assertEquals(4, all.size());
 
         var horizontal = StyleSheet.parse(".a { margin-horizontal: 7px; }").getRules().get(0).declarations();
@@ -353,12 +353,12 @@ public class StyleSheetTest extends UiDocumentTestBase {
      */
     @Test
     public void maskGeometryLonghandsAreSeparateRegisteredProperties() {
-        var decls = StyleSheet.parse(".a { mask-origin: padding-box; mask-fit: contain;"
+        var decls = StyleSheet.parse(".a { mask-origin: padding-box; mask-size: contain;"
                         + " mask-position: top-left; mask-offset: 4px; }")
                 .getRules().get(0).declarations();
         assertEquals(4, decls.size());
         assertTrue(declares(decls, StylePropertyRegistry.MASK_ORIGIN));
-        assertTrue(declares(decls, StylePropertyRegistry.MASK_FIT));
+        assertTrue(declares(decls, StylePropertyRegistry.MASK_SIZE));
         assertTrue(declares(decls, StylePropertyRegistry.MASK_POSITION));
         assertTrue(declares(decls, StylePropertyRegistry.MASK_OFFSET));
     }

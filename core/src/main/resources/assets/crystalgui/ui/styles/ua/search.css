@@ -84,7 +84,7 @@
     flex-shrink: 0;
     width: 22px;
     height: 22px;
-    gap-all: 3px;
+    gap: 3px;
     cursor: pointer;
 }
 
@@ -152,12 +152,12 @@ projectfiletree .__project-row__.__editing__ .__badge__ {
      * At 6px the children plus the gaps came to ~2px MORE than the panel, so the box shrank to its
      * min-width and stayed there however wide the panel got -- a two-pixel overflow reading as "the search
      * box never grows". */
-    gap-all: 4px;
+    gap: 4px;
     height: 20px;
     padding-left: 6px;
     padding-right: 4px;
     background-color: var(--findbar-bg, #2F3033);
-    border-width-bottom: 1px;
+    border-bottom-width: 1px;
     border-bottom-color: var(--findbar-border, #3C3F41);
 }
 
@@ -202,12 +202,12 @@ projectfiletree .__project-row__.__editing__ .__badge__ {
     width: 12px;
     height: 10px;
     min-height: 0px;
-    padding-all: 0px;
+    padding: 0px;
     flex-shrink: 0;
     background: none;
     background-color: transparent;
     overlay: icon("crystalgui:x");
-    overlay-fit: contain;
+    overlay-size: contain;
     color: var(--findbar-button-fg, #8A8A8A);
     background: none;
     border-radius: 2px;
@@ -224,11 +224,11 @@ projectfiletree .__project-row__.__editing__ .__badge__ {
     width: 12px;
     height: 10px;
     min-height: 0px;
-    padding-all: 0px;
+    padding: 0px;
     flex-shrink: 0;
     border-radius: 3px;
     overlay: icon("crystalgui:general/search/filter");
-    overlay-fit: contain;
+    overlay-size: contain;
     background: none;
     background-color: transparent;
     color: var(--findbar-toggle-fg, #9A9A9A);
@@ -251,10 +251,10 @@ projectfiletree .__project-row__.__editing__ .__badge__ {
     width: 11px;
     height: 10px;
     min-height: 0px;
-    padding-all: 0px;
+    padding: 0px;
     flex-shrink: 0;
     border-radius: 3px;
-    overlay-fit: contain;
+    overlay-size: contain;
     background: none;
     background-color: transparent;
     color: var(--findbar-arrow-fg, #9A9A9A);
@@ -383,7 +383,7 @@ problemspanel > .__find-bar__ {
     flex-direction: row;
     align-items: center;
     height: 16px;
-    gap-all: 3px;
+    gap: 3px;
     padding-left: 4px;
     padding-right: 3px;
     /* FROM THE THEME, not a literal. This was a hardcoded 2px while `textfield` beside it already read
@@ -405,7 +405,7 @@ problemspanel > .__find-bar__ {
     height: 12px;
     flex-shrink: 0;
     overlay: icon("crystalgui:general/search/search");
-    overlay-fit: contain;
+    overlay-size: contain;
     color: var(--searchfield-icon-fg, #8A8A8A);
 }
 
@@ -439,7 +439,7 @@ problemspanel > .__find-bar__ {
     height: 6px;
     flex-shrink: 0;
     overlay: icon("crystalgui:x");
-    overlay-fit: contain;
+    overlay-size: contain;
     color: var(--searchfield-clear-fg, #5F6265);
 }
 
@@ -456,7 +456,7 @@ problemspanel > .__find-bar__ {
     flex-direction: row;
     align-items: center;
     flex-shrink: 0;
-    gap-all: 2px;
+    gap: 2px;
     margin-left: 2px;
 }
 
@@ -490,10 +490,10 @@ problemspanel > .__find-bar__ {
      * machinery an outline renderer does not have, so `Cc`/`W`/`.*` as UIText would be crisper than any
      * SVG rendering of them can be. That trades icon-theme swappability for legibility on three icons
      * that are text anyway. Not done here; recorded so the next person does not re-measure it. */
-    padding-all: 0px;
+    padding: 0px;
     flex-shrink: 0;
     border-radius: 3px;
-    overlay-fit: contain;
+    overlay-size: contain;
     background: none;
     background-color: transparent;
     color: var(--searchfield-option-fg, #9A9A9A);
@@ -533,7 +533,7 @@ problemspanel > .__find-bar__ {
     width: 0;
     flex-grow: 1;
     flex-shrink: 1;
-    gap-all: 3px;
+    gap: 3px;
 }
 
 /* SAME WIDTH ON BOTH ROWS, which is the whole reason it exists — see SearchReplaceBar. Wide enough for
@@ -549,14 +549,14 @@ problemspanel > .__find-bar__ {
     flex-direction: row;
     align-items: center;
     flex-shrink: 0;
-    gap-all: 4px;
+    gap: 4px;
 }
 
 .__find-bar__ .__find-row__ {
     flex-direction: row;
     align-items: center;
     width: 100%;
-    gap-all: 4px;
+    gap: 4px;
 }
 
 /* THE CHEVRON, which is the only affordance for the replace row. Vertically centred against the FIRST row
@@ -566,7 +566,7 @@ problemspanel > .__find-bar__ {
     width: 12px;
     height: 12px;
     min-height: 0px;
-    padding-all: 0px;
+    padding: 0px;
     flex-shrink: 0;
     align-self: flex-start;
     margin-top: 2px;
@@ -574,7 +574,7 @@ problemspanel > .__find-bar__ {
     background: none;
     background-color: transparent;
     overlay: shape("chevron-right");
-    overlay-fit: contain;
+    overlay-size: contain;
     color: var(--findbar-toggle-fg, #9A9A9A);
 }
 
@@ -690,7 +690,7 @@ problemspanel > .__find-bar__ {
     padding-bottom: 4px;
     padding-left: 6px;
     padding-right: 6px;
-    gap-all: 4px;
+    gap: 4px;
     background-color: var(--editorfind-bg, #303235);
     /* SQUARE, because this bar is FULL-BLEED. It is laid out `left: 0; width: 100%` against the editor's
      * top edge, so all four of its corners abut something rather than floating clear of it — and the

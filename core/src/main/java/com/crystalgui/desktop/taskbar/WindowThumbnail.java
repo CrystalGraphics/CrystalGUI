@@ -173,7 +173,7 @@ public class WindowThumbnail extends UIElement {
      * proportions come from the window while its size does not, and a tall window ends up with a sliver
      * of a panel. The box is fitted into the sheet's square instead, and BOTH sizes are written.</p>
      *
-     * <h4>Explicit sizes, and not {@code aspect-rate}, which is the obvious way and does not work</h4>
+     * <h4>Explicit sizes, and not {@code aspect-ratio}, which is the obvious way and does not work</h4>
      *
      * <p>Taffy will happily derive a width from a definite height and a ratio — the box comes out the
      * right shape. What it does not do is count that derived width as the item's contribution to its

@@ -246,14 +246,14 @@ graphnode .__ports__ {
     flex-direction: row;
     padding-top: 1px;
     padding-bottom: 1px;
-    gap-all: 1px;
+    gap: 1px;
 }
-/* The input column has nothing visible in it (see `GraphNode.NO_INPUT_GAP_CLASS`) — `gap-all` runs
+/* The input column has nothing visible in it (see `GraphNode.NO_INPUT_GAP_CLASS`) — `gap` runs
  * between the two columns regardless of either one's width, so even a genuinely 0-width input column left
  * 1px of `.__ports__`'s own darker tint standing in front of the output content, reading as a stray left
  * edge on a node that has no input half to divide FROM. */
 graphnode .__ports__.__no-input-gap__ {
-    gap-all: 0;
+    gap: 0;
 }
 /* Both columns collapsed-empty (see `GraphNode.PORTS_EMPTY_CLASS`) — nothing left for the padding pair
  * to divide, so the 1px-top/1px-bottom band that used to read as two seams around real port rows now
@@ -263,7 +263,7 @@ graphnode .__ports__.__no-input-gap__ {
 graphnode .__ports__.__ports-empty__ {
     padding-top: 0;
     padding-bottom: 0;
-    gap-all: 0;
+    gap: 0;
     height: 1px;
     min-height: 1px;
     flex-shrink: 0;
@@ -330,7 +330,7 @@ graphnode .__outputs__.__empty-collapsed__ {
  * visible 2px band instead of the 1px seam everywhere else uses. */
 graphnode .__controls__ {
     flex-direction: column;
-    gap-all: 1px;
+    gap: 1px;
     padding-bottom: 1px;
 }
 graphnode .__control-row__ {
@@ -349,7 +349,7 @@ graphnode .__control-row__ {
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
-    gap-all: var(--graph-gap);
+    gap: var(--graph-gap);
     padding-left: var(--graph-pad-x);
     padding-right: var(--graph-pad-x);
     /* The padding, not min-height, is what holds the widget clear of the seams: extra height alone just
@@ -511,10 +511,10 @@ graphnode.__collapsed__ nodeport:blank { display: none; }
 nodeport {
     flex-direction: row;
     align-items: center;
-    gap-all: 4px;
+    gap: 4px;
     /* The padding IS the hit target. The dot is 8px and a pointer is not — a connection you have to
      * aim for is a connection you get wrong. */
-    padding-all: 3px;
+    padding: 3px;
     /* Measured off the reference like the header: Unity's port rows are ~24px on a 173px-wide node, so
        the same proportion on our 134px one is ~18. At 16 the band was visibly tighter than the reference
        while the header beside it already matched, which is what made the whole node read as compressed. */
@@ -609,8 +609,8 @@ nodecreationmenu {
     resize: both;
     overflow: hidden;
     flex-direction: column;
-    padding-all: 3px;
-    gap-all: 2px;
+    padding: 3px;
+    gap: 2px;
 }
 /* The draggable header, Unity's "Create Node". `grab` rather than `pointer`: it moves the window, it
    does not activate anything, and the two cursors are the web's own distinction. */
@@ -765,7 +765,7 @@ searchfield::part(icon) {
     flex-shrink: 0;
     margin-left: 3px;
     overlay: icon("crystalgui:general/search/search");
-    overlay-fit: contain;
+    overlay-size: contain;
     color: var(--searchfield-icon-fg, #8A8A8A);
 }
 /* The field owns the slack; icon and clear keep their own size. */
@@ -784,7 +784,7 @@ searchfield::part(clear) {
     overlay: shape("cross");
     cursor: pointer;
 }
-nodecreationmenu .__empty__ { padding-all: 4px; }
+nodecreationmenu .__empty__ { padding: 4px; }
 
 /* `pointer` marks anything clickable, as it does on the web for links and buttons. */
 button, checkbox, switch, tab, dropdown, menuitem { cursor: pointer; }
@@ -884,10 +884,10 @@ colorselector {
     width: 188px;
     flex-direction: row;
     align-items: stretch;
-    gap-all: 6px;
+    gap: 6px;
     /* Matches the channel rows' own gap, so the space left of a value box and the space right of it
      * (out to this padding) are the same — the bars then run as wide as that symmetry allows. */
-    padding-all: 3px;
+    padding: 3px;
     border-radius: 5px;
     /* Semi-transparent, same 0x76 (~46%) alpha graph.css uses throughout a shader node's own panels
      * (`.__inputs__`, `.__outputs__`, `.__ports__`) — this is the INNER surface the ring/square/channel
@@ -938,7 +938,7 @@ colorselector .__left__{
     width: 73px;
     flex-direction: column;
     align-items: center;
-    gap-all: 3px;
+    gap: 3px;
 }
 /* `height: 0` is the BASIS it grows from, and `min-height` is what stops the ring being crushed:
  * flex-shrink is 0 here, so without the minimum a short channel column would leave the 73px ring
@@ -963,10 +963,10 @@ colorselector .__side__{
     flex-grow: 1;
     flex-direction: column;
     justify-content: center;
-    gap-all: 3px;
+    gap: 3px;
     /* A few px nudge DOWN off dead centre — the mode dropdown's own chrome (chevron, padding) reads
      * visually "heavier" at the top of the stack than the bevelled channel rows below it, so true
-     * centring against the ring still looked a couple px high. Padding, not a bigger `gap-all`: this
+     * centring against the ring still looked a couple px high. Padding, not a bigger `gap`: this
      * needs to shift the WHOLE stack, not open space between its rows. */
     padding-top: 8px;
 }
@@ -1104,7 +1104,7 @@ colorselector .__swatches__ .__swatch-new__ {
 colorselector .__channels__{
     width: 100%;
     flex-direction: column;
-    gap-all: 3px;
+    gap: 3px;
 }
 /* 2px, not the picker's 4px padding, and the difference is the slider's OWN horizontal padding: the
  * track's visible edge stops 2px inside the slider's box (that padding is the thumb's travel room), so
@@ -1114,7 +1114,7 @@ colorselector .__channel-row__{
     width: 100%;
     flex-direction: row;
     align-items: center;
-    gap-all: 2px;
+    gap: 2px;
     height: 11px;
 }
 /* Fixed, so all four labels align and the tracks start on one column — a row-sized label would
@@ -1210,7 +1210,7 @@ colorselector .__channel-row__ textfield {
     min-width: 0;
     height: 9px;
     min-height: 9px;
-    padding-all: 2px;
+    padding: 2px;
     flex-grow: 0;
 }
 
@@ -1219,7 +1219,7 @@ colorselector .__hex-row__{
     flex-direction: row;
     align-items: center;
     justify-content: space-between;
-    gap-all: 5px;
+    gap: 5px;
 }
 /* Wider than a channel field, because it holds the whole colour — but eight digits plus a possible
  * leading '#' is its entire vocabulary, so it stops there rather than taking whatever is left. */
@@ -1232,7 +1232,7 @@ colorselector .__hex-row__ textfield {
     min-width: 0;
     height: 9px;
     min-height: 9px;
-    padding-all: 2px;
+    padding: 2px;
     flex-grow: 0;
 }
 
@@ -1245,7 +1245,7 @@ colorselector .__hex-row__ textfield {
 colorselector .__side__ dropdown .__menu__,
 colorselector .__side__ dropdown::part(menu) {
     min-width: 33px;
-    padding-all: 1px;
+    padding: 1px;
 }
 colorselector .__side__ dropdown .__menu__ menuitem {
     min-height: 9px;

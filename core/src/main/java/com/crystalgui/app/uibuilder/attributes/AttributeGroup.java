@@ -71,7 +71,8 @@ public enum AttributeGroup {
                 || property.equals("selection-color") || property.startsWith("caret-")) {
             return TEXT;
         }
-        if (property.startsWith("background") || property.startsWith("border-")
+        if (property.startsWith("background") || property.startsWith("backdrop-")
+                || property.startsWith("border-")
                 || property.startsWith("outline") || property.equals("opacity")
                 || property.startsWith("mask") || property.startsWith("overlay")) {
             return APPEARANCE;

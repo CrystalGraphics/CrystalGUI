@@ -93,7 +93,7 @@ public class StatusBarView extends UIElement {
      *
      * <p><b>A real element, not a CSS border</b>, and that is forced rather than chosen: the paint path
      * reads {@code layout.border().left} as <em>the</em> border width and strokes a uniform box, so
-     * asymmetric borders are not modelled — a {@code border-width-left} drew a rectangle around every
+     * asymmetric borders are not modelled — a {@code border-left-width} drew a rectangle around every
      * readout instead of a rule between two. {@code Breadcrumbs} already spells its separators as elements
      * for the same reason.</p>
      */

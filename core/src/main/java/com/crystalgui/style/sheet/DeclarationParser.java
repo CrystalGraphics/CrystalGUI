@@ -299,12 +299,6 @@ public final class DeclarationParser {
                                                String rawValue, boolean important) {
         BoxEdgeShorthands.Group group = match.group();
         switch (match.kind()) {
-            case ALL -> {
-                out.add(edgeDeclaration(group.left(), rawValue, important));
-                out.add(edgeDeclaration(group.top(), rawValue, important));
-                out.add(edgeDeclaration(group.right(), rawValue, important));
-                out.add(edgeDeclaration(group.bottom(), rawValue, important));
-            }
             case HORIZONTAL -> {
                 out.add(edgeDeclaration(group.left(), rawValue, important));
                 out.add(edgeDeclaration(group.right(), rawValue, important));

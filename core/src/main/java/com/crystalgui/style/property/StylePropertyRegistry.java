@@ -33,6 +33,8 @@ import com.crystalgui.style.property.visual.texture.TextureProperty;
 import com.crystalgui.style.property.visual.transform.TransformOriginShorthand;
 import com.crystalgui.style.property.visual.transform.TransformProperty;
 import com.crystalgui.render.texture.CgUiDrawable;
+import com.crystalgui.render.texture.CgUiBackdropFilter;
+import com.crystalgui.style.property.visual.backdrop.BackdropFilterValue;
 import com.crystalgui.style.transition.TransitionSpec;
 import com.crystalgui.style.transition.TransitionValue;
 import com.crystalgui.style.property.visual.transform.Transform;
@@ -60,6 +62,21 @@ public class StylePropertyRegistry {
     // ── Properties ───────────────────────────────────────────────────────────
 
     public static final StyleProperty<CgUiDrawable> BACKGROUND = create("background", CgUiDrawable.EMPTY);
+    /**
+     * {@code backdrop-filter} — CSS's own name for what is done to whatever shows through an element.
+     *
+     * <p>A PROPERTY and not a {@code background} value, which is the whole of why it moved: as a value
+     * it occupied the one background slot, so an element could have glass or a colour and never both.
+     * A backdrop filter runs UNDER the element's own background, which is how the web writes acrylic —
+     * {@code backdrop-filter: blur(24px)} beside {@code background-color: #1C1D21CC}.</p>
+     *
+     * <p>Initially null rather than a no-op material: an element with no filter must not capture and
+     * blur the surface behind it to draw nothing. @see BackdropFilterValue</p>
+     */
+    public static final StyleProperty<CgUiBackdropFilter> BACKDROP_FILTER = create(
+            new StyleProperty<>("backdrop-filter", CgUiBackdropFilter.class, null, BackdropFilterValue::new)
+                    .setWriter(BackdropFilterValue::write));
+
     public static final StyleProperty<CgUiDrawable> OVERLAY = create("overlay", CgUiDrawable.EMPTY);
     // Geometry longhands for the `overlay` layer, mirroring CSS background-origin / object-fit /
     // object-position. Defaults reproduce the engine's pre-existing behaviour exactly (stretch to
@@ -69,8 +86,8 @@ public class StylePropertyRegistry {
     // basis for percentage border-radius, so it can't be re-boxed without redefining border-radius.
     public static final StyleProperty<BoxOrigin> OVERLAY_ORIGIN =
             create("overlay-origin", BoxOrigin.class, BoxOrigin.BORDER_BOX);
-    public static final StyleProperty<DrawableFit> OVERLAY_FIT =
-            create("overlay-fit", DrawableFit.class, DrawableFit.FILL);
+    public static final StyleProperty<DrawableFit> OVERLAY_SIZE =
+            create("overlay-size", DrawableFit.class, DrawableFit.FILL);
     public static final StyleProperty<DrawableAlign> OVERLAY_POSITION =
             create("overlay-position", DrawableAlign.class, DrawableAlign.CENTER);
     // Distinct from BACKGROUND (a drawable) and COLOR (inherited, meant for text) — matches real CSS,
@@ -144,7 +161,7 @@ public class StylePropertyRegistry {
     // NaN rather than a union value type so the property stays a Float: Float already has a codec, so
     // inline line-height still crosses the wire. A union type would return null from
     // StyleValueCodecs.forProperty and make InlineStyleCodec throw. AutoFloatProperty established the
-    // same idiom for `flex`/`aspect-rate`.
+    // same idiom for `flex`/`aspect-ratio`.
     //
     // Consumed by TextField for vertical centring. It does NOT size the caret or the selection band —
     // those come from ascender + descender, excluding the lineGap that is leading between lines and
@@ -363,8 +380,8 @@ public class StylePropertyRegistry {
     // interpolate.
     public static final StyleProperty<BoxOrigin> MASK_ORIGIN =
             create("mask-origin", BoxOrigin.class, BoxOrigin.BORDER_BOX);
-    public static final StyleProperty<DrawableFit> MASK_FIT =
-            create("mask-fit", DrawableFit.class, DrawableFit.FILL);
+    public static final StyleProperty<DrawableFit> MASK_SIZE =
+            create("mask-size", DrawableFit.class, DrawableFit.FILL);
     public static final StyleProperty<DrawableAlign> MASK_POSITION =
             create("mask-position", DrawableAlign.class, DrawableAlign.CENTER);
     // Grows (or, when negative, shrinks) the resolved mask box on all four sides — same shape and

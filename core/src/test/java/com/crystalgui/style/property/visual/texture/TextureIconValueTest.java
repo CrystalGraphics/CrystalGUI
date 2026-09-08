@@ -27,7 +27,7 @@ public class TextureIconValueTest {
         assertTrue("expected a vector drawable, got " + drawable.getClass().getSimpleName(),
                 drawable instanceof CgUiSvg);
 
-        // The viewBox, read 1:1 as logical pixels -- what overlay-fit resolves against.
+        // The viewBox, read 1:1 as logical pixels -- what overlay-size resolves against.
         assertEquals(24f, drawable.intrinsicWidth(), 0.01f);
         assertEquals(24f, drawable.intrinsicHeight(), 0.01f);
     }

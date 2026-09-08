@@ -83,7 +83,6 @@ public final class DrawableKinds {
         register(Kind.function("asset", "Asset", "asset", TextureValue::parseAsset));
         register(Kind.function("shape", "Shape", "shape", TextureValue::parseShape));
         register(Kind.function("icon", "Icon", "icon", TextureValue::parseIcon));
-        register(Kind.function("glass", "Glass", "glass", TextureValue::parseGlass));
         register(Kind.function("gradient", "Gradient", "linear-gradient",
                 TextureValue::parseLinearGradient));
         register(Kind.function("grid", "Grid", "grid", TextureValue::parseGrid));

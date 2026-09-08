@@ -1,4 +1,4 @@
-// crystalgui:shaders/gui_glass.shader
+// crystalgui:shaders/gui_backdrop_filter.shader
 //
 // LIQUID GLASS: the composite pass. Takes a blurred backdrop and a sharp one -- both already cropped
 // to this element's rect by CgUiPaintContext.backdropFor -- and turns them into a pane of glass.

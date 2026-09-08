@@ -20,7 +20,7 @@
  * more. */
 textfield {
     height: 16px;
-    padding-all: 3px;
+    padding: 3px;
     align-items: center;
     background: var(--field-bg, #2A2A2A);
     color: var(--field-fg, #EEEEEE);
@@ -54,11 +54,11 @@ textfield:disabled {
 .row {
     flex-direction: row;
     align-items: center;
-    gap-all: 8px;
+    gap: 8px;
 }
 .column {
     flex-direction: column;
-    gap-all: 8px;
+    gap: 8px;
 }
 .label {
     color: var(--label-fg, #FFFFFF);
@@ -311,7 +311,7 @@ dropdown::part(menu) {
      * the stylesheet owns durations — drop this line and popovers snap in, with nothing broken. */
     opacity: 0;
     transition: opacity 120ms ease;
-    padding-all: 2px;
+    padding: 2px;
     flex-direction: column;
     /* A long menu must scroll rather than run off the screen. AnchoredPlacement clamps the BOX into the
      * containing block, which without this would just squash the items instead. */
@@ -351,7 +351,7 @@ dropdown::part(menu):open {
 menu .__items__,
 menu::part(items) {
     flex-direction: column;
-    gap-all: 2px;
+    gap: 2px;
 }
 
 /* The gap stays 2px while the rows tightened, and that is deliberate: it is what keeps two focus bars
@@ -481,7 +481,7 @@ menuitem:focus {
  * the free space at ONE point rather than dividing it between however many children happen to exist, so
  * a fourth slot added later cannot move the label again.
  *
- * There is deliberately NO `gap-all` beside it either. A gap applies between every pair, so it
+ * There is deliberately NO `gap` beside it either. A gap applies between every pair, so it
  * spaced the zero-width mark away from the label as well, and the label stayed indented after
  * `space-between` was gone -- the same too-broad-a-lever mistake in a second form. An auto
  * margin already guarantees the arrow cannot touch the label, because it absorbs whatever free
@@ -713,7 +713,7 @@ dialog .__content__ {
     flex-shrink: 1;
     min-height: 0;
     width: 100%;
-    padding-all: 6px;
+    padding: 6px;
     /* THE EDGE, AND ONLY THREE SIDES OF IT.
      *
      * The BODY is the half that needs one: --dialog-bg is --surface-panel and the editor a dialog
@@ -786,7 +786,7 @@ dialog .__title-bar__ .__close__ {
     background-color: transparent;
     overlay: icon("crystalgui:x");
     overlay-origin: content-box;
-    overlay-fit: contain;
+    overlay-size: contain;
     color: var(--dialog-close-fg, #9DA0A8);
 }
 
@@ -1151,8 +1151,8 @@ dialog.__paste-attributes__ button::part(label) {
      *
      * The gap is on the ROW axis only. A column gap would come out of the same hundred percent the
      * thirds are measured in, so three would no longer fit and the last would wrap. */
-    gap-row: 7px;
-    gap-column: 0;
+    row-gap: 7px;
+    column-gap: 0;
 }
 
 /* A THIRD, OR ITS OWN NAME -- whichever is wider, decided PER ITEM.
@@ -1201,7 +1201,7 @@ dialog.__paste-attributes__ button::part(label) {
 .__paste-group__,
 .__paste-item__,
 .__paste-remember__ {
-    gap-all: 3px;
+    gap: 3px;
 }
 
 /* NOT a property: a question about the WINDOW rather than about the copy, which is why it sits on the

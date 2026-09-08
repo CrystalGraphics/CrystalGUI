@@ -51,7 +51,7 @@ public final class CgUiCrossFade implements CgUiDrawable {
         ctx.withLayerOpacity(t, () -> to.draw(ctx, mouseX, mouseY, x, y, width, height));
     }
 
-    /** Interpolates the two sides' natural sizes so a fitted layer ({@code overlay-fit: none} etc.)
+    /** Interpolates the two sides' natural sizes so a fitted layer ({@code overlay-size: none} etc.)
      * animates smoothly between them instead of snapping. Reports -1 (unknown) unless BOTH sides
      * have a natural size — a fade between a sized icon and a plain colour has no meaningful
      * intermediate size, and degrading that whole transition to {@code fill} is steadier than

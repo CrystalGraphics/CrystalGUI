@@ -9,7 +9,7 @@ import com.crystalgui.style.property.StyleProperty;
  * poisons arithmetic, so blending into or out of it would produce a {@code NaN} line box for the whole
  * transition rather than a smooth one. Snapping at the halfway point is the same fallback the engine
  * uses everywhere two values have no meaningful intermediate, and it matches
- * {@code AutoFloatProperty}, which faced this exact problem for {@code flex} and {@code aspect-rate}.</p>
+ * {@code AutoFloatProperty}, which faced this exact problem for {@code flex} and {@code aspect-ratio}.</p>
  */
 public class LineHeightProperty extends StyleProperty<Float> {
 

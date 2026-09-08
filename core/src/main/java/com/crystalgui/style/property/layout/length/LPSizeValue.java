@@ -40,24 +40,27 @@ public class LPSizeValue extends StyleValue<LPSize> {
                 return LPSize.ZERO;
             }
 
-            // Parse each part using LengthPercentage syntax
-            LengthPercentage width = parseLengthPercentage(parts[0]);
-            if (width == null) {
+            // ROW FIRST, which is CSS's order for `gap` and the REVERSE of the Size this parses into:
+            // Taffy's width is the COLUMN gap and its height is the row gap, so `gap: 8px 4px` is a row
+            // gap of 8 and a column gap of 4. The only LPSize property is `gap`, which is why the CSS
+            // order can live here rather than in a parser of its own.
+            LengthPercentage row = parseLengthPercentage(parts[0]);
+            if (row == null) {
                 return null;
             }
 
-            LengthPercentage height;
+            LengthPercentage column;
             if (parts.length >= 2) {
-                height = parseLengthPercentage(parts[1]);
-                if (height == null) {
+                column = parseLengthPercentage(parts[1]);
+                if (column == null) {
                     return null;
                 }
             } else {
-                // If only one value, use it for both dimensions
-                height = width;
+                // One value is both, as it is in CSS.
+                column = row;
             }
 
-            return new LPSize(new TaffySize<>(width, height));
+            return new LPSize(new TaffySize<>(column, row));
         } catch (Exception e) {
             return null;
         }
