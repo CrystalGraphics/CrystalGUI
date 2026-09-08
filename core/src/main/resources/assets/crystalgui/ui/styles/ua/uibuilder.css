@@ -329,13 +329,27 @@ hierarchypanel .__leaf__ .__twisty__ {
     overlay: none;
 }
 
+/* THE PROJECT TREE'S SHAPE HERE TOO, which it was not: `flex-grow: 1` with `width: 0` pins the label to
+ * exactly the free space, so its box can never stick out past the row -- and a row that cannot overflow
+ * has nothing to scroll to, whatever the list is set to. `min-width: 0` is the shrinkable version of the
+ * same idea and is what the project tree carries. */
 hierarchypanel .__hierarchy-row__ .__label__ {
-    flex-grow: 1;
     flex-shrink: 1;
-    width: 0;
-    overflow: hidden;
+    min-width: 0px;
     white-space: nowrap;
     text-overflow: ellipsis;
+}
+
+/* AND THIS TREE ALWAYS SCROLLS SIDEWAYS, so the label never gives way -- it is the thing being scrolled
+ * to. `flex-shrink: 0` is the whole switch: a shrinkable item contributes ZERO to its row's min-content
+ * width, so with it on there is no overflow, the range is always exactly the viewport, and the bar can
+ * never appear however long the id.
+ *
+ * `text-overflow` stays and simply never fires; nothing clamps the label now. ListView writes the class
+ * from setHorizontalScrolling, so the two halves cannot drift apart. Same pair, same reason, as
+ * `projectfiletree` and `problemspanel`. */
+hierarchypanel .__h-scroll__ .__hierarchy-row__ .__label__ {
+    flex-shrink: 0;
 }
 
 /* THE UNFOCUSED STATE IS THE BASE RULE, as the project tree writes it: a selection answers "which row

@@ -128,6 +128,11 @@ public final class HierarchyPanel extends UIElement {
         // line, and chooseRows below has always taken a SET of indices. The panel simply never opted in,
         // so the canvas could hold a set and the tree could only ever show one of it.
         tree.setSelectionMode(SelectionMode.MULTIPLE);
+        // NAMES ARE SCROLLED TO, NOT TRUNCATED. A node's id is the only thing this panel says about it,
+        // so `#compos...` three rows running identifies nothing -- and unlike a file name there is no
+        // extension at the end carrying the useful half. The project tree and the Problems tree make the
+        // same call; the sheet's `.__h-scroll__` rule is the other half and cannot be set separately.
+        tree.setHorizontalScrolling(true);
         append(content);
         content.append(tree);
 
