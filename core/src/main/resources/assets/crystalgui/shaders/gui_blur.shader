@@ -121,7 +121,7 @@ Pass {
         // because a blur is the last thing anyone expects to produce a hard edge. `blur 0` was correct
         // throughout, since sampling a single pixel never reaches one.
         //
-        // The consumer un-premultiplies. @see gui_glass.shader#cg_backdrop
+        // The consumer un-premultiplies. @see gui_backdrop_filter.shader#cg_backdrop
         fragColor = sum / weight;
     }
 }

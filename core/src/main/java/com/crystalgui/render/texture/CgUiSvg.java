@@ -278,7 +278,7 @@ public final class CgUiSvg implements CgUiDrawable {
 
     /**
      * The viewBox size, read 1:1 as logical UI pixels — the convention {@link CgUiDrawable#intrinsicWidth}
-     * states for texture-backed drawables, and what {@code overlay-fit: contain|cover|none} resolves
+     * states for texture-backed drawables, and what {@code overlay-size: contain|cover|none} resolves
      * against.
      */
     @Override

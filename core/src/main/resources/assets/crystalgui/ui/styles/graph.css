@@ -168,7 +168,7 @@ graphnode .__ports__ { background-color: var(--graph-ports-bg, #26262676); }
  * property (only the 4-edge `border-width` shorthand and its own `border-width-{edge}` longhands), so a
  * `border-top-width`/`border-bottom-width` declaration is silently unrecognized and paints nothing. The
  * real mechanism is: the CONTAINER (`.__controls__`) is the darker tone, each ROW gets its own lighter
- * fill, and `.__controls__`'s `padding-top`/`padding-bottom` (default.css) plus its 1px `gap-all`
+ * fill, and `.__controls__`'s `padding-top`/`padding-bottom` (default.css) plus its 1px `gap`
  * (already there, for the multi-row case) expose the darker tone as a frame around them — exactly how
  * `.__ports__`'s own 1px-darker-than-its-columns band reads as a seam. Before this, `.__controls__` and
  * `.__control-row__` were the SAME flat colour, so there was nothing for that padding to expose: touching
@@ -379,7 +379,7 @@ nodeport.type-sampler:hover .__dot-core__ { background-color: var(--graph-port-s
 graphview .__editor__ {
     flex-direction: row;
     align-items: center;
-    gap-all: 4px;
+    gap: 4px;
     /* NOT a fixed height — auto, sized to its own content (the field's 11px plus this padding). A fixed
      * height here once clamped the box to exactly the field's own 11px with nothing left over for the
      * padding below, so the rounded corners clipped to an 11px band while the field inside — still
@@ -471,7 +471,7 @@ graphview .__editor__ dropdown {
     min-width: 24px;
     height: 11px;
     min-height: 11px;
-    padding-all: 2px;
+    padding: 2px;
     background: var(--node-field);
     border-radius: 2px;
     color: var(--node-text-bright);
@@ -680,7 +680,7 @@ graphnode.__property-node__ .__inputs__ {
 graphnode.__property-node__ .__title-bar__ {
     flex-direction: row;
     align-items: center;
-    gap-all: 6px;
+    gap: 6px;
     flex-grow: 0;
     flex-shrink: 0;
     padding-left: 0;
@@ -688,7 +688,7 @@ graphnode.__property-node__ .__title-bar__ {
 }
 /* The gap between the name and its port dot. On the NODE, since the two are siblings there. */
 graphnode.__property-node__ {
-    gap-all: 6px;
+    gap: 6px;
 }
 graphnode.__property-node__ .__ports__ {
     flex-direction: row;

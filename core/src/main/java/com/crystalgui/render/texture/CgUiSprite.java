@@ -306,7 +306,7 @@ public final class CgUiSprite implements CgUiDrawable {
     public float getV3() { updateUvCacheIfNeeded(); return v3; }
 
     /** The source sub-rect's pixel size, interpreted 1:1 as logical UI pixels — so
-     * {@code overlay-fit: none} on a 10x10 atlas sprite draws it at 10x10, matching how LDLib2
+     * {@code overlay-size: none} on a 10x10 atlas sprite draws it at 10x10, matching how LDLib2
      * sizes its own icon elements. Falls back to -1 while the sprite rect is still degenerate
      * (no texture assigned yet), so fitting degrades to {@code fill} rather than to nothing. */
     @Override

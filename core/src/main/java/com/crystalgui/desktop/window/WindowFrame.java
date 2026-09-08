@@ -542,7 +542,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
         controls.append(closeButton);
 
         // BUILT NOW AND HIDDEN, rather than created when an icon arrives. Creating an element from a
-        // setter means creating it possibly mid-gesture, and the title bar has no `gap-all` for a hidden
+        // setter means creating it possibly mid-gesture, and the title bar has no `gap` for a hidden
         // child to occupy — the one cost that would have made the lazy version worth it.
         // THE SAME DRAWING THE STRIP USES. It was a bare element with the glyph as an overlay, which
         // predates WindowIcon and meant a caption showed an uncoloured mark while the entry, the hover
@@ -557,7 +557,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
 
         // AFTER the icon and BEFORE the title, which is where IntelliJ's New UI and VS Code's custom
         // title bar both put an application's menu: hard against the left, with the title taking
-        // whatever is left. Hidden until something is adopted, and the caption has no `gap-all`, so an
+        // whatever is left. Hidden until something is adopted, and the caption has no `gap`, so an
         // empty slot occupies nothing.
         captionChrome = new UIElement();
         captionChrome.addClass(CAPTION_CHROME_CLASS);
@@ -934,15 +934,15 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
      * Whether the caption shows the title at all. Shown by default.
      *
      * <p>For a window whose ICON already says what it is: an application's main window carries its
-     * product icon, and a caption reading <i>Crystal Editor</i> beside the Crystal Editor logo says it
-     * twice. The title is still SET -- the taskbar entry, the window switcher and the icon's monogram
-     * fallback all read it -- it simply is not drawn here.</p>
+     * product icon, and a caption reading <i>Crystal Editor</i> beside the Crystal Editor logo says
+     * it twice. The title is still SET -- the taskbar entry, the window switcher and the monogram
+     * all read it -- it simply is not drawn here.</p>
      */
     public WindowFrame setTitleShown(boolean shown) {
         this.titleShown = shown;
-        // EMPTIED, NEVER HIDDEN. The label carries `flex-grow: 1; flex-basis: 0` and is therefore what
-        // pushes the window controls to the far edge -- `display: none` took the spacer out with the
-        // text, and pin, minimise, maximise and close collapsed against the menu bar.
+        // EMPTIED, NEVER HIDDEN. The label carries `flex-grow: 1; flex-basis: 0` and is therefore
+        // what pushes the window controls to the far edge -- `display: none` took the spacer out
+        // with the text and the pin, minimise, maximise and close collapsed against the menu bar.
         titleLabel.setText(shown ? title : "");
         return this;
     }
@@ -963,8 +963,8 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
     }
 
     public String getTitle() {
-        // THE STORED ONE, not the label's: a window whose caption draws no title still HAS one, and
-        // the taskbar entry, the window switcher and the icon's monogram all ask here.
+        // THE STORED ONE, not the label's: a window whose caption draws no title still HAS one,
+        // and the taskbar entry, the window switcher and the icon's monogram all ask here.
         return title;
     }
 

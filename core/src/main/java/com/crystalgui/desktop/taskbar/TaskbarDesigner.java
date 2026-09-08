@@ -5,10 +5,11 @@ import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.DesktopCommands;
 import com.crystalgui.desktop.window.WindowFrame;
-import com.crystalgui.render.texture.CgUiGlass;
+import com.crystalgui.render.texture.CgUiBackdropFilter;
 import com.crystalgui.render.texture.CgUiGradient;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.property.visual.backdrop.BackdropFilterValue;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.border.BorderRadiusProperties;
 import com.crystalgui.style.property.visual.border.LengthPercent;
@@ -45,7 +46,7 @@ import java.util.function.Consumer;
  *
  * <p>The island's look comes from {@code ua/desktop.css}, so every write here has to outrank a stylesheet
  * — that is what {@link StyleGroup#importantPipeline} is for. The backdrop is the same problem one level
- * down: the cascade owns the {@link CgUiGlass} that {@code glass(...)} parsed, and mutating someone
+ * down: the cascade owns the {@link CgUiBackdropFilter} that {@code backdrop-filter} parsed, and mutating someone
  * else's instance works only for as long as nothing re-resolves it. So the designer installs a glass of
  * its own, seeded from whatever the sheet had, and mutates that.</p>
  *
@@ -68,7 +69,7 @@ public final class TaskbarDesigner {
 
     private final Taskbar taskbar;
     private final UIElement island;
-    private final CgUiGlass glass = new CgUiGlass();
+    private final CgUiBackdropFilter glass = new CgUiBackdropFilter();
 
     /**
      * The tone: the accent wash's colour, alpha included, seeded from the bar's glow.
@@ -326,13 +327,16 @@ public final class TaskbarDesigner {
      * <p>Starting from hardcoded defaults instead would be the same class of lie the "copy CSS by hand"
      * step is: the first drag of any slider would snap the taskbar to a look nobody chose.</p>
      */
+    /** The line ending the generated sheet uses, named so it survives an edit. */
+    private static final String LINE = System.lineSeparator();
+
     private void seedFromCascade() {
-        Object background = island.getStyle().getComputed(StylePropertyRegistry.BACKGROUND);
-        if (background instanceof CgUiGlass live) {
-            glass.setBlurRadius(live.getBlurRadius()).setTint(live.getTint())
+        Object background = island.getStyle().getComputed(StylePropertyRegistry.BACKDROP_FILTER);
+        if (background instanceof CgUiBackdropFilter live) {
+            glass.setBlurRadius(live.getBlurRadius()).setTintArgb(live.getTintArgb())
                  .setSaturation(live.getSaturation()).setBezel(live.getBezel())
                  .setIor(live.getIor()).setSpecular(live.getSpecular())
-                 .setNoise(live.getNoise()).setFallbackColor(live.getFallbackColor())
+                 .setNoise(live.getNoise()).setFallbackColorArgb(live.getFallbackColorArgb())
                  .setGlow(live.getGlow()).setEdgeHighlight(live.getEdgeHighlight())
                  .setEdgeWidth(live.getEdgeWidth()).setChromatic(live.getChromatic())
                  .setRimAmbient(live.getRimAmbient()).setLuminosity(live.getLuminosity());
@@ -371,7 +375,7 @@ public final class TaskbarDesigner {
         radius = island.getStyle().getComputed(BorderRadiusProperties.TOP_LEFT_X) instanceof LengthPercent r
                 ? r.resolve(islandWidth)
                 : 0f;
-        StyleGroup.inlinePipeline(island.getStyle().getGeneralGroup(), g -> g.background(glass));
+        StyleGroup.inlinePipeline(island.getStyle().getGeneralGroup(), g -> g.backdropFilter(glass));
         applyGeometry();
     }
 
@@ -474,18 +478,12 @@ public final class TaskbarDesigner {
             sb.append(String.format(Locale.ROOT, "    min-width: %.0fpx;%n", islandWidth));
         }
         sb.append(String.format(Locale.ROOT, "    height: %.0fpx;%n", islandHeight));
-        sb.append(String.format(Locale.ROOT, "    padding-all: %.0fpx;%n", padding));
-        sb.append(String.format(Locale.ROOT, "    gap-all: %.0fpx;%n", gap));
+        sb.append(String.format(Locale.ROOT, "    padding: %.0fpx;%n", padding));
+        sb.append(String.format(Locale.ROOT, "    gap: %.0fpx;%n", gap));
         sb.append(String.format(Locale.ROOT, "    border-radius: %.0fpx;%n", radius));
-        sb.append(String.format(Locale.ROOT,
-                "    background: glass(blur %.0f, tint %s,%n"
-                + "                      bezel %.0f, ior %.2f, specular %.2f, noise %.3f,%n"
-                + "                      saturation %.2f, luminosity %.2f, glow %.2f, edge %.2f, edge-width %.1f,%n"
-                + "                      rim-ambient %.2f, chromatic %.2f, fallback %s);%n",
-                glass.getBlurRadius(), hex(glass.getTint()), glass.getBezel(), glass.getIor(),
-                glass.getSpecular(), glass.getNoise(), glass.getSaturation(), glass.getLuminosity(),
-                glass.getGlow(), glass.getEdgeHighlight(), glass.getEdgeWidth(),
-                glass.getRimAmbient(), glass.getChromatic(), hex(glass.getFallbackColor())));
+        // THROUGH THE VALUE'S OWN WRITER, so the panel cannot spell the grammar differently
+        // from the parser that has to read it back. @see BackdropFilterValue#write
+        sb.append("    backdrop-filter: ").append(BackdropFilterValue.write(glass)).append(";" + LINE);
         sb.append("}\n");
         // THE TONE IS A THEME PIN, not a rule: it goes in crystal-dark.css / crystal-light.css, one value
         // for the three surfaces that share the bar's material.
@@ -521,12 +519,12 @@ public final class TaskbarDesigner {
      * the whole reason the panel exists.</p>
      */
     private UIElement tintPicker() {
-        int initial = glass.getTint();
+        int initial = glass.getTintArgb();
         ColorSelector picker = new ColorSelector();
         picker.addClass("__designer-tint__");
         picker.setColor(initial);
         picker.onColorChanged.connect(argb -> {
-            glass.setTint(argb);
+            glass.setTintArgb(argb);
             refreshReadout();
         });
         resets.add(() -> picker.setColor(initial));

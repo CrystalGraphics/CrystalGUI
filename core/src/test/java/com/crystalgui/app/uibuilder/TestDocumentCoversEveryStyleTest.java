@@ -41,7 +41,7 @@ import com.crystalgui.ui.dom.UIElementRegistry;
  * the file, applies its declarations for real, and asks what came back.</p>
  *
  * <p>It does NOT demand one of all 101 properties: most are variations of a family that behaves
- * identically ({@code padding-left} tells you nothing {@code padding-all} did not). What it demands is
+ * identically ({@code padding-left} tells you nothing {@code padding} did not). What it demands is
  * every kind of value that is handled DIFFERENTLY — <b>and it asks the registries rather than a list</b>,
  * so a drawable function added tomorrow is a failing test tomorrow rather than a section nobody ever
  * sees anything in.</p>
@@ -53,6 +53,8 @@ public class TestDocumentCoversEveryStyleTest extends UiDocumentTestBase {
 
     /** The value shapes that are neither a drawable nor a transform, and are each handled their own way. */
     private static final List<String> MUST_CARRY = List.of(
+            "backdrop-filter",        // a filter-function list, and the one CSS property with our own
+                                      // functions inside it
             "gap",                    // a paired length, and one of the properties that had no codec
             "font-family",            // a list
             "transition",             // a list of records, with an easing inside
@@ -120,7 +122,7 @@ public class TestDocumentCoversEveryStyleTest extends UiDocumentTestBase {
      * <p>A typo in a hand-written document is otherwise silent: the declaration is skipped and the
      * element simply does not carry what it claims to, which is precisely the failure a fixture like
      * this is supposed to rule out. A drawable function whose arguments do not parse is the same
-     * failure with a longer spelling — {@code glass(nonsense)} yields null and the property is gone.</p>
+     * failure with a longer spelling — {@code blur(nonsense)} yields null and the property is gone.</p>
      */
     @Test
     public void everyDeclarationInTheFixtureIsRealAndApplies() throws IOException {

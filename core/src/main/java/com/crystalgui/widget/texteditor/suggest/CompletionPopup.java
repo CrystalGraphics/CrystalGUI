@@ -158,7 +158,7 @@ public final class CompletionPopup extends Popover {
     /**
      * The popup's own vertical padding, which its declared height has to CARRY.
      *
-     * <p>Paired with {@code completionpopup { padding-all }}, and the third number here that is duplicated
+     * <p>Paired with {@code completionpopup { padding }}, and the third number here that is duplicated
      * from the sheet for the same reason as {@link #ROW_HEIGHT} and {@link #HINT_HEIGHT} — this widget
      * writes its own geometry and cannot read the cascade.</p>
      *

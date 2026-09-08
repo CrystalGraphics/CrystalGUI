@@ -750,7 +750,7 @@ content, where the column layout alone puts it at the bottom.
 | A spacer takes the slack, not `margin-left: auto` | Auto margins *share* free space between every auto margin in the row — the trap the activity bar's groups already cost a session |
 | It subscribes only while attached | `StatusBar` is static and outlives every view of it, so a view that never unsubscribed keeps itself and its elements alive for the rest of the process |
 | A slot's tooltip is attached **once** and re-texted | `Tooltip.attach` adds a hover listener pair per call and `detach` leaves them inert rather than removing them, so attach/detach cycling accumulates listeners — and the compile summary rewrites its tooltip on every recompile |
-| Separators are **elements**, not borders | The paint path takes `border().left` as *the* border width and strokes a uniform box, so `border-width-left` drew a rectangle around every readout instead of a rule between two. `Breadcrumbs` spells its separators the same way |
+| Separators are **elements**, not borders | The paint path takes `border().left` as *the* border width and strokes a uniform box, so `border-left-width` drew a rectangle around every readout instead of a rule between two. `Breadcrumbs` spells its separators the same way |
 | `breadcrumbs()` is the one widget, not an item | A trail is clickable and structured. The host sets it; the view still derives nothing |
 
 **A view publishes its own items, through `DocumentEditor.activated(boolean)`.** The workbench knows

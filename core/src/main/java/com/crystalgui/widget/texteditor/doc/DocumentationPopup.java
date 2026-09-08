@@ -72,7 +72,7 @@ import javax.annotation.Nullable;
  * <p><b>{@code BOTTOM} — the location line and its edit-source pencil — is currently absent.</b> It read
  * {@code this file} for anything declared in the open document, which is the common case and says less
  * than the owner band above it already does; IntelliJ's names the <em>module</em> instead, which we have
- * no notion of yet. Removed rather than hidden, because a hidden child still counts for a {@code gap-all}
+ * no notion of yet. Removed rather than hidden, because a hidden child still counts for a {@code gap}
  * and would leave the space it used to occupy. {@code editor.goToDefinition} is the command the pencil
  * invoked and is unaffected — it is bound to {@code Ctrl+B} and to Ctrl+Click.</p>
  *
@@ -529,7 +529,7 @@ public final class DocumentationPopup extends Popover {
      * broken on the one file slow enough to notice. The section grows in when the answer lands.</p>
      *
      * <p>Hidden rather than emptied when there is nothing wrong, and hidden as a <em>row</em> rather than
-     * by clearing its text: a band with no content still occupies its share of the parent's {@code gap-all}
+     * by clearing its text: a band with no content still occupies its share of the parent's {@code gap}
      * and would leave a gap above the owner for every symbol in the file.</p>
      */
     public void setProblem(List<com.crystalgui.text.diagnostic.Diagnostic> problems,

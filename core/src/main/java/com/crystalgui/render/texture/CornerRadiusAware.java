@@ -9,7 +9,7 @@ package com.crystalgui.render.texture;
  * {@link CgUiRoundedRect} when the element has a radius or a border — rounding is orthogonal to what a
  * background <em>is</em>, exactly as it is in CSS, so one layer handles it for every fill type.</p>
  *
- * <p>That is right for a fill and impossible for a <b>material</b>. {@link CgUiGlass} carries its own
+ * <p>That is right for a fill and impossible for a <b>material</b>. {@link CgUiBackdrop} carries its own
  * shader: it needs the radii to mask itself <em>and</em> to measure the bezel its refraction is computed
  * across, and there is no way to express either through a wrapper that would have to rasterise it to a
  * texture first — which is what wrapping means. Wrapped, glass would silently become a rounded

@@ -174,7 +174,7 @@ PART	CreateMenu	entry-category	A	1	proposed	leaf in every rule, scoped by an anc
 PART	CreateMenu	items	A	0	proposed	leaf in every rule
 PART	CreateMenu	label	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
 PART	CreateMenu	search	A	0	proposed	leaf in every rule
-PART	CreateMenu	title	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	CreateMenu	title	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
 PART	CreateMenu	title-bar	A	0	proposed	leaf in every rule
 PART	CreateMenu	twisty	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	DesignToolWindow	design-panel	A	0	proposed	leaf in every rule
@@ -208,7 +208,7 @@ PART	DockGroup	drop-overlay	A	0	confirmed	leaf in every rule
 PART	DockGroup	empty	C	2	confirmed	state adjective
 PART	DockGroup	missing	C	0	confirmed	state adjective
 PART	DockGroup	pane-host	A	0	confirmed	leaf in every rule
-PART	DockWindow	dock-window	B	1	confirmed	a rule selects through it (1)
+PART	DockWindow	dock-window	B	3	confirmed	a rule selects through it (3)
 PART	DocumentTabs	missing	C	0	proposed	state adjective
 PART	DocumentationPopup	doc-body	B	0	confirmed	leaf in every rule
 PART	DocumentationPopup	doc-definition	B	0	confirmed	leaf in every rule
@@ -254,7 +254,7 @@ PART	GraphNode	outputs	B	0	confirmed	leaf in every rule
 PART	GraphNode	ports	B	0	confirmed	leaf in every rule
 PART	GraphNode	ports-empty	C	0	confirmed	state adjective
 PART	GraphNode	preview	B	0	confirmed	leaf in every rule
-PART	GraphNode	title	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	GraphNode	title	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	GraphNode	title-bar	B	0	confirmed	leaf in every rule
 PART	GraphView	marquee	B	0	confirmed	leaf in every rule
 PART	HeaderControl	header	B	2	confirmed	a rule selects through it (1)
@@ -619,6 +619,7 @@ PART	Taskbar	exiting	C	0	confirmed	state adjective
 PART	Taskbar	glow	B	0	confirmed	leaf in every rule
 PART	Taskbar	hidden	C	0	confirmed	state adjective
 PART	Taskbar	icon	B	0	confirmed	leaf in every rule
+PART	Taskbar	iconic	A	0	proposed	leaf in every rule
 PART	Taskbar	indicator	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	Taskbar	progress	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	TaskbarDesigner	designer	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
@@ -726,7 +727,7 @@ PART	WindowFrame	maximized	C	2	confirmed	state adjective
 PART	WindowFrame	minimize	B	3	confirmed	leaf in every rule, scoped by an ancestor in 3
 PART	WindowFrame	pin	B	5	confirmed	leaf in every rule, scoped by an ancestor in 5
 PART	WindowFrame	pinned	C	1	confirmed	state adjective
-PART	WindowFrame	title	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	WindowFrame	title	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	WindowFrame	title-bar	B	27	confirmed	a rule selects through it (23)
 PART	WindowFrame	window	B	34	confirmed	a rule selects through it (30)
 PART	WindowIcon	branded	C	1	confirmed	state adjective

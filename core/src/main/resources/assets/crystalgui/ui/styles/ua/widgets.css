@@ -89,7 +89,7 @@ button:disabled, dropdown:disabled {
  * align-self: flex-start is load-bearing, not cosmetic — see the matching note in ore.css. The root
  * paints nothing, so a stretched root would hit-test far to the right of the visible content. */
 
-/* NO `height`, and this was the mark's number on the whole control: 12px, with `padding-all: 1px`
+/* NO `height`, and this was the mark's number on the whole control: 12px, with `padding: 1px`
  * inside it, so a 12px mark filled the root and spilled over the padding, and a 13px LABEL sat at
  * y = -0.5 and overflowed the control top and bottom. A labelled checkbox has been drawing its text
  * outside itself since it was written.
@@ -98,8 +98,8 @@ button:disabled, dropdown:disabled {
  * padding. The config kit pins both axes on its own checkboxes (`--cfg-check`) and is unaffected. */
 checkbox {
     align-self: flex-start;
-    padding-all: 1px;
-    gap-all: 2px;
+    padding: 1px;
+    gap: 2px;
     align-items: center;
     text-shadow: false;
 }
@@ -135,7 +135,7 @@ checkbox:disabled::part(mark) {
 switch {
     width: 25px;
     height: 12px;
-    padding-all: 0;
+    padding: 0;
     align-items: center;
     background: var(--switch-bg, #6E6E6E);
     /* Half the height — a pill. Tied to `height` above; change one and change both. */
@@ -156,9 +156,9 @@ switch:checked::part(spacer) {
 switch .__knob__,
 switch::part(knob) {
     height: 100%;
-    aspect-rate: 1;
+    aspect-ratio: 1;
     background: var(--switch-knob, #D0D1D4);
-    /* Percentages resolve per axis, so 50% on a square (aspect-rate: 1) part is a circle regardless of
+    /* Percentages resolve per axis, so 50% on a square (aspect-ratio: 1) part is a circle regardless of
      * how big the switch gets — which is why this isn't a px value like the track's. */
     border-radius: 50%;
 }
@@ -463,7 +463,7 @@ tab::part(pre-icon) {
     height: 11px;
     flex-shrink: 0;
     margin-right: 3px;
-    overlay-fit: contain;
+    overlay-size: contain;
 }
 
 /* ── THE CLOSE BUTTON ────────────────────────────────────────────────────────────────────────────
@@ -491,7 +491,7 @@ tab::part(close) {
     height: 11px;
     min-height: 0;
     min-width: 0;
-    padding-all: 0;
+    padding: 0;
     margin-left: 3px;
     flex-shrink: 0;
     flex-grow: 0;
@@ -631,7 +631,7 @@ tab:disabled {
 markupview {
     flex-direction: column;
     width: 100%;
-    gap-all: 6px;
+    gap: 6px;
 }
 
 markupview .__markup-paragraph__ {
@@ -737,7 +737,7 @@ markupview .__markup-code__ {
     flex-direction: column;
     width: 100%;
     background-color: var(--markup-pre-bg, #2B2B2B);
-    padding-all: 6px;
+    padding: 6px;
     border-radius: 3px;
     overflow: auto;
     /* AN OUTLINE, not a border. A one-sided `border-width-*` in this engine either draws all four edges or
@@ -763,7 +763,7 @@ markupview .__markup-code__ > text {
 markupview .__markup-list__ {
     flex-direction: column;
     width: 100%;
-    gap-all: 2px;
+    gap: 2px;
     /* INDENTED AS A BLOCK, which is the whole visual job of a list: the marker column has to start inside
      * the prose's left edge or the items read as more paragraphs that happen to begin with a number.
      * On the list rather than the item, so a nested list indents against its parent for free. */
@@ -773,7 +773,7 @@ markupview .__markup-list__ {
 markupview .__markup-item__ {
     flex-direction: row;
     width: 100%;
-    gap-all: 4px;
+    gap: 4px;
 }
 
 markupview .__markup-bullet__ {
@@ -785,7 +785,7 @@ markupview .__markup-item-body__ {
     flex-direction: column;
     width: 0;
     flex-grow: 1;
-    gap-all: 4px;
+    gap: 4px;
 }
 
 /* A `<blockquote>`. The rule down its left is an ELEMENT, because a one-sided `border-width-*` in this
@@ -795,7 +795,7 @@ markupview .__markup-item-body__ {
 markupview .__markup-quote__ {
     flex-direction: row;
     width: 100%;
-    gap-all: 6px;
+    gap: 6px;
 }
 
 markupview .__markup-quote-rule__ {
@@ -811,7 +811,7 @@ markupview .__markup-quote-rule__ {
 markupview .__markup-definitions__ {
     flex-direction: column;
     width: 100%;
-    gap-all: 4px;
+    gap: 4px;
 }
 
 /* The label column is given ONE SHARED WIDTH after layout, by `MarkupView.alignTerms` -- a grid would be
@@ -821,7 +821,7 @@ markupview .__markup-definitions__ {
 markupview .__markup-definition__ {
     flex-direction: row;
     width: 100%;
-    gap-all: 8px;
+    gap: 8px;
 }
 
 /* Quieter than the value it introduces: the label is how you find the row, the value is what you came
@@ -843,7 +843,7 @@ markupview .__markup-detail__ {
     flex-direction: column;
     width: 0;
     flex-grow: 1;
-    gap-all: 3px;
+    gap: 3px;
 }
 
 
@@ -860,7 +860,7 @@ markupview .__markup-detail__ {
 markupview .__markup-table__ {
     flex-direction: column;
     width: 100%;
-    gap-all: 2px;
+    gap: 2px;
 }
 
 /* Above the rows and quieter than them: a caption names the table, the rows are what you came for. */

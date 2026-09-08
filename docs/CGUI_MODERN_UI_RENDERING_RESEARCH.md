@@ -4,7 +4,7 @@
 the exact numbers each one publishes and what each implies for this engine. It exists because the
 first version of every one of these was built from memory and looked plausible while being wrong in a
 way only the source could show: a Gaussian that was a comb, a "Mica" that let hue through, a gradient
-that banded. **Read the relevant section before touching `gui_glass.shader`, `gui_blur.shader`,
+that banded. **Read the relevant section before touching `gui_backdrop_filter.shader`, `gui_blur.shader`,
 `gui_gradient.shader`, `CgUiBackdrop` or the taskbar's sheet.** Every claim below carries its source;
 where a number is measured or community-reported rather than published, it says so.
 
@@ -83,7 +83,7 @@ the **backdrop's hue and saturation with the tint's luminance** (`SetLum(backdro
 applied at that opacity, and only then is the tint colour itself alpha-blended at `TintOpacity`.
 That is how Windows gets a surface that reads as a *temperature* — the wallpaper's hue survives at
 its own saturation — while its brightness is the tint's. A plain alpha blend of the tint (what
-`gui_glass.shader` does today) dims hue and brightness together and cannot separate the two.
+`gui_backdrop_filter.shader` does today) dims hue and brightness together and cannot separate the two.
 — [AcrylicBrush.TintLuminosityOpacity](https://learn.microsoft.com/en-us/uwp/api/windows.ui.xaml.media.acrylicbrush.tintluminosityopacity?view=winrt-22621),
 [W3C Compositing and Blending Level 1 §10 non-separable blend modes](https://www.w3.org/TR/compositing-1/#blendingnonseparable)
 
@@ -109,7 +109,7 @@ luminosity 1.0 and light `#F3F3F3` at 0.5 / 1.0; Base Alt dark `#0A0A0A` at 0.0 
 
 ### 1.4 Implications for CrystalGUI
 
-- `gui_glass.shader`'s `tint` was an alpha mix; Windows' is luminosity-blend + tint. **Done:** a
+- `gui_backdrop_filter.shader`'s `tint` was an alpha mix; Windows' is luminosity-blend + tint. **Done:** a
   `luminosity` term (`SetLum(backdrop, Lum(tint))` at a `luminosity` opacity, then the colour tint at
   `tint`'s alpha), so the backdrop can only ever contribute hue — the temperature without the colour.
   Recipe for the **bar** (Mica, base surface): the bar's own dark at tint 0.8, luminosity 1, saturation

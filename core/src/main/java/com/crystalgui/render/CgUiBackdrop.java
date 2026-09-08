@@ -22,7 +22,7 @@ import java.util.Map;
 /**
  * The BACKDROP PRIMITIVE: what is behind an element, captured and blurred, once per frame.
  *
- * <p>This is the whole of what {@code glass()} stands on, and it sits beside {@link CgUiPaintContext}
+ * <p>This is the whole of what {@code backdrop-filter} stands on, and it sits beside {@link CgUiPaintContext}
  * rather than inside it for the reason {@code TextEditor}'s view parts do: it is a piece of the paint
  * context rather than a client of it, so it reaches back through package-private members instead of
  * through a public API. Keeping it here also keeps the context's own job legible — the context draws
@@ -90,7 +90,7 @@ final class CgUiBackdrop {
 
     /** Scene plus whatever the UI had painted when the first glass element of the frame drew. */
     private final CgFrameBuffer captureFbo =
-            CgFrameBuffer.createOwned("cgui_backdrop", 1, 1, CgUiPaintContext.LAYER_FORMAT);
+            CgFrameBuffer.createOwned("cgui_backdrop_filter", 1, 1, CgUiPaintContext.LAYER_FORMAT);
 
     /** The frame {@link #captureFbo} was captured on — the whole of the "once per frame" rule. */
     private long captureFrame = -1L;
@@ -214,7 +214,7 @@ final class CgUiBackdrop {
     private float blurRadiusPx = Float.NaN;
 
     /**
-     * Captures what is behind {@code (x, y, w, h)} and blurs it — the primitive under {@code glass()}.
+     * Captures what is behind {@code (x, y, w, h)} and blurs it — the primitive under {@code backdrop-filter}.
      *
      * <h3>One capture per frame, shared</h3>
      * <p>The full-surface grab happens on the first call of a frame and every later caller crops out of
@@ -338,7 +338,7 @@ final class CgUiBackdrop {
         // 1b. THE SCENE IS OPAQUE, AND SAYING SO IS WHAT MAKES THE REST OF THIS PIPELINE TRUE.
         //
         // Everything downstream is premultiplied: gui_blur carries alpha through its taps ("PREMULTIPLIED
-        // ALPHA IS CARRIED THROUGH, NOT DISCARDED"), and gui_glass's cg_backdrop un-premultiplies with
+        // ALPHA IS CARRIED THROUGH, NOT DISCARDED"), and gui_backdrop_filter's cg_backdrop un-premultiplies with
         // `rgb /= max(a, 1/255)`. That contract is right for the LAYERS composited below, which really
         // are premultiplied. It is not right for the blit above, which is a raw glBlitFramebuffer of the
         // HOST's colour buffer -- and a host's alpha channel holds whatever its own rendering left there.

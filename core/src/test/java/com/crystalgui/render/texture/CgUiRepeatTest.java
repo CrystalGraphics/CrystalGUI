@@ -57,7 +57,7 @@ public class CgUiRepeatTest {
 
     /** Degenerate inputs collapse to a single stretched tile rather than dividing by zero or
      * (for space) drawing nothing as CSS would. Deliberate deviation — matches how the rest of the
-     * engine degrades, e.g. overlay-fit falling back to fill. */
+     * engine degrades, e.g. overlay-size falling back to fill. */
     @Test
     public void degenerateInputsFallBackToASingleTile() {
         assertEquals(1f, CgUiRepeat.REPEAT.tileCount(100f, 0f), EPS);

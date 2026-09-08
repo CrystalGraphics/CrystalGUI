@@ -24,7 +24,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class BoxEdgeShorthands {
 
-    public enum Kind { COMPOSITE, ALL, HORIZONTAL, VERTICAL }
+    public enum Kind { COMPOSITE, HORIZONTAL, VERTICAL }
 
     public record Group(String prefix,
                          StyleProperty<LengthPercentageAuto> left,
@@ -49,8 +49,11 @@ public final class BoxEdgeShorthands {
     private static final Map<String, Match> BY_ALIAS = new ConcurrentHashMap<>();
     static {
         for (Group group : GROUPS) {
+            // NO `-all`: the composite form already IS it. CSS's one-value shorthand sets all four
+            // edges, which this expands exactly, so `padding` was a second spelling of `padding`
+            // that no browser would take. `-horizontal`/`-vertical` stay -- CSS's nearest equivalents,
+            // `padding-inline`/`padding-block`, are LOGICAL and flip under RTL, and these are physical.
             BY_ALIAS.put(group.prefix(), new Match(group, Kind.COMPOSITE));
-            BY_ALIAS.put(group.prefix() + "-all", new Match(group, Kind.ALL));
             BY_ALIAS.put(group.prefix() + "-horizontal", new Match(group, Kind.HORIZONTAL));
             BY_ALIAS.put(group.prefix() + "-vertical", new Match(group, Kind.VERTICAL));
         }

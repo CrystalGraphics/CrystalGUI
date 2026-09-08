@@ -184,7 +184,7 @@ the same rule correctly outranks an earlier `margin:` shorthand's expansion, ins
 This replaced an earlier design where `margin`/`padding`/`-all`/`-horizontal`/`-vertical` *were*
 independently-cascading properties, reconciled by a hand-rolled, **non-CSS-accurate** resolver
 (`TaffyBridge`'s old `LPARectData`/`LPRectData`) that gave `margin-left` **permanent, sticky**
-priority over `margin-all` the moment it was ever set — regardless of actual cascade order. That
+priority over `margin` the moment it was ever set — regardless of actual cascade order. That
 resolver duplication also hid a real bug (`gap`'s height read `this.horizontal` instead of
 `this.vertical`, copy-pasted from the width line above it) — fixed as part of the same cleanup.
 
@@ -338,12 +338,12 @@ decorative visual because its style system lacks background geometry controls):
 | Layer | Painted | Clipped by own mask/scissor? | Geometry longhands |
 |---|---|---|---|
 | `background` | before children | no | *(none — see §9)* |
-| `overlay` | after children | no | `overlay-origin`, `overlay-fit`, `overlay-position` |
+| `overlay` | after children | no | `overlay-origin`, `overlay-size`, `overlay-position` |
 | `outline` | after overlay, last | no | `outline-offset`, `outline-width`, `outline-color` |
 
 - **`overlay-origin`** (`border-box`\|`padding-box`\|`content-box`, default `border-box`) — CSS
   `background-origin`. Which box the layer is laid into.
-- **`overlay-fit`** (`fill`\|`contain`\|`cover`\|`none`, default `fill`) — CSS `object-fit`, the
+- **`overlay-size`** (`fill`\|`contain`\|`cover`\|`none`, default `fill`) — CSS `object-fit`, the
   honest analogue since this engine fits *one* drawable into a box rather than tiling. `contain`/
   `cover`/`none` need the drawable's natural size (`CgUiDrawable.intrinsicWidth()/intrinsicHeight()`,
   `-1` when it has none); every mode degrades to `fill` when unknown, so solid colours and SDF shapes
@@ -412,7 +412,18 @@ returns `null`, same as any malformed CSS value).
 | `sprite("path", "sx sy sw sh", "bl bt br bb")` | `CgUiSprite`, 9-slice | Optional 4th `"refW refH"` arg, same override as `image(...)` |
 | `asset("ns:path", "element")` | `CgUiSprite`, fresh instance per lookup | Named 9-slice element from a pack at `assets/{ns}/ui/sprites/{path}.json`, via `CgUiSpriteRegistry`. The parsed pack JSON is cached, but each `get()` call rebuilds a new `CgUiSprite` from it (not a `.copy()` of a cached template) — safer against cross-call mutation. One pack file holds multiple named elements; each may override the pack's own `texture`/`textureSize`. On a missing pack/element, returns a visible fallback drawable rather than silently rendering nothing |
 | `linear-gradient(direction?, stop, stop, …)` | `CgUiGradient` | CSS's: an `<angle>` in any unit, `to <side>` or `to <corner>` (resolved per box); a stop is a colour with an optional `%` position, and missing positions spread evenly. One draw per eight stops, **premultiplied** interpolation, dithered, and it masks itself under `border-radius` (`CornerRadiusAware`, so no `border-width` stroke). No colour hints, no `repeating-` |
-| `glass(blur, tint)` / `glass(blur 12, tint …, saturation …, …)` | `CgUiGlass` | A backdrop material: captures what is behind the element, blurs, saturates and tints it. Keyword form takes any subset; the keys are in `TextureValue.parseGlass`. `CornerRadiusAware`, same gap |
+
+> **`glass()` is gone, and what it did is `backdrop-filter`.** It was a `background` value, which meant
+> an element could have the material or a colour and never both — and CSS already has a name for
+> filtering what shows through. `backdrop-filter: blur(24px) saturate(1.2) tint(#1C1D21CC)` is the same
+> effect as a property, painted UNDER the element's own background, over `CgUiBackdropFilter`. `blur()`
+> and `saturate()` are CSS's; the other twelve functions are ours. @see `BackdropFilterValue`
+>
+> **An opaque `background` hides it completely**, which is the one thing to know before it looks like a
+> bug. `glass()` OCCUPIED the background, so setting it always replaced whatever fill was there and was
+> always visible; a filter sits under that fill. Pasting `backdrop-filter` alone onto an element that has
+> a background therefore looks like nothing happened — the filter is drawn, and painted over. Clear the
+> background, make it translucent, or carry it along in the same paste.
 
 `CssParsingUtil.splitTopLevelCommas` (paren-aware comma split) backs every multi-arg form here.
 
@@ -645,7 +656,7 @@ comes from the font's own `ascender + descender + lineGap` via `CgFontFamily.get
 `Float`, so it still has a codec and inline `line-height` still crosses the wire — a union type would
 return `null` from `StyleValueCodecs.forProperty` and make `InlineStyleCodec` throw. The interpolator is
 guarded so a transition into or out of `normal` snaps instead of blending `NaN` through every frame.
-`AutoFloatProperty` established the same idiom for `flex`/`aspect-rate`.
+`AutoFloatProperty` established the same idiom for `flex`/`aspect-ratio`.
 
 **The sentinel becomes pixels in exactly one place — `TextField.paintDecoration`.** Resolving it in
 `GeneralGroup`, in a `StyleValue`, or anywhere in the cascade would drag `CgFontFamily` into style

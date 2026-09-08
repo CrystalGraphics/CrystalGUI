@@ -548,7 +548,7 @@ public class GraphNode extends UIElement {
         setEmptyOnCollapse(inputs, inputPorts);
         setEmptyOnCollapse(outputs, outputPorts);
         // Visibly empty EITHER because there is structurally nothing here (a portless column, permanent)
-        // OR because collapse just hid every row in it — `.__ports__`'s own `gap-all: 1px` runs between
+        // OR because collapse just hid every row in it — `.__ports__`'s own `gap: 1px` runs between
         // the two columns regardless of either one's width, so a genuinely 0-width input column still
         // left 1px of `.__ports__`'s darker tint standing before the output content, reading as a stray
         // left edge on an otherwise inputless row (`Position`'s `Out` row is the case that surfaced it).

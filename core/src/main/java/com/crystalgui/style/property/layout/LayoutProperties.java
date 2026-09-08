@@ -61,7 +61,7 @@ public class LayoutProperties {
             .create("display", TaffyDisplay.class, TaffyDisplay.FLEX)
             .setAllowTransition(true)
             .setInterpolator(DISPLAY_ALLOW_DISCRETE);
-    public static final StyleProperty<TaffyDirection> LAYOUT_DIRECTION = StylePropertyRegistry.create("layout-direction", TaffyDirection.class, TaffyDirection.INHERIT);
+    public static final StyleProperty<TaffyDirection> DIRECTION = StylePropertyRegistry.create("direction", TaffyDirection.class, TaffyDirection.INHERIT);
     public static final StyleProperty<TaffyDimension> FLEX_BASIS = create("flex-basis", TaffyDimension.auto());
     public static final StyleProperty<Float> FLEX = StylePropertyRegistry.create(new AutoFloatProperty("flex", Float.NaN));
     public static final StyleProperty<Float> FLEX_GROW = StylePropertyRegistry.create("flex-grow", 0f);
@@ -93,18 +93,18 @@ public class LayoutProperties {
     public static final StyleProperty<LengthPercentageAuto> PADDING_RIGHT = create("padding-right", LengthPercentageAuto.AUTO);
     public static final StyleProperty<LengthPercentageAuto> PADDING_BOTTOM = create("padding-bottom", LengthPercentageAuto.AUTO);
 
-    public static final StyleProperty<LengthPercentageAuto> BORDER_LEFT = create("border-width-left", LengthPercentageAuto.AUTO);
-    public static final StyleProperty<LengthPercentageAuto> BORDER_TOP = create("border-width-top", LengthPercentageAuto.AUTO);
-    public static final StyleProperty<LengthPercentageAuto> BORDER_RIGHT = create("border-width-right", LengthPercentageAuto.AUTO);
-    public static final StyleProperty<LengthPercentageAuto> BORDER_BOTTOM = create("border-width-bottom", LengthPercentageAuto.AUTO);
+    public static final StyleProperty<LengthPercentageAuto> BORDER_LEFT = create("border-left-width", LengthPercentageAuto.AUTO);
+    public static final StyleProperty<LengthPercentageAuto> BORDER_TOP = create("border-top-width", LengthPercentageAuto.AUTO);
+    public static final StyleProperty<LengthPercentageAuto> BORDER_RIGHT = create("border-right-width", LengthPercentageAuto.AUTO);
+    public static final StyleProperty<LengthPercentageAuto> BORDER_BOTTOM = create("border-bottom-width", LengthPercentageAuto.AUTO);
 
-    public static final StyleProperty<LengthPercentageAuto> GAP_ROW = create("gap-row", LengthPercentageAuto.AUTO);
-    public static final StyleProperty<LengthPercentageAuto> GAP_COLUMN = create("gap-column", LengthPercentageAuto.AUTO);
-    public static final StyleProperty<LengthPercentageAuto> GAP_ALL = create("gap-all", LengthPercentageAuto.AUTO);
+    public static final StyleProperty<LengthPercentageAuto> ROW_GAP = create("row-gap", LengthPercentageAuto.AUTO);
+    public static final StyleProperty<LengthPercentageAuto> COLUMN_GAP = create("column-gap", LengthPercentageAuto.AUTO);
     /** Two lengths, column then row — the pair its parser splits on whitespace. */
     public static final StyleProperty<LPSize> GAP = create("gap", LPSize.ZERO)
-            .setWriter(gap -> writeLengthPercentage(gap.size().width)
-                    + " " + writeLengthPercentage(gap.size().height));
+            // Row then column, as CSS reads it -- Taffy's width is the column gap. @see LPSizeValue
+            .setWriter(gap -> writeLengthPercentage(gap.size().height)
+                    + " " + writeLengthPercentage(gap.size().width));
 
     /**
      * A Taffy {@code LengthPercentage} as the CSS its parser reads — {@code 4px} or {@code 50%}.
@@ -132,7 +132,7 @@ public class LayoutProperties {
     public static final StyleProperty<TaffyDimension> MAX_WIDTH = create("max-width", TaffyDimension.auto());
     public static final StyleProperty<TaffyDimension> MAX_HEIGHT = create("max-height", TaffyDimension.auto());
 
-    public static final StyleProperty<Float> ASPECT_RATE = StylePropertyRegistry.create(new AutoFloatProperty("aspect-rate", Float.NaN));
+    public static final StyleProperty<Float> ASPECT_RATIO = StylePropertyRegistry.create(new AutoFloatProperty("aspect-ratio", Float.NaN));
     public static final StyleProperty<AlignItems> ALIGN_ITEMS = StylePropertyRegistry.create("align-items", AlignItems.class, AlignItems.STRETCH, DEFAULT_ALIGN_ITEMS);//.setIconProvider(v -> IGuiTexture.EMPTY);
     public static final StyleProperty<AlignItems> ALIGN_SELF = StylePropertyRegistry.create("align-self", AlignItems.class, AlignItems.AUTO, DEFAULT_ALIGN_ITEMS);//.setIconProvider(v -> IGuiTexture.EMPTY);
     public static final StyleProperty<AlignContent> ALIGN_CONTENT = StylePropertyRegistry.create("align-content", AlignContent.class, AlignContent.FLEX_START);//.setIconProvider(v -> IGuiTexture.EMPTY);
@@ -185,7 +185,7 @@ public class LayoutProperties {
 
     public static void init() {
         createSetter(LayoutProperties.DISPLAY, TaffyBridge::setDisplay);
-        createSetter(LayoutProperties.LAYOUT_DIRECTION, TaffyBridge::setDirection);
+        createSetter(LayoutProperties.DIRECTION, TaffyBridge::setDirection);
         createSetter(LayoutProperties.FLEX_BASIS, TaffyBridge::setFlexBasis);
         createSetter(LayoutProperties.FLEX, TaffyBridge::setFlex);
         createSetter(LayoutProperties.FLEX_GROW, TaffyBridge::setFlexGrow);
@@ -201,7 +201,7 @@ public class LayoutProperties {
         createSetter(LayoutProperties.JUSTIFY_SELF, TaffyBridge::setJustifySelf);
         createSetter(LayoutProperties.ALIGN_SELF, TaffyBridge::setAlignSelf);
         createSetter(LayoutProperties.ALIGN_CONTENT, TaffyBridge::setAlignContent);
-        createSetter(LayoutProperties.ASPECT_RATE, TaffyBridge::setAspectRate);
+        createSetter(LayoutProperties.ASPECT_RATIO, TaffyBridge::setAspectRate);
 
         createSetter(LayoutProperties.LEFT, TaffyBridge::setLeft);
         createSetter(LayoutProperties.TOP, TaffyBridge::setTop);
@@ -230,9 +230,8 @@ public class LayoutProperties {
         createSetter(LayoutProperties.BORDER_RIGHT, TaffyBridge::setBorderRight);
         createSetter(LayoutProperties.BORDER_BOTTOM, TaffyBridge::setBorderBottom);
 
-        createSetter(LayoutProperties.GAP_ROW, (style, value) -> style.gap.setVertical(value));
-        createSetter(LayoutProperties.GAP_COLUMN, (style, value) -> style.gap.setHorizontal(value));
-        createSetter(LayoutProperties.GAP_ALL, (style, value) -> style.gap.setAll(value));
+        createSetter(LayoutProperties.ROW_GAP, (style, value) -> style.gap.setVertical(value));
+        createSetter(LayoutProperties.COLUMN_GAP, (style, value) -> style.gap.setHorizontal(value));
         createSetter(LayoutProperties.GAP, (style, value) -> style.gap.setSize(value));
 
         // Grid properties (Taffy-specific, no Yoga equivalents)

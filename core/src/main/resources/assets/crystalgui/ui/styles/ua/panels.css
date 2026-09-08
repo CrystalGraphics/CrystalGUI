@@ -28,7 +28,7 @@ statusbarview {
      * stand off the corner.
      *
      * What is left in front of the first crumb after this is the icon's own doing: the glyph is drawn
-     * `overlay-fit: contain` inside its box and does not fill it, so the visible inset is this padding
+     * `overlay-size: contain` inside its box and does not fill it, so the visible inset is this padding
      * plus whatever margin the artwork carries. Below this, tighten the artwork rather than the bar. */
     padding-left: 4px;
     /* AND THE TRAILING EDGE STOPS WHERE THE PANELS DO. The bar runs the full width of the window while
@@ -39,14 +39,14 @@ statusbarview {
      * not its tail. So this is the whole of the trailing inset, and it is a number to look at rather
      * than derive -- the rail's width is not something the sheet can ask for. */
     padding-right: 24px;
-    gap-all: 8px;
+    gap: 8px;
     overflow: hidden;
     /* THE SAME SURFACE AS THE RAILS, which is what makes it read as chrome rather than as the bottom of
      * whichever panel happens to sit above it. Without a band of its own the line looked like loose text
      * lying on the panel -- which is exactly how it first shipped. */
     background: var(--statusbar-bg, #2B2B2B);
     color: var(--statusbar-fg, #9DA0A8);
-    border-width-top: 1px;
+    border-top-width: 1px;
     border-top-color: var(--statusbar-border, #1E1E1E);
 }
 
@@ -56,7 +56,7 @@ statusbarview .__right__ {
     align-items: center;
     /* The ITEM carries its own leading space, so the gap only has to keep the divider off its neighbour;
      * 12px in both would put 24px between every pair. */
-    gap-all: 12px;
+    gap: 12px;
     flex-shrink: 0;
 }
 
@@ -84,7 +84,7 @@ statusbarview .__status-item__ {
 }
 
 /* The rule between two readouts. An ELEMENT, because a border cannot be asymmetric here: the paint path
- * takes border().left as the width and strokes a uniform box, so `border-width-left` drew a rectangle
+ * takes border().left as the width and strokes a uniform box, so `border-left-width` drew a rectangle
  * around every item instead of a line between two. Breadcrumbs spells its separators the same way. */
 statusbarview .__status-sep__ {
     width: 1px;
@@ -112,7 +112,7 @@ statusbarview .__left__ breadcrumbs {
      * is the heading; here it runs along a 22px strip beside the readouts, and every segment costs an
      * icon, a word and a chevron. Nothing below changes what a crumb IS -- only how much room it takes
      * to say it -- which is why it is scoped here rather than written on the widget. */
-    gap-all: 2px;
+    gap: 2px;
 }
 
 /* A GLYPH THE SIZE OF THE TEXT BESIDE IT. 10px against 7px text read as an icon with a label rather than
@@ -137,7 +137,7 @@ notificationsview {
     flex-direction: column;
     flex-grow: 1;
     background: var(--notifications-bg, #1E1E1E);
-    padding-all: 6px;
+    padding: 6px;
 }
 
 notificationsview > .__head__ {
@@ -173,7 +173,7 @@ notificationsview .__clear__:hover {
     color: var(--notifications-link-hover-fg, #6BA5DE);
 }
 
-/* NO `gap-all` HERE, and it is not an omission: a ScrollerView puts a caller's children in a SLOT in its
+/* NO `gap` HERE, and it is not an omission: a ScrollerView puts a caller's children in a SLOT in its
  * own shadow tree, so a gap on the view falls between that slot and the bars -- which are absolutely
  * positioned and contribute nothing -- and never between the cards. It sat here reading as the spacing
  * and doing nothing at all, which is worse than absent. The cards space themselves; see below. */
@@ -229,12 +229,12 @@ notificationsview .__notification__ {
      * The sides are tuned against the HEAD ROW'S GAP rather than picked: the run is edge, glyph, heading,
      * and when the first step is bigger than the second it reads as a misalignment rather than as
      * spacing. The two are not the same measurement, which is why this needed an eye and not arithmetic
-     * -- the gap is between boxes, while the glyph is drawn `overlay-fit: contain` inside a 10px box and
+     * -- the gap is between boxes, while the glyph is drawn `overlay-size: contain` inside a 10px box and
      * does not fill it, so the visible inset is this padding plus whatever margin the SVG carries. If it
      * ever needs to go below this, shrink the icon box or tighten the artwork rather than keep spending
      * the card's padding on it. */
-    padding-all: 5px;
-    gap-all: 4px;
+    padding: 5px;
+    gap: 4px;
 }
 
 /* HOVER HIGHLIGHTS THE WHOLE CARD, which is what tells you the entry is a thing rather than a paragraph
@@ -257,7 +257,7 @@ notificationsview .__notification__ {
      * 10px glyph beside 8px text reads as sitting high, which is what flex-start actually buys here. The
      * detail and the attribution are their own rows below and are unaffected either way. */
     align-items: center;
-    gap-all: 4px;
+    gap: 4px;
     width: 100%;
 }
 
@@ -317,7 +317,7 @@ notificationsview .__notification__ {
 .__notification__ .__attribution__ {
     flex-direction: row;
     align-items: center;
-    gap-all: 4px;
+    gap: 4px;
     /* IN THE HEAD ROW, beside the timestamp, and never the thing that gives way: the heading is what
      * elides when the card narrows. Both of these say something ABOUT the event rather than what it was,
      * so they read as one cluster on the right. */
@@ -351,7 +351,7 @@ notificationsview .__notification__ {
 
 .__notification__ .__actions__ {
     flex-direction: row;
-    gap-all: 12px;
+    gap: 12px;
     flex-shrink: 0;
     /* FLUSH WITH THE DETAIL, not merely clear of the glyph: the links read as belonging to the message
      * they act on, and a two-pixel step between them and the text above is visible at this size.
@@ -409,7 +409,7 @@ notificationsview .__notification__ {
     width: 10px;
     height: 10px;
     flex-shrink: 0;
-    overlay-fit: contain;
+    overlay-size: contain;
 }
 
 /* A FAILING status item reads as a failure. "compiled 12n/9e" and "1 error(s)" are both ambient and both
@@ -457,7 +457,7 @@ notificationsview .__notification__ {
 notificationsview .__notifications-empty__ {
     font-size: 7px;
     color: var(--notifications-empty-fg, #6E7076);
-    padding-all: 8px;
+    padding: 8px;
 }
 
 /* ── Notification balloons ───────────────────────────────────────────────────────────────────────────
@@ -489,7 +489,7 @@ notificationsview .__notifications-empty__ {
      * widening one moves its LEFT edge and leaves the corner where it is. Setting `top` or `left` here
      * would pin the opposite edge and make a long message push out of the window instead. */
     align-items: flex-end;
-    gap-all: 6px;
+    gap: 6px;
     /* The cap a balloon may grow to, not the width it takes -- see the balloon rule. Sized against this
      * sheet's own 7px text rather than a pixel count read off an IntelliJ screenshot, since the two are
      * nowhere near the same scale.
@@ -614,7 +614,7 @@ problemspanel .__problem__ {
     flex-direction: row;
     align-items: center;
     width: 100%;
-    gap-all: 6px;
+    gap: 6px;
     padding-left: 8px;
     padding-right: 8px;
 }
@@ -668,7 +668,7 @@ problemspanel .__problem__ .__severity__ {
     width: 9px;
     height: 9px;
     flex-shrink: 0;
-    overlay-fit: contain;
+    overlay-size: contain;
 }
 
 problemspanel .__problem__ .__severity__.severity-info {
@@ -751,7 +751,7 @@ problemspanel .__problem__.__problem-file__ .__message__ {
 /* THE FOLDER, beside the filename — VS Code's second column, dim because it disambiguates rather than
  * identifies. The same slot carries `:591` on a problem row, which is why one rule serves both.
  *
- * NO PADDING OF ITS OWN. The row already sets `gap-all: 6px`, which applies between EVERY pair of
+ * NO PADDING OF ITS OWN. The row already sets `gap: 6px`, which applies between EVERY pair of
  * children — so a padding here is added to a gap that is already there, and the number drifted ten
  * pixels off the message it belongs to. It is not a separate column: a message and its line number are
  * one location, read as one thing, and IntelliJ sets them a single space apart. The 6px that remains is
@@ -843,7 +843,7 @@ runpanel .__run-left__ {
     height: 100%;
     min-width: 150px;
     background-color: var(--run-rail-bg, #191A1C);
-    /* NO BORDER ON THIS EDGE. The SplitView's own divider is the boundary now, and a `border-width-right`
+    /* NO BORDER ON THIS EDGE. The SplitView's own divider is the boundary now, and a `border-right-width`
      * here would draw nothing anyway -- the paint path takes `border().left` as its stroke width, so
      * naming any other edge resolves and draws nothing at all. */
 }
@@ -864,7 +864,7 @@ runpanel .__run-bar__ {
     /* NO GAP. The buttons carry their own padding, so a gap on top of it separates the GLYPHS by padding
      * + gap + padding -- three sources for one visual distance, and tuning the one named "gap" moves it
      * least. Tightening is the button box's job; see `.__run-action__`. */
-    gap-all: 0;
+    gap: 0;
 }
 
 /* The rule under it. An ELEMENT and not a border: the paint path takes `border().left` as the stroke
@@ -904,7 +904,7 @@ runpanel .__run-rail__ .__row__ {
     height: 22px;
     padding-left: 6px;
     padding-right: 6px;
-    gap-all: 6px;
+    gap: 6px;
 }
 
 runpanel .__run-rail__ .__row__:hover {
@@ -929,7 +929,7 @@ runpanel .__run-rail__ .__run-rail-glyph__ {
     width: 12px;
     height: 12px;
     flex-shrink: 0;
-    overlay-fit: contain;
+    overlay-size: contain;
 }
 
 runpanel .__run-rail__ .__run-rail-glyph__.runstate-running,
@@ -1123,10 +1123,10 @@ runpanel .__run-stripe__ {
     width: 20px;
     height: 100%;
     padding-top: 2px;
-    gap-all: 0;
+    gap: 0;
     /* NO BORDER AND NO FILL OF ITS OWN.
      *
-     * `border-width-left: 1px` here drew a grey frame around the whole stripe -- top, right and bottom
+     * `border-left-width: 1px` here drew a grey frame around the whole stripe -- top, right and bottom
      * included -- because the paint path takes `border().left` as the stroke width and strokes a UNIFORM
      * box. That is the same property that makes a bottom-only hairline draw NOTHING: name the left and
      * you get all four sides, name any other and you get none. Two opposite wrong results from one
@@ -1141,14 +1141,14 @@ runpanel .__run-stripe__ {
  * which is what held earlier attempts at a compact toggle open at 14px through three rounds of shrinking
  * `height`. The padding has to go for the same reason.
  *
- * THE DRAWING IS 12px AND THE TARGET IS 20px, which is what the padding is for. `overlay-fit: contain`
+ * THE DRAWING IS 12px AND THE TARGET IS 20px, which is what the padding is for. `overlay-size: contain`
  * scales the artwork to the box it is given, so a 20px button drew a 20px glyph -- huge beside 9px row
  * text. `overlay-origin: content-box` moves that box inside the padding, which shrinks and centres the
  * drawing without shrinking the thing you have to hit. */
 runpanel .__run-action__ {
     /* 18px BOX AROUND A 12px GLYPH. The padding is what actually sets the spacing between two icons --
      * 3px below one and 3px above the next -- so this is the number to change when they look loose, not
-     * the parent's `gap-all`. The glyph size is held at 12 by the content box: 18 - 3 - 3.
+     * the parent's `gap`. The glyph size is held at 12 by the content box: 18 - 3 - 3.
      *
      * `min-height`/`min-width` are cleared because `button` carries `min-height: 14px` in the base sheet,
      * and a minimum is a DIFFERENT PROPERTY from a height -- it wins at any specificity without ever
@@ -1157,12 +1157,12 @@ runpanel .__run-action__ {
     height: 18px;
     min-height: 0;
     min-width: 0;
-    padding-all: 3px;
+    padding: 3px;
     flex-shrink: 0;
     background: none;
     color: var(--run-action-fg, #9DA0A8);
     overlay-origin: content-box;
-    overlay-fit: contain;
+    overlay-size: contain;
 }
 
 /* `background` and `background-color` are separate properties, and a rule setting only the colour is
@@ -1193,7 +1193,7 @@ runpanel .__run-action__:disabled:hover {
  * missing, which is why it read as the enablement not working at all.
  *
  * The disabled twins are the same geometry recoloured to `currentColor`, so THEY take the tone above --
- * one file serves any future state rather than one file per state per theme. `overlay-fit` is inherited
+ * one file serves any future state rather than one file per state per theme. `overlay-size` is inherited
  * from the base rule and deliberately not repeated. */
 runpanel .__run-rerun__:disabled {
     overlay: icon("crystalgui:general/action/rerunDisabled");
@@ -1210,7 +1210,7 @@ runpanel .__run-stop__:disabled {
 
 runpanel .__run-stop__ {
     overlay: icon("crystalgui:general/action/stop");
-    overlay-fit: contain;
+    overlay-size: contain;
 }
 
 runpanel .__run-clear__ {
@@ -1219,7 +1219,7 @@ runpanel .__run-clear__ {
 
 runpanel .__run-wrap__ {
     overlay: icon("crystalgui:general/action/softWrap");
-    overlay-fit: contain;
+    overlay-size: contain;
 }
 
 /* A TOGGLE THAT IS ON, said with a class the widget writes rather than `:checked` -- the engine
@@ -1237,7 +1237,7 @@ runpanel .__run-action__.__on__ {
 
 runpanel .__run-end__ {
     overlay: icon("crystalgui:general/action/scrollDown");
-    overlay-fit: contain;
+    overlay-size: contain;
 }
 
 /* The System.in row. Present only while something is actually blocked on a read, so it needs no empty
@@ -1302,7 +1302,7 @@ runpanel .__run-empty__ {
 runpanel .__run-empty-lines__ {
     flex-direction: column;
     align-items: flex-start;
-    gap-all: 3px;
+    gap: 3px;
 }
 
 /* `font-size` DOES NOT INHERIT -- `default.css` opens with `* { font-size: 10 }`, which is a candidate at
@@ -1357,7 +1357,7 @@ runpanel .__run-notice__ {
 .__progress-item__ {
     flex-direction: row;
     align-items: center;
-    gap-all: 6px;
+    gap: 6px;
     flex-shrink: 0;
 }
 
@@ -1441,7 +1441,7 @@ radarchart::part(axis-label) {
      * because the placement already works off the label's OUTER box: whichever edge faces the chart
      * sits on the vertex, so padding on that edge is the gap. Without it "WIL" touches the bottom
      * point of the polygon it names. */
-    padding-all: 4px;
+    padding: 4px;
 }
 
 /* THE GLYPH GOES IN `overlay`, NOT `background` — which is what lets it have a hover chip at all.
@@ -1471,10 +1471,10 @@ radarchart::part(axis-label) {
 .__processes__ {
     flex-direction: column;
     min-width: 320px;
-    padding-all: 10px;
-    gap-all: 8px;
+    padding: 10px;
+    gap: 8px;
     background-color: var(--menu-bg, #3C3F41);
-    border-width-left: 1px;
+    border-left-width: 1px;
     border-color: var(--menu-border, #4E5254);
     border-radius: 4px;
 }
@@ -1497,7 +1497,7 @@ radarchart::part(axis-label) {
  * title above it that wants its own spacing. */
 .__processes__ .__process-row__ {
     flex-direction: column;
-    gap-all: 3px;
+    gap: 3px;
     padding-top: 6px;
     padding-bottom: 6px;
 }

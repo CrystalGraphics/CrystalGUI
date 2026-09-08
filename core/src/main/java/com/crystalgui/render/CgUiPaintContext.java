@@ -699,7 +699,7 @@ public final class CgUiPaintContext {
      * of defect, one layer below the ones {@code serverSmoke} exists for.</p>
      *
      * <p><b>What it reaches is decided by a fragment's OUTPUT alpha, not by any alpha in the CSS.</b>
-     * A {@code glass()} tint at 7.5% is an input to a mix inside the shader and the surface still
+     * A {@code backdrop-filter} tint at 7.5% is an input to a mix inside the shader and the surface still
      * writes its coverage, so the acrylic panels were never affected — the ones that are: a
      * {@code background-color} at or under 10% (Fluent's subtle fills, 6% and 3.5%, were discarded
      * whole), the transparent shoulder of any gradient, the outermost sliver of every anti-aliased SDF
@@ -1718,7 +1718,7 @@ public final class CgUiPaintContext {
                            float u0, float v0, float u1, float v1) {}
 
     /**
-     * Captures what is behind {@code (x, y, w, h)} and blurs it — the primitive under {@code glass()}.
+     * Captures what is behind {@code (x, y, w, h)} and blurs it — the primitive under {@code backdrop-filter}.
      *
      * <p>The work lives in {@link CgUiBackdrop}; this is the seam a drawable calls, kept here because
      * everything else a drawable needs is on the paint context too.</p>

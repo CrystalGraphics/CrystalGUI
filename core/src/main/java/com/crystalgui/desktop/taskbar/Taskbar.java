@@ -99,7 +99,7 @@ public class Taskbar extends UIElement {
     public static final String INDICATOR_PART = "indicator";
     /**
      * The hairline along the bar's top edge. An ELEMENT rather than a border, because a one-sided
-     * {@code border-width-top} draws nothing here and the left-hand spelling draws all four edges — the
+     * {@code border-top-width} draws nothing here and the left-hand spelling draws all four edges — the
      * documented trap — and a single edge is how {@code statusbarview} spells its separators too.
      */
     public static final String EDGE_CLASS = "__edge__";
@@ -136,11 +136,11 @@ public class Taskbar extends UIElement {
     /**
      * On an entry with nothing to write beside its icon.
      *
-     * <p>An entry is an icon and a label in a row, so an empty label leaves the icon against the
-     * leading padding with the gap and the trailing padding still spent after it -- 22px of space
-     * around a 16px icon, most of it on one side. A window may legitimately have no title, so this is
-     * a shape an entry HAS rather than a state to avoid: the sheet centres the icon and closes the
-     * padding up around it.</p>
+     * <p>An entry is an icon and a label in a row, so an empty label leaves the icon sitting against
+     * the leading padding with the gap and the trailing padding still spent after it -- 22px of
+     * space around a 16px icon, most of it on one side. A window may legitimately have no title, so
+     * this is a shape an entry has rather than a state to avoid: the sheet centres the icon and
+     * closes the padding up around it.</p>
      */
     public static final String ICONIC_CLASS = "__iconic__";
 
@@ -376,7 +376,7 @@ public class Taskbar extends UIElement {
      * The window's badge, in the entry's post-icon slot.
      *
      * <p>Built on first use rather than always, which is the {@code SearchField} lesson: a permanent
-     * child hidden with {@code display: none} still counts for the parent's {@code gap-all}, so every
+     * child hidden with {@code display: none} still counts for the parent's {@code gap}, so every
      * entry in the strip would have gained a gap for a badge almost none of them has. Not existing is
      * the only spelling of "costs nothing" that actually is.</p>
      */

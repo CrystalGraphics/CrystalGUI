@@ -300,7 +300,7 @@ hierarchypanel {
     align-items: center;
     height: 20px;
     padding-right: 4px;
-    gap-all: 3;
+    gap: 3;
 }
 
 .__hierarchy-content__ {

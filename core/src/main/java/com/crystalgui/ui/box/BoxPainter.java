@@ -5,6 +5,7 @@ import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.texture.CgUiCrossFade;
 import com.crystalgui.render.texture.CgUiDrawable;
+import com.crystalgui.render.texture.CgUiBackdropFilter;
 import com.crystalgui.render.texture.CgUiLayerBox;
 import com.crystalgui.render.texture.CgUiQuad;
 import com.crystalgui.render.texture.CgUiRoundedRect;
@@ -146,6 +147,22 @@ public final class BoxPainter {
 
     private static void paintSelf(Box box, ComputedStyle style, CgUiPaintContext ctx, Radii radii) {
         float width = box.width(), height = box.height();
+
+        // THE BACKDROP FIRST, and it is not the background: `backdrop-filter` acts on what is BEHIND the
+        // element, so the element's own background is drawn over the result. That ordering is the whole
+        // reason it is a property -- as a `background: glass(...)` value it occupied the one background
+        // slot, and an element could have glass or a colour, never both.
+        //
+        // It clips itself to the radii, like any CornerRadiusAware drawable: wrapped in a rounded quad
+        // it would come out a rounded rectangle full of nothing.
+        CgUiBackdropFilter backdrop = style.get(StylePropertyRegistry.BACKDROP_FILTER);
+        if (backdrop != null) {
+            backdrop.setCornerRadii(radii.rxTL, radii.ryTL, radii.rxTR, radii.ryTR,
+                    radii.rxBR, radii.ryBR, radii.rxBL, radii.ryBL);
+            ctx.setColor(WHITE);
+            backdrop.draw(ctx, 0f, 0f, width, height);
+        }
+
         CgUiDrawable background = style.get(StylePropertyRegistry.BACKGROUND);
         int backgroundColor = style.get(StylePropertyRegistry.BACKGROUND_COLOR);
         // background-color defaults to white (a no-op tint), so whether one was AUTHORED cannot be
@@ -235,7 +252,7 @@ public final class BoxPainter {
                 originBox.x() - offsetX, originBox.y() - offsetY,
                 Math.max(0f, originBox.width() + 2f * offsetX),
                 Math.max(0f, originBox.height() + 2f * offsetY),
-                style.get(StylePropertyRegistry.MASK_FIT), style.get(StylePropertyRegistry.MASK_POSITION));
+                style.get(StylePropertyRegistry.MASK_SIZE), style.get(StylePropertyRegistry.MASK_POSITION));
         Radii radii = radiiOf(style, laid.width(), laid.height());
         ctx.setColor(WHITE);
         paintMaskShape(ctx, source, laid.x(), laid.y(), laid.width(), laid.height(), radii, borderWidth);
@@ -267,7 +284,7 @@ public final class BoxPainter {
         CgUiLayerBox originBox = originBox(box, style.get(StylePropertyRegistry.OVERLAY_ORIGIN));
         CgUiLayerBox laid = CgUiLayerBox.resolve(overlay,
                 originBox.x(), originBox.y(), originBox.width(), originBox.height(),
-                style.get(StylePropertyRegistry.OVERLAY_FIT), style.get(StylePropertyRegistry.OVERLAY_POSITION));
+                style.get(StylePropertyRegistry.OVERLAY_SIZE), style.get(StylePropertyRegistry.OVERLAY_POSITION));
         overlay.draw(ctx, laid.x(), laid.y(), laid.width(), laid.height());
     }
 

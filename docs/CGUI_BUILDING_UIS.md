@@ -163,7 +163,7 @@ button.addClass("danger");
 ```css
 button.danger {
     background-color: #FFAA3333;
-    padding-all: 8px;
+    padding: 8px;
     transition: background-color 150ms;
 }
 button.danger:hover { background-color: #FFCC4444; }

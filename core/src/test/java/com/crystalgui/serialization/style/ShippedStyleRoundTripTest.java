@@ -30,7 +30,7 @@ import com.crystalgui.ui.dom.UIElementRegistry;
  * step with the registry. Anything anybody adds to a stylesheet tomorrow is tested tomorrow.</p>
  *
  * <p>Read through the real parser rather than lifted out with a regex, and that is not a detail: most
- * of what a sheet declares is a SHORTHAND. {@code padding-all} expands into four longhands and
+ * of what a sheet declares is a SHORTHAND. {@code padding} expands into four longhands and
  * {@code border-radius} into eight, so the properties that actually hold the values never appear as
  * authored text at all — a regex over the same files covered 46 properties where this covers far
  * more.</p>

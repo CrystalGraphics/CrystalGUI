@@ -44,7 +44,7 @@
 .__configurator__ {
     flex-direction: row;
     align-items: center;
-    gap-all: var(--cfg-gap);
+    gap: var(--cfg-gap);
     min-height: var(--cfg-row-h);
     padding-top: var(--cfg-pad-y);
     padding-bottom: var(--cfg-pad-y);
@@ -288,7 +288,7 @@
 }
 .__config-control__.__mask__ .__mask-panel__ .__mask-row__ {
     width: 100%;
-    padding-all: 2px;
+    padding: 2px;
 }
 /* Same fix as `.__config-control__.__boolean__` above, and the same reason: the base sheet's
  * `checkbox:checked .__mark__` is semantic green, and a mask panel is exactly the place that reads
@@ -316,15 +316,15 @@
 /* ── Matrix ─────────────────────────────────────────────────────────────────────────────────────
  * A grid: one row per `.__matrix-row__`, cells stretching evenly across it. Unlabelled by design —
  * see MatrixControl's javadoc on why it self-labels. */
-.__config-control__.__matrix__ { flex-direction: column; gap-all: 1px; }
-.__config-control__.__matrix__ .__matrix-row__ { flex-direction: row; gap-all: 1px; }
+.__config-control__.__matrix__ { flex-direction: column; gap: 1px; }
+.__config-control__.__matrix__ .__matrix-row__ { flex-direction: row; gap: 1px; }
 .__config-control__.__matrix__ .__matrix-cell__ { width: 0; flex-grow: 1; }
 
 /* ── Asset ──────────────────────────────────────────────────────────────────────────────────────
  * A field and a small square button, Unity's "path + picker" shape. The button does not stretch —
  * `...` never needs more than its own square, and stretching it would waste the width a long path
  * needs most. */
-.__config-control__.__asset__ { flex-direction: row; gap-all: var(--cfg-gap); }
+.__config-control__.__asset__ { flex-direction: row; gap: var(--cfg-gap); }
 .__config-control__.__asset__ .__field__ { width: 0; flex-grow: 1; }
 .__config-control__.__asset__ .__browse__ { flex-grow: 0; width: var(--cfg-ctrl-h); }
 
@@ -338,13 +338,13 @@
 
 /* A vector's components share the column evenly, and its axis letters live INSIDE it — that is what
  * makes a Vector3 one row rather than three. */
-.__config-control__.__vector__ { flex-direction: row; gap-all: var(--cfg-gap); }
+.__config-control__.__vector__ { flex-direction: row; gap: var(--cfg-gap); }
 .__config-control__.__vector__ .__vector-cell__ {
     width: 0;
     flex-grow: 1;
     flex-direction: row;
     align-items: center;
-    gap-all: 2px;
+    gap: 2px;
 }
 /* THE AXIS LETTER NEEDS A COLOUR OF ITS OWN, and the reason it survived this long is that its absence
  * was invisible in dark. It had no `color` rule anywhere, so it fell through inheritance to the COLOR
@@ -363,7 +363,7 @@
 
 /* Track and value field on one row, the field sized to its digits rather than sharing the slack —
  * a slider whose track is half its width is not a slider. */
-.__config-control__.__slider__ { flex-direction: row; align-items: center; gap-all: var(--cfg-gap); }
+.__config-control__.__slider__ { flex-direction: row; align-items: center; gap: var(--cfg-gap); }
 /* `flex-shrink: 1` on the TRACK, and it is load-bearing rather than tidy: this engine's flex-shrink
  * defaults to 0, so a theme that gives the number field any padding of its own makes the pair wider
  * than the column and the value is what gets pushed out — clipped at the panel edge under ore.css while
@@ -389,7 +389,7 @@
 .__configurator-group__ > .__head__ {
     flex-direction: row;
     align-items: center;
-    gap-all: var(--cfg-gap);
+    gap: var(--cfg-gap);
     min-height: var(--cfg-row-h);
     cursor: pointer;
     background: var(--cfg-band);
@@ -579,7 +579,7 @@
     flex-direction: row;
     justify-content: flex-end;
     align-self: flex-end;
-    gap-all: 1px;
+    gap: 1px;
     min-height: 14px;
     padding-left: 3px;
     padding-right: 3px;
@@ -624,8 +624,8 @@
 .__blackboard__ > .__head__ {
     flex-direction: row;
     align-items: center;
-    gap-all: var(--cfg-gap);
-    /* Long-hands, never `padding-all` with a var() inside -- the shorthand silently substitutes to zero,
+    gap: var(--cfg-gap);
+    /* Long-hands, never `padding` with a var() inside -- the shorthand silently substitutes to zero,
      * measured on this exact panel once already. */
     padding-left: var(--cfg-pad-x);
     padding-right: var(--cfg-pad-x);
@@ -637,14 +637,14 @@
 }
 /* The stacked pair. It takes the slack so the + stays pinned right.
  *
- * `gap-all` IS a real layout shorthand, unlike the `border-radius-all` that silently did nothing on the
+ * `gap` IS a real layout shorthand, unlike the `border-radius-all` that silently did nothing on the
  * capsule -- worth the note, since the two look like the same convention and only one is. */
 .__blackboard__ .__titles__ {
     flex-direction: column;
     width: 0;
     flex-grow: 1;
     flex-shrink: 1;
-    gap-all: 3px;
+    gap: 3px;
 }
 .__blackboard__ .__titles__ > .__title__ {
     font-size: var(--cfg-font);
@@ -694,9 +694,9 @@
      * its content and the right-aligned type column loses the slack it aligns against. */
     align-items: start;
     /* The list breathes: a gap between rows and an inset from the panel edge, so the capsules read as
-     * separate chips rather than a stack pressed together. `gap-all` IS a real layout shorthand, unlike
+     * separate chips rather than a stack pressed together. `gap` IS a real layout shorthand, unlike
      * the `border-radius-all` that silently did nothing above. */
-    gap-all: 4px;
+    gap: 4px;
     padding-top: 6px;
     padding-bottom: 6px;
     padding-left: 4px;
@@ -727,7 +727,7 @@
 .__blackboard__ .__category__ {
     flex-direction: row;
     align-items: center;
-    gap-all: 4px;
+    gap: 4px;
     /* At least the full width, never less -- see the body's `align-items: start`. */
     min-width: 100%;
     min-height: 16px;
@@ -770,7 +770,7 @@
 .__property-pill__ {
     flex-direction: row;
     align-items: center;
-    gap-all: var(--cfg-gap);
+    gap: var(--cfg-gap);
     /* AT LEAST the full width of the list, and wider when its own content is. The body is
      * `align-items: start` so a row is fit-content -- which is what lets a long name push the row past
      * the panel and become scrollable. This is the floor that keeps a SHORT row full width, so the type
@@ -788,7 +788,7 @@
 .__property-pill__ > .__capsule__ {
     flex-direction: row;
     align-items: center;
-    gap-all: 4px;
+    gap: 4px;
     flex-grow: 0;
     flex-shrink: 1;
     padding-left: 8px;
@@ -801,7 +801,7 @@
      * merely soft corners. That shape is what makes the board read as a list of THINGS.
      *
      * `border-radius`, NOT `border-radius-all`. The layout shorthands take an `-all` suffix
-     * (`padding-all`, `gap-all`) and this one does not -- it is plain `border-radius`, expanded at parse
+     * (`padding`, `gap`) and this one does not -- it is plain `border-radius`, expanded at parse
      * time into eight corner longhands. An unregistered property name is dropped silently by the
      * cascade, which is the right call for a malformed sheet and means a typo here draws SQUARE corners
      * with no warning anywhere. That shipped, on this rule and on the dot below.
@@ -932,9 +932,9 @@ projectfiletree .__project-row__.__drop-target__ {
 .__main-preview__ > .__head__ {
     flex-direction: row;
     align-items: center;
-    gap-all: var(--cfg-gap);
+    gap: var(--cfg-gap);
     min-height: var(--cfg-row-h);
-    /* The two long-hands, NOT `padding-all: 0px var(--cfg-pad-x)`. The shorthand silently produced zero
+    /* The two long-hands, NOT `padding: 0px var(--cfg-pad-x)`. The shorthand silently produced zero
      * padding — measured, not guessed: the title's inset went from 12px to 0. Whether it is the two-value
      * form or `var()` inside a shorthand that fails to substitute, the shorthand is not a safe place for
      * a custom property, and the configurator writes these as long-hands for the same reason. */

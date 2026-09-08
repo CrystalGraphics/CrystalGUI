@@ -40,7 +40,7 @@ public interface CgUiDrawable {
      * Natural (unscaled) width in pixels, or {@code -1} when this drawable has no inherent size —
      * solid colours and SDF shapes are defined by whatever rect they're handed, so they report -1.
      *
-     * <p>Consumed by {@code overlay-fit: contain|cover|none} via {@link CgUiLayerBox#resolve}, which
+     * <p>Consumed by {@code overlay-size: contain|cover|none} via {@link CgUiLayerBox#resolve}, which
      * degrades to {@code fill} when the size is unknown. Texture-backed drawables report their
      * source-rect size, interpreted 1:1 as logical UI pixels.</p>
      */

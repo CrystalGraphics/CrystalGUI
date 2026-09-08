@@ -85,7 +85,7 @@ public final class CgUiGrid implements CgUiDrawable, CornerRadiusAware {
     }
 
     /**
-     * {@code -1}: a grid has no size of its own, so {@code overlay-fit} resolves it against the box.
+     * {@code -1}: a grid has no size of its own, so {@code overlay-size} resolves it against the box.
      *
      * <p>The same answer a solid colour gives, and for the same reason — a grid is a field rather than
      * a picture, so there is no natural size for {@code contain} or {@code none} to honour.</p>

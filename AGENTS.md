@@ -403,15 +403,22 @@ Properties also carry change listeners — this is how `LayoutProperties.init()`
 property straight through to `TaffyBridge`.
 
 **Registered CSS properties** (`StylePropertyRegistry`) — the full set, alphabetically, so a missing
-entry is visible rather than merely absent: `background`, `background-color`, `border-bottom-color`,
+entry is visible rather than merely absent: `backdrop-filter`, `background`, `background-color`, `border-bottom-color`,
 `border-color`, `border-top-color`, `caret-color`, `caret-width`, `color`, `cursor`, `font-family`, `font-size`,
-`font-style`, `font-weight`, `line-height`, `mask`, `mask-fit`,
+`font-style`, `font-weight`, `line-height`, `mask`, `mask-size`,
 `mask-offset`, `mask-origin`, `mask-position`, `opacity`, `outline`, `outline-color`,
-`outline-offset-{top,right,bottom,left}`, `outline-width`, `overflow`, `overlay`, `overlay-fit`,
+`outline-offset-{top,right,bottom,left}`, `outline-width`, `overflow`, `overlay`, `overlay-size`,
 `overlay-origin`, `overlay-position`, `resize`, `scroll-behavior`, `scroll-duration`,
 `selection-color`, `text-align`, `text-decoration-color`, `text-decoration-line`, `text-offset-x`, `text-offset-y`,
 `text-overflow`, `text-shadow`, `tooltip-delay`, `transform`, `transform-origin-x`, `transform-origin-y`,
 `transition`, `white-space`, `z-index` — plus the whole layout set from `LayoutProperties`.
+
+> **Renaming one is a DATA migration, not a rename.** `InlineStyleCodec` refuses a document naming a
+> property it does not know — `CodecException: Unknown style property 'gap-all'` — rather than skipping
+> the declaration, which is right for a wire message and means a saved `.cgui` written before the rename
+> will not open at all. Sweep every `.cgui` in the same pass, and remember that a workspace's own
+> documents live outside `src/`: the scratch document at `gl-debug-harness/crystalgui/projects/` was
+> missed exactly that way.
 
 > **This list goes stale silently.** Registering a property is a one-line addition in a 300-line file and
 > nothing links the two, so three of the entries above (`text-align`, `white-space`, `text-overflow`) were
@@ -816,7 +823,7 @@ issue exactly one GPU draw call, or zero for a fully transparent tint.
 | `CgUiSprite` | Full 9-slice textured sprite (`setTexture`/`setSprite`/`setBorder`, lazy UV cache) |
 | `CgUiRoundedRect` | SDF path — per-corner radii, morphing |
 | `CgUiCrossFade` | Blends two drawables, for `background` transitions |
-| `CgUiLayerBox` | Composites a stack; resolves `overlay-fit` via `intrinsicWidth()` |
+| `CgUiLayerBox` | Composites a stack; resolves `overlay-size` via `intrinsicWidth()` |
 | `CgUiRepeat` | Tiling modes |
 | `ArgbMath` | Shared colour maths |
 | `CgUiSvg` | Draws an `SvgDocument` into a rect — fitted and centred, never stretched. See below |
@@ -1242,14 +1249,14 @@ com.crystalgui.lifecycle       CgUiLifecycle — the ONE CgLifecycleListener Cry
                                CrystalGraphics; drives paint-context teardown + cache invalidation
 
 com.crystalgui.render          CgUiPaintContext (singleton), CgUiRenderer, ScissorStack,
-                               CgUiBackdrop — the backdrop primitive under glass(): capture the region
+                               CgUiBackdrop — the backdrop primitive under backdrop-filter: capture the region
                                behind an element, blur it (separable Gaussian at 1/4 res), hand back the
                                sharp and blurred textures with UVs. Sits BESIDE the paint context and
                                reaches it through package-private members, as TextEditor's view parts do
   .text                        FontFamilyCache — (font stack, px) -> CgFontFamily
   .texture                     CgUiDrawable (SPI), CgUiQuad, CgUiSprite (9-slice), CgUiRoundedRect (SDF),
                                CgUiCrossFade, CgUiLayerBox, CgUiRepeat, ArgbMath, CgUiSvg,
-                               CgUiGlass (liquid glass — blur, luminosity blend, refraction, specular, noise, over a live
+                               CgUiBackdropFilter (liquid glass — blur, luminosity blend, refraction, specular, noise, over a live
                                backdrop), CornerRadiusAware (the seam that stops a self-clipping drawable
                                being wrapped in a CgUiRoundedRect it cannot survive),
                                CgUiTransformDrawable (stub)
@@ -1528,9 +1535,9 @@ three-phase event types are in `ui/event/` — there is no `core/event/` package
 | `shaders/gui_layer_blit.shader` | Visual-layer FBO composite. |
 | `shaders/gui_curve.shader` | Bézier strokes, via `ctx.curve()`. Declares `#pragma cg_use curve`, not `quad`. |
 | `shaders/gui_gradient.shader` | A whole `linear-gradient()` in one draw: eight premultiplied stops as properties, the unrolled ramp per fragment along `_Axis` (CSS's gradient line), a `_Window` of *t* so a longer gradient's extra draws never write a fragment twice, `WITH_MASK` for the rounded-box SDF, and half a level of `hash12` dither as the LAST thing before the target quantises. `Blend ONE ONE_MINUS_SRC_ALPHA` — premultiplied out, like the layer blit and unlike `gui_quad`. |
-| `shaders/gui_downsample.shader` | The box prefilter behind `glass()`: reduces the captured sub-rect 2x or 4x before it is blurred (four bilinear taps cover the block behind each output texel). Without it the Gaussian read a full-resolution source at a stride and was a comb — text came through as vertical streaks. |
-| `shaders/gui_blur.shader` | One axis of the separable Gaussian behind `glass()`, **kernel derived from sigma**: taps one source texel apart, `ceil(3σ)` of them per side, weights by the incremental recurrence and renormalised. `CgUiBackdrop` picks the working scale (1/2/4) from σ — Skia's scale-then-blur — so the loop stays short. **Helpers go ABOVE `void vertex`** or they never reach the fragment stage. |
-| `shaders/gui_glass.shader` | Liquid glass: refract → pick blurred/sharp → saturate → **luminosity** (W3C SetLum toward the tint's brightness — the layer WinUI's acrylic and Mica are mostly made of) → tint → specular → noise → SDF mask. Every optional layer is a `#pragma cg_feature`. |
+| `shaders/gui_downsample.shader` | The box prefilter behind `backdrop-filter`: reduces the captured sub-rect 2x or 4x before it is blurred (four bilinear taps cover the block behind each output texel). Without it the Gaussian read a full-resolution source at a stride and was a comb — text came through as vertical streaks. |
+| `shaders/gui_blur.shader` | One axis of the separable Gaussian behind `backdrop-filter`, **kernel derived from sigma**: taps one source texel apart, `ceil(3σ)` of them per side, weights by the incremental recurrence and renormalised. `CgUiBackdrop` picks the working scale (1/2/4) from σ — Skia's scale-then-blur — so the loop stays short. **Helpers go ABOVE `void vertex`** or they never reach the fragment stage. |
+| `shaders/gui_backdrop_filter.shader` | Liquid glass: refract → pick blurred/sharp → saturate → **luminosity** (W3C SetLum toward the tint's brightness — the layer WinUI's acrylic and Mica are mostly made of) → tint → specular → noise → SDF mask. Every optional layer is a `#pragma cg_feature`. |
 
 > **`gui_curve.shader` holds no stroke maths** — it `#include`s `crystalgraphics:shaders/lib/stroke.glsl`,
 > which is shared verbatim with the engine's own `curve.shader`. The two materials differ in exactly

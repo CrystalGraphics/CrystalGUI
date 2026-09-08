@@ -294,14 +294,14 @@ public class WorkbenchApplication extends UIElement
         String iconName = builder.icon != null ? builder.icon : kind.icon();
         if (iconName != null) {
             window.setIcon(iconName);
-            // AND WHATEVER THIS DOCK TEARS OUT WEARS IT TOO. A tab dragged into a window of its own is
-            // still this product -- it monogrammed the first letter of its own title instead, so a
-            // torn-out Main.java opened under a red S.
+            // AND WHATEVER THIS DOCK TEARS OUT WEARS IT TOO. A tab dragged into a window of its own
+            // is still this product -- it was monogramming the first letter of its own title instead,
+            // so a torn-out Main.java opened under a red S.
             workbench.dock().setTornWindowIcon(iconName);
         }
-        // AND WHOSE IT IS, which keeps its taskbar entry beside this product's own windows rather than
-        // in the group belonging to nobody -- a group that sorts FIRST, so a torn-out tab landed to the
-        // LEFT of the editor it came out of.
+        // AND WHOSE IT IS, which is what keeps its taskbar entry beside this product's own windows
+        // instead of in the group belonging to nobody -- a group that sorts FIRST, so a torn-out tab
+        // landed to the LEFT of the editor it came out of.
         workbench.dock().setTornWindowApplication(kind);
         // setContent, not content().append -- it is what ADOPTS the workbench's menu bar into the
         // caption, so the window has one header rather than two stacked on each other.

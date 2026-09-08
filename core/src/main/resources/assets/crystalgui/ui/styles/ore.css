@@ -14,14 +14,14 @@
  * Structural note: LDLib2's Toggle nests its mark icon inside an inner toggle-button element.
  * CrystalGUI's Checkbox is flat (__mark__ and the label are siblings), so here __mark__ IS the box,
  * and the check glyph rides on it as an `overlay:` (drawn after/on top of the background), sized by
- * `overlay-fit: none` to its natural 10x10 and centered in the 12x12 box. Same geometry LDLib2
+ * `overlay-size: none` to its natural 10x10 and centered in the 12x12 box. Same geometry LDLib2
  * gets from a nested child element, with no extra layout node.
  *
  * Deliberate deviation: LDLib2 leaves the toggle label at engine-default white; we set color on the
  * checkbox root instead (color is inheritable here, so it reaches the label), matching the button
  * and reading correctly against the light panel.
  *
- * Padding is always written as longhands, never `padding-all` + a `padding-bottom` override in the
+ * Padding is always written as longhands, never `padding` + a `padding-bottom` override in the
  * same rule — both would land at identical origin/specificity/source-order, making the winner
  * ambiguous in this cascade.
  *
@@ -221,9 +221,9 @@ button:focus-visible, dropdown:focus-visible {
 checkbox {
     align-self: flex-start;
     height: 14px;
-    padding-all: 1px;
+    padding: 1px;
     padding-bottom: 0px;
-    gap-all: 2px;
+    gap: 2px;
     align-items: center;
     color: #222222;
     text-shadow: false;
@@ -249,7 +249,7 @@ checkbox:checked::part(mark) {
     overlay: asset("crystalgui:ore", "checkbox-check");
     /* Natural 10x10, centered in the 12x12 box (overlay-position defaults to center) — matching
      * LDLib2's 10x10 mark inside a 12x12 toggle button, without the extra child element it uses. */
-    overlay-fit: none;
+    overlay-size: none;
 }
 checkbox:checked:hover .__mark__,
 checkbox:checked:hover::part(mark) {
@@ -284,7 +284,7 @@ switch {
     height: 14px;
     /* Zero, not the 2px LDLib2 sets in Java — its own ore.lss overrides that to 0, which is what
      * makes the knob fill the switch's full height instead of sitting inset. */
-    padding-all: 0;
+    padding: 0;
     align-items: center;
     background: asset("crystalgui:ore", "switch-off");
 }
@@ -303,7 +303,7 @@ switch:checked::part(spacer) {
 switch .__knob__,
 switch::part(knob) {
     height: 100%;
-    aspect-rate: 1;
+    aspect-ratio: 1;
     background: asset("crystalgui:ore", "button");
 }
 switch:checked .__knob__,
@@ -408,7 +408,7 @@ slider:disabled::part(thumb) {
     padding-top: 5px;
     padding-right: 5px;
     padding-bottom: 7px;
-    gap-all: 4px;
+    gap: 4px;
 }
 
 /* Split view. The two panes carry no styling of their own — they're content hosts, and whatever a
@@ -489,7 +489,7 @@ textfield {
      * Declaring it here is what lets the other themes stop doing that. */
     selection-color: #43912C80;
     height: 14px;
-    padding-all: 3px;
+    padding: 3px;
     align-items: center;
 }
 textfield:focus-visible {
@@ -528,7 +528,7 @@ tabview .__panes__ {
 tab {
     background: asset("crystalgui:ore", "tab-off");
     height: 18px;
-    padding-all: 3px;
+    padding: 3px;
     padding-bottom: 5px;
     /* ore.lss writes `tab:host:not(tab:selected) label { text-color: #222 }`. We have no `:not()`,
      * so the same result comes from darkening every tab here and lightening the selected one below. */
@@ -674,7 +674,7 @@ texteditor .__zoom-indicator__ {
 texteditor .__zoom-reset__ {
     background: #00000000;
     color: #4A9EFF;
-    padding-all: 0px;
+    padding: 0px;
     min-height: 0px;
     border-radius: 0px;
     outline: none;
@@ -765,7 +765,7 @@ colorselector .__channel-row__ slider:focus-visible::part(thumb) {
 colorselector .__channel-row__ textfield,
 colorselector .__hex-row__ textfield {
     height: 9px;
-    padding-all: 2px;
+    padding: 2px;
 }
 
 /* `button, dropdown` gives every dropdown a 14px min-height — a floor, so the mode button cannot be

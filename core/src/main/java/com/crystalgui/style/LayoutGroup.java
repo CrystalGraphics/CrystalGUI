@@ -643,7 +643,7 @@ public class LayoutGroup extends StyleGroup<LayoutGroup> {
     }
 
     public LayoutGroup direction(TaffyDirection direction) {
-        set(LayoutProperties.LAYOUT_DIRECTION, direction);
+        set(LayoutProperties.DIRECTION, direction);
         return this;
     }
 
@@ -658,7 +658,7 @@ public class LayoutGroup extends StyleGroup<LayoutGroup> {
     }
 
     public LayoutGroup setAspectRatio(float aspectRatio) {
-        set(LayoutProperties.ASPECT_RATE, aspectRatio);
+        set(LayoutProperties.ASPECT_RATIO, aspectRatio);
         return this;
     }
 
@@ -667,7 +667,7 @@ public class LayoutGroup extends StyleGroup<LayoutGroup> {
     }
 
     public LayoutGroup setAspectRatioAuto() {
-        set(LayoutProperties.ASPECT_RATE, Float.NaN);
+        set(LayoutProperties.ASPECT_RATIO, Float.NaN);
         return this;
     }
 
@@ -676,32 +676,35 @@ public class LayoutGroup extends StyleGroup<LayoutGroup> {
     }
 
     public LayoutGroup gapColumn(float value) {
-        set(LayoutProperties.GAP_COLUMN, LengthPercentageAuto.length(value));
+        set(LayoutProperties.COLUMN_GAP, LengthPercentageAuto.length(value));
         return this;
     }
 
     public LayoutGroup gapRow(float value) {
-        set(LayoutProperties.GAP_ROW, LengthPercentageAuto.length(value));
+        set(LayoutProperties.ROW_GAP, LengthPercentageAuto.length(value));
         return this;
     }
 
+    /** Both axes, which is what CSS's one-value {@code gap} means. */
     public LayoutGroup gapAll(float value) {
-        set(LayoutProperties.GAP_ALL, LengthPercentageAuto.length(value));
+        LengthPercentage both = LengthPercentage.length(value);
+        set(LayoutProperties.GAP, new LPSize(new TaffySize<>(both, both)));
         return this;
     }
 
     public LayoutGroup gapColumnPercent(float percent) {
-        set(LayoutProperties.GAP_COLUMN, LengthPercentageAuto.percent(percent / 100f));
+        set(LayoutProperties.COLUMN_GAP, LengthPercentageAuto.percent(percent / 100f));
         return this;
     }
 
     public LayoutGroup gapRowPercent(float percent) {
-        set(LayoutProperties.GAP_ROW, LengthPercentageAuto.percent(percent / 100f));
+        set(LayoutProperties.ROW_GAP, LengthPercentageAuto.percent(percent / 100f));
         return this;
     }
 
     public LayoutGroup gapAllPercent(float percent) {
-        set(LayoutProperties.GAP_ALL, LengthPercentageAuto.percent(percent / 100f));
+        LengthPercentage both = LengthPercentage.percent(percent / 100f);
+        set(LayoutProperties.GAP, new LPSize(new TaffySize<>(both, both)));
         return this;
     }
 

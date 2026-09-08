@@ -143,9 +143,9 @@ public class HeadlessTreeSmokeTest {
      */
     @Test
     public void declarationsParseWithoutLoadingTheUserAgentSheet() {
-        var declarations = DeclarationParser.parseBlock("width: 80px; color: #ff0000; padding-all: 4px");
+        var declarations = DeclarationParser.parseBlock("width: 80px; color: #ff0000; padding: 4px");
         assertFalse(declarations.isEmpty());
-        // padding-all expands to four longhands, so this is more than three declarations.
+        // padding expands to four longhands, so this is more than three declarations.
         assertTrue("shorthand expansion should still run", declarations.size() > 3);
     }
 }

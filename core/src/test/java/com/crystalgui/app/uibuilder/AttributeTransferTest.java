@@ -22,6 +22,7 @@ import com.crystalgui.core.attribute.AttributeClipboard;
 import com.crystalgui.core.attribute.AttributeSet;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.property.visual.backdrop.BackdropFilterValue;
 import com.crystalgui.style.property.visual.texture.TextureValue;
 import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.testsupport.UiDocumentTestBase;
@@ -76,15 +77,15 @@ public class AttributeTransferTest extends UiDocumentTestBase {
     public void theSectionsAreOrderedByTheTaxonomyRatherThanByPropertyName() {
         UIElement element = new UIElement().layout(l -> l.width(40f).height(40f));
         StyleGroup.inlinePipeline(element.getStyle().getGeneralGroup(), g -> g
-                .background(new TextureValue("glass(12, #2B2D3088)").compute())
+                .backdropFilter(BackdropFilterValue.parse("blur(12px) tint(#2B2D3088)"))
                 .mask(new TextureValue("linear-gradient(45deg, #FF0000FF, #0000FFFF)").compute())
                 .overlay(new TextureValue("grid(16, #6EDCD024)").compute()));
         model.root().append(element);
         document.update(W, H);
 
         List<String> groups = new ArrayList<>(new StyleAttributes(element).copyAttributes().groups());
-        assertEquals("Layout first, then the kinds the values happen to be: " + groups,
-                List.of("Layout", "Glass", "Gradient", "Grid"), groups);
+        assertEquals("the declared taxonomy first, then the kinds the values happen to be: " + groups,
+                List.of("Layout", "Appearance", "Gradient", "Grid"), groups);
     }
 
     /** What was typed onto the element, grouped the way a person looks for it. */

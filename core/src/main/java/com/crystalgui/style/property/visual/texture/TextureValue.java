@@ -5,7 +5,6 @@ import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.texture.CgUiGradient;
 import com.crystalgui.render.texture.CgUiGrid;
 import com.crystalgui.render.texture.CgUiQuad;
-import com.crystalgui.render.texture.CgUiGlass;
 import com.crystalgui.render.texture.CgUiRepeat;
 import com.crystalgui.render.texture.CgUiShape;
 import com.crystalgui.render.texture.CgUiSprite;
@@ -190,7 +189,7 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
      * <p>A leading angle ({@code deg}/{@code grad}/{@code rad}/{@code turn}), {@code to <side>} or
      * {@code to <corner>} is the direction; everything after it is a stop —
      * a colour with an optional {@code <n>%}. Fewer than two stops, or a colour that does not parse, is a
-     * parse failure (null), exactly as an unknown {@code glass()} argument list is. The position is read
+     * parse failure (null), exactly as a malformed gradient stop is. The position is read
      * off the END of the stop rather than by splitting on whitespace, because an {@code rgba(...)} colour
      * may carry spaces of its own.</p>
      */
@@ -250,76 +249,6 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
         }
         if (stops.size() < 2) return null;
         return corner != null ? new CgUiGradient(corner, stops) : new CgUiGradient(angle, stops);
-    }
-
-    /**
-     * {@code glass(...)} — a backdrop material. Two spellings, because one is what a theme writes and
-     * the other is what a designer tunes:
-     *
-     * <pre>
-     *   glass(12)                                  blur radius; everything else default
-     *   glass(12, #2B2D3088)                       blur radius, tint
-     *   glass(blur 12, tint #2B2D3088, bezel 8,
-     *         ior 1.5, specular 0.35, noise 0.04,
-     *         saturation 1.35, luminosity 0.96,
-     *         fallback #2B2D30)                    keyword pairs, any order
-     * </pre>
-     *
-     * <p>The short form is positional and the long form is not, distinguished by whether the first
-     * argument parses as a number. Mixing them is not supported and does not need to be.</p>
-     *
-     * <p><b>An unknown key warns and is ignored</b> rather than failing the declaration — the rule every
-     * {@link com.crystalgui.style.property.StyleValue} follows, because a malformed value should degrade
-     * rather than take the cascade with it. A wholly unparseable argument list still returns null, which
-     * is a parse failure: {@code glass(nonsense)} is a typo, and {@code none} already spells "nothing".</p>
-     */
-    static @Nullable CgUiDrawable parseGlass(String args) {
-        CgUiGlass glass = new CgUiGlass();
-        List<String> parts = CssParsingUtil.splitTopLevelCommas(args);
-        if (parts.isEmpty()) return glass;
-
-        Float leading = parseFloatOrNull(parts.get(0).trim());
-        if (leading != null) {
-            glass.setBlurRadius(leading);
-            if (parts.size() > 1) {
-                Integer tint = ColorValue.parseColor(parts.get(1).trim());
-                if (tint != null) glass.setTint(tint);
-            }
-            return glass;
-        }
-
-        boolean anyRecognised = false;
-        for (String part : parts) {
-            String[] kv = part.trim().split("\s+", 2);
-            if (kv.length != 2) continue;
-            String key = kv[0].toLowerCase(Locale.ROOT);
-            String raw = kv[1].trim();
-            Float number = parseFloatOrNull(raw);
-            switch (key) {
-                case "blur" -> { if (number != null) { glass.setBlurRadius(number); anyRecognised = true; } }
-                case "bezel" -> { if (number != null) { glass.setBezel(number); anyRecognised = true; } }
-                case "ior" -> { if (number != null) { glass.setIor(number); anyRecognised = true; } }
-                case "specular" -> { if (number != null) { glass.setSpecular(number); anyRecognised = true; } }
-                case "glow" -> { if (number != null) { glass.setGlow(number); anyRecognised = true; } }
-                case "edge" -> { if (number != null) { glass.setEdgeHighlight(number); anyRecognised = true; } }
-                case "edge-width" -> { if (number != null) { glass.setEdgeWidth(number); anyRecognised = true; } }
-                case "rim-ambient" -> { if (number != null) { glass.setRimAmbient(number); anyRecognised = true; } }
-                case "chromatic" -> { if (number != null) { glass.setChromatic(number); anyRecognised = true; } }
-                case "noise" -> { if (number != null) { glass.setNoise(number); anyRecognised = true; } }
-                case "saturation" -> { if (number != null) { glass.setSaturation(number); anyRecognised = true; } }
-                case "luminosity" -> { if (number != null) { glass.setLuminosity(number); anyRecognised = true; } }
-                case "tint" -> {
-                    Integer c = ColorValue.parseColor(raw);
-                    if (c != null) { glass.setTint(c); anyRecognised = true; }
-                }
-                case "fallback" -> {
-                    Integer c = ColorValue.parseColor(raw);
-                    if (c != null) { glass.setFallbackColor(c); anyRecognised = true; }
-                }
-                default -> CrystalGuiCore.LOGGER.warn("Unknown glass() key '{}' — ignored", key);
-            }
-        }
-        return anyRecognised ? glass : null;
     }
 
     private static @Nullable Float parseFloatOrNull(String raw) {
