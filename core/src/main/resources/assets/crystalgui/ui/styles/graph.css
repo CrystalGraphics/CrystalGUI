@@ -105,6 +105,22 @@ graphnode {
     border-color: var(--node-edge);
     color: var(--node-text);
     font-size: 8;
+
+    /* IT CLIPS, so the radius reaches the REGIONS and not just the border. A radius alone rounds the
+     * element's own fill, and this node deliberately has none -- so every region inside it (the port
+     * band, the controls, the preview) drew its square corner straight over the curve, and only the
+     * title bar looked right because it hand-rounds its own two. Clipping promotes the node to
+     * OverflowClip.MASK, which masks the whole subtree to the rounded box: whichever region happens to
+     * be last is cut to the curve without knowing it is last.
+     *
+     * The transparent background is not a problem for the mask -- a mask that would reveal nothing
+     * reveals the whole shape instead, which is what UIElement.maskFill guarantees.
+     *
+     * A promoted popup opened from inside a node (a ColorControl swatch) is NOT clipped by this: the
+     * box tree hosts a promoted box on the top layer rather than on its DOM parent, so it paints
+     * outside this subtree. The hover/selection outline is not clipped either -- it is painted after
+     * the mask composite. */
+    overflow: hidden;
 }
 
 /* Three ring states, ADDITIVE, sampled off the reference. Hover alone is a dimmer colour so it does not
