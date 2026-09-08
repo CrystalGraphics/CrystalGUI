@@ -309,6 +309,23 @@ public final class UIText extends UIElement implements Measurable {
         shadowParagraph = null;
         truncated = null;
         markTreeDirty();
+        // AND SAY SO, because a relayout is not evidence of a repaint: "abc" becoming "abd" measures
+        // the same, so the box tree sees nothing move and a layer holding this label would keep the
+        // old word. @see #paintsDynamically
+        repaint();
+    }
+
+    /**
+     * <b>A label's picture is a function of its text and its style</b>, and every route into either
+     * passes through {@link #invalidateShaping}, which says so.
+     *
+     * <p>Worth stating rather than inheriting the safe default, because a label is in almost every
+     * subtree in this UI: left dynamic, it would be the one node that stops any enclosing panel from
+     * ever being kept between frames.</p>
+     */
+    @Override
+    public boolean paintsDynamically() {
+        return false;
     }
 
     // ── Shaping ──────────────────────────────────────────────────────────────

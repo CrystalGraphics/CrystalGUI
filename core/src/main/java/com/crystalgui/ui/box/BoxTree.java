@@ -317,6 +317,7 @@ public final class BoxTree {
             transformsDirty = false;
             return;
         }
+        paintEpoch++;
         compose(root, rootTransform, 0f, 0f);
         transformsDirty = false;
     }
@@ -675,6 +676,71 @@ public final class BoxTree {
      * every level of a rotated tree.</p>
      */
     private void composeInk(Box box) {
+        composeInkBounds(box);
+        composeDamage(box);
+    }
+
+    /**
+     * The tick a damage belongs to: one per COMPOSE PASS, not one per damage.
+     *
+     * <p>Everything dirtied together shares a number, so "is this still the picture I drew" is one
+     * comparison however many things moved. And a pass is the right unit rather than a frame, because a
+     * pass is exactly when a change can be noticed — nothing recomposes unless something dirtied it, and
+     * a pass that finds nothing changed hands its tick to no box at all.</p>
+     */
+    private long paintEpoch;
+
+    /**
+     * Whether this box paints differently than it did, and what its subtree's revision is now.
+     *
+     * <p>Here, in the compose walk, because the compose walk is <b>exactly</b> the set of frames on
+     * which anything can have changed: a restyle sets {@code transformsDirty}, so does a layout, and
+     * {@link Box#requestRepaint} does too. A frame that recomposes nothing has nothing to damage, and
+     * every revision stays where it was — which is what makes a still frame free.</p>
+     *
+     * <p>The signature is the box's size, its world matrix, its computed style and how many boxes it
+     * hosts. Position is in the matrix; a child added or removed moves the count; a child REPLACED
+     * leaves the count alone and damages itself, because a fresh box starts at {@code NaN}.</p>
+     */
+    private void composeDamage(Box box) {
+        Matrix4f m = box.localToWorld;
+        ComputedStyle style = box.node.computedStyle();
+        if (box.repaintRequested
+                || box.wasStyle != style
+                || box.wasWidth != box.width || box.wasHeight != box.height
+                || box.wasChildCount != box.hosted.size()
+                || box.wasM00 != m.m00() || box.wasM01 != m.m01()
+                || box.wasM10 != m.m10() || box.wasM11 != m.m11()
+                || box.wasM30 != m.m30() || box.wasM31 != m.m31()) {
+            box.repaintRequested = false;
+            box.wasStyle = style;
+            box.wasWidth = box.width;
+            box.wasHeight = box.height;
+            box.wasChildCount = box.hosted.size();
+            box.wasM00 = m.m00();
+            box.wasM01 = m.m01();
+            box.wasM10 = m.m10();
+            box.wasM11 = m.m11();
+            box.wasM30 = m.m30();
+            box.wasM31 = m.m31();
+            box.paintRevision = paintEpoch;
+        }
+
+        long revision = box.paintRevision;
+        // A subtree is keepable only while nothing in it paints out of state the tree cannot see, and
+        // `backdrop-filter` never is -- what it composites is behind the element and outside this tree
+        // altogether. @see UIElement#paintsDynamically
+        boolean retainable = !box.node.paintsDynamically()
+                && style.get(StylePropertyRegistry.BACKDROP_FILTER) == null;
+        for (Box child : box.hosted) {
+            revision = Math.max(revision, child.subtreeRevision);
+            retainable &= child.retainable;
+        }
+        box.subtreeRevision = revision;
+        box.retainable = retainable;
+    }
+
+    private void composeInkBounds(Box box) {
         BoxPainter.localInk(box, inkLocal);
         worldAabb(box, inkLocal[0], inkLocal[1], inkLocal[2], inkLocal[3], inkLocal);
         box.inkX0 = inkLocal[0];

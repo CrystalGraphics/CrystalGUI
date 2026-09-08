@@ -5,6 +5,7 @@ import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.LayerRegion;
+import com.crystalgui.render.RetainedLayer;
 import com.crystalgui.render.texture.CgUiCrossFade;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.CgUiBackdropFilter;
@@ -72,7 +73,10 @@ public final class BoxPainter {
      * gives the copy boxes of its own; this is for a one-shot into a target the caller owns.</p>
      */
     public static void paintSubtree(Box box, CgUiPaintContext ctx) {
-        paintBox(box, ctx, new Matrix4f(ctx.getPoseStack().last().pose()));
+        Matrix4f base = new Matrix4f(ctx.getPoseStack().last().pose());
+        // @see CgUiPaintContext#withoutRetention -- a copy drawn at other coordinates must not become
+        // what the live tree thinks it last painted.
+        ctx.withoutRetention(() -> paintBox(box, ctx, base));
     }
 
     private static void paintBox(Box box, CgUiPaintContext ctx, Matrix4f base) {
@@ -126,6 +130,15 @@ public final class BoxPainter {
             LayerRegion region = regionOf(box, ctx, base);
             if (region.isEmpty()) return;
 
+            // AND IF NOTHING UNDER IT MOVED, THE PICTURE IS STILL THERE. The whole of what a frame owes
+            // an unchanged subtree is one composited quad; the clear, the walk and every draw beneath
+            // are the difference between two frames, and there is none.
+            RetainedLayer keep = box.retainable() ? ctx.retain(box, region, box.subtreeRevision()) : null;
+            if (keep != null && keep.isFresh()) {
+                ctx.blitLayer(keep.fbo(), opacity, region);
+                return;
+            }
+
             // The layer's own origin: its pixel (0,0) is the region's corner, so everything drawn
             // inside it -- this box and every descendant -- goes through a base shifted to match.
             Matrix4f inner = new Matrix4f(base).translateLocal(-region.x(), -region.y(), 0f);
@@ -134,7 +147,9 @@ public final class BoxPainter {
 
             // The subtree blends as one unit before opacity applies, and a mask multiplies only the
             // CHILDREN -- the box's own background is composited unmasked underneath.
-            CgFrameBuffer subtreeFbo = ctx.beginLayerFbo(region);
+            CgFrameBuffer subtreeFbo = keep != null
+                    ? ctx.beginLayerFbo(keep.fbo(), region)
+                    : ctx.beginLayerFbo(region);
             paintSelf(box, style, ctx, radii);
             node.paintContent(ctx, box);
             if (mask && !box.children().isEmpty()) {
@@ -154,6 +169,7 @@ public final class BoxPainter {
             // Inside the layer, so the outline fades with the box: CSS puts it in the opacity group.
             paintOutline(box, style, ctx, radii);
             ctx.endLayerFbo();
+            if (keep != null) keep.painted();
             ctx.blitLayer(subtreeFbo, opacity, region);
         } finally {
             pose.popPose();
@@ -178,7 +194,7 @@ public final class BoxPainter {
      */
     private static boolean foldsOpacity(Box box, ComputedStyle style, UIElement node) {
         if (!box.children().isEmpty()) return false;
-        if (PAINTS_ITS_OWN.get(node.getClass())) return false;
+        if (node.paintsItsOwnContent()) return false;
         if (style.get(StylePropertyRegistry.BACKDROP_FILTER) != null) return false;
 
         int primitives = 0;
@@ -190,29 +206,6 @@ public final class BoxPainter {
                 || stroke != null && stroke.resolve(box.width()) > 0f) primitives++;
         return primitives <= 1;
     }
-
-    /**
-     * Whether a node class overrides either paint hook — asked once per class and cached.
-     *
-     * <p>Derived rather than declared on purpose. A {@code paintsOwnContent()} flag for every widget to
-     * override is a flag somebody eventually forgets, and the cost of forgetting is a widget that draws
-     * nothing under a fade — silent, and only under a fade. Reflection cannot be forgotten.</p>
-     */
-    private static final ClassValue<Boolean> PAINTS_ITS_OWN = new ClassValue<>() {
-        @Override
-        protected Boolean computeValue(Class<?> type) {
-            return overrides(type, "paintContent") || overrides(type, "paintDecoration");
-        }
-
-        private boolean overrides(Class<?> type, String method) {
-            try {
-                return type.getMethod(method, CgUiPaintContext.class, Box.class)
-                        .getDeclaringClass() != UIElement.class;
-            } catch (NoSuchMethodException impossible) {
-                return true;   // it is declared on UIElement; if it cannot be found, assume the worst
-            }
-        }
-    };
 
     /**
      * Where this box's layer goes in the current target, and how big it needs to be: its subtree's

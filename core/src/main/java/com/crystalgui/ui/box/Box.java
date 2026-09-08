@@ -16,6 +16,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.function.Predicate;
 import javax.annotation.Nullable;
+import java.util.Objects;
 import org.joml.Matrix4f;
 import org.joml.Vector2f;
 import org.joml.Vector4f;
@@ -99,6 +100,41 @@ public final class Box {
      * {@link #worldToLocal} instead.</p>
      */
     float inkX0, inkY0, inkX1, inkY1;
+
+    /**
+     * When anything in this box's subtree last painted differently, on the tree's own paint clock.
+     *
+     * <p>What lets a flattened subtree be kept between frames: a layer whose {@code subtreeRevision} is
+     * the one its texture was drawn at has nothing new to draw, so the texture is composited again and
+     * the walk under it is skipped. Chromium calls the equivalent damage, and keeps it for the same
+     * reason — the difference between two frames is the only thing that has to be redone.</p>
+     *
+     * <p>Composed in {@link BoxTree}, from {@link #paintRevision} and every child's. Rebuilt only when
+     * the tree recomposes, which is exactly when something changed: a frame in which nothing moved,
+     * restyled or asked to be repainted leaves every revision where it was.</p>
+     */
+    long subtreeRevision;
+
+    /** When THIS box last painted differently, ignoring what it hosts. @see #subtreeRevision */
+    long paintRevision;
+
+    /**
+     * Whether this box's subtree can be kept as a texture at all.
+     *
+     * <p>False as soon as anything under it paints by hand or filters what is behind it, because
+     * neither is a change the box tree can see. @see UIElement#paintsDynamically</p>
+     */
+    boolean retainable;
+
+    /** Set by {@link UIElement#repaint}, cleared by the compose that turns it into a revision. */
+    boolean repaintRequested;
+
+    // What the last damage check saw of this box. Six matrix components rather than a whole Matrix4f:
+    // every one of these is affine and 2D, so the other ten never move.
+    float wasWidth = Float.NaN, wasHeight = Float.NaN;
+    int wasChildCount = -1;
+    float wasM00, wasM01, wasM10, wasM11, wasM30 = Float.NaN, wasM31;
+    @Nullable ComputedStyle wasStyle;
 
     Box(BoxTree tree, UIElement node, boolean mirror) {
         this.tree = tree;
@@ -190,6 +226,7 @@ public final class Box {
         if (this.stacksByInsertion == stacksByInsertion) return;
         this.stacksByInsertion = stacksByInsertion;
         invalidatePaintOrder();
+        requestRepaint();
     }
 
     public boolean stacksByInsertion() {
@@ -320,6 +357,32 @@ public final class Box {
     /** Whether this box's subtree paints anything at all â€” false for a zero-area or fully clipped one. */
     public boolean hasInk() {
         return inkX1 > inkX0 && inkY1 > inkY0;
+    }
+
+    /** @see #subtreeRevision */
+    public long subtreeRevision() {
+        return subtreeRevision;
+    }
+
+    /** @see #retainable */
+    public boolean retainable() {
+        return retainable;
+    }
+
+    /**
+     * Says this box will paint differently next frame, for a reason nothing else can see.
+     *
+     * <p>Geometry, style and transforms are all noticed by the tree itself. This is for the rest: a
+     * caret that blinked, a canvas whose contents were rewritten, a chart handed new numbers — anything
+     * a {@link UIElement#paintContent} draws out of state the cascade never hears about.</p>
+     *
+     * @see UIElement#repaint
+     */
+    public void requestRepaint() {
+        if (repaintRequested) return;
+        repaintRequested = true;
+        // The compose walk is what turns this into a revision, and it does not run unless asked.
+        tree.transformsChanged();
     }
 
     public Matrix4f worldToLocal() {
@@ -470,9 +533,14 @@ public final class Box {
 
     /** A compositor's z, above the cascade's; {@code null} withdraws it. */
     public void setZIndex(@Nullable Integer zIndex) {
+        if (Objects.equals(zIndexOverride, zIndex)) return;
         zIndexOverride = zIndex;
         Box host = host();
-        if (host != null) host.invalidatePaintOrder();
+        if (host != null) {
+            host.invalidatePaintOrder();
+            // The ORDER is what changed, and nothing about either box's own geometry did.
+            host.requestRepaint();
+        }
     }
 
     public float opacity() {
@@ -480,8 +548,17 @@ public final class Box {
         return node.computedStyle().get(StylePropertyRegistry.OPACITY);
     }
 
+    /**
+     * A compositor's opacity, above the cascade's; {@code null} withdraws it.
+     *
+     * <p>Damaging on a change is not belt and braces. A layer's OWN opacity is applied when it is
+     * composited, so fading a retained subtree needs no repaint — but a descendant's is baked into the
+     * picture, and nothing else in this box says it moved.</p>
+     */
     public void setOpacity(@Nullable Float opacity) {
+        if (Objects.equals(opacityOverride, opacity)) return;
         opacityOverride = opacity;
+        requestRepaint();
     }
 
     public Transform transform() {
