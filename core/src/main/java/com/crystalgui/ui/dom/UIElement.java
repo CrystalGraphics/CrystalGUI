@@ -1210,9 +1210,21 @@ public class UIElement extends UINode implements EventTarget, Styleable {
      * <p>Only meaningful for an out-of-flow node, which is the same set that has leading handles at
      * all — for anything in flow, {@code left}/{@code top} are a relative nudge rather than a position
      * and there is nothing to clamp against.</p>
+     *
+     * <p><b>A promoted node answers what it was promoted INTO</b>, not the parent it still hangs from.
+     * Promotion re-parents the BOX and leaves the node where it was appended, so the two are different
+     * elements — and {@link #resizeOriginTop} reads the box. Answering the node's parent measured a
+     * bound in one space against an origin in another: a dialog opened from a panel could not be grown
+     * past {@code panelHeight - itsOwnYOnScreen}, a ceiling with no relation to the dialog, the panel or
+     * any height it had been given, and one that MOVED when the window did.</p>
      */
     @Nullable
     public UIElement resizeContainingBlock() {
+        UIDocument document = document();
+        if (document != null && document.isPromoted(this)) {
+            UIElement host = document.promotionHost(this);
+            return host != null ? host : document.topLayerNodeIfPresent();
+        }
         return parentElement();
     }
 
@@ -1239,6 +1251,29 @@ public class UIElement extends UINode implements EventTarget, Styleable {
         UIDocument document = document();
         if (document != null && document.isPromoted(this)) return true;
         return computedStyle().get(LayoutProperties.POSITION) == TaffyPosition.ABSOLUTE;
+    }
+
+    /**
+     * Whether a user resize keeps this box's <b>trailing</b> edges inside its containing block.
+     *
+     * <p>True for anything that is simply placed somewhere — a panel parked in a corner should not be
+     * resizable straight out through it. False for anything that clamps its own position, and the two
+     * rules have to agree or the element is more free to be dragged than to be grown:
+     * {@link com.crystalgui.core.window.WindowClamp} bounds a window's ORIGIN and says nothing about its
+     * far edge, so a window can be dragged half off the bottom of the screen and then refuse to be
+     * resized there — the handle simply stops, with the pointer still on it.</p>
+     *
+     * <pre>{@code
+     * // I clamp my own position, so my far edges are nobody else's business
+     * public boolean confinesResizeToContainingBlock() { return false; }
+     * }</pre>
+     *
+     * <p>The LEADING edges are bounded either way, and that is not an inconsistency: a leading edge
+     * grows by moving the origin, and an origin that is clamped while the size keeps growing means the
+     * two disagree — the far edge slides away from the pointer.</p>
+     */
+    public boolean confinesResizeToContainingBlock() {
+        return true;
     }
 
     /**

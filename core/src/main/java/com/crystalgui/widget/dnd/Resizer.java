@@ -224,13 +224,23 @@ public final class Resizer extends UIElement {
         UIElement container = target.canMoveResizeOrigin() ? target.resizeContainingBlock() : null;
         Box available = container == null ? null : container.box();
         if (available != null) {
-            // A trailing edge is bounded by the far side of the container. A leading edge is bounded by
-            // its own origin reaching zero, which caps growth at everything between the container's near
-            // side and the edge that is staying put.
-            if (handle.dx > 0) width = Math.min(width, available.width() - startLeft);
+            // A LEADING edge is bounded by its own origin reaching zero, which caps growth at everything
+            // between the container's near side and the edge that is staying put. Always: a leading edge
+            // grows BY moving the origin, so an origin that stops while the size carries on means the far
+            // edge slides away from the pointer.
             if (handle.dx < 0) width = Math.min(width, startLeft + startWidth);
-            if (handle.dy > 0) height = Math.min(height, available.height() - startTop);
             if (handle.dy < 0) height = Math.min(height, startTop + startHeight);
+
+            // A TRAILING edge is bounded by the far side of the container -- unless the element clamps
+            // its own position, in which case this bound contradicts that one. WindowClamp bounds a
+            // window's ORIGIN and leaves its far edge alone, so a dialog could be DRAGGED half off the
+            // bottom and then refused a resize there: the handle stopped dead with the pointer still on
+            // it, at a height that had nothing to do with any height it had been given.
+            // @see UIElement#confinesResizeToContainingBlock
+            if (target.confinesResizeToContainingBlock()) {
+                if (handle.dx > 0) width = Math.min(width, available.width() - startLeft);
+                if (handle.dy > 0) height = Math.min(height, available.height() - startTop);
+            }
         }
 
         final float finalWidth = Math.max(0f, width);
