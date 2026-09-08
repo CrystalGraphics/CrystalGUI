@@ -1,0 +1,149 @@
+{
+  "cgui": 1,
+  "root": {
+    "kind": "element",
+    "id": "root",
+    "children": [
+      {
+        "kind": "element",
+        "id": "every-style",
+        "style": {
+          "align-items": "CENTER",
+          "aspect-rate": "1.5",
+          "background": "linear-gradient(to bottom right, #3574F0FF, #2E436EFF)",
+          "border-bottom-left-radius-x": "6px",
+          "border-bottom-left-radius-y": "6px",
+          "border-bottom-right-radius-x": "6px",
+          "border-bottom-right-radius-y": "6px",
+          "border-color": "#43454AFF",
+          "border-top-left-radius-x": "6px",
+          "border-top-left-radius-y": "6px",
+          "border-top-right-radius-x": "6px",
+          "border-top-right-radius-y": "6px",
+          "border-width-bottom": "1px",
+          "border-width-left": "1px",
+          "border-width-right": "1px",
+          "border-width-top": "1px",
+          "color": "#DFE1E5FF",
+          "cursor": "POINTER",
+          "flex-basis": "auto",
+          "flex-direction": "ROW",
+          "flex-grow": "0.0",
+          "flex-shrink": "1.0",
+          "font-family": "crystalgraphics:IBMPlexSans-Regular.ttf",
+          "font-size": "11.0",
+          "gap": "8px 4px",
+          "grid-column": "1 / span 2",
+          "grid-row": "auto / auto",
+          "height": "120px",
+          "justify-content": "SPACE_BETWEEN",
+          "left": "12px",
+          "line-height": "1.4",
+          "margin-bottom": "4px",
+          "margin-left": "4px",
+          "margin-right": "4px",
+          "margin-top": "4px",
+          "mask": "shape(\"checkmark\")",
+          "max-width": "400px",
+          "min-width": "40px",
+          "opacity": "0.9",
+          "outline-color": "#3574F0FF",
+          "outline-width": "1px",
+          "overflow": "HIDDEN",
+          "overlay": "icon(\"crystalgui:x\")",
+          "padding-bottom": "6px",
+          "padding-left": "6px",
+          "padding-right": "6px",
+          "padding-top": "6px",
+          "position": "ABSOLUTE",
+          "text-align": "CENTER",
+          "text-decoration-line": "underline",
+          "text-overflow": "ELLIPSIS",
+          "top": "220px",
+          "transform": "translate(4px, 2px) rotate(0.15rad) scale(1.1, 1.1) skew(0.05rad, 0.0rad)",
+          "transform-origin-x": "50%",
+          "transform-origin-y": "50%",
+          "transition": "opacity 240ms ease, transform 120ms ease-out",
+          "white-space": "NOWRAP",
+          "width": "180px",
+          "z-index": "3"
+        }
+      },
+      {
+        "kind": "element",
+        "id": "paste-target",
+        "style": {
+          "background": "#2B2B2BFF",
+          "height": "120px",
+          "left": "210px",
+          "position": "ABSOLUTE",
+          "top": "220px",
+          "transform": "scale(1.4, 1.4)",
+          "width": "180px"
+        }
+      },
+      {
+        "kind": "element",
+        "id": "composite-images",
+        "style": {
+          "position": "ABSOLUTE",
+          "left": "12px",
+          "top": "330px",
+          "width": "150px",
+          "height": "90px",
+          "background": "image(\"crystalgui:textures/gui/ore_styles.png\", \"0 0 32 32\", #FFFFFFCC)",
+          "overlay": "sprite(\"crystalgui:textures/gui/ore_styles.png\", \"0 0 16 16\", \"4 4 4 4\")",
+          "mask": "asset(\"crystalgui:ore\", \"button\")"
+        }
+      },
+      {
+        "kind": "element",
+        "id": "composite-materials",
+        "style": {
+          "position": "ABSOLUTE",
+          "left": "174px",
+          "top": "330px",
+          "width": "150px",
+          "height": "90px",
+          "background": "glass(blur 12, tint #2B2D3088, bezel 8, ior 1.5, specular 0.35, noise 0.04, saturation 1.35, luminosity 0.96, fallback #2B2D30FF)",
+          "overlay": "grid(16 24, #6EDCD024, 2)",
+          "mask": "linear-gradient(45deg, #FF0000FF 0%, #00FF00FF 33%, #0000FFFF 66%, #FFFFFF00 100%)"
+        }
+      },
+      {
+        "kind": "element",
+        "id": "composite-marks",
+        "style": {
+          "position": "ABSOLUTE",
+          "left": "336px",
+          "top": "330px",
+          "width": "150px",
+          "height": "90px",
+          "background": "#2B2B2BFF",
+          "overlay": "icon(\"crystalgui:x\", #FF8C00FF, monochrome)",
+          "mask": "shape(\"chevron-down\")",
+          "font-family": "crystalgraphics:IBMPlexSans-Regular.ttf, crystalgui:Minecraft.otf",
+          "text-decoration-line": "underline line-through",
+          "transition": "opacity 240ms ease, transform 120ms ease-out, background-color 80ms linear",
+          "gap": "6px",
+          "grid-row": "2 / span 3",
+          "grid-column": "span 2 / auto"
+        }
+      },
+      {
+        "kind": "element",
+        "id": "transform-interleaved",
+        "style": {
+          "position": "ABSOLUTE",
+          "left": "498px",
+          "top": "330px",
+          "width": "150px",
+          "height": "90px",
+          "transform": "translate(4px, 0px) rotate(0.2rad) translate(0px, 6px)",
+          "transform-origin-x": "0%",
+          "transform-origin-y": "100%"
+        }
+      }
+    ]
+  }
+}
