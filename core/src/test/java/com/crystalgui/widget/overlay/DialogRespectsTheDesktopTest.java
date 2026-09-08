@@ -1,5 +1,8 @@
 package com.crystalgui.widget.overlay;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
@@ -28,6 +31,7 @@ public class DialogRespectsTheDesktopTest extends UiDocumentTestBase {
     private Desktop desktop;
     private WindowFrame editor;
     private Dialog dialog;
+    private UIElement content;
 
     @Before
     public void aDesktopWithABar() {
@@ -37,7 +41,7 @@ public class DialogRespectsTheDesktopTest extends UiDocumentTestBase {
         // Raised from inside a window, which is the real path: the window layer takes frames only.
         editor = new WindowFrame("Editor");
         desktop.addWindow(editor);
-        UIElement content = new UIElement().layout(l -> l.width(200f).height(120f));
+        content = new UIElement().layout(l -> l.width(200f).height(120f));
         editor.content().append(content);
         frame();
 
@@ -48,6 +52,53 @@ public class DialogRespectsTheDesktopTest extends UiDocumentTestBase {
         dialog.show();
         frame();
         frame();
+    }
+
+    /**
+     * <b>A leading-edge resize moves the origin, and it stays moved.</b>
+     *
+     * <p>{@link com.crystalgui.ui.dom.UIElement} writes {@code left}/{@code top} inline for this, which a
+     * dialog's own clamp ticker overwrites from its wanted position on the very next frame — so dragging
+     * the left edge grew the window to the RIGHT while its origin snapped home. Routing it through
+     * {@link Dialog#applyPosition} is what makes the two agree.</p>
+     */
+    @Test
+    public void aLeadingEdgeResizeMovesTheOriginAndItSticks() {
+        dialog.moveTo(120f, 90f);
+        frame();
+        frame();
+
+        dialog.applyResizeOrigin(60f, 40f);
+        frame();
+        frame();
+
+        assertEquals("the left edge stayed where the drag put it", 60f, dialog.box().x(), 0.5f);
+        assertEquals("…and so did the top", 40f, dialog.box().y(), 0.5f);
+    }
+
+    /**
+     * <b>A resize is measured against what the dialog was promoted into, never the panel it was raised
+     * from.</b>
+     *
+     * <p>Promotion re-parents the BOX and leaves the node where it was appended, so the two are
+     * different elements — and the origin a resize is bounded from is read off the box. Measuring one
+     * against the other bounded a dialog at {@code panelHeight - itsOwnYOnScreen}: a ceiling with no
+     * relation to the dialog, the panel or any height it had been given, which MOVED when the window
+     * did and left the bottom handle dead with room on every side.</p>
+     *
+     * <p>And its far edges are bounded by nothing at all, because its position already is not:
+     * {@code WindowClamp} keeps a caption reachable and lets the rest hang off the edge, so confining
+     * the size to the same area contradicts it — the window could be dragged past the edge and not
+     * grown there.</p>
+     */
+    @Test
+    public void aResizeIsBoundedByTheWorkAreaAndNotByThePanelItWasRaisedFrom() {
+        assertNotSame("the 200x120 panel it was raised from does not bound it",
+                content, dialog.resizeContainingBlock());
+        assertSame("what it was promoted into does", document.workArea(),
+                dialog.resizeContainingBlock());
+        assertFalse("…and its trailing edges are bounded by nothing, as its position already is",
+                dialog.confinesResizeToContainingBlock());
     }
 
     /**

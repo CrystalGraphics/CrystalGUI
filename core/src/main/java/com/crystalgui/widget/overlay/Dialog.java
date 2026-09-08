@@ -752,22 +752,43 @@ public class Dialog extends UIElement {
     }
 
     /**
-     * <b>{@code resize:} has no counterpart on this engine yet, so the three hooks it needed are
-     * gone.</b>
+     * <b>A leading-edge resize moves this dialog's OWN position, not a stylesheet inset.</b>
      *
-     * <p>They were {@code applyResizeOrigin}, {@code resizeOriginLeft} and {@code resizeOriginTop} —
-     * {@code UIResizer}'s seam for a box whose position is state the widget owns rather than a
-     * stylesheet inset. The reason they existed is unchanged and worth keeping written down: without
-     * them a leading-edge drag and this dialog's own clamp fight every frame, the handle writing the
-     * inset and the clamp putting {@code posLeft}/{@code posTop} back on the next tick, so dragging
-     * the left edge resizes the box while snapping its origin home.</p>
+     * <p>Dragging the left or top edge has to move the origin as it sizes, or the opposite edge travels
+     * instead. {@code UIElement} writes {@code left}/{@code top} inline for that, which is right for
+     * anything positioned by a sheet — and wrong here, because a dialog's position is state it owns:
+     * {@code posLeft}/{@code posTop} are the source of truth and the clamp ticker writes them back
+     * every frame. So the handle wrote an inset, the ticker put the old one back on the next tick, and
+     * dragging the left edge grew the window to the RIGHT while its origin snapped home.</p>
      *
-     * <p>M6 D6 chose a resize MODE over an edge band rather than eight handle nodes, and 6.0 did not
-     * build it — nothing before this needed one. So a ported {@code Dialog} MOVES and does not RESIZE,
-     * which is a visible, stated gap rather than a silent one, and {@code ResizeTest} stays on the old
-     * engine until the mode exists. Moving is unaffected: it goes through {@code Drag} and writes the
-     * same INLINE insets it always did.</p>
+     * <p>Routing it through {@link #applyPosition} makes the two agree, and clamps the new origin the
+     * same way a move does — a resize cannot push a caption off the screen either.</p>
      */
+    @Override
+    public void applyResizeOrigin(float left, float top) {
+        // PLACED, because it now has a position somebody chose: without this an unplaced dialog would
+        // re-centre itself on the next frame and undo the drag. @see #centreIfUnplaced
+        placed = true;
+        applyPosition(left, top);
+    }
+
+    /**
+     * <b>No</b> — a dialog clamps its own position, so confining its size would contradict that.
+     *
+     * <p>{@link WindowClamp} bounds the ORIGIN and deliberately says nothing about the far edge: a
+     * window may hang off the bottom of the work area as far as you like, because what must stay
+     * reachable is the caption. Bounding the size against the same area asks for the opposite, and the
+     * two rules meeting produced a window that could be DRAGGED past the edge and not GROWN there —
+     * the bottom handle stopping dead at a height that had nothing to do with any height it had been
+     * given, which reads as a broken handle rather than as a clamp.</p>
+     *
+     * @see UIElement#confinesResizeToContainingBlock
+     */
+    @Override
+    public boolean confinesResizeToContainingBlock() {
+        return false;
+    }
+
 
     private void beginMove(float pointerX, float pointerY) {
         UIDocument window = document();
