@@ -179,7 +179,21 @@ dialog {
     min-width: 80px;
     min-height: 40px;
     background: var(--dialog-bg, #2E2E2E);
-    outline: 1px var(--dialog-border, #1A1A1A);
+    /* NO VISIBLE EDGE, exactly as a window frame has none — a dialog is a window with less furniture,
+     * and the outline was the last thing separating the two. It also read as an alignment fault it was
+     * not: the close control is flush to the caption's right and top by design, so the fill terminated
+     * against this line on those two sides and ran into open caption on the third, which makes a
+     * centred mark look pushed. The dialog's own ground and its caption grey carry the edge instead.
+     *
+     * THE RING IS KEPT AT ZERO ALPHA rather than removed, and that is not the same as deleting the
+     * declaration: `.__pulse__` below eases `outline-color` from whatever is resting here, and a
+     * property with no resting value declines to transition and snaps. Costs nothing — an outline is
+     * drawn OUTSIDE the border box, so it takes no space, and a fully transparent one draws nothing.
+     *
+     * `#00000000` and not the `transparent` keyword: this shorthand's colour parser does not take it,
+     * and a value it cannot read degrades to the initial one -- an OPAQUE edge, which is the thing being
+     * removed. CSS order, alpha last. */
+    outline: 1px #00000000;
     color: var(--dialog-fg, #DDDDDD);
     z-index: 5;
     /* THE RESTING END of the blocked pulse — __pulse__ below carries what it eases FROM, which is the

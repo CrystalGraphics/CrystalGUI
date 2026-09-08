@@ -1,5 +1,6 @@
 package com.crystalgui.widget.overlay;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -7,6 +8,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.transition.TransitionSpec;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElementRegistry;
@@ -92,6 +94,29 @@ public class DialogFadesByDefaultTest extends UiDocumentTestBase {
 
         assertNotNull("it is still on its way out, so it is still in the tree", dialog.parent());
         assertNotNull("and still laid out, or there would be nothing to fade", dialog.box());
+    }
+
+    /**
+     * <b>No visible edge, but a ring to pulse from.</b>
+     *
+     * <p>A dialog has no outline for the same reason a window frame has none. The declaration is kept at
+     * zero alpha rather than deleted, because {@code .__pulse__} eases {@code outline-color} from
+     * whatever rests here — and a property with no resting value declines to transition and snaps, which
+     * would cost the blocked-modal pulse the half of it that is an edge.</p>
+     */
+    @Test
+    public void theEdgeIsInvisibleButStillThereToEaseFrom() {
+        int resting = dialog.getStyle().getGeneralGroup().outlineColor();
+        assertEquals("nothing is drawn at rest", 0, (resting >>> 24) & 0xFF);
+
+        // THE RING IS STILL DECLARED, which is what gives `outline-color` a resting value to ease from.
+        // Asserted through the WIDTH rather than by pulsing and reading the colour back: the colour is in
+        // the transition list, so a frame after the class lands it holds whatever the wall clock has got
+        // to by then, which is not a fact about this sheet. @see the class note above.
+        LengthPercent width = dialog.getStyle().getGeneralGroup().outlineWidth();
+        assertNotNull("the declaration has to survive, or the pulse's edge snaps instead of easing",
+                width);
+        assertTrue("…with something to draw in, was " + width, width.resolve(100f) > 0f);
     }
 
     /** And the box that outlives the close must not go on taking clicks while it fades. */
