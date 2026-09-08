@@ -698,13 +698,29 @@ public class UIElement extends UINode implements EventTarget, Styleable {
     /**
      * Whether this class draws anything of its own — whether it overrides either paint hook.
      *
-     * <p>Asked once per class and cached. Derived rather than declared on purpose: a flag for every
-     * widget to override is a flag somebody eventually forgets, and what forgetting costs here is a
-     * widget that draws nothing under a fade, or one that freezes inside a retained layer. Neither
-     * fails loudly.</p>
+     * <p>Derived rather than declared, and asked once per class. A flag for every widget to override is
+     * a flag somebody eventually forgets, and what forgetting costs here is a widget that draws nothing
+     * under a fade, or one that freezes inside a kept layer. Neither fails loudly.</p>
      */
     public final boolean paintsItsOwnContent() {
         return PAINTS_ITS_OWN.get(getClass());
+    }
+
+    private static final ClassValue<Boolean> PAINTS_ITS_OWN = new ClassValue<>() {
+        @Override
+        protected Boolean computeValue(Class<?> type) {
+            return declarerOf(type, "paintContent") != UIElement.class
+                    || declarerOf(type, "paintDecoration") != UIElement.class;
+        }
+    };
+
+    /** Which class in {@code type}'s ancestry actually declares one of the two paint hooks. */
+    private static Class<?> declarerOf(Class<?> type, String hook) {
+        try {
+            return type.getMethod(hook, CgUiPaintContext.class, Box.class).getDeclaringClass();
+        } catch (NoSuchMethodException never) {
+            throw new AssertionError(hook + " is public on UIElement", never);
+        }
     }
 
     /**
@@ -727,23 +743,6 @@ public class UIElement extends UINode implements EventTarget, Styleable {
     public boolean paintsDynamically() {
         return paintsItsOwnContent();
     }
-
-    private static final ClassValue<Boolean> PAINTS_ITS_OWN = new ClassValue<>() {
-        @Override
-        protected Boolean computeValue(Class<?> type) {
-            return overrides(type, "paintContent") || overrides(type, "paintDecoration");
-        }
-
-        private boolean overrides(Class<?> type, String method) {
-            try {
-                return type.getMethod(method, CgUiPaintContext.class, Box.class)
-                        .getDeclaringClass() != UIElement.class;
-            } catch (NoSuchMethodException impossible) {
-                return true;   // declared right here; if it cannot be found, assume the worst
-            }
-        }
-    };
-
 
     /** A layout-affecting value changed: the box under it must be laid out again. */
     @Override
