@@ -17,6 +17,7 @@ import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Checkbox;
+import com.crystalgui.widget.scroll.ScrollerView;
 import com.crystalgui.widget.text.UIText;
 
 import dev.vfyjxf.taffy.style.FlexDirection;
@@ -60,6 +61,9 @@ public final class PasteAttributesDialog {
     /** The rule under the header, separating what is being pasted from what of it to take. */
     public static final String RULE_CLASS = "__paste-rule__";
 
+    /** What scrolls: every group and its section, between the header and the buttons. */
+    public static final String GROUPS_CLASS = "__paste-groups__";
+
     /** The boxed grid of properties under a heading. */
     public static final String SECTION_CLASS = "__paste-section__";
 
@@ -70,6 +74,16 @@ public final class PasteAttributesDialog {
 
     /** The one checkbox that is not a property. */
     public static final String REMEMBER_CLASS = "__paste-remember__";
+
+    /**
+     * On a window whose biggest group holds fewer than {@link #COLUMNS} properties, so the sheet can
+     * open it narrower.
+     *
+     * <p>A selector cannot count children — there is no {@code :nth-child} here — and this is the one
+     * thing about the width that only the window itself knows. It says how many columns are WANTED and
+     * says nothing about what one is worth; the sheet owns every number. @see #chooseWidth</p>
+     */
+    public static final String NARROW_CLASS = "__paste-narrow__";
 
     public static final String ACTIONS_CLASS = "__paste-actions__";
 
@@ -108,6 +122,15 @@ public final class PasteAttributesDialog {
         rule.addClass(RULE_CLASS);
         dialog.getContent().append(rule);
 
+        // THE GROUPS SCROLL, the header and the buttons do not. A composite property offers a section
+        // per function now, so the number of sections is a property of what was copied rather than
+        // something this window can size itself around -- an element with a transform, a gradient and a
+        // border can fill a screen. Header and actions stay put because they are the two things you
+        // navigate BY: what this is about, and the way out.
+        ScrollerView groups = new ScrollerView();
+        groups.addClass(GROUPS_CLASS);
+        dialog.getContent().append(groups);
+
         // PAIRED, not two parallel lists. The boxes are built group by group while the entries arrive in
         // the order the carrier listed them, so an index into one is not an index into the other -- Apply
         // would tick the property that happened to share a position with the box.
@@ -120,8 +143,7 @@ public final class PasteAttributesDialog {
             // item of the grid, indistinguishable at a glance from the things it governs.
             Checkbox master = new Checkbox(group);
             master.addClass(GROUP_CLASS);
-            master.setChecked(true);
-            dialog.getContent().append(master);
+            groups.append(master);
 
             // THE SECTION IS THE GRID. A wrapped row three across, because a list running straight down
             // makes a window as tall as the source element has properties.
@@ -129,14 +151,17 @@ public final class PasteAttributesDialog {
             section.addClass(SECTION_CLASS);
             StyleGroup.defaultPipeline(section.getStyle().getLayoutGroup(),
                     l -> l.flexDirection(FlexDirection.ROW).flexWrap(FlexWrap.WRAP));
-            dialog.getContent().append(section);
+            groups.append(section);
 
             List<Checkbox> members = new ArrayList<>();
             for (AttributeSet.Entry entry : copied.entries()) {
                 if (!entry.slot().group().equals(group)) continue;
+                // NOT TICKED. Everything ticked is "paste all of it unless you object", which is the
+                // whole set on the target the moment somebody presses the default button -- and every
+                // property they did not want has to be found and cleared first. Nothing ticked asks the
+                // question the window is for: which of these. @see #followTheTicks
                 Checkbox item = new Checkbox(entry.slot().label());
                 item.addClass(ITEM_CLASS);
-                item.setChecked(true);
                 chosenBy.put(item, entry);
                 members.add(item);
                 section.append(item);
@@ -145,6 +170,7 @@ public final class PasteAttributesDialog {
         }
 
         wireGroups(owned);
+        chooseWidth(dialog, owned);
 
         Checkbox remember = new Checkbox("Don't show until next copy");
         remember.addClass(REMEMBER_CLASS);
@@ -168,6 +194,18 @@ public final class PasteAttributesDialog {
         Button cancel = new Button("Cancel");
         buttons.append(apply, cancel);
 
+        // APPLY FOLLOWS THE TICKS, which nothing had to do while they all started on: a paste with
+        // nothing chosen closes the window and changes nothing, and a button that silently does nothing
+        // is worse than one that says it cannot. Attached per item rather than per group, because a
+        // group's tick reaches its members through `setChecked` and every member announces.
+        Runnable followTheTicks = () -> {
+            boolean any = false;
+            for (Checkbox item : chosenBy.keySet()) any |= item.isChecked();
+            apply.setEnabled(any);
+        };
+        for (Checkbox item : chosenBy.keySet()) item.attachListener(ignored -> followTheTicks.run());
+        followTheTicks.run();
+
         apply.onPressed.connect(() -> {
             Set<String> wanted = new HashSet<>();
             for (Map.Entry<Checkbox, AttributeSet.Entry> pair : chosenBy.entrySet()) {
@@ -183,14 +221,32 @@ public final class PasteAttributesDialog {
         window.addOverlay(dialog, from);
         dialog.removeWhenClosed();
         dialog.show();
-        // AFTER show, per Dialog's own instruction: its focusing steps take the first focusable
-        // descendant, which here is the first group's tick -- so the window opened with a checkbox
-        // outlined and Space would have cleared a whole group. Apply is what the person came to do.
-        window.focus().requestFocus(apply);
+        // AND THE FIRST TICK KEEPS THE FOCUS, which is Dialog's own behaviour -- its focusing steps take
+        // the first focusable descendant. This used to be overridden onto Apply, because with every box
+        // already ticked a stray Space cleared a whole group. Now Space ADDS one, which is what the
+        // person came to do, so the override is not merely unnecessary: it would put the focus ring on a
+        // button that starts disabled.
         return dialog;
     }
 
     /** One header line: a dimmed key and the name it is about. */
+    /** The grid is three across at most. @see #NARROW_CLASS */
+    private static final int COLUMNS = 3;
+
+    /**
+     * Marks the window narrow when no group can fill a row.
+     *
+     * <p>The width is a starting size for a WRAP, so it has to be decided before anything is laid out
+     * and cannot be read back off the boxes. What decides it is the biggest group: a copy holding one
+     * group of two properties has nothing that would ever occupy a third column, and opening at the
+     * three-column width leaves that column empty for the life of the window.</p>
+     */
+    private static void chooseWidth(Dialog dialog, Map<Checkbox, List<Checkbox>> owned) {
+        int widest = 0;
+        for (List<Checkbox> members : owned.values()) widest = Math.max(widest, members.size());
+        if (widest < COLUMNS) dialog.addClass(NARROW_CLASS);
+    }
+
     private static UIElement line(String key, String value) {
         UIElement row = new UIElement();
         row.addClass(LINE_CLASS);

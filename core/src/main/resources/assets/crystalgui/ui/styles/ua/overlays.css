@@ -702,6 +702,16 @@ dialog .__title-bar__ .__label__ {
 
 dialog .__content__ {
     flex-grow: 1;
+    /* AND IT SHRINKS, which this engine makes opt-in: flex-shrink defaults to 0 here, unlike CSS. A
+     * dialog with a max-height therefore capped its OWN box and left this one at its full content size
+     * -- measured as a content box of 1921 in a window at its cap -- so everything below the fold, the button
+     * row included, drew outside the window. `overflow: hidden` below cannot help: it clips what is
+     * inside this box, and the box itself was the thing hanging out of the window.
+     *
+     * `min-height: 0` for the same reason it is needed on any shrinkable flex child: without it the
+     * automatic minimum keeps the content at its natural height and the shrink has no room to act. */
+    flex-shrink: 1;
+    min-height: 0;
     width: 100%;
     padding-all: 6px;
     /* THE EDGE, AND ONLY THREE SIDES OF IT.
@@ -946,8 +956,108 @@ canvasview.__panning__, graphview.__panning__ { cursor: grabbing; }
  * but the offset says which owns which, and it has to be unmistakable at one glance. */
 dialog.__paste-attributes__ {
     /* Wide enough for THREE columns of property names, which is what makes the wrap useful at all: at
-     * two the window is nearly as tall as a plain list and the indent has bought nothing. */
-    min-width: 380;
+     * two the window is nearly as tall as a plain list and the indent has bought nothing.
+     *
+     * DEFINITE, not a minimum and not a cap. A minimum is a floor and the window sizes to its content,
+     * so the widest row set it instead and it came out the full width of the screen. A cap fails the
+     * same way for a subtler reason: the scroller's slot and the sections inside it are `min-width:
+     * 100%`, which a content measurement resolves against the space on offer rather than against a
+     * width nobody has decided yet -- so every copy asked for the whole area and every copy came out at
+     * exactly the cap. A wrap needs a width to wrap AT; leaving it to the content means there is nothing
+     * to wrap against. It is a STARTING size, not the only one -- see `resize` below. */
+    width: 380px;
+    /* RESIZABLE, all eight handles. A dialog is out of flow, which is what makes the leading edges
+     * meaningful: left and top move the origin as they size, and `Dialog` already owns its position, so
+     * the resizer has somewhere to write. How much there is to read depends on what was copied, and
+     * only the reader knows how much room to give it. */
+    resize: both;
+    /* THE CAP IS HERE, not on the scroller. A window is as tall as what was copied until that would be
+     * too tall to read, and past that the groups scroll. It is a STARTING ceiling and not a permanent
+     * one -- see the rule below, which is what makes that true. */
+    max-height: 400px;
+}
+
+/* AN OPENING SIZE IS NOT A LIMIT, and a cap that outlives the opening makes the handle dead.
+ *
+ * `max-height` above says how tall to COME UP, and nothing more: dragging the bottom edge past it did
+ * nothing at all, because a max binds the box whatever origin the drag writes its height at, and
+ * `Resizer` reads that same computed max to predict the size the box will settle at. So the window
+ * stopped at 400 with a grip still under the pointer.
+ *
+ * `__user-sized-height__` is written by `UIElement.markUserSized` the moment a drag sizes that axis, so
+ * this says exactly "the user has taken the decision" without the sheet knowing anything about drags.
+ * The width half is here for the same reason though nothing caps a width today: it is one statement,
+ * and the mirror bug would be found the same expensive way.
+ *
+ * ORDER-DEPENDENT, and deliberately so: it weighs the same as the `dialog.__paste-attributes__` rule it
+ * lifts, so it has to come after it. A dialog declaring its own cap below this would keep it. */
+dialog.__user-sized-height__ {
+    max-height: auto;
+}
+dialog.__user-sized-width__ {
+    max-width: auto;
+}
+
+/* WHAT SCROLLS, and the reason it has to. A composite offers a section per function, so how tall this
+ * window wants to be is a property of what was copied -- an element carrying a transform, a gradient and
+ * a border fills a screen. The header and the buttons stay put either side of it: they are the two
+ * things you navigate BY, what this is about and the way out.
+ *
+ * `height: 0; flex-grow: 1` is this engine's fill idiom, not `height: 100%` -- flex-shrink defaults to 0
+ * here, so a growing child keeps its content size and overflows its parent instead of scrolling inside
+ * it. That is the failure this exact rule shape exists to avoid. @see AGENTS.md */
+/* IT TAKES WHATEVER THE WINDOW HAS LEFT, and the three declarations are one idea.
+ *
+ * `height: 0; flex-grow: 1` -- this engine's usual fill idiom -- is wrong here, because it makes the
+ * scroller's BASIS zero: the window then measures itself as header plus rule plus nothing plus buttons,
+ * has no free space to grow into, and comes up with an empty band where the groups are. Measured at
+ * 368x0 with four sections correctly laid out inside it.
+ *
+ * An `auto` basis fixes that half: the window wants to be as tall as everything it holds. The cap then
+ * belongs on the WINDOW rather than here, so that a window the reader has made taller gives the extra
+ * room to this rather than leaving it blank.
+ *
+ * `flex-shrink: 1` is the half that is easy to miss, and this engine is why: flex-shrink defaults to 0
+ * here, unlike CSS. Without it a window at its cap cannot squeeze the scroller, so the groups overflow
+ * past the buttons and out of the window -- which is exactly what a resize downward looked like. */
+/* NARROWER WHEN THREE COLUMNS ARE NOT NEEDED. A copy whose biggest group holds one or two properties
+ * used the full three-column width and opened with a third of the window empty.
+ *
+ * The COUNT is Java's and the WIDTH is here: `PasteAttributesDialog` can see how many properties the
+ * biggest group holds and a sheet cannot -- there is no `:nth-child`, and a selector cannot count -- but
+ * it has no business knowing what a column is worth. So it says only "fewer than three", the way it
+ * already says "the reader has sized this".
+ *
+ * 300 rather than the two columns' 270, and the footer is why: its own row is 281px of checkbox and
+ * buttons that neither wrap nor shrink, so it is the real floor and no arrangement of the grid gets
+ * under it. */
+dialog.__paste-attributes__.__paste-narrow__ {
+    width: 300px;
+}
+
+dialog.__paste-attributes__ .__paste-groups__ {
+    width: 100%;
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-height: 0;
+    /* A GUTTER FOR THE SCROLLBAR, on BOTH sides so the sections stay centred in the band.
+     *
+     * The bar is an absolute overlay pinned to the right edge and takes no layout width, so a section
+     * spanning the band ran underneath it and the thumb drew on top of the box's own right border. The
+     * bar cannot move -- it is what `right: 0` means -- so the content has to come in.
+     *
+     * It comes in on both sides, because the alternative is a band whose left inset and right inset
+     * differ by the width of a scrollbar that is only sometimes there. 6px for a 4px bar leaves it clear
+     * of the border rather than touching it, which is the same reserve `.__completion-row__` makes.
+     *
+     * PADDING RATHER THAN A MARGIN ON THE SECTIONS: a margin is outside the box, so `min-width: 100%`
+     * would still measure the full band and the two together would overflow it -- a horizontal scrollbar
+     * that appears because of the vertical one. Padding narrows what 100% MEANS, and Taffy resolves an
+     * absolute child's inset against the border box with padding NOT subtracted (FlexboxComputer,
+     * `insetRelativeWidth`), which is exactly why the bar stays out at the edge while the sections
+     * move in. */
+    padding-left: 6px;
+    padding-right: 6px;
 }
 
 /* ONE STEP DOWN, everywhere inside. This window is a dense list of property names rather than prose, and
@@ -994,7 +1104,11 @@ dialog.__paste-attributes__ button::part(label) {
     width: 100%;
     height: 1;
     margin-top: 8px;
-    margin-bottom: 8px;
+    /* SHORTER BELOW THAN ABOVE, because what follows brings its own: the first group's heading has an
+     * 8px margin of its own, so an even 8 here put 16px between the rule and the first word under it
+     * while two groups inside the band sit 12 apart. Matched pairs of margins are the usual answer and
+     * this is the case they are wrong for -- the space a reader sees is the SUM. */
+    margin-bottom: 4px;
     background-color: var(--dialog-border, #43454A);
 }
 
@@ -1014,7 +1128,11 @@ dialog.__paste-attributes__ button::part(label) {
  * 31%, not 33%. Three at a third plus the gaps between them is over the width, and since flex-shrink
  * defaults to 0 in this engine nothing gives: the third item wraps and every row holds two. */
 .__paste-section__ {
-    width: 100%;
+    /* AT LEAST the width available, and more when its contents need it. `width: 100%` would pin it to
+     * the scroller and leave the items to be squeezed, which is the one thing they must not be: a
+     * truncated property name is neither readable nor searchable, and nobody recognises half of
+     * `border-bottom-left-radius-x`. Wider than the window is what the scroller is there to carry. */
+    min-width: 100%;
     border-width: 1px;
     border-color: var(--dialog-border, #43454A);
     border-radius: 4px;
@@ -1037,19 +1155,44 @@ dialog.__paste-attributes__ button::part(label) {
     gap-column: 0;
 }
 
-/* A THIRD EACH, with the breathing room as padding INSIDE the column rather than as a gap between them --
- * border-box, so it comes out of the third and cannot push the third item onto the next row.
+/* A THIRD, OR ITS OWN NAME -- whichever is wider, decided PER ITEM.
  *
- * Past that width the label truncates, which needs the shrink said out loud: flex-shrink defaults to 0
- * in this engine, so without it the text would simply overflow its own box. */
+ * Three columns while three fit and fewer where they do not, and the rule is a row's rather than the
+ * grid's: a row of short names keeps its three even when the row above it holds one long one. A single
+ * floor for every item cannot express that. It was 150px, which is wider than a third of the default
+ * window, so one long name in the whole list took every row down to two.
+ *
+ * The breathing room is padding INSIDE the column rather than a gap between columns -- border-box, so
+ * it comes out of the third and cannot push the third item onto the next row. */
 .__paste-item__ {
-    width: 33%;
+    /* ITS OWN CONTENT is the base size (`auto` flex-basis over an `auto` width), and the label under it
+     * neither wraps nor truncates, so this is the width of the whole name. An item is never narrower
+     * than what it says. */
+    width: auto;
+    /* AND NEVER NARROWER THAN A THIRD, which is what buys both halves at once.
+     *
+     * It aligns: a short name is exactly a third, so the columns line up down the window and a list of
+     * forty property names stays scannable. And it caps the row at three, since a fourth would need
+     * 132% of the row -- so "never more than three" is a consequence of the floor rather than a second
+     * rule that could disagree with it.
+     *
+     * A PERCENTAGE, not the pixels this was: pixels are a floor on every item alike, and one item that
+     * needs more takes the whole grid down with it. `min-width: auto` -- CSS's content-based automatic
+     * minimum -- would say this directly, but this engine's min-size default is 0 and `auto` is not a
+     * value it accepts (@see AGENTS.md), which is what the `width: auto` above is standing in for. */
+    min-width: 33%;
     padding-right: 8px;
 }
 
+/* NEVER TRUNCATED AND NEVER WRAPPED. The base `checkbox::part(label)` ellipsizes, which is right for a
+ * value in a dropdown and wrong for the name of the thing being asked about: an ellipsis here removes
+ * exactly the part that tells `border-bottom-left-radius-x` from `-y`. */
 .__paste-item__::part(label) {
-    flex-shrink: 1;
-    text-overflow: ellipsis;
+    flex-shrink: 0;
+    min-width: auto;
+    white-space: nowrap;
+    text-overflow: clip;
+    overflow: visible;
 }
 
 /* MORE AIR BETWEEN THE BOX AND ITS WORD than a bare checkbox wants. These are property names read as a
@@ -1072,7 +1215,9 @@ dialog.__paste-attributes__ button::part(label) {
     align-items: center;
     /* The standing choice at one end, the two ways out at the other. */
     justify-content: space-between;
-    margin-top: 12px;
+    /* THE SAME AIR ABOVE THE ROW AS BELOW IT, and below it is the content box's own 6px padding -- so
+     * this is that number and not a round one. At 12 the footer sat visibly low in its own margin. */
+    margin-top: 6px;
 }
 
 .__paste-buttons__ {
