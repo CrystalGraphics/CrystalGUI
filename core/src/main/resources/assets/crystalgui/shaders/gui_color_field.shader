@@ -49,7 +49,9 @@ Properties {
 }
 
 struct v2f {
-    vec2 uv;
+    // The quad's parameter, grown by half a pixel when rotated so the edge can be antialiased --
+    // CG_QUAD_EDGE_* in cg_env.glsl. uv is derived from it per fragment.
+    vec2 param;
     vec4 color;
 };
 
@@ -79,16 +81,18 @@ Pass {
     }
 
     void vertex(out v2f o) {
-        gl_Position = cg_ProjMatrix * vec4(CG_QUAD_WORLD_POS, 1.0);
-        o.uv    = CG_QUAD_UV;
+        o.param = CG_QUAD_EDGE_PARAM;
+        gl_Position = cg_ProjMatrix * vec4(CG_QUAD_EDGE_WORLD_POS(o.param), 1.0);
         o.color = CG_QUAD_COLOR;
     }
 
     void fragment(in v2f i, out vec4 fragColor) {
         vec2 halfSize = _BoxSize * 0.5;
-        vec2 localPos = (i.uv - 0.5) * _BoxSize;
+        vec2 uv = mix(QUAD_DATA(CG_INSTANCE_ID).uv0, QUAD_DATA(CG_INSTANCE_ID).uv1, i.param);
+        float ramp = CG_QUAD_EDGE_ROTATED ? CG_QUAD_EDGE_FILTER : 1.0;
+        vec2 localPos = (uv - 0.5) * _BoxSize;
         float dist = sdf_rounded_box(localPos, halfSize, _CornerRadiusX, _CornerRadiusY);
-        float coverage = sdf_coverage(dist);
+        float coverage = sdf_coverage(dist, ramp);
 
         vec4 result;
 
@@ -97,7 +101,7 @@ Pass {
             // Distance from centre normalised so the ring is round even when the box is not, then
             // banded between the inner radius and the edge. atan gives -pi..pi; the +0.5 turns it
             // into 0..1 with red at the top, which is the orientation every picker uses.
-            vec2 centred = (i.uv - 0.5) * 2.0;
+            vec2 centred = (uv - 0.5) * 2.0;
             float radius = length(centred);
             float hue = fract(atan(centred.x, centred.y) / 6.28318530718 + 0.5);
 
@@ -112,13 +116,13 @@ Pass {
             // -- SV_SQUARE ---------------------------------------------------
             // x is saturation, y is value with 1 at the TOP -- uv runs downward, so the flip is
             // what puts white in the corner every user expects it in.
-            result = vec4(hsv_to_rgb(vec3(_Hue, i.uv.x, 1.0 - i.uv.y)), 1.0);
+            result = vec4(hsv_to_rgb(vec3(_Hue, uv.x, 1.0 - uv.y)), 1.0);
         } else if (_Mode < 2.5) {
             // -- GRADIENT ----------------------------------------------------
             // Composited over the checker HERE rather than relying on blending, so the result is
             // opaque and the surface behind the widget never shows through a low-alpha stop.
-            vec4 ramp = mix(_ColorA, _ColorB, i.uv.x);
-            vec3 over = mix(cg_checker(i.uv * _BoxSize), ramp.rgb, ramp.a);
+            vec4 ramp = mix(_ColorA, _ColorB, uv.x);
+            vec3 over = mix(cg_checker(uv * _BoxSize), ramp.rgb, ramp.a);
             result = vec4(over, 1.0);
         } else {
             // -- HUE_STRIP ---------------------------------------------------
@@ -130,7 +134,7 @@ Pass {
             // tried and is wrong: a pale colour washed the strip out to near-white, so the one control
             // whose job is choosing a hue became unreadable exactly when hue was hardest to judge. It
             // is a palette, not a preview of the current colour.
-            result = vec4(hsv_to_rgb(vec3(i.uv.x, 1.0, 1.0)), 1.0);
+            result = vec4(hsv_to_rgb(vec3(uv.x, 1.0, 1.0)), 1.0);
         }
 
         result *= i.color;

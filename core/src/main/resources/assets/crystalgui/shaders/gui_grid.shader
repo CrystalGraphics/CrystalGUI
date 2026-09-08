@@ -65,7 +65,9 @@ Properties {
 }
 
 struct v2f {
-    vec2 uv;
+    // The quad's parameter, grown by half a pixel when rotated so the edge can be antialiased --
+    // CG_QUAD_EDGE_* in cg_env.glsl. uv is derived from it per fragment.
+    vec2 param;
     vec4 color;
 };
 
@@ -91,8 +93,8 @@ Pass {
     // instead of inventing a lib for it -- which is also what gui_gradient does with its ramp.
 
     void vertex(out v2f o) {
-        gl_Position = cg_ProjMatrix * vec4(CG_QUAD_WORLD_POS, 1.0);
-        o.uv    = CG_QUAD_UV;
+        o.param = CG_QUAD_EDGE_PARAM;
+        gl_Position = cg_ProjMatrix * vec4(CG_QUAD_EDGE_WORLD_POS(o.param), 1.0);
         o.color = CG_QUAD_COLOR;
     }
 
@@ -101,7 +103,8 @@ Pass {
         // uv is 0..1 over the box, so this is the position in CELLS -- the space `fract` and the
         // derivatives below both want. lineWidth likewise becomes a fraction of a cell, which is what
         // keeps a 1px line ONE pixel at any cell size and any uiScale.
-        vec2 uv = i.uv * _BoxSize / cell;
+        vec2 param = mix(QUAD_DATA(CG_INSTANCE_ID).uv0, QUAD_DATA(CG_INSTANCE_ID).uv1, i.param);
+        vec2 uv = param * _BoxSize / cell;
         vec2 lineWidth = clamp(_LineWidth / cell, vec2(0.0), vec2(1.0));
 
         vec2 ddxUv = dFdx(uv);
@@ -149,9 +152,11 @@ Pass {
 
 #ifdef WITH_MASK
         vec2 halfSize = _BoxSize * 0.5;
-        vec2 localPos = (i.uv - 0.5) * _BoxSize;
+        vec2 localPos = (param - 0.5) * _BoxSize;
         float dist = sdf_rounded_box(localPos, halfSize, _CornerRadiusX, _CornerRadiusY);
-        shape *= sdf_coverage(dist);
+        shape *= sdf_coverage(dist, CG_QUAD_EDGE_ROTATED ? CG_QUAD_EDGE_FILTER : 1.0);
+#else
+        shape *= CG_QUAD_EDGE_COVERAGE(i.param);
 #endif
 
         fragColor = c * shape * _LayerOpacity;

@@ -76,7 +76,9 @@ Properties {
 }
 
 struct v2f {
-    vec2 uv;
+    // The quad's parameter, grown by half a pixel when rotated so the edges can be antialiased --
+    // CG_QUAD_EDGE_* in cg_env.glsl. uv is derived from it per fragment.
+    vec2 param;
     vec4 color;
 };
 
@@ -93,13 +95,16 @@ Pass {
     }
 
     void vertex(out v2f o) {
-        gl_Position = cg_ProjMatrix * vec4(CG_QUAD_WORLD_POS, 1.0);
-        o.uv    = CG_QUAD_UV;
+        o.param = CG_QUAD_EDGE_PARAM;
+        gl_Position = cg_ProjMatrix * vec4(CG_QUAD_EDGE_WORLD_POS(o.param), 1.0);
         o.color = CG_QUAD_COLOR;
     }
 
     void fragment(in v2f i, out vec4 fragColor) {
-        float t = 0.5 + dot(i.uv - 0.5, _Axis);
+        // The ramp reads a CLAMPED uv, so the half-pixel pad holds the end colours rather than falling
+        // outside _Window.
+        vec2 uv = CG_QUAD_EDGE_UV(i.param);
+        float t = 0.5 + dot(uv - 0.5, _Axis);
 
         // The unrolled ramp. Before the first stop every fraction is 0 and the colour is stop 0;
         // after the last every fraction is 1 and it is the last stop -- CSS pads with the end colours.
@@ -126,11 +131,17 @@ Pass {
         float shape = step(_Window.x, t) * (1.0 - step(_Window.y, t));
 
 #ifdef WITH_MASK
+        // The SDF is the outline, straight sides included: with the quad grown when rotated it finishes
+        // those too, so the edge coverage below would soften them twice. It reads the UNCLAMPED
+        // parameter, since past the box is exactly what it is there to cut.
         vec2 halfSize = _BoxSize * 0.5;
-        vec2 localPos = (i.uv - 0.5) * _BoxSize;
+        vec2 unclamped = mix(QUAD_DATA(CG_INSTANCE_ID).uv0, QUAD_DATA(CG_INSTANCE_ID).uv1, i.param);
+        vec2 localPos = (unclamped - 0.5) * _BoxSize;
         float dist = sdf_rounded_box(localPos, halfSize, _CornerRadiusX, _CornerRadiusY);
         // All four channels: premultiplied coverage is a multiply of the whole colour.
-        shape *= sdf_coverage(dist);
+        shape *= sdf_coverage(dist, CG_QUAD_EDGE_ROTATED ? CG_QUAD_EDGE_FILTER : 1.0);
+#else
+        shape *= CG_QUAD_EDGE_COVERAGE(i.param);
 #endif
 
         c *= shape * _LayerOpacity;

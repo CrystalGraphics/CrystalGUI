@@ -31,7 +31,9 @@ Properties {
 }
 
 struct v2f {
-    vec2 uv;
+    // The quad's parameter, grown by half a pixel when rotated so the edge can be antialiased --
+    // CG_QUAD_EDGE_* in cg_env.glsl. uv is derived from it per fragment.
+    vec2 param;
     vec4 color;
 };
 
@@ -46,13 +48,16 @@ Pass {
     }
 
     void vertex(out v2f o) {
-        gl_Position = cg_ProjMatrix * vec4(CG_QUAD_WORLD_POS, 1.0);
-        o.uv    = CG_QUAD_UV;
+        o.param = CG_QUAD_EDGE_PARAM;
+        gl_Position = cg_ProjMatrix * vec4(CG_QUAD_EDGE_WORLD_POS(o.param), 1.0);
         o.color = CG_QUAD_COLOR;
     }
 
     void fragment(in v2f i, out vec4 fragColor) {
-        fragColor = texture(_MainTex, i.uv) * i.color;
+        // A layer is a screen-resolution picture, so no texel filter -- only the edge, for a snapshot
+        // drawn rotated.
+        fragColor = texture(_MainTex, CG_QUAD_EDGE_UV(i.param)) * i.color;
+        fragColor *= CG_QUAD_EDGE_COVERAGE(i.param);
         fragColor *= _LayerOpacity;
     }
 }

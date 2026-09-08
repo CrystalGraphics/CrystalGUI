@@ -67,7 +67,9 @@ Properties {
 }
 
 struct v2f {
-    vec2 uv;
+    // The quad's parameter, grown by half a pixel when rotated so the edge can be antialiased --
+    // CG_QUAD_EDGE_* in cg_env.glsl. uv is derived from it per fragment.
+    vec2 param;
     vec4 color;
 };
 
@@ -159,14 +161,18 @@ Pass {
     }
 
     void vertex(out v2f o) {
-        gl_Position = cg_ProjMatrix * vec4(CG_QUAD_WORLD_POS, 1.0);
-        o.uv    = CG_QUAD_UV;
+        o.param = CG_QUAD_EDGE_PARAM;
+        gl_Position = cg_ProjMatrix * vec4(CG_QUAD_EDGE_WORLD_POS(o.param), 1.0);
         o.color = CG_QUAD_COLOR;
     }
 
     void fragment(in v2f i, out vec4 fragColor) {
+        // Unclamped: past the box is exactly what the SDF is there to cut, and the lens taps clamp
+        // for themselves. Rotated, the ramp takes the wider reconstruction filter every other edge does.
+        vec2 uv = mix(QUAD_DATA(CG_INSTANCE_ID).uv0, QUAD_DATA(CG_INSTANCE_ID).uv1, i.param);
+        float ramp = CG_QUAD_EDGE_ROTATED ? CG_QUAD_EDGE_FILTER : 1.0;
         vec2 halfSize = _BoxSize * 0.5;
-        vec2 localPos = (i.uv - 0.5) * _BoxSize;
+        vec2 localPos = (uv - 0.5) * _BoxSize;
         float dist = sdf_rounded_box(localPos, halfSize, _CornerRadiusX, _CornerRadiusY);
         // PIXEL-EXACT COVERAGE, not the shared sdf_coverage ramp. That one is a smoothstep two
         // pixels wide centred on the boundary, so the last pixel row INSIDE an axis-aligned edge is only
@@ -177,7 +183,7 @@ Pass {
         // is the distance in SURFACE pixels along the edge's own gradient, so the ramp is exactly one
         // pixel wide whatever uiScale is: a straight edge that lies on a pixel boundary covers its last
         // row fully, and a rounded corner still gets one pixel of anti-aliasing.
-        float coverage = clamp(0.5 - dist / max(fwidth(dist), 1e-4), 0.0, 1.0);
+        float coverage = clamp(0.5 - dist / (max(fwidth(dist), 1e-4) * ramp), 0.0, 1.0);
 
         // How far inside the bezel this pixel is: 0 at the boundary, 1 where the glass goes flat.
         float bezel = max(1.0, _Bezel);
@@ -220,12 +226,12 @@ Pass {
         // The first version scaled the red and blue taps by 0.985 and 1.015 -- a 3% spread, where the
         // reference's default is 20%. At that size the fringe is invisible at any radius anybody would
         // use, which reads as the feature not being wired up rather than as being too subtle.
-        vec4 cR = cg_lensTap(i.uv + disp * (1.0 + 0.20 * _Chromatic), edge);
-        vec4 cG = cg_lensTap(i.uv + disp * (1.0 + 0.10 * _Chromatic), edge);
-        vec4 cB = cg_lensTap(i.uv + disp, edge);
+        vec4 cR = cg_lensTap(uv + disp * (1.0 + 0.20 * _Chromatic), edge);
+        vec4 cG = cg_lensTap(uv + disp * (1.0 + 0.10 * _Chromatic), edge);
+        vec4 cB = cg_lensTap(uv + disp, edge);
         vec4 c = vec4(cR.r, cG.g, cB.b, 1.0);
 #else
-        vec4 c = cg_lensTap(i.uv + disp, edge);
+        vec4 c = cg_lensTap(uv + disp, edge);
 #endif
 
         // THE BACKDROP IS OPAQUE ONCE UN-PREMULTIPLIED. A capture is transparent wherever nothing
