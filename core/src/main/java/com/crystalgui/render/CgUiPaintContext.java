@@ -42,9 +42,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -1112,21 +1109,21 @@ public final class CgUiPaintContext {
     }
 
     /**
-     * Starts a filled quad with exact-area antialiasing on the edges it marks soft — what a scanline
-     * tessellation submits per band cell. Same material path as {@link #curve()} and
+     * Starts a cell — one span of a scanline tessellation, with exact-area antialiasing on the edges it
+     * marks soft; see {@link CgVectorRenderer.Cell}. Same material path as {@link #curve()} and
      * {@link #triangle()}, so mixing the three costs nothing.
      *
      * <pre>{@code
-     * ctx.filledQuad().points(x0, y0, x1, y1, x2, y2, x3, y3)
-     *         .softEdges(CgVectorRenderer.QUAD_LEFT | CgVectorRenderer.QUAD_RIGHT)
+     * ctx.filledCell().points(x0, y0, x1, y1, x2, y2, x3, y3)
+     *         .softEdges(CgVectorRenderer.CELL_LEFT | CgVectorRenderer.CELL_RIGHT)
      *         .color(argb).submit();
      * }</pre>
      *
      * <p><b>Never call {@code .pose(...)} on the result</b> — same rule as {@link #quad()}.</p>
      */
-    public CgVectorRenderer.Quad filledQuad() {
+    public CgVectorRenderer.Cell filledCell() {
         beginCurvePath();
-        return renderer.filledQuad();
+        return renderer.filledCell();
     }
 
     /**

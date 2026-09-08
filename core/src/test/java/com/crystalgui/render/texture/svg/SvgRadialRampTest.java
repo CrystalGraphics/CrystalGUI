@@ -62,12 +62,12 @@ public class SvgRadialRampTest {
         float[] box = SvgGeometry.boundsOf(node.contours());
         SvgMesh mesh = radialMesh();
 
-        float[] quads = mesh.quads();
+        float[] cells = mesh.cells();
         int worst = 0;
         for (int i = 0; i < mesh.cellCount(); i++) {
             for (int v = 0; v < 4; v++) {
-                float px = quads[i * 8 + v * 2];
-                float py = quads[i * 8 + v * 2 + 1];
+                float px = cells[i * 8 + v * 2];
+                float py = cells[i * 8 + v * 2 + 1];
 
                 float t = (px - mesh.axes()[i * 4]) * mesh.axes()[i * 4 + 2]
                         + (py - mesh.axes()[i * 4 + 1]) * mesh.axes()[i * 4 + 3];

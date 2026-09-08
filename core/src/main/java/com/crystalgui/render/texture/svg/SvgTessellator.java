@@ -78,7 +78,7 @@ final class SvgTessellator {
     private static SvgMesh flat(List<List<float[]>> rings, boolean evenOdd, int argb) {
         SvgTriangulator.Fill mesh = SvgTriangulator.fill(rings, evenOdd, 0f, 0f);
         if (mesh.count() == 0) return SvgMesh.EMPTY;
-        return new SvgMesh(mesh.quads(), null, null, null, mesh.edges(), (argb >>> 24) == 0xFF);
+        return new SvgMesh(mesh.cells(), null, null, null, mesh.edges(), (argb >>> 24) == 0xFF);
     }
 
     /**
@@ -135,10 +135,10 @@ final class SvgTessellator {
         for (int i = 0; i < offsets.length; i++) cuts[i] = originV + offsets[i] / gLength;
 
         SvgTriangulator.Fill mesh = SvgTriangulator.fill(rotated, evenOdd, 0f, 0f, cuts);
-        float[] quads = mesh.quads();
-        if (quads.length == 0) return SvgMesh.EMPTY;
+        float[] cells = mesh.cells();
+        if (cells.length == 0) return SvgMesh.EMPTY;
 
-        int count = quads.length / 8;
+        int count = cells.length / 8;
         int[] colour0 = new int[count];
         int[] colour1 = new int[count];
         float[] axes = new float[count * 4];
@@ -146,8 +146,8 @@ final class SvgTessellator {
         for (int i = 0; i < count; i++) {
             int at = i * 8;
             // A cell's top and bottom are the band's cuts, so they hold the band's v range.
-            float vMin = Math.min(quads[at + 1], quads[at + 5]);
-            float vMax = Math.max(quads[at + 1], quads[at + 5]);
+            float vMin = Math.min(cells[at + 1], cells[at + 5]);
+            float vMax = Math.max(cells[at + 1], cells[at + 5]);
             if (vMax - vMin < 1e-6f) vMax = vMin + 1e-6f;
 
             colour0[i] = SvgColor.withOpacity(
@@ -167,12 +167,12 @@ final class SvgTessellator {
             axes[i * 4 + 3] = uy / span;
         }
 
-        for (int i = 0; i < quads.length; i += 2) {
-            float[] p = unrotate(quads[i], quads[i + 1], ux, uy);
-            quads[i] = p[0];
-            quads[i + 1] = p[1];
+        for (int i = 0; i < cells.length; i += 2) {
+            float[] p = unrotate(cells[i], cells[i + 1], ux, uy);
+            cells[i] = p[0];
+            cells[i + 1] = p[1];
         }
-        return new SvgMesh(quads, colour0, colour1, axes, mesh.edges(),
+        return new SvgMesh(cells, colour0, colour1, axes, mesh.edges(),
                 SvgMesh.allOpaque(colour0, colour1));
     }
 
@@ -218,8 +218,8 @@ final class SvgTessellator {
         // CIRCULAR iso-line? That is geometry, not colour, so it is answered from the shape's extent.
         float step = Math.max(box[2], box[3]) / RADIAL_CELLS_ACROSS;
         SvgTriangulator.Fill mesh = SvgTriangulator.fill(rings, evenOdd, step, step);
-        float[] quads = mesh.quads();
-        if (quads.length == 0) return SvgMesh.EMPTY;
+        float[] cells = mesh.cells();
+        if (cells.length == 0) return SvgMesh.EMPTY;
 
         if (gradient.spread() != SvgGradient.SPREAD_PAD) {
             // `repeat` and `reflect` make the ramp parameter a sawtooth, and the affine fit below is only
@@ -227,10 +227,10 @@ final class SvgTessellator {
             // points that lie on different teeth, which is worse than the flat cell it replaced. Those keep
             // the per-slice path.
             int[] colours = gradientColours(mesh, gradient, box, paint.alpha(), paint.transform());
-            return new SvgMesh(quads, colours, null, null, mesh.edges(), SvgMesh.allOpaque(colours));
+            return new SvgMesh(cells, colours, null, null, mesh.edges(), SvgMesh.allOpaque(colours));
         }
 
-        int count = quads.length / 8;
+        int count = cells.length / 8;
         int[] colour0 = new int[count];
         int[] colour1 = new int[count];
         float[] axes = new float[count * 4];
@@ -246,8 +246,8 @@ final class SvgTessellator {
             float mx = 0f, my = 0f, ms = 0f;
             float[] sx = new float[4], sy = new float[4], ss = new float[4];
             for (int v = 0; v < 4; v++) {
-                sx[v] = quads[at + v * 2];
-                sy[v] = quads[at + v * 2 + 1];
+                sx[v] = cells[at + v * 2];
+                sy[v] = cells[at + v * 2 + 1];
                 ss[v] = parameterAt(gradient, inverse, box, sx[v], sy[v]);
                 mx += sx[v]; my += sy[v]; ms += ss[v];
             }
@@ -303,7 +303,7 @@ final class SvgTessellator {
             axes[i * 4 + 2] = dirX;
             axes[i * 4 + 3] = dirY;
         }
-        return new SvgMesh(quads, colour0, colour1, axes, mesh.edges(),
+        return new SvgMesh(cells, colour0, colour1, axes, mesh.edges(),
                 SvgMesh.allOpaque(colour0, colour1));
     }
 
@@ -319,7 +319,7 @@ final class SvgTessellator {
     private static int[] gradientColours(SvgTriangulator.Fill mesh, SvgGradient gradient, float[] box,
                                          float alpha, SvgTransform toGradient) {
         int[] slice = mesh.slice();
-        float[] quads = mesh.quads();
+        float[] cells = mesh.cells();
         int count = slice.length;
         if (count == 0) return new int[0];
 
@@ -330,8 +330,8 @@ final class SvgTessellator {
         for (int i = 0; i < count; i++) {
             int at = i * 8;
             for (int v = 0; v < 8; v += 2) {
-                sumX[slice[i]] += quads[at + v];
-                sumY[slice[i]] += quads[at + v + 1];
+                sumX[slice[i]] += cells[at + v];
+                sumY[slice[i]] += cells[at + v + 1];
             }
             samples[slice[i]] += 4;
         }

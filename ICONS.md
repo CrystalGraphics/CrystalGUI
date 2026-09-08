@@ -166,11 +166,11 @@ per-pixel, live, from geometry — the same mechanism that keeps graph wires and
 ### It fills too, which removes the one thing §3 held back for MSDF
 
 **"Stroked only" was listed here as E's defining limit, and it is not one.** `CgVectorRenderer` has a fill
-reading of the same record — `triangle()`, and since 2026-09-08 `quad()`, a convex quad with exact-area
+reading of the same record — `triangle()`, and since 2026-09-08 `cell()`, a convex quad with exact-area
 coverage on whichever edges are marked as outline — so a filled interior needs no new GPU path at all, only
 a decomposition on the CPU. `SvgTriangulator` does it as a **scanline trapezoid decomposition**: cut the
 shape into horizontal bands at every vertex `y`, sort the edge crossings in each band, and apply the fill
-rule. One quad per inside span, which knows both of its walls; it was two triangles, and a triangle that
+rule. One cell per inside span, which knows both of its walls; it was two triangles, and a triangle that
 knew one wall claimed pixels near the other at full coverage on every seam row.
 
 That choice over ear clipping is the load-bearing one. Ear clipping triangulates a *single simple polygon*,
@@ -537,7 +537,7 @@ IntelliJ's raster of the same file** (`plan/svg-fix/`). Three things were wrong,
 2. A trapezoid drawn as two triangles: the half that owns the right wall claims every pixel on the seam
    row at full coverage even when that pixel is inside the LEFT wall's ramp, since it does not know the
    left wall exists. A bright row across every band boundary at every fractional scale. Fixed by
-   `CgVectorRenderer.Quad` — one instance per cell, all four edges known, exact area on the outline ones,
+   `CgVectorRenderer.Cell` — one instance per cell, all four edges known, exact area on the outline ones,
    half-open pixel-centre ownership on the seams.
 3. And the one no single-owner scheme can fix: a cell thinner than a pixel. At 20 device px a corner arc
    is eight cells inside two pixel rows and the circle's cells are a quarter of a pixel tall. Whichever
@@ -546,7 +546,7 @@ IntelliJ's raster of the same file** (`plan/svg-fix/`). Three things were wrong,
    make an icon read: corners and the small circle.
 
 The third is why `SvgRasterCache` exists. Cells are drawn with **every** edge as an exact area (a
-Sutherland–Hodgman clip of the unit pixel, `stroke.glsl`'s `_quad_exact_area`) through
+Sutherland–Hodgman clip of the unit pixel, `stroke.glsl`'s `_cell_exact_area`) through
 `gui_curve_accumulate.shader` — `Blend ONE ONE`, premultiplied — into an RGBA16F atlas, where the areas
 sum to the shape's coverage exactly. A flat fill accumulates straight-alpha white — `(1, 1, 1, area)`,
 `gui_curve_coverage.shader` — so the frame composites it through the ordinary box-model material with the

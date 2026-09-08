@@ -48,15 +48,15 @@ public class SvgSilhouetteTest {
     }
 
     /**
-     * The mask travels from the tessellator into {@code CgVectorRenderer.Quad#softEdges} untranslated,
+     * The mask travels from the tessellator into {@code CgVectorRenderer.Cell#softEdges} untranslated,
      * and the tessellator may not import the renderer to say so — this is where the two are held equal.
      */
     @Test
     public void theEdgeBitsAreTheRenderersEdgeBits() {
-        assertEquals(CgVectorRenderer.QUAD_TOP, TOP);
-        assertEquals(CgVectorRenderer.QUAD_RIGHT, RIGHT);
-        assertEquals(CgVectorRenderer.QUAD_BOTTOM, BOTTOM);
-        assertEquals(CgVectorRenderer.QUAD_LEFT, LEFT);
+        assertEquals(CgVectorRenderer.CELL_TOP, TOP);
+        assertEquals(CgVectorRenderer.CELL_RIGHT, RIGHT);
+        assertEquals(CgVectorRenderer.CELL_BOTTOM, BOTTOM);
+        assertEquals(CgVectorRenderer.CELL_LEFT, LEFT);
     }
 
     @Test
@@ -67,7 +67,7 @@ public class SvgSilhouetteTest {
 
     private static float[] cell(SvgTriangulator.Fill fill, int index) {
         float[] out = new float[8];
-        System.arraycopy(fill.quads(), index * 8, out, 0, 8);
+        System.arraycopy(fill.cells(), index * 8, out, 0, 8);
         return out;
     }
 }
