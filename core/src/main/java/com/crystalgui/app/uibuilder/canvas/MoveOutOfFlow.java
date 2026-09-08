@@ -223,14 +223,21 @@ public final class MoveOutOfFlow extends UIElement {
         // Half the stroke, so the coordinate stays the guide's CENTRE at any zoom -- which is also what
         // makes it agree with an edge it aligned to on the far side of the canvas, where there is no
         // outline to match and the true line is all there is.
+        // A STROKE, so the line is smooth wherever the zoom puts it. Centring a fill on a coordinate is
+        // exact only when that coordinate is a whole pixel, and on a canvas that pans and zooms it never
+        // is: the guide's own centring made the ragged edge worse, not better. The stroke path takes the
+        // centre line directly and computes coverage from it.
         float half = GUIDE_THICKNESS * 0.5f;
         for (Snap.Guide guide : guides) {
+            float at = guide.at() * zoom;
+            float from = guide.from() * zoom;
+            float to = Math.max(from + 1f, guide.to() * zoom);
             if (guide.vertical()) {
-                paint.fillRect(area[0] + guide.at() * zoom - half, area[1] + guide.from() * zoom,
-                        GUIDE_THICKNESS, Math.max(1f, (guide.to() - guide.from()) * zoom), colour);
+                paint.curve().line(area[0] + at, area[1] + from, area[0] + at, area[1] + to)
+                        .width(half).color(colour).submit();
             } else {
-                paint.fillRect(area[0] + guide.from() * zoom, area[1] + guide.at() * zoom - half,
-                        Math.max(1f, (guide.to() - guide.from()) * zoom), GUIDE_THICKNESS, colour);
+                paint.curve().line(area[0] + from, area[1] + at, area[0] + to, area[1] + at)
+                        .width(half).color(colour).submit();
             }
         }
     }
