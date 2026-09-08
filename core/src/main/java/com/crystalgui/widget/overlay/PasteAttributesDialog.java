@@ -83,11 +83,13 @@ public final class PasteAttributesDialog {
      * Opens the window on the document {@code from} belongs to.
      *
      * @param onApply given the chosen subset, never the whole set unless everything is ticked
+     * @return the window it opened, or null when there was nothing to ask about
      */
-    public static void open(@Nullable UIElement from, AttributeSet copied, String target,
-                            Consumer<AttributeSet> onApply) {
+    @Nullable
+    public static Dialog open(@Nullable UIElement from, AttributeSet copied, String target,
+                              Consumer<AttributeSet> onApply) {
         UIDocument window = from == null ? null : from.document();
-        if (window == null || copied.isEmpty()) return;
+        if (window == null || copied.isEmpty()) return null;
 
         Dialog dialog = new Dialog("Paste Attributes");
         dialog.addClass(DIALOG_CLASS);
@@ -185,6 +187,7 @@ public final class PasteAttributesDialog {
         // descendant, which here is the first group's tick -- so the window opened with a checkbox
         // outlined and Space would have cleared a whole group. Apply is what the person came to do.
         window.focus().requestFocus(apply);
+        return dialog;
     }
 
     /** One header line: a dimmed key and the name it is about. */

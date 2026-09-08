@@ -159,8 +159,17 @@ top-layer {
  * so that dock COMMANDS have something to resolve against, both are pane-sized by definition, and a
  * window activation focuses programmatically, which rings. The real repair is that focus should never
  * have stopped on them -- see WindowFrame.focusDelegate -- and this stays regardless, because an empty
- * dock with nothing focusable inside it still legitimately ends up holding focus itself. */
+ * dock with nothing focusable inside it still legitimately ends up holding focus itself.
+ *
+ * `dialog` is `window` again, one for one, and it was missed because a dialog does not look pane-sized
+ * until you notice it is a window with less furniture. It is focusable so focus has somewhere to land
+ * when its content has nowhere to put it, and `Dialog.show` focuses it PROGRAMMATICALLY on every open
+ * -- which rings by definition. So every dialog drew a 1px ring round its whole self from the moment it
+ * appeared, and that ring is what the close control's hover fill was terminating against: the reports
+ * were about the focus ring the entire time, not about the dialog's own edge. Which dialog you are in
+ * is not a question anybody has: there is one, and it is in front of everything. */
 texteditor:focus-visible,
+dialog:focus-visible,
 window:focus-visible,
 viewcontainer:focus-visible,
 dockarea:focus-visible,

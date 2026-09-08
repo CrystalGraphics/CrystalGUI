@@ -467,18 +467,21 @@ public class DialogTest extends UiDocumentTestBase {
      * title fitting by a fraction of a pixel truncated anyway and silently lost a real character to an
      * ellipsis it never needed. Asserting only that long titles truncate would have called that a pass.</p>
      *
-     * <p>The label's width is now the leftover — bar content minus the close button — so it does not
+     * <p>The label's width is the leftover — whatever the close button does not take — so it does not
      * depend on its own glyphs at all. That is the web's canonical `flex: 1 1 0; min-width: 0` recipe.</p>
+     *
+     * <p>Asserted as GEOMETRY rather than as bar-minus-button: the button carries a margin now, to keep
+     * its hover fill off the dialog's ring, and an arithmetic restatement of the layout goes stale every
+     * time one of its terms changes. Where the label ends and the button begins is the actual claim.</p>
      */
     @Test
     public void shortTitlesAreUntouchedAndLongOnesEllipsize() {
         Dialog d = withUserAgentSheet("Panel");
         UIText label = d.getTitleLabel();
 
-        float barContent = d.getTitleBar().box().contentBoxWidth();
-        float closeWidth = d.getCloseButton().box().width();
+        float leftover = d.getCloseButton().box().x() - label.box().x();
         assertEquals("the label must be exactly what is left of the bar",
-                barContent - closeWidth, label.box().width(), 0.5f);
+                leftover, label.box().width(), 0.5f);
         assertEquals("a title that fits must not lose a character to an ellipsis",
                 "Panel", label.displayedText());
 
@@ -491,7 +494,7 @@ public class DialogTest extends UiDocumentTestBase {
         assertTrue("...and must end in an ellipsis, was '" + shown + "'",
                 shown.endsWith("…") || shown.endsWith("..."));
         assertTrue("the box itself never grows to fit the text",
-                label.box().width() <= barContent - closeWidth + 0.5f);
+                label.box().width() <= d.getCloseButton().box().x() - label.box().x() + 0.5f);
     }
 
     /** The ellipsis is a default, not a policy — a caller who would rather see the whole title can turn
