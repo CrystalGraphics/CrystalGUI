@@ -1,5 +1,6 @@
 package com.crystalgui.widget.scroll;
 
+import com.crystalgui.ui.input.keymap.KeyStroke;
 import com.crystalgui.ui.dom.*;
 import dev.vfyjxf.taffy.style.AlignContent;
 import dev.vfyjxf.taffy.style.AlignItems;
@@ -291,12 +292,19 @@ public class ScrollerView extends UIElement {
                     || CgModifiers.hasSuper(held)) {
                 return;
             }
+            var adapter = CgPlatform.input();
+            int modifiers = adapter == null ? 0 : adapter.getCurrentModifiers();
+
+            // MOD+WHEEL IS NOT OURS. Input only consults the keymap for a wheel nothing default-prevented,
+            // so consuming this is what stopped `Mod+WheelUp` reaching editor.zoomIn -- the scroller took
+            // the gesture and the binding never fired. Plain and Shift+wheel stay ours.
+            if (KeyStroke.hasMod(modifiers)) return;
+
             float delta = event.getScroll() * WHEEL_PIXELS_PER_NOTCH;
 
             // Shift+wheel scrolls horizontally — the convention everywhere, and the only way to reach
             // a horizontal overflow with a plain vertical wheel.
-            var adapter = CgPlatform.input();
-            boolean horizontal = adapter != null && CgModifiers.hasShift(adapter.getCurrentModifiers());
+            boolean horizontal = CgModifiers.hasShift(modifiers);
 
             // ...and on a view that can ONLY scroll sideways, the plain wheel drives that axis too.
             // Otherwise a horizontal-only strip (a tab bar, a toolbar) simply ignores the wheel and

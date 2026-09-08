@@ -296,4 +296,15 @@ public record KeyStroke(int key, int modifiers) {
     static final int MOD = System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("mac")
             ? CgModifiers.SUPER
             : CgModifiers.CTRL;
+
+    /**
+     * Whether {@code modifiers} carries the accelerator key {@code Mod+} means — Cmd on macOS, Ctrl
+     * everywhere else.
+     *
+     * <p>For a widget deciding whether a gesture is its own or a shortcut's. A scroller asks this to let
+     * {@code Mod+wheel} fall through to the keymap while it keeps the plain and Shift wheel.</p>
+     */
+    public static boolean hasMod(int modifiers) {
+        return (modifiers & MOD) != 0;
+    }
 }

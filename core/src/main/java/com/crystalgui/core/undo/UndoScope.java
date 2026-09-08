@@ -1,5 +1,6 @@
 package com.crystalgui.core.undo;
 
+import com.crystalgui.core.data.CommandTarget;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.core.data.DataKey;
@@ -38,11 +39,17 @@ public interface UndoScope {
         return scope == null ? null : scope.undoStack();
     }
 
-    /** @see #nearest */
+    /**
+     * @see #nearest
+     *
+     * <p>Walks {@code commandParent()} rather than the light parent, so a scope is still found from
+     * inside a widget's own shadow tree — see {@code EditorCommands.nearest}, which had the same walk
+     * and lost Mod+wheel to it.</p>
+     */
     @Nullable
     static UndoScope nearestScope(@Nullable UIElement from) {
-        for (UIElement element = from; element != null; element = element.parentElement()) {
-            if (element instanceof UndoScope scope) return scope;
+        for (CommandTarget at = from; at != null; at = at.commandParent()) {
+            if (at instanceof UndoScope scope) return scope;
         }
         return null;
     }
