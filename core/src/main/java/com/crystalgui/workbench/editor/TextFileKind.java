@@ -73,7 +73,6 @@ public final class TextFileKind {
                     }
                     TextDocumentModel model = (TextDocumentModel) document.model();
                     TextEditor created = new TextEditor("");
-                    created.addClass(Workbench.FILE_EDITOR_CLASS);
                     // A VIEW OF THE MODEL'S BUFFER, never a copy of its text: two split panes are two
                     // editors over one buffer, so a keystroke in either is one edit on one document with
                     // one undo history. Copying is what made a second pane a second document.

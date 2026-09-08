@@ -15,6 +15,7 @@ import com.crystalgui.document.DocumentKinds;
 import com.crystalgui.document.DocumentReference;
 import com.crystalgui.document.DocumentState;
 import com.crystalgui.document.EditorInput;
+import com.crystalgui.workbench.Workbench;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Backup;
 import com.crystalgui.fs.client.Workspace;
@@ -442,6 +443,12 @@ public final class EditorService implements Disposable {
             Document document = document();
             if (document == null || !document.kind().hasEditor()) return null;
             editor = document.kind().createEditor(document);
+            // WHAT A VIEW IN THE EDITOR REGION IS, applied here because it is true of EVERY kind's view
+            // and not of the text one that happened to declare it. A tab's content sits flush against the
+            // dock group, so the bottom two corners of the document ARE the island's -- and a square view
+            // squares the island off under it. Only `texteditor` said so, so a .cgui and a shadergraph
+            // came out pointed against a rounded panel.
+            editor.view().addClass(Workbench.FILE_EDITOR_CLASS);
             // THE OPENING'S, applied to the VIEW. A read-only opening and an editable one are two tabs
             // over ONE document -- which is what lets a diff's left pane sit beside the live file --
             // so the refusal cannot live on the model without taking the other tab down with it.

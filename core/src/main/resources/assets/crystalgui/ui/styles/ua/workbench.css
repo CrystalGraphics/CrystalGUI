@@ -1134,6 +1134,9 @@ shadergrapheditor {
     width: 100%;
     height: 0;
     flex-grow: 1;
+    /* Its own surface, for the corner — see `builderpane` in ua/uibuilder.css. `--graph-canvas` is the
+     * token `graphview` inside it already paints, so the two cannot drift. */
+    background-color: var(--graph-canvas, #202020);
 }
 
 shadergrapheditor .__shader-content__ {
@@ -1699,34 +1702,48 @@ workbench .__activity-item__.__panel-focused__:hover {
     color: var(--fg-secondary, #888888);
 }
 
+/* THE ISLAND'S BOTTOM CORNERS BELONG TO WHATEVER IS IN FRONT, whichever kind that is. A tab's content
+ * sits flush against the group, so the two bottom corners of the document ARE the panel's — and a square
+ * view squares the island off beneath it. EditorService writes this class on every view it builds; it
+ * used to be declared by `texteditor` alone, so a .cgui canvas and a shader graph came out pointed
+ * against a rounded panel while the text editor did not.
+ *
+ * ONLY THE BOTTOM TWO. The tab strip is above, so the top corners belong to it and not to us.
+ *
+ * THE CLIP IS WHAT MAKES THE RADIUS BITE, and leaving it out is why this first shipped still pointy. A
+ * radius alone rounds the element's OWN FILL — which is all the text editor ever needed, since it paints
+ * the paper. `shadergrapheditor` and the .cgui canvas paint nothing at all: the fill under those corners
+ * belongs to a CHILD, so there was nothing for the radius to round and the child squared it off exactly
+ * as before. Clipping promotes the element to OverflowClip.MASK, which masks the whole SUBTREE to the
+ * rounded box — so the corner is the view's regardless of which descendant drew the pixels there.
+ *
+ * The layer pass is free at this size: 799 frames against a 785-frame baseline over ten seconds of
+ * cgui-dock, i.e. inside the run-to-run noise, and in the wrong direction.
+ *
+ * A MASK'S DEFAULT MASK IS THE ELEMENT'S OWN BACKGROUND, which is the trap to know about before giving
+ * one of these a transparent surface. Four of the five shipped schemes painted a deliberately transparent
+ * paper, so the mask was zero everywhere and would have multiplied the whole document away; the guard is
+ * in UIElement.maskFill, where a mask that reveals nothing is never what a clip meant. */
+.__file-editor__ {
+    overflow: hidden;
+    border-radius: 0 0 var(--radius-panel, 0px) var(--radius-panel, 0px);
+}
+
+/* WHAT IS THIS WIDGET'S ALONE, and both lines are load-bearing against the class rule above.
+ *
+ * `overflow: auto` is RESTATED, at a specificity that beats it. The editor scrolls itself, and a bare
+ * `texteditor { overflow: auto }` is one TYPE against that rule's one CLASS — so the clip above would win
+ * and silently take the scrollbars off every open file. It still takes the mask path, since `auto` clips
+ * just as `hidden` does; the two differ in whether you can scroll, not in what is drawn.
+ *
+ * The fill idiom is the other: a TextEditor scrolls inside its own text viewport and so contributes
+ * nothing to its own content size. Dropped into a pane with nothing sizing it, it lays out ZERO pixels
+ * tall and paints a blank pane while holding the file perfectly well. Every other view sizes itself. */
 texteditor.__file-editor__ {
     width: 100%;
     height: 0;
     flex-grow: 1;
-
-    /* ...AND ITS BOTTOM CORNERS ARE THE ISLAND'S, now that `tabview .__pane__` no longer insets it.
-     * A tab's content sits flush against the group, so the two bottom corners of the document ARE the
-     * two bottom corners of the panel — a square editor there squares off the island beneath it. The
-     * inset used to hide this: 3px of island showed around the paper, which is what read as a black
-     * border, and the curve was still visible in it.
-     *
-     * ONLY THE BOTTOM TWO. The strip is above, so the top corners belong to it and not to us.
-     *
-     * THIS IS THE FIRST ROUNDED CLIPPER WITH A TRANSPARENT SURFACE, and it found a latent hole in the
-     * engine on the way in. A radius on a clipping element promotes it to OverflowClip.MASK, whose
-     * default mask is the element's own BACKGROUND — and four of the five shipped schemes then painted a
-     * deliberately transparent paper, so the mask was zero everywhere and would have multiplied the whole
-     * document away. Fixed where it belongs, in UIElement.maskFill: a mask that reveals nothing is never
-     * what a clip meant. Nothing is needed here but the radius.
-     *
-     * ALL FIVE NOW PAINT AN OPAQUE PAPER, and the guard stays regardless — it is about what a clip means,
-     * not about which colours happen to ship. The two that were transparent were so in order to avoid
-     * squaring off the island, which THIS radius is what removed: the corners are the editor's own now,
-     * so a fill is drawn inside them. See dark-plus.css for the other half of why they changed.
-     *
-     * The layer pass is free at this size — 799 frames against a 785-frame baseline over ten seconds
-     * of cgui-dock, i.e. inside the run-to-run noise, and in the wrong direction. */
-    border-radius: 0 0 var(--radius-panel, 0px) var(--radius-panel, 0px);
+    overflow: auto;
 }
 
 /* A PANEL THAT FOLLOWS SOMETHING, rather than being it — the Inspector, which shows whichever shader
