@@ -87,27 +87,14 @@ Pass {
         // THE PIXEL CENTRE COMES FROM gl_FragCoord, NOT FROM THE INTERPOLATED VARYING.
         //
         // i.posXy is interpolated across THIS INSTANCE'S hull quad, and every instance derives its own
-        // hull from its own three points (CG_CURVE_WORLD_POS). So two triangles sharing a seam edge
-        // reconstruct the same pixel's position through two different interpolations, and the values
-        // disagree by roughly 1e-5 of the hull's extent -- about 0.008px on an 800px-wide icon.
-        //
-        // A tessellated fill decides seam ownership by nudging the two sides of a shared edge in
-        // opposite directions (SvgDocument.FILL_OFFSET, ~0.005px). That nudge is SMALLER than the
-        // disagreement, so it cannot arbitrate: near a seam both instances may claim a pixel, or
-        // neither. And a horizontal seam is axis-aligned, so every pixel in the row has the same
-        // distance to it and the whole row flips together -- a full-width line, present at some zooms
-        // and absent either side of them. Off-axis seams flip pixel by pixel, which is the same bug
-        // wearing sparse dashes.
-        //
-        // gl_FragCoord is exact and identical for every instance covering the pixel, so both sides
-        // evaluate at the SAME point and only their own SDF rounding (~1e-5px) separates them -- three
-        // orders below the offset instead of level with it.
+        // hull from its own points (CG_CURVE_WORLD_POS). So two cells sharing a seam reconstruct the
+        // same pixel's position through two different interpolations, and the values disagree by
+        // roughly 1e-5 of the hull's extent. A tessellated fill decides seam ownership at the pixel
+        // centre, half-open, and that only partitions if both cells evaluate the SAME point.
+        // gl_FragCoord is exact and identical for every instance covering the pixel.
         //
         // MEASURED, on the GPU, at a placement whose seam falls on a row of pixel centres: 25 one-pixel
-        // artefact rows on the varying, 0 taking the point from here, with everything else held. A CPU
-        // replay of this shader using exact pixel centres never reproduced the artefact at all, which is
-        // what identified the varying as the input that differed. The offset in SvgDocument.FILL_OFFSET
-        // is the other half and its size was measured against this; see that constant.
+        // artefact rows on the varying, 0 taking the point from here, with everything else held.
         //
         // THE FLIP IS REQUIRED, NOT COSMETIC. beginFrame sets ortho(0, w, h, 0) -- y down, origin
         // top-left, one unit per pixel -- so the control points are already in window pixels, while

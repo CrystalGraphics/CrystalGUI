@@ -1027,6 +1027,10 @@ public final class CgUiPaintContext {
 
     public void bindTexture(CgTexture2D texture) {
         if (texture == currentTexture) return;
+        // Whatever is queued was submitted against the texture bound NOW: switching first would draw it
+        // with this one. A cached icon relies on this -- it submits its quad and leaves the flush to
+        // whoever changes the texture next, so a run of icons from the atlas is one draw.
+        renderer.flushQuads();
         texture.bind(0);
         currentTexture = texture;
     }

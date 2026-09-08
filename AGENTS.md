@@ -846,9 +846,23 @@ registration call. This is what `background: asset("crystalgui:ore", "button")` 
 
 `render/texture/svg/` is a **full SVG renderer** — scanner, path grammar, transforms, colour, inheritance,
 scanline fills with holes cut, and real linear/radial gradients — parsing an `.svg` once into a cached list
-of draw ops and submitting them through `ctx.curve()`/`ctx.triangle()`. **No atlas, no bake, no texture, one
-instanced draw call for every icon on screen.** Full account in `ICONS.md`, including the nine things it
-deliberately does not implement and why none of them matters for icons.
+of draw ops: strokes through `ctx.curve()`, fills as one `ctx.filledQuad()` per scanline cell with
+exact-area coverage on the edges that are on the outline. Full account in `ICONS.md`, including the nine
+things it deliberately does not implement and why none of them matters for icons.
+
+> **A fill at icon size is rasterised once and drawn from a texture** — `SvgRasterCache`, for any
+> document at most 128 device px tall under an axis-aligned pose at a whole-pixel origin. A cell thinner
+> than a pixel cannot be composited on its own: two cells each covering half a pixel blend to three
+> quarters, so a direct draw has to let one cell claim the whole pixel and guess the rest of its boundary,
+> which is wrong wherever the outline bends inside the pixel — every corner of a 16-unit icon at 10 to
+> 14 px. Accumulating the cells' exact areas additively into an RGBA16F atlas is exact, and the raster is
+> coverage rather than colour, so one serves every tint. Measured on `nodes/java/package` at 8/10/12/14/16
+> logical px on a 2x display: within 0.7 levels of a 256-sample CPU raster, which is where IntelliJ's own
+> raster of the file sits. Strokes are cached too (max-blended), so a cached icon is textured quads only.
+> Larger draws take the direct path, where a cell is bigger than a pixel. Measured on the 48-icon grid:
+> 2.1 ms/frame cached against 4.2 ms drawing the cells directly, and no curve instances per frame at all
+> against 6,500. The testbed is the strip at the top of `--mode=cgui-svg-icon`; `plan/svg-fix/truth.py`
+> scores a capture; `-Dcrystalgui.svg.raster=false` draws everything direct for comparison.
 
 > **Two seams here are easy to get backwards, and both exist for the same reason: a document is shared.**
 > `currentColor` is left unresolved in the cached ops and bound at draw time, so one parsed icon backs a
@@ -1289,6 +1303,9 @@ com.crystalgui.lifecycle       CgUiLifecycle — the ONE CgLifecycleListener Cry
                                CrystalGraphics; drives paint-context teardown + cache invalidation
 
 com.crystalgui.render          CgUiPaintContext (singleton), CgUiRenderer, ScissorStack,
+                               SvgRasterCache — icon fills rasterised once by additive accumulation into an
+                               RGBA16F atlas and drawn as a tinted quad; sits beside the paint context and
+                               reaches it through package-private members, as the backdrop does.
                                CgUiBackdrop — the backdrop primitive under backdrop-filter: capture the region
                                behind an element, blur it (separable Gaussian at 1/4 res), hand back the
                                sharp and blurred textures with UVs. Sits BESIDE the paint context and
@@ -1576,7 +1593,8 @@ three-phase event types are in `ui/event/` — there is no `core/event/` package
 | `shaders/gui_quad.shader` | Default material bound by `beginFrame`. |
 | `shaders/gui_rounded_rect.shader` | SDF rounded rects. |
 | `shaders/gui_layer_blit.shader` | Visual-layer FBO composite. |
-| `shaders/gui_curve.shader` | Bézier strokes, via `ctx.curve()`. Declares `#pragma cg_use curve`, not `quad`. |
+| `shaders/gui_curve.shader` | Bézier strokes, via `ctx.curve()`; filled triangles and quads share it. Declares `#pragma cg_use curve`, not `quad`. |
+| `shaders/gui_curve_coverage.shader`, `gui_curve_coverage_max.shader`, `gui_curve_accumulate.shader` | `gui_curve.shader` with the blend `SvgRasterCache` needs: cells **summed** into alpha as straight-alpha white coverage (`Blend ONE ZERO, ONE ONE`), stroke segments **maxed** (`BlendEquation MAX` — segments overlap at joints), and a fill with its own colours summed premultiplied (`Blend ONE ONE`). A Pass's `RenderState` cannot vary per keyword, hence three files. |
 | `shaders/gui_gradient.shader` | A whole `linear-gradient()` in one draw: eight premultiplied stops as properties, the unrolled ramp per fragment along `_Axis` (CSS's gradient line), a `_Window` of *t* so a longer gradient's extra draws never write a fragment twice, `WITH_MASK` for the rounded-box SDF, and half a level of `hash12` dither as the LAST thing before the target quantises. `Blend ONE ONE_MINUS_SRC_ALPHA` — premultiplied out, like the layer blit and unlike `gui_quad`. |
 | `shaders/gui_downsample.shader` | The box prefilter behind `backdrop-filter`: reduces the captured sub-rect 2x or 4x before it is blurred (four bilinear taps cover the block behind each output texel). Without it the Gaussian read a full-resolution source at a stride and was a comb — text came through as vertical streaks. |
 | `shaders/gui_blur.shader` | One axis of the separable Gaussian behind `backdrop-filter`, **kernel derived from sigma**: taps one source texel apart, `ceil(3σ)` of them per side, weights by the incremental recurrence and renormalised. `CgUiBackdrop` picks the working scale (1/2/4) from σ — Skia's scale-then-blur — so the loop stays short. **Helpers go ABOVE `void vertex`** or they never reach the fragment stage. |

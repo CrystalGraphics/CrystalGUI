@@ -138,18 +138,14 @@ public class TriangulatorEquivalenceTest {
     private static void assertIdentical(String what, List<List<float[]>> rings, boolean evenOdd,
                                         float stepX, float stepY, float[] cuts) {
         SvgTriangulator.Fill expected = ReferenceTriangulator.fill(rings, evenOdd, stepX, stepY, cuts);
-        SvgTriangulator.Fill actual = SvgTriangulator.fill(rings, evenOdd, stepX, stepY, cuts);
+        // The sweep alone: marking horizontal silhouettes splits cells, which the reference predates.
+        SvgTriangulator.Fill actual = SvgTriangulator.cells(rings, evenOdd, stepX, stepY, cuts);
 
-        assertEquals(what + ": triangle count",
-                expected.triangles().length / 6, actual.triangles().length / 6);
+        assertEquals(what + ": cell count", expected.count(), actual.count());
         // Zero delta: this is an identity claim, not a tolerance one.
-        assertArrayEquals(what + ": vertices", expected.triangles(), actual.triangles(), 0f);
+        assertArrayEquals(what + ": vertices", expected.quads(), actual.quads(), 0f);
         assertArrayEquals(what + ": slice tags", expected.slice(), actual.slice());
-        assertEquals(what + ": half count", expected.upper().length, actual.upper().length);
-        for (int i = 0; i < expected.upper().length; i++) {
-            assertEquals(what + ": upper/lower half of triangle " + i,
-                    expected.upper()[i], actual.upper()[i]);
-        }
+        assertArrayEquals(what + ": walls", expected.edges(), actual.edges());
     }
 
     private static List<Path> shippedIcons() throws IOException {

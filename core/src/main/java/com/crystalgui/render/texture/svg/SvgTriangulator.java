@@ -1,7 +1,10 @@
 package com.crystalgui.render.texture.svg;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Turns a set of closed contours into triangles, so a filled shape can be drawn.
@@ -15,7 +18,19 @@ import java.util.List;
  *
  * <p>So: slice the shape into horizontal bands at every vertex {@code y}, and within each band find where
  * the edges cross, sort those crossings, and apply the fill rule to decide which spans are inside. Each
- * inside span becomes a trapezoid — two triangles.</p>
+ * inside span becomes a trapezoid — ONE quad, drawn as one instance that knows all four of its edges.</p>
+ *
+ * <h3>One quad per cell, not two triangles</h3>
+ *
+ * <p>A cell's two walls are contour edges and get antialiased; its top and bottom are cuts shared with
+ * the bands beside it and must stay a hard step. Split on its diagonal, each triangle knew one wall, and a
+ * pixel on a cut within reach of the other wall was claimed at full coverage by the half that owned the
+ * far one — a bright row across every band boundary, at every fractional scale. The quad reading of
+ * {@code CgVectorRenderer} takes all four corners, so there is no half that does not know a wall.</p>
+ *
+ * <p>Which edges are on the outline is decided here, once: the walls always are; a top or bottom is
+ * only where the shape does not continue past it, which {@link Silhouettes} works out from the cells on
+ * the other side of each cut — splitting a cell where the answer changes along its edge.</p>
  *
  * <p><b>This is exact, not an approximation.</b> The tempting objection is that horizontal bands must
  * stair-step a diagonal edge. They do not, because the bands are cut at <em>every</em> vertex: no vertex
@@ -66,16 +81,16 @@ import java.util.List;
  * intersection strictly interior to both edges lies at a single {@code y}, which must be strictly inside
  * both edges' {@code y} spans — so a pair whose spans do not overlap could not have contributed a crossing
  * to begin with, and skipping it changes nothing. The same holds for the box reject. This rewrite is
- * therefore a pure performance change: it emits <b>the same triangles, in the same order, bit for bit</b>,
+ * therefore a pure performance change: it emits <b>the same cells, in the same order, bit for bit</b>,
  * which is the property to check first if it is ever suspected of a visual regression.</p>
  *
  * <h3>Flat arrays, and why they are not premature</h3>
  *
- * <p>Edges and output triangles are flat primitive arrays rather than {@code List<float[]>}. A moderately
- * complex icon reaches tens of thousands of triangles, and the list form costs a {@code float[6]}, a boxed
- * {@code Integer} and a boxed {@code Boolean} for each of them — allocation that outweighs the arithmetic
- * it accompanies. The parallel-array note on {@link #sortByX} already made this argument for the innermost
- * loop; this is the same argument applied to the two structures around it.</p>
+ * <p>Edges and output cells are flat primitive arrays rather than {@code List<float[]>}. A moderately
+ * complex icon reaches tens of thousands of cells, and the list form costs a {@code float[8]} and a boxed
+ * {@code Integer} for each of them — allocation that outweighs the arithmetic it accompanies. The
+ * parallel-array note on {@link #sortByX} already made this argument for the innermost loop; this is the
+ * same argument applied to the two structures around it.</p>
  *
  * <h3>This class cannot profile itself</h3>
  *
@@ -153,66 +168,52 @@ public final class SvgTriangulator {
     private static final int MAX_INTERSECTION_EDGES = 1200;
 
     /**
+     * Edge bits of {@link Fill#edges}: the cell's top ({@code p0->p1}), right, bottom and left edges.
+     * The same values as {@code CgVectorRenderer.QUAD_*}, which the draw hands them to untranslated;
+     * this class runs headless and cannot name that type, so {@code SvgSilhouetteTest} holds them equal.
+     */
+    public static final int TOP = 1, RIGHT = 2, BOTTOM = 4, LEFT = 8;
+
+    /**
      * Fills a set of contours.
      *
      * <p>Every contour is implicitly closed, whether or not the path said {@code Z} — that is SVG's own
      * rule for filling, and it is why an unclosed subpath still paints a solid shape.</p>
      *
      * @param evenOdd {@code true} for {@code fill-rule: evenodd}, {@code false} for {@code nonzero}
-     * @return {@code x,y} triples — six floats per triangle; empty for anything with no area
+     * @return eight floats per cell — see {@link Fill#quads}; empty for anything with no area
      */
     public static float[] fill(List<List<float[]>> contours, boolean evenOdd) {
-        return fill(contours, evenOdd, 0f, 0f).triangles();
+        return fill(contours, evenOdd, 0f, 0f).quads();
     }
 
     /**
-     * A filled mesh, with each triangle tagged by the trapezoid slice it came from.
+     * A filled mesh: one quad per cell, each knowing which of its edges are on the outline.
      *
-     * <p>The tag exists so a caller can colour a gradient <b>per slice</b>. Colouring per triangle looks
-     * identical and is not: the two halves of a slice are split along a diagonal, so their centroids sit on
-     * opposite sides of it and pick up different colours. That stays invisible until something overdraws
-     * the shared diagonal — which the draw does, by a half pixel, to hide the seams between slices — and
-     * then it is a diagonal hatch across the whole shape, worst exactly where the gradient is steepest.</p>
-     *
-     * <p>A tag rather than "assume consecutive pairs", because a slice at a tip emits only <b>one</b>
-     * triangle; see the degeneracy note in {@link #fill(List, boolean, float, float)}.</p>
-     *
-     * @param slice {@code slice[i]} is the slice index of the triangle at {@code triangles[i * 6]}
-     * @param upper {@code true} when that triangle is the <b>upper</b> half of its trapezoid — the one
-     *              touching the band's top edge. The lower half touches the bottom edge, and therefore the
-     *              top edge of the band below. That alternation is what lets a caller give the two sides of
-     *              every shared edge opposite sub-pixel offsets and get an exact coverage partition; see
-     *              {@code SvgDocument.drawFill}
+     * @param quads eight floats per cell — {@code x0,y0} top-left, {@code x1,y1} top-right, {@code x2,y2}
+     *              bottom-right, {@code x3,y3} bottom-left, in the space the contours came in. A cell at
+     *              a tip has a collapsed top or bottom, which is legal: a zero-length edge constrains
+     *              nothing
+     * @param slice {@code slice[i]} is the index of the trapezoid slice cell {@code i} came from, so a
+     *              caller colouring per slice gives every piece of a split cell the same colour
+     * @param edges {@code edges[i]} is a mask of {@link #TOP}, {@link #RIGHT}, {@link #BOTTOM},
+     *              {@link #LEFT} — the edges of cell {@code i} that lie on the shape's outline. The rest
+     *              are seams shared with a neighbouring cell
      */
-    public record Fill(float[] triangles, int[] slice, boolean[] upper, boolean[] outerWall) {
+    public record Fill(float[] quads, int[] slice, int[] edges) {
+
+        int count() {
+            return slice.length;
+        }
     }
 
     /**
-     * Fills a set of contours, cut fine enough that a flat colour per triangle passes for a gradient.
+     * Fills a set of contours, cut fine enough that a colour ramp per cell passes for a gradient.
      *
      * <p>The two spacings are what keep that affordable. A gradient's colour varies along <em>one</em>
-     * direction, so cutting uniformly wastes almost all of the triangles: a horizontal ramp passes
+     * direction, so cutting uniformly wastes almost all of the cells: a horizontal ramp passes
      * {@code stepY = 0} and a shape of any height stays at its handful of natural bands. See
      * {@link SvgGradient#sampleSpacing}.</p>
-     *
-     * <h3>Both halves of every trapezoid are emitted, even a degenerate one</h3>
-     *
-     * <p>Where the shape comes to a point the trapezoid collapses and one half has a repeated vertex and
-     * no area. Dropping it looks obviously right and <b>breaks the caller's seam partition</b>: that
-     * scheme offsets the upper half of each trapezoid outward and the lower half inward, so a band's
-     * lower edge meets the next band's upper edge with opposite signs and every shared edge is claimed
-     * once. Remove one half and the survivor carries the wrong sign for one of its edges — the two sides
-     * of that boundary both pull away from it and leave a gap of twice the offset.</p>
-     *
-     * <p>It presents as sparse dots and short dashes along a band boundary rather than a continuous line,
-     * because only the trapezoids that actually degenerate are affected — one in a triangle, two in a
-     * 64-gon. Raising the offset makes it worse, which is what ruled out precision as the cause.</p>
-     *
-     * <p>Emitting them is safe on two independent counts, and was not always: {@code sdf_triangle} reports
-     * a zero-area triangle as outside everywhere rather than inside everywhere, and the fill's bounding
-     * geometry is now the triangle itself, so a degenerate one collapses to a line and rasterises nothing.
-     * Before either of those it filled its whole axis-aligned bounding box, which is why the filter
-     * existed.</p>
      *
      * @param stepX how far apart, in the contours' own units, two samples may sit across the shape before
      *              the step between them shows; {@code 0} for no horizontal subdivision
@@ -231,6 +232,15 @@ public final class SvgTriangulator {
      */
     public static Fill fill(List<List<float[]>> contours, boolean evenOdd,
                             float stepX, float stepY, float[] extraCuts) {
+        return Silhouettes.mark(cells(contours, evenOdd, stepX, stepY, extraCuts));
+    }
+
+    /**
+     * The sweep alone: every wall soft, every cut hard, nothing split. What {@link Silhouettes#mark}
+     * refines, and what the equivalence test holds against its reference.
+     */
+    static Fill cells(List<List<float[]>> contours, boolean evenOdd,
+                      float stepX, float stepY, float[] extraCuts) {
         Edges edges = Edges.of(contours);
         if (edges.count == 0) return empty();
 
@@ -241,7 +251,7 @@ public final class SvgTriangulator {
     }
 
     private static Fill empty() {
-        return new Fill(new float[0], new int[0], new boolean[0], new boolean[0]);
+        return new Fill(new float[0], new int[0], new int[0]);
     }
 
     /**
@@ -375,23 +385,15 @@ public final class SvgTriangulator {
                                     (int) Math.ceil(widest / stepX)))
                             : 1;
                     for (int s = 0; s < slices; s++) {
-                        // Which of this cell's two walls is REAL. A band sliced into N cells has one
-                        // contour edge at each end and N-1 seams in between, and the caller antialiases
-                        // whichever wall it is told is the silhouette -- so an interior seam handed over as
-                        // one gets feathered from a single side, against a neighbour with a hard step, and
-                        // the coverage never reaches 1. That is a visible line down every slice boundary.
-                        boolean firstSlice = s == 0;
-                        boolean lastSlice = s == slices - 1;
+                        // A band sliced into N cells has one contour edge at each end and N-1 seams in
+                        // between; only the contour may be antialiased. Feathering a seam fades it from
+                        // one side against a neighbour that steps hard there, and the coverage never
+                        // reaches 1 -- a line down every slice boundary.
+                        int edges = (s == 0 ? LEFT : 0) | (s == slices - 1 ? RIGHT : 0);
                         float a = (float) s / slices, b = (float) (s + 1) / slices;
                         float at = lt + (rt - lt) * a, ab = lb + (rb - lb) * a;
                         float bt = lt + (rt - lt) * b, bb = lb + (rb - lb) * b;
-                        // Upper half first: it carries the band's TOP edge. The lower carries the bottom,
-                        // which is the next band's top -- so "upper" alternates across every horizontal seam
-                        // as well as across the diagonal the two of them share.
-                        // The upper half owns the right wall, the lower half the left -- so only the last
-                        // slice's upper and the first slice's lower touch the contour.
-                        sink.add(sliceIndex, true, lastSlice, at, top, bt, top, bb, bottom);
-                        sink.add(sliceIndex, false, firstSlice, at, top, bb, bottom, ab, bottom);
+                        sink.add(sliceIndex, edges, at, top, bt, top, bb, bottom, ab, bottom);
                         sliceIndex++;
                     }
                 }
@@ -539,44 +541,150 @@ public final class SvgTriangulator {
      */
     private static final class Sink {
 
-        private float[] triangles = new float[6 * 64];
+        private float[] quads = new float[8 * 64];
         private int[] slice = new int[64];
-        private boolean[] upper = new boolean[64];
-        private boolean[] outerWall = new boolean[64];
+        private int[] edges = new int[64];
         private int count;
 
-        /**
-         * Appends one triangle, degenerate or not.
-         *
-         * <p>Unconditional on purpose — see the note on {@link #fill(List, boolean, float, float)}. A pair
-         * that loses a member stops partitioning its own edges, and that costs far more than the empty
-         * instance a zero-area triangle becomes.</p>
-         */
-        void add(int sliceIndex, boolean isUpper, boolean isOuterWall,
-                 float x0, float y0, float x1, float y1, float x2, float y2) {
+        /** Appends one cell, degenerate or not: a tip is a cell with a collapsed top or bottom. */
+        void add(int sliceIndex, int edgeMask,
+                 float x0, float y0, float x1, float y1, float x2, float y2, float x3, float y3) {
             if (count == slice.length) {
-                triangles = Arrays.copyOf(triangles, triangles.length * 2);
+                quads = Arrays.copyOf(quads, quads.length * 2);
                 slice = Arrays.copyOf(slice, slice.length * 2);
-                upper = Arrays.copyOf(upper, upper.length * 2);
-                outerWall = Arrays.copyOf(outerWall, outerWall.length * 2);
+                edges = Arrays.copyOf(edges, edges.length * 2);
             }
-            int at = count * 6;
-            triangles[at] = x0;
-            triangles[at + 1] = y0;
-            triangles[at + 2] = x1;
-            triangles[at + 3] = y1;
-            triangles[at + 4] = x2;
-            triangles[at + 5] = y2;
+            int at = count * 8;
+            quads[at] = x0;
+            quads[at + 1] = y0;
+            quads[at + 2] = x1;
+            quads[at + 3] = y1;
+            quads[at + 4] = x2;
+            quads[at + 5] = y2;
+            quads[at + 6] = x3;
+            quads[at + 7] = y3;
             slice[count] = sliceIndex;
-            upper[count] = isUpper;
-            outerWall[count] = isOuterWall;
+            edges[count] = edgeMask;
             count++;
         }
 
         Fill toFill() {
-            return new Fill(Arrays.copyOf(triangles, count * 6),
-                    Arrays.copyOf(slice, count), Arrays.copyOf(upper, count),
-                    Arrays.copyOf(outerWall, count));
+            return new Fill(Arrays.copyOf(quads, count * 8),
+                    Arrays.copyOf(slice, count), Arrays.copyOf(edges, count));
+        }
+    }
+
+    /**
+     * Decides which cell tops and bottoms are on the outline, and splits a cell where the answer changes
+     * along its edge.
+     *
+     * <p>A cut is a horizontal line the whole shape is sliced at. Where the shape continues across it the
+     * cut is a seam between two cells and must stay a hard step — softening it fades the boundary from
+     * both sides into a visible line. Where the shape stops at it — a horizontal contour edge — it is a
+     * silhouette and wants the same antialiasing as a wall, or a horizontal edge sitting between pixel
+     * rows draws as a full row of ink at every fractional scale.</p>
+     *
+     * <p>One cell's top can be both: a step in the outline leaves the shape continuing above part of the
+     * edge and not the rest. The cell is cut where the coverage changes, along a line to the same fraction
+     * of its bottom edge — the slicing rule, which keeps every piece a trapezoid — and each piece gets the
+     * one answer that holds along its whole edge.</p>
+     */
+    static final class Silhouettes {
+
+        private Silhouettes() {
+        }
+
+        static Fill mark(Fill cells) {
+            int count = cells.count();
+            if (count == 0) return cells;
+            float[] q = cells.quads();
+
+            // The spans each cut is covered by, from the cells above it (their bottoms) and below it (their
+            // tops). Keyed on the exact float: every cell on a cut took its y from the same bands[] entry.
+            Map<Float, List<float[]>> bottomsAt = new HashMap<>();
+            Map<Float, List<float[]>> topsAt = new HashMap<>();
+            for (int i = 0; i < count; i++) {
+                int at = i * 8;
+                topsAt.computeIfAbsent(q[at + 1], k -> new ArrayList<>())
+                        .add(new float[]{Math.min(q[at], q[at + 2]), Math.max(q[at], q[at + 2])});
+                bottomsAt.computeIfAbsent(q[at + 5], k -> new ArrayList<>())
+                        .add(new float[]{Math.min(q[at + 6], q[at + 4]), Math.max(q[at + 6], q[at + 4])});
+            }
+
+            Sink out = new Sink();
+            float[] fractions = new float[16];
+            for (int i = 0; i < count; i++) {
+                int at = i * 8;
+                float x0 = q[at], top = q[at + 1], x1 = q[at + 2];
+                float x2 = q[at + 4], bottom = q[at + 5], x3 = q[at + 6];
+                int walls = cells.edges()[i];
+
+                List<float[]> above = bottomsAt.get(top);
+                List<float[]> below = topsAt.get(bottom);
+
+                // Where the coverage changes along the top and along the bottom, as fractions across the
+                // cell, merged and sorted. Most cells produce none.
+                int capacity = 2 + 2 * ((above == null ? 0 : above.size()) + (below == null ? 0 : below.size()));
+                if (fractions.length < capacity) fractions = new float[capacity];
+                int n = 0;
+                fractions[n++] = 0f;
+                fractions[n++] = 1f;
+                n = boundaries(above, x0, x1, fractions, n);
+                n = boundaries(below, x3, x2, fractions, n);
+                Arrays.sort(fractions, 0, n);
+
+                for (int k = 0; k + 1 < n; k++) {
+                    float a = fractions[k], b = fractions[k + 1];
+                    if (b - a < EPSILON) continue;
+                    float at0 = x0 + (x1 - x0) * a, bt0 = x0 + (x1 - x0) * b;
+                    float ab0 = x3 + (x2 - x3) * a, bb0 = x3 + (x2 - x3) * b;
+                    int edges = walls;
+                    if (a > 0f) edges &= ~LEFT;
+                    if (b < 1f) edges &= ~RIGHT;
+                    if (!covered(above, (at0 + bt0) * 0.5f)) edges |= TOP;
+                    if (!covered(below, (ab0 + bb0) * 0.5f)) edges |= BOTTOM;
+                    out.add(cells.slice()[i], edges, at0, top, bt0, top, bb0, bottom, ab0, bottom);
+                }
+            }
+            return out.toFill();
+        }
+
+        /** Whether any span in {@code spans} contains {@code x}. */
+        private static boolean covered(List<float[]> spans, float x) {
+            if (spans == null) return false;
+            for (float[] span : spans) {
+                if (x > span[0] - EPSILON && x < span[1] + EPSILON) return true;
+            }
+            return false;
+        }
+
+        /**
+         * Appends, as fractions of {@code [from, to]}, every span endpoint strictly inside it where the
+         * coverage genuinely changes — the boundary between two abutting spans is a seam between two
+         * cells on the far side, not a change.
+         */
+        private static int boundaries(List<float[]> spans, float from, float to, float[] out, int n) {
+            if (spans == null) return n;
+            float width = to - from;
+            if (Math.abs(width) < EPSILON) return n;
+            for (float[] span : spans) {
+                for (float x : span) {
+                    float f = (x - from) / width;
+                    if (f <= EPSILON || f >= 1f - EPSILON) continue;
+                    if (coveredOutside(spans, span, x)) continue;
+                    out[n++] = f;
+                }
+            }
+            return n;
+        }
+
+        /** Whether a span other than {@code self} covers {@code x}. */
+        private static boolean coveredOutside(List<float[]> spans, float[] self, float x) {
+            for (float[] span : spans) {
+                if (span == self) continue;
+                if (x > span[0] - EPSILON && x < span[1] + EPSILON) return true;
+            }
+            return false;
         }
     }
 
