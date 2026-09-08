@@ -14,6 +14,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BooleanSupplier;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 /**
  * Mapping data on disk: present it, verify it, fetch it if it is not there — then parse it once.
@@ -118,7 +121,7 @@ public final class MappingCache {
      * nothing there worth interrupting, and giving it a flag would suggest otherwise.</p>
      */
     public static Result load(MappingCoordinates coordinates, Path cacheRoot,
-                              java.util.function.BooleanSupplier cancelled) {
+                              BooleanSupplier cancelled) {
         if (coordinates == null || coordinates.isNone() || cacheRoot == null) {
             return new Result(State.NOT_CONFIGURED, MappingSet.IDENTITY,
                     "no mapping coordinates; runtime names will be shown as they are");
@@ -132,18 +135,30 @@ public final class MappingCache {
         List<String> fetched = new ArrayList<>();
         for (String fileName : coordinates.files()) {
             Path target = directory.resolve(fileName);
-            String digest = coordinates.digestOf(fileName);
-            if (CacheFiles.isValid(target, digest)) {
+            String archiveEntry = coordinates.archiveEntryOf(fileName);
+            // AN EXTRACTED ENTRY CANNOT BE CHECKED AGAINST THE ARCHIVE'S DIGEST. What upstream publishes
+            // is a hash of the zip, so verification happens on the download and presence is the check on
+            // what came out of it. Comparing the two would fail every time and re-download every launch.
+            String cachedDigest = archiveEntry == null ? coordinates.digestOf(fileName) : null;
+            if (CacheFiles.isValid(target, cachedDigest)) {
                 present.add(target);
                 continue;
             }
             try {
+                // RESOLVED HERE, on the fetching thread. An address that has to be looked up upstream is
+                // network work, and doing it when the coordinates were declared would put it on whatever
+                // asked for them -- which is the frame thread. @see MappingCoordinates.Source
+                MappingCoordinates.Source source = coordinates.sourceOf(fileName);
+                String url = source.url();
+                String digest = source.digest();
                 // NO `reporting` HERE ON PURPOSE. PlatformMappings has already announced this as a
                 // SWEEP -- the two CSVs are small and their host declares no length worth trusting, so a
                 // bar would be invented rather than measured -- and a second announce from inside would
                 // retarget the very thing that decided a sweep was the honest answer.
-                if (!Downloads.from(coordinates.urlOf(fileName))
-                        .verifying(digest).cancelledWhen(cancelled).into(target)) {
+                boolean arrived = archiveEntry == null
+                        ? Downloads.from(url).verifying(digest).cancelledWhen(cancelled).into(target)
+                        : extract(url, digest, archiveEntry, target, cancelled);
+                if (!arrived) {
                     return new Result(State.UNAVAILABLE, MappingSet.IDENTITY,
                             fileName + " did not match its expected digest and was discarded; "
                                     + "runtime names will be shown as they are");
@@ -158,7 +173,9 @@ public final class MappingCache {
         }
 
         try {
-            MappingSet mappings = MappingFiles.load(present);
+            MappingSet mappings = coordinates.isJoined()
+                    ? join(coordinates, present)
+                    : MappingFiles.load(present);
             if (mappings.isIdentity()) {
                 // EVERY FILE ARRIVED AND NOTHING PARSED. That is a format nobody here knows rather than a
                 // missing download, and it is worth distinguishing: the fix is a MappingFormat, not a
@@ -178,6 +195,74 @@ public final class MappingCache {
                     "the mapping files could not be read (" + unreadable + "); "
                             + "runtime names will be shown as they are");
         }
+    }
+
+    /**
+     * Downloads an archive and takes ONE entry out of it.
+     *
+     * <p>The mapping data a modern loader needs is published inside a zip — MCPConfig's
+     * {@code joined.tsrg} and Fabric's {@code mappings.tiny} both — and the rest of the archive is of no
+     * interest. The archive is fetched beside its target, opened, the one entry written, and the archive
+     * deleted: what stays cached is the mapping file, so a second launch parses it directly.</p>
+     *
+     * @return false when the download did not match its digest, exactly as a plain fetch reports it
+     */
+    private static boolean extract(String url, String digest, String entryName, Path target,
+                                   BooleanSupplier cancelled) throws IOException {
+        Path archive = target.resolveSibling(target.getFileName() + ".archive");
+        try {
+            if (!Downloads.from(url).verifying(digest).cancelledWhen(cancelled).into(archive)) {
+                return false;
+            }
+            try (ZipFile zip = new ZipFile(archive.toFile())) {
+                ZipEntry entry = zip.getEntry(entryName);
+                if (entry == null) {
+                    throw new IOException("no entry '" + entryName + "' in " + url);
+                }
+                try (InputStream contents = zip.getInputStream(entry)) {
+                    // No digest: what upstream pinned was the archive, and that has been checked already.
+                    CacheFiles.install(target, contents, null);
+                }
+            }
+            return true;
+        } finally {
+            // The archive is a download artifact, not cache content -- MCPConfig's is megabytes and only
+            // one file in it is ever read.
+            Files.deleteIfExists(archive);
+        }
+    }
+
+    /**
+     * The two halves of a join, composed into the mapping the runtime needs.
+     *
+     * <p>No published artifact maps out of a namespace a runtime speaks — Mojang's is obf→official,
+     * MCPConfig's is obf→srg, Fabric's is obf→intermediary — so every 1.20.x mapping is
+     * {@code runtime.invert().then(readable)} over a shared obfuscated namespace.</p>
+     *
+     * <p>Each half is parsed on its own and overlaid within itself, so a half made of several files
+     * behaves exactly as an unjoined artifact does.</p>
+     *
+     * <p>A half with no files at all composes to {@link MappingSet#IDENTITY}, which is the honest
+     * answer: half a join is not a mapping, and {@code then} declines to invent one from it.</p>
+     */
+    private static MappingSet join(MappingCoordinates coordinates, List<Path> present)
+            throws IOException {
+        List<Path> readable = new ArrayList<>();
+        List<Path> runtime = new ArrayList<>();
+        for (Path file : present) {
+            String name = file.getFileName().toString();
+            if (coordinates.sideOf(name) == MappingCoordinates.Side.RUNTIME) {
+                runtime.add(file);
+            } else {
+                readable.add(file);
+            }
+        }
+        if (readable.isEmpty() || runtime.isEmpty()) return MappingSet.IDENTITY;
+        // WITH THE UNQUALIFIED TIER, or everything that scans TEXT is blind to this mapping -- the Remap
+        // command and ReadableSource have a name and a dot and no owner to key on.
+        return MappingFiles.load(runtime).invert()
+                .then(MappingFiles.load(readable))
+                .withUnqualifiedMembers();
     }
 
     /**

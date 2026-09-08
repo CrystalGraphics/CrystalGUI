@@ -166,6 +166,155 @@ public final class MappingSet {
         return ambiguousFields.contains(readableName);
     }
 
+    // ── composing two artifacts ─────────────────────────────────────────────────────────────────
+
+    /**
+     * The same mapping read the other way: runtime becomes readable and readable becomes runtime.
+     *
+     * <p>Every published mapping artifact maps <em>away</em> from the obfuscated namespace — Mojang's
+     * {@code client.txt} is official→obf, MCPConfig's {@code joined.tsrg} is obf→srg, Fabric's
+     * {@code intermediary} is obf→intermediary — while a runtime speaks one of the far ends. Inverting
+     * one of them is what brings the two onto a common footing, and {@link #then} joins them:</p>
+     *
+     * <pre>{@code
+     * MappingSet obfToSrg      = ...;   // MCPConfig joined.tsrg
+     * MappingSet obfToOfficial = ...;   // Mojang client.txt
+     * MappingSet srgToOfficial = obfToSrg.invert().then(obfToOfficial);
+     * }</pre>
+     *
+     * <p>Free — the reverse tables are built at construction, so this hands them over rather than
+     * computing anything.</p>
+     *
+     * <p><b>Not always a round trip.</b> An unqualified name that several runtime names claim is
+     * dropped rather than guessed, so inverting twice can lose entries a guess would have kept. That is
+     * {@link #reverseUnambiguous}'s rule and the reason it exists.</p>
+     */
+    public MappingSet invert() {
+        return new MappingSet(classesReversed, methodsReversed, fieldsReversed,
+                globalMethodsReversed, globalFieldsReversed);
+    }
+
+    /**
+     * The same mapping, plus an <b>unqualified</b> tier derived from the owner-keyed one.
+     *
+     * <p>Needed by everything that has a name and no owner, which in practice means a scan of TEXT:
+     * {@code plr.m_8055_} in a source file is a name and a dot, and the file does not say what
+     * {@code plr} is. {@link ReadableSource} and the Remap command read that tier and nothing else, so a
+     * mapping without it is invisible to them however complete it is.</p>
+     *
+     * <pre>{@code
+     * MappingSet forge = obfToSrg.invert().then(obfToOfficial).withUnqualifiedMembers();
+     * forge.readableMethodAnywhere("m_8055_");   // getBlockState
+     * }</pre>
+     *
+     * <h3>Uniqueness is MEASURED, not assumed</h3>
+     *
+     * <p>The tier is only sound for a format whose runtime names are globally unique. SRG and
+     * intermediary both are, by construction — but a mapping that trusted that and was wrong would
+     * rename the wrong member silently, which is the failure this whole class is arranged against. So a
+     * name claimed by two owners with <em>different</em> readable names is left out, exactly as an
+     * ambiguous reverse entry is. Two owners agreeing is not a conflict and is kept.</p>
+     *
+     * <p>Nothing derives this for MCP: its CSVs have no owner to key on and register here directly.</p>
+     */
+    public MappingSet withUnqualifiedMembers() {
+        return new MappingSet(classes, methods, fields,
+                mergedWithUnambiguous(globalMethods, methods),
+                mergedWithUnambiguous(globalFields, fields));
+    }
+
+    /** {@code existing}, plus every owner-keyed name that exactly one readable name is claimed by. */
+    private static Map<String, String> mergedWithUnambiguous(Map<String, String> existing,
+                                                             Map<String, String> ownerKeyed) {
+        Map<String, String> byName = new LinkedHashMap<>(existing);
+        Set<String> collided = new HashSet<>();
+        for (Map.Entry<String, String> entry : ownerKeyed.entrySet()) {
+            String name = entry.getKey().substring(entry.getKey().lastIndexOf('.') + 1);
+            if (collided.contains(name)) continue;
+            String readable = entry.getValue();
+            String seen = byName.put(name, readable);
+            if (seen != null && !seen.equals(readable)) {
+                byName.remove(name);
+                collided.add(name);
+            }
+        }
+        return byName;
+    }
+
+    /**
+     * This mapping followed by {@code next} — {@code P→Q} then {@code Q→R} gives {@code P→R}.
+     *
+     * <p>Members are joined through their OWNER as well as their name: a method's owner is carried into
+     * {@code next}'s namespace with {@link #readableClass} before it is looked up there. Joining on the
+     * bare name would ask an owner-keyed second stage a question it cannot answer.</p>
+     *
+     * <p>A name {@code next} does not carry passes through, exactly as a lookup on it would answer, so a
+     * partial second stage narrows the result rather than emptying it.</p>
+     *
+     * <p><b>The mixed namespaces come out right, which is the whole reason this composes rather than
+     * concatenates.</b> Forge 1.20.1 runs official class names with SRG members, and MCPConfig's srg
+     * namespace is that same mix — so {@code obfToSrg.invert().then(obfToOfficial)} yields identity
+     * classes and {@code Level.m_8055_ → getBlockState}, which is exactly what that runtime needs.</p>
+     *
+     * <p><b>This is a JOIN, not a monoid composition, and {@code then(IDENTITY)} is therefore
+     * {@link #IDENTITY} rather than {@code this}.</b> A second stage that knows nothing leaves every
+     * entry pointing at the intermediate namespace, and here that is the obfuscated one — a mapping into
+     * it is not a readable mapping, so the honest answer is to have none. @see #carries</p>
+     */
+    public MappingSet then(MappingSet next) {
+        Builder out = builder();
+        for (Map.Entry<String, String> entry : classes.entrySet()) {
+            String joined = next.readableClass(entry.getValue());
+            if (carries(joined, entry.getValue())) out.type(entry.getKey(), joined);
+        }
+        joinMembers(methods, next, out, true);
+        joinMembers(fields, next, out, false);
+        for (Map.Entry<String, String> entry : globalMethods.entrySet()) {
+            String joined = next.readableMethodAnywhere(entry.getValue());
+            if (carries(joined, entry.getValue())) out.method(entry.getKey(), joined);
+        }
+        for (Map.Entry<String, String> entry : globalFields.entrySet()) {
+            String joined = next.readableFieldAnywhere(entry.getValue());
+            if (carries(joined, entry.getValue())) out.field(entry.getKey(), joined);
+        }
+        return out.build();
+    }
+
+    /**
+     * Whether {@code next} actually knew this name, rather than handing back what it was asked.
+     *
+     * <p><b>An entry it did not know must be DROPPED, not kept.</b> Keeping it stores the intermediate
+     * name as though it were readable — and the intermediate namespace here is the obfuscated one, so a
+     * member the second stage is missing would be shown to a script author as {@code zz}. That is a
+     * plausible-looking answer, which is the worst kind: unmapped passes the runtime name through and
+     * looks unmapped.</p>
+     *
+     * <p>A name that genuinely maps to itself is dropped too, and harmlessly: a lookup that finds
+     * nothing returns its argument, which is the same answer the stored entry would have given.</p>
+     */
+    private static boolean carries(String joined, String intermediate) {
+        return !joined.equals(intermediate);
+    }
+
+    /** One owner-keyed table through {@code next}, owners translated first. @see #then */
+    private void joinMembers(Map<String, String> table, MappingSet next, Builder out, boolean method) {
+        for (Map.Entry<String, String> entry : table.entrySet()) {
+            int dot = entry.getKey().lastIndexOf('.');
+            String owner = entry.getKey().substring(0, dot);
+            String name = entry.getKey().substring(dot + 1);
+            String inNext = readableClass(owner);
+            String joined = method
+                    ? next.readableMethod(inNext, entry.getValue())
+                    : next.readableField(inNext, entry.getValue());
+            if (!carries(joined, entry.getValue())) continue;
+            if (method) {
+                out.method(owner, name, joined);
+            } else {
+                out.field(owner, name, joined);
+            }
+        }
+    }
+
     public static Builder builder() {
         return new Builder();
     }

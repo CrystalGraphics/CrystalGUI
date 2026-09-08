@@ -54,9 +54,15 @@ import java.util.List;
  * <p>The row is offered only for a file that actually names something the mapping can rename, which means
  * the question is asked every time a menu or the palette opens — and answering it honestly is a scan of
  * the whole document. Two things keep that off the frame budget. {@link MappingSet#isIdentity()} is
- * checked first, so on a dev environment, the harness and every test the answer costs one field read and
- * the feature is invisible rather than permanently greyed. And the answer is memoised against the
- * buffer's version, so a second menu open with nothing typed in between is free.</p>
+ * checked first, so on a dev environment, the harness and every test the answer costs one field read
+ * rather than a scan. And the answer is memoised against the buffer's version, so a second menu open with
+ * nothing typed in between is free.</p>
+ *
+ * <p><b>Disabled is the expected state almost everywhere, and it is shown rather than hidden.</b> The
+ * palette lists every command and dims what cannot act — IntelliJ's Find Action behaviour, and
+ * {@code CommandPalette} says so in its own contract — so on any dev run, on NeoForge and in the harness
+ * this reads as a greyed row. There is nothing to remap when the runtime already speaks readable names,
+ * which {@code PlatformMappings} reports at startup in as many words.</p>
  *
  * <p>The buffer is held <b>weakly</b>. This instance lives as long as the screen does and a document does
  * not; a strong field here would pin the last file whose menu was opened for the rest of the session.</p>
