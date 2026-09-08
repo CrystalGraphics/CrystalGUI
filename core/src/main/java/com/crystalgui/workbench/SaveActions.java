@@ -56,6 +56,67 @@ public final class SaveActions {
     }
 
     /**
+     * The trail for whatever the active tab shows, <b>project file or not</b>.
+     *
+     * <p>It used to take a {@code CgPath}, which is null for every scheme but {@code project} — so a
+     * decompiled class or a JDK source opened with no trail at all, in the one situation where "where am
+     * I" is hardest to answer from the tab alone. A library resource carries the top-level binary name,
+     * and a dotted name is already a path: splitting it gives exactly the package trail IntelliJ shows.</p>
+     *
+     * <p>Any other scheme falls back to a single crumb rather than nothing. A trail of one is thin, but it
+     * is the file's own name in the place a reader looks for it, and it means adding a scheme never
+     * silently removes the bar.</p>
+     */
+    List<Breadcrumbs.Crumb> trailFor(@Nullable Resource resource) {
+        if (resource == null) return List.of();
+        CgPath path = resource.asPath();
+        if (path != null) return trailFor(path);
+        if (Resource.SCHEME_LIBRARY.equals(resource.scheme())) return libraryTrail(resource.path());
+        String name = resource.path();
+        int slash = Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
+        if (slash >= 0) name = name.substring(slash + 1);
+        FileIconTheme theme = FileIconTheme.getDefault();
+        return name.isEmpty() ? List.of()
+                : List.of(new Breadcrumbs.Crumb(name, theme.drawableFor(name, false, false),
+                        theme.classFor(name, false)));
+    }
+
+    /**
+     * A binary name as a trail: the packages, then the source file.
+     *
+     * <p>{@code java.util.concurrent.atomic.AtomicReference} becomes {@code java > util > concurrent >
+     * atomic > AtomicReference.java}. The last segment gets {@code .java} appended <em>for the icon and
+     * the colour only</em> — the theme keys both off an extension, and the tab beside it says the same
+     * thing, so the trail matching it is what stops one reading as a different kind of file from the
+     * other.</p>
+     *
+     * <p>The packages are marked {@code PACKAGE} outright rather than asked about. {@code roleOf} answers
+     * from the project's source roots, and a library is by definition not in them — so asking returns
+     * {@code FOLDER} and draws a folder against a package name.</p>
+     */
+    private List<Breadcrumbs.Crumb> libraryTrail(String binaryName) {
+        if (binaryName.isEmpty()) return List.of();
+        FileIconTheme theme = FileIconTheme.getDefault();
+        String packageClass = SymbolIcon.classFor(SourceRoots.Role.PACKAGE);
+        List<Breadcrumbs.Crumb> trail = new ArrayList<>();
+        String[] parts = binaryName.split("\\.");
+        for (int i = 0; i < parts.length; i++) {
+            String part = parts[i];
+            if (part.isEmpty()) continue;
+            if (i == parts.length - 1) {
+                // A NESTED CLASS IS ONE FILE. `Map$Entry` lives in `Map.java`, and a trail ending
+                // `Entry.java` names a file that does not exist.
+                String file = part.split("\\$")[0] + ".java";
+                trail.add(new Breadcrumbs.Crumb(file, theme.drawableFor(file, false, false),
+                        theme.classFor(file, false)));
+                break;
+            }
+            trail.add(new Breadcrumbs.Crumb(part, theme.drawableFor(part, true, false), packageClass));
+        }
+        return trail;
+    }
+
+    /**
      * The project, then the path within it — which is what IntelliJ shows and what a bare path cannot say.
      *
      * <p>{@code segments()} is project-<em>relative</em>, so a file at the project root produced a
