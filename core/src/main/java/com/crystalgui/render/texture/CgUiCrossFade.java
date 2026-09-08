@@ -20,6 +20,12 @@ import com.crystalgui.render.CgUiPaintContext;
  */
 public final class CgUiCrossFade implements CgUiDrawable {
 
+    /** Both halves are drawn, over each other. @see CgUiDrawable#drawsOnePrimitive */
+    @Override
+    public boolean drawsOnePrimitive() {
+        return false;
+    }
+
     private final CgUiDrawable from;
     private final CgUiDrawable to;
     private final float t;

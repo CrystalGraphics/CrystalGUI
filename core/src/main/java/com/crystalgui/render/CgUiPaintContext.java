@@ -45,6 +45,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -1558,6 +1559,12 @@ public final class CgUiPaintContext {
     private static final long RETAINED_IDLE_FRAMES = 300L;
 
     private final Map<Object, RetainedLayer> retained = new LinkedHashMap<>();
+
+    /** A subtree seen once and not yet given a texture. @see #retain */
+    private record Candidate(long revision, LayerRegion region, long frame) {
+    }
+
+    private final Map<Object, Candidate> candidates = new HashMap<>();
     private long retainedBytes;
     private int retainedCreated;
     private boolean retentionSuspended;
@@ -1599,7 +1606,11 @@ public final class CgUiPaintContext {
             // Re-inserted so iteration order stays least-recently-used first, for the sweep below.
             retained.put(key, layer);
             layer.lastFrame = frameId;
-            boolean fits = layer.fbo().getWidth() >= region.width() && layer.fbo().getHeight() >= region.height();
+            // Too small is a miss; MUCH too big is one as well. An element that was 800px and is now 40
+            // would otherwise keep its 832px texture for as long as it stayed on screen.
+            int held = layer.fbo().getWidth(), tall = layer.fbo().getHeight();
+            boolean fits = held >= region.width() && tall >= region.height()
+                    && held <= Math.max(64, region.width() * 2) && tall <= Math.max(64, region.height() * 2);
             if (fits) {
                 // A LAYER THAT MOVED IS REDRAWN, not slid: the region is where it was composited FROM as
                 // well as to, and everything in it was drawn at that origin.
@@ -1612,9 +1623,22 @@ public final class CgUiPaintContext {
             drop(key, layer);
         }
 
+        // NOT ON FIRST SIGHT. A layer that changes every frame -- a window mid-fade, a scroller being
+        // dragged -- is never worth a texture of its own: it would repaint into it regardless, and hold
+        // it against the budget while the shared pool would have served. So a subtree has to be seen
+        // UNCHANGED once before it earns one. Flutter's raster cache scored pictures for complexity
+        // instead, and the score was bad enough to be disabled in the engine; stability is the same
+        // question answered by observation.
+        Candidate seen = candidates.get(key);
+        if (seen == null || seen.revision() != revision || !seen.region().equals(region)) {
+            candidates.put(key, new Candidate(revision, region, frameId));
+            return null;
+        }
+
         int width = bucket(region.width()), height = bucket(region.height());
         long bytes = (long) width * height * 4L;
         if (retainedBytes + bytes > RETAINED_BUDGET_BYTES && !evictUntil(bytes)) return null;
+        candidates.remove(key);
 
         CgFrameBuffer fbo = CgFrameBuffer.createOwned("cgui_retained_" + retainedCreated++, width, height, LAYER_FORMAT);
         warmUpLayer(fbo);
@@ -1646,6 +1670,10 @@ public final class CgUiPaintContext {
 
     /** Frees anything nothing has asked for in a while. Called once a frame, from {@link #endFrame}. */
     private void sweepRetained() {
+        // Candidates are only useful across one frame gap, and there is one per layered box that has
+        // not settled. Swept in a batch rather than per frame: the map is small and the walk is not
+        // worth doing sixty times a second to save a few hundred bytes.
+        if ((frameId & 63L) == 0L) candidates.values().removeIf(c -> frameId - c.frame() > 4L);
         if (retained.isEmpty()) return;
         Iterator<Map.Entry<Object, RetainedLayer>> entries = retained.entrySet().iterator();
         while (entries.hasNext()) {
@@ -1832,9 +1860,9 @@ public final class CgUiPaintContext {
         fd.viewportH = fbo.getHeight();
         CgRenderPipeline.getInstance().prepareFrame();
         // TEXT HAS ITS OWN PROJECTION, and it has to follow the target too. CgTextRenderer does not
-        // read cg_ProjMatrix; it carries a matrix of its own that beginFrame sets for the screen. Every
-        // pooled layer is screen-sized, so the two agreed for as long as those were the only layers --
-        // and inside a window's snapshot, sized to the window, glyphs were placed through a screen
+        // read cg_ProjMatrix; it carries a matrix of its own that beginFrame sets for the screen. Pooled
+        // layers were all screen-sized once, so the two agreed for as long as those were the only layers
+        // -- and inside a window's snapshot, sized to the window, glyphs were placed through a screen
         // ortho into a window-sized viewport: every string in a photograph drawn at a third of its size
         // in the top-left corner. updateOrtho is a no-op when the size is unchanged, so this costs a
         // pool layer nothing.
@@ -2134,6 +2162,7 @@ public final class CgUiPaintContext {
         layerFboPool.deleteAll();
         for (RetainedLayer layer : retained.values()) layer.fbo().delete();
         retained.clear();
+        candidates.clear();
         retainedBytes = 0L;
 
         // Same reasoning as the layer pool above — createOwned bypasses CgFrameBufferRegistry, so

@@ -675,9 +675,37 @@ public final class BoxTree {
      * axis-aligned bound, and re-bounding it through the parent's inverse and back would grow it at
      * every level of a rotated tree.</p>
      */
+    /**
+     * Ink bounds, damage and retainability for one box — everything the painter needs to know that the
+     * box itself cannot say.
+     *
+     * <p>Runs from {@link #compose} after the children, because all three are functions of theirs.
+     * <b>And returns immediately when nothing under this box moved</b>, which is most boxes on most
+     * passes: a compose is triggered by one restyle somewhere and the rest of the tree still holds
+     * every answer it held before. That early return is what keeps this walk from costing four style
+     * lookups per box per frame.</p>
+     */
     private void composeInk(Box box) {
+        boolean changed = damageCheck(box);
+        for (Box child : box.hosted) {
+            if (child.subtreeChanged) {
+                changed = true;
+                break;
+            }
+        }
+        box.subtreeChanged = changed;
+        if (!changed) return;
+
         composeInkBounds(box);
-        composeDamage(box);
+
+        long revision = box.paintRevision;
+        boolean retainable = box.selfRetainable;
+        for (Box child : box.hosted) {
+            revision = Math.max(revision, child.subtreeRevision);
+            retainable &= child.retainable;
+        }
+        box.subtreeRevision = revision;
+        box.retainable = retainable;
     }
 
     /**
@@ -691,58 +719,56 @@ public final class BoxTree {
     private long paintEpoch;
 
     /**
-     * Whether this box paints differently than it did, and what its subtree's revision is now.
-     *
-     * <p>Here, in the compose walk, because the compose walk is <b>exactly</b> the set of frames on
-     * which anything can have changed: a restyle sets {@code transformsDirty}, so does a layout, and
-     * {@link Box#requestRepaint} does too. A frame that recomposes nothing has nothing to damage, and
-     * every revision stays where it was — which is what makes a still frame free.</p>
+     * Whether this box paints differently than it did, refreshing what depends on the answer.
      *
      * <p>The signature is the box's size, its world matrix, its computed style and how many boxes it
      * hosts. Position is in the matrix; a child added or removed moves the count; a child REPLACED
      * leaves the count alone and damages itself, because a fresh box starts at {@code NaN}.</p>
+     *
+     * <p>The style-derived answers — what this box paints beyond its border box, and whether it may be
+     * kept at all — are recomputed here and only here, since {@code ComputedStyle} is immutable and is
+     * compared by identity.</p>
      */
-    private void composeDamage(Box box) {
+    private boolean damageCheck(Box box) {
         Matrix4f m = box.localToWorld;
         ComputedStyle style = box.node.computedStyle();
-        if (box.repaintRequested
-                || box.wasStyle != style
-                || box.wasWidth != box.width || box.wasHeight != box.height
-                || box.wasChildCount != box.hosted.size()
-                || box.wasM00 != m.m00() || box.wasM01 != m.m01()
-                || box.wasM10 != m.m10() || box.wasM11 != m.m11()
-                || box.wasM30 != m.m30() || box.wasM31 != m.m31()) {
-            box.repaintRequested = false;
-            box.wasStyle = style;
-            box.wasWidth = box.width;
-            box.wasHeight = box.height;
-            box.wasChildCount = box.hosted.size();
-            box.wasM00 = m.m00();
-            box.wasM01 = m.m01();
-            box.wasM10 = m.m10();
-            box.wasM11 = m.m11();
-            box.wasM30 = m.m30();
-            box.wasM31 = m.m31();
-            box.paintRevision = paintEpoch;
+        if (!box.repaintRequested
+                && box.wasStyle == style
+                && box.wasWidth == box.width && box.wasHeight == box.height
+                && box.wasChildCount == box.hosted.size()
+                && box.wasM00 == m.m00() && box.wasM01 == m.m01()
+                && box.wasM10 == m.m10() && box.wasM11 == m.m11()
+                && box.wasM30 == m.m30() && box.wasM31 == m.m31()) {
+            return false;
         }
+        box.repaintRequested = false;
+        box.wasStyle = style;
+        box.wasWidth = box.width;
+        box.wasHeight = box.height;
+        box.wasChildCount = box.hosted.size();
+        box.wasM00 = m.m00();
+        box.wasM01 = m.m01();
+        box.wasM10 = m.m10();
+        box.wasM11 = m.m11();
+        box.wasM30 = m.m30();
+        box.wasM31 = m.m31();
+        box.paintRevision = paintEpoch;
 
-        long revision = box.paintRevision;
+        BoxPainter.localInk(box, inkLocal);
+        box.localInkL = inkLocal[0];
+        box.localInkT = inkLocal[1];
+        box.localInkR = inkLocal[2];
+        box.localInkB = inkLocal[3];
         // A subtree is keepable only while nothing in it paints out of state the tree cannot see, and
         // `backdrop-filter` never is -- what it composites is behind the element and outside this tree
         // altogether. @see UIElement#paintsDynamically
-        boolean retainable = !box.node.paintsDynamically()
+        box.selfRetainable = !box.node.paintsDynamically()
                 && style.get(StylePropertyRegistry.BACKDROP_FILTER) == null;
-        for (Box child : box.hosted) {
-            revision = Math.max(revision, child.subtreeRevision);
-            retainable &= child.retainable;
-        }
-        box.subtreeRevision = revision;
-        box.retainable = retainable;
+        return true;
     }
 
     private void composeInkBounds(Box box) {
-        BoxPainter.localInk(box, inkLocal);
-        worldAabb(box, inkLocal[0], inkLocal[1], inkLocal[2], inkLocal[3], inkLocal);
+        worldAabb(box, box.localInkL, box.localInkT, box.localInkR, box.localInkB, inkLocal);
         box.inkX0 = inkLocal[0];
         box.inkY0 = inkLocal[1];
         box.inkX1 = inkLocal[2];

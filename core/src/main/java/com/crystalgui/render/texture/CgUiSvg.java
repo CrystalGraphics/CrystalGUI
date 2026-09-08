@@ -30,6 +30,12 @@ import javax.annotation.Nullable;
  */
 public final class CgUiSvg implements CgUiDrawable {
 
+    /** One instanced draw, but a path may cross another inside it. @see CgUiDrawable#drawsOnePrimitive */
+    @Override
+    public boolean drawsOnePrimitive() {
+        return false;
+    }
+
     private SvgDocument document;
 
     /**
