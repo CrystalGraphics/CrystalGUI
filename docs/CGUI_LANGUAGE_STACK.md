@@ -183,3 +183,81 @@ the same file went from sixteen errors to zero.
 everywhere, so the one question worth asking early is which of the two is answering. It is forwarded by
 the 1.20.x dev runs; `ClientProbe1201` prints the analysed file's diagnostics as text, so the answer does
 not have to be read off a screenshot.
+
+---
+
+## 7. Mappings: on 1.20.x every mapping is a JOIN
+
+A script is authored in ONE namespace — the readable one, which is Mojang's official names — and
+`MappingSet` translates at the boundary: in, so the compiler is shown readable members; out, so compiled
+bytecode links against what the runtime actually declares.
+
+### What each runtime speaks, measured from the build
+
+`:mc1201:forge` has a `reobfJar` task and `:mc1201:neoforge` has none, which is the whole story:
+
+| Runtime | Classes | Members | Mapping |
+|---|---|---|---|
+| any dev run | official | official | none |
+| NeoForge 1.20.4 | official | official | none |
+| Forge 1.20.1 | official | **SRG** | SRG → official |
+| Fabric 1.20.1 | **intermediary** | **intermediary** | intermediary → official |
+
+**Forge's is a mixed namespace** — official class names with SRG members — and MCPConfig's own "srg"
+namespace is that same mix, which is why the class half of its join composes to the identity.
+
+### No published artifact maps out of a namespace a runtime speaks
+
+Mojang's `client.txt` is obf→official, MCPConfig's `joined.tsrg` is obf→srg, Fabric's `intermediary` is
+obf→intermediary. Every one of them maps *away* from obf, and nothing runs obf. So the mapping is always
+composed, never downloaded:
+
+```java
+MappingSet srgToOfficial = obfToSrg.invert().then(obfToOfficial);
+```
+
+`MappingCoordinates` says which half a file is (`readable(...)` / `runtime(...)`); `MappingCache` parses
+each half on its own and joins them. 1.7.10 declares no runtime half and keeps the overlay behaviour it
+has always had.
+
+> **`then` is a join, not a monoid composition.** `then(IDENTITY)` is `IDENTITY`, not `this` — a second
+> stage that knows nothing would otherwise leave every name pointing at the *obfuscated* namespace, and
+> `m_8055_` would be shown to a script author as `a`. Runtime names shown as they are is a supported
+> state; obf names dressed as readable ones is not. The same rule drops any single entry the second
+> stage is missing.
+
+### Four formats, chosen by CONTENT
+
+`McpCsvFormat` (1.7.10), `ProGuardFormat` (Mojang), `Tsrg2Format` (MCPConfig), `TinyV2Format` (Fabric).
+Never by file name — several publishers ship a `mappings.txt`.
+
+### Where the addresses come from
+
+Mojang's `client.txt` lives at a content-addressed URL discoverable only through the version manifest, so
+`MappingCoordinates.Source` resolves a URL **and its digest** at fetch time rather than pinning a number
+nobody could verify. `MojangMappings1201` does that lookup; the digest comes back tagged `sha1:`, which
+`CacheFiles` checks alongside `gitblob:` and bare MD5. The runtime halves live inside archives
+(MCPConfig a zip, Fabric a jar), so a file may name an entry to extract; the digest is verified on the
+**archive**, and presence is the check on what came out of it.
+
+### Nobody outside `language/` fires the fetch
+
+The first `current()` probes, applies a cached mapping **on the calling thread** — so the first analysis
+already has readable names rather than showing runtime ones and correcting itself — and hands a genuine
+download to `ScriptService.runInBackground`.
+
+That last seam is the only part a host knows better: `JobScheduler` is drained by `UIDocument.frame` and
+by nothing else, so a job submitted on a dedicated server is never run. The default is a daemon thread,
+which is right for a server, a test and the harness; a client overrides it to get a progress bar and a
+cancel. **A platform states the what, the where and the how — never the when.**
+
+### The loader is never named
+
+`ScriptService1201` asks the runtime which namespace it is in — it reads `net/minecraft/class_1937`, a
+class only an intermediary runtime has — and picks the probe and the coordinates from the answer. A flag
+someone sets is a flag that will be wrong in exactly the environment nobody tests, and a future loader
+shipping intermediary gets the right answer without being named.
+
+> **The probe is what stops a dev run fetching anything.** `getBlockState` is declared under official
+> names and is `m_8055_` on Forge and `method_8320` on Fabric, so one class read separates the runtimes
+> that need no mapping from the two that do.

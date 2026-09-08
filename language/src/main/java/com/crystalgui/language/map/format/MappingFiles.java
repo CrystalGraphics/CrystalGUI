@@ -35,11 +35,12 @@ public final class MappingFiles {
     /**
      * Every format the core knows, in the order they are asked.
      *
-     * <p>One entry today. Ordered rather than a set because {@code matches} is a heuristic over content
-     * and two formats could in principle both accept a file; first-wins is at least deterministic and
-     * describable, where a set would depend on iteration order.</p>
+     * <p>Ordered rather than a set because {@code matches} is a heuristic over content and two formats
+     * could in principle both accept a file; first-wins is at least deterministic and describable, where
+     * a set would depend on iteration order.</p>
      */
-    private static final List<MappingFormat> FORMATS = List.of(new McpCsvFormat());
+    private static final List<MappingFormat> FORMATS = List.of(
+            new McpCsvFormat(), new ProGuardFormat(), new Tsrg2Format(), new TinyV2Format());
 
     private MappingFiles() {
     }
