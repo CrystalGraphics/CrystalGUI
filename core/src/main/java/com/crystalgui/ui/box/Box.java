@@ -85,6 +85,21 @@ public final class Box {
     final Matrix4f localToWorld = new Matrix4f();
     final Matrix4f worldToLocal = new Matrix4f();
 
+    /**
+     * The WORLD-space rectangle this box's whole subtree can paint into â€” Blink calls it visual, or
+     * ink, overflow.
+     *
+     * <p>A box's border box is not what it paints: an outline sits outside it, a widget's decoration
+     * may reach past it, and a non-clipping box carries every descendant's ink as well. Composed
+     * bottom-up in {@link BoxTree}, so it is available before any painting happens â€” which is what lets
+     * a layer be allocated at the size of what goes in it rather than at the size of the display.</p>
+     *
+     * <p>Axis-aligned, so under a rotation it is the bound rather than the shape. That is the right
+     * answer for an allocation and the wrong one for a hit test, which goes through
+     * {@link #worldToLocal} instead.</p>
+     */
+    float inkX0, inkY0, inkX1, inkY1;
+
     Box(BoxTree tree, UIElement node, boolean mirror) {
         this.tree = tree;
         this.node = node;
@@ -280,6 +295,31 @@ public final class Box {
     /** The one matrix both painting and hit-testing use. Read-only. */
     public Matrix4f localToWorld() {
         return localToWorld;
+    }
+
+    /** @see #inkX0 */
+    public float inkX0() {
+        return inkX0;
+    }
+
+    /** @see #inkX0 */
+    public float inkY0() {
+        return inkY0;
+    }
+
+    /** @see #inkX0 */
+    public float inkX1() {
+        return inkX1;
+    }
+
+    /** @see #inkX0 */
+    public float inkY1() {
+        return inkY1;
+    }
+
+    /** Whether this box's subtree paints anything at all â€” false for a zero-area or fully clipped one. */
+    public boolean hasInk() {
+        return inkX1 > inkX0 && inkY1 > inkY0;
     }
 
     public Matrix4f worldToLocal() {

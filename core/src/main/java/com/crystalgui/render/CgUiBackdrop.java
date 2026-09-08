@@ -9,6 +9,7 @@ import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.platform.gl.state.CgGlScope;
 import com.crystalgraphics.platform.gl.state.CgGlSlot;
 import com.crystalgraphics.platform.gl.state.CgGlState;
+import com.crystalgui.core.async.FrameProfile;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
@@ -308,7 +309,7 @@ final class CgUiBackdrop {
                 && needX1 <= capX0 + capW && needY1 <= capY0 + capH) {
             return true;
         }
-        long probeT0 = PROBE ? System.nanoTime() : 0L;
+        long probeT0 = PROBE || FrameProfile.ENABLED ? System.nanoTime() : 0L;
         int w = Math.max(1, ctx.screenWidth), h = Math.max(1, ctx.screenHeight);
         if (captureFbo.getWidth() != w || captureFbo.getHeight() != h) captureFbo.resize(w, h);
 
@@ -408,6 +409,8 @@ final class CgUiBackdrop {
         captureDepth = depth;
         captureTarget = innermost.getId();
         blurFrame = -1L;   // the capture moved, so whatever was blurred describes somewhere else
+        FrameProfile.end(probeT0, "backdrop:capture");
+        FrameProfile.count("backdrop-capture-kpx", (capW * capH) / 1000);
         if (PROBE) {
             pCapture += System.nanoTime() - probeT0;
             pRecaptures++;
@@ -518,7 +521,7 @@ final class CgUiBackdrop {
             if (PROBE) probeBlurSkipped++;
             return (CgTexture2D) blurResult.getColorTexture(0);
         }
-        long probeB0 = PROBE ? System.nanoTime() : 0L;
+        long probeB0 = PROBE || FrameProfile.ENABLED ? System.nanoTime() : 0L;
 
         // The fraction of each target the capture actually occupies. Identical in all of them, because
         // they are all the same fraction of the screen. @see #capX0
@@ -565,6 +568,7 @@ final class CgUiBackdrop {
         blurFrame = ctx.frameId;
         blurRadiusPx = radiusPx;
         blurResult = result;
+        FrameProfile.end(probeB0, "backdrop:blur");
         if (PROBE) pBlur += System.nanoTime() - probeB0;
         return (CgTexture2D) result.getColorTexture(0);
     }

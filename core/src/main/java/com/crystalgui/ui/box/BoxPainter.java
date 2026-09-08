@@ -2,7 +2,9 @@ package com.crystalgui.ui.box;
 
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
 import com.crystalgraphics.gl.texture.CgTexture2D;
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.LayerRegion;
 import com.crystalgui.render.texture.CgUiCrossFade;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.CgUiBackdropFilter;
@@ -86,7 +88,26 @@ public final class BoxPainter {
             boolean clips = box.clips();
             boolean mask = clips && (!radii.isZero() || style.get(StylePropertyRegistry.MASK) != CgUiDrawable.EMPTY);
             boolean scissor = clips && !mask;
+            // A MASK WITH NOTHING TO MASK. The multiply applies to the CHILDREN's layer and to nothing
+            // else, so a childless box was opening a layer, drawing into it and compositing it back at
+            // opacity 1 -- the whole apparatus for an identity. Rounded `overflow: hidden` is on almost
+            // every surface in this UI, and most of the leaves wearing it have no children at all.
+            mask = mask && !box.children().isEmpty();
             boolean needsLayer = opacity < 1f || mask;
+
+            // AND AN OPACITY THAT CANNOT SELF-OVERLAP folds into the draw instead of flattening a
+            // subtree -- Skia's rule, and Flutter's advice to colour a container rather than wrap it in
+            // an `Opacity`. Group opacity differs from per-primitive opacity only where two primitives
+            // cover the same pixel; where there is only one, they are the same number.
+            if (needsLayer && !mask && foldsOpacity(box, style, node)) {
+                FrameProfile.count("layers-elided", 1);
+                ctx.withLayerOpacity(opacity, () -> {
+                    paintSelf(box, style, ctx, radii);
+                    paintOverlay(box, style, ctx);
+                    paintOutline(box, style, ctx, radii);
+                });
+                return;
+            }
 
             if (!needsLayer) {
                 paintSelf(box, style, ctx, radii);
@@ -98,32 +119,123 @@ public final class BoxPainter {
                 return;
             }
 
-            // A layer: the subtree blends as one unit before opacity applies, and a mask multiplies
-            // only the CHILDREN -- the box's own background is composited unmasked underneath.
-            CgFrameBuffer subtreeFbo = ctx.beginLayerFbo();
+            // A LAYER, SIZED TO WHAT GOES IN IT. The region is the subtree's ink bounds through the
+            // pose, already intersected with whatever is clipping -- so an element wholly scrolled out
+            // of its container costs nothing at all here, and one that is 20px wide costs 20px rather
+            // than a screen.
+            LayerRegion region = regionOf(box, ctx, base);
+            if (region.isEmpty()) return;
+
+            // The layer's own origin: its pixel (0,0) is the region's corner, so everything drawn
+            // inside it -- this box and every descendant -- goes through a base shifted to match.
+            Matrix4f inner = new Matrix4f(base).translateLocal(-region.x(), -region.y(), 0f);
+            pose.last().pose().set(inner).mul(box.localToWorld());
+            LayerRegion inside = region.atOrigin();
+
+            // The subtree blends as one unit before opacity applies, and a mask multiplies only the
+            // CHILDREN -- the box's own background is composited unmasked underneath.
+            CgFrameBuffer subtreeFbo = ctx.beginLayerFbo(region);
             paintSelf(box, style, ctx, radii);
             node.paintContent(ctx, box);
             if (mask && !box.children().isEmpty()) {
-                CgFrameBuffer childrenFbo = ctx.beginLayerFbo();
-                paintChildren(box, ctx, base, false);
-                CgFrameBuffer maskFbo = ctx.beginLayerFbo();
+                CgFrameBuffer childrenFbo = ctx.beginLayerFbo(inside);
+                paintChildren(box, ctx, inner, false);
+                CgFrameBuffer maskFbo = ctx.beginLayerFbo(inside);
                 paintMask(box, style, ctx);
                 ctx.endLayerFbo();
-                ctx.compositeMask(childrenFbo, maskFbo);
+                ctx.compositeMask(childrenFbo, maskFbo, inside);
                 ctx.endLayerFbo();
-                ctx.blitLayer(childrenFbo, 1f);
+                ctx.blitLayer(childrenFbo, 1f, inside);
             } else {
-                paintChildren(box, ctx, base, scissor);
+                paintChildren(box, ctx, inner, scissor);
             }
             node.paintDecoration(ctx, box);
             paintOverlay(box, style, ctx);
             // Inside the layer, so the outline fades with the box: CSS puts it in the opacity group.
             paintOutline(box, style, ctx, radii);
             ctx.endLayerFbo();
-            ctx.blitLayer(subtreeFbo, opacity);
+            ctx.blitLayer(subtreeFbo, opacity, region);
         } finally {
             pose.popPose();
         }
+    }
+
+    /**
+     * Whether {@code opacity} can be multiplied into this box's own draw rather than flattening it
+     * through a layer first.
+     *
+     * <p>It can when nothing the box paints can land on top of anything else it paints: one background,
+     * or one overlay, or one outline, and no children. Two primitives over one pixel is exactly where
+     * group opacity and per-primitive opacity part company — {@code 0.5} over {@code 0.5} composites to
+     * {@code 0.75} drawn separately and to {@code 0.5} drawn as a group.</p>
+     *
+     * <p><b>A node that paints its own content is never folded</b>, even a leaf, because
+     * {@code _LayerOpacity} is a property of the materials in this repository and CrystalGraphics' text
+     * material does not carry it — a folded label would simply ignore the fade. That is also why the
+     * question is asked of the CLASS rather than of the style: a subclass painting by hand is invisible
+     * from here otherwise. {@code backdrop-filter} is excluded for its own reason: it composites what is
+     * behind the element, which is not this element's paint to scale.</p>
+     */
+    private static boolean foldsOpacity(Box box, ComputedStyle style, UIElement node) {
+        if (!box.children().isEmpty()) return false;
+        if (PAINTS_ITS_OWN.get(node.getClass())) return false;
+        if (style.get(StylePropertyRegistry.BACKDROP_FILTER) != null) return false;
+
+        int primitives = 0;
+        if (style.get(StylePropertyRegistry.BACKGROUND) != CgUiDrawable.EMPTY
+                || style.isSet(StylePropertyRegistry.BACKGROUND_COLOR)) primitives++;
+        if (style.get(StylePropertyRegistry.OVERLAY) != CgUiDrawable.EMPTY) primitives++;
+        LengthPercent stroke = style.get(StylePropertyRegistry.OUTLINE_WIDTH);
+        if (style.get(StylePropertyRegistry.OUTLINE) != CgUiDrawable.EMPTY
+                || stroke != null && stroke.resolve(box.width()) > 0f) primitives++;
+        return primitives <= 1;
+    }
+
+    /**
+     * Whether a node class overrides either paint hook — asked once per class and cached.
+     *
+     * <p>Derived rather than declared on purpose. A {@code paintsOwnContent()} flag for every widget to
+     * override is a flag somebody eventually forgets, and the cost of forgetting is a widget that draws
+     * nothing under a fade — silent, and only under a fade. Reflection cannot be forgotten.</p>
+     */
+    private static final ClassValue<Boolean> PAINTS_ITS_OWN = new ClassValue<>() {
+        @Override
+        protected Boolean computeValue(Class<?> type) {
+            return overrides(type, "paintContent") || overrides(type, "paintDecoration");
+        }
+
+        private boolean overrides(Class<?> type, String method) {
+            try {
+                return type.getMethod(method, CgUiPaintContext.class, Box.class)
+                        .getDeclaringClass() != UIElement.class;
+            } catch (NoSuchMethodException impossible) {
+                return true;   // it is declared on UIElement; if it cannot be found, assume the worst
+            }
+        }
+    };
+
+    /**
+     * Where this box's layer goes in the current target, and how big it needs to be: its subtree's
+     * world ink bounds carried through {@code base} into the target's own physical pixels, then
+     * clipped by {@link CgUiPaintContext#layerRegion}.
+     *
+     * <p>{@code base} is affine and usually a scale plus a translation, so the four transformed corners
+     * bound the rectangle exactly; under a rotation they bound it conservatively, which is the right
+     * answer for an allocation.</p>
+     */
+    private static LayerRegion regionOf(Box box, CgUiPaintContext ctx, Matrix4f base) {
+        float x0 = box.inkX0(), y0 = box.inkY0(), x1 = box.inkX1(), y1 = box.inkY1();
+        float m00 = base.m00(), m10 = base.m10(), m30 = base.m30();
+        float m01 = base.m01(), m11 = base.m11(), m31 = base.m31();
+        float ax = m00 * x0 + m10 * y0 + m30, ay = m01 * x0 + m11 * y0 + m31;
+        float bx = m00 * x1 + m10 * y0 + m30, by = m01 * x1 + m11 * y0 + m31;
+        float cx = m00 * x1 + m10 * y1 + m30, cy = m01 * x1 + m11 * y1 + m31;
+        float dx = m00 * x0 + m10 * y1 + m30, dy = m01 * x0 + m11 * y1 + m31;
+        return ctx.layerRegion(
+                Math.min(Math.min(ax, bx), Math.min(cx, dx)),
+                Math.min(Math.min(ay, by), Math.min(cy, dy)),
+                Math.max(Math.max(ax, bx), Math.max(cx, dx)),
+                Math.max(Math.max(ay, by), Math.max(cy, dy)));
     }
 
     private static void paintChildren(Box box, CgUiPaintContext ctx, Matrix4f base, boolean scissor) {
@@ -316,6 +428,48 @@ public final class BoxPainter {
 
     private static float resolve(@Nullable LengthPercent lp, float against) {
         return lp == null ? 0f : lp.resolve(against);
+    }
+
+    /**
+     * How far this box paints in its OWN space, as {@code left, top, right, bottom} â€” its border box
+     * grown by the outline and by whatever the node says it draws beyond it.
+     *
+     * <p>Here rather than in {@link BoxTree} because it is the same arithmetic {@link #paintOutline}
+     * does, and a layer sized from a different answer than the one the painter draws is a clipped
+     * outline nobody looks for. The subtree's share, and the clip {@code overflow} imposes on it, are
+     * the tree's â€” this is one box.</p>
+     */
+    static void localInk(Box box, float[] ltrb) {
+        ComputedStyle style = box.node().computedStyle();
+        float width = box.width(), height = box.height();
+        float left = 0f, top = 0f, right = width, bottom = height;
+
+        CgUiDrawable outline = style.get(StylePropertyRegistry.OUTLINE);
+        LengthPercent strokeLp = style.get(StylePropertyRegistry.OUTLINE_WIDTH);
+        float stroke = strokeLp == null ? 0f : strokeLp.resolve(width);
+        boolean hasDrawable = outline != CgUiDrawable.EMPTY;
+        if (hasDrawable || stroke > 0f) {
+            // A drawable outline fills the offset rect; a stroked one grows outward from it by its own
+            // width. Offsets are commonly NEGATIVE here (`*` sets -1px), so this can subtract.
+            float grow = hasDrawable ? 0f : stroke;
+            left = Math.min(left, -(resolve(style.get(StylePropertyRegistry.OUTLINE_OFFSET_LEFT), width) + grow));
+            right = Math.max(right, width + resolve(style.get(StylePropertyRegistry.OUTLINE_OFFSET_RIGHT), width) + grow);
+            top = Math.min(top, -(resolve(style.get(StylePropertyRegistry.OUTLINE_OFFSET_TOP), height) + grow));
+            bottom = Math.max(bottom, height + resolve(style.get(StylePropertyRegistry.OUTLINE_OFFSET_BOTTOM), height) + grow);
+        }
+
+        InkOverflow declared = box.node().inkOverflow();
+        if (!declared.isZero()) {
+            left = Math.min(left, -declared.left());
+            top = Math.min(top, -declared.top());
+            right = Math.max(right, width + declared.right());
+            bottom = Math.max(bottom, height + declared.bottom());
+        }
+
+        ltrb[0] = left;
+        ltrb[1] = top;
+        ltrb[2] = right;
+        ltrb[3] = bottom;
     }
 
     /** One of the CSS box-model boxes, in the box's own space. */

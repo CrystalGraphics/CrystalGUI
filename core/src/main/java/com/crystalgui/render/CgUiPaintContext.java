@@ -247,14 +247,22 @@ public final class CgUiPaintContext {
     // matches LDLib2's own "off-target spans the full window" approach for the same reason.
     int screenWidth, screenHeight;
     long frameId;
-    private final List<CgFrameBuffer> layerFboPool = new ArrayList<>();
+    private final LayerPool layerFboPool = new LayerPool(this::warmUpLayer);
     /** One saved frame per nested {@link #beginLayerFbo}/{@link #endLayerFbo} pair. */
     final Deque<LayerFrame> layerStack = new ArrayDeque<>();
     static final CgFrameBufferFormat LAYER_FORMAT =
             CgFrameBufferFormat.builder("cgui_layer").color(0, CgTextureType.RGBA8).build();
 
+    /**
+     * @param savedScissor the clip stack as the ENCLOSING target expressed it. A bounded layer has its
+     *                     own origin, so every rect on the stack is shifted into its space on the way
+     *                     in and this is what puts them back â€” the stack always describes whatever is
+     *                     bound right now, which is what lets {@code applyScissorIfNeeded} stay a
+     *                     one-argument flip.
+     */
     record LayerFrame(CgFrameBuffer fbo, CgGlScope glScope, Matrix4f savedProjMatrix,
-                               int savedViewportW, int savedViewportH) {
+                               int savedViewportW, int savedViewportH, int[] savedScissor,
+                               @Nullable LayerRegion region) {
     }
 
     // ── Whole-frame MSAA ─────────────────────────────────────────────────────
@@ -675,12 +683,8 @@ public final class CgUiPaintContext {
         FrameProfile.end(timed, "glbegin:bindQuadPath");
         currentMaterial = boxModelMaterial;
         currentTexture = null;
-        frameActive = true; // must be set before warmUp() — quad() requires an active frame
+        frameActive = true; // must be set before the pool warms a slot — quad() requires an active frame
 
-        if (!warmedUp) {
-            warmUp();
-            warmedUp = true;
-        }
         // AFTER frameActive, with the pool's own warm-up, because warming a target SUBMITS A QUAD and
         // quads are refused outside a frame. Built here rather than on demand: an FBO created mid-draw,
         // with our own bindings in flight, came back incomplete. @see #blurLevel
@@ -735,22 +739,14 @@ public final class CgUiPaintContext {
         CgGL.glDisable(CgGL.GL_ALPHA_TEST);
     }
 
-    private boolean warmedUp = false;
-
-    /**
-     * Eagerly creates (and cold-draws into) the layer-FBO pool slots a masked element with children
-     * commonly needs, once, on the first frame — see {@link #warmUpLayer} for why. Depth 0 covers
-     * the element's own background layer; depth 1 covers its children's nested layer; depth 2
-     * covers the transient mask-shape FBO. Deeper nesting (an element whose child is *also* masked)
-     * isn't pre-warmed here — it's covered automatically by {@link #acquireLayerFbo}'s own per-slot
-     * warm-up whenever that depth is first reached, so this is a head start for the common case, not
-     * the load-bearing part of the fix.
+    /*
+     * THE EAGER POOL WARM-UP IS GONE, and the reason is the whole point of bucketing. It created three
+     * screen-sized targets on the first frame so a masked element with children would not meet a cold
+     * FBO -- but a layer is now sized to its element, so which slot the first real one takes is not
+     * knowable in advance, and priming the full-screen bucket only guessed wrong at 8MB a go. Every
+     * slot LayerPool creates is warmed as it is created, which the note below always called the
+     * load-bearing part of the fix. @see #warmUpLayer
      */
-    private void warmUp() {
-        acquireLayerFbo(0);
-        acquireLayerFbo(1);
-        acquireLayerFbo(2);
-    }
 
     /**
      * Unbinds the box-model material and restores GL state via the saved {@link CgGlScope}. Call once
@@ -1377,8 +1373,31 @@ public final class CgUiPaintContext {
      * set aside, for instance.
      */
     public void reapplyScissor() {
-        if (scissorStack.hasScissor()) scissorStack.applyScissorIfNeeded(targetHeight());
+        reapplyScissorFor(targetHeight());
+    }
+
+    /** {@link #reapplyScissor} against a buffer that is not yet the one {@link #targetHeight} names â€”
+     * a layer being entered, whose frame is on the stack before it is bound. */
+    private void reapplyScissorFor(int targetHeight) {
+        if (scissorStack.hasScissor()) scissorStack.applyScissorIfNeeded(targetHeight);
         else scissorStack.clearScissorIfNeeded();
+    }
+
+    /**
+     * The clip stack's rects, moved into a target whose origin is somewhere else.
+     *
+     * <p>A bounded layer's pixel {@code (0,0)} is its region's corner, so an inherited rect describing
+     * the enclosing target describes a different place inside it. Rects are stored top-left and
+     * unflipped precisely so this is a subtraction rather than a re-derivation.</p>
+     */
+    private static int[] shifted(int[] rects, int dx, int dy) {
+        if (dx == 0 && dy == 0 || rects.length == 0) return rects;
+        int[] moved = rects.clone();
+        for (int i = 0; i < moved.length; i += 4) {
+            moved[i] += dx;
+            moved[i + 1] += dy;
+        }
+        return moved;
     }
 
     /**
@@ -1487,19 +1506,43 @@ public final class CgUiPaintContext {
 
     // ── Visual layers ────────────────────────────────────────────────────────
 
-    /** Acquires (creating on first use) the pooled screen-sized layer FBO for the given nesting depth. */
-    private CgFrameBuffer acquireLayerFbo(int depth) {
-        while (layerFboPool.size() <= depth) {
-            String name = "cgui_layer_" + layerFboPool.size();
-            CgFrameBuffer newFbo = CgFrameBuffer.createOwned(name, Math.max(1, screenWidth), Math.max(1, screenHeight), LAYER_FORMAT);
-            layerFboPool.add(newFbo);
-            warmUpLayer(newFbo);
+    /**
+     * The region a layer covering {@code (x0,y0)-(x1,y1)} actually needs, in the current target's
+     * physical pixels â€” those bounds intersected with the live clip and with the target itself,
+     * rounded outward to whole pixels.
+     *
+     * <p>Callers hand in the bounds of what they are about to draw; {@link BoxPainter} takes them from
+     * {@link Box#inkX0 ink bounds} through the pose. Everything a layer costs â€” the allocation, the
+     * clear, the composite â€” is sized from the answer, so a layer nobody can see costs nothing at all:
+     * an empty region means the subtree is entirely clipped away and there is nothing to draw.</p>
+     *
+     * @return the region, empty when the bounds fall outside the clip
+     */
+    public LayerRegion layerRegion(float x0, float y0, float x1, float y1) {
+        // The enclosing REGION where there is one, not the buffer: a pooled target is bucketed, so
+        // its slack is space the enclosing composite will never read and a child sized into it would
+        // be allocating for pixels that cannot reach the screen.
+        LayerFrame enclosing = layerStack.peek();
+        LayerRegion bounds = enclosing == null ? null : enclosing.region();
+        float clipX0 = 0f, clipY0 = 0f;
+        float clipX1 = bounds != null ? bounds.width() : targetWidth();
+        float clipY1 = bounds != null ? bounds.height() : targetHeight();
+        if (scissorStack.hasScissor()) {
+            clipX0 = scissorStack.currentX();
+            clipY0 = scissorStack.currentY();
+            clipX1 = clipX0 + scissorStack.currentW();
+            clipY1 = clipY0 + scissorStack.currentH();
         }
-        CgFrameBuffer fbo = layerFboPool.get(depth);
-        if (fbo.getWidth() != screenWidth || fbo.getHeight() != screenHeight) {
-            fbo.resize(Math.max(1, screenWidth), Math.max(1, screenHeight));
-        }
-        return fbo;
+        int left = (int) Math.floor(Math.max(x0, clipX0));
+        int top = (int) Math.floor(Math.max(y0, clipY0));
+        int right = (int) Math.ceil(Math.min(x1, clipX1));
+        int bottom = (int) Math.ceil(Math.min(y1, clipY1));
+        return new LayerRegion(left, top, Math.max(0, right - left), Math.max(0, bottom - top));
+    }
+
+    /** Acquires (creating on first use) the pooled layer FBO for a nesting depth and a wanted size. */
+    private CgFrameBuffer acquireLayerFbo(int depth, int width, int height) {
+        return layerFboPool.acquire(depth, width, height, Math.max(1, screenWidth), Math.max(1, screenHeight));
     }
 
     /**
@@ -1516,9 +1559,8 @@ public final class CgUiPaintContext {
      * against throwaway content nobody reads — means whatever real content later reuses this exact
      * pool slot never hits a truly first-ever draw again, on any frame.</p>
      *
-     * <p>Self-scaling by construction: this runs from {@link #acquireLayerFbo} itself, so it covers
-     * every nesting depth the UI tree ever actually reaches, not just whatever depth
-     * {@link #warmUp()} eagerly primes at startup.</p>
+     * <p>Self-scaling by construction: {@link LayerPool} runs this as it creates a slot, so it covers
+     * every nesting depth and every size bucket the UI tree actually reaches.</p>
      *
      * <p><b>Public, because the pool is no longer the only thing that creates one.</b> Anything holding
      * its own render target through {@link #beginLayerFbo(CgFrameBuffer)} — a window snapshot, say —
@@ -1554,16 +1596,33 @@ public final class CgUiPaintContext {
     }
 
     /**
-     * Pushes a new screen-sized offscreen target and redirects subsequent drawing into it —
-     * cleared fully transparent, same screen-space ortho convention {@link #beginFrame} sets up
-     * for the real screen (just retargeted), so draws made while a layer is active use the exact
-     * same absolute coordinates they always do. Nests correctly (a layered element containing
-     * another layered element) via a small per-depth FBO pool. Pair with {@link #endLayerFbo}.
+     * Pushes an offscreen target the size of {@code region} and redirects drawing into it, cleared
+     * fully transparent. Nests. Pair with {@link #endLayerFbo}, then composite with
+     * {@link #blitLayer(CgFrameBuffer, float, LayerRegion)} <b>giving the same region</b>.
      *
-     * @return the acquired FBO, for the caller to composite/blit once painting into it is done
+     * <pre>{@code
+     * LayerRegion region = ctx.layerRegion(x0, y0, x1, y1);
+     * if (region.isEmpty()) return;                    // wholly clipped: nothing to draw
+     * CgFrameBuffer layer = ctx.beginLayerFbo(region);
+     * // ...draw, with the caller's own transform pre-translated by (-region.x(), -region.y())
+     * ctx.endLayerFbo();
+     * ctx.blitLayer(layer, opacity, region);
+     * }</pre>
+     *
+     * <p><b>The layer has its own origin, and the caller has to honour it.</b> The target's pixel
+     * {@code (0,0)} is the region's top-left corner, not the screen's, so a caller drawing at absolute
+     * coordinates must pre-translate its own transform by the region's negated origin. Nothing here can
+     * do that for it: the pose is rebuilt per element from a base matrix this class never sees. The clip
+     * stack IS shifted here, because this class owns it.</p>
+     *
+     * @return the acquired FBO, which may be LARGER than the region -- it comes from a size-bucketed
+     *         pool, and only the region's own corner of it is cleared, drawn or composited
      */
-    public CgFrameBuffer beginLayerFbo() {
-        return beginLayerFbo(acquireLayerFbo(layerStack.size()));
+    public CgFrameBuffer beginLayerFbo(LayerRegion region) {
+        int width = Math.max(1, region.width()), height = Math.max(1, region.height());
+        FrameProfile.count("layers", 1);
+        FrameProfile.count("layers-d" + layerStack.size(), 1);
+        return beginLayerFbo(acquireLayerFbo(layerStack.size(), width, height), true, region);
     }
 
     /**
@@ -1599,30 +1658,44 @@ public final class CgUiPaintContext {
      * had been testing it.</p>
      */
     public CgFrameBuffer beginLayerFbo(CgFrameBuffer fbo, boolean clear) {
+        return beginLayerFbo(fbo, clear, null);
+    }
+
+    /**
+     * @param region what of {@code fbo} is in use, and where it goes back, or null when the caller owns
+     *               the target and its whole extent is the layer -- a snapshot, a backdrop capture.
+     *               A region shifts the clip stack into the layer's own origin; null leaves it alone.
+     */
+    private CgFrameBuffer beginLayerFbo(CgFrameBuffer fbo, boolean clear, @Nullable LayerRegion region) {
         flush();
         CgFrameData fd = CgRenderPipeline.getInstance().getFrameData();
+        int[] savedScissor = scissorStack.suspend();
         layerStack.push(new LayerFrame(fbo, CgGlState.save(CgGlSlot.FBO, CgGlSlot.VIEWPORT),
-                new Matrix4f(fd.projMatrix), fd.viewportW, fd.viewportH));
+                new Matrix4f(fd.projMatrix), fd.viewportW, fd.viewportH, savedScissor, region));
 
         fbo.bind();
         CgGL.glViewport(0, 0, fbo.getWidth(), fbo.getHeight());
-        // The clear must reach the whole buffer: layers are pooled, and blitLayer composites all of one
-        // full-screen assuming everything the subtree did not draw is transparent. The clip is
-        // re-applied below, so it still governs the drawing.
         if (clear) {
-            int[] suspended = scissorStack.suspend();
-            scissorStack.clearScissorIfNeeded();
+            // ONLY THE REGION. A pooled target is bucketed, so it is usually bigger than what is about
+            // to be drawn into it and it still holds whatever the last element to take this slot left
+            // behind. Nothing ever samples that: the composite reads the region and no more, which is
+            // the same argument that made the full-screen clear correct when every layer was a screen.
+            long timed = FrameProfile.begin();
+            int width = region == null ? fbo.getWidth() : Math.min(fbo.getWidth(), region.width());
+            int height = region == null ? fbo.getHeight() : Math.min(fbo.getHeight(), region.height());
+            scissorStack.pushScissor(0, 0, width, height);
+            scissorStack.applyScissorIfNeeded(fbo.getHeight());
             fbo.clearColor(0f, 0f, 0f, 0f);
-            scissorStack.resume(suspended);
+            scissorStack.popScissor();
+            FrameProfile.end(timed, "layer:clear");
+            FrameProfile.count("layer-clear-kpx", width * height / 1000);
         }
         // THE INHERITED CLIP, RE-EXPRESSED FOR THIS BUFFER. A GL scissor rect is bottom-left pixels of
-        // one particular target; the rect the enclosing element pushed is kept top-left and flipped
-        // against whatever is bound, so a layer of another height than its parent -- a pool layer
-        // inside a window's snapshot -- clips the same region rather than a band at its bottom.
-        if (scissorStack.hasScissor()) scissorStack.applyScissorIfNeeded(fbo.getHeight());
-        // The state a layer STARTS in: complete or not, and what a live scissor would clip it to. An
-        // incomplete target discards every draw silently, and an inherited clip expressed against the
-        // wrong height is the documented way a layer ends up with a band of untouched pixels.
+        // one particular target; the stack keeps rects top-left and flips them here, so a layer of
+        // another height than its parent clips the same region rather than a band at its bottom. A
+        // BOUNDED layer moves the origin as well, so every inherited rect shifts with it.
+        scissorStack.resume(region == null ? savedScissor : shifted(savedScissor, -region.x(), -region.y()));
+        reapplyScissorFor(fbo.getHeight());
 
         fd.projMatrix.identity().ortho(0, fbo.getWidth(), fbo.getHeight(), 0, -1, 1);
         fd.viewportW = fbo.getWidth();
@@ -1657,6 +1730,9 @@ public final class CgUiPaintContext {
         CgRenderPipeline.getInstance().prepareFrame();
         // Back to the enclosing target's size for text as well -- @see beginLayerFbo.
         textRenderer.context().updateOrtho(frame.savedViewportW(), frame.savedViewportH());
+        // The clip stack as the enclosing target expressed it -- a bounded layer shifted every rect
+        // into its own origin on the way in. @see LayerFrame#savedScissor
+        scissorStack.resume(frame.savedScissor());
         frame.glScope().close();
         // And the clip, against the enclosing target's height -- the scope above restores the FBO and
         // the viewport but not the scissor rect, which was last applied for the layer just ended.
@@ -1748,7 +1824,24 @@ public final class CgUiPaintContext {
     }
 
     public void blitLayer(CgFrameBuffer fbo, float opacity) {
+        blitLayer(fbo, opacity, new LayerRegion(0, 0, fbo.getWidth(), fbo.getHeight()));
+    }
+
+    /**
+     * As {@link #blitLayer(CgFrameBuffer, float)}, for a layer that occupies only part of its target:
+     * composites {@code region}'s corner of {@code fbo} back at {@code region}'s own position.
+     *
+     * <p>Give it the region {@link #beginLayerFbo(LayerRegion)} was opened with. The pool hands out
+     * size buckets, so the FBO is usually larger than the layer and everything outside the region is
+     * stale -- blitting the whole buffer would composite the previous user of the slot.</p>
+     */
+    public void blitLayer(CgFrameBuffer fbo, float opacity, LayerRegion region) {
+        if (region.isEmpty()) return;
+        long timed = FrameProfile.begin();
+        FrameProfile.count("layer-blit-kpx", region.width() * region.height() / 1000);
         CgTexture2D colorTex = (CgTexture2D) fbo.getColorTexture(0);
+        float u1 = Math.min(1f, (float) region.width() / fbo.getWidth());
+        float v1 = Math.max(0f, 1f - (float) region.height() / fbo.getHeight());
         // Declared rather than bound by hand: _MainTex has a "white" default, so a raw bindTexture() is
         // ignored -- the material binds the fallback and points the uniform at it. Composited
         // premultiplied, that floods the destination rather than missing an image.
@@ -1756,8 +1849,8 @@ public final class CgUiPaintContext {
         withMaterial(layerBlitMaterial, () -> withLayerOpacity(opacity, () -> {
             poseStack.pushPose();
             poseStack.setIdentity();
-            quad().at(0, 0).size(fbo.getWidth(), fbo.getHeight())
-                  .uv(0f, 1f, 1f, 0f)   // V flipped — see the javadoc above
+            quad().at(region.x(), region.y()).size(region.width(), region.height())
+                  .uv(0f, 1f, u1, v1)   // V flipped — see the javadoc above
                   .color(getColor()).submit();
             flush();
             // WHICH UNIT THE LAYER TEXTURE LANDED ON, read after the draw. gui_layer_blit declares
@@ -1767,6 +1860,7 @@ public final class CgUiPaintContext {
             // the two symptoms this composite is blamed for, and neither looks like a binding fault.
             poseStack.popPose();
         }));
+        FrameProfile.end(timed, "layer:blit");
     }
 
     /**
@@ -1786,6 +1880,20 @@ public final class CgUiPaintContext {
      * {@code subtreeFbo} itself if it needs to keep drawing into it afterward).
      */
     public void compositeMask(CgFrameBuffer subtreeFbo, CgFrameBuffer maskFbo) {
+        compositeMask(subtreeFbo, maskFbo, new LayerRegion(0, 0, subtreeFbo.getWidth(), subtreeFbo.getHeight()));
+    }
+
+    /**
+     * As {@link #compositeMask(CgFrameBuffer, CgFrameBuffer)}, over the part of the two targets a
+     * bounded layer actually used.
+     *
+     * <p>Both come from the same size bucket, so the region means the same thing in each. Multiplying
+     * the whole buffer would be correct but pays for the bucket's slack, and the slack is where the
+     * previous user of the slot still is.</p>
+     */
+    public void compositeMask(CgFrameBuffer subtreeFbo, CgFrameBuffer maskFbo, LayerRegion region) {
+        if (region.isEmpty()) return;
+        long timed = FrameProfile.begin();
         flush();
         try (CgGlScope scope = CgGlState.save(CgGlSlot.FBO, CgGlSlot.VIEWPORT, CgGlSlot.BLEND)) {
             subtreeFbo.bind();
@@ -1827,8 +1935,10 @@ public final class CgUiPaintContext {
                 // identity-pose bypass as blitLayer too — this quad is already physical-pixel-sized.
                 poseStack.pushPose();
                 poseStack.setIdentity();
-                quad().at(0, 0).size(subtreeFbo.getWidth(), subtreeFbo.getHeight())
-                      .uv(0f, 1f, 1f, 0f)   // V flipped, same reason as blitLayer
+                quad().at(0, 0).size(region.width(), region.height())
+                      .uv(0f, 1f,
+                          Math.min(1f, (float) region.width() / maskFbo.getWidth()),
+                          Math.max(0f, 1f - (float) region.height() / maskFbo.getHeight()))   // V flipped, same reason as blitLayer
                       .color(0xFFFFFFFF).submit();
                 flush();
                 poseStack.popPose();
@@ -1848,6 +1958,7 @@ public final class CgUiPaintContext {
         // The scope put the enclosing target back; the clip has to follow it.
         reapplyScissor();
         currentTexture = null;
+        FrameProfile.end(timed, "layer:mask");
     }
 
     /**
@@ -1890,10 +2001,7 @@ public final class CgUiPaintContext {
         // restoring it is meaningless at best.
         layerStack.clear();
 
-        for (CgFrameBuffer fbo : layerFboPool) {
-            fbo.delete();
-        }
-        layerFboPool.clear();
+        layerFboPool.deleteAll();
 
         // Same reasoning as the layer pool above — createOwned bypasses CgFrameBufferRegistry, so
         // nothing else ever frees these. Not nulled out afterward (they're final, built once in the
