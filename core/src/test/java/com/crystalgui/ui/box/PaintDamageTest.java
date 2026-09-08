@@ -155,6 +155,32 @@ public class PaintDamageTest extends UiDocumentTestBase {
         assertNotEquals(was, parent.box().subtreeRevision());
     }
 
+    /**
+     * <b>Fading an element does not repaint it.</b>
+     *
+     * <p>Its own opacity is applied when it is composited, so what changed is the picture above it. A
+     * window fading in over a still desktop paints its contents once and is re-composited at a new
+     * opacity every frame after.</p>
+     */
+    @Test
+    public void aCompositorOpacityDamagesTheHostAndNotTheElement() {
+        UIElement root = new UIElement().layout(l -> l.width(40).height(20));
+        UIElement faded = new UIElement().layout(l -> l.width(10).height(10));
+        root.append(faded);
+        document.append(root);
+        document.update(W, H);
+
+        long wasFaded = faded.box().subtreeRevision();
+        long wasRoot = root.box().subtreeRevision();
+        faded.box().setOpacity(0.5f);
+        document.update(W, H);
+
+        assertEquals("the faded element's own picture is unchanged",
+                wasFaded, faded.box().subtreeRevision());
+        assertNotEquals("what contains it composites it differently",
+                wasRoot, root.box().subtreeRevision());
+    }
+
     private static final class HandPainted extends UIElement {
         @Override
         public void paintContent(CgUiPaintContext ctx, Box box) {

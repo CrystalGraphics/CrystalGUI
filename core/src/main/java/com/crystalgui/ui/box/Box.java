@@ -560,14 +560,22 @@ public final class Box {
     /**
      * A compositor's opacity, above the cascade's; {@code null} withdraws it.
      *
-     * <p>Damaging on a change is not belt and braces. A layer's OWN opacity is applied when it is
-     * composited, so fading a retained subtree needs no repaint — but a descendant's is baked into the
-     * picture, and nothing else in this box says it moved.</p>
+     * <p><b>It damages the HOST, not this box</b>, and the distinction is what makes a fade cheap. An
+     * opacity is applied when this box is composited into whatever contains it — so what changed is the
+     * host's picture, and this box's own is the same one it was. A window fading in over a still desktop
+     * therefore paints its contents once and is re-composited at a new opacity every frame after, where
+     * damaging itself would have repainted the whole window on every frame of the fade.</p>
+     *
+     * <p>It reaches a layer either way: damage folds up through {@link #subtreeRevision}, so if the host
+     * is not itself flattened the nearest ancestor that is still hears about it — which is the case that
+     * matters, since a descendant's opacity IS baked into the picture above it.</p>
      */
     public void setOpacity(@Nullable Float opacity) {
         if (Objects.equals(opacityOverride, opacity)) return;
         opacityOverride = opacity;
-        requestRepaint();
+        Box host = host();
+        // No host is the root, which composites into the screen: there is nothing above to tell.
+        (host != null ? host : this).requestRepaint();
     }
 
     public Transform transform() {
