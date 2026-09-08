@@ -2,6 +2,9 @@ package com.crystalgui.widget.config;
 
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.style.StyleGroup;
+import com.crystalgui.ui.box.Box;
+import com.crystalgui.widget.config.control.HeaderControl;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.scroll.ScrollerView;
@@ -61,6 +64,45 @@ public class ConfiguratorPanel extends ScrollerView {
     public ConfiguratorPanel() {
         super(NAME);
         addClass(PANEL_CLASS);
+    }
+
+    /**
+     * A section band spans the whole scrollable width, not just the viewport.
+     *
+     * <p>A header is the only thing in this panel that is a <em>surface</em> rather than a value: it says
+     * "a section starts here", and a band that stops at the viewport's edge stops saying it the moment
+     * the panel is scrolled sideways — the rows carry on past a strip that ran out. Rows are viewport-wide
+     * by design (see {@code .__inline__} in ua/inspector.css for why that basis has to be definite), so
+     * the width a band wants is the one thing CSS here cannot name: it belongs to the scroller, several
+     * levels up.</p>
+     *
+     * <p><b>Scroll-exempt, which is what stops this closing a loop.</b> The extent is the widest thing in
+     * the panel; a band stretched TO the extent would then be that widest thing, and the extent would be
+     * defined in terms of itself. Exempting it from the scroll measurement means it follows the width
+     * without ever contributing to it — the same rule {@code ListView} states for anything pinned to a
+     * row's trailing edge.</p>
+     */
+    @Override
+    protected void connected() {
+        super.connected();
+        document().animation().afterLayout(this, delta -> {
+            stretchSectionBands();
+            return true;
+        });
+    }
+
+    private void stretchSectionBands() {
+        Box self = box();
+        if (self == null) return;
+        float span = Math.max(self.clientWidth(), self.scrollWidth());
+        if (span <= 0f) return;
+        for (UIElement node : composedSubtree()) {
+            if (!(node instanceof HeaderControl)) continue;
+            // Once, not per frame: an unchanged inline candidate is dropped by replaceOrPutCandidate,
+            // so this settles rather than re-dirtying layout every pass.
+            node.setScrollExempt(true);
+            StyleGroup.inlinePipeline(node.getStyle().getLayoutGroup(), l -> l.width(span));
+        }
     }
 
     /**
