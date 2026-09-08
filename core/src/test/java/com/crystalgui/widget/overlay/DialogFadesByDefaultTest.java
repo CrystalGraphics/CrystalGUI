@@ -11,6 +11,7 @@ import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.transition.TransitionSpec;
 import com.crystalgui.testsupport.UiDocumentTestBase;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIElementRegistry;
 
 /**
@@ -97,26 +98,111 @@ public class DialogFadesByDefaultTest extends UiDocumentTestBase {
     }
 
     /**
-     * <b>No visible edge, but a ring to pulse from.</b>
+     * <b>Three edges, and the fourth is covered rather than not drawn.</b>
      *
-     * <p>A dialog has no outline for the same reason a window frame has none. The declaration is kept at
-     * zero alpha rather than deleted, because {@code .__pulse__} eases {@code outline-color} from
-     * whatever rests here — and a property with no resting value declines to transition and snaps, which
-     * would cost the blocked-modal pulse the half of it that is an edge.</p>
+     * <p>The body carries the outline — {@code --dialog-bg} and {@code --surface-editor} are the same
+     * colour, so it is the half with nothing separating it. Per-edge width does not exist here
+     * ({@code BoxPainter} strokes with {@code border().left} for all four sides, and {@code outline} has
+     * one width), so the fourth side is <b>covered</b>: the caption carries a z-index and paints after
+     * the body, and the body's top edge is pushed onto the caption's last row by
+     * {@code outline-offset-top: 0} — outlines are drawn INSIDE the border box here, because
+     * {@code ua/core.css} sets {@code outline-offset: -1px} on {@code *}.</p>
      */
     @Test
-    public void theEdgeIsInvisibleButStillThereToEaseFrom() {
-        int resting = dialog.getStyle().getGeneralGroup().outlineColor();
-        assertEquals("nothing is drawn at rest", 0, (resting >>> 24) & 0xFF);
+    public void theBodyCarriesTheEdgeAndTheCaptionCoversItsTop() {
+        dialog.show();
+        frame();
 
-        // THE RING IS STILL DECLARED, which is what gives `outline-color` a resting value to ease from.
-        // Asserted through the WIDTH rather than by pulsing and reading the colour back: the colour is in
-        // the transition list, so a frame after the class lands it holds whatever the wall clock has got
-        // to by then, which is not a fact about this sheet. @see the class note above.
-        LengthPercent width = dialog.getStyle().getGeneralGroup().outlineWidth();
-        assertNotNull("the declaration has to survive, or the pulse's edge snaps instead of easing",
-                width);
-        assertTrue("…with something to draw in, was " + width, width.resolve(100f) > 0f);
+        // THE WIDTH, not the colour: outline-color has an opaque initial value whether or not an
+        // outline is declared, so reading it says nothing about whether one is drawn. paintOutline
+        // itself returns early on a zero stroke, which is the same question asked the same way.
+        LengthPercent onBody = dialog.getContent().getStyle().getGeneralGroup().outlineWidth();
+        assertNotNull(onBody);
+        assertTrue("the body draws one, was " + onBody, onBody.resolve(100f) > 0f);
+
+        int bodyColor = dialog.getContent().getStyle().getGeneralGroup().outlineColor();
+        assertTrue("…and visibly, was " + Integer.toHexString(bodyColor),
+                ((bodyColor >>> 24) & 0xFF) > 0x80);
+
+        assertEquals("the dialog itself draws none", 0,
+                (dialog.getStyle().getGeneralGroup().outlineColor() >>> 24) & 0xFF);
+
+        // THE COVER. Children paint in z-index order, so a caption above the body hides the 1px of the
+        // body's outline that lands on the caption's last row. Without it the header and the body are
+        // ruled apart, which says they are two surfaces when they are one window.
+        assertTrue("the caption has to paint after the body",
+                dialog.getTitleBar().getStyle().getGeneralGroup().zIndex()
+                        > dialog.getContent().getStyle().getGeneralGroup().zIndex());
+    }
+
+    /**
+     * <b>A dialog does not ring itself on open.</b>
+     *
+     * <p>{@code :focus-visible} rings whatever holds focus, and {@code Dialog.show} focuses the dialog
+     * programmatically — which rings by definition. So every dialog drew a 1px {@code --focus-ring}
+     * around its whole self from the moment it appeared, which is the edge four rounds of reports were
+     * actually about: it survived every change to the dialog's own border because it was never the
+     * dialog's own border. {@code ua/core.css} carves pane-sized containers out of that rule and a
+     * dialog is one, for the same two reasons {@code window} is.</p>
+     */
+    @Test
+    public void aFocusedDialogDrawsNoRingOfItsOwn() {
+        dialog.show();
+        frame();
+        frame();
+
+        // NOTHING VISIBLE, which is the claim -- not "the width is zero". The carve-out zeroes the width
+        // only while the dialog is focus-visible; unfocused it keeps the 1px ring the pulse eases from,
+        // at zero alpha. Either way paintOutline draws nothing, and asserting one of the two mechanisms
+        // would pass or fail on which state the fixture happened to be in.
+        LengthPercent ring = dialog.getStyle().getGeneralGroup().outlineWidth();
+        int colour = dialog.getStyle().getGeneralGroup().outlineColor();
+        boolean invisible = ring == null || ring.resolve(100f) <= 0f || ((colour >>> 24) & 0xFF) == 0;
+        assertTrue("a dialog is pane-sized and focuses itself, so it must not ring: width=" + ring
+                + " colour=" + Integer.toHexString(colour), invisible);
+    }
+
+    /**
+     * …and the carve-out must not take the blocked-modal pulse with it. The two rules are the same
+     * weight, so the pulse wins only by sitting in a later part of the sheet than {@code ua/core.css}.
+     */
+    @Test
+    public void theBlockedPulseStillOutranksTheCarveOut() {
+        dialog.show();
+        frame();
+        dialog.addClass("__pulse__");
+        frame();
+
+        LengthPercent pulsing = dialog.getStyle().getGeneralGroup().outlineWidth();
+        assertNotNull(pulsing);
+        // THE WIDTH ONLY. outline-color is in the transition list, so a frame after the class lands it
+        // is still easing up from transparent -- reading it here asserts the wall clock, not the sheet.
+        assertTrue("the pulse has to draw an edge, was " + pulsing, pulsing.resolve(100f) > 0f);
+    }
+
+    /**
+     * <b>The body's top edge is pushed out of the body, or the caption cannot cover it.</b>
+     *
+     * <p>{@code ua/core.css} sets {@code outline-offset: -1px} on {@code *} so a focus ring survives an
+     * ancestor's clip, which means outlines are drawn INSIDE the border box. At that inherited offset
+     * the body's top edge sits on the body's own first row — below the caption, and impossible to hide
+     * behind it. This is the one pixel that puts it back on the caption's last row.</p>
+     */
+    @Test
+    public void theBodysTopEdgeSitsOnTheCaptionNotOnTheBody() {
+        dialog.show();
+        frame();
+
+        LengthPercent top = dialog.getContent().getStyle()
+                .getComputed(StylePropertyRegistry.OUTLINE_OFFSET_TOP);
+        assertNotNull("the top offset has to be stated, or `*` gives it -1px", top);
+        assertEquals("…and be zero, which is what lifts the stroke off the body's first row",
+                0f, top.resolve(100f), 0.01f);
+
+        LengthPercent left = dialog.getContent().getStyle()
+                .getComputed(StylePropertyRegistry.OUTLINE_OFFSET_LEFT);
+        assertNotNull(left);
+        assertTrue("the other three keep the inherited inset, was " + left, left.resolve(100f) < 0f);
     }
 
     /** And the box that outlives the close must not go on taking clicks while it fades. */

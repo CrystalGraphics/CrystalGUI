@@ -120,6 +120,12 @@ theme {
 
     --dialog-bg: var(--surface-panel);
     --dialog-border: var(--border-base);
+    /* THE SAME ROLE THE CAPTION IS PAINTED IN, which is what makes the edge read as the caption carried
+     * round the body rather than as a frame drawn on it: one shape, not a panel with a lighter rim.
+     * Its own token rather than a reference to --dialog-title-bg, because base.css derives component
+     * tokens from the SYSTEM vocabulary and never from each other -- so "these two match" is said by
+     * both naming --surface-base, and a theme can still part them. @see --dialog-title-bg below */
+    --dialog-edge: var(--surface-base);
     /* The blocked pulse borrows the accent, because it is an ANSWER to a click rather than an error: the
      * dialog is saying "over here", not "you did something wrong". Red would read as the latter. */
     --dialog-pulse-border: var(--accent);

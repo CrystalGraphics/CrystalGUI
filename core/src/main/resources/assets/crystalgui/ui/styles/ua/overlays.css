@@ -179,20 +179,15 @@ dialog {
     min-width: 80px;
     min-height: 40px;
     background: var(--dialog-bg, #2E2E2E);
-    /* NO VISIBLE EDGE, exactly as a window frame has none — a dialog is a window with less furniture,
-     * and the outline was the last thing separating the two. It also read as an alignment fault it was
-     * not: the close control is flush to the caption's right and top by design, so the fill terminated
-     * against this line on those two sides and ran into open caption on the third, which makes a
-     * centred mark look pushed. The dialog's own ground and its caption grey carry the edge instead.
+    /* NO EDGE ON THE DIALOG ITSELF -- the BODY carries it, three sides only. @see .__content__ below.
      *
-     * THE RING IS KEPT AT ZERO ALPHA rather than removed, and that is not the same as deleting the
-     * declaration: `.__pulse__` below eases `outline-color` from whatever is resting here, and a
-     * property with no resting value declines to transition and snaps. Costs nothing — an outline is
-     * drawn OUTSIDE the border box, so it takes no space, and a fully transparent one draws nothing.
+     * THE RING IS KEPT AT ZERO ALPHA rather than removed: `.__pulse__` eases `outline-color` from
+     * whatever rests here, and a property with no resting value declines to transition and snaps, so
+     * the blocked-modal pulse would lose the half of it that is an edge. It costs nothing -- an outline
+     * never affects layout, and a transparent stroke draws nothing.
      *
-     * `#00000000` and not the `transparent` keyword: this shorthand's colour parser does not take it,
-     * and a value it cannot read degrades to the initial one -- an OPAQUE edge, which is the thing being
-     * removed. CSS order, alpha last. */
+     * `#00000000`, not `transparent`: that keyword does not parse in this shorthand and a value it
+     * cannot read degrades to the initial one, which is an OPAQUE edge. CSS order, alpha last. */
     outline: 1px #00000000;
     color: var(--dialog-fg, #DDDDDD);
     z-index: 5;
@@ -273,6 +268,11 @@ dialog .__title-bar__ {
     justify-content: space-between;
     background: var(--dialog-title-bg, #26282B);
     color: var(--dialog-title-fg, #DFE1E5);
+    /* PAINTED AFTER THE BODY, which is what hides the body's fourth edge. Children paint in z-index
+     * order (Box#paintOrder sorts by it), and the body's outline puts a 1px segment on this bar's last
+     * row -- so the caption's own background covers it and the header and body read as one surface.
+     * They do not overlap otherwise, so nothing else changes by raising it. */
+    z-index: 1;
 }
 
 /* ── Popovers, menus and dropdowns ──────────────────────────────────────────────────────────────
@@ -704,6 +704,32 @@ dialog .__content__ {
     flex-grow: 1;
     width: 100%;
     padding-all: 6px;
+    /* THE EDGE, AND ONLY THREE SIDES OF IT.
+     *
+     * The BODY is the half that needs one: --dialog-bg is --surface-panel and the editor a dialog
+     * floats over is --surface-editor, the same #191A1C. The CAPTION is --surface-base, thirteen levels
+     * up, and stands clear on its own -- and a line between them would say they are two surfaces when
+     * they are one window.
+     *
+     * PER-EDGE WIDTH DOES NOT EXIST, so the fourth side is not dropped, it is COVERED: BoxPainter
+     * strokes a border with `border().left` for all four sides, and `outline` has one width. The
+     * caption carries a z-index so it paints after this element (see `.__title-bar__`), and the top
+     * edge is pushed up onto the caption's last row for it to cover.
+     *
+     * `outline-offset-top: 0` IS THAT PUSH, and it is one pixel. Outlines here are drawn INSIDE the
+     * border box -- ua/core.css sets `outline-offset: -1px` on `*` so a focus ring survives an
+     * ancestor's `overflow: hidden` -- so at the inherited -1px this edge sits on the body's FIRST ROW,
+     * below the caption and impossible to cover. At 0 the stroke lands in the band just outside the
+     * box, which is the caption's last row. The other three keep the inherited inset and do not move.
+     *
+     * It also keeps the close control clear of a line: the caption's top and right are the two sides it
+     * sits flush against, and neither has one.
+     *
+     * Not clipped by the `overflow: hidden` below, though it looks as though it should be: BoxPainter
+     * pushes the scissor inside paintChildren and pops it before paintOutline, so a box's own
+     * decorations are never clipped by its own overflow. */
+    outline: 1px var(--dialog-edge, #26282B);
+    outline-offset-top: 0px;
     /* A dialog contains its content: it is user-movable and user-resizable, and an unclipped panel
      * spills the moment either shrinks it below the content. Same lesson as the resize page. */
     overflow: hidden;

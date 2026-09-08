@@ -215,6 +215,7 @@ editor scheme's.
 | `--dialog-close-fg` | `var(--fg-secondary)` | base.css |
 | `--dialog-close-hover-bg` | `var(--error)` | base.css |
 | `--dialog-close-hover-fg` | `var(--fg-on-accent)` | base.css |
+| `--dialog-edge` | `var(--surface-base)` | base.css |
 | `--dialog-fg` | `var(--fg)` | base.css |
 | `--dialog-picker-bg` | `#2E2E2E76` | crystal-dark.css |
 | `--dialog-pulse-border` | `var(--accent)` | base.css |
