@@ -143,7 +143,7 @@ public class TriangulatorEquivalenceTest {
 
         assertEquals(what + ": cell count", expected.count(), actual.count());
         // Zero delta: this is an identity claim, not a tolerance one.
-        assertArrayEquals(what + ": vertices", expected.quads(), actual.quads(), 0f);
+        assertArrayEquals(what + ": vertices", expected.cells(), actual.cells(), 0f);
         assertArrayEquals(what + ": slice tags", expected.slice(), actual.slice());
         assertArrayEquals(what + ": walls", expected.edges(), actual.edges());
     }

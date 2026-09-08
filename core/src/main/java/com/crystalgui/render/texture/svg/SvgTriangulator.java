@@ -18,14 +18,14 @@ import java.util.Map;
  *
  * <p>So: slice the shape into horizontal bands at every vertex {@code y}, and within each band find where
  * the edges cross, sort those crossings, and apply the fill rule to decide which spans are inside. Each
- * inside span becomes a trapezoid — ONE quad, drawn as one instance that knows all four of its edges.</p>
+ * inside span becomes a trapezoid — ONE cell, drawn as one instance that knows all four of its edges.</p>
  *
- * <h3>One quad per cell, not two triangles</h3>
+ * <h3>One cell per span, not two triangles</h3>
  *
  * <p>A cell's two walls are contour edges and get antialiased; its top and bottom are cuts shared with
  * the bands beside it and must stay a hard step. Split on its diagonal, each triangle knew one wall, and a
  * pixel on a cut within reach of the other wall was claimed at full coverage by the half that owned the
- * far one — a bright row across every band boundary, at every fractional scale. The quad reading of
+ * far one — a bright row across every band boundary, at every fractional scale. The cell reading of
  * {@code CgVectorRenderer} takes all four corners, so there is no half that does not know a wall.</p>
  *
  * <p>Which edges are on the outline is decided here, once: the walls always are; a top or bottom is
@@ -169,7 +169,7 @@ public final class SvgTriangulator {
 
     /**
      * Edge bits of {@link Fill#edges}: the cell's top ({@code p0->p1}), right, bottom and left edges.
-     * The same values as {@code CgVectorRenderer.QUAD_*}, which the draw hands them to untranslated;
+     * The same values as {@code CgVectorRenderer.CELL_*}, which the draw hands them to untranslated;
      * this class runs headless and cannot name that type, so {@code SvgSilhouetteTest} holds them equal.
      */
     public static final int TOP = 1, RIGHT = 2, BOTTOM = 4, LEFT = 8;
@@ -181,16 +181,16 @@ public final class SvgTriangulator {
      * rule for filling, and it is why an unclosed subpath still paints a solid shape.</p>
      *
      * @param evenOdd {@code true} for {@code fill-rule: evenodd}, {@code false} for {@code nonzero}
-     * @return eight floats per cell — see {@link Fill#quads}; empty for anything with no area
+     * @return eight floats per cell — see {@link Fill#cells}; empty for anything with no area
      */
     public static float[] fill(List<List<float[]>> contours, boolean evenOdd) {
-        return fill(contours, evenOdd, 0f, 0f).quads();
+        return fill(contours, evenOdd, 0f, 0f).cells();
     }
 
     /**
-     * A filled mesh: one quad per cell, each knowing which of its edges are on the outline.
+     * A filled mesh: one cell per span, each knowing which of its edges are on the outline.
      *
-     * @param quads eight floats per cell — {@code x0,y0} top-left, {@code x1,y1} top-right, {@code x2,y2}
+     * @param cells eight floats per cell — {@code x0,y0} top-left, {@code x1,y1} top-right, {@code x2,y2}
      *              bottom-right, {@code x3,y3} bottom-left, in the space the contours came in. A cell at
      *              a tip has a collapsed top or bottom, which is legal: a zero-length edge constrains
      *              nothing
@@ -200,7 +200,7 @@ public final class SvgTriangulator {
      *              {@link #LEFT} — the edges of cell {@code i} that lie on the shape's outline. The rest
      *              are seams shared with a neighbouring cell
      */
-    public record Fill(float[] quads, int[] slice, int[] edges) {
+    public record Fill(float[] cells, int[] slice, int[] edges) {
 
         int count() {
             return slice.length;
@@ -541,7 +541,7 @@ public final class SvgTriangulator {
      */
     private static final class Sink {
 
-        private float[] quads = new float[8 * 64];
+        private float[] cells = new float[8 * 64];
         private int[] slice = new int[64];
         private int[] edges = new int[64];
         private int count;
@@ -550,26 +550,26 @@ public final class SvgTriangulator {
         void add(int sliceIndex, int edgeMask,
                  float x0, float y0, float x1, float y1, float x2, float y2, float x3, float y3) {
             if (count == slice.length) {
-                quads = Arrays.copyOf(quads, quads.length * 2);
+                cells = Arrays.copyOf(cells, cells.length * 2);
                 slice = Arrays.copyOf(slice, slice.length * 2);
                 edges = Arrays.copyOf(edges, edges.length * 2);
             }
             int at = count * 8;
-            quads[at] = x0;
-            quads[at + 1] = y0;
-            quads[at + 2] = x1;
-            quads[at + 3] = y1;
-            quads[at + 4] = x2;
-            quads[at + 5] = y2;
-            quads[at + 6] = x3;
-            quads[at + 7] = y3;
+            cells[at] = x0;
+            cells[at + 1] = y0;
+            cells[at + 2] = x1;
+            cells[at + 3] = y1;
+            cells[at + 4] = x2;
+            cells[at + 5] = y2;
+            cells[at + 6] = x3;
+            cells[at + 7] = y3;
             slice[count] = sliceIndex;
             edges[count] = edgeMask;
             count++;
         }
 
         Fill toFill() {
-            return new Fill(Arrays.copyOf(quads, count * 8),
+            return new Fill(Arrays.copyOf(cells, count * 8),
                     Arrays.copyOf(slice, count), Arrays.copyOf(edges, count));
         }
     }
@@ -597,7 +597,7 @@ public final class SvgTriangulator {
         static Fill mark(Fill cells) {
             int count = cells.count();
             if (count == 0) return cells;
-            float[] q = cells.quads();
+            float[] q = cells.cells();
 
             // The spans each cut is covered by, from the cells above it (their bottoms) and below it (their
             // tops). Keyed on the exact float: every cell on a cut took its y from the same bands[] entry.

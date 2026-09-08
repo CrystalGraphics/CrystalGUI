@@ -846,7 +846,7 @@ registration call. This is what `background: asset("crystalgui:ore", "button")` 
 
 `render/texture/svg/` is a **full SVG renderer** — scanner, path grammar, transforms, colour, inheritance,
 scanline fills with holes cut, and real linear/radial gradients — parsing an `.svg` once into a cached list
-of draw ops: strokes through `ctx.curve()`, fills as one `ctx.filledQuad()` per scanline cell with
+of draw ops: strokes through `ctx.curve()`, fills as one `ctx.filledCell()` per scanline cell with
 exact-area coverage on the edges that are on the outline. Full account in `ICONS.md`, including the nine
 things it deliberately does not implement and why none of them matters for icons.
 

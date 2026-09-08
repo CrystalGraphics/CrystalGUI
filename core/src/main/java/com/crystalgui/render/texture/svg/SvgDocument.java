@@ -1,6 +1,5 @@
 package com.crystalgui.render.texture.svg;
 
-import com.crystalgraphics.gl.buffer.CgStreamBuffer;
 import com.crystalgraphics.gl.render.CgVectorRenderer;
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgraphics.util.profiling.CgProfiler;
@@ -8,7 +7,6 @@ import com.crystalgraphics.util.profiling.CgProfiler;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.CgUiPaintContext;
 
-import java.lang.annotation.Annotation;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -89,7 +87,7 @@ public final class SvgDocument {
     /**
      * One batch of geometry sharing a colour and a mode.
      *
-     * <p>{@code data} is cells for a fill (eight floats each, see {@link SvgTriangulator.Fill#quads}) and
+     * <p>{@code data} is cells for a fill (eight floats each, see {@link SvgTriangulator.Fill#cells}) and
      * segments for a stroke (four each) — one field rather than two subtypes because the draw loop
      * switches on {@code fill} exactly once per op and then runs a tight loop, and a sealed hierarchy
      * would buy a cast per op to say the same thing.</p>
@@ -578,7 +576,7 @@ public final class SvgDocument {
                     SvgScene.Paint paint = fill.paint();
                     int argb = paint instanceof SvgScene.Gradient ramp
                             ? ramp.argb() : ((SvgScene.Solid) paint).argb();
-                    ops.add(new DrawOp(true, mesh.quads(), mesh.colour0(), mesh.colour1(),
+                    ops.add(new DrawOp(true, mesh.cells(), mesh.colour0(), mesh.colour1(),
                             mesh.axes(), mesh.edges(), mesh.opaque(), argb,
                             paint.currentColor(), 0f, 0, null));
                 }
@@ -798,12 +796,12 @@ public final class SvgDocument {
             int cell = i / 8;
             // Every edge the tessellator marked as outline is antialiased by exact area, every seam is a
             // half-open step; the quad reading owes nothing to a feather, an offset or the sample count.
-            CgVectorRenderer.Quad out = ctx.filledQuad()
-                    .points(x + q[i] * scale, y + q[i + 1] * scale,
+            CgVectorRenderer.Cell out = ctx.filledCell()
+                                           .points(x + q[i] * scale, y + q[i + 1] * scale,
                             x + q[i + 2] * scale, y + q[i + 3] * scale,
                             x + q[i + 4] * scale, y + q[i + 5] * scale,
                             x + q[i + 6] * scale, y + q[i + 7] * scale)
-                    .softEdges(accumulate ? 15 : edges[cell]);
+                                           .softEdges(accumulate ? 15 : edges[cell]);
 
             if (ramp) {
                 // The axis is stored in the document's own units, so it moves and scales with the draw:

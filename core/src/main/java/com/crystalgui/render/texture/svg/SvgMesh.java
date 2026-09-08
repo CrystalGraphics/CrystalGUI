@@ -22,7 +22,7 @@ import org.jetbrains.annotations.Nullable;
  * is the format the draw path actually wants, and the per-edge antialiasing is what lyon pays a
  * separately tessellated fringe for.</p>
  *
- * @param quads   eight floats per cell — see {@link SvgTriangulator.Fill#quads}
+ * @param cells   eight floats per cell — see {@link SvgTriangulator.Fill#cells}
  * @param colour0 one ARGB per cell — the start of the ramp; null when the whole mesh is one colour,
  *                which the draw op already carries and which would otherwise be a full array of the
  *                same int per fill
@@ -33,17 +33,17 @@ import org.jetbrains.annotations.Nullable;
  * @param edges   per cell, which edges are on the outline — see {@link SvgTriangulator.Fill#edges}
  * @param opaque  every colour is fully opaque
  */
-record SvgMesh(float[] quads, @Nullable int[] colour0, @Nullable int[] colour1,
+record SvgMesh(float[] cells, @Nullable int[] colour0, @Nullable int[] colour1,
                @Nullable float[] axes, int[] edges, boolean opaque) {
 
     static final SvgMesh EMPTY = new SvgMesh(new float[0], null, null, null, new int[0], true);
 
     boolean isEmpty() {
-        return quads.length == 0;
+        return cells.length == 0;
     }
 
     int cellCount() {
-        return quads.length / 8;
+        return cells.length / 8;
     }
 
     /** Whether every colour is fully opaque — a ramp that fades out is not, even if it starts solid. */
