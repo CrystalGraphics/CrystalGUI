@@ -144,9 +144,13 @@ public class LayoutProperties {
             create("grid-template-rows", GridTemplate.EMPTY).setWriter(GridTemplateValue::write);
     public static final StyleProperty<GridTemplate> GRID_TEMPLATE_COLUMNS =
             create("grid-template-columns", GridTemplate.EMPTY).setWriter(GridTemplateValue::write);
-    public static final StyleProperty<GridTemplateAreas> GRID_TEMPLATE_AREAS = create("grid-template-areas", GridTemplateAreas.EMPTY);
-    public static final StyleProperty<GridAuto> GRID_AUTO_ROWS = create("grid-auto-rows", GridAuto.EMPTY);
-    public static final StyleProperty<GridAuto> GRID_AUTO_COLUMNS = create("grid-auto-columns", GridAuto.EMPTY);
+    public static final StyleProperty<GridTemplateAreas> GRID_TEMPLATE_AREAS =
+            create("grid-template-areas", GridTemplateAreas.EMPTY)
+                    .setWriter(GridTemplateAreasValue::write);
+    public static final StyleProperty<GridAuto> GRID_AUTO_ROWS =
+            create("grid-auto-rows", GridAuto.EMPTY).setWriter(GridAutoValue::write);
+    public static final StyleProperty<GridAuto> GRID_AUTO_COLUMNS =
+            create("grid-auto-columns", GridAuto.EMPTY).setWriter(GridAutoValue::write);
     public static final StyleProperty<GridAutoFlow> GRID_AUTO_FLOW = StylePropertyRegistry.create("grid-auto-flow", GridAutoFlow.class, GridAutoFlow.ROW);
     public static final StyleProperty<Grid> GRID_ROW = create("grid-row", Grid.EMPTY)
             .setWriter(LayoutProperties::writeGrid);

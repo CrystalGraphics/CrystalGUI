@@ -32,7 +32,10 @@ public class GridAutoValue extends StyleValue<GridAuto> {
     }
 
     public static GridAuto parse(String rawValue) {
-        if (rawValue == null || rawValue.trim().isEmpty()) {
+        // `none` is how this writes "no implicit track sizes", so it has to read one back. CSS has no
+        // `none` for grid-auto-*, whose initial is `auto` -- but `auto` is a REAL one-track value here
+        // and would not round-trip to the empty list this property actually starts at.
+        if (rawValue == null || rawValue.trim().isEmpty() || rawValue.trim().equalsIgnoreCase("none")) {
             return GridAuto.EMPTY;
         }
 
@@ -237,6 +240,11 @@ public class GridAutoValue extends StyleValue<GridAuto> {
     }
 
     // ==================== Serialization to CSS String ====================
+
+    /** The declaration that would produce {@code value}. @see #parse */
+    public static String write(GridAuto value) {
+        return value == null || value.values().isEmpty() ? "none" : toString(value);
+    }
 
     public static String toString(GridAuto gridAuto) {
         if (gridAuto == null || gridAuto == GridAuto.EMPTY) {

@@ -39,7 +39,9 @@ public class GridTemplateAreasValue extends StyleValue<GridTemplateAreas> {
     }
 
     public static GridTemplateAreas parse(String rawValue) {
-        if (rawValue == null || rawValue.trim().isEmpty()) {
+        // `none` is CSS's own spelling for no named areas, and it has to read back what write() emits.
+        if (rawValue == null || rawValue.trim().isEmpty()
+                || rawValue.trim().equalsIgnoreCase("none")) {
             return GridTemplateAreas.EMPTY;
         }
 
@@ -172,6 +174,11 @@ public class GridTemplateAreasValue extends StyleValue<GridTemplateAreas> {
     }
 
     // ==================== Serialization to CSS String ====================
+
+    /** The declaration that would produce {@code value} — the quoted rows. @see #parse */
+    public static String write(GridTemplateAreas value) {
+        return value == null || value.areas().isEmpty() ? "none" : toString(value);
+    }
 
     public static String toString(GridTemplateAreas gridTemplateAreas) {
         if (gridTemplateAreas == null || gridTemplateAreas == GridTemplateAreas.EMPTY) {

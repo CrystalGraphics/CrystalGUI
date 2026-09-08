@@ -30,8 +30,7 @@ public class GridTemplateValue extends StyleValue<GridTemplate> {
 
         try {
             List<String> tokens = tokenize(rawValue.trim());
-            List<TrackSizingFunction> simples = new ArrayList<>();
-            List<GridTemplateComponent> repeats = new ArrayList<>();
+            List<GridTemplateComponent> components = new ArrayList<>();
             List<NamedGridLine> names = new ArrayList<>();
 
             int trackIndex = 0;
@@ -49,7 +48,7 @@ public class GridTemplateValue extends StyleValue<GridTemplate> {
                     // Parse repeat function
                     GridTemplateComponent component = parseRepeat(token);
                     if (component != null) {
-                        repeats.add(component);
+                        components.add(component);
                         trackIndex++;
                     } else {
                         return null;
@@ -58,8 +57,7 @@ public class GridTemplateValue extends StyleValue<GridTemplate> {
                     // Parse single track
                     TrackSizingFunction track = parseTrack(token);
                     if (track != null) {
-                        simples.add(track);
-                        repeats.add(GridTemplateComponent.single(track));
+                        components.add(GridTemplateComponent.single(track));
                         trackIndex++;
                     } else {
                         return null;
@@ -67,11 +65,7 @@ public class GridTemplateValue extends StyleValue<GridTemplate> {
                 }
             }
 
-            return new GridTemplate(
-                    Collections.unmodifiableList(simples),
-                    Collections.unmodifiableList(repeats),
-                    Collections.unmodifiableList(names)
-            );
+            return new GridTemplate(components, names);
         } catch (Exception e) {
             return null;
         }
@@ -334,7 +328,7 @@ public class GridTemplateValue extends StyleValue<GridTemplate> {
         int nameIndex = 0;
         var names = template.names();
 
-        for (int i = 0; i < template.repeats().size(); i++) {
+        for (int i = 0; i < template.components().size(); i++) {
             // Add named lines before this track
             while (nameIndex < names.size() && names.get(nameIndex).getIndex() == i) {
                 if (sb.length() > 0) sb.append(' ');
@@ -344,7 +338,7 @@ public class GridTemplateValue extends StyleValue<GridTemplate> {
 
             // Add the track/repeat
             if (sb.length() > 0) sb.append(' ');
-            sb.append(componentToString(template.repeats().get(i)));
+            sb.append(componentToString(template.components().get(i)));
         }
 
         // Add any trailing named lines
@@ -418,12 +412,19 @@ public class GridTemplateValue extends StyleValue<GridTemplate> {
      * one set INLINE on an element — so the honest refusal costs nothing and says exactly what is
      * missing. @see com.crystalgui.serialization.style.StyleValueCodecs</p>
      */
+    /**
+     * The declaration that would produce {@code template}, {@code none} when it has no tracks.
+     *
+     * <p>Every piece of this was already here — {@link #toString} walks the components in order,
+     * interleaving named lines by index, and {@code trackToString} covers all seven track types
+     * including {@code minmax()} and {@code fit-content()}. Only the wiring was missing, and without it
+     * an element with a real grid template could not be copied OR saved: {@code write} threw, which
+     * reaches a person as Copy Attributes crashing.</p>
+     */
     public static String write(GridTemplate template) {
-        if (template.simples().isEmpty() && template.repeats().isEmpty() && template.names().isEmpty()) {
+        if (template == null || (template.components().isEmpty() && template.names().isEmpty())) {
             return "none";
         }
-        throw new IllegalStateException("grid-template with explicit tracks cannot be written back to CSS"
-                + " yet — TrackSizingFunction, repeat() and named lines have no writer. Declare it in a"
-                + " stylesheet rather than inline, or add one here.");
+        return toString(template);
     }
 }

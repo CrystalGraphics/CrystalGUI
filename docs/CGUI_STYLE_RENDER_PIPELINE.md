@@ -259,6 +259,33 @@ cost, since per-element material binds at draw time can dwarf everything else.
 blend). Each `draw(ctx, mouseX, mouseY, x, y, w, h)` call issues its own GPU draw(s) immediately —
 no batching, no deferred submission.
 
+### `CgUiLayers` — a declaration can hold several of them
+
+A value is a comma-separated **list of layers**, exactly as CSS writes a background, and
+`TextureValue` builds a `CgUiLayers` whenever a declaration holds more than one:
+
+```css
+background: grid(16, #6EDCD024), shape("checkmark"), linear-gradient(to bottom, #3574F0FF, #2E436EFF);
+```
+
+**The first layer is the TOP one** — CSS's order, so `draw` walks the list from the end. Writing it the
+other way round still renders: every layer is present and the picture is inside out, which reads as a
+z-order bug in whatever supplied the drawables rather than as a reversed loop.
+
+Because the split happens in the value parser, **every drawable-valued property takes a stack** —
+`background`, `overlay` and `mask` alike. The split is paren-aware, so `linear-gradient(to bottom, a, b)`
+is one layer and not three; one unreadable layer fails the whole declaration rather than being dropped,
+since a stack quietly missing a layer renders something nobody wrote.
+
+A stack clips itself: the radii are forwarded to every layer that is `CornerRadiusAware`, because the
+painter's alternative — wrapping the background in a `CgUiRoundedRect` — can only round one fill.
+Per-layer clipping, and per-layer `background-size`/`-position`/`-origin`, are stage 2; see
+`plan/crystalgui/style-overhaul/css-background-layers.md`.
+
+Copy Attributes offers **one part per layer**, each filed under its own kind, so a three-layer background
+is three tickable rows under Grid, Shape and Gradient. Two layers of the same kind land in one section as
+two identically-named rows, which is the one thing that arrangement cannot yet tell apart.
+
 **Two distinct compositing channels exist, deliberately kept separate:**
 
 | Channel | Set via | Meaning | Consumed by |
