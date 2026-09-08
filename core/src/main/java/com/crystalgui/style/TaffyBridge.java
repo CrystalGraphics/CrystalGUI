@@ -10,6 +10,7 @@ import dev.vfyjxf.taffy.geometry.TaffySize;
 import dev.vfyjxf.taffy.style.*;
 import lombok.Getter;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -235,12 +236,15 @@ public class TaffyBridge {
 
     public void setGridTemplateRows(GridTemplate value) {
         var dirty = false;
-        if (!Objects.equals(style.gridTemplateRows, value.simples())) {
-            style.gridTemplateRows = value.simples();
+        // THE ORDERED LIST, which is the one Taffy reads: `gridTemplateRowsWithRepeat` takes precedence
+        // over the flat field whenever it is non-empty, so the flat one is cleared rather than kept in
+        // step with a projection nothing consults.
+        if (!Objects.equals(style.gridTemplateRowsWithRepeat, value.components())) {
+            style.gridTemplateRowsWithRepeat = value.components();
             dirty = true;
         }
-        if (!Objects.equals(style.gridTemplateRowsWithRepeat, value.repeats())) {
-            style.gridTemplateRowsWithRepeat = value.repeats();
+        if (!style.gridTemplateRows.isEmpty()) {
+            style.gridTemplateRows = List.of();
             dirty = true;
         }
         if (!Objects.equals(style.gridTemplateRowNames, value.names())) {
@@ -254,12 +258,15 @@ public class TaffyBridge {
 
     public void setGridTemplateColumns(GridTemplate value) {
         var dirty = false;
-        if (!Objects.equals(style.gridTemplateColumns, value.simples())) {
-            style.gridTemplateColumns = value.simples();
+        // THE ORDERED LIST, which is the one Taffy reads: `gridTemplateColumnsWithRepeat` takes precedence
+        // over the flat field whenever it is non-empty, so the flat one is cleared rather than kept in
+        // step with a projection nothing consults.
+        if (!Objects.equals(style.gridTemplateColumnsWithRepeat, value.components())) {
+            style.gridTemplateColumnsWithRepeat = value.components();
             dirty = true;
         }
-        if (!Objects.equals(style.gridTemplateColumnsWithRepeat, value.repeats())) {
-            style.gridTemplateColumnsWithRepeat = value.repeats();
+        if (!style.gridTemplateColumns.isEmpty()) {
+            style.gridTemplateColumns = List.of();
             dirty = true;
         }
         if (!Objects.equals(style.gridTemplateColumnNames, value.names())) {

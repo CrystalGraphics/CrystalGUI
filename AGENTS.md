@@ -1285,7 +1285,10 @@ com.crystalgui.render          CgUiPaintContext (singleton), CgUiRenderer, Sciss
                                reaches it through package-private members, as TextEditor's view parts do
   .text                        FontFamilyCache — (font stack, px) -> CgFontFamily
   .texture                     CgUiDrawable (SPI), CgUiQuad, CgUiSprite (9-slice), CgUiRoundedRect (SDF),
-                               CgUiCrossFade, CgUiLayerBox, CgUiRepeat, ArgbMath, CgUiSvg,
+                               CgUiCrossFade, CgUiLayers (a comma-separated STACK, first on
+                               top -- every drawable property takes one), CgUiLayerBox (the
+                               rect ONE layer paints into, not a stack), CgUiRepeat,
+                               ArgbMath, CgUiSvg,
                                CgUiBackdropFilter (liquid glass — blur, luminosity blend, refraction, specular, noise, over a live
                                backdrop), CornerRadiusAware (the seam that stops a self-clipping drawable
                                being wrapped in a CgUiRoundedRect it cannot survive),
