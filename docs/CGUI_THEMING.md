@@ -483,7 +483,6 @@ editor scheme's.
 | `--radius-panel` | `8px` | crystal-dark.css |
 | `--region-drop-bg` | `#3574F055` | crystal-dark.css |
 | `--region-drop-border` | `var(--accent)` | base.css |
-| `--resizer-grip` | `var(--border-strong)` | base.css |
 | `--run-action-disabled-fg` | `var(--fg-disabled)` | base.css |
 | `--run-action-fg` | `var(--fg-secondary)` | base.css |
 | `--run-action-hover-bg` | `var(--hover-bg)` | base.css |

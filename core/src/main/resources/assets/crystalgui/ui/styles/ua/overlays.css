@@ -849,20 +849,16 @@ dialog .__title-bar__ .__close__:hover {
     z-index: 11;
 }
 
-/* ONLY ONE handle draws a grip. The others stay full-size and fully draggable — this is `background`,
- * not `display` or `width`, so the hit area is untouched.
+/* NO HANDLE DRAWS ANYTHING. All eight are invisible grab areas, and the corners are still 8px and still
+ * win the hit test against the edges crossing under them — this is about paint, not about hit area.
  *
- * That asymmetry is the convention every desktop toolkit landed on, and the web's single grabber is the
- * same idea taken further: one visible grip says "this resizes" without ringing the element in four
- * marks that read as selection handles. A panel wearing all four looks selected rather than resizable.
+ * The bottom-right one used to carry a tinted grip, on the reasoning that one visible mark says "this
+ * resizes" the way a browser's `textarea` grabber does. It reads as clutter on a UI made mostly of
+ * panels that are resizable by default: a small square in the corner of every one of them says nothing
+ * you did not already know from dragging the edge, and it lands on top of whatever the panel is showing
+ * there. The cursor is the affordance now, which is what the edges have always relied on.
  *
- * The bottom-right corner, in EVERY resizable mode — it exists under `resize: horizontal` and
- * `vertical` too, and a drag on it moves only the axis the mode allows, which is what a browser does
- * with a `textarea`. Painting the grip on a full-length edge strip instead was tried and reads as a
- * scrollbar. */
-.__resizer-bottom-right__ {
-    background: var(--resizer-grip, #FFFFFF40);
-}
+ * A theme that wants the mark back sets `background` here; nothing in Java knows about it either way. */
 .__resizer-top-left__     { top: 0;    left: 0; }
 .__resizer-top-right__    { top: 0;    right: 0; }
 .__resizer-bottom-left__  { bottom: 0; left: 0; }
