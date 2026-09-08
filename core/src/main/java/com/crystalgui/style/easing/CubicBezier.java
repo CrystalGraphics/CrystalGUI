@@ -1,5 +1,8 @@
 package com.crystalgui.style.easing;
 
+import java.util.Objects;
+import lombok.Getter;
+
 public final class CubicBezier implements Easing {
 
     private static final int NEWTON_RAPHSON_ITERATIONS = 8;
@@ -8,6 +11,7 @@ public final class CubicBezier implements Easing {
     private static final double MAX_DELTA_TO_EVALUATE = 1e-10;
     private static final double EPSILON = 1e-12; // Tolerance for "essentially zero" due to floating-point precision
 
+    @Getter
     private final double x1, y1, x2, y2;
     private final double startY, endY;
 
@@ -130,5 +134,26 @@ public final class CubicBezier implements Easing {
         t = (low + high) * 0.5;
 
         return evalY(t);
+    }
+
+    /**
+     * <b>By the numbers that define the curve</b>, so one read back from CSS equals the one written.
+     *
+     * <p>Without this a {@code TransitionSpec} could never compare equal to itself after a round trip:
+     * the record compares its easing, and two curves with identical numbers were two objects. The
+     * sample table is derived from them, so it is not part of the identity.</p>
+     */
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof CubicBezier other)) return false;
+        return Double.compare(x1, other.x1) == 0 && Double.compare(y1, other.y1) == 0
+                && Double.compare(x2, other.x2) == 0 && Double.compare(y2, other.y2) == 0
+                && Double.compare(startY, other.startY) == 0 && Double.compare(endY, other.endY) == 0;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(x1, y1, x2, y2, startY, endY);
     }
 }

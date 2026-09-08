@@ -1,5 +1,7 @@
 package com.crystalgui.style.property;
 
+import java.util.Objects;
+
 import com.crystalgui.style.property.general.bools.BoolValue;
 import com.crystalgui.style.property.general.enums.EnumProperty;
 import com.crystalgui.style.property.general.floats.FloatProperty;
@@ -38,6 +40,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -120,7 +123,10 @@ public class StylePropertyRegistry {
      */
     public static final StyleProperty<List<String>> FONT_FAMILY = create(
             "font-family", List.of("crystalgraphics:IBMPlexSans-Regular.ttf"), FontFamilyValue::new
-    ).setInheritable(true);
+    ).setInheritable(true)
+            // A STACK IS COMMA-SEPARATED, which is what its parser splits on. Unquoted: these are
+            // resource paths rather than family names with spaces in, and quoting is optional there.
+            .setWriter(stack -> String.join(", ", stack));
     // TODO: no-op. Parsed and cascaded so stylesheets can declare it without a warning, but nothing
     // consumes it yet — CgTextRenderer/UIText have no drop-shadow support. Defaults false to match
     // what actually renders today (no shadow is ever drawn). Inheritable, like the other text
@@ -294,7 +300,22 @@ public class StylePropertyRegistry {
     @SuppressWarnings({"unchecked", "rawtypes"})
     public static final StyleProperty<Set<TextDecorationLine>> TEXT_DECORATION_LINE =
             create("text-decoration-line", (Class) Set.class, java.util.Collections.emptySet(),
-                    TextDecorationLineValue::new).setInheritable(true);
+                    TextDecorationLineValue::new).setInheritable(true)
+                    // SPACE-SEPARATED KEYWORDS, and `none` for the empty set -- the parser reads the
+                    // empty string as the empty set too, but an empty declaration is not something to
+                    // write into a stylesheet or onto a clipboard.
+                    .setWriter(value -> {
+                        // RAW, because the declaration casts Set.class to keep the generics quiet --
+                        // so the writer sees the erased type and has to say what it knows.
+                        Set<?> lines = (Set<?>) value;
+                        if (lines.isEmpty()) return "none";
+                        StringBuilder out = new StringBuilder();
+                        for (Object line : lines) {
+                            if (out.length() > 0) out.append(' ');
+                            out.append(((Enum<?>) line).name().toLowerCase(Locale.ROOT).replace('_', '-'));
+                        }
+                        return out.toString();
+                    });
 
     /**
      * CSS {@code text-decoration-color}, with CSS's own {@code currentColor} default.
@@ -402,7 +423,8 @@ public class StylePropertyRegistry {
     public static final StyleProperty<Integer> OUTLINE_COLOR =
             create(new ColorProperty("outline-color", 0xFFFFFFFF));
     public static final StyleProperty<List<TransitionSpec>> TRANSITION =
-            create("transition", List.of(), TransitionValue::new);
+            create("transition", List.of(), TransitionValue::new)
+                    .setWriter(TransitionSpec::write);
 
     // ── transform ────────────────────────────────────────────────────────────
     //
@@ -461,15 +483,17 @@ public class StylePropertyRegistry {
         PROPERTIES_BY_ID = newArr;
     }
 
+    /** Every registered property. @see #ensureDeclaringClasses */
     public static Collection<StyleProperty<?>> all() {
-        ensureLayoutProperties();
+        ensureDeclaringClasses();
+        ensureDeclaringClasses();
         return PROPERTIES_BY_NAME.values();
     }
 
     @SuppressWarnings("unchecked")
     @Nullable
     public static <T> StyleProperty<T> byName(String name) {
-        ensureLayoutProperties();
+        ensureDeclaringClasses();
         return (StyleProperty<T>) PROPERTIES_BY_NAME.get(name);
     }
 
@@ -490,10 +514,25 @@ public class StylePropertyRegistry {
      * through {@link #create} — so a block here would re-enter a half-initialised {@code
      * LayoutProperties} and register its not-yet-assigned fields as null.</p>
      */
-    private static void ensureLayoutProperties() {
+    /**
+     * <b>Loads the classes that only DECLARE properties</b>, so the registry is genuinely complete.
+     *
+     * <p>A property registers itself from its holder's static initialiser, which runs when something
+     * touches that holder — and nothing touches a holder whose properties are only ever reached through
+     * a shorthand. The eight corner radii are that case: {@code border-radius} is parse-time syntax
+     * expanding into them, so they loaded whenever a sheet mentioned one and were simply absent from
+     * anything that asked the registry first. A document carrying a saved corner radius therefore had
+     * it dropped on load — {@code byName} answered null and the declaration was skipped, silently.</p>
+     *
+     * <p>This existed for {@code LayoutProperties} already and was right; the radii were just not in
+     * it. Idempotent, and a field read after the first call.</p>
+     */
+    private static void ensureDeclaringClasses() {
         if (layoutForced) return;
         layoutForced = true;
         LayoutProperties.init();
+        Objects.requireNonNull(
+                com.crystalgui.style.property.visual.border.BorderRadiusProperties.TOP_LEFT_X);
     }
 
     @SuppressWarnings("unchecked")

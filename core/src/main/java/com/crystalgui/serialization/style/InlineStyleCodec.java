@@ -66,15 +66,9 @@ public final class InlineStyleCodec {
     @SuppressWarnings("unchecked")
     private static <T, V> T encodeSlot(DynamicOps<T> ops, StyleSlot<V> slot) {
         StyleProperty<V> property = slot.property();
-        Codec<V> codec = StyleValueCodecs.forProperty(property);
-        if (codec == null) {
-            // Loud, not skipped. A dropped style is a UI that renders differently on the two sides
-            // with nothing to indicate why, which is far worse to debug than a refusal to send.
-            throw new CodecException("Style property '" + property.name + "' has no value codec for "
-                    + property.type.getSimpleName() + " — it cannot be sent to a client. "
-                    + "Move it into a stylesheet, or add a codec in StyleValueCodecs.");
-        }
-        return codec.encode(ops, slot.value());
+        // EVERY property has one now: a codec is built from the property's own parser and writer, so
+        // there is no longer a class of style that cannot be sent. @see StyleValueCodecs
+        return StyleValueCodecs.forProperty(property).encode(ops, slot.value());
     }
 
     /** Applies a previously encoded style map to {@code element}, at INLINE origin. */
