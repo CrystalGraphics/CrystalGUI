@@ -2,7 +2,10 @@ package com.crystalgui.language.platform;
 
 import com.crystalgui.language.map.ReadableView;
 
+import com.crystalgui.core.async.Progress;
+
 import java.nio.file.Path;
+import java.util.function.BooleanSupplier;
 import java.nio.file.Paths;
 
 /**
@@ -35,6 +38,44 @@ import java.nio.file.Paths;
  * {@code language/} run off a Minecraft host at all, which is the property the module exists for.</p>
  */
 public interface ScriptService {
+
+    /**
+     * Work that must not block its caller — a fetch, and nothing finer grained than that.
+     *
+     * @see ScriptService#runInBackground
+     */
+    interface BackgroundWork {
+        void run(Progress progress, BooleanSupplier cancelled);
+    }
+
+    /**
+     * <b>How this host runs background work.</b> {@code language/} decides what and when; only the host
+     * knows what it can run it on.
+     *
+     * <pre>{@code
+     * // A host with a UI, so the work reports into a status bar and can be cancelled:
+     * public void runInBackground(String title, BackgroundWork work) {
+     *     JobScheduler.shared().job(key, JobLane.BACKGROUND, context -> {
+     *         work.run(context.progress(), context::isCancelled);
+     *         return null;
+     *     }).submit();
+     * }
+     * }</pre>
+     *
+     * <p><b>The default is a daemon thread, and it is the right answer for anything headless.</b>
+     * {@code JobScheduler} is drained by {@code UIDocument.frame} and by nothing else, so a job
+     * submitted where there is no window is never run — a dedicated server would wait for a mapping
+     * for ever with nothing to say why. Overriding this is therefore a claim about having a drained
+     * scheduler, and a host that is sometimes headless must answer for the side it is on.</p>
+     *
+     * <p>Daemon, because acquiring data must never be the reason a game cannot exit.</p>
+     */
+    default void runInBackground(String title, BackgroundWork work) {
+        Thread worker = new Thread(() -> work.run(Progress.NONE, () -> false),
+                "crystalgui-" + title.toLowerCase().replace(' ', '-'));
+        worker.setDaemon(true);
+        worker.start();
+    }
 
     /**
      * No Minecraft host: read bytes off the classloader, no mappings, nothing to detect.
