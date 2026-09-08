@@ -18,7 +18,7 @@ import org.apache.logging.log4j.Logger;
  *   <tr><td>{@code CrystalGuiCore.getAdapter()}</td><td>{@code CgPlatform.input()}</td></tr>
  *   <tr><td>{@code CrystalGuiCore.getClipboard().get()}</td><td>{@code CgPlatform.input().getClipboard()}</td></tr>
  *   <tr><td>{@code CrystalGuiCore.getSoundSystem()}</td><td>{@code CgPlatform.sound()}</td></tr>
- *   <tr><td>{@code CrystalGuiCore.getCursorService()}</td><td>{@code CgPlatform.cursor()}</td></tr>
+ *   <tr><td>{@code CrystalGuiCore.getCursorService()}</td><td>{@code CgPlatform.get(CursorService.SERVICE)}</td></tr>
  * </table>
  *
  * <p><b>Why they left.</b> CrystalGraphics is CrystalGUI's parent project and is always present, so two

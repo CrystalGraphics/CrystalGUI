@@ -7,7 +7,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
-import com.crystalgraphics.platform.input.CgCursor;
+import com.crystalgui.core.cursor.Cursor;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
@@ -316,7 +316,7 @@ public class TextEditorBatchPortTest extends UiDocumentTestBase {
         editor("hello world" + System.lineSeparator() + "second line");
         move(60f, 20f);
         frame();
-        assertEquals(CgCursor.TEXT, document.input().currentCursor());
+        assertEquals(Cursor.TEXT, document.input().currentCursor());
     }
 
     /**
@@ -337,7 +337,7 @@ public class TextEditorBatchPortTest extends UiDocumentTestBase {
         assertNotNull("the vertical bar is shown for a long document", bar);
         move(bar.worldX() + bar.width() / 2f, bar.worldY() + bar.height() / 2f);
         frame();
-        assertEquals("a scrollbar is not text", CgCursor.DEFAULT, document.input().currentCursor());
+        assertEquals("a scrollbar is not text", Cursor.DEFAULT, document.input().currentCursor());
     }
 
     /**

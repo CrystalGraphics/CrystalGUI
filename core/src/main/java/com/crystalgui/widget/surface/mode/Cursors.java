@@ -4,7 +4,7 @@ import java.util.function.Supplier;
 
 import javax.annotation.Nullable;
 
-import com.crystalgraphics.platform.input.CgCursor;
+import com.crystalgui.core.cursor.Cursor;
 
 import com.crystalgui.ui.dom.UIDocument;
 
@@ -12,7 +12,7 @@ import com.crystalgui.ui.dom.UIDocument;
  * What the pointer looks like while a gesture owns it.
  *
  * <pre>{@code
- * ctx.cursors().set(CgCursor.GRABBING);   // a drag begins
+ * ctx.cursors().set(Cursor.GRABBING);   // a drag begins
  * ctx.cursors().clear();                  // and ends
  * }</pre>
  *
@@ -28,14 +28,14 @@ public final class Cursors {
     private final Supplier<UIDocument> window;
 
     @Nullable
-    private CgCursor current;
+    private Cursor current;
 
     public Cursors(Supplier<UIDocument> window) {
         this.window = window;
     }
 
     /** Forces {@code cursor} until it is cleared. Null is {@link #clear}. */
-    public void set(@Nullable CgCursor cursor) {
+    public void set(@Nullable Cursor cursor) {
         if (current == cursor) return;
         current = cursor;
         UIDocument document = window.get();
@@ -48,7 +48,7 @@ public final class Cursors {
     }
 
     @Nullable
-    public CgCursor current() {
+    public Cursor current() {
         return current;
     }
 }

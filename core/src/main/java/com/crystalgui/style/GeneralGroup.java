@@ -6,7 +6,7 @@ import com.crystalgui.render.texture.CgUiBackdropFilter;
 import com.crystalgui.style.property.visual.BoxOrigin;
 import com.crystalgui.style.property.visual.DrawableAlign;
 import com.crystalgui.style.property.visual.DrawableFit;
-import com.crystalgraphics.platform.input.CgCursor;
+import com.crystalgui.core.cursor.Cursor;
 import com.crystalgui.style.property.visual.text.FontStyle;
 import com.crystalgui.style.property.visual.text.FontWeight;
 import com.crystalgui.style.property.visual.text.TextAlign;
@@ -366,12 +366,12 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         return this;
     }
 
-    /** CSS `cursor` -- inherited, initial `auto`. @see CgCursor */
-    public CgCursor cursor() {
+    /** CSS `cursor` -- inherited, initial `auto`. @see Cursor */
+    public Cursor cursor() {
         return getValueSave(StylePropertyRegistry.CURSOR);
     }
 
-    public GeneralGroup cursor(CgCursor cursor) {
+    public GeneralGroup cursor(Cursor cursor) {
         set(StylePropertyRegistry.CURSOR, cursor);
         return this;
     }

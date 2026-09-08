@@ -1,6 +1,5 @@
-package com.crystalgui.core;
+package com.crystalgui.core.cursor;
 
-import com.crystalgraphics.platform.input.CgCursorBitmaps;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -19,8 +18,8 @@ public class CursorArtTest {
 
     @Test
     public void bothVariantsDrawSomethingHandSized() {
-        for (int[] art : new int[][] { CgCursorBitmaps.pointingHand(), CgCursorBitmaps.pointingHandPixelArt() }) {
-            assertEquals(CgCursorBitmaps.SIZE * CgCursorBitmaps.SIZE, art.length);
+        for (int[] art : new int[][] { CursorBitmaps.pointingHand(), CursorBitmaps.pointingHandPixelArt() }) {
+            assertEquals(CursorBitmaps.SIZE * CursorBitmaps.SIZE, art.length);
             int opaque = 0;
             for (int px : art) if (alpha(px) > 128) opaque++;
             assertTrue("a hand should cover a decent slab of the canvas, was " + opaque, opaque > 150);
@@ -32,8 +31,8 @@ public class CursorArtTest {
      * puts the click where the picture is not. */
     @Test
     public void theHotspotIsOnTheFingertip() {
-        for (int[] art : new int[][] { CgCursorBitmaps.pointingHand(), CgCursorBitmaps.pointingHandPixelArt() }) {
-            int index = CgCursorBitmaps.HAND_HOTSPOT_Y * CgCursorBitmaps.SIZE + CgCursorBitmaps.HAND_HOTSPOT_X;
+        for (int[] art : new int[][] { CursorBitmaps.pointingHand(), CursorBitmaps.pointingHandPixelArt() }) {
+            int index = CursorBitmaps.HAND_HOTSPOT_Y * CursorBitmaps.SIZE + CursorBitmaps.HAND_HOTSPOT_X;
             assertTrue("the hotspot pixel must be part of the cursor", alpha(art[index]) > 0);
         }
     }
@@ -41,8 +40,8 @@ public class CursorArtTest {
     /** Nothing may touch the border, or the shape is clipped by the canvas rather than by design. */
     @Test
     public void neitherVariantRunsOffTheCanvas() {
-        for (int[] art : new int[][] { CgCursorBitmaps.pointingHand(), CgCursorBitmaps.pointingHandPixelArt() }) {
-            int n = CgCursorBitmaps.SIZE;
+        for (int[] art : new int[][] { CursorBitmaps.pointingHand(), CursorBitmaps.pointingHandPixelArt() }) {
+            int n = CursorBitmaps.SIZE;
             for (int i = 0; i < n; i++) {
                 assertEquals("top row", 0, alpha(art[i]));
                 assertEquals("bottom row", 0, alpha(art[(n - 1) * n + i]));
@@ -66,8 +65,8 @@ public class CursorArtTest {
      */
     @Test
     public void allArtworkIsOneBit() {
-        for (int[] art : new int[][] { CgCursorBitmaps.pointingHand(), CgCursorBitmaps.pointingHandPixelArt(),
-                CgCursorBitmaps.horizontalDoubleArrow(), CgCursorBitmaps.textBeam() }) {
+        for (int[] art : new int[][] { CursorBitmaps.pointingHand(), CursorBitmaps.pointingHandPixelArt(),
+                CursorBitmaps.horizontalDoubleArrow(), CursorBitmaps.textBeam() }) {
             for (int px : art) {
                 int a = alpha(px);
                 assertTrue("must be fully on or fully off, was " + a, a == 0 || a == 255);
@@ -90,17 +89,17 @@ public class CursorArtTest {
      */
     @Test
     public void theCurvedCursorsAreSmooth() {
-        assertSmooth("rotate-ne", CgCursorBitmaps.rotateNe());
-        assertSmooth("rotate-nw", CgCursorBitmaps.rotateNw());
-        assertSmooth("rotate-se", CgCursorBitmaps.rotateSe());
-        assertSmooth("rotate-sw", CgCursorBitmaps.rotateSw());
-        assertSmooth("skew", CgCursorBitmaps.skew());
-        assertSmooth("pivot", CgCursorBitmaps.pivot());
+        assertSmooth("rotate-ne", CursorBitmaps.rotateNe());
+        assertSmooth("rotate-nw", CursorBitmaps.rotateNw());
+        assertSmooth("rotate-se", CursorBitmaps.rotateSe());
+        assertSmooth("rotate-sw", CursorBitmaps.rotateSw());
+        assertSmooth("skew", CursorBitmaps.skew());
+        assertSmooth("pivot", CursorBitmaps.pivot());
     }
 
     /** @see #theCurvedCursorsAreSmooth */
     private static void assertSmooth(String name, int[] art) {
-        assertEquals(CgCursorBitmaps.SIZE * CgCursorBitmaps.SIZE, art.length);
+        assertEquals(CursorBitmaps.SIZE * CursorBitmaps.SIZE, art.length);
         int opaque = 0;
         int partial = 0;
         for (int px : art) {
@@ -118,11 +117,11 @@ public class CursorArtTest {
     /** Nothing may touch the border: a cursor clipped by its own canvas looks broken at the screen edge. */
     @Test
     public void theCurvedCursorsStayOnTheCanvas() {
-        int n = CgCursorBitmaps.SIZE;
+        int n = CursorBitmaps.SIZE;
         for (int[] art : new int[][] {
-                CgCursorBitmaps.rotateNe(), CgCursorBitmaps.rotateNw(),
-                CgCursorBitmaps.rotateSe(), CgCursorBitmaps.rotateSw(),
-                CgCursorBitmaps.skew(), CgCursorBitmaps.pivot() }) {
+                CursorBitmaps.rotateNe(), CursorBitmaps.rotateNw(),
+                CursorBitmaps.rotateSe(), CursorBitmaps.rotateSw(),
+                CursorBitmaps.skew(), CursorBitmaps.pivot() }) {
             for (int i = 0; i < n; i++) {
                 assertEquals("top row", 0, alpha(art[i]));
                 assertEquals("bottom row", 0, alpha(art[(n - 1) * n + i]));
@@ -136,8 +135,8 @@ public class CursorArtTest {
      * variant, and the thing four generated attempts kept losing. */
     @Test
     public void theFingersAreSeparated() {
-        int[] art = CgCursorBitmaps.pointingHand();
-        int n = CgCursorBitmaps.SIZE;
+        int[] art = CursorBitmaps.pointingHand();
+        int n = CursorBitmaps.SIZE;
         // A row through the middle of the curled fingers crosses white, black division, white, ... — so a
         // fused slab shows up as too few transitions.
         int row = 14, transitions = 0;
@@ -155,7 +154,7 @@ public class CursorArtTest {
     /** A white body inside a dark rim is what makes a cursor readable on any background. */
     @Test
     public void theSmoothHandIsWhiteInsideWithADarkRim() {
-        int[] art = CgCursorBitmaps.pointingHand();
+        int[] art = CursorBitmaps.pointingHand();
         boolean sawWhite = false, sawDark = false;
         for (int px : art) {
             if (alpha(px) < 200) continue;

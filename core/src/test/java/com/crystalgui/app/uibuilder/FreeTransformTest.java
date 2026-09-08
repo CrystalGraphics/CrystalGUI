@@ -20,7 +20,7 @@ import com.crystalgui.app.uibuilder.canvas.Artboard;
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.canvas.ResizeHandles.Spot;
 import com.crystalgui.app.uibuilder.canvas.TreePolicy;
-import com.crystalgraphics.platform.input.CgCursor;
+import com.crystalgui.core.cursor.Cursor;
 
 import com.crystalgui.app.uibuilder.canvas.TreeSelectTool;
 import com.crystalgui.app.uibuilder.canvas.transform.FreeTransformTool;
@@ -424,11 +424,11 @@ public class FreeTransformTest extends UiDocumentTestBase {
         assertNotNull(edge);
         assertNotNull(corner);
 
-        assertEquals(CgCursor.SKEW, TransformBox.cursorFor(box().grip(edge.x, edge.y, true)));
+        assertEquals(Cursor.SKEW, TransformBox.cursorFor(box().grip(edge.x, edge.y, true)));
         assertEquals("without the modifier it is still a scale",
-                CgCursor.NS_RESIZE, TransformBox.cursorFor(box().grip(edge.x, edge.y, false)));
+                Cursor.NS_RESIZE, TransformBox.cursorFor(box().grip(edge.x, edge.y, false)));
         assertEquals("a free corner is not affine, so Ctrl there stays a scale",
-                CgCursor.NESW_RESIZE, TransformBox.cursorFor(box().grip(corner.x, corner.y, true)));
+                Cursor.NESW_RESIZE, TransformBox.cursorFor(box().grip(corner.x, corner.y, true)));
     }
 
     /**
