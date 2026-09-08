@@ -18,6 +18,7 @@ import com.crystalgui.mc.net.Connections1201;
 import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.workbench.Workbench;
 import com.crystalgui.workbench.app.WorkbenchApplication;
 
 import net.minecraft.client.Minecraft;
@@ -95,6 +96,11 @@ public final class CgUiScreen1201 extends Screen {
     @Nullable
     public static Desktop desktop() {
         return host == null ? null : host.desktop();
+    }
+
+    /** The editor's workbench, or null before one is up. */
+    static Workbench editorWorkbench() {
+        return editor == null ? null : editor.workbench();
     }
 
     /** Seconds since the previous frame, clamped so a stall does not complete every animation at once. */

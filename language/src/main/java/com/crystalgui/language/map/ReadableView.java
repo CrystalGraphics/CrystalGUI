@@ -46,6 +46,22 @@ public final class ReadableView {
         byte[] bytesOf(String internalName) throws IOException;
 
         /**
+         * Supplies nothing — for a platform with no transformed-bytes call to offer.
+         *
+         * <pre>{@code
+         * public ReadableView.ByteSource liveBytes() {
+         *     return ReadableView.ByteSource.NONE;   // ModLauncher exposes no such call
+         * }
+         * }</pre>
+         *
+         * <p>Return this rather than {@link #ofClassLoader}. A classloader answers for <em>every</em>
+         * loadable class, the JDK included, so offering one as live bytes makes the live tier outrank
+         * the classpath for names it has nothing to say about. {@code PlatformTypeBytes} reads this as
+         * no live tier at all, which is the same posture a host with no platform has.</p>
+         */
+        ByteSource NONE = internalName -> null;
+
+        /**
          * The ordinary route: read the class file the loader would.
          *
          * <p><b>Correct off a Minecraft host and not on one</b>, because it reads what is on disk and

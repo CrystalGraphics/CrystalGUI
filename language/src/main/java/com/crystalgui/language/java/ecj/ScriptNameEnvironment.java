@@ -191,7 +191,12 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
         NameEnvironmentAnswer fromProject = fromProject(internalName);
         if (fromProject != null) return fromProject;
 
-        if (!live) return delegate.findType(split(internalName));
+        // THE PLATFORM IS THE DELEGATE'S, ALWAYS. The live tier exists for names the classpath sees
+        // wrongly -- remapped members, bytes a transformer produced -- and none of that reaches
+        // `java.*`. From compliance 9 ECJ resolves module-aware and DISCARDS an answer for
+        // `java.lang.Object` that is not attributed to `java.base`, which a live answer never is; the
+        // type is then reported unresolvable while the delegate holds a perfectly good one.
+        if (!live || isPlatformName(internalName)) return delegate.findType(split(internalName));
 
         NameEnvironmentAnswer cached = cache.get(internalName);
         if (cached != null) return cached;
@@ -469,6 +474,13 @@ final class ScriptNameEnvironment implements IModuleAwareNameEnvironment {
     private boolean declaredByProject(String internalName) {
         return internalName != null && !internalName.isEmpty()
                 && project.declaresPackage(internalName.replace('/', '.'));
+    }
+
+    /** {@code java/lang/Object} and friends — what only the JDK may answer for. */
+    private static boolean isPlatformName(String internalName) {
+        return internalName != null
+                && (internalName.startsWith("java/") || internalName.startsWith("javax/")
+                || internalName.startsWith("jdk/") || internalName.startsWith("sun/"));
     }
 
     private boolean isPackageName(String name) {

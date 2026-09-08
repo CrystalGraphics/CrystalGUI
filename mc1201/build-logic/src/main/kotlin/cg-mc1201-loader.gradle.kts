@@ -408,7 +408,7 @@ tasks.register("serverSmoke") {
 //   ./gradlew :mc1201:forge:runClient -Dcrystalgui.layer.probe=true
 val cgForwardedProperties = listOf(
     "crystalgui.layer.probe", "crystalgui.editor.trace", "crystalgui.clientProbe",
-    "crystalgui.glass.probe")
+    "crystalgui.glass.probe", "crystalgui.language.noLiveBytes")
 tasks.withType<JavaExec>().matching { it.name.startsWith("run") }.configureEach {
     cgForwardedProperties.forEach { key ->
         val value = providers.systemProperty(key).orNull
