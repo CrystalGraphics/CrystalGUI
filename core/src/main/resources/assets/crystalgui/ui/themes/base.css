@@ -448,8 +448,6 @@ theme {
 
     --region-drop-border: var(--accent);
 
-    --resizer-grip: var(--border-strong);
-
     /* The Run console. Chrome DERIVES, exactly as the Problems panel above it does — these were authored
      * as free-standing hex, which the governance test correctly refused: a panel whose toolbar keeps its
      * own grey while every other toolbar follows the theme is the drift the token layer exists to stop. */
