@@ -2009,7 +2009,13 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * rebased by the view line's origin — for the reason {@link #xOfView} gives.</p>
      */
     public int offsetAtLocal(float localX, float localY) {
-        float relativeY = localY - textOriginY() + scrollTop();
+        // INTO THE SPACE A VIEW LINE IS LAID OUT IN, which is the CONTENT box: a view line is an
+        // absolutely positioned child and this engine places those from the parent's content box, while
+        // `toLocal` hands us the BORDER box. Without the padding term a click lands one padding lower
+        // than it looks -- and the find bar is the only thing that writes the editor a top padding, so
+        // clicking a line while it was open selected one a bar's height further down. `textOriginX`
+        // already carries `paddingLeftOrZero` for the same reason on the other axis.
+        float relativeY = localY - paddingTopOrZero() - textOriginY() + scrollTop();
         int viewLine = Math.max(0, Math.min(viewLineCount() - 1, (int) (relativeY / lineHeight())));
 
         ProjectedLines.ModelPosition model = modelAt(viewLine);
