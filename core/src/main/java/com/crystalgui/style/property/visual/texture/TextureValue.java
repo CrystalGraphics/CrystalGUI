@@ -4,6 +4,7 @@ import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.texture.CgUiGradient;
 import com.crystalgui.render.texture.CgUiGrid;
+import com.crystalgui.render.texture.CgUiLayers;
 import com.crystalgui.render.texture.CgUiQuad;
 import com.crystalgui.render.texture.CgUiRepeat;
 import com.crystalgui.render.texture.CgUiShape;
@@ -119,6 +120,31 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
         String value = rawValue.trim();
         if (value.isEmpty()) return null;
 
+        // LAYERS, comma-separated, as CSS writes a background. The split is paren-aware, so a lone
+        // `linear-gradient(to bottom, a, b)` is one layer and not three.
+        List<String> parts = CssParsingUtil.splitTopLevelCommas(value);
+        if (parts.size() > 1) {
+            List<CgUiDrawable> layers = new ArrayList<>(parts.size());
+            for (String part : parts) {
+                String text = part.trim();
+                CgUiDrawable layer = parseLayer(text);
+                // ONE BAD LAYER FAILS THE DECLARATION rather than being dropped: a stack missing a layer
+                // still renders, and renders something the author did not write.
+                if (layer == null) return null;
+                // EACH LAYER REMEMBERS ITS OWN TEXT, not just the stack's. Only the whole declaration is
+                // remembered by doCompute, and a layer nobody can write is a layer Copy Attributes
+                // cannot offer on its own. @see #sourceOf
+                remember(layer, text);
+                layers.add(layer);
+            }
+            return new CgUiLayers(layers);
+        }
+        return parseLayer(value);
+    }
+
+    /** One layer: a keyword, or a registered function. */
+    @Nullable
+    private static CgUiDrawable parseLayer(String value) {
         // `none` is CSS's own spelling for "no layer here"; `empty` is accepted because LDLib2's LSS
         // uses that word and the two dialects otherwise read the same. Both resolve to the shared
         // EMPTY drawable rather than to null — null is how this method reports a PARSE FAILURE, so
