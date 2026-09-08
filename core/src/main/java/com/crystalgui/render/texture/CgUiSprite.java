@@ -376,9 +376,9 @@ public final class CgUiSprite implements CgUiDrawable {
 
         // Top / bottom edges: tiled horizontally, stretched vertically.
         if (rowH0 > 0) {
-            if (colW0 > 0) submit(ctx, x0, y0, colW0, rowH0, u0, v0, u1, v1, tintArgb);
-            emitRow(ctx, tilesX, x1, y0, rowH0, v0, v1, tintArgb);
-            if (colW2 > 0) submit(ctx, x2, y0, colW2, rowH0, u2, v0, u3, v1, tintArgb);
+            if (colW0 > 0) submit(ctx, x0, y0, colW0, rowH0, u0, v0, u1, v1, tintArgb, abuts(0, 0));
+            emitRow(ctx, tilesX, x1, y0, rowH0, v0, v1, tintArgb, abuts(1, 0));
+            if (colW2 > 0) submit(ctx, x2, y0, colW2, rowH0, u2, v0, u3, v1, tintArgb, abuts(2, 0));
         }
         // Left / right edges tiled vertically; centre tiled on both axes.
         if (rowH1 > 0) {
@@ -388,16 +388,16 @@ public final class CgUiSprite implements CgUiDrawable {
                 if (th <= 0) continue;
                 float tv0 = tilesY.uvStart();
                 float tv1 = tilesY.uvEnd(ty);
-                if (colW0 > 0) submit(ctx, x0, ty0, colW0, th, u0, tv0, u1, tv1, tintArgb);
-                if (fillCenter) emitRow(ctx, tilesX, x1, ty0, th, tv0, tv1, tintArgb);
-                if (colW2 > 0) submit(ctx, x2, ty0, colW2, th, u2, tv0, u3, tv1, tintArgb);
+                if (colW0 > 0) submit(ctx, x0, ty0, colW0, th, u0, tv0, u1, tv1, tintArgb, abuts(0, 1));
+                if (fillCenter) emitRow(ctx, tilesX, x1, ty0, th, tv0, tv1, tintArgb, abuts(1, 1));
+                if (colW2 > 0) submit(ctx, x2, ty0, colW2, th, u2, tv0, u3, tv1, tintArgb, abuts(2, 1));
                 maybeFlush(ctx);
             }
         }
         if (rowH2 > 0) {
-            if (colW0 > 0) submit(ctx, x0, y2, colW0, rowH2, u0, v2, u1, v3, tintArgb);
-            emitRow(ctx, tilesX, x1, y2, rowH2, v2, v3, tintArgb);
-            if (colW2 > 0) submit(ctx, x2, y2, colW2, rowH2, u2, v2, u3, v3, tintArgb);
+            if (colW0 > 0) submit(ctx, x0, y2, colW0, rowH2, u0, v2, u1, v3, tintArgb, abuts(0, 2));
+            emitRow(ctx, tilesX, x1, y2, rowH2, v2, v3, tintArgb, abuts(1, 2));
+            if (colW2 > 0) submit(ctx, x2, y2, colW2, rowH2, u2, v2, u3, v3, tintArgb, abuts(2, 2));
         }
 
         ctx.flush();
@@ -419,19 +419,36 @@ public final class CgUiSprite implements CgUiDrawable {
      */
     private void submit(CgUiPaintContext ctx, float x, float y, float w, float h,
                         float u0, float v0, float u1, float v1, int argb) {
+        submit(ctx, x, y, w, h, u0, v0, u1, v1, argb, 0);
+    }
+
+    /**
+     * @param abutting which edges of this piece meet another piece — {@code CgQuadRenderer.ABUTS_*} — so
+     *                 those stay hard however the sprite is rotated while its outer edges are
+     *                 antialiased. A whole sprite drawn as one quad abuts nothing
+     */
+    private void submit(CgUiPaintContext ctx, float x, float y, float w, float h,
+                        float u0, float v0, float u1, float v1, int argb, int abutting) {
         CgQuadRenderer.Quad q = ctx.quad().at(x, y).size(w, h).color(argb);
         if (!missingTexture) q.uv(u0, v0, u1, v1);
+        if (abutting != 0) q.abutting(abutting);
         q.submit();
+    }
+
+    /** The edges a nine-slice piece at {@code (col, row)} shares with its neighbours. */
+    private static int abuts(int col, int row) {
+        return (col > 0 ? CgQuadRenderer.ABUTS_LEFT : 0) | (col < 2 ? CgQuadRenderer.ABUTS_RIGHT : 0)
+                | (row > 0 ? CgQuadRenderer.ABUTS_TOP : 0) | (row < 2 ? CgQuadRenderer.ABUTS_BOTTOM : 0);
     }
 
     /** Emits one horizontal strip of tiles at a fixed y/height and fixed vertical UV range. */
     private void emitRow(CgUiPaintContext ctx, Axis tilesX, float xStart, float yPos, float h,
-                         float vTop, float vBottom, int tintArgb) {
+                         float vTop, float vBottom, int tintArgb, int abutting) {
         for (int tx = 0; tx < tilesX.count; tx++) {
             float tx0 = xStart + tilesX.offset(tx);
             float tw = tilesX.size(tx);
             if (tw <= 0) continue;
-            submit(ctx, tx0, yPos, tw, h, tilesX.uvStart(), vTop, tilesX.uvEnd(tx), vBottom, tintArgb);
+            submit(ctx, tx0, yPos, tw, h, tilesX.uvStart(), vTop, tilesX.uvEnd(tx), vBottom, tintArgb, abutting);
             maybeFlush(ctx);
         }
     }

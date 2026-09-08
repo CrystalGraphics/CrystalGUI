@@ -54,7 +54,9 @@ Properties {
 }
 
 struct v2f {
-    vec2 uv;
+    // The quad's parameter, grown by half a pixel when rotated so the SDF's ramp is not cut off by the
+    // quad's own edge -- CG_QUAD_EDGE_* in cg_env.glsl. uv is derived from it per fragment.
+    vec2 param;
     vec4 color;
 };
 
@@ -92,22 +94,28 @@ Pass {
     }
 
     void vertex(out v2f o) {
-        gl_Position = cg_ProjMatrix * vec4(CG_QUAD_WORLD_POS, 1.0);
-        o.uv    = CG_QUAD_UV;
+        o.param = CG_QUAD_EDGE_PARAM;
+        gl_Position = cg_ProjMatrix * vec4(CG_QUAD_EDGE_WORLD_POS(o.param), 1.0);
         o.color = CG_QUAD_COLOR;
     }
 
     void fragment(in v2f i, out vec4 fragColor) {
+        // Unclamped for the SDF, since past the box is exactly what it is there to cut; clamped for the
+        // texture fills, so the pad never samples outside the rect.
+        vec2 uvUnclamped = mix(QUAD_DATA(CG_INSTANCE_ID).uv0, QUAD_DATA(CG_INSTANCE_ID).uv1, i.param);
+        vec2 uv = CG_QUAD_EDGE_UV(i.param);
         vec2 halfSize = _BoxSize * 0.5;
-        vec2 localPos = (i.uv - 0.5) * _BoxSize;
+        vec2 localPos = (uvUnclamped - 0.5) * _BoxSize;
         float dist = sdf_rounded_box(localPos, halfSize, _CornerRadiusX, _CornerRadiusY);
-        float coverage = sdf_coverage(dist);
+        // A rotated box takes the wider reconstruction filter its edges and texels get; at rest, one pixel.
+        float ramp = CG_QUAD_EDGE_ROTATED ? CG_QUAD_EDGE_FILTER : 1.0;
+        float coverage = sdf_coverage(dist, ramp);
 
 #ifdef WITH_9SLICE_FILL
         // Continuous-per-pixel equivalent of CgUiSprite's 9-quad slicing: remap this pixel's
         // box-local position into the correct one of 9 atlas regions, using the same
         // border-overlap clamp (scaleX/scaleY) CgUiSprite.draw() applies.
-        vec2 p = i.uv * _BoxSize;
+        vec2 p = uv * _BoxSize;
         vec4 border = _NineSliceBorder;
         float scaleX = min(1.0, _BoxSize.x / max(1.0, border.x + border.z));
         float scaleY = min(1.0, _BoxSize.y / max(1.0, border.y + border.w));
@@ -155,7 +163,7 @@ Pass {
         // the border's inner edge and leave a fringe -- the same hazard paintOutline documents.
         fillColor *= keepX * keepY * centerMask;
 #elif defined(WITH_TEXTURE_FILL)
-        vec4 fillColor = texture(_MainTex, i.uv);
+        vec4 fillColor = texture(_MainTex, uv);
 #else
         vec4 fillColor = _FillColor;
 #endif
@@ -165,7 +173,7 @@ Pass {
         fillColor *= i.color;
 
 #ifdef WITH_BORDER
-        float innerCoverage = sdf_coverage(dist + _BorderWidth);
+        float innerCoverage = sdf_coverage(dist + _BorderWidth, ramp);
 #ifdef SPLIT_BORDER
         // Which of the FOUR edges this boundary pixel belongs to, not just which half of the box: a
         // naive `localPos.y < 0` split colours the whole stroke by vertical half, which cuts the LEFT

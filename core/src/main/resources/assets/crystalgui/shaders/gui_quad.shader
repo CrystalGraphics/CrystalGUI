@@ -40,7 +40,9 @@ Properties {
 }
 
 struct v2f {
-    vec2 uv;
+    // The quad's own parameter rather than uv: grown by half a pixel when the quad is rotated, so its
+    // edges can be antialiased in the fragment stage. See CG_QUAD_EDGE_* in cg_env.glsl.
+    vec2 param;
     vec4 color;
 };
 
@@ -55,13 +57,18 @@ Pass {
     }
 
     void vertex(out v2f o) {
-        gl_Position = cg_ProjMatrix * vec4(CG_QUAD_WORLD_POS, 1.0);
-        o.uv    = CG_QUAD_UV;
+        o.param = CG_QUAD_EDGE_PARAM;
+        gl_Position = cg_ProjMatrix * vec4(CG_QUAD_EDGE_WORLD_POS(o.param), 1.0);
         o.color = CG_QUAD_COLOR;
     }
 
     void fragment(in v2f i, out vec4 fragColor) {
-        fragColor = texture(_MainTex, i.uv) * i.color;
-        fragColor.a *= _LayerOpacity;
+        vec2 uv = CG_QUAD_EDGE_UV(i.param);
+        // Rotated, the texels get the same treatment as the outline -- see CG_TEXEL_AA in cg_env.glsl.
+        vec4 texel = CG_QUAD_EDGE_ROTATED
+                ? cg_texel_aa_sample(_MainTex, uv, CG_QUAD_UV_RECT)
+                : texture(_MainTex, uv);
+        fragColor = texel * i.color;
+        fragColor.a *= _LayerOpacity * CG_QUAD_EDGE_COVERAGE(i.param);
     }
 }

@@ -1590,7 +1590,7 @@ three-phase event types are in `ui/event/` — there is no `core/event/` package
 | `textures/gui/gdp_styles.png` | **Unreferenced by any code today.** |
 | `textures/gui/Spritesheet_UI_Flat.png` | Unreferenced by any stylesheet today. |
 | `ui/fonts/Minecraft.otf`, `MinecraftRegular.otf` | Public-domain MC fonts. |
-| `shaders/gui_quad.shader` | Default material bound by `beginFrame`. |
+| `shaders/gui_quad.shader` | Default material bound by `beginFrame`. **Every quad material here antialiases its own edges when rotated or sheared, with no MSAA** — the `CG_QUAD_EDGE_*` helpers in `cg_env.glsl` (padded geometry, exact-area coverage per edge), `cg_texel_aa_sample` for pixel art, and a wider `sdf_coverage` ramp for the SDF materials; see `CrystalGraphics/AGENTS.md` § *Engine Buffers*. Axis-aligned content is untouched, measured pixel-identical. The `edges` page of `cgui-gallery` shows every material rotated and skewed. |
 | `shaders/gui_rounded_rect.shader` | SDF rounded rects. |
 | `shaders/gui_layer_blit.shader` | Visual-layer FBO composite. |
 | `shaders/gui_curve.shader` | Bézier strokes, via `ctx.curve()`; filled triangles and quads share it. Declares `#pragma cg_use curve`, not `quad`. |
