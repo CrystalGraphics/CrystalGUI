@@ -71,6 +71,30 @@ public final class LocalFileSystem implements CgFileSystem {
         return name.startsWith(TEMP_PREFIX) && name.endsWith(TEMP_SUFFIX);
     }
 
+    /**
+     * Whether {@code name} is an editor's scratch file rather than a document.
+     *
+     * <p>Ours is one of these and was the only one recognised, which is a rule written from the
+     * inside: every other editor writing into this workspace leaves its own, and their comings and
+     * goings are not news. Reported from the harness -- saving one file announced <b>2 Changes</b>,
+     * because the editor writes {@code baba~} beside {@code baba} and removes it again, and the
+     * removal was a change like any other.</p>
+     *
+     * <p><b>Events only, not listings.</b> Our temp genuinely never exists as content, so it is
+     * filtered from both; a {@code foo~} is a real file that persists until its editor tidies it
+     * away, and hiding a file somebody can see in their own file manager is worse than mentioning
+     * it once. So the tree still lists these -- they simply do not raise a notification.</p>
+     */
+    public static boolean isEditorScratch(String name) {
+        if (isWriteTemp(name)) return true;
+        if (name.isEmpty()) return false;
+        return name.endsWith("~")                       // emacs, vim, gedit, kate: the backup
+                || name.startsWith(".#")                // emacs: the lock
+                || name.startsWith("~$")                // office: the owner file
+                || name.startsWith(".goutputstream-")   // gio/gedit: the atomic save
+                || name.endsWith(".swp") || name.endsWith(".swo") || name.endsWith(".swx");
+    }
+
     private final ProjectRegistry projects;
     private final long maxFileBytes;
     private final boolean caseSensitive;

@@ -128,7 +128,9 @@ public final class NioFileEventSource implements CgFileEvent.Source {
                 // AN ATOMIC WRITE IN FLIGHT, not a file anybody asked for: every save creates one in
                 // the target's own directory and moves it onto the file, so reporting it made a save
                 // announce a stranger appearing and vanishing. @see LocalFileSystem#TEMP_PREFIX
-                if (LocalFileSystem.isWriteTemp(child.getFileName().toString())) continue;
+                // NOT OURS ALONE. Every editor writing into this workspace leaves scratch beside the
+                // file it is saving, and none of it is news. @see LocalFileSystem#isEditorScratch
+                if (LocalFileSystem.isEditorScratch(child.getFileName().toString())) continue;
 
                 if (raw.kind() == StandardWatchEventKinds.ENTRY_CREATE) {
                     events.add(CgFileEvent.of(CgFileEvent.Kind.CREATED, path));
