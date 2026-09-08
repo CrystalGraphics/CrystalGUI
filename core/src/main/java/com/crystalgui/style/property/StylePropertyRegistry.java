@@ -9,7 +9,7 @@ import com.crystalgui.style.property.general.ints.IntProperty;
 import com.crystalgui.style.property.general.strings.StringValue;
 import com.crystalgui.style.property.visual.BoxOrigin;
 import com.crystalgui.style.property.visual.DrawableAlign;
-import com.crystalgraphics.platform.input.CgCursor;
+import com.crystalgui.core.cursor.Cursor;
 import com.crystalgui.style.property.visual.DrawableFit;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.style.property.visual.Resize;
@@ -265,8 +265,8 @@ public class StylePropertyRegistry {
      * pointer is currently over, which {@code UIInputHandler} already tracks per frame -- reacting to
      * the property itself would fire for elements nowhere near the pointer.</p>
      */
-    public static final StyleProperty<CgCursor> CURSOR =
-            create("cursor", CgCursor.class, CgCursor.AUTO).setInheritable(true);
+    public static final StyleProperty<Cursor> CURSOR =
+            create("cursor", Cursor.class, Cursor.AUTO).setInheritable(true);
 
     /**
      * CSS {@code font-weight}. Inherited, initial {@code normal}. @see FontWeight

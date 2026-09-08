@@ -4,7 +4,7 @@ import org.joml.Vector2f;
 
 import javax.annotation.Nullable;
 
-import com.crystalgraphics.platform.input.CgCursor;
+import com.crystalgui.core.cursor.Cursor;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;

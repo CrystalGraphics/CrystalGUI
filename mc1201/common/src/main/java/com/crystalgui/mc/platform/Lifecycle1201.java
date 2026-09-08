@@ -7,6 +7,8 @@ import javax.annotation.Nullable;
 
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.cursor.CursorService;
+import com.crystalgui.mc.platform.service.CursorService1201;
 import com.crystalgui.mc.client.CgUiHud1201;
 import com.crystalgui.mc.example.MachineExample1201;
 import com.crystalgui.mc.example.MachineExampleClient1201;
@@ -59,6 +61,10 @@ public final class Lifecycle1201 {
         // Before the announcement: the engine source asks this service where it may write, so a band
         // bundled in the jar or fetched for this host has nowhere to go until it is registered.
         ScriptService1201.install();
+        // THE POINTER IS THIS PLATFORM'S TO DRESS, and it belongs to the process rather than to any one
+        // screen -- so a cursor resolves the same whether the desktop has ever been opened or not. GLFW
+        // has the whole standard set, so this one is a mapping table; the engine resolves a keyword and asks.
+        CgPlatform.provide(CursorService.SERVICE, new CursorService1201());
         // Behind the loading screen, where the registry's discovery costs nobody anything.
         LanguageStack1201.announce();
         MachineExampleClient1201.registerClient();

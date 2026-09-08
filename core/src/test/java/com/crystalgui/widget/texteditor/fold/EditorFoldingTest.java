@@ -1,5 +1,6 @@
 package com.crystalgui.widget.texteditor.fold;
 
+import com.crystalgui.core.cursor.Cursor;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.texteditor.EditorTestBase;
 import com.crystalgui.widget.text.UIText;
@@ -402,7 +403,7 @@ public class EditorFoldingTest extends EditorTestBase {
                 hit.hasClass(TextEditor.FOLD_PLACEHOLDER_CLASS));
 
         assertEquals("and it declares a pointer cursor",
-                com.crystalgraphics.platform.input.CgCursor.POINTER,
+                Cursor.POINTER,
                 hit.getStyle().getGeneralGroup().cursor());
 
         var press = new com.crystalgui.ui.event.MouseEvent.Down(hit,

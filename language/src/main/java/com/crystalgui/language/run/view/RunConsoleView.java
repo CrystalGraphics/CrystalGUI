@@ -89,10 +89,8 @@ public final class RunConsoleView {
     /**
      * On the console while the pointer is over a navigable span — what turns the cursor into a pointer.
      *
-     * <p>A class rather than a {@code cursor} written from Java, for two reasons that agree. The house
-     * rule puts appearance in the sheet; and {@code CgCursor} lives in CrystalGraphics' platform module,
-     * which {@code core} takes as {@code compileOnly} and therefore does not pass on — so {@code language/}
-     * cannot name the type at all. The constraint and the convention point the same way.</p>
+     * <p>A class rather than a {@code cursor} written from Java: the house rule puts appearance in the
+     * sheet, so a theme can change what a link's pointer looks like without a recompile.</p>
      */
     public static final String OVER_LINK_CLASS = "__over-link__";
 

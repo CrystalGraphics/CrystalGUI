@@ -1096,25 +1096,45 @@ the backend here.
 `cpw.mods.fml.*`, `net.minecraftforge.*`, `org.lwjgl.*`.
 
 **The platform seam is CrystalGraphics'.** CrystalGUI has no registry of its own — it reads everything
-through `CgPlatform`, and a loader registers exactly one `CgPlatformService` bundle:
+through `CgPlatform`, which has two halves: a loader registers exactly one `CgPlatformService` bundle
+(**closed** — nine methods, no defaults, so the compiler forces a new loader to answer every one), and
+fills any number of `CgService` **slots** (**open** — for contracts the rendering framework must not name,
+each carrying its own absent-value):
 
 | Need | Reached via | Lives in |
 |---|---|---|
 | Key/mouse codes, modifier state, **and the clipboard** | `CgPlatform.input()` | `platform/service/CgInputService` |
 | UI sounds | `CgPlatform.sound()` | `platform/service/CgSoundService` |
-| Presenting a cursor | `CgPlatform.cursor()` | `platform/service/CgCursorService` |
 | Raw event sink (`Input` implements it) | — | `platform/input/CgSystemInput` |
-| Code constants, cursor enum, cursor artwork | — | `platform/input/CgKeyCodes`, `CgMouseCodes`, `CgModifiers`, `CgCursor`, `CgCursorBitmaps` |
+| Code constants | — | `platform/input/CgKeyCodes`, `CgMouseCodes`, `CgModifiers` |
+| **Presenting a cursor** | `CgPlatform.get(CursorService.SERVICE)` | **`core.cursor`, ours** — see below |
+
+> **The cursor is CrystalGUI's, and it is a slot rather than a bundle method.** It was
+> `CgCursorService`/`CgCursor`/`CgCursorBitmaps` in `platform/` until `CgService` existed — CrystalGUI
+> could own no service, so anything a loader supplied went into the one registry there. Nothing about a
+> cursor is a rendering concern, and everything that *decides* one is here: the `cursor` property, its
+> inheritance, the `auto` rule, `Input`'s gesture override.
+>
+> **A new cursor never touches a loader.** `CursorBitmaps.artFor` is the single keyword→picture table for
+> every platform; an adapter reads it, caches natives by the returned `CursorArt`, and enumerates no
+> keywords of its own. It used to be copied into each adapter and the copies drifted — `slide-arrow`
+> reached the two LWJGL2 ones and not GLFW, `crosshair` the reverse. The one table a loader still owns is
+> the set of shapes *its own toolkit* ships natively, keyed on `CursorArt.name()`.
 
 > **The clipboard is on `CgInputService`, not a service of its own.** It is not conceptually input, but it
 > is reached the same way and needed by exactly the code that handles keys — two methods do not earn a
 > registration slot. Both default to a no-op pair.
 
-**No method in this SPI has a default, and neither sound nor cursor ships a `NOOP` constant.** A default is
+**No method in the BUNDLE has a default, and `CgSoundService` ships no `NOOP` constant.** A default is
 an answer chosen for someone who never saw the question: a new platform compiles cleanly while silently
-inheriting "no sound, no cursor, no clipboard", and inheriting a no-op is indistinguishable from deciding
-on one. Abstract methods make the compiler the reminder — and a platform with nothing to offer still says
-so, with an empty body in its own source.
+inheriting "no sound, no clipboard", and inheriting a no-op is indistinguishable from deciding on one.
+Abstract methods make the compiler the reminder — and a platform with nothing to offer still says so, with
+an empty body in its own source.
+
+**A `CgService` slot is the deliberate opposite**, and the cursor is why the distinction exists: an
+unpresented cursor is *cosmetic*, and the engine runs where there is nothing to present to — a dedicated
+server, a headless test, a fixture with no window. Those must not register a stub to stay silent, so the
+slot answers `CursorService.NONE` and `CgService` logs the absence once, on first read.
 
 > **Why this stopped being CrystalGUI's own registry.** `CrystalGuiCore` used to hold four static fields
 > with setters. CrystalGraphics is the parent project and is always present, so two registries meant a
@@ -1171,6 +1191,14 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
                                checked so the RENDERER decides), MenuContributor (rows computed at open
                                time — the Window menu's editor list). CommandRegistry.sections() is the
                                one query every menu renderer reads; menu() is its deprecated flat view
+  .cursor                      Cursor (the keyword set — CSS UI 4's, plus six the web never named:
+                               slide-arrow, four rotate-*, skew, pivot), CursorBitmaps (procedural 32x32
+                               ARGB art, AND `artFor` — the ONE keyword->picture table every platform
+                               reads), CursorArt (one picture: name, drawing, hotspot; shared across the
+                               keywords that want it, so an adapter caches one native per PICTURE),
+                               CursorService (+ its CgService slot). Was CrystalGraphics' `platform.input`
+                               / `platform.service` until CgService gave CrystalGUI a way to own a
+                               service; it names no GL and no loader
   .undo                        Edit (one undoable change), CompositeEdit, UndoStack — one history per
                                DOCUMENT, never per window
   .window                      WindowState, WindowPolicy, DesktopPresentation — three types BOTH engines
@@ -1235,15 +1263,17 @@ com.crystalgui.desktop         CRYSTALOS ON THE NEW ENGINE (M6.6) — Desktop (t
                                LaunchContext (the Exec line's arguments)
 
 com.crystalgraphics.platform   NOT CrystalGUI's code — CrystalGraphics' platform SPI, which CrystalGUI
-                               consumes. Listed here because the engine's input, sound, clipboard and
-                               cursor seams all live in it.
-  (root)                       CgPlatform (the registry), CgPlatformService (the bundle a loader registers)
+                               consumes. Listed here because the engine's input, sound and clipboard
+                               seams all live in it — the CURSOR does not; see `core.cursor` above.
+  (root)                       CgPlatform (the registry, both halves), CgPlatformService (the CLOSED
+                               bundle a loader registers), CgService (the OPEN half — a slot a consumer
+                               declares, a loader fills and anyone reads, each with its own absent-value.
+                               CursorService.SERVICE and CgNetworkChannel.SERVICE are ours)
   .input                       CgSystemInput (raw Mouse/Keyboard event sink + event types),
                                CgKeyCodes (LWJGL2-shaped, no LWJGL import), CgMouseCodes,
-                               CgModifiers (bitmask), CgCursor (the cursor keyword set),
-                               CgCursorBitmaps (procedural 32x32 cursor art)
+                               CgModifiers (bitmask)
   .service                     CgInputService (codes, modifier/key/button state, AND the clipboard),
-                               CgSoundService, CgCursorService — plus CrystalGraphics' own six
+                               CgSoundService — plus CrystalGraphics' own six
 
 com.crystalgui.lifecycle       CgUiLifecycle — the ONE CgLifecycleListener CrystalGUI registers with
                                CrystalGraphics; drives paint-context teardown + cache invalidation

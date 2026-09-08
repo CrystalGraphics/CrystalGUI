@@ -4,8 +4,8 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.CgPlatformService;
 import com.crystalgraphics.platform.gl.CgGLBackend;
 import com.crystalgraphics.platform.gl.CgGLContext;
-import com.crystalgraphics.platform.input.CgCursor;
-import com.crystalgraphics.platform.service.CgCursorService;
+import com.crystalgui.core.cursor.Cursor;
+import com.crystalgui.core.cursor.CursorService;
 import com.crystalgraphics.platform.service.CgInputService;
 import com.crystalgraphics.platform.service.CgLifecycleService;
 import com.crystalgraphics.platform.service.CgReloadService;
@@ -24,8 +24,12 @@ import java.util.List;
  * <p>{@link CgPlatform} reads every service through the one registered bundle and offers no per-service
  * setter, which is correct for production: a loader has all of this to hand at once, and half-registration
  * is the failure mode that shape rules out. A test wanting only a fake clipboard would otherwise have to
- * build a whole bundle, so instead there is one bundle, registered once, whose three UI services are
- * fields — {@link #input(CgInputService)}, {@link #sound(CgSoundService)}, {@link #cursor(CgCursorService)}.</p>
+ * build a whole bundle, so instead there is one bundle, registered once, whose two UI services are
+ * fields — {@link #input(CgInputService)} and {@link #sound(CgSoundService)}.</p>
+ *
+ * <p>The cursor is not among them: it is CrystalGUI's own {@link CursorService#SERVICE}, a slot on the
+ * open half of the platform stack rather than a bundle member, and {@link #install()} clears it here for
+ * the same reason it resets the others.</p>
  *
  * <p>The six GL-facing services all answer {@code null}. Nothing in a unit test reaches them —
  * {@code CgPlatform.register} only stores {@code gl()} and {@code capabilities()} into static fields, and
@@ -43,9 +47,6 @@ public final class TestPlatformService implements CgPlatformService {
 
     /** Silence. Named rather than anonymous so a stack trace in a failing test says what it hit. */
     public static final CgSoundService SILENT_SOUND = soundId -> {};
-
-    /** Shows nothing — the platform services no longer ship a shared no-op to borrow. */
-    public static final CgCursorService NO_CURSOR = cursor -> {};
 
     /** A keyboard and mouse that report nothing pressed — what a test needs unless it says otherwise. */
     public static final CgInputService STUB_INPUT = new CgInputService() {
@@ -89,15 +90,14 @@ public final class TestPlatformService implements CgPlatformService {
 
     private CgInputService input = STUB_INPUT;
     private CgSoundService sound = SILENT_SOUND;
-    private CgCursorService cursor = NO_CURSOR;
 
     private TestPlatformService() {}
 
-    /** Registers the bundle and resets its three UI services to their defaults. */
+    /** Registers the bundle and resets every swappable service — the cursor holder included. */
     public static TestPlatformService install() {
         INSTANCE.input = STUB_INPUT;
         INSTANCE.sound = SILENT_SOUND;
-        INSTANCE.cursor = NO_CURSOR;
+        CgPlatform.provide(CursorService.SERVICE, null);
         modifiers = 0;
         CgPlatform.register(INSTANCE);
         return INSTANCE;
@@ -120,27 +120,21 @@ public final class TestPlatformService implements CgPlatformService {
         return this;
     }
 
-    /** Replaces the cursor service. {@code null} restores {@link #NO_CURSOR}. */
-    public TestPlatformService cursor(CgCursorService cursorService) {
-        this.cursor = cursorService != null ? cursorService : NO_CURSOR;
-        return this;
-    }
-
     /**
-     * Installs a cursor service that appends every cursor it is shown to {@code sink}.
+     * Provides a {@link CursorService} that appends every cursor it is shown to the returned list.
      *
      * <p>Convenience for the common assertion shape — what the engine <em>resolved</em> is only observable
-     * as the sequence of values it handed the platform.</p>
+     * as the sequence of values it handed the service. {@link #install()} clears the slot, so a recording
+     * service cannot outlive the test that wanted it.</p>
      */
-    public List<CgCursor> recordCursors() {
-        List<CgCursor> shown = new ArrayList<>();
-        cursor(shown::add);
+    public List<Cursor> recordCursors() {
+        List<Cursor> shown = new ArrayList<>();
+        CgPlatform.provide(CursorService.SERVICE, shown::add);
         return shown;
     }
 
     @Override public CgInputService input() { return input; }
     @Override public CgSoundService sound() { return sound; }
-    @Override public CgCursorService cursor() { return cursor; }
 
     // ── Unused by unit tests; see the class javadoc ────────────────────────────────────────────────
     @Override public CgGLBackend gl() { return null; }

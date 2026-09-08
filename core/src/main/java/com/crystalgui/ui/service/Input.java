@@ -1,7 +1,8 @@
 package com.crystalgui.ui.service;
 
 import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgraphics.platform.input.CgCursor;
+import com.crystalgui.core.cursor.Cursor;
+import com.crystalgui.core.cursor.CursorService;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgSystemInput;
@@ -81,7 +82,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
      * reach a platform service and a headless tree pays nothing.
      */
     public interface CursorSink {
-        void present(CgCursor cursor);
+        void present(Cursor cursor);
     }
 
     /**
@@ -225,8 +226,8 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
     private @Nullable CursorSink cursors;
 
     /** Beats the CSS answer while a gesture owns the pointer. @see #setCursorOverride */
-    private @Nullable CgCursor cursorOverride;
-    private CgCursor lastCursor = CgCursor.DEFAULT;
+    private @Nullable Cursor cursorOverride;
+    private Cursor lastCursor = Cursor.DEFAULT;
 
     /**
      * Whether the default sink has been resolved, and to what.
@@ -235,9 +236,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
      * different: the first wants the default, the second wants silence. {@code UNRESOLVED} until the
      * pointer first needs a cursor, so a tree nobody points at never asks.</p>
      */
-    private DefaultSink defaultSink = DefaultSink.UNRESOLVED;
 
-    private enum DefaultSink { UNRESOLVED, PLATFORM, NONE }
 
     public Input(UIDocument document) {
         this.document = document;
@@ -293,7 +292,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
     /**
      * Intercepts the resolved cursor, instead of letting it reach the platform.
      *
-     * <p>Optional: with no sink the cursor goes to {@code CgPlatform.cursor()}, which is where one
+     * <p>Optional: with no sink the cursor goes to {@link CursorService#SERVICE}, which is where one
      * comes from anyway. A host installs one to take it somewhere else — a test that asserts on the
      * cursor, or a loader presenting it through its own screen.</p>
      */
@@ -301,7 +300,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
      * Forces a cursor for as long as it is set, over whatever the cascade resolves.
      *
      * <pre>{@code
-     * input.setCursorOverride(CgCursor.GRABBING);   // a drag begins
+     * input.setCursorOverride(Cursor.GRABBING);   // a drag begins
      * input.setCursorOverride(null);                // and ends
      * }</pre>
      *
@@ -309,7 +308,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
      * must keep its arrow after the pointer has left the handle. Null restores the CSS answer — a
      * gesture that forgets to clear it leaves the whole window pointing the wrong way.</p>
      */
-    public Input setCursorOverride(@Nullable CgCursor cursor) {
+    public Input setCursorOverride(@Nullable Cursor cursor) {
         this.cursorOverride = cursor;
         return this;
     }
@@ -367,38 +366,26 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
      * cursor because the node under it changed.</p>
      */
     private void presentCursor(@Nullable UIElement hovered) {
-        CgCursor resolved = cursorOverride != null ? cursorOverride : resolveCursor(hovered);
+        Cursor resolved = cursorOverride != null ? cursorOverride : resolveCursor(hovered);
         if (resolved == lastCursor) return;
         lastCursor = resolved;
         if (cursors != null) {
             cursors.present(resolved);
             return;
         }
-        // NO SINK INSTALLED, so ask the platform -- which is where a cursor comes from by this
-        // project's own rule, not a boundary this is stepping over. Without it every resize handle
-        // on this engine showed the default arrow: the cursor was resolved correctly on every frame
-        // and pushed into a sink nobody had installed.
-        if (defaultSink == DefaultSink.NONE) return;
-        try {
-            CgPlatform.cursor().setCursor(resolved);
-            defaultSink = DefaultSink.PLATFORM;
-        } catch (RuntimeException noPlatform) {
-            // A DEDICATED SERVER REGISTERS NO PLATFORM and `CgPlatform.cursor()` throws rather than
-            // answering an absent-value, so this is the probe rather than a guard: asked once, and a
-            // tree with nothing behind it stops asking. Not logged -- a headless tree having no
-            // cursor is the normal case, not a fault.
-            defaultSink = DefaultSink.NONE;
-        }
+        // No sink: the host's slot, which answers NONE until a loader provides one -- so an unhosted
+        // engine costs a virtual call rather than the throw-and-latch CgPlatform.cursor() needed.
+        CgPlatform.get(CursorService.SERVICE).setCursor(resolved);
     }
 
     /**
      * The spec's {@code auto} rule: {@code text} over an editable node, {@code default} otherwise.
      * {@code cursor} is inheritable, so the cascade has already answered what a nested node shows.
      */
-    private static CgCursor resolveCursor(@Nullable UIElement hovered) {
-        if (hovered == null) return CgCursor.DEFAULT;
-        CgCursor declared = hovered.computedStyle().get(StylePropertyRegistry.CURSOR);
-        if (declared == null) return CgCursor.DEFAULT;
+    private static Cursor resolveCursor(@Nullable UIElement hovered) {
+        if (hovered == null) return Cursor.DEFAULT;
+        Cursor declared = hovered.computedStyle().get(StylePropertyRegistry.CURSOR);
+        if (declared == null) return Cursor.DEFAULT;
         if (!declared.needsResolution()) return declared;
         // OVER EDITABLE CONTENT, and a SLOT is not a control -- it is a placeholder for one.
         //
@@ -418,11 +405,11 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         // is the control. So the resolution was correct exactly when it was asked about the right node.
         UIElement at = hovered;
         while (at instanceof UISlot) at = at.composedParent();
-        return at != null && at.consumesTextInput() ? CgCursor.TEXT : CgCursor.DEFAULT;
+        return at != null && at.consumesTextInput() ? Cursor.TEXT : Cursor.DEFAULT;
     }
 
-    /** The cursor currently presented. Resolved, so never {@link CgCursor#AUTO}. */
-    public CgCursor currentCursor() {
+    /** The cursor currently presented. Resolved, so never {@link Cursor#AUTO}. */
+    public Cursor currentCursor() {
         return lastCursor;
     }
 
