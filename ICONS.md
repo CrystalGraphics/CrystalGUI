@@ -5,9 +5,16 @@ Explorer). **Approach E was built on 2026-08-06** and is what shipped — §2b, 
 record; §1 and §2A–D are kept because they are why E won, not because any of them is the plan.
 
 **The short version**: we needed less than it looked like, and then less again. The recommended path adds
-**no new dependency, no new GPU path, no atlas and no bake** — an SVG is parsed once into geometry and
-drawn through the instanced vector renderer that already exists for graph wires. The MSDF converter §1.4
-found in the jar turned out not to be needed either.
+**no new dependency and no new GPU path** — an SVG is parsed once into geometry and drawn through the
+instanced vector renderer that already exists for graph wires. The MSDF converter §1.4 found in the jar
+turned out not to be needed either.
+
+> **Amended 2026-09-08: fills at icon size ARE rasterised into an atlas after all** — `SvgRasterCache`,
+> see §9b. "No atlas, no bake" held while a fill's cells could be composited one by one, and at 10–14 px they
+> cannot: a scanline cell is thinner than a pixel there, and two cells each covering half a pixel composite
+> to three quarters of it. The cells still draw exactly as below; they just draw into a scratch target
+> once, additively, and the frame gets one textured quad. The raster is coverage rather than colour, so the
+> free recolouring survives.
 
 ---
 
@@ -158,11 +165,13 @@ per-pixel, live, from geometry — the same mechanism that keeps graph wires and
 
 ### It fills too, which removes the one thing §3 held back for MSDF
 
-**"Stroked only" was listed here as E's defining limit, and it is not one.** `CgVectorRenderer` already has
-`triangle()` — the fill twin of `curve()`, sharing its material and its instance buffer — so a filled
-interior needs no new GPU path at all, only a decomposition on the CPU. `SvgTriangulator` does it as a
-**scanline trapezoid decomposition**: cut the shape into horizontal bands at every vertex `y`, sort the edge
-crossings in each band, and apply the fill rule. Two triangles per inside span.
+**"Stroked only" was listed here as E's defining limit, and it is not one.** `CgVectorRenderer` has a fill
+reading of the same record — `triangle()`, and since 2026-09-08 `quad()`, a convex quad with exact-area
+coverage on whichever edges are marked as outline — so a filled interior needs no new GPU path at all, only
+a decomposition on the CPU. `SvgTriangulator` does it as a **scanline trapezoid decomposition**: cut the
+shape into horizontal bands at every vertex `y`, sort the edge crossings in each band, and apply the fill
+rule. One quad per inside span, which knows both of its walls; it was two triangles, and a triangle that
+knew one wall claimed pixels near the other at full coverage on every seam row.
 
 That choice over ear clipping is the load-bearing one. Ear clipping triangulates a *single simple polygon*,
 and real artwork is neither — a logo is several contours at once, its counters and windows are holes that
@@ -517,6 +526,47 @@ Until one of those lands, moving buys nothing and costs a cross-project split.
 is a `TextureValue` form, and `FileIconTheme` ports VS Code's file-icon-theme JSON — extension and exact
 name to icon, longest-extension-first, with the colour deliberately left to the `.filetype-*` class it hands
 back so a dozen languages can share one glyph and still differ.
+
+### Small sizes: exact-area coverage, summed, once
+
+**Written 2026-09-08, after `package.svg` at 10, 12 and 14 logical px was compared pixel for pixel with
+IntelliJ's raster of the same file** (`plan/svg-fix/`). Three things were wrong, in order of discovery:
+
+1. The silhouette feather was a logical distance the pose scaled like a stroke width — two device pixels
+   at `uiScale` 2, so every pixel-aligned edge read 0.16 / 0.84 / 0.84 / 0.16 instead of 0 / 1 / 1 / 0.
+2. A trapezoid drawn as two triangles: the half that owns the right wall claims every pixel on the seam
+   row at full coverage even when that pixel is inside the LEFT wall's ramp, since it does not know the
+   left wall exists. A bright row across every band boundary at every fractional scale. Fixed by
+   `CgVectorRenderer.Quad` — one instance per cell, all four edges known, exact area on the outline ones,
+   half-open pixel-centre ownership on the seams.
+3. And the one no single-owner scheme can fix: a cell thinner than a pixel. At 20 device px a corner arc
+   is eight cells inside two pixel rows and the circle's cells are a quarter of a pixel tall. Whichever
+   cell owns a pixel must claim all of it and extend its own walls across it, and the walls of the cells
+   above and below are not collinear with them, so the extension is wrong — at exactly the places that
+   make an icon read: corners and the small circle.
+
+The third is why `SvgRasterCache` exists. Cells are drawn with **every** edge as an exact area (a
+Sutherland–Hodgman clip of the unit pixel, `stroke.glsl`'s `_quad_exact_area`) through
+`gui_curve_accumulate.shader` — `Blend ONE ONE`, premultiplied — into an RGBA16F atlas, where the areas
+sum to the shape's coverage exactly. A flat fill accumulates straight-alpha white — `(1, 1, 1, area)`,
+`gui_curve_coverage.shader` — so the frame composites it through the ordinary box-model material with the
+tint as its colour and it batches with every other quad; a fill with colours of its own accumulates them
+premultiplied and goes through the layer-blit material. Strokes are rasterised too, max-blended
+(`gui_curve_coverage_max.shader`) because their segments overlap at every joint. Keyed on (mesh tier,
+op, device scale, monochrome, stroke width), for draws up to 128 device px under an axis-aligned pose at a
+whole-pixel origin — `CgUiSvg` snaps the origin for exactly this. A 1024² atlas, shelf-packed, dropped
+wholesale when full.
+
+Cost, on the harness grid of 48 icons at 32 device px, 120 frames: **2.1 ms/frame** with the cache against
+**4.2 ms** drawing the same cells directly, and the curve renderer submits nothing per frame against
+6,500 instances. The first version composited through a material switch per op and measured 7.2 ms —
+1,380 material binds a frame — which is why the flat raster is straight alpha.
+
+Scored against a 256-sample CPU raster of the file over the harness's clear colour (`truth.py`), mean
+absolute error per pixel, worst pixel in brackets: triangles 1.07 (49) / 7.06 (81) / 9.96 (81) / 1.67
+(27) at 32 / 24 / 20 / 16 device px; quads direct 0.82 (14) / 2.03 (62) / 4.68 (77) / 1.31 (12); the
+cache **0.65 (3) / 0.69 (3) / 0.70 (3) / 0.72 (2)**, with 28 px at 0.69 (4). IntelliJ's own raster
+scores 0.77 (5) against the same truth, so this is the same picture to within the truth's own noise.
 
 ### The icon set: IntelliJ Platform, not Feather, and not Material
 

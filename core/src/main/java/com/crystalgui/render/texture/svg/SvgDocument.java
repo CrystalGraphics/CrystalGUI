@@ -73,113 +73,15 @@ import javax.annotation.Nullable;
  */
 public final class SvgDocument {
 
-
-
     /**
-     * How far every fill triangle is grown, in screen pixels, so its seams with its neighbours close.
+     * Width of the antialiasing ramp on a stroke, in device pixels.
      *
-     * <h3>Overlap, and why the partition that replaced it was wrong</h3>
-     *
-     * <p>A fill is a strip of trapezoids and every internal edge is shared by two triangles, each
-     * evaluating its own SDF. Growing both by a hair makes them overlap along that edge, so it is always
-     * claimed — the cost being that a <b>translucent</b> fill composites the overlap twice and reads
-     * lighter there.</p>
-     *
-     * <p>That cost is what motivated a partition instead: grow one side, shrink the other, so exactly one
-     * claims the edge. <b>It does not work.</b> Growing by δ and shrinking by δ leaves both effective
-     * boundaries on the <em>same line</em>, δ from the true edge — the same coincidence, relocated. A
-     * pixel within the coverage ramp of it takes partial coverage from both and lands near 0.83. Worse,
-     * the two triangles derive their distances from different vertex triples, so rounding puts them
-     * either side of that line at slightly different places; at 700px a float ULP is already 6e-5,
-     * comparable to the ramp. It shows up as sparse dark specks and short dashes along a seam rather than
-     * a continuous line, because only pixels landing in that sliver are affected.</p>
-     *
-     * <p>So the scheme is chosen by what the fill can afford:</p>
-     *
-     * <ul>
-     *   <li><b>Opaque — overlap.</b> Compositing a colour over itself is a no-op, so the doubled band
-     *       costs nothing and the seam is always claimed. Exactly right.</li>
-     *   <li><b>Translucent — partition.</b> An overlap would blend twice and read as a lighter line along
-     *       every seam, which is what regexp's and hprof's pages showed. The partition's own weakness —
-     *       a sliver where neither side fully claims — is confined to pixels landing within the coverage
-     *       ramp of one line, and is far rarer than a seam on every edge.</li>
-     * </ul>
-     *
-     * <p>Whichever is used, keep it <b>small</b>. The first overlap attempt used half a pixel, doubling a
-     * full pixel of every seam, which is why it read as a bright line rather than a hairline.</p>
-     *
-     * <h3>Why a small constant, measured rather than reasoned</h3>
-     *
-     * <p>This used to scale with the coordinates being drawn, on the theory that the offset had to stay
-     * tens of float ULPs wide at any zoom. That was compensating for a different bug — the fragment stage
-     * reconstructed its sample point from an interpolated varying, so two instances sharing a seam
-     * disagreed about where the pixel was by far more than any ULP. {@code gui_curve.shader} now takes the
-     * point from {@code gl_FragCoord}, which is identical for every instance, and the scaling became a
-     * liability: a larger offset is a wider doubled band, and on a translucent fill that band IS the
-     * artefact.</p>
-     *
-     * <p>Measured on the GPU, counting one-pixel rows that differ from two agreeing neighbours by 3/255 or
-     * more, over {@code javaOutsideSource} and {@code regexp} at two placements each:</p>
-     *
-     * <pre>
-     *   interpolated varying, offset .005     25 and 37    -- the reported lines and dashes
-     *   gl_FragCoord,         offset .005      0 and 29
-     *   gl_FragCoord,         offset 0        281 and  3   -- ties: both sides land on 0.5 coverage
-     *   gl_FragCoord,         offset .001      0 and  3    -- the residual 3 is real geometry
-     * </pre>
-     *
-     * <p>Zero is not the answer even though it removes the doubled band: with no offset an axis-aligned
-     * seam landing exactly on a row of pixel centres gives <em>both</em> sides a distance of zero, so both
-     * return the smoothstep's midpoint and the row blends twice at half strength. That is the 281, and at
-     * a high zoom on {@code regexp} it is 266 against 2. The offset exists to break that tie and needs to
-     * be only comfortably larger than the SDF's own rounding, not larger than an interpolation error that
-     * no longer happens.</p>
+     * <p>One pixel with a linear ramp is the exact area a straight edge covers of the pixel it crosses,
+     * which is what the fill path computes analytically. The fragment stage runs once per pixel, so a
+     * multisampled target never sees this ramp twice — measured: a pixel-aligned edge under 4x MSAA
+     * reads exactly 0 / 1 with it, and a stroke with no ramp is simply aliased.</p>
      */
-    private static final float FILL_OFFSET = 0.001f;
-
-    /**
-     * Width of the antialiased band on a fill's outline, in <b>post-pose</b> units — i.e. screen pixels.
-     *
-     * <p>One pixel, which is what an analytic coverage ramp wants: the edge should go from fully covered
-     * to fully uncovered across exactly the pixel it passes through, and no further. Wider reads as a
-     * blurry icon rather than a smooth one.</p>
-     *
-     * <p>Only the outline gets it — see the note at the submission site. Internal seams stay a hard step,
-     * which is why this can be turned on at all.</p>
-     */
-    private static final float SILHOUETTE_FEATHER = 1f;
-
-    /**
-     * Narrower than this, in screen pixels, and the edge is drawn as a hard step instead.
-     *
-     * <h3>Half a pixel is where antialiasing stops carrying information</h3>
-     *
-     * <p>A coverage ramp narrower than half a pixel spans less than one sample spacing, so at most one
-     * pixel can land inside it and there is no gradient left to resolve — the edge is decided by a single
-     * sample either way. Tapering it therefore buys nothing, and it <b>costs</b> something: that one pixel
-     * comes out at partial coverage, and partial coverages from abutting shapes composite as
-     * {@code 1-(1-c)^n} rather than summing, so the shortfall shows as background leaking through.</p>
-     *
-     * <p>That is the whole of the grainy dark speckle on artwork built from many small abutting shapes. The
-     * clamp against triangle height already stops a 1px band being smeared over a 0.2px wedge; this
-     * finishes the job by refusing the residual sliver of a feather that is left.</p>
-     *
-     * <h3>Why it is safe for detail, which is what it was tested against</h3>
-     *
-     * <p>The obvious fear is thin features vanishing: a hairline with no coverage ramp is visible only if a
-     * pixel centre happens to fall inside it. What makes it safe is that the threshold is compared against
-     * the shape's <b>own height</b> and never against the zoom — anything half a pixel or wider keeps its
-     * full feather, so only shapes already too small to antialias are ever snapped.</p>
-     *
-     * <p>Measured rather than assumed, on the IntelliJ mark at 0.75x — the most detail-dense icon shipped:
-     * turning the cutoff on changes <b>8 pixels, by at most 29/255</b>, and nothing is lost or broken up.
-     * Over the same step the colour wheel goes from grainy to clean. That ratio is the argument for the
-     * number; it is not free, it is just very cheap.</p>
-     */
-    private static final float MINIMUM_FEATHER = 0.5f;
-
-
-
+    private static final float STROKE_FEATHER = 1f;
 
     /** Path to parsed document; see {@link #of}. */
     private static final Map<String, SvgDocument> CACHE = new ConcurrentHashMap<>();
@@ -187,14 +89,15 @@ public final class SvgDocument {
     /**
      * One batch of geometry sharing a colour and a mode.
      *
-     * <p>{@code data} is triangles for a fill (six floats each) and segments for a stroke (four each) —
-     * one field rather than two subtypes because the draw loop switches on {@code fill} exactly once per
-     * op and then runs a tight loop, and a sealed hierarchy would buy a cast per op to say the same
-     * thing.</p>
+     * <p>{@code data} is cells for a fill (eight floats each, see {@link SvgTriangulator.Fill#quads}) and
+     * segments for a stroke (four each) — one field rather than two subtypes because the draw loop
+     * switches on {@code fill} exactly once per op and then runs a tight loop, and a sealed hierarchy
+     * would buy a cast per op to say the same thing.</p>
      *
-     * @param colours     one ARGB per triangle for a gradient fill, parallel to {@code data}; null when the
-     *                     whole op is one colour. A gradient is realised by cutting the fill fine enough
-     *                     that a flat colour per triangle passes for a ramp — see {@link SvgGradient}
+     * @param colours     one ARGB per cell for a gradient fill, parallel to {@code data}; null when the
+     *                     whole op is one colour
+     * @param edges       per cell, which edges are on the outline — see {@link SvgTriangulator.Fill#edges}.
+     *                     Null for a stroke
      * @param currentColor the paint was {@code currentColor}, so the consumer's tint decides it at draw
      *                     time. Late-bound rather than resolved here because a document is cached and
      *                     shared, and the same icon is routinely drawn in two colours in one frame
@@ -204,14 +107,9 @@ public final class SvgDocument {
      */
     public record DrawOp(boolean fill, float[] data, @Nullable int[] colours,
                          @Nullable int[] coloursEnd, @Nullable float[] gradients,
-                         @Nullable boolean[] upper, @Nullable boolean[] outerWall, boolean opaque,
+                         @Nullable int[] edges, boolean opaque,
                          int argb, boolean currentColor,
                          float halfWidth, int cap, @Nullable int[] segmentCaps) {
-
-        /** Whether triangle {@code i} carries a per-pixel ramp rather than a flat colour. */
-        public boolean hasGradient(int triangle) {
-            return gradients != null && coloursEnd != null;
-        }
     }
 
     /** Retained so {@link #ops()} can tessellate on demand; see the laziness note there. */
@@ -680,8 +578,8 @@ public final class SvgDocument {
                     SvgScene.Paint paint = fill.paint();
                     int argb = paint instanceof SvgScene.Gradient ramp
                             ? ramp.argb() : ((SvgScene.Solid) paint).argb();
-                    ops.add(new DrawOp(true, mesh.triangles(), mesh.colour0(), mesh.colour1(),
-                            mesh.axes(), mesh.upper(), mesh.outerWall(), mesh.opaque(), argb,
+                    ops.add(new DrawOp(true, mesh.quads(), mesh.colour0(), mesh.colour1(),
+                            mesh.axes(), mesh.edges(), mesh.opaque(), argb,
                             paint.currentColor(), 0f, 0, null));
                 }
             }
@@ -692,7 +590,7 @@ public final class SvgDocument {
                         node.contours(), stroke.cap() & 3, (stroke.cap() >> 2) & 3);
                 if (segments.data().length > 0) {
                     SvgScene.Solid paint = (SvgScene.Solid) stroke.paint();
-                    ops.add(new DrawOp(false, segments.data(), null, null, null, null, null, true,
+                    ops.add(new DrawOp(false, segments.data(), null, null, null, null, true,
                             paint.argb(), paint.currentColor(), stroke.halfWidth(), stroke.cap(),
                             segments.caps()));
                 }
@@ -748,6 +646,10 @@ public final class SvgDocument {
      */
     public void render(CgUiPaintContext ctx, float x, float y, float scale, int tint) {
         if (cullable(ctx, x, y, scale, 0f)) return;
+        if (ctx.svgRaster().accepts(this, x, y, scale)) {
+            renderCached(ctx, x, y, scale, tint, false, 0f);
+            return;
+        }
         SvgDocument lod = lodFor(ctx, scale);
         if (lod != this) {
             lod.render(ctx, x, y, scale, tint);
@@ -779,6 +681,10 @@ public final class SvgDocument {
         // the box -- otherwise a thick monochrome stroke gets culled at the viewport edge while still
         // partly on screen.
         if (cullable(ctx, x, y, scale, Math.max(0f, halfWidth))) return;
+        if (ctx.svgRaster().accepts(this, x, y, scale)) {
+            renderCached(ctx, x, y, scale, argb, true, halfWidth);
+            return;
+        }
         SvgDocument lod = lodFor(ctx, scale);
         if (lod != this) {
             lod.renderMonochrome(ctx, x, y, scale, argb, halfWidth);
@@ -795,109 +701,123 @@ public final class SvgDocument {
     }
 
     /**
-     * @param flat ignore any per-triangle gradient colours and paint the whole op in {@code argb} — what
+     * An icon-sized draw: fills from the raster cache, strokes direct, in the file's own order.
+     *
+     * <p>Rasterised from the tier a draw this size would have used, built now rather than under the
+     * frame budget: the raster is kept, so an interim coarse tier would be kept with it.</p>
+     */
+    private void renderCached(CgUiPaintContext ctx, float x, float y, float scale, int argb,
+                              boolean flat, float halfWidth) {
+        SvgDocument tier = rasterTier(Math.max(width, height) * scale * ctx.deviceScale());
+        List<DrawOp> ops = tier.ops();
+        for (int i = 0; i < ops.size(); i++) {
+            DrawOp op = ops.get(i);
+            int colour = flat || op.currentColor() ? argb : op.argb();
+            // A fill with colours of its own -- a gradient, a per-slice ramp -- bakes them into the
+            // raster and is drawn untinted; everything else is white coverage under the tint.
+            boolean baked = op.fill() && !flat && op.colours() != null;
+            ctx.svgRaster().draw(tier, i, x, y, scale, baked ? 0xFFFFFFFF : colour, flat, halfWidth);
+        }
+    }
+
+    /** The mesh tier for a draw {@code devicePx} tall, built synchronously. */
+    private SvgDocument rasterTier(float devicePx) {
+        if (tags == null) return this;
+        for (int i = 0; i < LOD_MAX_DEVICE_PX.length; i++) {
+            if (devicePx > LOD_MAX_DEVICE_PX[i]) continue;
+            return lods.computeIfAbsent(LOD_STEPS[i], steps -> {
+                SvgDocument built = fromScene(SvgResolver.resolve(tags, steps));
+                built.ops();
+                return built;
+            });
+        }
+        return this;
+    }
+
+    /**
+     * Submits fill op {@code op}'s cells for accumulation: every edge an exact area, the document origin
+     * at {@code (x, y)} in the target's own pixels. What {@link com.crystalgui.render.SvgRasterCache}
+     * rasterises through, under its additive material.
+     *
+     * @param flat every cell white; otherwise a fill with colours of its own keeps them and a plain
+     *             one is white either way, since a flat colour is applied when the raster is drawn
+     */
+    public void accumulateFill(CgUiPaintContext ctx, int op, float x, float y, float scale, boolean flat) {
+        DrawOp fill = ops().get(op);
+        drawFill(ctx, fill, x, y, scale, 0xFFFFFFFF, flat || fill.colours() == null, true);
+    }
+
+    /**
+     * Submits stroke op {@code op}'s segments with the document origin at {@code (x, y)} in the target's
+     * own pixels, under an identity pose — so widths and the feather are device pixels as given.
+     *
+     * @param halfWidth in device pixels; {@code <= 0} for the file's own, scaled
+     */
+    public void accumulateStroke(CgUiPaintContext ctx, int op, float x, float y, float scale, float halfWidth) {
+        DrawOp stroke = ops().get(op);
+        drawStroke(ctx, stroke, x, y, scale, 0xFFFFFFFF,
+                halfWidth > 0f ? halfWidth : stroke.halfWidth() * scale);
+    }
+
+    /** {@code minX, minY, maxX, maxY} of everything the document draws, in its own units. */
+    public float[] bounds() {
+        return bounds.clone();
+    }
+
+    /**
+     * @param flat ignore any per-cell gradient colours and paint the whole op in {@code argb} — what
      *             {@link #renderMonochrome} means, and the reason the choice is a parameter rather than the
      *             presence of the array
      */
     private static void drawFill(CgUiPaintContext ctx, DrawOp op,
                                  float x, float y, float scale, int argb, boolean flat) {
-        // Scoped per OP, never per triangle: a scope costs a nanoTime pair, and a fill is hundreds of
-        // triangles, so per-triangle instrumentation would measure itself. The triangle count rides along
-        // as a counter instead, which is what turns "drawFill is slow" into "drawFill is slow per triangle"
-        // or "there are simply a lot of triangles".
+        drawFill(ctx, op, x, y, scale, argb, flat, false);
+    }
+
+    /**
+     * @param accumulate every edge is an exact area rather than only the outline ones, for cells that
+     *                   are being summed into a coverage target instead of composited one by one
+     */
+    private static void drawFill(CgUiPaintContext ctx, DrawOp op,
+                                 float x, float y, float scale, int argb, boolean flat, boolean accumulate) {
+        // Scoped per OP, never per cell: a scope costs a nanoTime pair, and a fill is hundreds of cells,
+        // so per-cell instrumentation would measure itself. The cell count rides along as a counter
+        // instead, which is what turns "drawFill is slow" into "drawFill is slow per cell" or "there are
+        // simply a lot of cells".
         CgProfiler.Scope scope = CgProfiler.scope("svg.drawFill");
-        CgProfiler.count("svg.fillTriangles", op.data().length / 6);
+        CgProfiler.count("svg.fillCells", op.data().length / 8);
         try (CgProfiler.Scope ignored = scope) {
-        float[] t = op.data();
-        boolean[] upper = op.upper();
+        float[] q = op.data();
+        int[] edges = op.edges();
         int[] start = op.colours();
         int[] end = op.coloursEnd();
         float[] axes = op.gradients();
         boolean ramp = !flat && start != null && end != null && axes != null;
-        // The feather is submitted in LOGICAL units and the pose scales it with the points, so a band
-        // meant to be one device pixel wide has to be divided out here -- at uiScale 2 it was two, and
-        // every pixel-aligned edge of a 16px icon read as 0.16 / 0.84 / 0.84 / 0.16 instead of 0 / 1 / 1 / 0.
-        float device = ctx.deviceScale();
 
-        for (int i = 0; i < t.length; i += 6) {
-            int triangle = i / 6;
-            CgVectorRenderer.Triangle out = ctx.triangle()
-                    .points(x + t[i] * scale, y + t[i + 1] * scale,
-                            x + t[i + 2] * scale, y + t[i + 3] * scale,
-                            x + t[i + 4] * scale, y + t[i + 5] * scale);
+        for (int i = 0; i < q.length; i += 8) {
+            int cell = i / 8;
+            // Every edge the tessellator marked as outline is antialiased by exact area, every seam is a
+            // half-open step; the quad reading owes nothing to a feather, an offset or the sample count.
+            CgVectorRenderer.Quad out = ctx.filledQuad()
+                    .points(x + q[i] * scale, y + q[i + 1] * scale,
+                            x + q[i + 2] * scale, y + q[i + 3] * scale,
+                            x + q[i + 4] * scale, y + q[i + 5] * scale,
+                            x + q[i + 6] * scale, y + q[i + 7] * scale)
+                    .softEdges(accumulate ? 15 : edges[cell]);
 
             if (ramp) {
                 // The axis is stored in the document's own units, so it moves and scales with the draw:
                 // the origin like a point, and the direction by 1/scale because it already carries the
                 // reciprocal length. Getting that inverse backwards makes the ramp shrink as the icon
                 // grows, which reads as a gradient that is nearly flat at small sizes.
-                int at = triangle * 4;
-                out.gradient(start[triangle], end[triangle],
+                int at = cell * 4;
+                out.gradient(start[cell], end[cell],
                         x + axes[at] * scale, y + axes[at + 1] * scale,
                         axes[at + 2] / scale, axes[at + 3] / scale);
             } else {
-                out.color(start == null || flat ? argb : start[triangle]);
+                out.color(start == null || flat ? argb : start[cell]);
             }
-
-            // OPAQUE OVERLAPS, TRANSLUCENT PARTITIONS -- see FILL_OFFSET. Overlap is exactly right when
-            // compositing the colour over itself is a no-op, and only then.
-            // ONLY THE OUTER WALL IS ANTIALIASED. SvgTriangulator splits every trapezoid the same way,
-            // so which edge came from the contour is known rather than inferred: the upper half owns the
-            // right wall (p1->p2) and the lower half the left wall (p2->p0). Everything else it touches --
-            // the horizontal band cuts and the diagonal split -- is a seam shared with a neighbour, and
-            // softening those would fade each one out from both sides into a visible line.
-            // ...and only when that wall is REALLY the contour. A band cut into slices has one contour
-            // edge at each end and seams in between, and handing a seam over as the silhouette feathers it
-            // from one side while the neighbour steps hard there -- coverage never reaches 1, and every
-            // slice boundary draws as a line down the shape. Only a radial gradient slices, so for
-            // everything else outerWall is true throughout and nothing changes.
-            boolean[] outer = op.outerWall();
-            boolean contourWall = outer == null || outer[triangle];
-
-            // A FEATHER MAY NEVER BE WIDER THAN THE SHAPE IT SOFTENS.
-            //
-            // The band is stated in screen pixels, which is right for a silhouette and catastrophic for a
-            // sliver. Artwork built from many abutting shapes -- a colour wheel is 361 separate wedges --
-            // puts each of them below a pixel once the icon is small: at 24px the disc's circumference is
-            // ~75px over 361 wedges, so a wedge is 0.2px wide and was being softened over 1px. Its coverage
-            // spreads to about 0.2, five neighbours composite to 1-0.8^5 = 0.67, and the missing third is
-            // BACKGROUND showing through. That is the muddy, dark wheel at tab size, and it is why turning
-            // the feather off entirely made it clean.
-            //
-            // Clamping to the triangle's own height against the edge being softened fixes it without
-            // costing anything at sizes where the shape is bigger than the band -- there the clamp never
-            // binds and the silhouette is antialiased exactly as before.
-            float featherPx = 0f;
-            if (contourWall) {
-                float ax = t[i], ay = t[i + 1];
-                float bx = t[i + 2], by = t[i + 3];
-                float cx = t[i + 4], cy = t[i + 5];
-                // The upper half softens p1->p2 (opposite p0), the lower half p2->p0 (opposite p1).
-                float ex, ey, sx, sy, ox, oy;
-                if (upper[triangle]) {
-                    sx = bx; sy = by; ex = cx - bx; ey = cy - by; ox = ax; oy = ay;
-                } else {
-                    sx = cx; sy = cy; ex = ax - cx; ey = ay - cy; ox = bx; oy = by;
-                }
-                float edgeLength = (float) Math.sqrt(ex * ex + ey * ey);
-                if (edgeLength > 1e-9f) {
-                    float area2 = Math.abs(ex * (oy - sy) - ey * (ox - sx));
-                    featherPx = Math.min(SILHOUETTE_FEATHER, area2 / edgeLength * scale * device);
-                    // ...and below half a pixel, drop it entirely rather than taper. See MINIMUM_FEATHER.
-                    if (featherPx < MINIMUM_FEATHER) featherPx = 0f;
-                }
-            }
-            // EDGE_NONE means "antialias the WHOLE outline", not "antialias nothing" -- with a feather it
-            // would soften all three edges of an interior cell, which is worse than the seam it is meant to
-            // cure. A feather of zero is what makes every edge a hard step: stroke.glsl clamps the ramp to
-            // 1e-6, so the smoothstep degenerates.
-            out.cornerRadius(op.opaque() || upper[triangle] ? FILL_OFFSET : -FILL_OFFSET)
-                    .silhouetteEdge(contourWall
-                            ? (upper[triangle]
-                                    ? CgVectorRenderer.EDGE_P1_P2 : CgVectorRenderer.EDGE_P2_P0)
-                            : CgVectorRenderer.EDGE_NONE)
-                    .feather(featherPx / device)
-                    .submit();
+            out.submit();
         }
         }
     }
@@ -907,6 +827,7 @@ public final class SvgDocument {
         CgProfiler.count("svg.strokeSegments", op.data().length / 4);
         try (CgProfiler.Scope ignored = CgProfiler.scope("svg.drawStroke")) {
         float[] s = op.data();
+        float feather = STROKE_FEATHER / ctx.deviceScale();
         for (int i = 0; i < s.length; i += 4) {
             // Per SEGMENT, not per op: the caps were decided where the contour structure was still known,
             // so an interior joint gets one round cap and the stroke's real ends keep what the file asked
@@ -914,25 +835,11 @@ public final class SvgDocument {
             int[] caps = op.segmentCaps();
             int packed = caps == null ? op.cap() : caps[i / 4];
             ctx.curve()
-                    // NO FEATHER, for the same reason SILHOUETTE_FEATHER is zero on the fill path: the
-                    // whole UI tree paints into a multisampled target, so coverage is already being
-                    // computed by the sample grid. An analytic ramp on top of that is not extra quality,
-                    // it is the SECOND application of an antialiasing this pixel has already had --
-                    // CgVectorRenderer's default feather of 1 spreads the edge across a pixel, and MSAA
-                    // then averages that spread across the pixel again.
-                    //
-                    // The cost is exact and was visible on every stroked icon in the set. A 1px stroke
-                    // whose centreline sits on a half-integer -- which is how the JetBrains icons are
-                    // drawn, deliberately -- covers exactly one pixel row. With the ramp, that row's
-                    // samples span coverage 1.0 down to 0.5 and average ~0.75 while both neighbours pick
-                    // up ~0.15, so a crisp 1px outline renders as three rows of grey. Hence "our folder
-                    // icon is fat and blurry and IntelliJ's is one solid pixel": ours was drawing the
-                    // antialiasing twice.
-                    //
-                    // stroke.glsl clamps the ramp to 1e-4, so this is a hard step and not a divide by
-                    // zero. On a driver with no real multisampling the frame FBO resolves to one sample
-                    // and these edges harden -- the same trade the fill path already makes.
-                    .feather(0f)
+                    // The feather is a logical distance the pose scales like a width; the ramp is
+                    // stated in device pixels, so divide the scale out. It was zero here once, on the
+                    // theory that MSAA already antialiased the edge -- it never did, the shader runs
+                    // once per pixel, and a "crisp" stroke was an aliased one.
+                    .feather(feather)
                     .line(x + s[i] * scale, y + s[i + 1] * scale,
                             x + s[i + 2] * scale, y + s[i + 3] * scale)
                     .width(halfWidth)
@@ -980,10 +887,10 @@ public final class SvgDocument {
         return total;
     }
 
-    /** How many fill triangles a draw submits. */
-    public int triangleCount() {
+    /** How many fill cells a draw submits. */
+    public int cellCount() {
         int total = 0;
-        for (DrawOp op : ops()) if (op.fill()) total += op.data().length / 6;
+        for (DrawOp op : ops()) if (op.fill()) total += op.data().length / 8;
         return total;
     }
 

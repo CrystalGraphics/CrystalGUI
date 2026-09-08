@@ -35,16 +35,15 @@ final class ReferenceTriangulator {
                 edges.add(new float[]{a[0], a[1], b[0], b[1]});
             }
         }
-        SvgTriangulator.Fill empty =
-                new SvgTriangulator.Fill(new float[0], new int[0], new boolean[0], new boolean[0]);
+        SvgTriangulator.Fill empty = new SvgTriangulator.Fill(new float[0], new int[0], new int[0]);
         if (edges.isEmpty()) return empty;
 
         float[] bands = bandBoundaries(edges, stepY, extraCuts);
         if (bands.length < 2) return empty;
 
-        List<float[]> triangles = new ArrayList<>();
+        List<float[]> cells = new ArrayList<>();
         List<Integer> slices = new ArrayList<>();
-        List<Boolean> uppers = new ArrayList<>();
+        List<Integer> masks = new ArrayList<>();
         int sliceIndex = 0;
         int sliceAllowance = Math.max(1, MAX_CELLS / Math.max(1, bands.length - 1));
         float[] crossX = new float[edges.size()];
@@ -92,30 +91,24 @@ final class ReferenceTriangulator {
                     float a = (float) s / count, b = (float) (s + 1) / count;
                     float at = lt + (rt - lt) * a, ab = lb + (rb - lb) * a;
                     float bt = lt + (rt - lt) * b, bb = lb + (rb - lb) * b;
-                    add(triangles, slices, uppers, sliceIndex, true, at, top, bt, top, bb, bottom);
-                    add(triangles, slices, uppers, sliceIndex, false, at, top, bb, bottom, ab, bottom);
+                    cells.add(new float[]{at, top, bt, top, bb, bottom, ab, bottom});
+                    slices.add(sliceIndex);
+                    masks.add((s == 0 ? SvgTriangulator.LEFT : 0)
+                            | (s == count - 1 ? SvgTriangulator.RIGHT : 0));
                     sliceIndex++;
                 }
             }
         }
 
-        float[] packed = new float[triangles.size() * 6];
-        int[] tags = new int[triangles.size()];
-        boolean[] halves = new boolean[triangles.size()];
-        for (int i = 0; i < triangles.size(); i++) {
-            System.arraycopy(triangles.get(i), 0, packed, i * 6, 6);
+        float[] packed = new float[cells.size() * 8];
+        int[] tags = new int[cells.size()];
+        int[] masksOut = new int[cells.size()];
+        for (int i = 0; i < cells.size(); i++) {
+            System.arraycopy(cells.get(i), 0, packed, i * 8, 8);
             tags[i] = slices.get(i);
-            halves[i] = uppers.get(i);
+            masksOut[i] = masks.get(i);
         }
-        return new SvgTriangulator.Fill(packed, tags, halves, allTrue(halves.length));
-    }
-
-    private static void add(List<float[]> out, List<Integer> slices, List<Boolean> uppers,
-                            int slice, boolean upper,
-                            float x0, float y0, float x1, float y1, float x2, float y2) {
-        out.add(new float[]{x0, y0, x1, y1, x2, y2});
-        slices.add(slice);
-        uppers.add(upper);
+        return new SvgTriangulator.Fill(packed, tags, masksOut);
     }
 
     /**
@@ -124,12 +117,6 @@ final class ReferenceTriangulator {
      * Filled in as all-true so the geometry comparison stays exact; the flag itself is new behaviour and is
      * covered by {@code SvgRadialSeamTest} rather than here.
      */
-    private static boolean[] allTrue(int count) {
-        boolean[] out = new boolean[count];
-        java.util.Arrays.fill(out, true);
-        return out;
-    }
-
     private static float[] bandBoundaries(List<float[]> edges, float stepY, float[] extraCuts) {
         int extra = 0;
         float minY = Float.MAX_VALUE, maxY = -Float.MAX_VALUE;

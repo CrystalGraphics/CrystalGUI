@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Turns a resolved fill into triangles with colours — the tessellation half, shaped after <b>lyon</b>
+ * Turns a resolved fill into cells with colours — the tessellation half, shaped after <b>lyon</b>
  * (MIT/Apache-2.0).
  *
  * <p>Takes rings, a fill rule and a paint; returns an {@link SvgMesh}. It never sees a tag, a style, an
@@ -16,7 +16,7 @@ import java.util.List;
  * <h3>Everything happens in one space</h3>
  *
  * <p>Contours arrive absolute, and the gradient arrives with a transform mapping its own space into that
- * one. Rather than tessellating in gradient space and mapping the triangles back — which round-trips every
+ * one. Rather than tessellating in gradient space and mapping the cells back — which round-trips every
  * point through a matrix and its inverse, and puts float drift straight into the seams — the <b>ramp</b>
  * is mapped into absolute space instead and the geometry never moves. A linear gradient is an affine
  * scalar function of position, so it survives that intact; see {@link SvgTransform#mapCovector} for why
@@ -44,7 +44,7 @@ final class SvgTessellator {
      *       have a minimum in the middle. <b>The centre of a radial gradient is exactly where an affine fit
      *       is worst</b>, and exactly where the interesting colour is.</li>
      *   <li><b>8</b> — centre present but soft, its peak spread over a cell.</li>
-     *   <li><b>32</b> — centre crisp, seams down to barely visible, and <em>fewer</em> triangles than the
+     *   <li><b>32</b> — centre crisp, seams down to barely visible, and <em>fewer</em> cells than the
      *       old colour-driven spacing produced (11,420 against 15,492 for the whole scene).</li>
      * </ul>
      *
@@ -77,9 +77,8 @@ final class SvgTessellator {
     /** No gradient: one colour, and the mesh is cut only where the geometry demands. */
     private static SvgMesh flat(List<List<float[]>> rings, boolean evenOdd, int argb) {
         SvgTriangulator.Fill mesh = SvgTriangulator.fill(rings, evenOdd, 0f, 0f);
-        if (mesh.triangles().length == 0) return SvgMesh.EMPTY;
-        return new SvgMesh(mesh.triangles(), null, null, null, mesh.upper(), mesh.outerWall(),
-                (argb >>> 24) == 0xFF);
+        if (mesh.count() == 0) return SvgMesh.EMPTY;
+        return new SvgMesh(mesh.quads(), null, null, null, mesh.edges(), (argb >>> 24) == 0xFF);
     }
 
     /**
@@ -95,12 +94,12 @@ final class SvgTessellator {
      *
      * <p>Rotating the shape so the gradient points along {@code +y} makes every band an <b>iso-line
      * strip</b> — constant ramp position from end to end — so one two-colour lerp per band is not an
-     * approximation at all. The triangles are rotated back before they are stored, so nothing downstream
+     * approximation at all. The cells are rotated back before they are stored, so nothing downstream
      * knows this happened.</p>
      *
      * <h3>One cut per stop, and nothing else</h3>
      *
-     * <p>The fragment stage interpolates {@code color0 -> color1} across each triangle, so a band no
+     * <p>The fragment stage interpolates {@code color0 -> color1} across each cell, so a band no
      * longer has to be small enough that a flat colour passes for a ramp — it only has to stay inside ONE
      * stop interval, because a two-colour lerp is exact there and wrong across a stop. That takes the band
      * count from "however many the colour delta demands" to "however many stops the gradient has", which
@@ -136,18 +135,19 @@ final class SvgTessellator {
         for (int i = 0; i < offsets.length; i++) cuts[i] = originV + offsets[i] / gLength;
 
         SvgTriangulator.Fill mesh = SvgTriangulator.fill(rotated, evenOdd, 0f, 0f, cuts);
-        float[] triangles = mesh.triangles();
-        if (triangles.length == 0) return SvgMesh.EMPTY;
+        float[] quads = mesh.quads();
+        if (quads.length == 0) return SvgMesh.EMPTY;
 
-        int count = triangles.length / 6;
+        int count = quads.length / 8;
         int[] colour0 = new int[count];
         int[] colour1 = new int[count];
         float[] axes = new float[count * 4];
 
         for (int i = 0; i < count; i++) {
-            int at = i * 6;
-            float vMin = Math.min(triangles[at + 1], Math.min(triangles[at + 3], triangles[at + 5]));
-            float vMax = Math.max(triangles[at + 1], Math.max(triangles[at + 3], triangles[at + 5]));
+            int at = i * 8;
+            // A cell's top and bottom are the band's cuts, so they hold the band's v range.
+            float vMin = Math.min(quads[at + 1], quads[at + 5]);
+            float vMax = Math.max(quads[at + 1], quads[at + 5]);
             if (vMax - vMin < 1e-6f) vMax = vMin + 1e-6f;
 
             colour0[i] = SvgColor.withOpacity(
@@ -157,7 +157,7 @@ final class SvgTessellator {
 
             // The band's own axis, in absolute space: it starts where the band starts and reaches 1 where
             // the band ends, so the fragment stage's clamp(dot(p - origin, dir)) spans exactly this
-            // triangle. Deriving it from the band's extent rather than from the whole ramp is what lets
+            // cell. Deriving it from the band's extent rather than from the whole ramp is what lets
             // one lerp be exact per band.
             float span = vMax - vMin;
             float[] a = unrotate(0f, vMin, ux, uy);
@@ -167,17 +167,17 @@ final class SvgTessellator {
             axes[i * 4 + 3] = uy / span;
         }
 
-        for (int i = 0; i < triangles.length; i += 2) {
-            float[] p = unrotate(triangles[i], triangles[i + 1], ux, uy);
-            triangles[i] = p[0];
-            triangles[i + 1] = p[1];
+        for (int i = 0; i < quads.length; i += 2) {
+            float[] p = unrotate(quads[i], quads[i + 1], ux, uy);
+            quads[i] = p[0];
+            quads[i + 1] = p[1];
         }
-        return new SvgMesh(triangles, colour0, colour1, axes, mesh.upper(), mesh.outerWall(),
+        return new SvgMesh(quads, colour0, colour1, axes, mesh.edges(),
                 SvgMesh.allOpaque(colour0, colour1));
     }
 
     /**
-     * A radial gradient: subdivided as before, but each triangle now carries a <b>ramp</b> rather than a
+     * A radial gradient: subdivided as before, but each cell now carries a <b>ramp</b> rather than a
      * colour.
      *
      * <h3>Why the flat cell had to go</h3>
@@ -189,29 +189,18 @@ final class SvgTessellator {
      * came out as roughly twelve visible vertical bands, because 3000 cells over ~250 bands is 12 slices
      * across. No cell budget fixes that, since the shape is what sets the band count.</p>
      *
-     * <h3>An affine fit per triangle, which is exact where it matters</h3>
+     * <h3>An affine fit per cell, which is exact where it matters</h3>
      *
      * <p>The instance record already carries {@code color0}, {@code color1} and a gradient axis, and the
      * fragment stage already evaluates {@code mix(color0, color1, clamp(dot(p - origin, dir)))} — that is
-     * how {@link #linear} is smooth. A radial ramp is not linear in position, but over <em>one triangle</em>
-     * the plane through its three vertices' parameters is the exact affine interpolant of them, so:</p>
+     * how {@link #linear} is smooth. A radial ramp is not linear in position, but over <em>one cell</em>
+     * the least-squares plane through its four corners' parameters is within a couple of levels of the
+     * true ramp at each of them, with the error coming only from the circle's curvature across a single
+     * small cell — which is what keeps two cells sharing an edge close enough that the seam does not
+     * show.</p>
      *
-     * <ul>
-     *   <li>it matches the true ramp <b>exactly at every vertex</b>, with error only from the circle's
-     *       curvature across a single small triangle;</li>
-     *   <li>two triangles sharing an edge interpolate the same two vertex values along it, so they
-     *       <b>agree on that edge exactly</b> — the mesh is continuous and there are no cell steps left to
-     *       see, at any subdivision.</li>
-     * </ul>
-     *
-     * <p>That continuity also retires the reason {@link #gradientColours} coloured per <em>slice</em>
-     * rather than per triangle: the two halves of a trapezoid used to pick different centroid colours and
-     * the seam overlap turned that into a diagonal hatch. Fitted to shared vertices, the halves cannot
-     * disagree along the diagonal they share.</p>
-     *
-     * <p>Costs three parameter samples per triangle instead of one per slice — paid once, at build time,
-     * into a cached mesh. It also means the subdivision no longer has to be fine enough to hide a step,
-     * which is a saving available to be taken later.</p>
+     * <p>Costs four parameter samples per cell instead of one per slice — paid once, at build time, into
+     * a cached mesh.</p>
      */
     private static SvgMesh radial(List<List<float[]>> rings, boolean evenOdd, SvgScene.Gradient paint) {
         SvgGradient gradient = paint.gradient();
@@ -229,8 +218,8 @@ final class SvgTessellator {
         // CIRCULAR iso-line? That is geometry, not colour, so it is answered from the shape's extent.
         float step = Math.max(box[2], box[3]) / RADIAL_CELLS_ACROSS;
         SvgTriangulator.Fill mesh = SvgTriangulator.fill(rings, evenOdd, step, step);
-        float[] triangles = mesh.triangles();
-        if (triangles.length == 0) return SvgMesh.EMPTY;
+        float[] quads = mesh.quads();
+        if (quads.length == 0) return SvgMesh.EMPTY;
 
         if (gradient.spread() != SvgGradient.SPREAD_PAD) {
             // `repeat` and `reflect` make the ramp parameter a sawtooth, and the affine fit below is only
@@ -238,51 +227,67 @@ final class SvgTessellator {
             // points that lie on different teeth, which is worse than the flat cell it replaced. Those keep
             // the per-slice path.
             int[] colours = gradientColours(mesh, gradient, box, paint.alpha(), paint.transform());
-            return new SvgMesh(triangles, colours, null, null, mesh.upper(), mesh.outerWall(),
-                    SvgMesh.allOpaque(colours));
+            return new SvgMesh(quads, colours, null, null, mesh.edges(), SvgMesh.allOpaque(colours));
         }
 
-        int count = triangles.length / 6;
+        int count = quads.length / 8;
         int[] colour0 = new int[count];
         int[] colour1 = new int[count];
         float[] axes = new float[count * 4];
         SvgTransform inverse = inverseOf(paint.transform());
 
         for (int i = 0; i < count; i++) {
-            int at = i * 6;
-            float ax = triangles[at], ay = triangles[at + 1];
-            float bx = triangles[at + 2], by = triangles[at + 3];
-            float cx = triangles[at + 4], cy = triangles[at + 5];
-            float sa = parameterAt(gradient, inverse, box, ax, ay);
-            float sb = parameterAt(gradient, inverse, box, bx, by);
-            float sc = parameterAt(gradient, inverse, box, cx, cy);
-
-            float low = Math.min(sa, Math.min(sb, sc));
-            float high = Math.max(sa, Math.max(sb, sc));
-            float span = high - low;
-
-            // The affine function through the three (position, parameter) pairs: solve the two edge
-            // equations for its gradient. A degenerate triangle has no plane through it, and one whose
-            // three parameters agree needs none.
-            float e1x = bx - ax, e1y = by - ay;
-            float e2x = cx - ax, e2y = cy - ay;
-            float determinant = e1x * e2y - e1y * e2x;
-            if (span < 1e-6f || Math.abs(determinant) < 1e-12f) {
+            int at = i * 8;
+            // The plane closest to all four corners, in the least-squares sense. Four (position,
+            // parameter) pairs are not coplanar in general -- the ramp is a circle -- so fitting three
+            // exactly puts the whole misfit on the fourth, and at the wheel's centre that was nine levels
+            // on one corner. Spread over four it is a couple each, and two cells sharing an edge disagree
+            // by half of what they would.
+            float mx = 0f, my = 0f, ms = 0f;
+            float[] sx = new float[4], sy = new float[4], ss = new float[4];
+            for (int v = 0; v < 4; v++) {
+                sx[v] = quads[at + v * 2];
+                sy[v] = quads[at + v * 2 + 1];
+                ss[v] = parameterAt(gradient, inverse, box, sx[v], sy[v]);
+                mx += sx[v]; my += sy[v]; ms += ss[v];
+            }
+            mx *= 0.25f; my *= 0.25f; ms *= 0.25f;
+            float sxx = 0f, sxy = 0f, syy = 0f, sxs = 0f, sys = 0f;
+            for (int v = 0; v < 4; v++) {
+                float dx = sx[v] - mx, dy = sy[v] - my, ds = ss[v] - ms;
+                sxx += dx * dx; sxy += dx * dy; syy += dy * dy;
+                sxs += dx * ds; sys += dy * ds;
+            }
+            float determinant = sxx * syy - sxy * sxy;
+            float low = Math.min(Math.min(ss[0], ss[1]), Math.min(ss[2], ss[3]));
+            float high = Math.max(Math.max(ss[0], ss[1]), Math.max(ss[2], ss[3]));
+            if (high - low < 1e-6f || Math.abs(determinant) < 1e-12f) {
+                // A degenerate cell has no plane through it, and one whose parameters agree needs none.
                 int flatColour = SvgColor.withOpacity(gradient.colourAt(low), paint.alpha());
                 colour0[i] = flatColour;
                 colour1[i] = flatColour;
                 axes[i * 4 + 2] = 0f;               // a zero axis pins t at 0, so colour0 is what shows
                 continue;
             }
-            float d1 = sb - sa, d2 = sc - sa;
-            float gx = (d1 * e2y - d2 * e1y) / determinant;
-            float gy = (e1x * d2 - e2x * d1) / determinant;
+            float gx = (sxs * syy - sys * sxy) / determinant;
+            float gy = (sys * sxx - sxs * sxy) / determinant;
+            float constant = ms - (gx * mx + gy * my);
+
+            // The colours at the plane's own extremes over the cell, so t spans exactly 0..1 across it.
+            low = Float.MAX_VALUE;
+            high = -Float.MAX_VALUE;
+            for (int v = 0; v < 4; v++) {
+                float fitted = gx * sx[v] + gy * sy[v] + constant;
+                low = Math.min(low, fitted);
+                high = Math.max(high, fitted);
+            }
+            float span = high - low;
 
             // Rescaled so the shader's clamp(dot(p - origin, dir)) runs 0 at `low` and 1 at `high`.
             float dirX = gx / span, dirY = gy / span;
             float lengthSq = dirX * dirX + dirY * dirY;
-            if (lengthSq < 1e-20f) {
-                int flatColour = SvgColor.withOpacity(gradient.colourAt(low), paint.alpha());
+            if (span < 1e-6f || lengthSq < 1e-20f) {
+                int flatColour = SvgColor.withOpacity(gradient.colourAt(ms), paint.alpha());
                 colour0[i] = flatColour;
                 colour1[i] = flatColour;
                 axes[i * 4 + 2] = 0f;
@@ -290,7 +295,6 @@ final class SvgTessellator {
             }
             // f(p) = g.p + constant, so t = (f(p) - low)/span = dir.p - dir.origin. Any origin on that
             // level line will do; the one along dir is the cheapest to state.
-            float constant = sa - (gx * ax + gy * ay);
             float offset = (constant - low) / span;
             colour0[i] = SvgColor.withOpacity(gradient.colourAt(low), paint.alpha());
             colour1[i] = SvgColor.withOpacity(gradient.colourAt(high), paint.alpha());
@@ -299,7 +303,7 @@ final class SvgTessellator {
             axes[i * 4 + 2] = dirX;
             axes[i * 4 + 3] = dirY;
         }
-        return new SvgMesh(triangles, colour0, colour1, axes, mesh.upper(), mesh.outerWall(),
+        return new SvgMesh(quads, colour0, colour1, axes, mesh.edges(),
                 SvgMesh.allOpaque(colour0, colour1));
     }
 
@@ -310,19 +314,12 @@ final class SvgTessellator {
     }
 
     /**
-     * One colour per <b>slice</b> rather than per triangle.
-     *
-     * <p>The two halves of a slice are split along a diagonal, so their centroids sit on opposite sides of
-     * it and pick up different colours. That is invisible on its own, and stops being invisible the moment
-     * the draw nudges each triangle to settle its seams: each half then claims a strip of the other along
-     * the shared diagonal, and whichever is submitted second wins. The result is a diagonal hatch of the
-     * wrong colour across the whole shape, strongest exactly where the gradient is steepest. Giving a
-     * slice one colour makes that overlap land on itself.</p>
+     * One flat colour per <b>slice</b>, sampled at its centroid — so the pieces of a split cell agree.
      */
     private static int[] gradientColours(SvgTriangulator.Fill mesh, SvgGradient gradient, float[] box,
                                          float alpha, SvgTransform toGradient) {
         int[] slice = mesh.slice();
-        float[] triangles = mesh.triangles();
+        float[] quads = mesh.quads();
         int count = slice.length;
         if (count == 0) return new int[0];
 
@@ -331,12 +328,12 @@ final class SvgTessellator {
         float[] sumY = new float[sliceCount];
         int[] samples = new int[sliceCount];
         for (int i = 0; i < count; i++) {
-            int at = i * 6;
-            for (int v = 0; v < 6; v += 2) {
-                sumX[slice[i]] += triangles[at + v];
-                sumY[slice[i]] += triangles[at + v + 1];
+            int at = i * 8;
+            for (int v = 0; v < 8; v += 2) {
+                sumX[slice[i]] += quads[at + v];
+                sumY[slice[i]] += quads[at + v + 1];
             }
-            samples[slice[i]] += 3;
+            samples[slice[i]] += 4;
         }
 
         SvgTransform inverse = inverseOf(toGradient);

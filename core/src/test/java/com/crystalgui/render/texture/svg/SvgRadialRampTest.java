@@ -39,13 +39,13 @@ public class SvgRadialRampTest {
             </svg>""";
 
     @Test
-    public void aRadialFillCarriesAPerTriangleRampRatherThanFlatCells() {
+    public void aRadialFillCarriesAPerCellRampRatherThanFlatColours() {
         SvgMesh mesh = radialMesh();
         assertNotNull("radial gradients must carry a start colour", mesh.colour0());
         assertNotNull("radial gradients must carry an end colour -- null means the flat-cell path",
                 mesh.colour1());
-        assertNotNull("radial gradients must carry a per-triangle axis", mesh.axes());
-        assertTrue("expected a real mesh", mesh.triangleCount() > 32);
+        assertNotNull("radial gradients must carry a per-cell axis", mesh.axes());
+        assertTrue("expected a real mesh", mesh.cellCount() > 16);
     }
 
     /**
@@ -62,12 +62,12 @@ public class SvgRadialRampTest {
         float[] box = SvgGeometry.boundsOf(node.contours());
         SvgMesh mesh = radialMesh();
 
-        float[] triangles = mesh.triangles();
+        float[] quads = mesh.quads();
         int worst = 0;
-        for (int i = 0; i < mesh.triangleCount(); i++) {
-            for (int v = 0; v < 3; v++) {
-                float px = triangles[i * 6 + v * 2];
-                float py = triangles[i * 6 + v * 2 + 1];
+        for (int i = 0; i < mesh.cellCount(); i++) {
+            for (int v = 0; v < 4; v++) {
+                float px = quads[i * 8 + v * 2];
+                float py = quads[i * 8 + v * 2 + 1];
 
                 float t = (px - mesh.axes()[i * 4]) * mesh.axes()[i * 4 + 2]
                         + (py - mesh.axes()[i * 4 + 1]) * mesh.axes()[i * 4 + 3];

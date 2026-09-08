@@ -179,6 +179,17 @@ public final class CgUiRenderer {
     }
 
     /**
+     * Starts a filled quad, <b>with this context's pose already applied</b> — the four-cornered twin
+     * of {@link #triangle()}, for a tessellated fill's band cells. Same pose and unrounded-coordinate
+     * conventions; coverage is exact area in device pixels, so there is no width or feather to scale.
+     */
+    public CgVectorRenderer.Quad filledQuad() {
+        if (!ctx.isFrameActive()) throw new IllegalStateException("Cannot submit quads outside beginFrame()/endFrame()");
+
+        return vectorRenderer.quad().pose(ctx.getPoseStack().last().pose());
+    }
+
+    /**
      * Releases what this renderer owns.
      *
      * <p>Called by {@link CgUiPaintContext#destroy()}. {@link CgQuadRenderer#delete()} only unbinds
