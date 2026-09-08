@@ -115,7 +115,12 @@ theme {
     --switcher-glow: #3574F024;
     /* The active entry -- @see crystal-dark.css. A clear step BELOW the hover fill (#E0E4EA) on a white
      * bar; the dark theme's mid grey would be a slab here. */
-    --taskbar-entry-active-bg: #CDD1D8;
+    /* THE SHEEN INVERTS. Over a pale blurred bar, light added to light says nothing -- what reads as
+     * depth here is a shadow, so these are black at low alpha where the dark theme uses white. The
+     * rule is the same either way: a translucent tint over the backdrop, never an opaque fill that
+     * would put a hole in the blur. @see ua/desktop.css */
+    --taskbar-entry-hover-bg: #0000001F;
+    --taskbar-entry-active-bg: #00000033;
     /* The floating panels' acrylic -- @see crystal-dark.css. WinUI's light transient brush carries NO
      * colour tint at all (#FCFCFC at 0.0) and lets the luminosity layer at 0.85 do everything, so the
      * alpha here is zero on purpose: the colour still names the brightness the backdrop is pulled to. */

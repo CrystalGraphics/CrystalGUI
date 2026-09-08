@@ -136,7 +136,10 @@ theme {
     --switcher-glow: #3574F033;
     /* THE ACTIVE ENTRY: Windows' #5D5D5D in this theme's cool cast -- a step of sixty above the bar,
      * where --pressed-bg was a step of twenty and read as nothing. @see base.css */
-    --taskbar-entry-active-bg: #5A5D63;
+    /* WHITE AT LOW ALPHA, not a grey: these are the top stop of a sheen over a live blurred bar, so
+     * they have to composite with whatever is behind rather than replace it. @see ua/desktop.css */
+    --taskbar-entry-hover-bg: #FFFFFF29;
+    --taskbar-entry-active-bg: #FFFFFF3D;
     /* THE FLOATING PANELS' ACRYLIC: WinUI's SystemControlTransientBackgroundBrush, dark, at HALF its
      * strength -- tint #2C2C2C-class at 0.07 where Windows runs 0.15, with the rule's `luminosity 0.48`
      * (Windows: 0.96) doing the rest. At Windows' numbers the panels read as opaque slabs over this

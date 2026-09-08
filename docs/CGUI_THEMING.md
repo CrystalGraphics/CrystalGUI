@@ -397,6 +397,7 @@ editor scheme's.
 | `--nodemenu-separator-fg` | `var(--fg-disabled)` | base.css |
 | `--nodemenu-title-bg` | `var(--surface-raised)` | base.css |
 | `--nodemenu-twisty-fg` | `var(--fg-secondary)` | base.css |
+| `--notification-attribution-fg` | `var(--fg-secondary)` | base.css |
 | `--notification-bg` | `var(--surface-base)` | base.css |
 | `--notification-close-fg` | `var(--fg-hint)` | base.css |
 | `--notification-close-hover-bg` | `var(--hover-bg)` | base.css |
@@ -663,7 +664,7 @@ editor scheme's.
 | `--tab-strip-bg` | `#00000000` | base.css |
 | `--taskbar-bg` | `var(--surface-overlay)` | base.css |
 | `--taskbar-border` | `var(--border-base)` | base.css |
-| `--taskbar-entry-active-bg` | `#5A5D63` | crystal-dark.css |
+| `--taskbar-entry-active-bg` | `#FFFFFF3D` | crystal-dark.css |
 | `--taskbar-entry-active-fg` | `var(--fg)` | base.css |
 | `--taskbar-entry-attention-bg` | `var(--accent-soft)` | base.css |
 | `--taskbar-entry-attention-fg` | `var(--fg)` | base.css |

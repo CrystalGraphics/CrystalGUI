@@ -276,10 +276,24 @@ taskbar .__entry__.__animating__ {
     overflow: clip;
 }
 
+/* LIT GLASS, NOT A GREY CHIP. The bar behind these is a live blurred backdrop, and an OPAQUE fill on
+ * top of it is a hole in that blur -- the entry stops floating on the glass and starts covering it.
+ * These were #5A5D63 and #35373B, two greys tuned against one backdrop and wrong over any other.
+ *
+ * So the states are made of LIGHT: white at low alpha, which composites with whatever is behind rather
+ * than replacing it. The entry brightens over a pale wallpaper and stays quiet over a dark one, and the
+ * blur goes on reading through it -- which is the whole difference between sitting ON glass and being
+ * made of it.
+ *
+ * A COLOUR RATHER THAN A GRADIENT, and that is measured rather than preferred: a sheen falling off down
+ * the entry is the nicer idea, and `background: linear-gradient(...)` on these painted nothing at all --
+ * both states vanished. The same declaration works on the bar's own glow two rules up, so it is
+ * something about a gradient on THIS element rather than the syntax. Alpha on the fill gets the part
+ * that matters, which is compositing with the backdrop; the sheen can come back when the gradient does. */
 taskbar .__entry__:hover {
     color: var(--taskbar-entry-hover-fg, #DFE1E5);
     background: none;
-    background-color: var(--taskbar-entry-hover-bg, #2E3033);
+    background-color: var(--taskbar-entry-hover-bg, #FFFFFF29);
 }
 
 /* THE ACTIVE ENTRY: a step lighter than hover, and never an accent fill — an accent fill reads as a
@@ -289,9 +303,9 @@ taskbar .__entry__:hover {
  * Declared after the hover rule and tying with it on specificity, so an active entry stays looking
  * active while the pointer is over it. */
 taskbar .__entry__.__active__ {
-    color: var(--taskbar-entry-active-fg, #DFE1E5);
+    color: var(--taskbar-entry-active-fg, #FFFFFF);
     background: none;
-    background-color: var(--taskbar-entry-active-bg, #35373B);
+    background-color: var(--taskbar-entry-active-bg, #FFFFFF3D);
 }
 
 /* A minimised window's entry is DIMMED, not hidden — hiding it is the failure the strip exists to

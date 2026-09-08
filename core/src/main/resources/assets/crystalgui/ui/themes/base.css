@@ -353,6 +353,11 @@ theme {
     /* One card, one surface, wherever it is drawn -- a balloon and a row in the timeline are the same
      * thing and reading as two would be the tell that they are separately styled. @see --balloon-bg */
     --notification-bg: var(--surface-base);
+    /* WHO CHANGED IT, and the dot before the name -- one token for both, because the dot is a bullet
+     * for that line rather than a mark of its own. Secondary: attribution is the least of the three
+     * things a notification says, after what happened and to what. It shipped as a literal with no
+     * token behind it, so a light theme inherited a grey chosen against a dark card. */
+    --notification-attribution-fg: var(--fg-secondary);
     --notification-close-fg: var(--fg-hint);
     --notification-close-hover-bg: var(--hover-bg);
     --notification-close-hover-fg: var(--fg);
