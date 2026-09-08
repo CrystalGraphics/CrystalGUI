@@ -273,17 +273,31 @@ public final class CgUiPaintContext {
     // exactly as before, it resolves into msaaResolveFbo, and that gets composited back via the
     // existing blitLayer premultiplied-alpha path.
     //
-    // No "is MSAA supported" branch here: MSAA_FORMAT asks for CgFrameBufferFormat.Builder.maxSamples()
-    // — the driver's max, resolved once a live GL context exists — and a driver with no real
-    // multisampling just resolves that to 1, i.e. an ordinary single-sampled FBO. Redirect, resolve and
-    // composite always run the same way either way.
+    // FOUR SAMPLES, not the driver's maximum. This asked for maxSamples() on the reasoning that a
+    // machine with no multisampling resolves it to 1 and needs no branch -- true, and it also means
+    // taking the most expensive option the driver will admit to: one tester's reports 32, which is a
+    // 265MB colour renderbuffer at 1920x1080 and thirty-two coverage samples per covered fragment,
+    // every frame.
+    //
+    // Four is the conventional UI figure and the returns above it are close to nil HERE in particular,
+    // because MSAA only antialiases GEOMETRY edges: rounded corners, glyphs and gradient edges are all
+    // shader-computed coverage and never see it. What is left for it to smooth is rotated quads and the
+    // one-pixel fills design-time chrome draws its outlines from.
+    //
+    // Still no "is MSAA supported" branch: `samples(int)` is a REQUEST that drivers clamp to
+    // GL_MAX_SAMPLES, so 4 becomes 2 or 1 on hardware that offers less, exactly as maxSamples() would.
+    // Redirect, resolve and composite run the same way either way.
     //
     // Renderbuffer, not a texture: msaaFbo is never sampled directly, only resolved via blitFrom, so
     // there is no reason to pay for a sampleable multisampled texture. Pure data — no GL calls — so
     // this is safe as a static constant despite CgUiPaintContext's own materials/textures needing a
     // live context; only actually creating an FBO from it does.
+    /** @see #MSAA_FORMAT */
+    private static final int FRAME_SAMPLES = 4;
+
     private static final CgFrameBufferFormat MSAA_FORMAT =
-            CgFrameBufferFormat.builder("cgui_msaa").colorRenderbuffer(0, CgTextureType.RGBA8).maxSamples().build();
+            CgFrameBufferFormat.builder("cgui_msaa").colorRenderbuffer(0, CgTextureType.RGBA8)
+                    .samples(FRAME_SAMPLES).build();
 
     /** Built once, in the constructor — real dimensions aren't known that early (no frame has run
      * yet), so this starts 1x1 and {@link #beginFrame} resizes it in place, the same way every other
