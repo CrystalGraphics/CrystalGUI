@@ -60,7 +60,7 @@
           "text-decoration-line": "underline",
           "text-overflow": "ELLIPSIS",
           "top": "220px",
-          "transform": "translate(4px, 2px) rotate(0.15rad) scale(1.1, 1.1) skew(0.05rad, 0.0rad)",
+          "transform": "translate(4px, 2px) rotate(0.15rad) skew(0.05rad, 0.0rad) scale(1.1, 1.1)",
           "transform-origin-x": "50%",
           "transform-origin-y": "50%",
           "transition": "opacity 240ms ease, transform 120ms ease-out",

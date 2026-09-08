@@ -164,22 +164,28 @@ public class TransformGestureTest {
     }
 
     /**
-     * <b>A transform it cannot decompose is refused, not guessed at.</b>
+     * <b>A shape the ordered walk cannot read is decomposed instead.</b>
      *
-     * <p>Seven numbers cannot describe an arbitrary op list — a translate after a rotate is a different
-     * matrix from one before it — so reading one back as if they could would silently move the element on
-     * the first drag. It says so instead, and the caller decides.</p>
+     * <p>This asserted a REFUSAL — a translate after a rotate was not this class's shape, and {@code
+     * reset} answered false and stayed at identity. That was true of the ordered walk and is no longer
+     * true of the class: it composes such a transform to a matrix and takes that apart, so the box opens
+     * showing what the element actually has. The refusal is now only for a collapsed transform, which
+     * {@code canDecompose} answers before the tool is ever entered.</p>
+     *
+     * <p>What it must not do is silently open at identity, which is what a false return produced once
+     * the caller stopped checking it: the box then showed none of the element's transform and committing
+     * wrote over it.</p>
      */
     @Test
-    public void resetRefusesAShapeItCannotDecompose() {
+    public void resetDecomposesAShapeTheOrderedWalkCannotRead() {
         Transform outOfOrder = Transform.IDENTITY
                 .then(Transform.Op.rotate(0.4f))
                 .then(Transform.Op.translate(LengthPercent.px(10f), LengthPercent.px(0f)));
 
         TransformGesture gesture = new TransformGesture();
-        assertFalse("a translate after a rotate is not this class's shape",
+        assertTrue("it is read through its matrix, not refused",
                 gesture.reset(W, H, outOfOrder, W / 2f, H / 2f));
-        assertTrue("a refused transform must leave the gesture at identity", gesture.isIdentity());
+        assertFalse("and the gesture carries it rather than sitting at identity", gesture.isIdentity());
     }
 
     /**

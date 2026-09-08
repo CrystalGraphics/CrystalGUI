@@ -4,6 +4,8 @@ import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.attributes.StyleAttributes;
 import com.crystalgui.app.uibuilder.canvas.TextEditGesture;
 import com.crystalgui.app.uibuilder.canvas.transform.FreeTransformTool;
+import com.crystalgui.app.uibuilder.canvas.transform.TransformGesture;
+import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformBox;
 import com.crystalgui.app.uibuilder.live.PickMode;
 import com.crystalgui.core.attribute.AttributeClipboard;
@@ -233,7 +235,13 @@ public final class BuilderCommands {
         BuilderEditor builder = builderOf(context);
         if (builder == null || !builder.surface().isDesignMode()) return false;
         UIElement node = selectionOf(context);
-        return node != null && node.box() != null;
+        if (node == null || node.box() == null) return false;
+        // AND A TRANSFORM THE BOX CAN ACTUALLY SHOW. The gesture describes translate/rotate/skew/scale
+        // composed in that order; anything else opens at identity showing none of it, and committing
+        // then writes the gesture over the property. Refusing the command is the only safe place to
+        // catch it -- the tool's mode is already entered by the time the box opens.
+        return TransformGesture.canDecompose(
+                node.getStyle().computed().get(StylePropertyRegistry.TRANSFORM));
     }
 
     /**

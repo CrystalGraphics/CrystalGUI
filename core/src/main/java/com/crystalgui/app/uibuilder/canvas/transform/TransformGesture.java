@@ -100,14 +100,14 @@ public final class TransformGesture {
         grip = Grip.NONE;
         if (existing == null || existing.isIdentity()) return true;
 
-        int seen = -1;
+        // THE ORDERED WALK IS THE FAST PATH, and it is exact: ops already in the order this gesture
+        // composes them are read straight into the fields, so a value written by this tool comes back
+        // as the numbers that were typed rather than as their matrix rounded off.
+        if (!inCanonicalOrder(existing)) {
+            return decomposeMatrix(existing);
+        }
+
         for (Transform.Op op : existing.ops()) {
-            int rank = rankOf(op.kind());
-            if (rank <= seen) {
-                clearOps();
-                return false;
-            }
-            seen = rank;
             switch (op.kind()) {
                 case TRANSLATE -> {
                     tx = op.lx().resolve(width);
@@ -123,6 +123,109 @@ public final class TransformGesture {
                     sy = op.fy();
                 }
             }
+        }
+        return true;
+    }
+
+    /**
+     * Reads any transform by <b>composing it to a matrix and taking that apart</b>.
+     *
+     * <p>Ported from CSS Transforms Level 1, §"Decomposing a 2D matrix" — the {@code unmatrix} routine
+     * from <i>Graphics Gems II</i> that every browser uses to interpolate between two {@code matrix()}
+     * values. It exists here for the same reason: the five fields describe
+     * {@code translate → rotate → skew → scale} composed in that order, and a transform written in any
+     * other order is a matrix those fields cannot be read off directly. Composing first makes the order
+     * irrelevant — {@code scale(2) rotate(1rad)} and {@code rotate(1rad) scale(2)} are different
+     * matrices, and each decomposes to the fields that reproduce it.</p>
+     *
+     * <p><b>Origin-relative</b>, because the fields are: {@code applyTo} builds
+     * {@code T(origin) · ops · T(-origin)}, so the ops themselves are recovered by undoing that
+     * sandwich. Skipping it folds the origin's own shift into {@code tx}/{@code ty}.</p>
+     *
+     * <p>A 2D affine has six degrees of freedom and this gesture carries seven — {@code skewY} is the
+     * spare, so a decomposed transform always reports {@code skewY = 0} and puts all the shear in
+     * {@code skewX}. The composed matrix is identical either way.</p>
+     */
+    private boolean decomposeMatrix(Transform existing) {
+        Matrix4f m = matrixOf(existing);
+        Matrix4f local = new Matrix4f()
+                .translation(-originX, -originY, 0f)
+                .mul(m)
+                .translate(originX, originY, 0f);
+
+        float a = local.m00(), b = local.m01();
+        float c = local.m10(), d = local.m11();
+        if (Math.abs(a * d - b * c) < 1e-6f) {
+            // NOT INVERTIBLE -- a zero scale has collapsed the box to a line or a point, and there is
+            // no rotation or shear left in it to show. Nothing to open on.
+            clearOps();
+            return false;
+        }
+
+        tx = local.m30();
+        ty = local.m31();
+
+        sx = (float) Math.hypot(a, b);
+        if (sx != 0f) {
+            a /= sx;
+            b /= sx;
+        }
+        float shear = a * c + b * d;
+        c -= a * shear;
+        d -= b * shear;
+        sy = (float) Math.hypot(c, d);
+        if (sy != 0f) {
+            c /= sy;
+            d /= sy;
+            shear /= sy;
+        }
+        if (a * d - b * c < 0f) {
+            sx = -sx;
+            sy = -sy;
+            a = -a;
+            b = -b;
+        }
+        rotation = (float) Math.atan2(b, a);
+        skewX = (float) Math.atan(shear);
+        skewY = 0f;
+        return true;
+    }
+
+    /** Whether the ops are already in the order the fields compose them in. @see #decomposeMatrix */
+    private static boolean inCanonicalOrder(Transform transform) {
+        int seen = -1;
+        for (Transform.Op op : transform.ops()) {
+            int rank = rankOf(op.kind());
+            if (rank <= seen) return false;
+            seen = rank;
+        }
+        return true;
+    }
+
+    /**
+     * Whether {@code transform} is one this gesture can open on — <b>ask before entering the tool</b>.
+     *
+     * <pre>{@code
+     * if (!TransformGesture.canDecompose(node.getStyle().computed().get(TRANSFORM))) return false;
+     * }</pre>
+     *
+     * <p>The five fields describe {@code translate → rotate → skew → scale} composed in that order and
+     * nothing else, because a transform is an ORDERED list and {@code rotate scale} is not
+     * {@code scale rotate}. Anything out of that order, or repeating a kind either side of another, is a
+     * matrix these fields cannot represent — {@link #reset} answers false for it and opens at identity.
+     * </p>
+     *
+     * <p><b>Ask here rather than acting on that false.</b> By the time the box opens, the tool's mode is
+     * already on the stack, so refusing then leaves it live with no target and every click on the canvas
+     * goes nowhere. @see com.crystalgui.app.uibuilder.BuilderCommands</p>
+     */
+    public static boolean canDecompose(@Nullable Transform transform) {
+        if (transform == null || transform.isIdentity()) return true;
+        for (Transform.Op op : transform.ops()) {
+            // A ZERO SCALE is the one thing that cannot be opened on: it collapses the box to a line or
+            // a point, and no rotation or shear survives in the matrix to be read back. Every other
+            // transform decomposes, whatever order it was written in. @see #decomposeMatrix
+            if (op.kind() == Transform.Kind.SCALE && (op.fx() == 0f || op.fy() == 0f)) return false;
         }
         return true;
     }

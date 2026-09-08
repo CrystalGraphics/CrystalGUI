@@ -277,6 +277,10 @@ public final class TransformBox extends UIElement {
         if (box == null) return false;
         target = node;
         before = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        // NOT REFUSED HERE, however tempting: `activated()` has already entered the mode by the time
+        // this runs -- its own note says switching tools from inside it re-enters the mode stack -- so a
+        // false return leaves the tool live with no target, swallowing every click on the canvas. The
+        // guard belongs where entry is DECIDED. @see BuilderCommands#canFreeTransform
         gesture.reset(box.width(), box.height(),
                 node.getStyle().computed().get(StylePropertyRegistry.TRANSFORM),
                 resolvedOriginX(node, box), resolvedOriginY(node, box));
