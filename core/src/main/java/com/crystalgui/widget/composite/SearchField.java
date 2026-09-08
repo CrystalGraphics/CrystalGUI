@@ -8,10 +8,13 @@ import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.core.signal.Signal;
+import dev.vfyjxf.taffy.style.AlignItems;
+import dev.vfyjxf.taffy.style.FlexDirection;
 import com.crystalgui.style.StyleGroup;
 import javax.annotation.Nullable;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UISlot;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.widget.control.TextField;
@@ -129,6 +132,21 @@ public class SearchField extends UIElement {
     @Nullable
     private UIElement options;
 
+    /**
+     * Where a caller's options land inside {@link #options}. @see #addOption
+     *
+     * <p>Laid out, because a slot is a REAL BOX between the strip and the toggles — the strip's own
+     * {@code flex-direction: row} reaches this and stops here, so without it the three glyphs stack down
+     * the engine's default column and spill out of the field. {@code Menu} states the same thing about
+     * its item slot for the same reason. DEFAULT origin, so a sheet can still decide.</p>
+     */
+    private final UISlot optionSlot = new UISlot();
+
+    {
+        StyleGroup.defaultPipeline(optionSlot.getStyle().getLayoutGroup(),
+                l -> l.flexDirection(FlexDirection.ROW).alignItems(AlignItems.CENTER).gapAll(2f));
+    }
+
     /** Fires on every keystroke — see the constructor's note on why this is not deferred to Enter. */
     public final Signal.Action onQueryChanged = new Signal.Action();
 
@@ -220,11 +238,22 @@ public class SearchField extends UIElement {
         if (options == null) {
             options = new UIElement();
             options.set(Attribute.PART, OPTIONS_PART);
+            // THE STRIP IS OURS; WHAT GOES IN IT IS THE CALLER'S, so the strip holds a slot rather than
+            // the buttons themselves. An ordinary selector cannot reach into a shadow tree, and the sheet
+            // styles these by class -- `.__search-option__`, `.__option-regex__`, `.__on__` -- so a button
+            // appended here directly matched no rule at all and laid out 0x0. Visible as three toggles
+            // simply missing from the find bar, with nothing reporting a problem, which is the failure
+            // mode an unstyled shadow child always has.
+            //
+            // A part name would not fix it: the sheet needs a class per option and a state class on top,
+            // and `::part()` addresses neither.
+            options.append(optionSlot);
             // AFTER the clear button, matching IntelliJ: the one control whose presence changes with the
             // query sits next to the text it clears, rather than beyond a fixed strip.
             shadow.append(options);
         }
-        options.append(option);
+        // LIGHT, so the cascade sees it; the slot is what puts it inside the strip.
+        append(option);
         return this;
     }
 
