@@ -44,6 +44,26 @@ fun modClasses(modId: String, moduleDir: File) = modClasses(modId, listOf(
 fun mainSourceSet(project: Project) =
     project.extensions.getByType(SourceSetContainer::class.java)["main"]
 
+/**
+ * The projects bundled INTO the crystalgui mod, named once.
+ *
+ * Three places need this list -- the service merge, the resource staging and MOD_CLASSES -- and it was
+ * written out in each. The header above says what a hand-maintained second copy costs; a third copy of
+ * the same list is the same bet.
+ *
+ * The loader project itself is NOT here: its resources carry META-INF/mods.toml and must stay their own
+ * root, and it is added to MOD_CLASSES separately below.
+ */
+val bundledProjects = listOf(project(":core"), project(":mc1201:common"), project(":language"))
+
+/** Where each of those keeps META-INF/services, for the merge and for its up-to-date check. */
+val serviceDirs: List<File> = bundledProjects.mapNotNull { owner ->
+    mainSourceSet(owner).output.resourcesDir?.let { File(it, "META-INF/services") }
+}
+
+/** The tasks that PRODUCE those resources. `from(File)` carries no dependency, so both stages name them. */
+val resourceTasks: List<String> = bundledProjects.map { "${it.path}:processResources" }
+
 // Setting MOD_CLASSES REPLACES what ModDevGradle derived from mods{} rather than adding to it, so the
 // crystalgui half names the same source sets that block does. THE TWO LISTS ARE MAINTAINED BY HAND AND
 // NOTHING CHECKS THEM AGAINST EACH OTHER: a source set added to mods{} alone is silently dropped here,
@@ -69,11 +89,16 @@ val mergedServicesDir: File = layout.buildDirectory.dir("merged-services").get()
 val mergeDevServices = tasks.register("mergeDevServices") {
     group = "build"
     description = "Unions :core's and :language's META-INF/services so neither shadows the other."
+    // THE FILES IT READS, or it is compared on its outputs alone and stays UP-TO-DATE across an edit to
+    // one of them -- leaving a merged copy that describes the previous build. Same class of staleness the
+    // run tasks' inputs.property below exists for, and just as silent.
+    inputs.files(serviceDirs).withPropertyName("serviceDirs").optional()
     outputs.dir(mergedServicesDir)
+    // ORDERING, which declaring the inputs does not give: without it this can run before the resources
+    // are copied and union an empty directory.
+    dependsOn(resourceTasks)
     doLast {
-        val sources = listOf(project(":core"), project(":mc1201:common"), project(":language"))
-            .map { owner -> File(mainSourceSet(owner).output.resourcesDir, "META-INF/services") }
-            .filter { it.isDirectory }
+        val sources = serviceDirs.filter { it.isDirectory }
         val byService = linkedMapOf<String, MutableList<String>>()
         for (directory in sources) {
             for (file in directory.listFiles().orEmpty()) {
@@ -96,20 +121,49 @@ val mergeDevServices = tasks.register("mergeDevServices") {
     }
 }
 
+/**
+ * ONE resource root for the dev run, and the reason it exists rather than naming three.
+ *
+ * FML answers a resource path from a single root, and which one it picks is not ours to choose --
+ * ordering the merged services first did not beat :language's copy. So the collision is removed instead
+ * of ranked: every project's resources are staged here with META-INF/services stripped out, and the
+ * merged services are laid on top. Exactly one root offers any given path, and nothing depends on the
+ * order they are listed in.
+ *
+ * The classes directories stay separate roots below -- those never collide, and copying 219 files of
+ * :core resources is cheap where copying its classes would not be.
+ */
+val devResourcesDir: File = layout.buildDirectory.dir("dev-resources").get().asFile
+
+val stageDevResources = tasks.register<Sync>("stageDevResources") {
+    group = "build"
+    description = "Stages every project's resources into one root, with a single merged META-INF/services."
+    dependsOn(mergeDevServices)
+    // ITS OWN, not inherited: from(File) carries no task dependency, so without these the copy is
+    // ordered only by mergeDevServices happening to depend on the same tasks.
+    dependsOn(resourceTasks)
+    into(devResourcesDir)
+    for (owner in bundledProjects) {
+        val resources = mainSourceSet(owner).output.resourcesDir ?: continue
+        from(resources) { exclude("META-INF/services/**") }
+    }
+    from(mergedServicesDir)
+}
+
 /** tree-sitter, which :language needs and which must live in the same module it does. */
 val treeSitterJars: List<File> = rootProject.file("lib/tree-sitter").listFiles()
     ?.filter { it.name.endsWith(".jar") }?.sorted() ?: emptyList()
 
 val modClassesValue = (
-    // The merged services FIRST, so it is the root that answers for META-INF/services.
-    modClasses("crystalgui", listOf(mergedServicesDir))
-        + listOf(mainSourceSet(project), mainSourceSet(project(":core")),
-                 mainSourceSet(project(":mc1201:common")), mainSourceSet(project(":language")))
-            .flatMap { modClasses("crystalgui", it) }
+    modClasses("crystalgui", listOf(devResourcesDir))
+        + modClasses("crystalgui", mainSourceSet(project))
+        + bundledProjects
+            .flatMap { modClasses("crystalgui", mainSourceSet(it).output.classesDirs.files) }
         + modClasses("crystalgui", treeSitterJars)
         + modClasses("crystalgraphics", File(crystalGraphics.projectDir, "mc1201/common"))
         + modClasses("crystalgraphics", File(crystalGraphics.projectDir, "mc1201/$loader"))
-    ).joinToString(";")
+    // FML splits MOD_CLASSES on the PLATFORM's path separator, not on a semicolon.
+    ).joinToString(File.pathSeparator)
 
 // A directory named in MOD_CLASSES is read at launch with nothing in the task graph behind it, so
 // whatever sits there is what runs. prepareClientRun is included because that is the task an IDE
@@ -123,7 +177,7 @@ tasks.matching {
     // an editor missing every extension whose service file lost, on a build that compiled and copied
     // everything correctly.
     inputs.property("cgModClasses", modClassesValue)
-    dependsOn(mergeDevServices)
+    dependsOn(stageDevResources)
     dependsOn(crystalGraphics.task(":mc1201:common:classes"))
     dependsOn(crystalGraphics.task(":mc1201:$loader:classes"))
 
