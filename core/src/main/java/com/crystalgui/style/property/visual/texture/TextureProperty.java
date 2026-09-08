@@ -2,7 +2,10 @@ package com.crystalgui.style.property.visual.texture;
 
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.render.texture.CgUiCrossFade;
+import com.crystalgui.render.texture.ArgbMath;
 import com.crystalgui.render.texture.CgUiDrawable;
+import com.crystalgui.render.texture.CgUiQuad;
+import com.crystalgui.render.texture.CgUiShape;
 import lombok.experimental.Accessors;
 
 @Accessors(chain = true)
@@ -21,5 +24,46 @@ public class TextureProperty extends StyleProperty<CgUiDrawable> {
      */
     private CgUiDrawable interpolate(CgUiDrawable from, CgUiDrawable to, float lerp) {
         return new CgUiCrossFade(from, to, lerp);
+    }
+
+    /**
+     * The CSS that produced this drawable.
+     *
+     * <p>A drawable cannot describe itself: {@code CgUiSvg} holds a parsed document and {@code CgUiSprite}
+     * resolved UVs, so the arguments that made them are gone by the time anyone asks. What is kept is the
+     * text they were parsed from ({@link TextureValue#sourceOf}), which is a better answer anyway — it is
+     * exactly what a person wrote, and re-parsing it is deterministic.</p>
+     *
+     * <p>Two cases the map cannot answer, and both have one:</p>
+     * <ul>
+     *   <li>the shared EMPTY, which is what every {@code none} in every sheet resolves to, so it is
+     *       spelled rather than remembered;</li>
+     *   <li>a flat colour built in Java — a widget writing {@code new CgUiQuad(argb)} rather than a
+     *       stylesheet — which writes as the colour it holds;</li>
+     *   <li>a vector mark, which is a record over one enum and so is exactly {@code shape(kind)}.</li>
+     * </ul>
+     *
+     * <p><b>Both of those are also the two whose equality is value-based, and that is not a
+     * coincidence any more — it is the rule.</b> {@link TextureValue#sourceOf} is a weak map keyed by
+     * equality, so two equal drawables share one entry keyed on whichever was seen first; when THAT one
+     * is collected the entry goes with it and the live one is left with no source. It takes a temporary
+     * to trigger — the codec's own write-then-read check makes one — so it appears as a shape that has
+     * been on screen all along suddenly having no CSS. A drawable that can describe itself does not
+     * depend on the map at all, which is why anything with value equality must.</p>
+     *
+     * <p>Anything else built in Java throws, and says so plainly: a drawable that reached an element
+     * without going through CSS has no CSS to write, and inventing one would put something on the
+     * clipboard that renders differently from what was copied.</p>
+     */
+    @Override
+    public String write(CgUiDrawable value) {
+        if (value == CgUiDrawable.EMPTY) return "none";
+        String source = TextureValue.sourceOf(value);
+        if (source != null) return source;
+        if (value instanceof CgUiQuad quad) return ArgbMath.toCss(quad.getColorArgb());
+        if (value instanceof CgUiShape shape) return "shape(\"" + CgUiShape.cssName(shape.kind()) + "\")";
+        throw new IllegalStateException("A " + value.getClass().getSimpleName() + " for '" + name
+                + "' was built in Java rather than parsed from CSS, so there is no CSS to write for it."
+                + " Set it from a stylesheet or an inline style, or give it a source.");
     }
 }

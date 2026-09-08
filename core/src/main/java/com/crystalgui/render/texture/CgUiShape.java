@@ -1,5 +1,7 @@
 package com.crystalgui.render.texture;
 
+import java.util.Locale;
+
 import com.crystalgraphics.gl.render.CgVectorRenderer;
 import com.crystalgui.render.CgUiPaintContext;
 
@@ -74,6 +76,18 @@ public record CgUiShape(Kind kind) implements CgUiDrawable {
      * modelled on, which draw at a visibly lighter weight than "fill the whole box" produces.</p>
      */
     private static final float SIZE_FRACTION = 0.78f;
+
+    /**
+     * This kind's catalog name — {@code CHEVRON_DOWN} is {@code "chevron-down"}.
+     *
+     * <p>Derived rather than listed, so it cannot drift from {@link #parseKind}: a second switch would
+     * be sixteen lines that have to agree with sixteen others, and a kind added to only one of them
+     * would parse and then fail to write, or the reverse. {@code CgUiShapeTest} holds the two together
+     * by round-tripping every constant.</p>
+     */
+    public static String cssName(Kind kind) {
+        return kind.name().toLowerCase(Locale.ROOT).replace('_', '-');
+    }
 
     /** Parses a catalog name (e.g. {@code "chevron-down"}) into a {@link Kind}, or {@code null}. */
     public static Kind parseKind(String name) {

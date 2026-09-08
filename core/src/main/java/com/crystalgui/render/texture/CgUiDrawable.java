@@ -10,6 +10,12 @@ import com.crystalgui.render.CgUiPaintContext;
  * — there is no batching or deferred submission anywhere in this call path. A call
  * to {@link #draw} is expected to issue exactly one GPU draw call (or zero, for a
  * fully-transparent tint) before returning.</p>
+ *
+ * <p><b>A new drawable is not finished until it is registered.</b> If it can be written in CSS, its
+ * function belongs in {@link com.crystalgui.style.property.visual.texture.DrawableKinds} — one call,
+ * which gives it parsing, a readable name, and a section of its own wherever drawables are grouped.
+ * Skipping it does not fail: the class compiles and paints correctly wherever Java builds one directly,
+ * and the only symptom is CSS that never parses.</p>
  */
 public interface CgUiDrawable {
 

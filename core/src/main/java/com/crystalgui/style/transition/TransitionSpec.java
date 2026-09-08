@@ -1,6 +1,7 @@
 package com.crystalgui.style.transition;
 
 import com.crystalgui.style.CssParsingUtil;
+import com.crystalgui.style.easing.CubicBezier;
 import com.crystalgui.style.easing.Easing;
 import com.crystalgui.style.easing.ProgressFunctions;
 
@@ -111,5 +112,47 @@ public record TransitionSpec(String propertyNameOrAll, long durationNanos, long 
             case "ease-in-out" -> ProgressFunctions.cubicBezier(0.42, 0.0, 0.58, 1.0);
             default -> throw new IllegalArgumentException("Unknown transition-timing-function '" + token + "'");
         };
+    }
+
+    /**
+     * A transition list as the CSS its own {@link #parse} reads back.
+     *
+     * <pre>{@code
+     * "opacity 240ms ease, display 240ms ease"
+     * }</pre>
+     *
+     * <p>Beside the parser, so the two spellings of one grammar cannot drift apart — the same reason
+     * {@link com.crystalgui.style.property.StyleProperty#write} sits beside its {@code ValueParser}.</p>
+     */
+    public static String write(List<TransitionSpec> specs) {
+        // `none` IS the empty list, and the parser reads it back as one. An empty string would too, but
+        // nothing should write an empty declaration into a sheet or onto a clipboard.
+        if (specs.isEmpty()) return "none";
+        StringBuilder out = new StringBuilder();
+        for (TransitionSpec spec : specs) {
+            if (out.length() > 0) out.append(", ");
+            out.append(spec.propertyNameOrAll())
+                    .append(' ').append(millis(spec.durationNanos()));
+            // ONLY WHEN THERE IS ONE: a bare `0ms` delay in the middle would be read as the delay it is,
+            // which is the same value -- but it is noise in something a person reads.
+            if (spec.delayNanos() != 0L) out.append(' ').append(millis(spec.delayNanos()));
+            out.append(' ').append(timingFunction(spec.easing()));
+        }
+        return out.toString();
+    }
+
+    private static String millis(long nanos) {
+        return (nanos / 1_000_000L) + "ms";
+    }
+
+    /** The keyword or {@code cubic-bezier(...)} that {@code parseTimingFunction} would answer with. */
+    private static String timingFunction(Easing easing) {
+        if (easing == ProgressFunctions.Premade.LINEAR) return "linear";
+        if (easing instanceof CubicBezier bezier) {
+            return "cubic-bezier(" + bezier.getX1() + ", " + bezier.getY1() + ", "
+                    + bezier.getX2() + ", " + bezier.getY2() + ")";
+        }
+        throw new IllegalStateException("No CSS spelling for easing " + easing.getClass().getSimpleName()
+                + " — transition-timing-function can only write the keywords and cubic-bezier().");
     }
 }

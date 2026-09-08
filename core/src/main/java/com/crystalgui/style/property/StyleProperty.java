@@ -21,6 +21,9 @@ public class StyleProperty<VALUE> {
     public final Class<VALUE> type;
     public final VALUE initialValue;
     public final ValueParser<VALUE> valueParser;
+    /** @see #write(Object) */
+    @Nullable
+    private ValueWriter<VALUE> valueWriter;
     @Setter
     @Getter
     private IValueInterpolator<VALUE> interpolator = IValueInterpolator.BINARY;
@@ -50,6 +53,39 @@ public class StyleProperty<VALUE> {
         return new StyleProperty<>(name, (Class<T>) initialValue.getClass(), initialValue, valueParser);
     }
 
+
+    /**
+     * <b>This value as CSS its own {@link #valueParser} reads back</b> — the half the engine was missing.
+     *
+     * <pre>{@code
+     * String css = StylePropertyRegistry.COLOR.write(0xFF3574F0);   // "#3574F0FF"
+     * }</pre>
+     *
+     * <p>A property has always known how to read its own CSS, because that is how a stylesheet becomes
+     * anything. Nothing knew how to write it, so anything that had to MOVE a value — the wire, the
+     * clipboard — needed a codec hand-written against the value's Java type, and fifteen properties
+     * never got one. They failed at the moment of use, which is a strange way to learn that a border
+     * cannot be copied.</p>
+     *
+     * <p><b>On the property and not on the type</b>, because the type is not enough to know: {@code color}
+     * and {@code z-index} are both {@code Integer} and only one of them writes {@code #RRGGBBAA}. The
+     * parser lives here for the same reason, and the two have to agree — so they sit together, and
+     * {@code StyleValueRoundTripTest} holds every registered property to writing something its own parser
+     * reads back as an equal value.</p>
+     *
+     * <p>The default is {@link String#valueOf}, which is already right for the numbers and booleans and
+     * wrong for everything with a syntax. A subclass overrides it, or a property declared inline states
+     * one with {@link #setWriter}.</p>
+     */
+    public String write(VALUE value) {
+        return valueWriter != null ? valueWriter.write(value) : String.valueOf(value);
+    }
+
+    /** States how this property writes itself, for one declared without a subclass. @see #write */
+    public StyleProperty<VALUE> setWriter(ValueWriter<VALUE> writer) {
+        this.valueWriter = writer;
+        return this;
+    }
 
     @Override
     public boolean equals(Object o) {
@@ -85,6 +121,12 @@ public class StyleProperty<VALUE> {
     @FunctionalInterface
     public interface ValueParser<T> {
         StyleValue<T> parse(String rawValue);
+    }
+
+    /** The other direction. @see StyleProperty#write(Object) */
+    @FunctionalInterface
+    public interface ValueWriter<T> {
+        String write(T value);
     }
 
 }

@@ -20,7 +20,11 @@ public class GridTemplateValue extends StyleValue<GridTemplate> {
     }
 
     public static GridTemplate parse(String rawValue) {
-        if (rawValue == null || rawValue.trim().isEmpty()) {
+        // `none` IS CSS's spelling for "no explicit tracks", and it was missing: only a blank string
+        // reached EMPTY, so the value could be read from a sheet and never written back to one. An
+        // empty declaration is not something to put in a stylesheet or on a clipboard.
+        if (rawValue == null || rawValue.trim().isEmpty()
+                || rawValue.trim().equalsIgnoreCase("none")) {
             return GridTemplate.EMPTY;
         }
 
@@ -402,5 +406,24 @@ public class GridTemplateValue extends StyleValue<GridTemplate> {
             return String.valueOf((int) value);
         }
         return String.valueOf(value);
+    }
+
+    /**
+     * A template as the CSS its own {@link #parse} reads back.
+     *
+     * <p><b>Only {@code none} today</b>, and it throws for anything else rather than guessing. Writing a
+     * real track list means spelling {@code TrackSizingFunction}, {@code repeat()} and named lines, and
+     * a writer that produced something almost right would put a silently different layout on the
+     * clipboard. A grid template is declared in a stylesheet in practice — this path is reached only by
+     * one set INLINE on an element — so the honest refusal costs nothing and says exactly what is
+     * missing. @see com.crystalgui.serialization.style.StyleValueCodecs</p>
+     */
+    public static String write(GridTemplate template) {
+        if (template.simples().isEmpty() && template.repeats().isEmpty() && template.names().isEmpty()) {
+            return "none";
+        }
+        throw new IllegalStateException("grid-template with explicit tracks cannot be written back to CSS"
+                + " yet — TrackSizingFunction, repeat() and named lines have no writer. Declare it in a"
+                + " stylesheet rather than inline, or add one here.");
     }
 }

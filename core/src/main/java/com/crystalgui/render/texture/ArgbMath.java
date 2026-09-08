@@ -119,4 +119,16 @@ public final class ArgbMath {
     private static float clamp01(float v) {
         return v < 0f ? 0f : (v > 1f ? 1f : v);
     }
+
+    /**
+     * {@code argb} as the CSS this engine parses back — {@code #RRGGBBAA}, alpha LAST.
+     *
+     * <p>The eight-digit form always, never the three- or six-digit shorthands: those cannot carry an
+     * alpha, and a colour that silently loses its transparency on the way out is worse than a longer
+     * string. @see com.crystalgui.style.property.visual.color.ColorValue
+     */
+    public static String toCss(int argb) {
+        return String.format("#%02X%02X%02X%02X",
+                (argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF, (argb >>> 24) & 0xFF);
+    }
 }

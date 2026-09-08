@@ -11,7 +11,6 @@ import com.crystalgui.render.texture.CgUiShape;
 import com.crystalgui.render.texture.CgUiSprite;
 import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.render.texture.asset.CgUiSpriteRegistry;
-import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.style.CssAngle;
 import com.crystalgui.style.CssParsingUtil;
 import com.crystalgui.style.property.StyleValue;
@@ -20,7 +19,10 @@ import com.crystalgui.style.property.visual.color.ColorValue;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Collections;
 import java.util.Locale;
+import java.util.Map;
+import java.util.WeakHashMap;
 
 /**
  * Parses a {@code background} value. Grammar (each form is distinct, not four ways to do the
@@ -65,7 +67,51 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
 
     @Override
     protected @Nullable CgUiDrawable doCompute(String rawValue) {
-        return parseDrawable(rawValue);
+        CgUiDrawable drawable = parseDrawable(rawValue);
+        if (drawable != null) remember(drawable, rawValue.trim());
+        return drawable;
+    }
+
+    /**
+     * What CSS produced a drawable, so {@code TextureProperty} can write it back.
+     *
+     * <p><b>Beside the drawable rather than on it</b>, and the reason is ownership: a drawable is a
+     * painter, and which stylesheet text happened to make one is not a fact about painting. Several of
+     * them are shared besides — {@code CgUiSpriteRegistry} hands the same sprite to every rule that asks
+     * for it — so a field would have to be written by whoever parsed last and would not mean anything
+     * for a sprite built in Java.</p>
+     *
+     * <p>That sharing is also why this is safe. Two spellings can reach one drawable ({@code asset(...)}
+     * and {@code sprite(...)} of the same pack), and the map then answers with whichever was parsed
+     * last — which parses back to the same drawable, so the value survives even though the text may not
+     * be the one originally typed. Values are what has to round-trip; spelling is not.</p>
+     *
+     * <p>Weak keys: an entry lives exactly as long as the drawable does, so a stylesheet reloaded a
+     * hundred times leaves nothing behind.</p>
+     */
+    private static final Map<CgUiDrawable, String> SOURCES =
+            Collections.synchronizedMap(new WeakHashMap<>());
+
+    private static void remember(CgUiDrawable drawable, String source) {
+        // NEVER the shared EMPTY, which every `none` in every sheet resolves to: one entry would be
+        // overwritten by the next and it has a spelling of its own anyway. @see #sourceOf
+        if (drawable == CgUiDrawable.EMPTY) return;
+        // RE-KEYED, not updated in place. `put` on an equal key keeps the EXISTING key, so a drawable
+        // whose equality is value-based -- a record -- leaves the map holding whichever equal instance
+        // was seen first, which is often a temporary, and the entry dies with that one while the live
+        // drawable is still on screen. Removing first makes the live instance the key.
+        //
+        // It NARROWS the window rather than closing it, and cannot close it: two equal drawables can
+        // only ever have one entry between them. The rule that actually holds is on the other side --
+        // a drawable with value equality must be able to write itself. @see TextureProperty#write
+        SOURCES.remove(drawable);
+        SOURCES.put(drawable, source);
+    }
+
+    /** The CSS that produced {@code drawable}, or null when nothing parsed it. @see #SOURCES */
+    @Nullable
+    public static String sourceOf(CgUiDrawable drawable) {
+        return SOURCES.get(drawable);
     }
 
     /** Package-private so the keyword handling can be tested without a GL context, as
@@ -74,44 +120,20 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
         String value = rawValue.trim();
         if (value.isEmpty()) return null;
 
-        String lower = value.toLowerCase(Locale.ROOT);
         // `none` is CSS's own spelling for "no layer here"; `empty` is accepted because LDLib2's LSS
         // uses that word and the two dialects otherwise read the same. Both resolve to the shared
         // EMPTY drawable rather than to null — null is how this method reports a PARSE FAILURE, so
         // returning it for a deliberate "nothing" would be indistinguishable from a typo. A fully
         // transparent colour (`#00000000`) also works but still allocates and draws a quad.
+        String lower = value.toLowerCase(Locale.ROOT);
         if (lower.equals("none") || lower.equals("empty")) {
             return CgUiDrawable.EMPTY;
         }
-        if (value.startsWith("#") || lower.startsWith("rgb(") || lower.startsWith("rgba(")) {
-            Integer color = ColorValue.parseColor(value);
-            return color == null ? null : new CgUiQuad(color);
-        }
-        if (lower.startsWith("image(") && value.endsWith(")")) {
-            return parseImage(value.substring("image(".length(), value.length() - 1));
-        }
-        if (lower.startsWith("sprite(") && value.endsWith(")")) {
-            return parseSprite(value.substring("sprite(".length(), value.length() - 1));
-        }
-        if (lower.startsWith("asset(") && value.endsWith(")")) {
-            return parseAsset(value.substring("asset(".length(), value.length() - 1));
-        }
-        if (lower.startsWith("shape(") && value.endsWith(")")) {
-            return parseShape(value.substring("shape(".length(), value.length() - 1));
-        }
-        if (lower.startsWith("icon(") && value.endsWith(")")) {
-            return parseIcon(value.substring("icon(".length(), value.length() - 1));
-        }
-        if (lower.startsWith("glass(") && value.endsWith(")")) {
-            return parseGlass(value.substring("glass(".length(), value.length() - 1));
-        }
-        if (lower.startsWith("linear-gradient(") && value.endsWith(")")) {
-            return parseLinearGradient(value.substring("linear-gradient(".length(), value.length() - 1));
-        }
-        if (lower.startsWith("grid(") && value.endsWith(")")) {
-            return parseGrid(value.substring("grid(".length(), value.length() - 1));
-        }
-        return null;
+        // EVERY OTHER FORM IS A REGISTERED KIND. This was a chain of nine `startsWith` branches, and the
+        // same nine were written out again wherever a copied drawable had to be filed by which function
+        // made it — so a tenth added here and not there rendered correctly and quietly stopped being
+        // recognised. @see DrawableKinds
+        return DrawableKinds.parse(value);
     }
 
     /**
@@ -132,7 +154,7 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
      * malformed gradient stop is. There is deliberately no default colour: a grid nobody can see is
      * indistinguishable from one that failed to parse.</p>
      */
-    private static @Nullable CgUiDrawable parseGrid(String args) {
+    static @Nullable CgUiDrawable parseGrid(String args) {
         List<String> parts = CssParsingUtil.splitTopLevelCommas(args);
         if (parts.size() < 2 || parts.size() > 3) return null;
 
@@ -172,7 +194,7 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
      * off the END of the stop rather than by splitting on whitespace, because an {@code rgba(...)} colour
      * may carry spaces of its own.</p>
      */
-    private static @Nullable CgUiDrawable parseLinearGradient(String args) {
+    static @Nullable CgUiDrawable parseLinearGradient(String args) {
         List<String> parts = CssParsingUtil.splitTopLevelCommas(args);
         if (parts.isEmpty()) return null;
         float angle = 180f;   // CSS's default: to bottom
@@ -251,7 +273,7 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
      * rather than take the cascade with it. A wholly unparseable argument list still returns null, which
      * is a parse failure: {@code glass(nonsense)} is a typo, and {@code none} already spells "nothing".</p>
      */
-    private static @Nullable CgUiDrawable parseGlass(String args) {
+    static @Nullable CgUiDrawable parseGlass(String args) {
         CgUiGlass glass = new CgUiGlass();
         List<String> parts = CssParsingUtil.splitTopLevelCommas(args);
         if (parts.isEmpty()) return glass;
@@ -315,7 +337,7 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
      * typo'd icon name and a deliberately absent one are different statements, and {@code none} already
      * spells the second.</p>
      */
-    private static @Nullable CgUiDrawable parseIcon(String args) {
+    static @Nullable CgUiDrawable parseIcon(String args) {
         List<String> parts = CssParsingUtil.splitTopLevelCommas(args);
         if (parts.isEmpty()) return null;
         String name = unquote(parts.get(0).trim());
@@ -349,7 +371,7 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
         return icon;
     }
 
-    private static @Nullable CgUiDrawable parseShape(String args) {
+    static @Nullable CgUiDrawable parseShape(String args) {
         List<String> parts = CssParsingUtil.splitTopLevelCommas(args);
         if (parts.size() != 1) return null;
         String name = unquote(parts.get(0).trim());
@@ -357,7 +379,7 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
         return kind == null ? null : new CgUiShape(kind);
     }
 
-    private static @Nullable CgUiDrawable parseImage(String args) {
+    static @Nullable CgUiDrawable parseImage(String args) {
         List<String> parts = CssParsingUtil.splitTopLevelCommas(args);
         if (parts.isEmpty()) return null;
         String path = unquote(parts.get(0).trim());
@@ -386,7 +408,7 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
         return sprite;
     }
 
-    private static @Nullable CgUiDrawable parseSprite(String args) {
+    static @Nullable CgUiDrawable parseSprite(String args) {
         List<String> parts = CssParsingUtil.splitTopLevelCommas(args);
         if (parts.size() < 3) return null;
         String path = unquote(parts.get(0).trim());
@@ -431,7 +453,7 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
         return new CgUiRepeat[]{x, y};
     }
 
-    private static @Nullable CgUiDrawable parseAsset(String args) {
+    static @Nullable CgUiDrawable parseAsset(String args) {
         List<String> parts = CssParsingUtil.splitTopLevelCommas(args);
         if (parts.size() != 2) return null;
         String packPath = unquote(parts.get(0).trim());

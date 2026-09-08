@@ -2,6 +2,9 @@ package com.crystalgui.style.property.layout;
 
 import com.crystalgui.style.TaffyBridge;
 import com.crystalgui.style.property.StyleProperty;
+import com.crystalgui.style.property.layout.grid.GridTemplateValue;
+import dev.vfyjxf.taffy.style.GridPlacement;
+import dev.vfyjxf.taffy.style.LengthPercentage;
 import com.crystalgui.style.property.IValueInterpolator;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.general.floats.AutoFloatProperty;
@@ -98,7 +101,26 @@ public class LayoutProperties {
     public static final StyleProperty<LengthPercentageAuto> GAP_ROW = create("gap-row", LengthPercentageAuto.AUTO);
     public static final StyleProperty<LengthPercentageAuto> GAP_COLUMN = create("gap-column", LengthPercentageAuto.AUTO);
     public static final StyleProperty<LengthPercentageAuto> GAP_ALL = create("gap-all", LengthPercentageAuto.AUTO);
-    public static final StyleProperty<LPSize> GAP = create("gap", LPSize.ZERO);
+    /** Two lengths, column then row — the pair its parser splits on whitespace. */
+    public static final StyleProperty<LPSize> GAP = create("gap", LPSize.ZERO)
+            .setWriter(gap -> writeLengthPercentage(gap.size().width)
+                    + " " + writeLengthPercentage(gap.size().height));
+
+    /**
+     * A Taffy {@code LengthPercentage} as the CSS its parser reads — {@code 4px} or {@code 50%}.
+     *
+     * <p>Percentages are stored 0..1 here and written 0..100, which is the one place the two dialects
+     * differ and the one place a writer can silently lose a factor of a hundred.</p>
+     */
+    private static String writeLengthPercentage(LengthPercentage value) {
+        if (value.isPercent()) return trimFloat(value.getValue() * 100f) + "%";
+        return trimFloat(value.getValue()) + "px";
+    }
+
+    /** {@code 4} rather than {@code 4.0}, so a written value reads like one somebody typed. */
+    private static String trimFloat(float value) {
+        return value == Math.rint(value) ? String.valueOf((long) value) : String.valueOf(value);
+    }
 
     public static final StyleProperty<TaffyDimension> WIDTH = create("width", TaffyDimension.auto());
 
@@ -118,14 +140,44 @@ public class LayoutProperties {
     public static final StyleProperty<AlignItems> JUSTIFY_SELF = StylePropertyRegistry.create("justify-self", AlignItems.class, AlignItems.AUTO, DEFAULT_ALIGN_ITEMS);//.setIconProvider(v -> IGuiTexture.EMPTY);
     public static final StyleProperty<AlignContent> JUSTIFY_CONTENT = StylePropertyRegistry.create("justify-content", AlignContent.class, AlignContent.FLEX_START);//.setIconProvider(v -> IGuiTexture.EMPTY);
 
-    public static final StyleProperty<GridTemplate> GRID_TEMPLATE_ROWS = create("grid-template-rows", GridTemplate.EMPTY);
-    public static final StyleProperty<GridTemplate> GRID_TEMPLATE_COLUMNS = create("grid-template-columns", GridTemplate.EMPTY);
+    public static final StyleProperty<GridTemplate> GRID_TEMPLATE_ROWS =
+            create("grid-template-rows", GridTemplate.EMPTY).setWriter(GridTemplateValue::write);
+    public static final StyleProperty<GridTemplate> GRID_TEMPLATE_COLUMNS =
+            create("grid-template-columns", GridTemplate.EMPTY).setWriter(GridTemplateValue::write);
     public static final StyleProperty<GridTemplateAreas> GRID_TEMPLATE_AREAS = create("grid-template-areas", GridTemplateAreas.EMPTY);
     public static final StyleProperty<GridAuto> GRID_AUTO_ROWS = create("grid-auto-rows", GridAuto.EMPTY);
     public static final StyleProperty<GridAuto> GRID_AUTO_COLUMNS = create("grid-auto-columns", GridAuto.EMPTY);
     public static final StyleProperty<GridAutoFlow> GRID_AUTO_FLOW = StylePropertyRegistry.create("grid-auto-flow", GridAutoFlow.class, GridAutoFlow.ROW);
-    public static final StyleProperty<Grid> GRID_ROW = create("grid-row", Grid.EMPTY);
-    public static final StyleProperty<Grid> GRID_COLUMN = create("grid-column", Grid.EMPTY);
+    public static final StyleProperty<Grid> GRID_ROW = create("grid-row", Grid.EMPTY)
+            .setWriter(LayoutProperties::writeGrid);
+    public static final StyleProperty<Grid> GRID_COLUMN = create("grid-column", Grid.EMPTY)
+            .setWriter(LayoutProperties::writeGrid);
+
+    /**
+     * {@code start / end} — the shorthand its parser reads.
+     *
+     * <p>Always both halves, even when the end is {@code auto}. A single value parses as "start, end
+     * auto", which is the same VALUE, but writing the pair keeps a written declaration readable as the
+     * two-sided thing a grid placement is.</p>
+     */
+    private static String writeGrid(Grid grid) {
+        return writePlacement(grid.grid().start) + " / " + writePlacement(grid.grid().end);
+    }
+
+    /** One side of a placement: {@code auto}, a line number, {@code span n}, or a named line. */
+    private static String writePlacement(GridPlacement placement) {
+        return switch (placement.getType()) {
+            case AUTO -> "auto";
+            case LINE -> String.valueOf(placement.getValue());
+            case SPAN -> "span " + placement.getValue();
+            case NAMED_LINE -> placement.getNthIndex() == 1
+                    ? placement.getLineName()
+                    : placement.getLineName() + " " + placement.getNthIndex();
+            case NAMED_SPAN -> placement.getNthIndex() == 1
+                    ? "span " + placement.getLineName()
+                    : "span " + placement.getLineName() + " " + placement.getNthIndex();
+        };
+    }
 
     static {
         init();
