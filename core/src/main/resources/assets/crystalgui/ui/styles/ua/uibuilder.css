@@ -84,11 +84,20 @@ hoverhighlight::part(tag) {
  *
  * Toolbar over plane. The plane takes the fill idiom (`height: 0` + `flex-grow: 1`) and the toolbar its
  * own height, which is this codebase's rule for "one fixed row and one that takes the rest" -- a
- * percentage on the plane would measure against a parent that is still distributing. */
+ * percentage on the plane would measure against a parent that is still distributing.
+ *
+ * IT PAINTS ITS OWN SURFACE, and the rounded corner is why. A rounded view masks its CHILDREN and
+ * composites its own background underneath unmasked — so where the view paints nothing, the pixels in the
+ * corner are a child's arriving through the mask's edge, a softer curve than the SDF fill a background is
+ * drawn with. The text editor never showed this because it paints its paper itself.
+ *
+ * The same token `buildersurface` uses, so the two cannot drift, and nothing is visible twice: the child
+ * covers this everywhere except the corner it is being cut away from. */
 builderpane {
     width: 100%;
     height: 100%;
     flex-direction: column;
+    background-color: var(--builder-surface-bg, #1B1B1F);
 }
 
 /* A PANEL'S TAB STRIP, and it takes its numbers from the same tokens rather than being talked into
