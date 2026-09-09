@@ -130,6 +130,24 @@ public final class LibrarySources implements ContentProvider {
      * <p>Asked of the archive rather than of the content, so it costs one cached lookup and does not
      * depend on having already read the file.</p>
      */
+    /**
+     * Always a {@code .java} name, whether the text was decompiled or read from an attached source jar.
+     *
+     * <p>{@link #displayName} ends in {@code .class} when the class had to be DECOMPILED, which is a
+     * fact about provenance and is the right thing on a tab. It is the wrong thing to pick a LANGUAGE
+     * with: no {@code LanguageRegistry} entry claims {@code class}, so a decompiled buffer got no
+     * tokenizer and no services -- no completion, no Ctrl+B -- while a class with source attached got
+     * both, from the same provider, one tab over. The content is Java in both cases.</p>
+     */
+    @Override
+    public String languageFileName(Resource resource) {
+        String shown = displayName(resource);
+        if (shown == null) return resource == null ? null : resource.name();
+        return shown.endsWith(".class")
+                ? shown.substring(0, shown.length() - ".class".length()) + ".java"
+                : shown;
+    }
+
     @Override
     public String displayName(Resource resource) {
         if (resource == null) return null;
