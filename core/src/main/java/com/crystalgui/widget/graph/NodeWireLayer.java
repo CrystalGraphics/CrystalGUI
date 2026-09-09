@@ -305,7 +305,6 @@ public class NodeWireLayer extends UIElement {
                 // Exactly double, so hover reads as "the same wire, thicker" — Unity's own pair is a
                 // hairline and twice a hairline.
                 .width(view.getWireWidth() * (emphasised ? 2f : 1f))
-                .feather(view.getWireFeather())
                 .colors(color0, color1)
                 .submit();
     }
