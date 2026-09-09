@@ -31,6 +31,19 @@ public class CommonProxy {
     }
 
     /**
+     * Begins acquiring the runtime mapping. <b>A dedicated server declines</b>, and that is the point
+     * of it being a proxy method.
+     *
+     * <p>The fetch is handed to {@code ScriptService1710.runInBackground}, whose job only
+     * {@code UIDocument.frame} drains -- so a server that started one would wait for a mapping for
+     * ever with nothing to say why. That defect is why nothing drove the mapping from
+     * {@code scriptInit} at all; this puts it back on the side that has frames.
+     * @see com.crystalgui.language.map.PlatformMappings#start</p>
+     */
+    public void startMappings() {
+    }
+
+    /**
      * FML init. Registers the network channel, which both sides need.
      *
      * <p><b>init and not preInit, following CustomNPC+</b>, which builds its {@code PacketHandler} at

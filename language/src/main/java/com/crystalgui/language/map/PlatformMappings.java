@@ -2,6 +2,7 @@ package com.crystalgui.language.map;
 
 import com.crystalgui.language.platform.MappingCoordinates;
 import com.crystalgui.language.platform.NamespaceProbe;
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.async.Progress;
 import com.crystalgui.language.platform.ScriptService;
 import com.crystalgraphics.platform.CgPlatform;
@@ -64,7 +65,7 @@ public final class PlatformMappings {
      * hold: this reference is replaced once, when a background fetch completes.</p>
      */
     public static MappingSet current() {
-        if (!started) startLazily();
+        if (!started) startLazily(true);
         return current;
     }
 
@@ -88,26 +89,90 @@ public final class PlatformMappings {
     }
 
     /**
+     * <b>Begins acquisition now</b>, so the first analysis does not have to trigger it.
+     *
+     * <pre>{@code
+     * ScriptService1201.install();   // the service first -- this reads it
+     * PlatformMappings.start();      // from a loader's CLIENT bootstrap
+     * }</pre>
+     *
+     * <p>Without this the first caller of {@link #current()} is the first analysis, which therefore
+     * <b>cannot win</b>: it starts the download and reads the identity in the same breath, and its
+     * diagnostics are computed against runtime names. Services are attached once per document and
+     * nothing re-runs an analysis when a mapping lands, so those diagnostics stand until the file is
+     * closed and reopened — "mappings work on the second launch and never on the first", which
+     * {@code LibrarySources.forgetIfMappingChanged} describes in the same words about its own cache.</p>
+     *
+     * <p>Called at mod init this is many seconds of world-loading ahead of any editor, which is what
+     * makes the race practically decided rather than merely likelier. It is <b>not</b> a guarantee: a
+     * slow enough first fetch still lands after an analysis, and that analysis is still stale.</p>
+     *
+     * <p>Idempotent and cheap to call from anywhere — the claim makes it one-shot per process.</p>
+     */
+    public static void start() {
+        if (!started) startLazily(false);
+    }
+
+    /**
      * Probe, apply what is cached, and hand a download to the host — so a first {@code current()} never
      * blocks its caller.
      *
      * <p>One-shot: there is exactly one artifact to acquire per process, and {@link #claim()} is what
      * makes that true however many threads ask at once.</p>
      */
-    private static void startLazily() {
+    /**
+     * @param viaHost whether the fetch goes to {@link ScriptService#runInBackground} or to a plain
+     *                thread. TRUE for {@link #current()}, whose caller is a live editor: the host puts
+     *                it in the status bar and makes it cancellable. FALSE for {@link #start()}, and not
+     *                merely because there is no viewer at mod init -- a host may implement
+     *                {@code runInBackground} with a queue only a FRAME drains, and on 1.7.10 it does.
+     *                Submitted before any {@code UIDocument} exists, such a job is never started at
+     *                all: no download, no report, and {@code current()} answering identity until
+     *                something opens a window. @see com.crystalgui.core.async.JobScheduler#drain
+     */
+    private static void startLazily(boolean viaHost) {
         if (!claim()) return;
-        // THE DECISION INLINE, THE FETCH ON A THREAD. A mapping already cached is applied before this
-        // returns, so the caller's very next current() sees it -- which is the difference between the
-        // editor opening with readable names and opening with runtime ones and correcting itself.
-        ScriptService needsFetch = decide();
+        // NOTHING MAY LEAVE HERE UNSAID. current() is called from inside `catch (Exception) -> null`
+        // misses -- PlatformTypeBytes reads a type that way -- so a throw out of the decision is
+        // indistinguishable from "that type is not here", and the claim is already taken: every later
+        // current() answers IDENTITY with nothing anywhere saying why. That is not hypothetical; it is
+        // how a Fabric client resolved no Minecraft class at all while its mappings sat on disk.
+        ScriptService needsFetch;
+        try {
+            // THE DECISION INLINE, THE FETCH ON A THREAD. A mapping already cached is applied before
+            // this returns, so the caller's very next current() sees it -- which is the difference
+            // between the editor opening with readable names and opening with runtime ones and
+            // correcting itself.
+            needsFetch = decide();
+        } catch (RuntimeException | LinkageError failed) {
+            CrystalGuiCore.LOGGER.warn("[cgui] mappings: the decision failed; runtime names will be"
+                    + " shown as they are", failed);
+            return;
+        }
         if (needsFetch == null) return;
 
         // THE HOST SAYS HOW, THIS SAYS WHEN. A platform states the what, the where and the how; deciding
         // that a fetch is owed is this module's job and used to be copied into every loader. The default
         // is a daemon thread, so a dedicated server is correct with no code at all, and a host with a UI
         // overrides it to get a progress bar. @see ScriptService#runInBackground
-        needsFetch.runInBackground("Downloading Minecraft mappings",
-                (progress, cancelled) -> fetch(needsFetch, progress, cancelled));
+        ScriptService.BackgroundWork work = (progress, cancelled) -> {
+            // AND NOTHING MAY LEAVE THE FETCH EITHER. A host runs this on a thread of its own choosing
+            // and a job that dies reports where the job went, not here.
+            try {
+                fetch(needsFetch, progress, cancelled);
+            } catch (RuntimeException | LinkageError failed) {
+                CrystalGuiCore.LOGGER.warn("[cgui] mappings: the fetch failed; runtime names will be"
+                        + " shown as they are", failed);
+            }
+        };
+        if (viaHost) {
+            needsFetch.runInBackground("Downloading Minecraft mappings", work);
+            return;
+        }
+        Thread thread = new Thread(
+                () -> work.run(Progress.NONE, () -> false), "crystalgui-mappings");
+        thread.setDaemon(true);
+        thread.start();
     }
 
     /**
@@ -143,9 +208,9 @@ public final class PlatformMappings {
             // the branch a THREADING or CLASSLOADER fault arrives through: a worker that cannot see a
             // service the client thread provided, or a second copy of this class defined inside the engine
             // band, both present exactly as "no platform" and neither leaves any other trace.
-            System.err.println("[crystalgui] mappings: NOT_CONFIGURED — no script platform is registered"
-                    + " (asked from " + Thread.currentThread().getName() + ")"
-                    + "; runtime names will be shown as they are");
+            CrystalGuiCore.LOGGER.warn("[cgui] mappings: NOT_CONFIGURED -- no script platform is"
+                    + " registered (asked from {}); runtime names will be shown as they are",
+                    Thread.currentThread().getName());
             return null;
         }
 
@@ -155,22 +220,22 @@ public final class PlatformMappings {
             // Nothing to decide, or nothing to fetch. Either way the runtime is taken as it is -- and it
             // is SAID, because "this platform declares no mappings" and "the download failed" produce the
             // same names on screen and are entirely different things to whoever is looking at them.
-            System.err.println("[crystalgui] mappings: NOT_CONFIGURED — "
-                    + (probe.isNone() ? "no namespace probe" : "no mapping coordinates")
-                    + " on " + platform.getClass().getName()
-                    + "; runtime names will be shown as they are");
+            CrystalGuiCore.LOGGER.info("[cgui] mappings: NOT_CONFIGURED -- {} on {}; runtime names"
+                    + " will be shown as they are",
+                    probe.isNone() ? "no namespace probe" : "no mapping coordinates",
+                    platform.getClass().getName());
             return null;
         }
 
         Boolean readable = isReadable(platform, probe);
         if (readable == null) {
-            System.err.println("[crystalgui] could not read " + probe.internalName()
-                    + " to tell which namespace this runtime speaks; assuming it is already readable");
+            CrystalGuiCore.LOGGER.warn("[cgui] could not read {} to tell which namespace this runtime"
+                    + " speaks; assuming it is already readable", probe.internalName());
             return null;
         }
         if (readable) {
-            System.err.println("[crystalgui] the runtime already speaks readable names ("
-                    + probe.internalName() + " declares " + probe.readableMember() + ")");
+            CrystalGuiCore.LOGGER.info("[cgui] the runtime already speaks readable names ({} declares"
+                    + " {})", probe.internalName(), probe.readableMember());
             return null;
         }
 
@@ -204,7 +269,15 @@ public final class PlatformMappings {
     private static void apply(MappingCache.Result result) {
         // SAID ONCE, WHICHEVER IT IS. "No mappings configured" and "the download failed" produce the same
         // thing on screen -- runtime names -- and are entirely different to somebody offline on purpose.
-        System.err.println("[crystalgui] mappings: " + result.state() + " — " + result.detail());
+        //
+        // THE LOGGER, not stderr: a launcher keeps the console half in memory and writes only the log
+        // file, so every line this class printed was unreadable on the one build that needed it -- an
+        // installed client.
+        if (result.state() == MappingCache.State.UNAVAILABLE) {
+            CrystalGuiCore.LOGGER.warn("[cgui] mappings: {} -- {}", result.state(), result.detail());
+        } else {
+            CrystalGuiCore.LOGGER.info("[cgui] mappings: {} -- {}", result.state(), result.detail());
+        }
         if (!result.mappings().isIdentity()) current = result.mappings();
     }
 

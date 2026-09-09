@@ -189,6 +189,16 @@ dependencies {
     // a working backend beside a dead service with nothing to report it. @see CgService
     compileOnly("com.crystalgraphics:platform:1.0.0")
 
+    // LOG4J, AT CORE'S PIN AND FOR CORE'S REASON. `CrystalGuiCore.LOGGER` is typed
+    // org.apache.logging.log4j.Logger, so naming it needs the API here even though the field is core's.
+    //
+    // 2.0-beta9 because this module ships on mc1710 too, and that is what Minecraft 1.7.10 supplies:
+    // the parameterised `warn(String, Object)` overloads arrived in 2.6, overload selection happens at
+    // COMPILE time, and building against a modern api emits calls no 1.7.10 runtime has. The failure is
+    // a NoSuchMethodError on the branch that logs, not a build break. @see core/build.gradle.kts
+    compileOnly("org.apache.logging.log4j:log4j-api:${property("dep.log4j")}")
+    testImplementation("org.apache.logging.log4j:log4j-core:2.26.1")
+
     // Checked in under lib/ rather than resolved. The official `jtreesitter` needs JDK 23+ and the
     // Foreign Function & Memory API, which a Java 8 bytecode target cannot use, so these come from a fork
     // of `tree-sitter-ng` that is JNI-based and compiles to Java 8. They used to be read from a local
