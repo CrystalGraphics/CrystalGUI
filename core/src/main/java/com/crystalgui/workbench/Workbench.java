@@ -1645,7 +1645,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      */
     void bindStatusToActiveTab() {
         syncActiveTab();
-        statusBar.breadcrumbs().setCrumbs(saveActions.trailFor(activeResource()));
+        refreshBreadcrumbs();
 
         Document active = activeDocument();
         // THE VIEW IS PART OF THE QUESTION, not just the document. @see #activeStatusView
@@ -1672,6 +1672,19 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * there is no active editor, and answering null there would blank every consumer each time somebody
      * clicked the file tree.</p>
      */
+    /**
+     * The trail for whatever tab is in front, re-read.
+     *
+     * <p>Its own method because it is asked from two places for two different reasons: when the active
+     * tab changes, and when the project index fills. The leaf crumb draws what the file DECLARES, and
+     * that answer arrives after the trail does -- the same lateness a tab's icon and a tree row's icon
+     * both have, and all three are re-read from the one announcement.
+     * @see com.crystalgui.workbench.explorer.ProjectSourcesIndex#announceProjectSourcesMoved</p>
+     */
+    public void refreshBreadcrumbs() {
+        statusBar.breadcrumbs().setCrumbs(saveActions.trailFor(activeResource()));
+    }
+
     private void syncActiveTab() {
         Resource shown = activeResource();
         if (shown == null) return;

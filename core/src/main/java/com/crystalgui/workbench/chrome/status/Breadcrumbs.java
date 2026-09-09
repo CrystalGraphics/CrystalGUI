@@ -3,6 +3,7 @@ package com.crystalgui.workbench.chrome.status;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.render.texture.CgUiDrawable;
+import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.widget.display.SymbolIcon;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.UIElement;
@@ -65,13 +66,30 @@ public class Breadcrumbs extends UIElement {
      * {@code code} glyph and still need their own colours, so colour is keyed to the class and never to
      * the icon. The same split {@code graph.css} makes for port types.</p>
      */
-    public record Crumb(String text, @Nullable CgUiDrawable icon, @Nullable String iconClass) {
+    /**
+     * @param symbol what this crumb's file DECLARES, when anything knows — a class, an enum, a record.
+     *               A declaration's glyph is not a file type: {@code Minecraft.java} is a class, and the
+     *               tab above it and the row in the tree both say so. It takes precedence over
+     *               {@code icon}, which stays the answer for a directory, a package, or a file that
+     *               declares nothing.
+     */
+    public record Crumb(String text, @Nullable CgUiDrawable icon, @Nullable String iconClass,
+                        @Nullable SymbolInfo symbol) {
+        public Crumb(String text, @Nullable CgUiDrawable icon, @Nullable String iconClass) {
+            this(text, icon, iconClass, null);
+        }
+
         public static Crumb of(String text) {
-            return new Crumb(text, null, null);
+            return new Crumb(text, null, null, null);
+        }
+
+        /** Whether anything at all goes in front of the text. */
+        boolean hasGlyph() {
+            return icon != null || symbol != null;
         }
     }
 
-    private final List<UIElement> icons = new ArrayList<>();
+    private final List<SymbolIcon> icons = new ArrayList<>();
     private final List<UIText> segments = new ArrayList<>();
     private final List<UIElement> separators = new ArrayList<>();
     private List<String> trail = new ArrayList<>();
@@ -94,9 +112,20 @@ public class Breadcrumbs extends UIElement {
             // BUILT HERE, never in setTrail. An element created during an update lands after that
             // frame's layout pass -- the trap the palette's key chips and the editor's gutter arrows each
             // shipped once. A slot that is sometimes empty is cheaper than one that is sometimes late.
-            UIElement icon = new UIElement();
+            // A SYMBOL ICON, for the reason ProjectFileTree's rows are: a `.java` crumb is a
+            // DECLARATION and the rest of the trail is not. The same widget the tree, the tab strip and
+            // the completion popup all build, so a class glyph cannot mean one thing in a tab and
+            // another in the status bar -- which is exactly what it did, a coffee cup here against the
+            // tab's class mark. A crumb with no symbol calls showNothing() and keeps the file-type
+            // overlay, so a directory or a package is unchanged.
+            SymbolIcon icon = new SymbolIcon();
             icon.addClass(ICON_CLASS);
             icon.setHitTest(false);      // the press belongs to the segment beside it
+            // EMPTY AND HIDDEN UNTIL A TRAIL ARRIVES. SymbolIcon's constructor ends in
+            // `show(null, ...)`, which draws the UNKNOWN glyph -- so an untouched bar would open with a
+            // row of question marks where the previous plain element drew nothing at all.
+            icon.showNothing();
+            icon.setDisplayed(false);
             icons.add(icon);
             append(icon);
 
@@ -134,7 +163,7 @@ public class Breadcrumbs extends UIElement {
 
         for (int i = 0; i < MAX_SEGMENTS; i++) {
             UIText segment = segments.get(i);
-            UIElement icon = icons.get(i);
+            SymbolIcon icon = icons.get(i);
             boolean visible = i < shown.size();
             segment.setDisplayed(visible);
             if (!visible) {
@@ -148,14 +177,23 @@ public class Breadcrumbs extends UIElement {
             if (i == shown.size() - 1) segment.addClass(CURRENT_CLASS);
             else segment.removeClass(CURRENT_CLASS);
 
-            icon.setDisplayed(crumb.icon() != null);
-            if (crumb.icon() != null) {
-                // DEFAULT origin, so `.filetype-java { overlay: icon(...) }` in a theme can still beat it
-                // -- written INLINE this would be the one part of a trail a stylesheet cannot touch. The
-                // same reasoning ProjectFileTree records for a row's icon.
-                StyleGroup.defaultPipeline(icon.getStyle().getGeneralGroup(),
-                        g -> g.overlay(crumb.icon()));
-            }
+            icon.setDisplayed(crumb.hasGlyph());
+            // WHAT IT DECLARES BEATS WHAT IT IS NAMED. `showNothing()` rather than `show(null, ...)`,
+            // which draws the UNKNOWN glyph as a background -- under a file-type overlay that is two
+            // pictures in one slot. @see SymbolIcon
+            if (crumb.symbol() != null) icon.show(crumb.symbol().kind(), crumb.symbol().modifiers());
+            else icon.showNothing();
+            // EMPTY, never null, and never skipped: null is how the cascade spells "nobody set this", so
+            // leaving it writes the PREVIOUS trail's icon into this slot. A kind paints `background` and
+            // a file type paints `overlay`, so a slot showing both would draw both.
+            //
+            // DEFAULT origin, so `.filetype-java { overlay: icon(...) }` in a theme can still beat it
+            // -- written INLINE this would be the one part of a trail a stylesheet cannot touch. The
+            // same reasoning ProjectFileTree records for a row's icon.
+            CgUiDrawable painted = crumb.symbol() != null || crumb.icon() == null
+                    ? CgUiDrawable.EMPTY : crumb.icon();
+            StyleGroup.defaultPipeline(icon.getStyle().getGeneralGroup(),
+                    g -> g.overlay(painted));
             // SWAPPED, never added: a slot is a different file every time the trail moves, so adding
             // `filetype-java` without removing `filetype-md` leaves both on the element and the cascade
             // resolves whichever happens to win -- which reads as a random colour.
