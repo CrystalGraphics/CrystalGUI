@@ -378,7 +378,7 @@ public final class BoxPainter {
                 ? new CgUiRect.Fill.Color(WHITE)
                 : ((CgUiRect) d).getFill();
         CgUiRect mask = shapedRect(radii, fill);
-        if (borderWidth > 0f) mask.setBorder(borderWidth, 0x00000000);
+        if (borderWidth > 0f) mask = mask.withBorder(borderWidth, 0x00000000);
         mask.draw(ctx, x, y, width, height);
     }
 
@@ -418,8 +418,8 @@ public final class BoxPainter {
         float insetTop = top + stroke, insetBottom = bottom + stroke, insetLeft = left + stroke, insetRight = right + stroke;
         Radii ring = radii.expand((insetLeft + insetRight) * 0.5f, (insetTop + insetBottom) * 0.5f);
         int color = style.get(StylePropertyRegistry.OUTLINE_COLOR);
-        CgUiRect rect = shapedRect(ring, new CgUiRect.Fill.Color(color & 0x00FFFFFF));
-        rect.setBorder(stroke, color);
+        CgUiRect rect = shapedRect(ring, new CgUiRect.Fill.Color(color & 0x00FFFFFF))
+                .withBorder(stroke, color);
         rect.draw(ctx, -insetLeft, -insetTop, width + insetLeft + insetRight, height + insetTop + insetBottom);
     }
 
@@ -494,16 +494,15 @@ public final class BoxPainter {
      */
     private static CgUiRect shapedRect(Radii radii, CgUiRect.Fill fill) {
         return new CgUiRect()
-                .setCornerRadius(radii.rxTL, radii.ryTL, radii.rxTR, radii.ryTR,
+                .withCornerRadius(radii.rxTL, radii.ryTL, radii.rxTR, radii.ryTR,
                         radii.rxBR, radii.ryBR, radii.rxBL, radii.ryBL)
-                .setFill(fill);
+                .withFill(fill);
     }
 
     private static CgUiRect shapedRect(Radii radii, float borderWidth, int borderColor, int borderTop,
                                        int borderBottom, CgUiRect.Fill fill) {
         CgUiRect rect = shapedRect(radii, fill);
-        if (borderWidth > 0f) rect.setBorder(borderWidth, borderColor, borderTop, borderBottom);
-        return rect;
+        return borderWidth > 0f ? rect.withBorder(borderWidth, borderColor, borderTop, borderBottom) : rect;
     }
 
     /** Whether the rounded wrap can express this background: only a rect has a fill to re-shape. */

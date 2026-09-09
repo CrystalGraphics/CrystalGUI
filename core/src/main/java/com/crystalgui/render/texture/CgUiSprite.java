@@ -315,7 +315,7 @@ public final class CgUiSprite {
      * <pre>element.generalStyle(s -&gt; s.background(sprite.toRect()));</pre>
      */
     public CgUiRect toRect() {
-        return new CgUiRect().setFillSprite(this);
+        return new CgUiRect().withFillSprite(this);
     }
 
     /** The tint baked into the sprite itself, multiplied with the ambient one at draw time. */

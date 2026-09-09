@@ -194,11 +194,11 @@ public final class CanvasRects {
     public static void outline(CgUiPaintContext ctx, @Nullable float[] rect, float thickness, int argb) {
         float[] ring = outlineRing(rect, thickness);
         if (ring == null) return;
-        CgUiRect stroke = new CgUiRect();
         // A transparent interior carrying the stroke's rgb, so the shader's edge-to-fill mix has no dark
         // fringe to bleed. @see BoxPainter#paintRounded, which does the same for the same reason.
-        stroke.setFillColor(argb & 0x00FFFFFF);
-        stroke.setBorder(thickness, argb);
+        CgUiRect stroke = new CgUiRect()
+                .withFillColor(argb & 0x00FFFFFF)
+                .withBorder(thickness, argb);
         stroke.draw(ctx, ring[0], ring[1], ring[2], ring[3]);
     }
 

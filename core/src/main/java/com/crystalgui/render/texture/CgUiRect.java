@@ -14,10 +14,10 @@ import java.util.Objects;
  *
  * <pre>
  * CgUiRect.ofColor(0xFF3574F0)                       // a flat fill
- * new CgUiRect().setFillSprite(sprite)               // a 9-slice
- * new CgUiRect().setFillColor(argb)
- *               .setCornerRadius(6f, 6f)
- *               .setBorder(1f, 0xFF5B8DFF)           // rounded, stroked
+ * new CgUiRect().withFillSprite(sprite)               // a 9-slice
+ * new CgUiRect().withFillColor(argb)
+ *               .withCornerRadius(6f, 6f)
+ *               .withBorder(1f, 0xFF5B8DFF)          // rounded, stroked
  * </pre>
  *
  * <p>Corner radii are independent per corner and per axis (rx/ry, TL/TR/BR/BL, CSS
@@ -41,8 +41,10 @@ import java.util.Objects;
  * A colour fill compares by value; a texture or sprite fill by identity, which is what a shared
  * atlas sprite wants.</p>
  *
- * <p><b>So do not mutate a rect the cascade is holding.</b> The setters are for building one;
- * {@code BoxPainter} builds its own rather than pushing radii into the background it was handed.</p>
+ * <p><b>IMMUTABLE, which is what makes that safe.</b> Every configuration method returns a new rect,
+ * so a background the cascade is holding cannot be reshaped by whoever paints it — {@code BoxPainter}
+ * builds its own from the element's radii and the background's fill. A shared value that could be
+ * mutated is a value in name only, and this one is shared by every element a rule matches.</p>
  */
 public final class CgUiRect implements CgUiDrawable {
 
@@ -76,45 +78,61 @@ public final class CgUiRect implements CgUiDrawable {
      */
     private static final CgMaterial MATERIAL = CgMaterial.load("crystalgui:shaders/gui_rect.shader");
 
-    private float rxTL = 0f, ryTL = 0f, rxTR = 0f, ryTR = 0f, rxBR = 0f, ryBR = 0f, rxBL = 0f, ryBL = 0f;
-    private float borderWidth = 0f;
+    private final float rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL;
+    private final float borderWidth;
     /** The LEFT and RIGHT edges always take this — there is no border-left/right-color to split them
-     * with — and it is what {@link #setBorder(float, int, int, int)}'s top/bottom pair falls back to
+     * with — and it is what {@link #withBorder(float, int, int, int)}'s top/bottom pair falls back to
      * being equal to when a caller doesn't want a split at all. */
-    private int borderColorArgb = 0xFF000000;
-    /** Equal to {@link #borderColorArgb} unless {@link #setBorder(float, int, int, int)} was used — the
-     * pair that lets the shader stroke the TOP and BOTTOM edges differently (Unity's inset text-field
-     * bevel). See {@code gui_rect.shader}'s {@code SPLIT_BORDER} feature. */
-    private int borderTopColorArgb = 0xFF000000;
-    private int borderBottomColorArgb = 0xFF000000;
-    private Fill fill = new Fill.Color(0xFFFFFFFF);
+    private final int borderColorArgb;
+    /** Equal to {@link #borderColorArgb} unless {@link #withBorder(float, int, int, int)} was used —
+     * the pair that lets the shader stroke the TOP and BOTTOM edges differently (Unity's inset
+     * text-field bevel). See {@code gui_rect.shader}'s {@code SPLIT_BORDER} feature. */
+    private final int borderTopColorArgb;
+    private final int borderBottomColorArgb;
+    private final Fill fill;
 
-    /** A flat fill, which is what a {@code #rrggbb} or {@code rgba()} background parses to. */
-    public static CgUiRect ofColor(int colorArgb) {
-        return new CgUiRect().setFillColor(colorArgb);
+    public CgUiRect() {
+        this(new Fill.Color(0xFFFFFFFF), 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
+                0f, 0xFF000000, 0xFF000000, 0xFF000000);
     }
 
-    public CgUiRect setCornerRadius(float rx, float ry) {
-        return setCornerRadius(rx, ry, rx, ry, rx, ry, rx, ry);
-    }
-
-    /** Independent elliptical radius per corner, CSS {@code border-radius} order (TL,TR,BR,BL),
-     * each an (rx,ry) pair. */
-    public CgUiRect setCornerRadius(float rxTL, float ryTL, float rxTR, float ryTR,
-                                    float rxBR, float ryBR, float rxBL, float ryBL) {
+    private CgUiRect(Fill fill, float rxTL, float ryTL, float rxTR, float ryTR,
+                     float rxBR, float ryBR, float rxBL, float ryBL,
+                     float borderWidth, int borderColorArgb, int borderTopColorArgb, int borderBottomColorArgb) {
+        this.fill = Objects.requireNonNull(fill, "fill");
         this.rxTL = rxTL; this.ryTL = ryTL;
         this.rxTR = rxTR; this.ryTR = ryTR;
         this.rxBR = rxBR; this.ryBR = ryBR;
         this.rxBL = rxBL; this.ryBL = ryBL;
-        return this;
+        this.borderWidth = borderWidth;
+        this.borderColorArgb = borderColorArgb;
+        this.borderTopColorArgb = borderTopColorArgb;
+        this.borderBottomColorArgb = borderBottomColorArgb;
     }
 
-    public CgUiRect setBorder(float width, int colorArgb) {
-        return setBorder(width, colorArgb, colorArgb, colorArgb);
+    /** A flat fill, which is what a {@code #rrggbb} or {@code rgba()} background parses to. */
+    public static CgUiRect ofColor(int colorArgb) {
+        return new CgUiRect().withFill(new Fill.Color(colorArgb));
+    }
+
+    public CgUiRect withCornerRadius(float rx, float ry) {
+        return withCornerRadius(rx, ry, rx, ry, rx, ry, rx, ry);
+    }
+
+    /** Independent elliptical radius per corner, CSS {@code border-radius} order (TL,TR,BR,BL),
+     * each an (rx,ry) pair. */
+    public CgUiRect withCornerRadius(float rxTL, float ryTL, float rxTR, float ryTR,
+                                     float rxBR, float ryBR, float rxBL, float ryBL) {
+        return new CgUiRect(fill, rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL,
+                borderWidth, borderColorArgb, borderTopColorArgb, borderBottomColorArgb);
+    }
+
+    public CgUiRect withBorder(float width, int colorArgb) {
+        return withBorder(width, colorArgb, colorArgb, colorArgb);
     }
 
     /**
-     * As {@link #setBorder(float, int)}, but the TOP and BOTTOM edges may stroke a different colour
+     * As {@link #withBorder(float, int)}, but the TOP and BOTTOM edges may stroke a different colour
      * from {@code uniformColorArgb} — Unity's inset text-field bevel: dark top, light bottom, same
      * colour as the fill on the left and right (there is no {@code border-left/right-color} to split
      * those with, and the shader has no notion of "left" or "right" edge to begin with).
@@ -124,36 +142,33 @@ public final class CgUiRect implements CgUiDrawable {
      * all three arguments is byte-for-byte the old uniform path, since the shader only engages
      * {@code SPLIT_BORDER} when top or bottom actually differs from it.</p>
      */
-    public CgUiRect setBorder(float width, int uniformColorArgb, int topColorArgb, int bottomColorArgb) {
-        this.borderWidth = width;
-        this.borderColorArgb = uniformColorArgb;
-        this.borderTopColorArgb = topColorArgb;
-        this.borderBottomColorArgb = bottomColorArgb;
-        return this;
+    public CgUiRect withBorder(float width, int uniformColorArgb, int topColorArgb, int bottomColorArgb) {
+        return new CgUiRect(fill, rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL,
+                width, uniformColorArgb, topColorArgb, bottomColorArgb);
     }
 
-    public CgUiRect setFill(Fill fill) {
-        this.fill = Objects.requireNonNull(fill, "fill");
-        return this;
+    public CgUiRect withFill(Fill fill) {
+        return new CgUiRect(fill, rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL,
+                borderWidth, borderColorArgb, borderTopColorArgb, borderBottomColorArgb);
     }
 
     public Fill getFill() {
         return fill;
     }
 
-    public CgUiRect setFillColor(int colorArgb) {
-        return setFill(new Fill.Color(colorArgb));
+    public CgUiRect withFillColor(int colorArgb) {
+        return withFill(new Fill.Color(colorArgb));
     }
 
-    public CgUiRect setFillTexture(CgTexture2D texture) {
-        return setFill(new Fill.Texture(texture));
+    public CgUiRect withFillTexture(CgTexture2D texture) {
+        return withFill(new Fill.Texture(texture));
     }
 
     /** Fills with a sprite: 9-sliced when it has a border, clipped and stroked by the same
      * corner-radius/border SDF as any other fill — the sprite's own alpha (including transparency
      * baked into its art, not just what {@code border-radius} carves out) is what renders. */
-    public CgUiRect setFillSprite(CgUiSprite sprite) {
-        return setFill(new Fill.Sprite(sprite));
+    public CgUiRect withFillSprite(CgUiSprite sprite) {
+        return withFill(new Fill.Sprite(sprite));
     }
 
     /** The fill's natural size, which only a sprite has — {@code CgUiLayerBox} reads it for
@@ -218,11 +233,12 @@ public final class CgUiRect implements CgUiDrawable {
             ctx.flush();
             return;
         }
-        // A BORDERLESS SPRITE UNDER A RADIUS takes the plain texture fill, sub-rect and all dropped —
-        // which is what the wrap did before this merge, so an atlas sprite with a border-radius has
-        // always sampled the whole sheet. Preserved rather than fixed here: it is a separate defect.
-        if (sprite.hasBorder()) drawShaped(ctx, x, y, width, height, tint, 0, null, sprite);
-        else drawShaped(ctx, x, y, width, height, tint, 0, resolved, null);
+        // EVERY SHAPED SPRITE GOES DOWN THE SLICED PATH, bordered or not. With zero borders the nine
+        // regions degenerate to one — inner UVs equal outer, so the centre stretches the sprite's own
+        // sub-rect — which is the point: the old wrap handed the raw texture to a plain texture fill and
+        // dropped the sub-rect, so an ATLAS sprite with a border-radius sampled the whole sheet. It also
+        // means a borderless sprite finally honours its repeat modes under a radius.
+        drawShaped(ctx, x, y, width, height, tint, 0, null, sprite);
     }
 
     /**
