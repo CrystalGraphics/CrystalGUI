@@ -584,8 +584,10 @@ public final class SvgDocument {
 
             SvgScene.Stroke stroke = node.stroke();
             if (stroke != null) {
+                // Both ends, because SVG has no per-end linecap: stroke.cap() is the one value
+                // `stroke-linecap` parsed, not the start/end pair CgVectorRenderer packs.
                 SvgGeometry.Segments segments = SvgGeometry.segmentsOf(
-                        node.contours(), stroke.cap() & 3, (stroke.cap() >> 2) & 3);
+                        node.contours(), stroke.cap(), stroke.cap());
                 if (segments.data().length > 0) {
                     SvgScene.Solid paint = (SvgScene.Solid) stroke.paint();
                     ops.add(new DrawOp(false, segments.data(), null, null, null, null, true,
@@ -831,7 +833,8 @@ public final class SvgDocument {
             // so an interior joint gets one round cap and the stroke's real ends keep what the file asked
             // for. See SvgGeometry.segmentsOf.
             int[] caps = op.segmentCaps();
-            int packed = caps == null ? op.cap() : caps[i / 4];
+            // op.cap() is one linecap, so it goes to both ends -- see segmentsOf above.
+            int packed = caps == null ? (op.cap() & 3) | ((op.cap() & 3) << 2) : caps[i / 4];
             ctx.curve()
                     // The feather is a logical distance the pose scales like a width; the ramp is
                     // stated in device pixels, so divide the scale out. It was zero here once, on the
