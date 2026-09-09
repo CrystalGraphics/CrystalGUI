@@ -295,7 +295,27 @@ public class Popover extends UIElement {
         hostFor(window, near).append(this);
     }
 
+    /**
+     * Whether there is anything worth putting on screen — asked once, at the moment of opening.
+     *
+     * <p>A popover holding arbitrary content always has something; {@link Menu} answers for its rows, so
+     * a context menu whose every contributor declined shows nothing rather than an empty box. Override
+     * this rather than each {@code show} method: both entry points route through one {@code open()}.</p>
+     *
+     * <pre>{@code
+     * @Override protected boolean hasContentToShow() { return getItemCount() > 0; }
+     * }</pre>
+     */
+    protected boolean hasContentToShow() {
+        return true;
+    }
+
     private Popover open() {
+        // AN EMPTY POPUP IS NOT A POPUP. Right-clicking a status bar with no entries registered opened a
+        // 120x10 rounded sliver -- the menu's own padding with nothing between it. Refused here rather
+        // than at each caller, because the callers that can produce one are every menu built from a
+        // registry, and each would need the same three lines.
+        if (!hasContentToShow()) return this;
         UIDocument window = document();
         if (window == null) throw new IllegalStateException(
                 "A Popover must be attached to a window before it can be shown"

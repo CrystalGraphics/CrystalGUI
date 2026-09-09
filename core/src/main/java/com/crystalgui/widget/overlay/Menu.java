@@ -456,6 +456,17 @@ public class Menu extends Popover {
         return itemList.size();
     }
 
+    /**
+     * A menu with no rows does not open.
+     *
+     * <p>Separators are not rows: a menu holding nothing but rules has nothing to choose and is the same
+     * empty box, which is why this counts {@link #getItemCount()} rather than children.</p>
+     */
+    @Override
+    protected boolean hasContentToShow() {
+        return getItemCount() > 0;
+    }
+
     /** The row container, for styling. */
     public UIElement itemsContainer() {
         return items;
