@@ -29,6 +29,8 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.text.HighlightRegistry;
 import com.crystalgui.text.TextRange;
+import dev.vfyjxf.taffy.style.BoxSizing;
+import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 import dev.vfyjxf.taffy.style.TaffyDimension;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -256,10 +258,19 @@ public final class UIText extends UIElement implements Measurable {
         // a `nowrap` run undoes the line above -- zero means "one line", and the clamp read zero as
         // "unconstrained, so use the max" and wrapped at it. The text is then supposed to overflow a
         // box the cap still holds at 80px, which is what the covering test asserts on both counts.
+        //
+        // AND IT IS A BORDER-BOX NUMBER, while a wrap width is content space. Under this engine's
+        // default `box-sizing` the cap holds the padding too, so a padded element wrapped at more room
+        // than it has: a 240px javadoc table cell with 6px either side measured two lines at 240 and
+        // was laid out in 228, where the text needs three -- the third drawn below the cell, over
+        // whatever follows the table. A known or available width needs no such correction: the engine
+        // passes those in content space already.
         TaffyDimension max = computedStyle().get(LayoutProperties.MAX_WIDTH);
-        if (wraps && max != null && max.isLength() && max.getValue() > 0f
-                && (width <= 0f || width > max.getValue())) {
-            width = max.getValue();
+        if (wraps && max != null && max.isLength() && max.getValue() > 0f) {
+            float cap = max.getValue()
+                    - (computedStyle().get(LayoutProperties.BOX_SIZING) == BoxSizing.BORDER_BOX
+                            ? horizontalEdges() : 0f);
+            if (cap > 0f && (width <= 0f || width > cap)) width = cap;
         }
 
         measuredAt.addLast(width);
@@ -268,6 +279,23 @@ public final class UIText extends UIElement implements Measurable {
         if (text.get().isEmpty()) return Size.ZERO;
         CgTextLayout laid = ensureShaped().layout(width, 0f);
         return new Size(laid.totalWidth(), laid.totalHeight());
+    }
+
+    /**
+     * The padding and border this element's own style puts either side of its content.
+     *
+     * <p>Lengths only: a percentage resolves against the containing block, which a measure has never
+     * seen, so one contributes nothing rather than a guess. {@code auto} is zero, as it is for padding
+     * everywhere.</p>
+     */
+    private float horizontalEdges() {
+        return edge(LayoutProperties.PADDING_LEFT) + edge(LayoutProperties.PADDING_RIGHT)
+                + edge(LayoutProperties.BORDER_LEFT) + edge(LayoutProperties.BORDER_RIGHT);
+    }
+
+    private float edge(StyleProperty<LengthPercentageAuto> property) {
+        LengthPercentageAuto value = computedStyle().get(property);
+        return value != null && value.isLength() ? Math.max(0f, value.getValue()) : 0f;
     }
 
     /** The last {@value #MEASURE_HISTORY} widths this node was measured at, oldest first. */
