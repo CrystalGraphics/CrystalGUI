@@ -19,7 +19,29 @@ import com.crystalgui.render.CgUiPaintContext;
  */
 public interface CgUiDrawable {
 
-    CgUiDrawable EMPTY = CgUiRect.ofColor(0);
+    /**
+     * No background at all — what {@code background: none} resolves to, and what every drawable
+     * property starts as.
+     *
+     * <p><b>Its own no-op rather than a transparent rect</b>, which is what it was while a flat fill
+     * had a class of its own. {@link CgUiRect} is mutable, and this instance is shared by every element
+     * in every document that says {@code none} — one setter call on it would repaint the whole UI.
+     * Nothing to configure is nothing to corrupt.</p>
+     *
+     * <p>It also stops a fully transparent quad being submitted for every element that has no
+     * background, which the colour-zero rect did.</p>
+     */
+    CgUiDrawable EMPTY = new CgUiDrawable() {
+        @Override
+        public void draw(CgUiPaintContext ctx, float mouseX, float mouseY,
+                         float x, float y, float width, float height) {
+        }
+
+        @Override
+        public String toString() {
+            return "none";
+        }
+    };
 
     /**
      * Paints this texture into the given rect, immediately.
