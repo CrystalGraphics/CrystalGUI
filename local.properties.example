@@ -1,0 +1,40 @@
+# Machine-local settings — the TEMPLATE, and this file is committed on purpose.
+#
+#   cp local.properties.example local.properties     # then edit; that copy is gitignored
+#
+# So the pair reads oddly on first sight and is meant to: `local.properties.example` is tracked and
+# carries no real paths, `local.properties` beside it is ignored and carries yours.
+#
+# Keys are FREE-FORM: every line in local.properties is loaded onto each project, and a build script
+# reads one by name. Nothing enumerates them, so this file EXPLAINS rather than declares — the build
+# neither reads it nor refuses a key missing from it. Write a new setting down here anyway; one nobody
+# documented is one the next person finds by reading a build script.
+#
+# Forward slashes on Windows too: a backslash is an escape in a .properties file, so `C:\Users\...`
+# silently loses its separators. Spaces in a path need no quoting.
+#
+# The examples below stay COMMENTED. An unedited copy then reads as unset and says so, where a live
+# placeholder would have Gradle create `C:/Users/you/...` and report a successful deploy into it.
+
+# ── PrismLauncher instances ─────────────────────────────────────────────────────────────────────
+#
+# The instance DIRECTORY — the one containing `instance.cfg` and `.minecraft`, not the `mods/` folder
+# inside it. `deployMods` appends `.minecraft/mods` itself, which keeps `logs/latest.log` and
+# `crash-reports/` reachable from the same setting when a failure has to be read back.
+#
+# One key per instance, because a target is a version AND a loader, and they fail differently: Forge
+# 1.20.1 runs SRG members, NeoForge 1.20.4 runs official names and needs no mapping at all, Fabric
+# runs intermediary, 1.7.10 is a different engine again.
+#
+# `deployMods` copies BOTH CrystalGraphics' and CrystalGUI's jars — CrystalGUI does not run without
+# CrystalGraphics beside it — and deletes the previous pair first, so a loader switch cannot leave a
+# jar built for the other one behind. Unset is fine: the jars go to that module's `build/ship/`.
+
+#prismLauncher1201ForgeDir=C:/Users/you/AppData/Roaming/PrismLauncher/instances/Crystal 1201 Forge
+#prismLauncher1204NeoForgeDir=C:/Users/you/AppData/Roaming/PrismLauncher/instances/Crystal 1204 NeoForge
+#prismLauncher1710Dir=C:/Users/you/AppData/Roaming/PrismLauncher/instances/Crystal 1710
+
+# Fabric has no deployMods yet: Loom remaps `tasks.jar`, which carries core and language but not
+# taffy, tree-sitter or the engine bands, so the remapped jar would install and then fail. The key is
+# here for when the shadow jar is routed through Loom's remap.
+#prismLauncher1201FabricDir=C:/Users/you/AppData/Roaming/PrismLauncher/instances/Crystal 1201 Fabric
