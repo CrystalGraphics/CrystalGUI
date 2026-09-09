@@ -13,6 +13,7 @@ import com.crystalgui.mc.client.CgUiHud1201;
 import com.crystalgui.mc.example.MachineExample1201;
 import com.crystalgui.mc.example.MachineExampleClient1201;
 import com.crystalgui.mc.client.CgUiKeybinds1201;
+import com.crystalgui.language.map.PlatformMappings;
 import com.crystalgui.mc.client.ScriptService1201;
 import com.crystalgui.mc.net.Connections1201;
 import com.crystalgui.mc.net.ServerSmoke1201;
@@ -61,6 +62,11 @@ public final class Lifecycle1201 {
         // Before the announcement: the engine source asks this service where it may write, so a band
         // bundled in the jar or fetched for this host has nowhere to go until it is registered.
         ScriptService1201.install();
+        // AND THE MAPPING IS STARTED HERE, not left to whoever asks first. The first asker is the first
+        // Java analysis, which then cannot win its own race -- it starts the download and reads the
+        // identity in the same breath, and nothing re-analyses when the mapping lands. Started at mod
+        // init it has the whole world load to arrive in. @see PlatformMappings#start
+        PlatformMappings.start();
         // THE POINTER IS THIS PLATFORM'S TO DRESS, and it belongs to the process rather than to any one
         // screen -- so a cursor resolves the same whether the desktop has ever been opened or not. GLFW
         // has the whole standard set, so this one is a mapping table; the engine resolves a keyword and asks.

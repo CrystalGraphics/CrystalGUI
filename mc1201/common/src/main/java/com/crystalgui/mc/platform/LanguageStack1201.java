@@ -2,7 +2,10 @@ package com.crystalgui.mc.platform;
 
 import java.util.List;
 
+import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.language.platform.ScriptService;
+import com.crystalgui.language.platform.ScriptServices;
 import com.crystalgui.text.syntax.LanguageRegistry;
 
 /**
@@ -17,14 +20,13 @@ import com.crystalgui.text.syntax.LanguageRegistry;
  * configurations are indistinguishable on screen, so the only thing separating "this deployment ships
  * no grammars" from "a contributor failed to load" is a line saying which one this is.</p>
  *
- * <p><b>A {@code ScriptService} IS registered, and it answers one question.</b>
- * {@link com.crystalgui.mc.client.ScriptService1201} exists for {@code cacheRoot()}, which is what lets
- * a band bundled in the jar be extracted and a missing one be fetched. Its other three members are
- * LaunchWrapper-shaped and 1.20.x has ModLauncher or Knot, neither of which exposes a transformed-bytes
- * call -- so it answers {@code ByteSource.NONE} for live bytes, and the engine reads that as no live
- * tier at all. There are no mappings. The Run panel still opens; {@code ScriptRuntimes.open} answers
- * empty, so nothing in it runs. The plan recommended registering no service at all, which would also
- * have cost the engine bands.</p>
+ * <p><b>The {@code ScriptService} answers every question, and scripts run.</b>
+ * {@link com.crystalgui.mc.client.ScriptService1201} gives the cache root a band is extracted into,
+ * live bytes off the loader that will actually run the class, and a mapping chosen by READING which
+ * namespace this runtime speaks rather than by naming a loader. This paragraph used to say the
+ * opposite -- cacheRoot only, no live bytes, no mappings, nothing in the Run panel runs -- on the
+ * belief that a transformed-bytes call needs LaunchWrapper. It does not: {@code MinecraftBytes1201}
+ * reads the mod class loader, which is namespace-correct here in a way 1.7.10's never was.</p>
  */
 public final class LanguageStack1201 {
 
@@ -52,9 +54,17 @@ public final class LanguageStack1201 {
                     + "Rhino; source files colour from core's built-in lexers and are not analysed. "
                     + "Contributors: {}", contributors);
         }
-        CrystalGuiCore.LOGGER.info("[cgui-1201] ScriptService answers cacheRoot only: 1.20.x has "
-                + "ModLauncher or Knot rather than LaunchWrapper, so there are no live bytes and no "
-                + "mappings. The Run panel opens and ScriptRuntimes.open answers empty, so nothing runs");
+        // THE TIER THIS DEPLOYMENT IS AT, measured rather than described. A wrong sentence here is
+        // worse than none: this one claimed for a release that scripts could not run, while they were
+        // running. @see PlatformMappings for the line that says which mapping was resolved.
+        ScriptService scripts = CgPlatform.get(ScriptServices.SERVICE);
+        if (scripts == ScriptService.NONE) {
+            CrystalGuiCore.LOGGER.warn("[cgui-1201] no ScriptService registered -- the Run panel opens "
+                    + "and ScriptRuntimes.open answers empty, so nothing in it runs");
+        } else {
+            CrystalGuiCore.LOGGER.info("[cgui-1201] scripts: {}, live bytes from {}", scripts,
+                    scripts.liveBytes().getClass().getName());
+        }
     }
 
     private static boolean isPresent(String className) {
