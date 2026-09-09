@@ -62,6 +62,19 @@ dependencies {
     // lexers and does not analyse, which is not the degradation somebody installing a code editor
     // wants. plan/platform-mc1201.md 4.3.
     "compileOnly"(project(":language"))
+    // AND ON THE RUNTIME CLASSPATH, like :core and :mc1201:common above. compileOnly alone put it on
+    // no run at all: `Lifecycle1201.bootstrapClient` calls `ScriptService1201.install()`, so the first
+    // dev client to reach it died with
+    //
+    //     NoClassDefFoundError: com/crystalgui/language/platform/ScriptService
+    //
+    // The shipped jar was never affected -- shadowJar bundles :language from `cgBundledProjects` -- so
+    // this is a dev-run-only hole, and the one loader that shows it first is whichever runs the seam.
+    // Same excludes as the two above, for the same NeoForge strict-version reason.
+    "runtimeOnly"(project(":language")) {
+        exclude(group = "org.apache.logging.log4j")
+        exclude(group = "com.google.code.gson")
+    }
 
     // Minecraft supplies log4j and gson. :core pins modern ones runtimeOnly for its tests and the
     // harness, and those reach a loader -- where NeoForge requires {strictly 2.19.0}/{strictly 2.10.1}
