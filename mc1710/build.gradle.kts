@@ -676,3 +676,21 @@ afterEvaluate {
             ?.forEach { from(zipTree(it)) }
     }
 }
+
+// -- Dropping a build into a real client ---------------------------------------------------------
+//
+// The SHIPPING jar here is the unclassified one -- GTNH's `reobfJar` output, at SRG names
+// (`field_71439_g`). The `-dev`, `-downgraded` and `-preshadow` jars beside it are stages of that
+// pipeline and none of them runs in a real client.
+//
+// 1.7.10 needs no mapping DOWNLOAD to be useful, unlike 1.20.x: MCP's data is what the readable
+// namespace is here, and `ScriptService1710` already states its coordinates.
+val crystalGraphicsBuild = gradle.includedBuild("CrystalGraphics")
+
+extra["cgDeployKey"] = "prismLauncher1710Dir"
+extra["cgDeployJars"] = listOf(
+        layout.buildDirectory.file("libs/crystalgui-$version.jar"),
+        File(crystalGraphicsBuild.projectDir, "mc1710/build/libs/crystalgraphics-1.0.0.jar"))
+extra["cgDeployDependsOn"] = listOf(
+        tasks.named("reobfJar"), crystalGraphicsBuild.task(":mc1710:reobfJar"))
+apply(from = rootProject.file("gradle/module_integration/deploy-mods.gradle.kts").toURI())

@@ -2,6 +2,7 @@ import java.security.MessageDigest
 import org.gradle.process.CommandLineArgumentProvider
 import java.io.File
 import xyz.wagyourtail.jvmdg.gradle.task.DowngradeJar
+import xyz.wagyourtail.jvmdg.gradle.task.ShadeJar
 
 plugins {
     id("cg-java17")
@@ -126,14 +127,110 @@ tasks.withType<JavaExec>().matching { it.name.startsWith("run") }.configureEach 
 // Ported from mc1710 with ONE difference: it defaults to band 17 where mc1710 defaults to 8, because
 // that is what this Minecraft runs. EngineBand reads java.specification.version, so a host selecting a
 // band this jar does not carry falls through to the manifest and fetches it.
+// -- What the shipped jar and the dev run BOTH need ----------------------------------------------
+//
+// These lived in `crystalgraphics-run.gradle.kts`, which is ModDevGradle's dev-run integration and is
+// applied by forge and neoforge only. `ShadowUtils` needs the merged services for the SHIPPED jar, so
+// fabric -- which uses Loom and applies no such script -- could not configure its own shadowJar at all:
+//
+//     Could not create task ':mc1201:fabric:shadowJar'
+//       > Task with name 'mergeDevServices' not found in project ':mc1201:fabric'
+//
+// A jar every loader builds cannot depend on a script two of them apply.
+
+fun cgMainSourceSet(target: Project) =
+    target.extensions.getByType(SourceSetContainer::class.java)["main"]
+
 /**
- * JOML and fastutil, for the SHIPPED jar.
+ * The projects bundled INTO the crystalgui mod, named once.
  *
- * Declared here by coordinate rather than resolved off :core or :taffy. Those declare JOML and Taffy
- * `compileOnly` so they reach nobody transitively -- a jar built from :core's runtimeClasspath carried
- * neither and said nothing -- and reading another project's compileClasspath at configuration time
- * reaches across the composite build and fails outright. The versions are the same properties those
- * projects read.
+ * Three places need this list -- the service merge, the dev run's resource staging and MOD_CLASSES --
+ * and it was written out in each. The loader project itself is NOT here: its resources carry
+ * META-INF/mods.toml and must stay their own root.
+ */
+val cgBundledProjects = listOf(project(":core"), project(":mc1201:common"), project(":language"))
+
+/** Where each of those keeps META-INF/services, for the merge and for its up-to-date check. */
+val cgServiceDirs: List<File> = cgBundledProjects.mapNotNull { owner ->
+    cgMainSourceSet(owner).output.resourcesDir?.let { File(it, "META-INF/services") }
+}
+
+/**
+ * ONE merged META-INF/services root, for both consumers.
+ *
+ * :core and :language each ship a WorkbenchExtension service file, and a copy keeps whichever arrived
+ * first while silently DROPPING the other -- with :core first the jar carried its eight extensions and
+ * lost the language Run panel. ShadowJar's own mergeServiceFiles does not help: these arrive through
+ * from(zipTree(...)) and the duplicate is dropped by the copy before any transformer sees it.
+ */
+val cgMergedServicesDir: File = layout.buildDirectory.dir("merged-services").get().asFile
+
+tasks.register("mergeDevServices") {
+    group = "build"
+    description = "Unions :core's and :language's META-INF/services so neither shadows the other."
+    // THE FILES IT READS, or it is compared on its outputs alone and stays UP-TO-DATE across an edit to
+    // one of them -- leaving a merged copy that describes the previous build.
+    inputs.files(cgServiceDirs).withPropertyName("serviceDirs").optional()
+    outputs.dir(cgMergedServicesDir)
+    // ORDERING, which declaring the inputs does not give: without it this can run before the resources
+    // are copied and union an empty directory.
+    dependsOn(cgBundledProjects.map { "${it.path}:processResources" })
+    doLast {
+        val sources = cgServiceDirs.filter { it.isDirectory }
+        val byService = linkedMapOf<String, MutableList<String>>()
+        for (directory in sources) {
+            for (file in directory.listFiles().orEmpty()) {
+                val providers = byService.getOrPut(file.name) { mutableListOf() }
+                file.readLines()
+                    .map { it.substringBefore('#').trim() }
+                    .filter { it.isNotEmpty() && it !in providers }
+                    .forEach { providers.add(it) }
+            }
+        }
+        val out = File(cgMergedServicesDir, "META-INF/services")
+        out.mkdirs()
+        out.listFiles().orEmpty().forEach { it.delete() }
+        byService.forEach { (service, providers) ->
+            File(out, service).writeText(buildString {
+                appendLine("# Merged for the jar and the dev run by mergeDevServices; see its declaration.")
+                providers.forEach { appendLine(it) }
+            })
+        }
+    }
+}
+
+// Read by crystalgraphics-run.gradle.kts, which stages the dev run's resources from the same list.
+extra["cgBundledProjects"] = cgBundledProjects
+extra["cgMergedServicesDir"] = cgMergedServicesDir
+
+/**
+ * Third-party libraries this jar carries -- EMPTY on 1.20.x, and that is the whole point.
+ *
+ * A library is bundled only where the platform does not already have it, and 1.20.x has both of the
+ * ones this engine needs, at the versions we pin: `fastutil 8.5.12` and `joml 1.10.8` are Minecraft's
+ * own libraries. Shipping them again is not merely redundant, it is FATAL -- two modules exporting
+ * `it.unimi.dsi.fastutil.ints` fails module resolution before a single mod class loads:
+ *
+ *     Modules it.unimi.dsi.fastutil and crystalgui export package it.unimi.dsi.fastutil.ints
+ *     to module minecraft
+ *
+ * A dev run cannot show it. There the classes come off a source-set directory rather than a jar, so
+ * nothing declares a second module and the layer resolves.
+ *
+ * The seam stays because the answer is per platform, not universal. 1.7.10 has neither library, and
+ * mc1710 accordingly ships both -- with the two treated DIFFERENTLY, which any new target must copy:
+ *
+ *  - **fastutil is CrystalGUI's and is RELOCATED** (`com.crystalgui.shadow.it.unimi.dsi.fastutil`).
+ *    Taffy needs it, nothing outside this jar sees those types, and a stock copy in another mod must
+ *    not win a classloader race.
+ *  - **JOML is CrystalGraphics' and is NOT relocated.** Its types cross the boundary between the two
+ *    mods -- `UINode` and `ElementStyle` hold `Matrix4f` FIELDS, and `Quad.pose` takes one -- so
+ *    relocating it in one jar and not the other makes two unrelated types with the same name.
+ *    CrystalGUI bundles no JOML at all on 1.7.10 and uses CrystalGraphics' copy.
+ *
+ * Declared by coordinate rather than resolved off :core or :taffy: those declare JOML and Taffy
+ * `compileOnly` so they reach nobody transitively, and reading another project's compileClasspath at
+ * configuration time reaches across the composite build and fails outright.
  */
 val shippedLibs: Configuration by configurations.creating { isCanBeConsumed = false; isCanBeResolved = true }
 
@@ -142,8 +239,7 @@ val engineBand11: Configuration by configurations.creating { isCanBeConsumed = f
 val engineBand17: Configuration by configurations.creating { isCanBeConsumed = false; isCanBeResolved = true }
 
 dependencies {
-    add("shippedLibs", "org.joml:joml:${rootProject.properties["jomlVersion"]}")
-    add("shippedLibs", "it.unimi.dsi:fastutil:${rootProject.properties["fastutil_version"]}")
+    // Nothing in shippedLibs: Minecraft 1.20.x provides joml and fastutil itself. @see shippedLibs
     add("engineBand8", project(path = ":language", configuration = "engineBand8Bundle"))
     add("engineBand11", project(path = ":language", configuration = "engineBand11Bundle"))
     add("engineBand17", project(path = ":language", configuration = "engineBand17Bundle"))
@@ -282,7 +378,35 @@ val downgradeShadowJar = tasks.register<DowngradeJar>("downgradeShadowJar") {
     archiveClassifier.set("java17")
 }
 
-tasks.named("assemble") { dependsOn(downgradeShadowJar) }
+/**
+ * The jvmdg RUNTIME the downgrade just made this jar depend on.
+ *
+ * Downgrading does not only lower the class-file version: where the source used a Java 21 construct
+ * with no Java 17 spelling, jvmdg rewrites the reference to a STUB of its own. A pattern-matching
+ * switch in `TaffyBridge` became a reference to
+ * `xyz.wagyourtail.jvmdg.j21.stub.java_base.J_L_MatchException`, and that class ships in jvmdg's API
+ * jar, which nothing was bundling:
+ *
+ *     NoClassDefFoundError: xyz/wagyourtail/jvmdg/j21/stub/java_base/J_L_MatchException
+ *         at com.crystalgui.style.TaffyBridge.<clinit>
+ *
+ * It fails at the first widget constructed, which on this loader is mod construction itself. A dev run
+ * never downgrades at all, so nothing there can show it. mc1710 has always shaded this; 1.20.x was
+ * downgrading and not shading, which is the half-measure that produces a jar that loads and then dies.
+ */
+val shadeDowngradedShadowJar = tasks.register<ShadeJar>("shadeDowngradedShadowJar") {
+    group = "build"
+    description = "Bundles jvmdg's runtime stubs that downgradeShadowJar's output now references."
+    inputFile.set(downgradeShadowJar.flatMap { it.archiveFile })
+    // NAMED, never defaulted: the default is the archive base name, and `crystalgui-mc1201-forge`
+    // has hyphens in it -- not a legal package identifier, so the module system rejects the jar and
+    // the launch dies before the early display with nothing in any log. Same prefix taffy relocates
+    // under, for one shaded namespace rather than two.
+    shadePath.set({ _: String -> "com/crystalgui/shadow" })
+    archiveClassifier.set("java17-shaded")
+}
+
+tasks.named("assemble") { dependsOn(shadeDowngradedShadowJar) }
 
 /**
  * A server run task's game directory.
