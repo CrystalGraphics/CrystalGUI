@@ -1,7 +1,6 @@
 package com.crystalgui.render.texture;
 
 import com.crystalgraphics.api.texture.CgTextureSpec;
-import com.crystalgraphics.gl.render.CgQuadRenderer;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.gl.texture.CgTextureManager;
 import com.crystalgui.render.texture.geometry.Position;
@@ -16,7 +15,7 @@ import com.crystalgui.render.CgUiPaintContext;
  * CrystalGraphics' own texture manager — repeated construction of this class with the
  * same path is cheap) and reused on every {@link #draw} call.</p>
  */
-public final class CgUiSprite implements CgUiDrawable {
+public final class CgUiSprite {
 
     // Set-up data.
     private CgTexture2D texture;
@@ -60,9 +59,6 @@ public final class CgUiSprite implements CgUiDrawable {
     private boolean uvDirty = true;
     private boolean hasBorder = false;
 
-    /** Whether {@link #getTexture()} resolved to the fallback checkerboard, recomputed each
-     * {@link #draw}. Consumed by {@link #submit}. */
-    private boolean missingTexture = false;
     private float u0, u1, u2, u3;
     private float v0, v1, v2, v3;
     private float borderSumX = 0f;
@@ -307,82 +303,54 @@ public final class CgUiSprite implements CgUiDrawable {
 
     /** The source sub-rect's pixel size, interpreted 1:1 as logical UI pixels — so
      * {@code overlay-size: none} on a 10x10 atlas sprite draws it at 10x10, matching how LDLib2
-     * sizes its own icon elements. Falls back to -1 while the sprite rect is still degenerate
-     * (no texture assigned yet), so fitting degrades to {@code fill} rather than to nothing. */
-    @Override
-    public float intrinsicWidth() {
+     * sizes its own icon elements. -1 while the sprite rect is still degenerate (no texture assigned
+     * yet), so fitting degrades to {@code fill} rather than to nothing.
+     *
+     * <p>What a caller actually reads is {@code CgUiRect}'s intrinsic size, which delegates here.</p> */
+    public float sourceWidth() {
         return spriteSize.width > 0 ? spriteSize.width : -1f;
     }
 
-    @Override
-    public float intrinsicHeight() {
+    /** @see #sourceWidth() */
+    public float sourceHeight() {
         return spriteSize.height > 0 ? spriteSize.height : -1f;
     }
 
-    /** The sliced draw, built once and kept -- a fresh one per frame would be garbage in the paint
-     * loop. Holds no state of its own beyond the sprite it is pointed at. @see #draw */
-    private CgUiRoundedRect slicer;
+    /**
+     * This sprite as something drawable — a {@link CgUiRect} filled with it.
+     *
+     * <p>A sprite is a FILL, not a drawable: the rect is what knows how to paint one, 9-sliced or
+     * stretched, with or without a radius. Anything holding a sprite and owing a {@code CgUiDrawable}
+     * wants this.</p>
+     *
+     * <pre>element.generalStyle(s -&gt; s.background(sprite.toRect()));</pre>
+     */
+    public CgUiRect toRect() {
+        return new CgUiRect().setFillSprite(this);
+    }
 
-    @Override
-    public void draw(CgUiPaintContext ctx, float mouseX, float mouseY, float x, float y, float width, float height) {
-        // Via the accessor, not the field: this is the point where a lazily-deferred texture path
-        // gets resolved, and it's the first place a GL context is guaranteed to exist.
+    /** The tint baked into the sprite itself, multiplied with the ambient one at draw time. */
+    public int getTint() {
+        return tintArgb;
+    }
+
+    /**
+     * Resolves the texture and says whether there is anything to draw — {@code null} when there is not.
+     *
+     * <p>Through the accessor rather than the field, because this is where a lazily-deferred texture
+     * path is resolved and the first point a GL context is guaranteed to exist. Refreshes the UV cache
+     * too, so every {@code getU0()}-style accessor is valid afterwards.</p>
+     */
+    CgTexture2D resolveForDraw() {
         CgTexture2D resolved = getTexture();
-        if (resolved == null || textureSize.width <= 0 || textureSize.height <= 0) return;
-
-        // A failed load resolves to the shared fallback checkerboard. Recorded once per draw and
-        // consumed by submit() below — see there for why the UV crop has to be dropped.
-        missingTexture = resolved == CgTextureManager.get().getFallback();
-
+        if (resolved == null || textureSize.width <= 0 || textureSize.height <= 0) return null;
         updateUvCacheIfNeeded();
+        return resolved;
+    }
 
-        final int tintArgb = ArgbMath.multiply(this.tintArgb, ctx.getColor());
-        ctx.bindTexture(resolved);
-
-        // A MISSING TEXTURE IS NOT WORTH SLICING, and a whole sprite was never sliced. Without a UV
-        // crop (see below) the nine pieces were nine copies of the whole checkerboard rather than a
-        // nine-slice, so one stretched copy says "missing" just as loudly -- and it is the one case the
-        // sliced path cannot serve, since that samples the sprite's own atlas UVs, which land in an
-        // arbitrary corner of the 8x8 fallback and read as a flat colour rather than as broken.
-        if (!hasBorder || missingTexture) {
-            if (width > 0 && height > 0) {
-                CgQuadRenderer.Quad q = ctx.quad().at(x, y).size(width, height).color(tintArgb);
-                // THE FALLBACK GETS NO UV CROP: it has no meaningful sub-rect, so cropping into it
-                // samples an arbitrary corner and a broken sprite reads as a solid colour instead of as
-                // missing. CgUiPaintContext.drawImage is the only other site that can be handed one.
-                if (!missingTexture) q.uv(u0, v0, u3, v3);
-                q.submit();
-                ctx.flush();
-            }
-            return;
-        }
-
-        // THE NINE PIECES ARE ONE DRAW. gui_rounded_rect's WITH_9SLICE_FILL is the same nine-region
-        // remap done per PIXEL, and it is better on both counts that used to be traded off.
-        //
-        // CORRECTNESS: nine quads shared eight interior seams, and a seam is either hard -- the
-        // rasteriser's own cut, a visible staircase once the sprite is off its axis -- or softened from
-        // both sides, which composites to three quarters and reads as a hairline down the middle of the
-        // art. Neither is fixable per quad, because each would have to know what its neighbour drew.
-        // The two paths also disagreed under ROUND tiling, by a pixel on every tile divider: this one
-        // places them continuously where the quad loop rounded each tile's rect. cgui-nineslice draws
-        // the same sprite both ways and says they must match; now there is one answer.
-        //
-        // COST: this was assumed to be the expensive path, because it is a material switch where nine
-        // quads join the frame's existing batch. Measured on cgui-sprite-stress -- 500 sprite-backed
-        // cells, nothing else on screen -- it is 2.5-3x CHEAPER, and the batching is real but not where
-        // the money is: the nine-quad path held material binds to 6 a frame against 1506, and still
-        // lost, because nine instances per sprite against one is what dominates. quadRenderer.flush
-        // drops about tenfold. The same shape as SvgRasterCache: the instance upload is the cost.
-        // @see CgUiRoundedRect#setFillSprite
-        if (slicer == null) slicer = new CgUiRoundedRect();
-        slicer.setFillSprite(this);
-        int outerTint = ctx.getColor();
-        ctx.setColor(tintArgb);   // the material reads the quad colour, and this is the same product
-        try {
-            slicer.draw(ctx, mouseX, mouseY, x, y, width, height);
-        } finally {
-            ctx.setColor(outerTint);
-        }
+    /** Whether a failed load left the shared fallback checkerboard, which has no sub-rect worth
+     * cropping into. @see CgUiRect */
+    boolean isFallback(CgTexture2D resolved) {
+        return resolved == CgTextureManager.get().getFallback();
     }
 }

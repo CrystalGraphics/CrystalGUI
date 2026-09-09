@@ -9,7 +9,7 @@ import com.crystalgui.style.property.visual.DrawableFit;
  *
  * <p>Standalone rather than inlined into {@code UIElement} because {@code background} needs exactly
  * this same math once its coupling to the SDF rounded-rect shape is resolved — today the background
- * rect doubles as {@code CgUiRoundedRect}'s {@code _BoxSize} and as the basis for percentage
+ * rect doubles as {@code CgUiRect}'s {@code _BoxSize} and as the basis for percentage
  * {@code border-radius}, so it can't be shrunk independently without redefining what
  * {@code border-radius} means.</p>
  */

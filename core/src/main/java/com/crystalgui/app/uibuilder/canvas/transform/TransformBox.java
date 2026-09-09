@@ -24,7 +24,7 @@ import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgui.render.texture.CgUiRoundedRect;
+import com.crystalgui.render.texture.CgUiRect;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.style.StyleGroup;
@@ -94,7 +94,7 @@ public final class TransformBox extends UIElement {
     private static final float GRAB = HANDLE_SIZE * 0.5f + 1f;
 
     /** Fully rounded, so the square is a circle at any size. @see #HANDLE_SIZE */
-    private final CgUiRoundedRect dot = new CgUiRoundedRect()
+    private final CgUiRect dot = new CgUiRect()
             .setCornerRadius(HANDLE_SIZE * 0.5f, HANDLE_SIZE * 0.5f);
 
     private static final float PIVOT_SIZE = 9f;

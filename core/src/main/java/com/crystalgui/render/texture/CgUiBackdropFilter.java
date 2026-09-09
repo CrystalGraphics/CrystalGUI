@@ -46,7 +46,7 @@ public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware
     private static final CgMaterial MATERIAL = CgMaterial.load("crystalgui:shaders/gui_backdrop_filter.shader");
 
     /** Drawn instead of the filter when there is no backdrop to sample. @see #setFallbackColor */
-    private final CgUiRoundedRect fallback = new CgUiRoundedRect();
+    private final CgUiRect fallback = new CgUiRect();
 
     private float rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL;
 

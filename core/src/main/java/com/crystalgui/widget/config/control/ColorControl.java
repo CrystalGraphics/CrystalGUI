@@ -7,7 +7,7 @@ import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.core.data.Transform2D;
-import com.crystalgui.render.texture.CgUiQuad;
+import com.crystalgui.render.texture.CgUiRect;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.composite.ColorSelector;
 import com.crystalgui.widget.overlay.Dialog;
@@ -129,7 +129,7 @@ public class ColorControl extends ValueControl<Integer> {
      * glance in a dense panel, and a real alpha bar is a faster read there than a checkerboard is. */
     private void paint(@Nullable Integer value) {
         int argb = value == null ? DEFAULT_COLOR : value;
-        colorBar.generalStyle(g -> g.background(new CgUiQuad(argb | 0xFF000000)));
+        colorBar.generalStyle(g -> g.background(CgUiRect.ofColor(argb | 0xFF000000)));
         float alpha = ((argb >>> 24) & 0xFF) / 255f;
         alphaFill.layout(l -> l.widthPercent(alpha * 100f));
     }

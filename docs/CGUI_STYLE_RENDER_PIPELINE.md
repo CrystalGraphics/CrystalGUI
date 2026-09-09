@@ -254,8 +254,8 @@ cost, since per-element material binds at draw time can dwarf everything else.
 
 `core/src/main/java/com/crystalgui/render/texture/`, `core/src/main/java/com/crystalgui/render/CgUiPaintContext.java`
 
-`CgUiDrawable` is the "paint yourself into a rect" interface — `CgUiQuad` (flat color), `CgUiSprite`
-(textured, optional 9-slice border), `CgUiRoundedRect` (SDF), `CgUiCrossFade` (generic two-drawable
+`CgUiDrawable` is the "paint yourself into a rect" interface — `CgUiRect` (a fill plus radii and border, which is what every `background` resolves to), `CgUiSprite`
+(textured, optional 9-slice border), `CgUiRect` (SDF), `CgUiCrossFade` (generic two-drawable
 blend). Each `draw(ctx, mouseX, mouseY, x, y, w, h)` call issues its own GPU draw(s) immediately —
 no batching, no deferred submission.
 
@@ -278,7 +278,7 @@ is one layer and not three; one unreadable layer fails the whole declaration rat
 since a stack quietly missing a layer renders something nobody wrote.
 
 A stack clips itself: the radii are forwarded to every layer that is `CornerRadiusAware`, because the
-painter's alternative — wrapping the background in a `CgUiRoundedRect` — can only round one fill.
+painter's alternative — wrapping the background in a `CgUiRect` — can only round one fill.
 Per-layer clipping, and per-layer `background-size`/`-position`/`-origin`, are stage 2; see
 `plan/crystalgui/style-overhaul/css-background-layers.md`.
 
@@ -290,7 +290,7 @@ two identically-named rows, which is the one thing that arrangement cannot yet t
 
 | Channel | Set via | Meaning | Consumed by |
 |---|---|---|---|
-| **Tint** | `ctx.setColor(argb)` | Per-drawable multiplicative color, baked per-vertex | `CgUiQuad`/`CgUiSprite`/`CgUiRoundedRect`'s own fragment output `*= i.color` |
+| **Tint** | `ctx.setColor(argb)` | Per-drawable multiplicative color, baked per-vertex | `CgUiRect`'s own fragment output `*= i.color` |
 | **Layer opacity** | `ctx.withLayerOpacity(t, drawBody)` | Whole-draw compositing weight | `_LayerOpacity` material property, multiplied into `fragColor.a` |
 
 They're separate because conflating them was an earlier bug: an initial `CgUiCrossFade` draft scaled
@@ -400,7 +400,7 @@ decorative visual because its style system lacks background geometry controls):
 
   1. **Drawable** — `outline: asset("crystalgui:ore", "focus-ring")`. A 9-slice ring texture.
   2. **SDF stroke** — `outline: 2px #4488ff`, i.e. `outline-width` + `outline-color`. Rendered as a
-     `CgUiRoundedRect` with a transparent fill, so it **follows `border-radius` for free** and needs
+     `CgUiRect` with a transparent fill, so it **follows `border-radius` for free** and needs
      no texture. The fill is `outlineColor & 0x00FFFFFF` (same RGB, zero alpha) rather than
      `0x00000000`: the shader mixes border→fill on straight alpha, so a black-transparent fill
      drags the inner AA edge toward black and leaves a visible dark fringe.
@@ -434,7 +434,7 @@ returns `null`, same as any malformed CSS value).
 
 | Form | Produces | Notes |
 |---|---|---|
-| `#RRGGBB` / `#RGB` / `#RRGGBBAA` / `rgb(...)` / `rgba(...)` | `CgUiQuad` | 8-hex form is CSS-standard `#RRGGBBAA` (alpha last), not the engine's internal `0xAARRGGBB` int packing |
+| `#RRGGBB` / `#RGB` / `#RRGGBBAA` / `rgb(...)` / `rgba(...)` | `CgUiRect.ofColor` | 8-hex form is CSS-standard `#RRGGBBAA` (alpha last), not the engine's internal `0xAARRGGBB` int packing |
 | `image("path")` | `CgUiSprite`, unsliced | Optional trailing args, type-sniffed, order-independent: quoted `"x y w h"` crop rect, quoted `"refW refH"` texture-size-reference override, or a color literal (tint) |
 | `sprite("path", "sx sy sw sh", "bl bt br bb")` | `CgUiSprite`, 9-slice | Optional 4th `"refW refH"` arg, same override as `image(...)` |
 | `asset("ns:path", "element")` | `CgUiSprite`, fresh instance per lookup | Named 9-slice element from a pack at `assets/{ns}/ui/sprites/{path}.json`, via `CgUiSpriteRegistry`. The parsed pack JSON is cached, but each `get()` call rebuilds a new `CgUiSprite` from it (not a `.copy()` of a cached template) — safer against cross-call mutation. One pack file holds multiple named elements; each may override the pack's own `texture`/`textureSize`. On a missing pack/element, returns a visible fallback drawable rather than silently rendering nothing |
@@ -463,15 +463,15 @@ value type of its own.
 ## 7. Universal Border-Radius/Border-Width/Border-Color Layer
 
 `CrystalGraphics/core/src/main/resources/assets/crystalgraphics/shaders/lib/sdf.glsl`,
-`core/src/main/resources/assets/crystalgui/shaders/gui_rounded_rect.shader`,
-`core/src/main/java/com/crystalgui/render/texture/CgUiRoundedRect.java`,
+`core/src/main/resources/assets/crystalgui/shaders/gui_rect.shader`,
+`core/src/main/java/com/crystalgui/render/texture/CgUiRect.java`,
 `core/src/main/java/com/crystalgui/style/property/visual/border/`, `UINode.paintContent`
 
 `border-radius`/`border-width`/`border-color` apply on top of *whatever* `background:` produces —
 matching real CSS (rounding/border is orthogonal to what the background *is*, not tied to one special
 drawable). `UINode.paintContent` resolves all three once per paint; if any are set, it branches on the
 resolved `background` drawable's concrete type: a flat color or a non-9-slice `CgUiSprite` gets wrapped
-in a freshly-built `CgUiRoundedRect` (clipped + stroked by the shared SDF shader); a 9-slice sprite
+in a freshly-built `CgUiRect` (clipped + stroked by the shared SDF shader); a 9-slice sprite
 falls through to the plain unclipped path (border-radius/border-width still resolve for hit-testing and
 layout growth, just without visual clipping of the sprite — see the known gap in §9).
 
@@ -541,7 +541,7 @@ never disagree about the element's shape. `sdf_coverage` turns a signed distance
 0–1 mask via `fwidth`.
 
 > **`sdf_coverage` is wrapped in `#ifndef CG_VERTEX_STAGE`, and that guard is load-bearing.**
-> `gui_rounded_rect.shader` includes `sdf.glsl` at *material* scope, and CrystalGraphics' compiler
+> `gui_rect.shader` includes `sdf.glsl` at *material* scope, and CrystalGraphics' compiler
 > hoists every material-scope `#`-line into **both** generated stages — so without the guard,
 > `fwidth`, a fragment-only derivative builtin, lands in the vertex shader. NVIDIA compiles that
 > anyway. AMD refuses, and the whole material fails to compile: an AMD tester could not launch
@@ -565,13 +565,13 @@ first uploads whatever was dirty from the *previous* draw call — one draw stal
 shape re-drawing identical values every frame, badly broken for two different instances alternating
 every frame (a fixed bug from an earlier session).
 
-**Transitions, not morphing**: `CgUiRoundedRect` is built fresh every frame by `paintContent` from
+**Transitions, not morphing**: `CgUiRect` is built fresh every frame by `paintContent` from
 whatever the currently-interpolated style values are — it is never itself held inside the `background`
 cascade (there's no `roundedrect(...)` background value anymore), so `TransitionEngine` never
-interpolates between two `CgUiRoundedRect` instances directly. Instead, each of the 8 radius longhands,
+interpolates between two `CgUiRect` instances directly. Instead, each of the 8 radius longhands,
 the border-width longhands, and border-color animate independently as ordinary scalar/color
 `StyleProperty` transitions — `TextureProperty.interpolate` (for `background` itself) always falls
-through to `CgUiCrossFade` now, since `background` can only ever hold a `CgUiQuad`/`CgUiSprite`.
+through to `CgUiCrossFade` now, since `background` holds a `CgUiRect` or one of the self-drawing kinds.
 
 ---
 
@@ -628,7 +628,7 @@ subtree layer, multiplying the subtree's existing color+alpha by the mask's alph
 mask's alpha is 0, the subtree's output is zeroed too. This mirrors LDLib2's `VisualLayerPipRenderer`
 exactly (`renderMaskAndComposite`) — no `CgStencilState`/stencil buffer involved anywhere.
 
-**Default mask shape** (`UINode.buildDefaultMask`) is the element's own resolved `CgUiRoundedRect`
+**Default mask shape** (`UINode.buildDefaultMask`) is the element's own resolved `CgUiRect`
 shape (same radii/border-width resolution `paintRoundedBackground` already does) with the border
 band's *color* forced to `#00000000` instead of its real color — since the shader already computes
 `color = mix(borderColor, fillColor, innerCoverage)` then multiplies the whole shape by the outer
@@ -763,7 +763,7 @@ went unnoticed.
   baked-in crop rects on `image()`/`sprite()` at parse time. **`overlay` and `outline` are not
   subject to this** (see §5): `overlay` has real `-origin`/`-fit`/`-position` longhands, and
   `outline` has `-offset`. `background` can't get equivalents without design work, because its rect
-  doubles as `CgUiRoundedRect`'s `_BoxSize` *and* as the basis percentage `border-radius` resolves
+  doubles as `CgUiRect`'s `_BoxSize` *and* as the basis percentage `border-radius` resolves
   against — re-boxing it would silently redefine what `border-radius` means.
 - **Tiling is a property of the sprite value, not the element.** CSS `border-image-repeat`'s four
   modes exist as a trailing `sprite(…)` keyword / JSON field (see §5), not as a cascading
@@ -838,6 +838,6 @@ went unnoticed.
 | Drawables | `core/src/main/java/com/crystalgui/render/texture/` |
 | `background:` parsing | `core/src/main/java/com/crystalgui/style/property/visual/texture/TextureValue.java` |
 | SDF shader lib | `CrystalGraphics/core/src/main/resources/assets/crystalgraphics/shaders/lib/sdf.glsl` |
-| SDF material | `core/src/main/resources/assets/crystalgui/shaders/gui_rounded_rect.shader` |
+| SDF material | `core/src/main/resources/assets/crystalgui/shaders/gui_rect.shader` |
 | Named 9-slice assets | `core/src/main/java/com/crystalgui/render/texture/asset/CgUiSpriteRegistry.java` |
 | Demo scenes | `gl-debug-harness/src/main/java/io/github/somehussar/crystalgraphics/harness/scene/ui/` — `CgUiStylingScene` (selectors/cascade/transitions), `CgUiVisualLayersScene` (opacity isolation + masking), `CgUiNineSliceScene` (tiling modes, CPU vs SDF path), `CgUiOreThemeScene` (the theme + forced-state matrices), `CgUiTextFieldScene` (the only visible caret), `CgUiGalleryScene` (everything, with a live theme toggle). Full list in `CGUI_WIDGETS.md`. |

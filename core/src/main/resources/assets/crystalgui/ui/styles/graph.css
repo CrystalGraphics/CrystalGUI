@@ -605,7 +605,7 @@ colorselector .__channel-row__ slider {
  *
  * `border-radius` matches the swatches' own — those round via `CgUiColorField.setCornerRadius` in
  * Java, not CSS (see that method's doc for why), so nothing here derives it automatically the way a
- * `CgUiRoundedRect`-backed pair would. Without it this outline was a sharp rectangle drawn around
+ * `CgUiRect`-backed pair would. Without it this outline was a sharp rectangle drawn around
  * properly rounded content — invisible back when the container's own background was close enough in
  * tone to hide the mismatch, and an obvious squared-off corner poking out past the pill the moment
  * that background changed. */

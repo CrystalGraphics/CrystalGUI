@@ -1481,7 +1481,7 @@ public final class CgUiPaintContext {
      *
      * <p><b>{@code bind()} must run AFTER {@code drawBody}, not before.</b> {@code applyProperties(...)}
      * is CPU-only — it marks a dirty flag but doesn't upload anything; the GPU-side upload only
-     * happens inside {@code bind()}'s own dirty-check. {@code drawBody} (e.g. {@code CgUiRoundedRect}'s
+     * happens inside {@code bind()}'s own dirty-check. {@code drawBody} (e.g. {@code CgUiRect}'s
      * lambda) is exactly where the caller sets its own per-instance properties (corner radius, border,
      * fill, ...) — binding before that ran would upload whatever was dirty from the *previous* draw
      * call on this material, one draw stale. Invisible for a single static drawable re-drawing the
@@ -1539,7 +1539,7 @@ public final class CgUiPaintContext {
         flush();
         float previous = layerOpacity;
         // Compose with the enclosing scope rather than overwriting it — a retargeted texture-valued
-        // transition can nest a drawable (e.g. a CgUiCrossFade or mixed-fill CgUiRoundedRect) inside
+        // transition can nest a drawable (e.g. a CgUiCrossFade or mixed-fill CgUiRect) inside
         // another one; an absolute overwrite here would let the innermost call silently discard
         // every enclosing opacity, leaving the outer transition's own progress with zero visual
         // effect on whatever it wraps.

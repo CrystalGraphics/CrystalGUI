@@ -6,14 +6,8 @@ import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.LayerRegion;
 import com.crystalgui.render.RetainedLayer;
-import com.crystalgui.render.texture.CgUiCrossFade;
-import com.crystalgui.render.texture.CgUiDrawable;
-import com.crystalgui.render.texture.CgUiBackdropFilter;
-import com.crystalgui.render.texture.CgUiLayerBox;
-import com.crystalgui.render.texture.CgUiQuad;
-import com.crystalgui.render.texture.CgUiRoundedRect;
-import com.crystalgui.render.texture.CgUiSprite;
-import com.crystalgui.render.texture.CornerRadiusAware;
+import com.crystalgui.render.texture.*;
+import com.crystalgui.render.texture.CgUiRect;
 import com.crystalgui.style.ComputedStyle;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.BoxOrigin;
@@ -313,18 +307,18 @@ public final class BoxPainter {
         int borderTop = edgeColor(style.get(StylePropertyRegistry.BORDER_TOP_COLOR), borderColor);
         int borderBottom = edgeColor(style.get(StylePropertyRegistry.BORDER_BOTTOM_COLOR), borderColor);
         if (background == CgUiDrawable.EMPTY) {
-            RectFill fill;
+            CgUiRect.Fill fill;
             if (explicitBackgroundColor) {
-                fill = new ColorFill(backgroundColor);
+                fill = new CgUiRect.Fill.Color(backgroundColor);
             } else if (borderWidth > 0f) {
                 // Border only: a transparent interior carrying the border's rgb, so the shader's
                 // edge->fill mix has no dark fringe to bleed.
-                fill = new ColorFill(borderColor & 0x00FFFFFF);
+                fill = new CgUiRect.Fill.Color(borderColor & 0x00FFFFFF);
             } else {
                 return false;
             }
             ctx.setColor(WHITE);
-            roundedRect(radii, borderWidth, borderColor, borderTop, borderBottom, fill).draw(ctx, 0f, 0f, width, height);
+            shapedRect(radii, borderWidth, borderColor, borderTop, borderBottom, fill).draw(ctx, 0f, 0f, width, height);
             return true;
         }
         if (!canPaintRounded(background)) return false;
@@ -342,7 +336,8 @@ public final class BoxPainter {
                     radii, borderWidth, borderColor, borderTop, borderBottom));
             return;
         }
-        roundedRect(radii, borderWidth, borderColor, borderTop, borderBottom, fillOf(d)).draw(ctx, 0f, 0f, width, height);
+        shapedRect(radii, borderWidth, borderColor, borderTop, borderBottom, ((CgUiRect) d).getFill())
+                .draw(ctx, 0f, 0f, width, height);
     }
 
     private static int edgeColor(int edge, int fallback) {
@@ -379,8 +374,10 @@ public final class BoxPainter {
         }
         // A mask that would reveal NOTHING reveals the whole shape instead -- `background: none` and
         // `background: #00000000` must clip the same way.
-        RectFill fill = revealsNothing(d) ? new ColorFill(WHITE) : fillOf(d);
-        CgUiRoundedRect mask = fillOnlyRect(radii, fill);
+        CgUiRect.Fill fill = revealsNothing(d)
+                ? new CgUiRect.Fill.Color(WHITE)
+                : ((CgUiRect) d).getFill();
+        CgUiRect mask = shapedRect(radii, fill);
         if (borderWidth > 0f) mask.setBorder(borderWidth, 0x00000000);
         mask.draw(ctx, x, y, width, height);
     }
@@ -421,7 +418,7 @@ public final class BoxPainter {
         float insetTop = top + stroke, insetBottom = bottom + stroke, insetLeft = left + stroke, insetRight = right + stroke;
         Radii ring = radii.expand((insetLeft + insetRight) * 0.5f, (insetTop + insetBottom) * 0.5f);
         int color = style.get(StylePropertyRegistry.OUTLINE_COLOR);
-        CgUiRoundedRect rect = fillOnlyRect(ring, new ColorFill(color & 0x00FFFFFF));
+        CgUiRect rect = shapedRect(ring, new CgUiRect.Fill.Color(color & 0x00FFFFFF));
         rect.setBorder(stroke, color);
         rect.draw(ctx, -insetLeft, -insetTop, width + insetLeft + insetRight, height + insetTop + insetBottom);
     }
@@ -490,55 +487,34 @@ public final class BoxPainter {
 
     // ── Fills and radii ──────────────────────────────────────────────────────
 
-    private sealed interface RectFill permits ColorFill, TextureFill, NineSliceFill {
+    /**
+     * A rect with the element's radii and the given fill, built HERE rather than by pushing radii into
+     * the background the cascade handed us — that value is shared across frames and elements, and
+     * {@code CgUiRect} equality is what stops a repeated write retargeting a transition.
+     */
+    private static CgUiRect shapedRect(Radii radii, CgUiRect.Fill fill) {
+        return new CgUiRect()
+                .setCornerRadius(radii.rxTL, radii.ryTL, radii.rxTR, radii.ryTR,
+                        radii.rxBR, radii.ryBR, radii.rxBL, radii.ryBL)
+                .setFill(fill);
     }
 
-    private record ColorFill(int argb) implements RectFill {
+    private static CgUiRect shapedRect(Radii radii, float borderWidth, int borderColor, int borderTop,
+                                       int borderBottom, CgUiRect.Fill fill) {
+        CgUiRect rect = shapedRect(radii, fill);
+        if (borderWidth > 0f) rect.setBorder(borderWidth, borderColor, borderTop, borderBottom);
+        return rect;
     }
 
-    private record TextureFill(CgTexture2D texture) implements RectFill {
-    }
-
-    private record NineSliceFill(CgUiSprite sprite) implements RectFill {
-    }
-
+    /** Whether the rounded wrap can express this background: only a rect has a fill to re-shape. */
     private static boolean canPaintRounded(CgUiDrawable d) {
         if (d instanceof CgUiCrossFade cf) return canPaintRounded(cf.getFrom()) && canPaintRounded(cf.getTo());
-        return fillOf(d) != null;
-    }
-
-    private static @Nullable RectFill fillOf(CgUiDrawable d) {
-        if (d == CgUiDrawable.EMPTY) return null;
-        if (d instanceof CgUiQuad quad) return new ColorFill(quad.getColorArgb());
-        if (d instanceof CgUiSprite sprite) {
-            CgTexture2D texture = sprite.getTexture();
-            if (texture == null) return null;
-            return sprite.hasBorder() ? new NineSliceFill(sprite) : new TextureFill(texture);
-        }
-        return null;
+        return d != CgUiDrawable.EMPTY && d instanceof CgUiRect;
     }
 
     private static boolean revealsNothing(CgUiDrawable d) {
-        RectFill fill = fillOf(d);
-        return fill == null || fill instanceof ColorFill(int argb) && (argb >>> 24) == 0;
-    }
-
-    private static CgUiRoundedRect fillOnlyRect(Radii radii, RectFill fill) {
-        CgUiRoundedRect rect = new CgUiRoundedRect();
-        rect.setCornerRadius(radii.rxTL, radii.ryTL, radii.rxTR, radii.ryTR, radii.rxBR, radii.ryBR, radii.rxBL, radii.ryBL);
-        switch (fill) {
-            case ColorFill(int argb) -> rect.setFillColor(argb);
-            case TextureFill(CgTexture2D texture) -> rect.setFillTexture(texture);
-            case NineSliceFill(CgUiSprite sprite) -> rect.setFillSprite(sprite);
-        }
-        return rect;
-    }
-
-    private static CgUiRoundedRect roundedRect(Radii radii, float borderWidth, int borderColor, int borderTop,
-                                               int borderBottom, RectFill fill) {
-        CgUiRoundedRect rect = fillOnlyRect(radii, fill);
-        if (borderWidth > 0f) rect.setBorder(borderWidth, borderColor, borderTop, borderBottom);
-        return rect;
+        if (!(d instanceof CgUiRect rect)) return true;
+        return rect.getFill() instanceof CgUiRect.Fill.Color(int argb) && (argb >>> 24) == 0;
     }
 
     /** The eight resolved corner radii of a box. */

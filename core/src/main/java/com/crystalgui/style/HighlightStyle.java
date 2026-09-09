@@ -174,7 +174,7 @@ public final class HighlightStyle {
     }
 
     /**
-     * The band's corner radii in pixels, in {@code CgUiRoundedRect}'s order — TL, TR, BR, BL, each an
+     * The band's corner radii in pixels, in {@code CgUiRect}'s order — TL, TR, BR, BL, each an
      * {@code (rx, ry)} pair — or {@code null} when every corner is square.
      *
      * <p>Null rather than an array of zeroes so the painter keeps its {@code fillRect} fast path: a

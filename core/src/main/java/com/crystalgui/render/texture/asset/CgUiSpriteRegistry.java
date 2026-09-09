@@ -7,6 +7,7 @@ import com.crystalgraphics.util.io.CgIO;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.CgUiRepeat;
+import com.crystalgui.render.texture.CgUiRect;
 import com.crystalgui.render.texture.CgUiSprite;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -67,7 +68,7 @@ public final class CgUiSpriteRegistry {
         CACHE.clear();
     }
 
-    /** Returns a fresh, independent {@link CgUiSprite} instance for the named element within the
+    /** Returns a fresh, independent {@link CgUiRect} filled with the named element's sprite within the
      * given pack, or a visible fallback drawable if the pack file is missing/malformed or the
      * element doesn't exist — never {@code null}, so a broken reference degrades visibly rather
      * than silently rendering nothing. */
@@ -79,7 +80,7 @@ public final class CgUiSpriteRegistry {
             CrystalGuiCore.LOGGER.warn("CgUiSpriteRegistry: no element '{}' in asset pack '{}'", elementName, packPath);
             return fallback();
         }
-        return element.toSprite(pack);
+        return element.toSprite(pack).toRect();
     }
 
     /** Same fallback texture the rest of the engine already uses for a broken texture load
@@ -100,7 +101,7 @@ public final class CgUiSpriteRegistry {
      * rendered nothing at all rather than the visible checkerboard.</p> */
     private static CgUiDrawable fallback() {
         CgTexture2D tex = CgTextureManager.get().getFallback();
-        return new CgUiSprite().setTexture(tex).setTextureSizeReference(tex.getWidth(), tex.getHeight());
+        return new CgUiSprite().setTexture(tex).setTextureSizeReference(tex.getWidth(), tex.getHeight()).toRect();
     }
 
     private static ParsedPack load(String namespacedPath) {

@@ -19,7 +19,7 @@ import com.crystalgui.render.CgUiPaintContext;
  */
 public interface CgUiDrawable {
 
-    CgUiQuad EMPTY = new CgUiQuad(0);
+    CgUiDrawable EMPTY = CgUiRect.ofColor(0);
 
     /**
      * Paints this texture into the given rect, immediately.
