@@ -6,6 +6,7 @@ import com.crystalgraphics.gl.texture.CgTextureManager;
 import com.crystalgui.render.texture.geometry.Position;
 import com.crystalgui.render.texture.geometry.Size;
 import com.crystalgui.render.CgUiPaintContext;
+import lombok.Getter;
 
 /**
  * Full-rect image draw from a {@link CgTexture2D}, with an optional UV sub-rect for
@@ -30,13 +31,17 @@ public final class CgUiSprite {
     private int tintArgb = 0xFFFFFFFF;
     /** How the edge/centre regions fill their span — see {@link CgUiRepeat}. Per-axis, like CSS
      * {@code border-image-repeat}. Corners never tile. Baked at parse time alongside {@link #tintArgb}. */
+    @Getter
     private CgUiRepeat repeatX = CgUiRepeat.STRETCH;
+    @Getter
     private CgUiRepeat repeatY = CgUiRepeat.STRETCH;
     /** Whether the centre region draws at all (Unity's "Fill Center"; CSS's {@code border-image-slice:
      * … fill}). False leaves a frame with a see-through middle. */
+    @Getter
     private boolean fillCenter = true;
     /** Multiplier on the 9-slice border widths and tile sizes — Unity's "Pixels Per Unit Multiplier".
      * Lets a 4px source border render chunky at 8px without re-authoring the texture. */
+    @Getter
     private float borderScale = 1f;
     /** Whether {@link #setSprite} has ever been called explicitly — until then, {@link #setTexture}/
      * {@link #setTextureSizeReference} keep the sprite rect defaulted to the full texture, so an
@@ -106,31 +111,15 @@ public final class CgUiSprite {
         return this;
     }
 
-    public CgUiRepeat getRepeatX() {
-        return repeatX;
-    }
-
-    public CgUiRepeat getRepeatY() {
-        return repeatY;
-    }
-
     public CgUiSprite setFillCenter(boolean fillCenter) {
         this.fillCenter = fillCenter;
         return this;
-    }
-
-    public boolean isFillCenter() {
-        return fillCenter;
     }
 
     /** @param borderScale multiplier on border widths and tile sizes; clamped to a sane positive range. */
     public CgUiSprite setBorderScale(float borderScale) {
         this.borderScale = borderScale > 0f ? Math.min(borderScale, 64f) : 1f;
         return this;
-    }
-
-    public float getBorderScale() {
-        return borderScale;
     }
 
     /** Source (texture-pixel) width of the centre column — the tile size for horizontal tiling.
