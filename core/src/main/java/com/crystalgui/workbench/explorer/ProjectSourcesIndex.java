@@ -208,6 +208,12 @@ public final class ProjectSourcesIndex {
         // and never re-read, which was correct while it was a function of the file NAME. It is now a
         // function of what the file declares, and that answer arrives later than the tab does.
         workbench.documentTabs.syncTabDecorations();
+        // AND THE TRAIL, which is the same question asked a third time: a `.java` crumb draws what its
+        // file declares, and it is built when the tab is ACTIVATED -- before the file has been read.
+        // Without this the status bar keeps the file-type icon while the tab beside it and the row above
+        // it both show the class, which is the one arrangement that reads as a bug rather than a wait.
+        // @see Workbench#refreshBreadcrumbs
+        workbench.refreshBreadcrumbs();
         for (CgPath path : workbench.openPaths()) {
             TextEditor editor = workbench.editorFor(path);
             if (editor == null || editor.languageServices() == null) continue;

@@ -18,6 +18,8 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.overlay.Dialog;
 import com.crystalgui.widget.overlay.InputDialog;
+import com.crystalgui.fs.client.ContentProvider;
+import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.workbench.chrome.status.Breadcrumbs;
 import com.crystalgui.workbench.diff.ConflictDialog;
 import com.crystalgui.workbench.diff.MergeView;
@@ -70,15 +72,45 @@ public final class SaveActions {
     List<Breadcrumbs.Crumb> trailFor(@Nullable Resource resource) {
         if (resource == null) return List.of();
         CgPath path = resource.asPath();
-        if (path != null) return trailFor(path);
-        if (Resource.SCHEME_LIBRARY.equals(resource.scheme())) return libraryTrail(resource.path());
+        if (path != null) return declaring(trailFor(path), resource);
+        if (Resource.SCHEME_LIBRARY.equals(resource.scheme())) {
+            return declaring(libraryTrail(resource.path()), resource);
+        }
         String name = resource.path();
         int slash = Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
         if (slash >= 0) name = name.substring(slash + 1);
         FileIconTheme theme = FileIconTheme.getDefault();
         return name.isEmpty() ? List.of()
-                : List.of(new Breadcrumbs.Crumb(name, theme.drawableFor(name, false, false),
-                        theme.classFor(name, false)));
+                : declaring(List.of(new Breadcrumbs.Crumb(name, theme.drawableFor(name, false, false),
+                        theme.classFor(name, false))), resource);
+    }
+
+    /**
+     * Gives the last crumb the glyph for what the file DECLARES, when anything can say.
+     *
+     * <p>A trail's leaf is the file you are in, and the tab above it already draws a class mark for
+     * {@code Minecraft.java} while this drew the coffee cup every {@code .java} gets. Two answers to one
+     * question, in two places a reader sees at once — which is the failure {@link SymbolIcon}'s javadoc
+     * describes and the reason the tree and the tab strip both ask this rather than keeping a table.</p>
+     *
+     * <p>Asked HERE and not inside the three trail builders, because this is the only one of them holding
+     * a {@link Resource} — a path and a binary name each name a place, and only a resource can be handed
+     * to a provider. It is also the one call site, so the lookup happens once per tab change rather than
+     * once per segment.</p>
+     *
+     * <p>Every step answers null happily: no provider, no symbol, or a symbol with no kind all leave the
+     * file-type icon exactly as it was, which is still right for everything that is not a declaration.</p>
+     */
+    private List<Breadcrumbs.Crumb> declaring(List<Breadcrumbs.Crumb> trail, Resource resource) {
+        if (trail.isEmpty()) return trail;
+        ContentProvider provider = workbench.workspace.providerFor(resource);
+        SymbolInfo symbol = provider == null ? null : provider.symbolOf(resource);
+        if (symbol == null || symbol.kind() == null) return trail;
+        List<Breadcrumbs.Crumb> out = new ArrayList<>(trail);
+        Breadcrumbs.Crumb leaf = out.get(out.size() - 1);
+        out.set(out.size() - 1,
+                new Breadcrumbs.Crumb(leaf.text(), leaf.icon(), leaf.iconClass(), symbol));
+        return out;
     }
 
     /**
