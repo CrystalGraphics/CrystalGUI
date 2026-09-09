@@ -77,9 +77,20 @@ val commonJar = project(":mc1201:common").tasks.named<Jar>("jar").flatMap { it.a
 val languageJar = project(":language").tasks.named<Jar>("jar").flatMap { it.archiveFile }
 
 tasks.jar {
-    from(zipTree(coreJar))
-    from(zipTree(commonJar))
-    from(zipTree(languageJar))
+    // META-INF/services IS TAKEN FROM ONE MERGED COPY, and excluded from every jar below -- the same
+    // rule the shipped shadow jar follows, for the same reason. :core and :language each ship a
+    // WorkbenchExtension service file, and two of them in one Copy is a hard failure here:
+    //
+    //     Entry META-INF/services/com.crystalgui.workbench.extension.WorkbenchExtension is a duplicate
+    //     but no duplicate handling strategy has been set
+    //
+    // A duplicatesStrategy would silence it by DROPPING one, which is the bug the merge exists to stop:
+    // whichever arrived first wins and the other extension is simply absent.
+    dependsOn("mergeDevServices")
+    for (jar in listOf(coreJar, commonJar, languageJar)) {
+        from(zipTree(jar)) { exclude("META-INF/services/**") }
+    }
+    from(tasks.named("mergeDevServices"))
 }
 
 // Extracts Fabric MC 1.20.1 sources and resources into build/mc-src for local navigation.

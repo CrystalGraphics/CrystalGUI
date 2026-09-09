@@ -89,3 +89,41 @@ val extractMcSources by tasks.registering(Sync::class) {
 // extractMcSources is cheap (unzips an already-present jar — createMinecraftArtifacts ran first).
 // Wire it into classes so build/mc-src/ is always populated after a normal compile.
 tasks.named("classes") { dependsOn(extractMcSources) }
+
+// The SHIPPED jar has to be reobfuscated, and it is the SHADOW jar that ships.
+//
+// Forge 1.20.1 runs SRG member names; a mod is compiled against official ones. ModDevGradle
+// reobfuscates `jar` by default, which here is the six-class loader stub -- so `assemble` produced a
+// 10 KB jar that was correctly mapped and had no engine in it, beside a 54 MB one that had everything
+// and called `Minecraft.getInstance()` under a name production does not have. Both are unusable, and a
+// dev run cannot show it: dev is deobfuscated, so official names are the right ones there.
+//
+// Downgrade, then SHADE, then remap. jvmdg rewrites bytecode and adds a dependency on its own stubs;
+// the remapper only rewrites names, so it has to run last, on the class files that will actually ship.
+val reobfShadowJar = the<net.neoforged.moddevgradle.legacyforge.dsl.ObfuscationExtension>()
+    .reobfuscate(
+        tasks.named<org.gradle.api.tasks.bundling.AbstractArchiveTask>("shadeDowngradedShadowJar"),
+        sourceSets.main.get()) {
+        archiveClassifier.set("srg")
+    }
+
+tasks.named("assemble") { dependsOn(reobfShadowJar) }
+
+
+// -- Dropping a build into a real client ---------------------------------------------------------
+//
+// CrystalGraphics goes too: CrystalGUI does not run without it, and shipping one of a matched pair is
+// how an afternoon disappears. Its reobfuscated jar is `reobfShadowJar` -- no downgrade step there,
+// being Java 17 throughout, where this project shadows core/ and language/ and must downgrade first.
+val crystalGraphicsBuild = gradle.includedBuild("CrystalGraphics")
+
+// ONLY the -srg pair. `assemble` also leaves a `-java17` jar carrying every class under official
+// names, and a tiny plain one correctly mapped and nearly empty. Both install; neither runs.
+extra["cgDeployKey"] = "prismLauncher1201ForgeDir"
+extra["cgDeployJars"] = listOf(
+        layout.buildDirectory.file("libs/crystalgui-mc1201-forge-$version-srg.jar"),
+        File(crystalGraphicsBuild.projectDir,
+                "mc1201/forge/build/libs/crystalgraphics-mc1201-forge-1.0.0-srg.jar"))
+extra["cgDeployDependsOn"] = listOf(
+        reobfShadowJar, crystalGraphicsBuild.task(":mc1201:forge:reobfShadowJar"))
+apply(from = rootProject.file("gradle/module_integration/deploy-mods.gradle.kts").toURI())

@@ -44,24 +44,12 @@ fun modClasses(modId: String, moduleDir: File) = modClasses(modId, listOf(
 fun mainSourceSet(project: Project) =
     project.extensions.getByType(SourceSetContainer::class.java)["main"]
 
-/**
- * The projects bundled INTO the crystalgui mod, named once.
- *
- * Three places need this list -- the service merge, the resource staging and MOD_CLASSES -- and it was
- * written out in each. The header above says what a hand-maintained second copy costs; a third copy of
- * the same list is the same bet.
- *
- * The loader project itself is NOT here: its resources carry META-INF/mods.toml and must stay their own
- * root, and it is added to MOD_CLASSES separately below.
- */
-val bundledProjects = listOf(project(":core"), project(":mc1201:common"), project(":language"))
-
-/** Where each of those keeps META-INF/services, for the merge and for its up-to-date check. */
-val serviceDirs: List<File> = bundledProjects.mapNotNull { owner ->
-    mainSourceSet(owner).output.resourcesDir?.let { File(it, "META-INF/services") }
-}
-
-/** The tasks that PRODUCE those resources. `from(File)` carries no dependency, so both stages name them. */
+// The bundled-project list, the service merge and its output directory are the LOADER PLUGIN's:
+// `ShadowUtils` needs them for the shipped jar and fabric never applies this script. @see cg-mc1201-loader
+@Suppress("UNCHECKED_CAST")
+val bundledProjects = extra["cgBundledProjects"] as List<Project>
+val mergedServicesDir = extra["cgMergedServicesDir"] as File
+val mergeDevServices = tasks.named("mergeDevServices")
 val resourceTasks: List<String> = bundledProjects.map { "${it.path}:processResources" }
 
 // Setting MOD_CLASSES REPLACES what ModDevGradle derived from mods{} rather than adding to it, so the
@@ -75,52 +63,6 @@ val resourceTasks: List<String> = bundledProjects.map { "${it.path}:processResou
 // found nothing there, and tree-sitter loaded but was invisible to the grammars that call it. What may
 // NOT come along is :core, which :language depends on and which is already a root here -- one package
 // in two modules and the JVM refuses the layer outright, naming com.crystalgui.core.nav.
-/**
- * ONE merged META-INF/services root, read before the others.
- *
- * :core and :language each ship a WorkbenchExtension service file, and FML's ModuleClassLoader answers
- * a resource path from ONE root -- so two roots of one module means one file wins and the other's
- * providers are silently absent. It presented as every CrystalEditor extension being offline except the
- * one :language contributes. Merging by hand and putting the result first is the only lever a dev run
- * has; the shipped jar uses ShadowJar's own mergeServiceFiles.
- */
-val mergedServicesDir: File = layout.buildDirectory.dir("merged-services").get().asFile
-
-val mergeDevServices = tasks.register("mergeDevServices") {
-    group = "build"
-    description = "Unions :core's and :language's META-INF/services so neither shadows the other."
-    // THE FILES IT READS, or it is compared on its outputs alone and stays UP-TO-DATE across an edit to
-    // one of them -- leaving a merged copy that describes the previous build. Same class of staleness the
-    // run tasks' inputs.property below exists for, and just as silent.
-    inputs.files(serviceDirs).withPropertyName("serviceDirs").optional()
-    outputs.dir(mergedServicesDir)
-    // ORDERING, which declaring the inputs does not give: without it this can run before the resources
-    // are copied and union an empty directory.
-    dependsOn(resourceTasks)
-    doLast {
-        val sources = serviceDirs.filter { it.isDirectory }
-        val byService = linkedMapOf<String, MutableList<String>>()
-        for (directory in sources) {
-            for (file in directory.listFiles().orEmpty()) {
-                val providers = byService.getOrPut(file.name) { mutableListOf() }
-                file.readLines()
-                    .map { it.substringBefore('#').trim() }
-                    .filter { it.isNotEmpty() && it !in providers }
-                    .forEach { providers.add(it) }
-            }
-        }
-        val out = File(mergedServicesDir, "META-INF/services")
-        out.mkdirs()
-        out.listFiles().orEmpty().forEach { it.delete() }
-        byService.forEach { (service, providers) ->
-            File(out, service).writeText(buildString {
-                appendLine("# Merged for the dev run by mergeDevServices; see its declaration.")
-                providers.forEach { appendLine(it) }
-            })
-        }
-    }
-}
-
 /**
  * ONE resource root for the dev run, and the reason it exists rather than naming three.
  *
