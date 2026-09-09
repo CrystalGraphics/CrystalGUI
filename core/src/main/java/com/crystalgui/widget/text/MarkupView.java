@@ -9,6 +9,7 @@ import com.crystalgui.text.markup.MarkupDocument;
 import com.crystalgui.text.markup.MarkupSpan;
 import com.crystalgui.text.syntax.Language;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.box.Measurable;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.text.TextRange;
@@ -203,12 +204,16 @@ public class MarkupView extends UIElement {
     private final List<UIText> terms = new ArrayList<>();
 
     /**
-     * Every table's cells, by row, so each COLUMN can be given one shared width.
+     * Every table, so each COLUMN can be given its width.
      *
      * <p>Per table rather than per document: two tables in one comment are two grids, and a column in one
      * says nothing about a column in the other. @see #alignTables</p>
      */
-    private final List<List<List<Placed>>> tables = new ArrayList<>();
+    private final List<PlacedTable> tables = new ArrayList<>();
+
+    /** One table: the box that says how much room there is, and the grid inside it. */
+    private record PlacedTable(UIElement box, List<List<Placed>> rows) {
+    }
 
     /** One link's extent within its run, and where it points. */
     private record LinkSpan(int start, int end, String target) {
@@ -615,7 +620,7 @@ public class MarkupView extends UIElement {
             }
             if (!cells.isEmpty()) rows.add(cells);
         }
-        if (!rows.isEmpty()) tables.add(place(rows));
+        if (!rows.isEmpty()) tables.add(new PlacedTable(box, place(rows)));
         return box;
     }
 
@@ -727,9 +732,11 @@ public class MarkupView extends UIElement {
             // never a zero, which would put the whole grid at the origin.
             Box firstRow = rows.get(0).box();
             Box lastRow = rows.get(rows.size() - 1).box();
+            Box widestRow = widest.box();
             Box firstCell = columns.get(0).box();
             Box lastCell = columns.get(columns.size() - 1).box();
-            if (firstRow == null || lastRow == null || firstCell == null || lastCell == null) return;
+            if (firstRow == null || lastRow == null || widestRow == null) return;
+            if (firstCell == null || lastCell == null) return;
             if (firstRow.width() <= 0f || firstCell.width() <= 0f) return;
 
             // HALF A LINE INSIDE THE EDGE, all four of them. A stroke is CENTRED on the line it is given,
@@ -740,14 +747,21 @@ public class MarkupView extends UIElement {
             //
             // The interior lines need no such nudge: they are already a whole cell away from any edge.
             //
-            // LOCAL TO THIS NODE. `paintDecoration` draws in the box's own space with the pose already
-            // set from `localToWorld`, and a child's box is in the same space -- so a row's y is used as
-            // it stands. On the old engine these came off `getRuntimeCache()`, which was absolute.
+            // BOX OFFSETS, NEVER `worldX`/`worldY`. `paintDecoration` draws in this box's own space with
+            // the pose already set from `localToWorld` -- so the pose carries `uiScale`, and a coordinate
+            // handed to it must not. A world translation has that scale baked in, so a difference of two
+            // of them is DEVICE pixels: at `uiScale` 2 every line was drawn at twice its distance from
+            // this corner, which put the outer edge a whole table-width to the right of the last column
+            // (read as an empty column nobody wrote), ran the bottom rule down through the paragraphs
+            // below the table, and cut each column line through the middle of its own cell's text. At
+            // `uiScale` 1 the two agree exactly, which is why every test and every headless probe was
+            // green while the screen was not. A child's `x`/`y` is already in its parent's space, which
+            // is what this needs, and a cell composes through its row.
             float inset = LINE * 0.5f;
-            float top = localY(box, firstRow) + inset;
-            float bottom = localY(box, lastRow) + lastRow.height() - inset;
-            float left = localX(box, firstCell) + inset;
-            float right = localX(box, lastCell) + lastCell.width() - inset;
+            float top = firstRow.y() + inset;
+            float bottom = lastRow.y() + lastRow.height() - inset;
+            float left = widestRow.x() + firstCell.x() + inset;
+            float right = widestRow.x() + lastCell.x() + lastCell.width() - inset;
 
             // THE BOX, then the lines inside it. The cells carry their own padding, so every boundary is
             // a single coordinate rather than a gap to guess a midpoint in -- which is what lets the outer
@@ -760,7 +774,7 @@ public class MarkupView extends UIElement {
             for (int i = 0; i + 1 < rows.size(); i++) {
                 Box row = rows.get(i).box();
                 if (row == null) continue;
-                float y = localY(box, row) + row.height();
+                float y = row.y() + row.height();
                 stroke(ctx, left, y, right, y, colour);
             }
             // A COLUMN LINE IS DRAWN PER ROW, not once down the whole table.
@@ -777,26 +791,17 @@ public class MarkupView extends UIElement {
             for (UIElement row : rows) {
                 Box rowBox = row.box();
                 if (rowBox == null) continue;
-                float y0 = Math.max(localY(box, rowBox), top);
-                float y1 = Math.min(localY(box, rowBox) + rowBox.height(), bottom);
+                float y0 = Math.max(rowBox.y(), top);
+                float y1 = Math.min(rowBox.y() + rowBox.height(), bottom);
                 List<UIElement> cells = row.children();
                 for (int i = 0; i + 1 < cells.size(); i++) {
                     Box cell = cells.get(i).box();
                     if (cell == null) continue;
-                    float x = localX(box, cell) + cell.width();
+                    float x = rowBox.x() + cell.x() + cell.width();
                     stroke(ctx, x, y0, x, y1, colour);
                 }
             }
             ctx.flush();
-        }
-
-        /** A descendant's x in this box's own space — what {@code paintDecoration} draws in. */
-        private static float localX(Box self, Box descendant) {
-            return descendant.worldX() - self.worldX();
-        }
-
-        private static float localY(Box self, Box descendant) {
-            return descendant.worldY() - self.worldY();
         }
 
         /**
@@ -831,7 +836,11 @@ public class MarkupView extends UIElement {
         List<MarkupSpan> spans = spansOf(block);
         boolean simple = !spans.isEmpty() && block.children().size() <= 1;
         if (simple) {
-            built = contentSized(text(spans, TABLE_CELL_CLASS));
+            // NOT `contentSized`, unlike a `<dt>`. A cell's width is its COLUMN's, decided by
+            // TableColumns from every cell in that column -- so a cell that sized itself to its own
+            // text would be a fourth writer on the one property. Its intrinsic widths are still asked
+            // for; they are asked for through `Measurable` rather than read off a laid-out box.
+            built = text(spans, TABLE_CELL_CLASS);
         } else {
             built = new UIElement();
             built.addClass(TABLE_CELL_CLASS);
@@ -869,34 +878,55 @@ public class MarkupView extends UIElement {
     }
 
     /**
-     * Gives every column of every table the width of its widest cell.
+     * Gives every column of every table its width, by CSS Tables 3's automatic layout.
      *
-     * <p>{@link #alignTerms} with an index: a definition list is a table of one column, and this is the
-     * same measurement over N.</p>
+     * <p>{@link TableColumns} decides; this asks the questions it needs and writes the answers back. The
+     * halves are separate because the deciding is arithmetic that can be tested on its own, and the
+     * asking is the part that has to know what a cell is.</p>
      *
-     * <p>MIN-width rather than width, so the cap the sheet puts on a cell still applies and a cell that
-     * genuinely needs to be wider than its column is not clipped to it.</p>
+     * <h3>Intrinsics, not measured boxes</h3>
+     *
+     * <p>Every cell is asked what it needs -- its widest unbreakable word, and what it takes on one line
+     * -- through {@link Measurable}, the protocol the layout engine itself uses. The version this
+     * replaces read {@code box.width()} and wrote {@code min-width} from it, which is a ratchet rather
+     * than a measurement: a column could only grow, {@code min-width} outranks {@code max-width} so it
+     * could escape the sheet's own cap, and a column once measured wide never came back.</p>
+     *
+     * <p><b>A definite {@code width}, not a minimum.</b> That is what makes a row's height right: a cell
+     * whose width is settled before it is laid out wraps against the width it actually gets, so the row
+     * is as tall as its tallest cell really is. With a minimum the cell was measured at one width and
+     * laid out at another, and the lines that did not fit were drawn below the table, over whatever
+     * followed it.</p>
+     *
+     * <p>Still one frame behind, as the note on {@link #alignTerms} explains and for the same reason:
+     * layout is a single pass with no feedback into it, so a width written after one applies to the
+     * next.</p>
      */
     private void alignTables() {
-        for (List<List<Placed>> rows : tables) {
+        for (PlacedTable table : tables) {
+            Box box = table.box().box();
+            if (box == null) continue;
+            // THE ROOM THE COLUMNS HAVE is the table's own content box, never the view's: a table nested
+            // in a list or a quote has less, and reading the view would let it overflow one.
+            float available = box.contentBoxWidth();
+            if (available <= 0f) continue;
+
+            List<List<Placed>> rows = table.rows();
             int columns = 0;
             for (List<Placed> row : rows) {
                 for (Placed cell : row) columns = Math.max(columns, cell.column() + cell.colspan());
             }
+            if (columns == 0) continue;
 
-            // ONLY SINGLE-COLUMN CELLS MEASURE A COLUMN. A cell covering three of them says nothing about
-            // how wide any ONE of them is, and letting it vote makes every column under a wide header as
-            // wide as the header -- which is the table three times too wide, from a construct that was
-            // supposed to be cosmetic. Browsers resolve this the same way round.
-            float[] width = new float[columns];
+            List<TableColumns.Cell> asked = new ArrayList<>();
             for (List<Placed> row : rows) {
                 for (Placed cell : row) {
-                    if (cell.colspan() != 1) continue;
-                    Box box = cell.cell().box();
-                    if (box == null) continue;
-                    width[cell.column()] = Math.max(width[cell.column()], box.width());
+                    asked.add(new TableColumns.Cell(cell.column(), cell.colspan(),
+                            intrinsicWidth(cell.cell(), Measurable.Fit.MIN_CONTENT),
+                            preferredWidth(cell.cell())));
                 }
             }
+            float[] width = TableColumns.solve(columns, asked, available);
 
             for (List<Placed> row : rows) {
                 for (Placed cell : row) {
@@ -906,15 +936,89 @@ public class MarkupView extends UIElement {
                     for (int c = cell.column(); c < cell.column() + cell.colspan() && c < columns; c++) {
                         shared += width[c];
                     }
-                    // NOTHING MEASURED YET is the first layout of a freshly built document, where every
-                    // box is zero. Equalising to zero would latch it.
                     if (shared <= 0f) continue;
-                    final float min = shared;
+                    final float assigned = shared;
                     StyleGroup.inlinePipeline(cell.cell().getStyle().getLayoutGroup(),
-                            l -> l.minWidth(min));
+                            l -> l.width(assigned));
                 }
             }
         }
+    }
+
+    /**
+     * The longest line a column is allowed to PREFER, in characters.
+     *
+     * <p>The classic typographic measure is 45-75 characters; past that the eye loses the start of the
+     * next line, which is why a documentation renderer sets one and why the CSS convention is a
+     * {@code ch}-based cap. 70 is the top of the range, chosen because a table cell has neighbours
+     * competing for the same width and a narrower measure would wrap ordinary rows too.</p>
+     */
+    private static final int MEASURE_CHARACTERS = 70;
+
+    /**
+     * How wide a cell would LIKE to be — its own longest line, up to {@link #MEASURE_CHARACTERS}.
+     *
+     * <p>Without a cap, one long sentence decides a whole column: the table then grows with the window
+     * until that sentence fits on a single line, and every ordinary row in that column is a short phrase
+     * followed by a great deal of ruled emptiness. Capping the PREFERENCE and not the width is what keeps
+     * the rest of the algorithm honest — a column may still be wider when its neighbours leave room and
+     * narrower when they do not, and a cell that cannot break at all is still never clipped, because
+     * {@link TableColumns} holds every column at its minimum.</p>
+     *
+     * <p><b>Calibrated against the cell's own text, not a pixel constant.</b> The maximum content width
+     * IS one line of this text in this face, so dividing by its length gives the average character in it
+     * — no font metric to look up, nothing to re-derive when the theme changes the size, and no repeat of
+     * the arbitrary 240px this replaced.</p>
+     *
+     * <p>Deliberately here rather than in {@link TableColumns}: that is CSS Tables 3's algorithm and
+     * takes the widths it is given. A measure is this renderer's editorial choice about prose, and
+     * mixing the two would leave neither statable on its own.</p>
+     */
+    private static float preferredWidth(UIElement cell) {
+        float preferred = intrinsicWidth(cell, Measurable.Fit.MAX_CONTENT);
+        int characters = textLength(cell);
+        if (characters <= MEASURE_CHARACTERS) return preferred;
+        float edges = edgesOf(cell);
+        float content = Math.max(0f, preferred - edges);
+        return edges + content * ((float) MEASURE_CHARACTERS / characters);
+    }
+
+    /** How many characters a cell holds, however many runs they are spread over. */
+    private static int textLength(UIElement element) {
+        if (element instanceof UIText run) return run.getText().length();
+        int total = 0;
+        for (UIElement child : element.children()) total += textLength(child);
+        return total;
+    }
+
+    /** The padding and border between a box's edge and its content, or zero before it has a box. */
+    private static float edgesOf(UIElement element) {
+        Box box = element.box();
+        return box == null ? 0f : Math.max(0f, box.width() - box.contentBoxWidth());
+    }
+
+    /**
+     * What a cell needs, in the border-box terms the written width is in.
+     *
+     * <p>{@link Measurable} answers in CONTENT space -- that is the protocol, and the engine adds the
+     * padding itself -- while a width written into the cascade is a border box under this project's
+     * {@code box-sizing}. The box supplies the difference exactly, which is why this runs after a layout
+     * rather than reading padding back out of the cascade and resolving percentages by hand.</p>
+     *
+     * <p>A cell holding several blocks is not itself measurable: it is a column of them, so it needs the
+     * widest, which is what stacking things vertically means for a width.</p>
+     */
+    private static float intrinsicWidth(UIElement cell, Measurable.Fit fit) {
+        float edges = edgesOf(cell);
+        if (cell instanceof Measurable measurable) {
+            float unknown = Float.NaN;
+            Measurable.Size size = measurable.measure(new Measurable.Constraints(
+                    unknown, unknown, unknown, unknown, fit, Measurable.Fit.MAX_CONTENT));
+            return size.width() + edges;
+        }
+        float widest = 0f;
+        for (UIElement child : cell.children()) widest = Math.max(widest, intrinsicWidth(child, fit));
+        return widest + edges;
     }
 
     /**

@@ -216,6 +216,31 @@ average cannot track a throughput that changes; an exponential moving average tr
 yo-yos. `AGENTS.md`'s *"Port, don't reinvent"* rule names exactly this class of problem, and both
 references consulted — Chromium and wget — independently land on a sliding window.
 
+## Chromium — `TableColumns` (BSD-3-Clause)
+
+`core/src/main/java/com/crystalgui/widget/text/TableColumns.java` is a port of Blink's table column
+sizing — `third_party/blink/renderer/core/layout/table/table_layout_utils.cc`, specifically
+`ComputeGridInlineMinMax` and `DistributeColspanCellsToColumns` — Copyright The Chromium Authors,
+licensed BSD-3-Clause. It implements CSS Tables 3 §*Computing column measures*: a minimum and a maximum
+per column, a spanning cell contributing only the excess its columns cannot already carry, and every
+column then grown from its minimum toward its maximum by the same fraction of what it asked for.
+
+Dropped from the reference, because a doc comment's table never carries them: declared column and cell
+widths, percentage columns, and `table-layout: fixed`. Each is a separate branch there and would be
+dead code here.
+
+**Ported rather than written, after the home-grown version produced the bug it was reported for.** What
+it replaced measured laid-out boxes and wrote `min-width` from them, which is a ratchet rather than a
+measurement — a column could only grow, `min-width` outranks `max-width` so it escaped the sheet's own
+cap, and a column once measured wide never came back. `AGENTS.md`'s *"Port, don't reinvent"* rule names
+this class of problem, and table column sizing is one of the most-solved layout problems there is.
+
+> **Flutter's `RenderTable` (BSD-3-Clause) was the other candidate and none of its code is here.** Its
+> two-phase shape — resolve every column from cell intrinsics, then take each row's height from the
+> tallest cell laid out at its column's final width — is what `MarkupView.alignTables` does, and it is
+> the shape any correct implementation has. It was not the source because `RenderTable` supports no
+> column or row spanning at all, and javadoc tables use `colspan` freely.
+
 > **wget's `progress.c` is GPL-3.0 and none of its code is here.** What was taken from it is one design
 > idea, stated in its own comment: *"Don't refresh the ETA too often to avoid jerkiness in predictions.
 > This allows ETA to change approximately once per second."* That throttle lives in `JobContext` and is

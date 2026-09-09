@@ -853,9 +853,10 @@ markupview .__markup-detail__ {
  * every cell concatenated into one run of prose, which reads as the renderer failing rather than as a
  * construct nobody implemented.
  *
- * The columns are lined up by `MarkupView.alignTables` AFTER layout, for the reason the definition list
- * already documents: `display: grid` is non-functional here, so a real grid track cannot be asked for.
- * A definition list is a table of one column and this is the same measurement over N. */
+ * The columns are sized by `TableColumns` -- CSS Tables 3's automatic layout, ported from Chromium --
+ * and written by `MarkupView.alignTables` after layout, because `display: table` does not exist in this
+ * engine's Taffy and `display: grid` is non-functional, so there is no track to ask for. A definition
+ * list is a table of one column and `alignTerms` is the same measurement over one. */
 
 markupview .__markup-table__ {
     flex-direction: column;
@@ -891,9 +892,11 @@ markupview .__markup-cell__ {
     padding-right: 6px;
     padding-top: 2px;
     padding-bottom: 2px;
-    /* CAPPED, so one long cell wraps rather than pushing the rest of the row off the box. Below the cap
-     * the measured width decides and the column lines up with no gap to spare. */
-    max-width: 240px;
+    /* NO `max-width`. It was here so one long cell wrapped instead of pushing the row off the box, and
+     * it was a stand-in for a column algorithm: 240 is not a property of any table, it capped the header
+     * of a narrow column as readily as the prose of a wide one, and `alignTables` then wrote a
+     * `min-width` that outranks it. `TableColumns` bounds a column by the room the TABLE has, which is
+     * the real constraint, so the cap has nothing left to do. */
 }
 
 /* A `<th>`. Weight rather than a fill: a rule under the header would need a one-sided border, which in
