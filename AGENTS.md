@@ -1604,7 +1604,7 @@ three-phase event types are in `ui/event/` — there is no `core/event/` package
 | `textures/gui/gdp_styles.png` | **Unreferenced by any code today.** |
 | `textures/gui/Spritesheet_UI_Flat.png` | Unreferenced by any stylesheet today. |
 | `ui/fonts/Minecraft.otf`, `MinecraftRegular.otf` | Public-domain MC fonts. |
-| `shaders/gui_quad.shader` | Default material bound by `beginFrame`. **Every quad material here antialiases its own edges when rotated or sheared, with no MSAA** — the `CG_QUAD_EDGE_*` helpers in `cg_env.glsl` (padded geometry, exact-area coverage per edge), `cg_texel_aa_sample` for pixel art, and a wider `sdf_coverage` ramp for the SDF materials; see `CrystalGraphics/AGENTS.md` § *Engine Buffers*. Axis-aligned content is untouched, measured pixel-identical. The `edges` page of `cgui-gallery` shows every material rotated and skewed. |
+| `shaders/gui_quad.shader` | Default material bound by `beginFrame`. **Every quad material here antialiases its own edges when rotated or sheared, with no MSAA** — the `CG_QUAD_EDGE_*` helpers in `env/buffer/quad.glsl`, injected by `#pragma cg_use quad` (padded geometry, exact-area coverage per edge), `cg_texel_aa_sample` from `lib/texel.glsl` for pixel art, and a wider `sdf_coverage` ramp for the SDF materials; see `CrystalGraphics/AGENTS.md` § *Engine Buffers*. Axis-aligned content is untouched, measured pixel-identical. The `edges` page of `cgui-gallery` shows every material rotated and skewed. |
 | `shaders/gui_rect.shader` | SDF rounded rects. |
 | `shaders/gui_layer_blit.shader` | Visual-layer FBO composite. |
 | `shaders/gui_curve.shader` | Bézier strokes, via `ctx.curve()`; filled triangles and quads share it. Declares `#pragma cg_use curve`, not `quad`. |
@@ -1635,7 +1635,7 @@ three-phase event types are in `ui/event/` — there is no `core/event/` package
 
 > **A `#include` in a `.shader` is compiled into the vertex stage as well as the fragment stage.**
 > The material compiler hoists every material-scope `#`-line into both. `gui_rect.shader` is
-> the only shipped shader with an include, and its `sdf.glsl` needed `#ifndef CG_VERTEX_STAGE` around
+> one of several shipped shaders with an include, and its `sdf.glsl` needed `#ifndef CG_VERTEX_STAGE` around
 > `sdf_coverage` — `fwidth` is fragment-only, NVIDIA accepted it anyway, and AMD's refusal made the
 > whole gallery unlaunchable on that hardware. Guard fragment-only code inside the lib, with
 > `#ifndef CG_VERTEX_STAGE` and never `#ifdef CG_FRAGMENT_STAGE` (raw `.vert`/`.frag` get neither
