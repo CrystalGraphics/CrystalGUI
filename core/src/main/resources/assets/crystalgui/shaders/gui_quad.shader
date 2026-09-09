@@ -31,6 +31,8 @@
 #type pos2_uv2_col4ub
 #pragma cg_use quad
 
+#include "crystalgraphics:shaders/lib/texel.glsl"
+
 Tags { "RenderType" = "Transparent" }
 Queue = "Overlay"
 
@@ -66,7 +68,7 @@ Pass {
         vec2 uv = CG_QUAD_EDGE_UV(i.param);
         // Rotated, the texels get the same treatment as the outline -- see CG_TEXEL_AA in cg_env.glsl.
         vec4 texel = CG_QUAD_EDGE_ROTATED
-                ? cg_texel_aa_sample(_MainTex, uv, CG_QUAD_UV_RECT)
+                ? cg_texel_aa_sample(_MainTex, uv, CG_QUAD_UV_RECT, CG_QUAD_EDGE_FILTER)
                 : texture(_MainTex, uv);
         fragColor = texel * i.color;
         fragColor.a *= _LayerOpacity * CG_QUAD_EDGE_COVERAGE(i.param);

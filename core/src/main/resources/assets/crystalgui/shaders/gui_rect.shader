@@ -23,6 +23,8 @@
 #pragma cg_feature WITH_9SLICE_FILL
 #pragma cg_feature SPLIT_BORDER
 
+#include "crystalgraphics:shaders/lib/texel.glsl"
+
 #include "crystalgraphics:shaders/lib/sdf.glsl"
 
 Tags { "RenderType" = "Transparent" }
@@ -173,7 +175,7 @@ Pass {
         // toward fillColor on straight alpha, so a colour left in an alpha-zeroed fill would drag
         // the border's inner edge and leave a fringe -- the same hazard paintOutline documents.
         vec4 fillColor = (CG_QUAD_EDGE_ROTATED
-                ? cg_texel_aa_sample(_MainTex, slice.xy, spriteRect)
+                ? cg_texel_aa_sample(_MainTex, slice.xy, spriteRect, CG_QUAD_EDGE_FILTER)
                 : texture(_MainTex, slice.xy)) * slice.z;
 
         // A SEAM BETWEEN TWO OF THE NINE REGIONS IS GEOMETRY, NOT A TEXEL EDGE, and the texel filter
@@ -207,7 +209,7 @@ Pass {
         }
 #elif defined(WITH_TEXTURE_FILL)
         vec4 fillColor = CG_QUAD_EDGE_ROTATED
-                ? cg_texel_aa_sample(_MainTex, uv, CG_QUAD_UV_RECT)
+                ? cg_texel_aa_sample(_MainTex, uv, CG_QUAD_UV_RECT, CG_QUAD_EDGE_FILTER)
                 : texture(_MainTex, uv);
 #else
         vec4 fillColor = _FillColor;
