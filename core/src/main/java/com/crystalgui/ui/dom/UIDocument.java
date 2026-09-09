@@ -269,6 +269,29 @@ public final class UIDocument extends UIElement {
         return topLayerNode;
     }
 
+    /**
+     * Keeps the top layer the LAST child, whatever is appended after it.
+     *
+     * <p>The layer and the {@code Desktop} are both appended lazily, so their sibling order was decided
+     * by whichever was touched first -- and paint order and hit-test order both read it. Promote before
+     * the desktop exists and the desktop becomes the later sibling: every popup, dialog and tooltip then
+     * draws BEHIND it and takes none of its clicks, for the rest of the session. It reproduced on every
+     * loader and never in dev, because dev builds the desktop before anything can promote.</p>
+     *
+     * <p>Overriding {@code insertAt} alone covers {@code append} and its varargs form too: both funnel
+     * through it and the call dispatches virtually.</p>
+     */
+    @Override
+    public UIElement insertAt(int index, UIElement child) {
+        super.insertAt(index, child);
+        if (topLayerNode != null && child != topLayerNode && topLayerNode.parent() == this) {
+            List<UIElement> kids = children();
+            // moveTo reads its index AFTER the node is taken out, so the post-removal end is size() - 1.
+            if (kids.get(kids.size() - 1) != topLayerNode) topLayerNode.moveTo(this, kids.size() - 1);
+        }
+        return this;
+    }
+
     /** The layer's node, built on first use. The box tree resolves its box. */
     public UIElement topLayerNode() {
         if (topLayerNode == null) {

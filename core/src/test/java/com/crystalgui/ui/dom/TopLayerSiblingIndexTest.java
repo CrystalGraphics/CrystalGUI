@@ -159,4 +159,27 @@ public class TopLayerSiblingIndexTest extends UiDocumentTestBase {
         assertNotNull("the popover did not attach itself", orphan.parent());
         assertTrue(orphan.isOpen());
     }
+
+    /**
+     * A node appended AFTER the layer exists must not overtake it.
+     *
+     * <p>The layer and the {@code Desktop} are both appended lazily, so promoting before the desktop
+     * existed left the desktop the later sibling -- and paint order and hit-test order both read sibling
+     * order, so every popup drew behind it and took none of its clicks for the rest of the session.
+     * Reproduced on every loader and never in dev, which builds the desktop first.</p>
+     */
+    @Test
+    public void topLayerStaysLastWhenSomethingIsAppendedAfterIt() {
+        UIElement layer = document.topLayerNode();
+        assertSame("the layer is last when nothing has followed it",
+                layer, document.children().get(document.children().size() - 1));
+
+        document.append(new UIElement());
+        document.append(new UIElement(), new UIElement());
+        document.insertAt(0, new UIElement());
+        settle();
+
+        assertSame("anything appended after the layer must sit BELOW it",
+                layer, document.children().get(document.children().size() - 1));
+    }
 }
