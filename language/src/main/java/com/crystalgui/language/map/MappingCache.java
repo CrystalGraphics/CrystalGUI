@@ -260,9 +260,12 @@ public final class MappingCache {
         if (readable.isEmpty() || runtime.isEmpty()) return MappingSet.IDENTITY;
         // WITH THE UNQUALIFIED TIER, or everything that scans TEXT is blind to this mapping -- the Remap
         // command and ReadableSource have a name and a dot and no owner to key on.
-        return MappingFiles.load(runtime).invert()
-                .then(MappingFiles.load(readable))
-                .withUnqualifiedMembers();
+        MappingSet joined = MappingFiles.load(runtime).invert().then(MappingFiles.load(readable));
+        // A RUNTIME THAT RENAMED NO CLASSES KEEPS NONE. MCPConfig's srg namespace has its own class
+        // vocabulary (`net/minecraft/src/C_3391_`) that Forge does not run; keeping it makes a script
+        // link against a class nothing has. @see MappingSet#withoutClassRenames
+        if (coordinates.keepsReadableClassNames()) joined = joined.withoutClassRenames();
+        return joined.withUnqualifiedMembers();
     }
 
     /**

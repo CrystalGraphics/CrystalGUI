@@ -155,7 +155,10 @@ public final class ScriptService1201 implements ScriptService {
                 .runtime("joined.tsrg",
                         "https://maven.minecraftforge.net/de/oceanlabs/mcp/mcp_config/"
                                 + version + "/mcp_config-" + version + ".zip",
-                        null, "config/joined.tsrg");
+                        null, "config/joined.tsrg")
+                // Official CLASS names with SRG MEMBERS -- what Forge has run since 1.17. MCPConfig's
+                // own class vocabulary is `net/minecraft/src/C_NNNN_` and no runtime speaks it.
+                .runtimeKeepsReadableClassNames();
     }
 
     /**

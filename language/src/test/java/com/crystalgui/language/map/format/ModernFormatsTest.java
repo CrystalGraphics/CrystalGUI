@@ -40,7 +40,7 @@ public class ModernFormatsTest {
             "net.minecraft.core.BlockPos -> fx:",
             "    int getX() -> u");
 
-    /** MCPConfig's file: tabs nest, and the srg namespace already carries official CLASS names. */
+    /** MCPConfig's file: tabs nest, and its srg CLASS names are {@code net/minecraft/src/C_NNNN_}. */
     private static final String JOINED_TSRG = String.join("\n",
             "tsrg2 obf srg",
             "dhg net/minecraft/world/level/Level",
