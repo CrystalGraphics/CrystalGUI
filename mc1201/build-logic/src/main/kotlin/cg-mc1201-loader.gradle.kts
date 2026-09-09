@@ -99,6 +99,68 @@ dependencies {
 // Shared shadow JAR bundling: bundles :core and :mc1201:common into shadowJar.
 cgbuildlogic.configureShadowJarBundling(project)
 
+// ── The thin jar (J1) ────────────────────────────────────────────────────────────────────────────
+//
+// One input to the single-jar merge: this loader's own classes and resources, plus :mc1201:common,
+// and NOTHING else. The engine, the language stack, Taffy, the bands and tree-sitter enter the merge
+// once at the root; a copy here would ship four times over.
+//
+// `common` has to be relocated because the single jar carries THREE remapped copies of it -- SRG on
+// Forge, official on NeoForge, intermediary on Fabric -- and three classes cannot share a name.
+//
+// THE FOUR PACKAGES ARE MOVED INDIVIDUALLY, never their parent: relocating `com.crystalgui.mc` would
+// rewrite this loader's own `com.crystalgui.mc.<loader>` too, into `...<loader>.common.<loader>`.
+// Each keeps its leaf name under the new root rather than being flattened into it, so a class that
+// was `mc.client.CgUiScreen1201` becomes `mc.forge.common.client.CgUiScreen1201` and stays unique.
+val cgCommonPackages = listOf("client", "net", "platform", "example")
+val cgThinRoot = "com.crystalgui.mc.${project.name}.common"
+
+val thinShadowJar = tasks.register<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("thinShadowJar") {
+    group = "build"
+    description = "This loader plus :mc1201:common, relocated -- the merge's input, before remapping."
+    // DEV NAMES STILL. Forge reobfuscates this, Fabric remaps it, NeoForge ships it as it is; the
+    // classifier says so, so a `-thin-dev` jar is never mistaken for something installable.
+    archiveClassifier.set("thin-dev")
+    configurations = emptyList()
+    from(sourceSets["main"].output)
+    val commonJar = project(":mc1201:common").tasks.named<Jar>("jar")
+    dependsOn(commonJar)
+    from(commonJar.map { zipTree(it.archiveFile) })
+    cgCommonPackages.forEach { relocate("com.crystalgui.mc.$it", "$cgThinRoot.$it") }
+}
+
+// Nothing in :mc1201:common may be NAMED from a descriptor or a service file.
+//
+// The relocation rewrites class references inside the jar; it cannot rewrite a name sitting in
+// `mods.toml`, `fabric.mod.json` or `META-INF/services/...`, so such a name would point at a class
+// that no longer exists under that spelling -- on three loaders, silently, at the moment something
+// asks for it. The loader's OWN packages are fine: they are not relocated.
+val checkDescriptorsNameNoCommon = tasks.register("checkDescriptorsNameNoCommon") {
+    group = "verification"
+    description = "Fails if a descriptor or service file names a class that the thin jar relocates."
+    val resourceRoot = layout.projectDirectory.dir("src/main/resources").asFile
+    val forbidden = cgCommonPackages.map { "com.crystalgui.mc.$it" }
+    inputs.dir(resourceRoot).optional(true).withPropertyName("resources")
+    outputs.upToDateWhen { true }
+    doLast {
+        if (!resourceRoot.isDirectory) return@doLast
+        val hits = resourceRoot.walkTopDown()
+            .filter { it.isFile }
+            .flatMap { file ->
+                val text = runCatching { file.readText() }.getOrDefault("")
+                forbidden.filter { text.contains(it) }.map { file.relativeTo(resourceRoot) to it }
+            }
+            .toList()
+        if (hits.isNotEmpty()) {
+            throw GradleException(
+                "A descriptor or service file names a package the thin jar relocates, so the name "
+                    + "will be wrong on every loader:\n"
+                    + hits.joinToString("\n") { (path, pkg) -> "  $path  names  $pkg" })
+        }
+    }
+}
+tasks.named("check") { dependsOn(checkDescriptorsNameNoCommon) }
+
 // A dev run must BUILD what mods{} makes visible.
 //
 // `mods { sourceSet(project(":core")...) }` writes the source set's output DIRECTORY into

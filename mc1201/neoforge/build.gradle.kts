@@ -101,6 +101,21 @@ val extractMcSources by tasks.registering(Sync::class) {
 // Wire it into classes so build/mc-src/ is always populated after a normal compile.
 tasks.named("classes") { dependsOn(extractMcSources) }
 
+// -- The thin jar (J1) ----------------------------------------------------------------------------
+//
+// NO REMAPPING STEP, for the same reason `assemble` has no reobfuscation here: NeoForge runs official
+// Minecraft names, so `thinShadowJar` already IS the production artifact. It therefore takes the
+// `thin` classifier directly rather than the `thin-dev` the other two carry until they are mapped.
+tasks.named<AbstractArchiveTask>("thinShadowJar") { archiveClassifier.set("thin") }
+
+tasks.register<cgbuildlogic.CheckThinJar>("checkThinJar") {
+    jar.set(tasks.named<AbstractArchiveTask>("thinShadowJar").flatMap { it.archiveFile })
+    allowedPrefixes.set(listOf("com/crystalgui/mc/"))
+}
+
+tasks.named("check") { dependsOn("checkThinJar") }
+tasks.named("assemble") { dependsOn("thinShadowJar") }
+
 // -- Dropping a build into a real client ---------------------------------------------------------
 //
 // NO REOBFUSCATION HERE, and that is the difference from forge rather than an omission: NeoForge runs

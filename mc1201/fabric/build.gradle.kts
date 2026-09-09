@@ -101,6 +101,27 @@ tasks.named<net.fabricmc.loom.task.RemapJarTask>("remapJar") {
     inputFile.set(shadedShadowJar.flatMap { it.archiveFile })
 }
 
+// -- The thin jar, remapped (J1) -------------------------------------------------------------------
+//
+// A SECOND remap task rather than a reconfiguration of the first: `remapJar` produces the fat jar
+// this loader ships today, and both artifacts have to keep building until the root merge replaces
+// the fat one. Remapping is what makes a thin jar production-shaped here, exactly as reobfuscation
+// does on Forge -- intermediary is what a Fabric mod's class references must be.
+val remapThinJar = tasks.register<net.fabricmc.loom.task.RemapJarTask>("remapThinJar") {
+    group = "build"
+    description = "The thin jar at intermediary names -- the merge's input from this loader."
+    inputFile.set(tasks.named<AbstractArchiveTask>("thinShadowJar").flatMap { it.archiveFile })
+    archiveClassifier.set("thin")
+}
+
+tasks.register<cgbuildlogic.CheckThinJar>("checkThinJar") {
+    jar.set(remapThinJar.flatMap { it.archiveFile })
+    allowedPrefixes.set(listOf("com/crystalgui/mc/"))
+}
+
+tasks.named("check") { dependsOn("checkThinJar") }
+tasks.named("assemble") { dependsOn(remapThinJar) }
+
 // Extracts Fabric MC 1.20.1 sources and resources into build/mc-src for local navigation.
 // Sync (not Copy) removes stale files when jars change between toolchain version bumps.
 val extractMcSources by tasks.registering(Sync::class) {
