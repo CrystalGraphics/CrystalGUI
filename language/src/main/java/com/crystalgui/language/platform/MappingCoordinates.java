@@ -120,6 +120,8 @@ public final class MappingCoordinates {
     private final Map<String, String> digests;
     /** Per-file source and side, for coordinates that state them. @see #readable @see #runtime */
     private final Map<String, Artifact> artifacts;
+    /** @see #runtimeKeepsReadableClassNames */
+    private final boolean readableClassNames;
 
     private MappingCoordinates(String minecraftVersion, String channel, String version, String baseUrl,
                                List<String> files, Map<String, String> digests) {
@@ -130,6 +132,13 @@ public final class MappingCoordinates {
     private MappingCoordinates(String minecraftVersion, String channel, String version, String baseUrl,
                                List<String> files, Map<String, String> digests,
                                Map<String, Artifact> artifacts) {
+        this(minecraftVersion, channel, version, baseUrl, files, digests, artifacts, false);
+    }
+
+    private MappingCoordinates(String minecraftVersion, String channel, String version, String baseUrl,
+                               List<String> files, Map<String, String> digests,
+                               Map<String, Artifact> artifacts, boolean readableClassNames) {
+        this.readableClassNames = readableClassNames;
         this.minecraftVersion = minecraftVersion;
         this.channel = channel;
         this.version = version;
@@ -258,6 +267,29 @@ public final class MappingCoordinates {
     public Source sourceOf(String fileName) {
         Artifact artifact = artifacts.get(fileName);
         return artifact == null ? Source.fixed(urlOf(fileName), digestOf(fileName)) : artifact.source;
+    }
+
+    /**
+     * Declares that the runtime keeps the READABLE class names and renames only members.
+     *
+     * <pre>{@code
+     * MappingCoordinates.of("1.20.1", "srg", version)
+     *     .readable("client.txt", mojang, null)
+     *     .runtime("joined.tsrg", mcpConfigZip, null, "config/joined.tsrg")
+     *     .runtimeKeepsReadableClassNames();   // Forge: official classes, SRG members
+     * }</pre>
+     *
+     * <p>True of Forge from 1.17 on. NOT true of Fabric, whose runtime really does have
+     * {@code net/minecraft/class_1937}. @see com.crystalgui.language.map.MappingSet#withoutClassRenames</p>
+     */
+    public MappingCoordinates runtimeKeepsReadableClassNames() {
+        return new MappingCoordinates(minecraftVersion, channel, version, baseUrl, files, digests,
+                artifacts, true);
+    }
+
+    /** @see #runtimeKeepsReadableClassNames */
+    public boolean keepsReadableClassNames() {
+        return readableClassNames;
     }
 
     /**

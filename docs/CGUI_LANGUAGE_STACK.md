@@ -203,8 +203,20 @@ bytecode links against what the runtime actually declares.
 | Forge 1.20.1 | official | **SRG** | SRG → official |
 | Fabric 1.20.1 | **intermediary** | **intermediary** | intermediary → official |
 
-**Forge's is a mixed namespace** — official class names with SRG members — and MCPConfig's own "srg"
-namespace is that same mix, which is why the class half of its join composes to the identity.
+**Forge's is a mixed namespace** — official class names with SRG members. MCPConfig's own "srg"
+namespace is *not* that mix: its classes are `net/minecraft/src/C_NNNN_`, a vocabulary nothing runs.
+
+> **The class half of a Forge join has to be thrown away.** `enn net/minecraft/src/C_3391_ 3391` is
+> what `joined.tsrg` says, so the raw composition keys every member under `C_3391_` and answers
+> `runtimeClass(Minecraft)` with it — and `runtimeClass` is what rewrites a compiled script's class
+> references, so the script links against a class no runtime has.
+> `MappingSet.withoutClassRenames()` moves the owners into the readable namespace and drops the class
+> table; `MappingCoordinates.runtimeKeepsReadableClassNames()` is how a target asks for it. **Fabric
+> must not**, because `net/minecraft/class_1937` is genuinely what its runtime has.
+>
+> This was asserted the other way round for a whole feature, and the fixtures agreed because they were
+> written from the assumption rather than from the file. Twenty-four green tests, and a mapping that
+> could not link one line.
 
 ### No published artifact maps out of a namespace a runtime speaks
 

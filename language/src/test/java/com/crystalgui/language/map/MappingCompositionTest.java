@@ -25,33 +25,73 @@ public class MappingCompositionTest {
     }
 
     /**
-     * Forge 1.20.1: official class names, SRG members — and the composed mapping must come out in that
-     * same mix, because that is what the runtime is.
+     * MCPConfig's srg namespace, spelled as it really is: {@code net/minecraft/src/C_NNNN_}.
      *
-     * <p>MCPConfig's srg namespace already carries official class names, which is why the class half
-     * composes to the identity rather than to anything needing a rename.</p>
+     * <p>An earlier version of this fixture put OFFICIAL class names in this column, because that is
+     * what the code assumed. It is not what the file says — {@code enn net/minecraft/src/C_3391_ 3391}
+     * — and writing the assumption into the fixture is what let twenty-four green tests agree with a
+     * mapping that could not link a single script.</p>
      */
-    @Test
-    public void forgeComposesToOfficialClassesWithSrgMembers() {
-        MappingSet obfToSrg = MappingSet.builder()
-                .type("dhg", "net/minecraft/world/level/Level")
-                .type("fx", "net/minecraft/core/BlockPos")
+    private static MappingSet obfToSrg() {
+        return MappingSet.builder()
+                .type("dhg", "net/minecraft/src/C_3391_")
+                .type("fx", "net/minecraft/src/C_4675_")
                 .method("dhg", "a", "m_8055_")
                 .method("dhg", "b", "m_5776_")
                 .field("dhg", "c", "f_46441_")
                 .build();
+    }
 
-        MappingSet srgToOfficial = obfToSrg.invert().then(obfToOfficial());
+    /**
+     * Forge 1.20.1: official class names, SRG members — and the composed mapping must come out in that
+     * mix, because that is what the runtime is.
+     *
+     * <p>The join alone does not produce it. MCPConfig has a class vocabulary of its own that Forge
+     * does not run, so the raw composition keys everything under {@code C_3391_};
+     * {@link MappingSet#withoutClassRenames()} is what moves the owners into the readable namespace
+     * and drops the class table.</p>
+     */
+    @Test
+    public void forgeComposesToOfficialClassesWithSrgMembers() {
+        MappingSet forge = obfToSrg().invert().then(obfToOfficial()).withoutClassRenames();
 
-        assertEquals("class names are already official at runtime",
-                "net/minecraft/world/level/Level",
-                srgToOfficial.readableClass("net/minecraft/world/level/Level"));
+        String level = "net/minecraft/world/level/Level";
+        assertEquals("getBlockState", forge.readableMethod(level, "m_8055_"));
+        assertEquals("isClientSide", forge.readableMethod(level, "m_5776_"));
+        assertEquals("random", forge.readableField(level, "f_46441_"));
+        assertEquals("a class answers as itself", level, forge.readableClass(level));
+    }
+
+    /**
+     * The failure that shipped: a script naming {@code Minecraft} linked against {@code C_3391_}.
+     *
+     * <p>{@code runtimeClass} is what rewrites a compiled script's class references, so a class table
+     * carried over from MCPConfig sends it to a name no runtime has —
+     * {@code NoClassDefFoundError: net/minecraft/src/C_3391_}, on the line that named the class.</p>
+     */
+    @Test
+    public void aForgeRuntimeClassNameIsNeverMcpConfigsOwn() {
+        MappingSet forge = obfToSrg().invert().then(obfToOfficial()).withoutClassRenames();
+
+        String level = "net/minecraft/world/level/Level";
+        assertEquals("the runtime has this class under this very name", level, forge.runtimeClass(level));
+        assertEquals("and the member is still SRG", "m_8055_", forge.runtimeMethod(level, "getBlockState"));
+    }
+
+    /** Fabric renames classes for real, so the same treatment there would throw away half the mapping. */
+    @Test
+    public void dropingClassRenamesIsWrongForARuntimeThatRenamesThem() {
+        MappingSet obfToIntermediary = MappingSet.builder()
+                .type("dhg", "net/minecraft/class_1937")
+                .method("dhg", "a", "method_8320")
+                .build();
+
+        MappingSet fabric = obfToIntermediary.invert().then(obfToOfficial());
+
+        assertEquals("net/minecraft/world/level/Level",
+                fabric.readableClass("net/minecraft/class_1937"));
         assertEquals("getBlockState",
-                srgToOfficial.readableMethod("net/minecraft/world/level/Level", "m_8055_"));
-        assertEquals("isClientSide",
-                srgToOfficial.readableMethod("net/minecraft/world/level/Level", "m_5776_"));
-        assertEquals("random",
-                srgToOfficial.readableField("net/minecraft/world/level/Level", "f_46441_"));
+                fabric.readableMethod("net/minecraft/class_1937", "method_8320"));
     }
 
     /** Fabric: intermediary classes AND members, so both halves genuinely rename. */

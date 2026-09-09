@@ -13,7 +13,7 @@ import java.nio.file.Path;
  *
  * <pre>{@code
  * tsrg2 obf srg
- * dhg net/minecraft/world/level/Level
+ * enn net/minecraft/src/C_3391_ 3391
  * 	a (Lfx;)Ldkr; m_8055_
  * 	c Ldsx; f_46441_
  * }</pre>
@@ -24,11 +24,16 @@ import java.nio.file.Path;
  * MappingSet srgToOfficial = obfToSrg.invert().then(obfToOfficial);
  * }</pre>
  *
- * <h3>The "srg" namespace carries OFFICIAL class names</h3>
+ * <h3>The "srg" namespace has a CLASS vocabulary of its own, and no runtime speaks it</h3>
  *
- * <p>Since 1.17 only members are SRG; classes are already {@code net/minecraft/world/level/Level}. So
- * the class half of the join composes to the identity, and that is not a bug in the join — it is what
- * Forge 1.20.1 actually runs, and what makes {@code Level.m_8055_ → getBlockState} the right answer.</p>
+ * <p>{@code enn net/minecraft/src/C_3391_ 3391}. Forge runs official class names with SRG members and
+ * has done since 1.17, so {@code C_NNNN_} is MCPConfig's alone — carry it into the composed mapping and
+ * a script naming {@code Minecraft} links against a class nothing has, which is
+ * {@code NoClassDefFoundError: net/minecraft/src/C_3391_} on the line that named it.</p>
+ *
+ * <p>{@link MappingSet#withoutClassRenames()} is what drops it, and a Forge target asks for it through
+ * {@code MappingCoordinates.runtimeKeepsReadableClassNames()}. Fabric must NOT: its runtime really is
+ * {@code net/minecraft/class_1937}.</p>
  *
  * <h3>Indentation is the grammar</h3>
  *

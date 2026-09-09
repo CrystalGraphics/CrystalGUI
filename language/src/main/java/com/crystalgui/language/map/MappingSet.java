@@ -217,6 +217,56 @@ public final class MappingSet {
      *
      * <p>Nothing derives this for MCP: its CSVs have no owner to key on and register here directly.</p>
      */
+    /**
+     * The members, re-keyed under their READABLE owners, with the class renames dropped.
+     *
+     * <p>For a runtime that already speaks readable CLASS names and renames only members — which is
+     * Forge from 1.17 onward: {@code net.minecraft.client.Minecraft} spelled in full, with
+     * {@code m_91087_} on it.</p>
+     *
+     * <pre>{@code
+     * MappingSet forge = obfToSrg.invert().then(obfToOfficial).withoutClassRenames();
+     * forge.readableMethod("net/minecraft/client/Minecraft", "m_91087_");  // getInstance
+     * forge.runtimeClass("net/minecraft/client/Minecraft");                // itself, unchanged
+     * }</pre>
+     *
+     * <h3>Why this is not the same as the join already producing it</h3>
+     *
+     * <p>MCPConfig's srg namespace has a class vocabulary of its OWN —
+     * {@code enn -> net/minecraft/src/C_3391_} — and Forge runs none of it. Composed unaltered, the
+     * join keys every member under {@code C_3391_} and answers {@code runtimeClass(Minecraft)} with
+     * {@code C_3391_}; a script then links against a class no runtime has, and fails with
+     * {@code NoClassDefFoundError: net/minecraft/src/C_3391_} pointing at the line that named
+     * {@code Minecraft}. So the owners are translated into the readable namespace and the class table
+     * is discarded, leaving classes to answer as themselves.</p>
+     *
+     * <p><b>Not for every host.</b> Fabric renames classes for real — {@code net/minecraft/class_1937}
+     * IS what its runtime has — so calling this there would throw the mapping's class half away and
+     * break exactly what it is meant to fix.</p>
+     */
+    public MappingSet withoutClassRenames() {
+        Builder out = builder();
+        rekeyUnderReadableOwner(methods, out, true);
+        rekeyUnderReadableOwner(fields, out, false);
+        globalMethods.forEach(out::method);
+        globalFields.forEach(out::field);
+        return out.build();
+    }
+
+    /** One owner-keyed table, its owners moved into the readable namespace. @see #withoutClassRenames */
+    private void rekeyUnderReadableOwner(Map<String, String> table, Builder out, boolean method) {
+        for (Map.Entry<String, String> entry : table.entrySet()) {
+            int dot = entry.getKey().lastIndexOf('.');
+            String owner = readableClass(entry.getKey().substring(0, dot));
+            String name = entry.getKey().substring(dot + 1);
+            if (method) {
+                out.method(owner, name, entry.getValue());
+            } else {
+                out.field(owner, name, entry.getValue());
+            }
+        }
+    }
+
     public MappingSet withUnqualifiedMembers() {
         return new MappingSet(classes, methods, fields,
                 mergedWithUnambiguous(globalMethods, methods),
