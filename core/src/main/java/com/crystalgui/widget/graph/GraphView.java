@@ -976,11 +976,6 @@ public class GraphView extends SurfaceEditor implements GraphContext {
         return wires.width();
     }
 
-    /** @see GraphWires#feather */
-    public float getWireFeather() {
-        return wires.feather();
-    }
-
     @Override
     protected void connected() {
         super.connected();

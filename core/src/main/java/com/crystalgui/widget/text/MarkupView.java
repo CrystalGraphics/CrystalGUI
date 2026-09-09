@@ -700,9 +700,6 @@ public class MarkupView extends UIElement {
          */
         private static final float LINE = 0.6f;
 
-        /** Enough to keep the edge crisp; a stroke with no ramp at all aliases into a dotted line. */
-        private static final float FEATHER = 0.4f;
-
         @Override
         public void paintDecoration(CgUiPaintContext ctx, Box box) {
             super.paintDecoration(ctx, box);
@@ -817,7 +814,6 @@ public class MarkupView extends UIElement {
             ctx.curve()
                     .cubic(x0, y0, x0, y0, x1, y1, x1, y1)
                     .width(LINE)
-                    .feather(FEATHER)
                     .colors(color, color)
                     .submit();
         }
