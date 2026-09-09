@@ -4,7 +4,9 @@
 // (WITH_TEXTURE_FILL, single stretched sample), or a 9-slice sprite (WITH_9SLICE_FILL, per-pixel
 // equivalent of CgUiSprite's 9-quad slicing -- see the fragment's own comment), with an optional
 // _BorderColor stroke band (WITH_BORDER) along the outer edge. All fill modes and the border share
-// one rounded-box SDF, so corners clip everything consistently. _CornerRadiusX/_CornerRadiusY each
+// one rounded-box SDF, so corners clip everything consistently. Off-axis, both textured fills take
+// the texel filter the shared quad material takes (CG_TEXEL_AA in cg_env.glsl) -- for the 9-slice that
+// is also what antialiases the boundaries BETWEEN its nine regions, which nine separate quads cannot. _CornerRadiusX/_CornerRadiusY each
 // hold four independent per-corner radii (TL,TR,BR,BL, CSS order) -- elliptical corners (rx != ry).
 // UIElement's rounded-corner hit-test uses the same per-corner (rx,ry) values and the same
 // approximate elliptical SDF technique, so rendering and hit-testing stay consistent.
@@ -93,39 +95,22 @@ Pass {
         return srcSize > 0.0 ? within / srcSize : 0.0;
     }
 
-    void vertex(out v2f o) {
-        o.param = CG_QUAD_EDGE_PARAM;
-        gl_Position = cg_ProjMatrix * vec4(CG_QUAD_EDGE_WORLD_POS(o.param), 1.0);
-        o.color = CG_QUAD_COLOR;
-    }
-
-    void fragment(in v2f i, out vec4 fragColor) {
-        // Unclamped for the SDF, since past the box is exactly what it is there to cut; clamped for the
-        // texture fills, so the pad never samples outside the rect.
-        vec2 uvUnclamped = mix(QUAD_DATA(CG_INSTANCE_ID).uv0, QUAD_DATA(CG_INSTANCE_ID).uv1, i.param);
-        vec2 uv = CG_QUAD_EDGE_UV(i.param);
-        vec2 halfSize = _BoxSize * 0.5;
-        vec2 localPos = (uvUnclamped - 0.5) * _BoxSize;
-        float dist = sdf_rounded_box(localPos, halfSize, _CornerRadiusX, _CornerRadiusY);
-        // A rotated box takes the wider reconstruction filter its edges and texels get; at rest, one pixel.
-        float ramp = CG_QUAD_EDGE_ROTATED ? CG_QUAD_EDGE_FILTER : 1.0;
-        float coverage = sdf_coverage(dist, ramp);
-
-#ifdef WITH_9SLICE_FILL
-        // Continuous-per-pixel equivalent of CgUiSprite's 9-quad slicing: remap this pixel's
-        // box-local position into the correct one of 9 atlas regions, using the same
-        // border-overlap clamp (scaleX/scaleY) CgUiSprite.draw() applies.
-        vec2 p = uv * _BoxSize;
+    /** Where the nine regions meet, in box-local pixels: (x1, y1, x2, y2). */
+    vec4 cg_sliceBounds() {
         vec4 border = _NineSliceBorder;
         float scaleX = min(1.0, _BoxSize.x / max(1.0, border.x + border.z));
         float scaleY = min(1.0, _BoxSize.y / max(1.0, border.y + border.w));
-        float drawL = border.x * scaleX;
-        float drawR = border.z * scaleX;
-        float drawT = border.y * scaleY;
-        float drawB = border.w * scaleY;
-        float x1 = drawL, x2 = _BoxSize.x - drawR;
-        float y1 = drawT, y2 = _BoxSize.y - drawB;
+        return vec4(border.x * scaleX, border.y * scaleY,
+                    _BoxSize.x - border.z * scaleX, _BoxSize.y - border.w * scaleY);
+    }
 
+    // The nine-region remap: box-local pixels in, atlas UV in .xy and the keep/centre mask in .z.
+    // A FUNCTION rather than the inline block it used to be, because the fragment evaluates it at more
+    // than one position -- see the seam supersample there. It samples nothing itself: cg_texel_aa_sample
+    // is fragment-only and this is compiled into the vertex stage as well.
+    vec3 cg_slice9Uv(vec2 p) {
+        vec4 b = cg_sliceBounds();
+        float x1 = b.x, y1 = b.y, x2 = b.z, y2 = b.w;
         float keepX = 1.0;
         float keepY = 1.0;
         float centerMask = 1.0;
@@ -156,14 +141,74 @@ Pass {
         if (_NineSliceFlags.x < 0.5 && p.x >= x1 && p.x <= x2 && p.y >= y1 && p.y <= y2) {
             centerMask = 0.0;
         }
+        return vec3(u, v, keepX * keepY * centerMask);
+    }
 
-        vec4 fillColor = texture(_MainTex, vec2(u, v));
+    void vertex(out v2f o) {
+        o.param = CG_QUAD_EDGE_PARAM;
+        gl_Position = cg_ProjMatrix * vec4(CG_QUAD_EDGE_WORLD_POS(o.param), 1.0);
+        o.color = CG_QUAD_COLOR;
+    }
+
+    void fragment(in v2f i, out vec4 fragColor) {
+        // Unclamped for the SDF, since past the box is exactly what it is there to cut; clamped for the
+        // texture fills, so the pad never samples outside the rect.
+        vec2 uvUnclamped = mix(QUAD_DATA(CG_INSTANCE_ID).uv0, QUAD_DATA(CG_INSTANCE_ID).uv1, i.param);
+        vec2 uv = CG_QUAD_EDGE_UV(i.param);
+        vec2 halfSize = _BoxSize * 0.5;
+        vec2 localPos = (uvUnclamped - 0.5) * _BoxSize;
+        float dist = sdf_rounded_box(localPos, halfSize, _CornerRadiusX, _CornerRadiusY);
+        // A rotated box takes the wider reconstruction filter its edges and texels get; at rest, one pixel.
+        float ramp = CG_QUAD_EDGE_ROTATED ? CG_QUAD_EDGE_FILTER : 1.0;
+        float coverage = sdf_coverage(dist, ramp);
+
+#ifdef WITH_9SLICE_FILL
+        // Continuous-per-pixel equivalent of CgUiSprite's 9-quad slicing: remap this pixel's
+        // box-local position into the correct one of 9 atlas regions -- see cg_slice9Uv.
+        vec2 p = uv * _BoxSize;
+        vec4 spriteRect = vec4(min(_NineSliceOuterUV.xy, _NineSliceOuterUV.zw),
+                               max(_NineSliceOuterUV.xy, _NineSliceOuterUV.zw));
+        vec3 slice = cg_slice9Uv(p);
         // Multiply ALL FOUR channels, never alpha alone: the WITH_BORDER mix() below interpolates
         // toward fillColor on straight alpha, so a colour left in an alpha-zeroed fill would drag
         // the border's inner edge and leave a fringe -- the same hazard paintOutline documents.
-        fillColor *= keepX * keepY * centerMask;
+        vec4 fillColor = (CG_QUAD_EDGE_ROTATED
+                ? cg_texel_aa_sample(_MainTex, slice.xy, spriteRect)
+                : texture(_MainTex, slice.xy)) * slice.z;
+
+        // A SEAM BETWEEN TWO OF THE NINE REGIONS IS GEOMETRY, NOT A TEXEL EDGE, and the texel filter
+        // above cannot antialias it: that filter works in texel space off `fwidth`, and at a seam the
+        // two sides' texel gradients differ by whatever the centre is stretched by -- a hundredfold on
+        // a 5x7 sprite blown up to a button -- so the width it reconstructs from is meaningless there.
+        // The seam's position, though, is a straight line in box-local pixels, which ARE smooth. So
+        // supersample the remap over this pixel's own footprint, on the one-pixel line where the
+        // regions meet and nowhere else: 16 taps of a 5x7 sprite, on the rare quad that is off-axis.
+        //
+        // dFdx/dFdy OUTSIDE the branch -- derivatives in divergent control flow are undefined, and a
+        // seam is exactly where neighbouring fragments disagree about the branch.
+        vec2 ddx = dFdx(p), ddy = dFdy(p);
+        vec4 sb = cg_sliceBounds();
+        vec2 fw = abs(ddx) + abs(ddy);
+        bool onSeam = min(min(abs(p.x - sb.x), abs(p.x - sb.z)) - fw.x,
+                          min(abs(p.y - sb.y), abs(p.y - sb.w)) - fw.y) < 0.0;
+        if (CG_QUAD_EDGE_ROTATED && onSeam) {
+            // 8x8, because the grid IS the gradation: a box filter quantises coverage to 1/N^2, and at
+            // 4x4 that left the seam stepping by a fifth of its colour range where the analytic edges
+            // beside it step by a twelfth. 64 taps of a 5x7 sprite, on a one-pixel line, off-axis only.
+            vec4 acc = vec4(0.0);
+            for (int sy = 0; sy < 8; ++sy) {
+                for (int sx = 0; sx < 8; ++sx) {
+                    vec2 o = (vec2(float(sx), float(sy)) - 3.5) * 0.125;
+                    vec3 sub = cg_slice9Uv(p + o.x * ddx + o.y * ddy);
+                    acc += texture(_MainTex, sub.xy) * sub.z;
+                }
+            }
+            fillColor = acc * (1.0 / 64.0);
+        }
 #elif defined(WITH_TEXTURE_FILL)
-        vec4 fillColor = texture(_MainTex, uv);
+        vec4 fillColor = CG_QUAD_EDGE_ROTATED
+                ? cg_texel_aa_sample(_MainTex, uv, CG_QUAD_UV_RECT)
+                : texture(_MainTex, uv);
 #else
         vec4 fillColor = _FillColor;
 #endif

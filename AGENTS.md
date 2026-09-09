@@ -843,7 +843,7 @@ issue exactly one GPU draw call, or zero for a fully transparent tint.
 | Class | Role |
 |---|---|
 | `CgUiQuad` | Flat solid-colour fill; `CgUiDrawable.EMPTY` is one |
-| `CgUiSprite` | Full 9-slice textured sprite (`setTexture`/`setSprite`/`setBorder`, lazy UV cache) |
+| `CgUiSprite` | Full 9-slice textured sprite (`setTexture`/`setSprite`/`setBorder`, lazy UV cache). **Rotated or sheared it draws as ONE quad, not nine** — through `gui_rounded_rect.shader`'s `WITH_9SLICE_FILL`, the same nine-region remap done per pixel. Nine quads share eight interior seams, and a seam is either hard (a staircase, once off-axis) or softened from both sides (three-quarter coverage, a hairline); neither is fixable per quad, because each would have to know what its neighbour drew. Axis-aligned the rasteriser snaps every seam to the same pixel boundary and the nine batch, so the one-quad path is gated on `ctx.poseIsOffAxis()`. In that shader the seams are **supersampled**, not texel-filtered: a seam is a line in box-local pixels, and the texel filter reconstructs from `fwidth` in TEXEL space, which is meaningless where a stretched centre meets a 1:1 border |
 | `CgUiRoundedRect` | SDF path — per-corner radii, morphing |
 | `CgUiCrossFade` | Blends two drawables, for `background` transitions |
 | `CgUiLayerBox` | Composites a stack; resolves `overlay-size` via `intrinsicWidth()` |
