@@ -44,3 +44,7 @@ __pycache__/
 
 # The plans, cloned by hand from a private remote. Absent is normal.
 /plan/
+
+# Machine-local settings -- paths true of one checkout only. The .example beside it IS committed and
+# is the template. @see gradle/local-settings.gradle.kts
+local.properties

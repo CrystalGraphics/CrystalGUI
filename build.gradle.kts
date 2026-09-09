@@ -20,6 +20,10 @@ plugins {
     id("org.jetbrains.gradle.plugin.idea-ext")
 }
 
+// Machine-local settings (`local.properties`, gitignored) onto every project's `extra`, before
+// anything reads one. @see gradle/local-settings.gradle.kts
+apply(from = rootProject.file("gradle/local-settings.gradle.kts").toURI())
+
 // ── Everything a consuming mod's dev run reads, built ────────────────────────────────────────────
 //
 // A mod that consumes CrystalGUI as a composite puts these jars on its game classpath, and nothing
