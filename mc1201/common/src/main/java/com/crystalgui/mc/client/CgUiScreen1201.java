@@ -181,6 +181,11 @@ public final class CgUiScreen1201 extends Screen {
      */
     private boolean ensureEditorWindow() {
         if (editorWindow != null) return true;
+        // THE HOST'S FRAME FIRST, because it is what BINDS the workspace and the launch below reads one.
+        // Paint was the only caller, so the FIRST open asked for the editor before any frame had run and
+        // took the registry's "needs a server and there is none" refusal with a healthy connection open.
+        // Idempotent: the bind is guarded and a rebind needs a new wire. @see CgUiScreen on 1.7.10
+        host.frame(0f);
         Application launched;
         try {
             launched = host.desktop().applications()
