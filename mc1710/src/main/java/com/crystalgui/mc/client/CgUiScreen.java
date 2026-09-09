@@ -383,6 +383,13 @@ public final class CgUiScreen extends GuiScreen {
      */
     private boolean ensureEditorWindow() {
         if (editorWindow != null) return true;
+        // THE HOST'S FRAME FIRST, because it is what BINDS the workspace and the launch below reads one.
+        // DesktopHost.frame builds the Workspace from the live connection the first time it runs, and
+        // paint is the only thing that used to call it -- so the FIRST open asked for the editor before
+        // any frame had run, took the registry's "needs a server and there is none" refusal with a
+        // healthy connection open, and showed an empty desktop. The second open worked, which is what
+        // made it read as a render fault. Idempotent: the bind is guarded and a rebind needs a new wire.
+        host.frame(0f);
         // ONE CALL, AND EVERY REFUSAL IS THE REGISTRY'S. "The editor needs a world" used to be a log
         // line written here, beside the storage wiring, the class registration, the window's title, key,
         // policy and icon, the first-run geometry, the project ask and the session restore -- fourteen

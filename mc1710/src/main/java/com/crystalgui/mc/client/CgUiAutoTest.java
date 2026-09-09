@@ -105,6 +105,28 @@ public final class CgUiAutoTest {
      */
     private static final String WORLD = emptyToNull(System.getProperty("crystalgui.autotest.world"));
 
+    /**
+     * The save to load: {@code *} means "whichever one is there", any other value is a folder name.
+     *
+     * <p><b>Because a folder name cannot always be passed.</b> An installed client takes these through
+     * PrismLauncher's {@code JvmArgs}, which splits on spaces and strips quotes -- so
+     * {@code -Dcrystalgui.autotest.world=New World} arrives as two arguments and the JVM dies with
+     * {@code Could not find or load main class World...}. Every world made through the vanilla UI is
+     * called "New World". The sentinel sidesteps the whole quoting problem, and "the first save" is
+     * what somebody driving this unattended means anyway.</p>
+     */
+    private static String resolveWorld(Minecraft mc) {
+        if (!"*".equals(WORLD)) return WORLD;
+        File[] saves = new File(mc.mcDataDir, "saves").listFiles(File::isDirectory);
+        if (saves != null) {
+            for (File save : saves) {
+                if (new File(save, "level.dat").isFile()) return save.getName();
+            }
+        }
+        // Nothing to load, so name the one this would create. @see the WorldSettings below
+        return "cgui-autotest";
+    }
+
     /** Frames in the world before opening, so the render pipeline has really run. */
     private static final int IN_WORLD_SETTLE_TICKS = 40;
 
@@ -207,10 +229,11 @@ public final class CgUiAutoTest {
                         // with a session.lock in it, and loading that answers null and NPEs inside
                         // Minecraft -- so the second run of a broken first run fails differently
                         // from the first, which is the worst kind of flake to read.
-                        boolean exists = new File(mc.mcDataDir, "saves/" + WORLD + "/level.dat").isFile();
+                        String world = resolveWorld(mc);
+                        boolean exists = new File(mc.mcDataDir, "saves/" + world + "/level.dat").isFile();
                         CrystalGuiCore.LOGGER.info("CGUI AUTOTEST {} world '{}'",
-                                exists ? "loading" : "creating", WORLD);
-                        mc.launchIntegratedServer(WORLD, WORLD, exists ? null
+                                exists ? "loading" : "creating", world);
+                        mc.launchIntegratedServer(world, world, exists ? null
                                 : new WorldSettings(0L, WorldSettings.GameType.CREATIVE,
                                         false, false, WorldType.FLAT));
                     }

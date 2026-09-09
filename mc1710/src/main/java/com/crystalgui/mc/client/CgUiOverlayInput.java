@@ -3,6 +3,7 @@ package com.crystalgui.mc.client;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.core.window.DesktopPresentation;
+import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.host.ScreenOverlay;
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
@@ -94,7 +95,11 @@ public final class CgUiOverlayInput {
             CrystalGuiCore.LOGGER.info("[cgui] overlay input is live: pinned windows are taking events "
                     + "from {}", screen.getClass().getName());
         }
-        ScreenOverlay overlay = CgUiScreen.desktop().screenOverlay();
+        // NOT COVERED BY THE GUARD ABOVE, which asks the HOST for a document; this asks the DESKTOP
+        // NODE, and a closed UI leaves the node disconnected while the host still holds one. @see CgUiHud
+        Desktop desktop = CgUiScreen.desktop();
+        ScreenOverlay overlay = desktop == null ? null : desktop.screenOverlay();
+        if (overlay == null) return;
         Minecraft mc = Minecraft.getMinecraft();
 
         try {

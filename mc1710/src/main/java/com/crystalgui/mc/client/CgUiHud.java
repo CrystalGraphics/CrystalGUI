@@ -1,6 +1,7 @@
 package com.crystalgui.mc.client;
 
 import com.crystalgraphics.platform.gl.state.CgGlState;
+import com.crystalgui.desktop.host.ScreenOverlay;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.ui.dom.UIDocument;
@@ -103,12 +104,17 @@ public final class CgUiHud {
         boolean foreignUp = current != null && !(current instanceof CgUiScreen);
         if (foreignUp != foreignScreenWasUp) {
             foreignScreenWasUp = foreignUp;
-            desktop.screenOverlay().onForeignScreenChanged(foreignUp);
+            // Nullable: screenOverlay() answers null while the compositor's node is not connected to a
+            // document, which is what a CLOSED UI leaves behind -- CgUiScreen.desktop() still hands back
+            // the Desktop. Thrown from the render tick it takes the whole game down, which is the crash
+            // this reads as. The missed transition is not owed to anybody: a fresh ScreenOverlay is
+            // built when a document appears, so there is no stale belief to correct.
+            ScreenOverlay overlay = desktop.screenOverlay();
+            if (overlay != null) overlay.onForeignScreenChanged(foreignUp);
         }
 
         return desktop.presentation(current instanceof CgUiScreen, current != null);
     }
-
     /** Paints {@code presentation}, bracketed by the GL discipline. Shared by both hooks. */
     private static void paint(DesktopPresentation presentation) {
         Desktop desktop = CgUiScreen.desktop();

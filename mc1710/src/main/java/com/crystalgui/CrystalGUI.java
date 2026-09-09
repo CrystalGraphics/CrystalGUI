@@ -90,6 +90,10 @@ public class CrystalGUI {
         LOGGER.info("{}: init", NAME);
         proxy.init();
         scriptInit();
+        // AFTER scriptInit, which registers the ScriptService this reads. Started before it, the
+        // decision finds no platform, says so, and KEEPS THE CLAIM -- identity names for the life of
+        // the process. @see CommonProxy#startMappings
+        proxy.startMappings();
     }
 
     @Mod.EventHandler
