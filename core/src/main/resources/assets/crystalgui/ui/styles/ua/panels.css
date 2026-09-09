@@ -252,11 +252,10 @@ notificationsview .__notification__ {
     /* CENTRED ON THE HEADING, which is one line and can only be one line.
      *
      * This was `flex-start`, against a message that WRAPPED: a four-line one put the severity glyph level
-     * with line two and a half, floating beside the text rather than introducing it. The heading takes
-     * `white-space: nowrap` and an ellipsis now, so that case cannot arise -- and against a single line a
-     * 10px glyph beside 8px text reads as sitting high, which is what flex-start actually buys here. The
-     * detail and the attribution are their own rows below and are unaffected either way. */
-    align-items: center;
+     * with line two and a half, floating beside the text rather than introducing it -- which is the state
+     * the panel is back in now that its heading genuinely wraps, and the balloons never left. Against a
+     * single line it costs the glyph looking slightly high, which is the cheaper of the two. */
+    align-items: flex-start;
     gap: 4px;
     width: 100%;
 }
@@ -543,6 +542,20 @@ notificationsview .__notifications-empty__ {
 notificationsview .__notification__ .__message__ {
     white-space: normal;
     text-overflow: clip;
+    /* AND IT NEEDS A DEFINITE BASIS TO WRAP AGAINST. `white-space: normal` has been here all along and
+     * did nothing: with `flex-grow: 1` over an `auto` basis the heading is asked for its own size,
+     * answers one unbroken line, and the card grows to fit it -- 334px inside a 200px panel, measured.
+     * There was no width for the text to wrap at, because the text was what decided the width.
+     *
+     * ON `flex-basis`, NOT `width`. A definite `width` would clamp the item's own content minimum away,
+     * which is the trap `.__configurator__ > .__inline__` records; the basis carries the zero and `width`
+     * stays auto.
+     *
+     * NOTHING HERE REACHES THE SCROLLER, and that is the engine's answer rather than a choice made here:
+     * a run with no break opportunity in it is broken mid-word, so 72 unbroken characters wrap to three
+     * lines at 133px rather than pushing the card out. There is no width a heading can demand. */
+    flex-basis: 0;
+    width: auto;
 }
 
 /* A BALLOON WRAPS; A LIST ROW ELLIPSIZES. The shared rule truncates, which is right in the panel — rows
