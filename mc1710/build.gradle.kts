@@ -654,10 +654,59 @@ tasks.shadowJar {
     dependsOn(":language:jar")
 }
 
+// ONE MERGED META-INF/services, and the shipped jar was WRONG without it.
+//
+// :core and :language each ship a `WorkbenchExtension` service file. Both arrive through
+// `from(zipTree(...))` below, and a Copy keeps whichever came first while silently DROPPING the other
+// -- so the shipped jar carried core's eight extensions and lost :language's, and an installed client
+// said "the extension 'crystalgui:scripting' is not present on this host" with the Run panel simply
+// absent. A dev run never sees it: there the two roots are separate directories.
+//
+// ShadowJar's own mergeServiceFiles() does not help -- these entries are dropped by the copy before any
+// transformer sees them. mc1201 solved this the same way; @see its `mergeDevServices`.
+val cgServiceOwners = listOf(project(":core"), project(":language"))
+val cgMergedServicesDir: File = layout.buildDirectory.dir("merged-services").get().asFile
+
+val mergeShippedServices by tasks.registering {
+    group = "build"
+    description = "Unions :core's and :language's META-INF/services so neither shadows the other."
+    val serviceDirs = cgServiceOwners.mapNotNull { owner ->
+        owner.extensions.getByType<SourceSetContainer>()["main"].output.resourcesDir
+            ?.let { File(it, "META-INF/services") }
+    }
+    // THE FILES IT READS, or it stays UP-TO-DATE across an edit to one of them and leaves a merged copy
+    // describing the previous build.
+    inputs.files(serviceDirs).withPropertyName("serviceDirs").optional()
+    outputs.dir(cgMergedServicesDir)
+    dependsOn(cgServiceOwners.map { "${it.path}:processResources" })
+    doLast {
+        val byService = linkedMapOf<String, MutableList<String>>()
+        for (directory in serviceDirs.filter { it.isDirectory }) {
+            for (file in directory.listFiles().orEmpty()) {
+                val providers = byService.getOrPut(file.name) { mutableListOf() }
+                file.readLines()
+                    .map { it.substringBefore('#').trim() }
+                    .filter { it.isNotEmpty() && it !in providers }
+                    .forEach { providers.add(it) }
+            }
+        }
+        val out = File(cgMergedServicesDir, "META-INF/services")
+        out.mkdirs()
+        out.listFiles().orEmpty().forEach { it.delete() }
+        byService.forEach { (service, providers) ->
+            File(out, service).writeText(buildString {
+                appendLine("# Merged for the shipped jar by mergeShippedServices; see its declaration.")
+                providers.forEach { appendLine(it) }
+            })
+        }
+    }
+}
+
 afterEvaluate {
     tasks.shadowJar.configure {
+        dependsOn(mergeShippedServices)
         val coreJar = project(":core").tasks.named<Jar>("jar").get()
-        from(zipTree(coreJar.archiveFile.get()))
+        from(zipTree(coreJar.archiveFile.get())) { exclude("META-INF/services/**") }
 
         // :language, and the tree-sitter jars it needs.
         //
@@ -670,7 +719,9 @@ afterEvaluate {
         //
         // (Taffy above is relocated and that is fine -- it is pure Java, zero natives, checked.)
         val languageJar = project(":language").tasks.named<Jar>("jar").get()
-        from(zipTree(languageJar.archiveFile.get()))
+        from(zipTree(languageJar.archiveFile.get())) { exclude("META-INF/services/**") }
+        // The union of what the two exclusions above just dropped.
+        from(mergeShippedServices)
         rootProject.file("lib/tree-sitter").listFiles()
             ?.filter { it.name.endsWith(".jar") }
             ?.forEach { from(zipTree(it)) }

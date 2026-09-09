@@ -62,35 +62,43 @@ loom {
     }
 }
 
-// Merge core and mc1201:common into BOTH tasks.jar and tasks.shadowJar.
-// tasks.jar is the source for Loom's remapJar — the remapped JAR is what Loom puts on
-// Knot's mod classpath for dev runs. Without bundling here, core and mc1201:common classes
-// are absent from Knot's classloader at runtime.
+// `${version}` in fabric.mod.json is a GRADLE placeholder and nothing at runtime expands it.
 //
-// NOTE: loom.mods { sourceSet(crossProject) } was attempted but triggers Loom trying to apply
-// 'fabric-loom-companion' to each cross-project — fails because :core/:mc1201:common don't
-// apply Loom. JAR bundling is the correct approach for Loom dev runs with multi-project mods.
-val coreJar   = project(":core").tasks.named<Jar>("jar").flatMap { it.archiveFile }
-val commonJar = project(":mc1201:common").tasks.named<Jar>("jar").flatMap { it.archiveFile }
-// Knot does not delegate com.crystalgui.* to the system classloader, so :language has to be IN the jar
-// like the others -- runtimeOnly alone leaves the grammars and the ScriptService seam unreachable.
-val languageJar = project(":language").tasks.named<Jar>("jar").flatMap { it.archiveFile }
+// Forge's `${file.jarVersion}` is read by FML from the jar manifest; Fabric has no such thing, so an
+// unexpanded fabric.mod.json ships the six literal characters. Fabric Loader does not reject it -- it
+// falls back to a StringVersion -- so the mod loads and the failure is confined to what reads the
+// version: the mod list shows `${version}`, and any dependency range another mod declares on this id
+// can never be satisfied.
+tasks.processResources {
+    inputs.property("modVersion", project.version)
+    filesMatching("fabric.mod.json") { expand("version" to project.version) }
+}
 
-tasks.jar {
-    // META-INF/services IS TAKEN FROM ONE MERGED COPY, and excluded from every jar below -- the same
-    // rule the shipped shadow jar follows, for the same reason. :core and :language each ship a
-    // WorkbenchExtension service file, and two of them in one Copy is a hard failure here:
-    //
-    //     Entry META-INF/services/com.crystalgui.workbench.extension.WorkbenchExtension is a duplicate
-    //     but no duplicate handling strategy has been set
-    //
-    // A duplicatesStrategy would silence it by DROPPING one, which is the bug the merge exists to stop:
-    // whichever arrived first wins and the other extension is simply absent.
-    dependsOn("mergeDevServices")
-    for (jar in listOf(coreJar, commonJar, languageJar)) {
-        from(zipTree(jar)) { exclude("META-INF/services/**") }
-    }
-    from(tasks.named("mergeDevServices"))
+// -- The SHIPPED jar is the SHADED SHADOW jar, remapped ------------------------------------------
+//
+// Loom remaps `jar` by convention, and `jar` is this module's two loader classes. That produced a
+// 9.2 MB mod carrying core and language and NOT taffy, tree-sitter, the engine bands or jvmdg's
+// stubs -- against 30 MB on Forge. It installs, Knot accepts it, and the first widget constructed
+// dies on a NodeId field descriptor. The shadow pipeline is where all of that is assembled, so the
+// shipped jar has to come off the END of it: shadowJar -> downgradeShadowJar -> shade -> remap.
+//
+// Remap LAST, for the reason forge reobfuscates last: a remapper rewrites names, so it has to run on
+// the class files that will actually ship -- after jvmdg has rewritten Java 21 constructs and after
+// its stubs have been shaded in.
+//
+// `inputFile` is a CONVENTION on Loom's task (RemapTaskConfiguration), so setting it replaces the
+// default cleanly; this is the documented Loom+Shadow pattern with two stages in between. The
+// dependency comes with the provider.
+//
+// `jar` keeps its own contents. It used to bundle core, common and language on the belief that
+// "Loom uses the remapped JAR as the mod's classpath when running the dev client" -- it does not:
+// `:mc1201:fabric:runClient --dry-run` builds neither `jar` nor `remapJar`. A dev run resolves from
+// runtimeClasspath and the source-set outputs, so that copy served the shipped jar alone, and the
+// shipped jar now comes from a pipeline that assembles far more than it did.
+val shadedShadowJar = tasks.named<AbstractArchiveTask>("shadeDowngradedShadowJar")
+
+tasks.named<net.fabricmc.loom.task.RemapJarTask>("remapJar") {
+    inputFile.set(shadedShadowJar.flatMap { it.archiveFile })
 }
 
 // Extracts Fabric MC 1.20.1 sources and resources into build/mc-src for local navigation.
@@ -151,3 +159,18 @@ tasks.named("ideaSyncTask") { dependsOn(extractMcSources) }
 // Only runtimeClasspath: compileOnly still needs them, and forge/neoforge take theirs from a classpath
 // rather than a mod jar, so this is fabric's alone.
 configurations.named("runtimeClasspath") { exclude(group = "com.crystalgraphics") }
+
+
+// -- Dropping a build into a real client ---------------------------------------------------------
+//
+// CrystalGraphics goes too: CrystalGUI does not run without it. Its shippable jar is its own
+// `remapJar` output -- the plain one, no classifier. Both `assemble`s also leave an `-all` (shadow,
+// named namespace) and a `-dev` jar; those install and neither runs.
+extra["cgDeployKey"] = "prismLauncher1201FabricDir"
+extra["cgDeployJars"] = listOf(
+        tasks.named<AbstractArchiveTask>("remapJar").flatMap { it.archiveFile },
+        File(crystalGraphicsBuild.projectDir,
+                "mc1201/fabric/build/libs/crystalgraphics-mc1201-fabric-1.0.0.jar"))
+extra["cgDeployDependsOn"] = listOf(
+        tasks.named("remapJar"), crystalGraphicsBuild.task(":mc1201:fabric:remapJar"))
+apply(from = rootProject.file("gradle/module_integration/deploy-mods.gradle.kts").toURI())

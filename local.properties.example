@@ -34,7 +34,4 @@
 #prismLauncher1204NeoForgeDir=C:/Users/you/AppData/Roaming/PrismLauncher/instances/Crystal 1204 NeoForge
 #prismLauncher1710Dir=C:/Users/you/AppData/Roaming/PrismLauncher/instances/Crystal 1710
 
-# Fabric has no deployMods yet: Loom remaps `tasks.jar`, which carries core and language but not
-# taffy, tree-sitter or the engine bands, so the remapped jar would install and then fail. The key is
-# here for when the shadow jar is routed through Loom's remap.
 #prismLauncher1201FabricDir=C:/Users/you/AppData/Roaming/PrismLauncher/instances/Crystal 1201 Fabric
