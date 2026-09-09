@@ -262,8 +262,6 @@ public final class CgUiPaintContext {
     private final LayerPool layerFboPool = new LayerPool(this::warmUpLayer);
     /** One saved frame per nested {@link #beginLayerFbo}/{@link #endLayerFbo} pair. */
     final Deque<LayerFrame> layerStack = new ArrayDeque<>();
-    static final CgFrameBufferFormat LAYER_FORMAT =
-            CgFrameBufferFormat.builder("cgui_layer").color(0, CgTextureType.RGBA8).build();
 
     /**
      * @param savedScissor the clip stack as the ENCLOSING target expressed it. A bounded layer has its
@@ -276,58 +274,29 @@ public final class CgUiPaintContext {
                                int savedViewportW, int savedViewportH, int[] savedScissor,
                                @Nullable LayerRegion region) {
     }
+    
+    static final CgFrameBufferFormat LAYER_FORMAT = CgFrameBufferFormat.builder("cgui_layer")
+                         .color(0, CgTextureType.RGBA8).build();
 
-    // ── Whole-frame MSAA ─────────────────────────────────────────────────────
-    //
-    // This engine's box-model/curve rendering is analytic-SDF coverage antialiasing, which has a real
-    // floor: a sufficiently thin, sufficiently zoomed-out shape (a shader-graph wire, say) can be
-    // narrower than the screen can resolve, at which point no per-shader tuning fixes it. Real
-    // multisampling supersamples the rasterizer's own coverage test regardless of how fine the geometry
-    // is, which analytic coverage cannot substitute for at that limit. One target for the whole UI
-    // tree, not per-material: the hardware coverage test needs to run against the actual triangle
-    // edges, so this has to be the real render destination, not a filter applied after the fact.
-    //
-    // Cannot seed the target from whatever's already on screen first: glBlitFramebuffer only resolves
-    // multisample -> single-sample, not the reverse. So this works the same way an opacity/mask LAYER
-    // already does in this file — msaaFbo clears fully transparent, the whole UI tree paints into it
-    // exactly as before, it resolves into msaaResolveFbo, and that gets composited back via the
-    // existing blitLayer premultiplied-alpha path.
-    //
-    // FOUR SAMPLES, not the driver's maximum. This asked for maxSamples() on the reasoning that a
-    // machine with no multisampling resolves it to 1 and needs no branch -- true, and it also means
-    // taking the most expensive option the driver will admit to: one tester's reports 32, which is a
-    // 265MB colour renderbuffer at 1920x1080 and thirty-two coverage samples per covered fragment,
-    // every frame.
-    //
-    // Four is the conventional UI figure and the returns above it are close to nil HERE in particular,
-    // because MSAA only antialiases GEOMETRY edges: rounded corners, glyphs and gradient edges are all
-    // shader-computed coverage and never see it. What is left for it to smooth is rotated quads and the
-    // one-pixel fills design-time chrome draws its outlines from.
-    //
-    // Still no "is MSAA supported" branch: `samples(int)` is a REQUEST that drivers clamp to
-    // GL_MAX_SAMPLES, so 4 becomes 2 or 1 on hardware that offers less, exactly as maxSamples() would.
-    // Redirect, resolve and composite run the same way either way.
-    //
-    // Renderbuffer, not a texture: msaaFbo is never sampled directly, only resolved via blitFrom, so
-    // there is no reason to pay for a sampleable multisampled texture. Pure data — no GL calls — so
-    // this is safe as a static constant despite CgUiPaintContext's own materials/textures needing a
-    // live context; only actually creating an FBO from it does.
-    /** @see #MSAA_FORMAT */
-    private static final int FRAME_SAMPLES = 4;
 
-    private static final CgFrameBufferFormat MSAA_FORMAT =
-            CgFrameBufferFormat.builder("cgui_msaa").colorRenderbuffer(0, CgTextureType.RGBA8)
-                    .samples(FRAME_SAMPLES).build();
-
+    // ── The frame's own target ────────────────────────────────
+    //
+    // The whole tree paints into a buffer of ours and is composited onto the host's target once, so the
+    // finished picture is a texture this engine owns: the backdrop samples it, a readback sees the UI
+    // rather than the world behind it, and its format is the same on every loader. One screen-sized
+    // RGBA8 and one full-screen quad per frame.
+    //
+    // NOT MULTISAMPLED, and it was until the quad materials learned to antialias themselves
+    // (CG_QUAD_EDGE_* in cg_env.glsl; everything else here is analytic coverage already). Four samples
+    // bought a 33MB renderbuffer at 1920x1080 that had to be RESOLVED before anything could read it:
+    // once in endFrame, and again on every backdrop capture, which is what made the capture expensive.
+    // A colour TEXTURE is sampleable as it stands, so one buffer does what the multisampled pair did.
+    // What it gives up is the case analytic coverage cannot reach — geometry finer than one sample, a
+    // graph wire zoomed far out. Measured against the pair: no visible difference, 0.1-0.4 ms/frame.
     /** Built once, in the constructor — real dimensions aren't known that early (no frame has run
      * yet), so this starts 1x1 and {@link #beginFrame} resizes it in place, the same way every other
      * screen-sized FBO in this file already tracks the window. */
-    final CgFrameBuffer msaaFbo = CgFrameBuffer.createOwned("cgui_msaa", 1, 1, MSAA_FORMAT);
-    /** What {@link #msaaFbo} resolves into — same shape as {@link #LAYER_FORMAT}, and what {@link
-     * #blitLayer} reads from to composite. Kept separate from {@link #layerFboPool}: that pool is
-     * indexed by per-element nesting depth, which has nothing to do with this FBO's role as a single
-     * fixed whole-frame resolve target. */
-    final CgFrameBuffer msaaResolveFbo = CgFrameBuffer.createOwned("cgui_msaa_resolve", 1, 1, LAYER_FORMAT);
+    final CgFrameBuffer frameFbo = CgFrameBuffer.createOwned("cgui_frame", 1, 1, LAYER_FORMAT);
 
     // ── Scissor ─────────────────────────────────────────────────────────────
     @Getter
@@ -618,7 +587,7 @@ public final class CgUiPaintContext {
         this.screenWidth = screenWidth;
         this.screenHeight = screenHeight;
 
-        // Save GL state before UI rendering — FBO included specifically so the whole-frame MSAA
+        // Save GL state before UI rendering — FBO included specifically so the frame's own
         // redirect below has something to restore back to. No raw glGetInteger query: CgGlState
         // already shadows the current binding for exactly this purpose, and endFrame's early
         // glScope.close() (see its own note) is what puts the real target back before compositing.
@@ -639,13 +608,9 @@ public final class CgUiPaintContext {
         // BEFORE the redirect, because the redirect is what hides it. @see #sceneFboId
         backdrop.captureSceneTarget();
 
-        // Whole-frame MSAA redirect — see the class doc above msaaFbo for why this exists and why it
-        // has to be the whole tree rather than one material.
+        // The frame's own target — see the note above frameFbo for what owning it buys.
         int w = Math.max(1, screenWidth), h = Math.max(1, screenHeight);
-        if (msaaFbo.getWidth() != w || msaaFbo.getHeight() != h) {
-            msaaFbo.resize(w, h);
-            msaaResolveFbo.resize(w, h);
-        }
+        if (frameFbo.getWidth() != w || frameFbo.getHeight() != h) frameFbo.resize(w, h);
         // The clearColor below outlives this frame — CgFrameBuffer.clear scopes FBO alone and no
         // CgGlSlot models a clear value. Not ours to fix here (every caller of it leaks the same way)
         // and harmless against MC, which sets glClearColor immediately before each of its own clears.
@@ -654,9 +619,9 @@ public final class CgUiPaintContext {
         // THE FULL-SCREEN CLEAR, timed apart from the rest of beginFrame. gl:begin was measured at 33ms
         // in a client, and this is the only thing in it that touches every pixel of the surface.
         long cleared = FrameProfile.begin();
-        msaaFbo.bind();
-        msaaFbo.clearColor(0f, 0f, 0f, 0f);
-        FrameProfile.end(cleared, "glbegin:msaaClear");
+        frameFbo.bind();
+        frameFbo.clearColor(0f, 0f, 0f, 0f);
+        FrameProfile.end(cleared, "glbegin:frameClear");
 
         // Overwritten and deliberately NOT restored — the javadoc used to claim otherwise and was
         // corrected rather than implemented. CgFrameData is per-frame scratch that every consumer
@@ -673,7 +638,7 @@ public final class CgUiPaintContext {
         fd.viewportW = screenWidth;
         fd.viewportH = screenHeight;
         // EACH STEP OF beginFrame TIMED SEPARATELY. `gl:begin` was measured at 19.9ms on the frame after
-        // a tab closes, with `glbegin:msaaClear` -- the only thing in here that touches every pixel --
+        // a tab closes, with `glbegin:frameClear` -- the only thing in here that touches every pixel --
         // never even reaching the report threshold. So the cost is one of the four below, and they have
         // nothing in common: a UBO upload, a projection write plus an atlas tick, a buffer rewind, and a
         // material bind that compiles on its first use.
@@ -781,35 +746,27 @@ public final class CgUiPaintContext {
         // of it anyway, since the pose was baked at submit() time.
         // Text first: it owns a separate renderer whose batch, if a caller left one open, would otherwise
         // flush after the frame's GL scope is torn down. Lenient when no batch is active.
-        // SPLIT, because gl:end is three unrelated things and one of them was measured at 48ms in a
-        // client while every CPU phase in that frame was under 2ms. Draining our own queued draws, the
-        // MSAA resolve blit, and the composite back onto the real target fail for completely different
-        // reasons -- and a resolve that blocks is the GPU being behind, which no amount of tuning our
-        // traversal would ever touch.
+        // SPLIT, because gl:end is two unrelated things and one of them was measured at 48ms in a
+        // client while every CPU phase in that frame was under 2ms. Draining our own queued draws and
+        // compositing the frame onto the real target fail for different reasons -- and a composite that
+        // blocks is the GPU being behind, which no amount of tuning our traversal would ever touch.
         long timed = FrameProfile.begin();
         textRenderer.endBatch();
         renderer.flush();
         FrameProfile.end(timed, "glend:flush");
 
-        // Resolve the MSAA redirect (see beginFrame/msaaFbo) and composite it back onto whatever the
-        // real target was. blitFrom binds its own explicit source/destination ids and needs no
-        // ambient FBO binding, so it runs fine before the restore below. Closing glScope HERE — early,
-        // not at this method's usual end — is what puts the real target back (it saved CgGlSlot.FBO in
-        // beginFrame): blitLayer() right after draws a real quad through the normal quad() path, which
-        // needs the real target actually bound, and needs an active frame the same as any other draw
-        // call in this class, which is why this whole block still runs before frameActive is cleared.
-        long resolved = FrameProfile.begin();
-        msaaResolveFbo.blitFrom(msaaFbo, CgGL.GL_COLOR_BUFFER_BIT, CgGL.GL_NEAREST);
-        FrameProfile.end(resolved, "glend:msaaResolve");
-        // THE WHOLE FRAME'S PICTURE, at the first moment it is readable — msaaFbo is multisampled and
-        // this resolve is what makes it samplable at all. Empty here means nothing the UI drew reached
-        // the frame target, which would be a fault far upstream of any one layer.
+        // Composite the frame's own target (see beginFrame/frameFbo) back onto whatever the real
+        // target was. Closing glScope HERE — early, not at this method's usual end — is what puts
+        // that target back (it saved CgGlSlot.FBO in beginFrame): blitLayer() right after draws a real
+        // quad through the normal quad() path, which needs the real target actually bound, and needs an
+        // active frame the same as any other draw call in this class, which is why this whole block
+        // still runs before frameActive is cleared.
         if (glScope != null) {
             glScope.close();
             glScope = null;
         }
-        // Full opacity — the resolved texture already carries whatever per-element opacity the UI tree
-        // itself applied while painting into msaaFbo; this composite is the "put the finished picture
+        // Full opacity — the frame texture already carries whatever per-element opacity the UI tree
+        // itself applied while painting into it; this composite is the "put the finished picture
         // on screen" step, not another opacity multiply.
         //
         // SCOPED, because this draw happens AFTER glScope.close() above and would otherwise be the one
@@ -845,7 +802,7 @@ public final class CgUiPaintContext {
                 CgGlSlot.BLEND, CgGlSlot.DEPTH, CgGlSlot.CULL,
                 CgGlSlot.STENCIL, CgGlSlot.COLOR_MASK, CgGlSlot.ALPHA_TEST)) {
             disableFixedFunctionAlphaTest();
-            blitLayer(msaaResolveFbo, 1f);
+            blitLayer(frameFbo, 1f);
             // THE HOST'S OWN TARGET, and the last thing this class can observe. Content here with a flat
             // fill on screen means the presenting broke, not the drawing — which is the reading the
             // comment above has described for two loaders without anything ever measuring it.
@@ -860,8 +817,8 @@ public final class CgUiPaintContext {
 
         if (!poseStack.clear()) throw new IllegalStateException("Unpopped stack(s) in UI frame");
 
-        // THE OTHER HALF OF THE FRAME THE DOCUMENT OPENED, and last of all so the resolve and the
-        // composite above are in it. Reports and clears; a no-op when nothing opened one, which is
+        // THE OTHER HALF OF THE FRAME THE DOCUMENT OPENED, and last of all so the composite above is
+        // in it. Reports and clears; a no-op when nothing opened one, which is
         // every headless document. @see UIDocument#frame
         FrameProfile.frameEnd();
     }
@@ -2120,11 +2077,11 @@ public final class CgUiPaintContext {
     }
 
     /**
-     * The target {@link #blitLayer} just drew into — the innermost live layer, or the frame's own MSAA
+     * The target {@link #blitLayer} just drew into — the innermost live layer, or the frame's own
      * target when none is open. Probe-only: nothing in the paint path needs to ask this.
      */
     private CgFrameBuffer currentTarget() {
-        return layerStack.isEmpty() ? msaaFbo : layerStack.peek().fbo();
+        return layerStack.isEmpty() ? frameFbo : layerStack.peek().fbo();
     }
 
     /**
@@ -2231,7 +2188,7 @@ public final class CgUiPaintContext {
      * <p><b>Only genuinely-owned resources are freed here</b>, and the distinction matters because
      * double-freeing is as bad as leaking:</p>
      * <ul>
-     *   <li><b>Freed</b> — the layer FBO pool, {@link #msaaFbo}/{@link #msaaResolveFbo} (all built via
+     *   <li><b>Freed</b> — the layer FBO pool and {@link #frameFbo} (both built via
      *       {@link CgFrameBuffer#createOwned}, so all ours), the {@link CgUiRenderer}'s batch renderer,
      *       and the {@link CgTextRenderer} (CrystalGraphics' registry treats {@code deleteAll()} as a
      *       backstop and expects owners to delete their own).</li>
@@ -2264,11 +2221,10 @@ public final class CgUiPaintContext {
         retainedBytes = 0L;
 
         // Same reasoning as the layer pool above — createOwned bypasses CgFrameBufferRegistry, so
-        // nothing else ever frees these. Not nulled out afterward (they're final, built once in the
+        // nothing else ever frees it. Not nulled out afterward (it's final, built once in the
         // constructor) — destroy() drops the whole singleton right after this, so a fresh instance
-        // with fresh FBOs is what the next getInstance() builds anyway.
-        msaaFbo.delete();
-        msaaResolveFbo.delete();
+        // with a fresh FBO is what the next getInstance() builds anyway.
+        frameFbo.delete();
 
         // createOwned, so no registry sweeps these — the same reason the layer pool is freed here.
         backdrop.delete();

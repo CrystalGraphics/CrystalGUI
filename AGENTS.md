@@ -751,7 +751,7 @@ Obtained via `CgUiPaintContext.getInstance()`, **not** owned per-`UIDocument`. E
 
 | Group | Methods |
 |---|---|
-| Frame | `beginFrame(w,h)` / `endFrame()` — save/restore GL via `CgGlScope`, ortho projection, bind `crystalgui:shaders/gui_quad.shader`, reset `ScissorStack` |
+| Frame | `beginFrame(w,h)` / `endFrame()` — save/restore GL via `CgGlScope`, redirect the whole tree into `frameFbo` and composite it back once, ortho projection, bind `crystalgui:shaders/gui_quad.shader`, reset `ScissorStack` |
 | Draw | `fillRect`, `drawImage`, `quad()` + `flush`, `curve()`, `bindTexture` (elides redundant rebinds), `text()` → a `CgTextRenderer` wired to this context's `PoseStack` |
 
 > **`curve()` is `quad()`'s twin, and switching between them flushes.** Bézier strokes go through
@@ -787,6 +787,19 @@ Obtained via `CgUiPaintContext.getInstance()`, **not** owned per-`UIDocument`. E
 > the fallback white pixel, font atlases), since those are swept by `CgGraphicsLifecycle.destroyContext()`
 > and freeing them here would be a double free. Use `hasInstance()` to check without *causing*
 > construction.
+
+> **The whole tree paints into `frameFbo` and is composited onto the host's target once.** So the
+> finished picture is a texture this engine owns — the backdrop samples it, a readback sees the UI and
+> not the world behind it, and the format is the same on every loader — for one screen-sized RGBA8 and
+> one full-screen quad a frame. **It is not multisampled**, and was until the quad materials learned to
+> antialias themselves: four samples bought a 33MB renderbuffer at 1920x1080 that had to be *resolved*
+> before anything could read it, once in `endFrame` and again on every backdrop capture, which is what
+> made that capture expensive. A colour texture is sampleable as it stands, so one buffer does what the
+> multisampled pair did. Measured on `cgui-gallery`'s `edges` page: 0.25% of pixels differ, mean 0.031
+> levels, all of it a hairline on rotated rims and rotated glyph stems and none of it visible at 14x.
+> Frame time 0.1–0.4 ms/frame better; `frame.swap` and `glFlush` do not move, because these scenes are
+> CPU-bound in buffer mapping. What it gives up is the case analytic coverage cannot reach: geometry
+> finer than one sample, a graph wire zoomed far out.
 
 > **A layer is the size of what goes in it, and one whose subtree did not change is not painted
 > again.** `BoxPainter` sizes every layer from the subtree's ink bounds (`Box.inkX0..inkY1`, composed

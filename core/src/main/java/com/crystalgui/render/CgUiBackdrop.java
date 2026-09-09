@@ -31,7 +31,7 @@ import java.util.Map;
  *
  * <h3>What it does, in order</h3>
  * <pre>
- *   capture   scene blit -&gt; MSAA resolve -&gt; composite msaaFbo and every enclosing layer
+ *   capture   scene blit -&gt; composite the frame target and every enclosing layer
  *   blur      scale down until sigma is small, box-prefiltered; separable Gaussian, horizontal then
  *             vertical, with the tap count derived from sigma -- Skia's scale-then-blur, see blurredBackdrop
  *   hand out  the sharp texture, the blurred one, and the element's UVs into both
@@ -57,7 +57,7 @@ final class CgUiBackdrop {
     /**
      * Records the draw target that was bound when the frame began, and invalidates last frame's capture.
      *
-     * <p>Must run BEFORE the MSAA redirect, because the redirect is what hides it. @see #sceneFboId</p>
+     * <p>Must run BEFORE the frame's redirect, because the redirect is what hides it. @see #sceneFboId</p>
      */
     void captureSceneTarget() {
         sceneFboId = CgGL.glGetInteger(CgGL.GL_DRAW_FRAMEBUFFER_BINDING);
@@ -76,11 +76,12 @@ final class CgUiBackdrop {
     /**
      * The draw target that was bound when {@link #beginFrame} ran — <b>the scene behind the UI</b>.
      *
-     * <p><b>{@code ctx.msaaFbo} is not the backdrop, and reaching for it is the mistake this field exists
-     * to prevent.</b> {@code beginFrame} binds it and clears it <em>fully transparent</em>, so the UI's
-     * own target holds the UI and nothing else. The world, the HUD and the hotbar are all in whatever
-     * was bound before that — which is what {@code endFrame} composites back onto. A backdrop grab that
-     * read {@code ctx.msaaFbo} would capture an empty buffer and look exactly like the effect not working.</p>
+     * <p><b>{@code ctx.frameFbo} is not the backdrop, and reaching for it is the mistake this field
+     * exists to prevent.</b> {@code beginFrame} binds it and clears it <em>fully transparent</em>, so the
+     * UI's own target holds the UI and nothing else. The world, the HUD and the hotbar are all in
+     * whatever was bound before that — which is what {@code endFrame} composites back onto. A backdrop
+     * grab that read {@code ctx.frameFbo} would capture an empty buffer and look exactly like the effect
+     * not working.</p>
      *
      * <p>Read from the binding rather than handed in by the host: it needs no loader change, it is true
      * by construction in game and in the harness alike, and it stays correct when {@code framebufferMc}
@@ -102,8 +103,8 @@ final class CgUiBackdrop {
      * THE REGION THE CURRENT CAPTURE COVERS, in surface pixels, occupying the target's top-left corner.
      *
      * <p>The capture used to be the whole surface, and that is what made glass a frame killer: a taskbar
-     * island is about a fortieth of the screen, and it was paying for a full-surface scene blit, a
-     * full-surface MSAA resolve and a full-surface composite per enclosing layer, every frame. Sharing
+     * island is about a fortieth of the screen, and it was paying for a full-surface scene blit and a
+     * full-surface composite per enclosing layer, every frame. Sharing
      * one capture between consumers is right; taking "shared" to mean "everything" was not.</p>
      *
      * <p><b>The targets stay screen-sized and only a SUB-RECTANGLE is used.</b> Resizing them to the
@@ -292,17 +293,17 @@ final class CgUiBackdrop {
      * <p><b>"So far" includes the LAYER STACK, and missing that is what made the first version draw
      * nothing.</b> A masked or faded subtree paints into a layer FBO of its own and is not composited
      * back until it finishes, so at the moment a glass element inside one draws, its siblings are in
-     * that layer — not in {@code ctx.msaaFbo}, and certainly not in the scene. Capturing only those two
+     * that layer — not in {@code ctx.frameFbo}, and certainly not in the scene. Capturing only those two
      * produced a flat, empty backdrop: on screen, a panel with nothing but its own rim, which reads as
      * the blur being broken rather than as the capture looking in the wrong place.</p>
      *
-     * <p>So every live target is composited in paint order — scene, then {@code ctx.msaaFbo}, then each
+     * <p>So every live target is composited in paint order — scene, then {@code ctx.frameFbo}, then each
      * enclosing layer from outermost inward. That is the definition of "behind this element", and the
      * stack is at most a few deep because it is nesting depth rather than element count.</p>
      */
     private boolean ensureCaptured(int needX0, int needY0, int needX1, int needY1) {
         int depth = ctx.layerStack.size();
-        CgFrameBuffer innermost = ctx.layerStack.isEmpty() ? ctx.msaaFbo : ctx.layerStack.peek().fbo();
+        CgFrameBuffer innermost = ctx.layerStack.isEmpty() ? ctx.frameFbo : ctx.layerStack.peek().fbo();
         boolean sameTarget = captureFrame == ctx.frameId
                 && captureDepth == depth && captureTarget == innermost.getId();
         if (sameTarget && needX0 >= capX0 && needY0 >= capY0
@@ -372,14 +373,6 @@ final class CgUiBackdrop {
             }
         });
 
-        // 2. ctx.msaaFbo, resolved - it is a multisampled RENDERBUFFER and cannot be sampled, which is the
-        // same reason endFrame resolves it and the reason this feature is possible at all. RESOLVED IN
-        // PLACE and region-only: on a multisampled surface this is the single most expensive thing the
-        // capture does, because it touches every sample of every pixel it covers.
-        CgFrameBuffer.blitFrom(ctx.msaaFbo.getId(), ctx.msaaResolveFbo.getId(),
-                capX0, glY0, capX0 + capW, glY1,
-                capX0, glY0, capX0 + capW, glY1, CgGL.GL_COLOR_BUFFER_BIT, CgGL.GL_NEAREST);
-
         // SNAPSHOT FIRST. beginLayerFbo below pushes onto the very stack being read.
         List<CgFrameBuffer> enclosing = new ArrayList<>();
         for (Iterator<CgUiPaintContext.LayerFrame> it = ctx.layerStack.descendingIterator(); it.hasNext(); ) {
@@ -396,7 +389,7 @@ final class CgUiBackdrop {
             // an OPAQUE BLACK one erases it completely. Those two produce an identical-looking flat
             // panel downstream, and only the alpha channel tells them apart.
             withoutScissor(() -> {
-                drawOver((CgTexture2D) ctx.msaaResolveFbo.getColorTexture(0), fx0, fy0, fw, fh, w, h);
+                drawOver((CgTexture2D) ctx.frameFbo.getColorTexture(0), fx0, fy0, fw, fh, w, h);
                 for (CgFrameBuffer layer : enclosing) {
                     drawOver((CgTexture2D) layer.getColorTexture(0), fx0, fy0, fw, fh, w, h);
                 }
