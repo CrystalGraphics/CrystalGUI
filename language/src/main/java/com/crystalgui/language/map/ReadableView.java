@@ -128,7 +128,7 @@ public final class ReadableView {
      *         rather than a failure, since a caller normally has a classpath to fall back to
      */
     public byte[] readableBytesOf(String internalName) throws IOException {
-        byte[] bytes = source.bytesOf(internalName);
+        byte[] bytes = bytesOfRuntime(internalName);
         if (bytes == null) return null;
         java.util.Set<String> nested = new java.util.LinkedHashSet<>();
         ClassReader reader = new ClassReader(bytes);
@@ -149,6 +149,23 @@ public final class ReadableView {
      * declared a member than left looking top-level, and the member's own file carries the truthful entry
      * regardless.</p>
      */
+    /**
+     * The source's bytes for a name given the way a CALLER spells it, which is the readable way.
+     *
+     * <p>The source speaks runtime names. Where a runtime renames classes the two differ, and asking it
+     * for a readable name misses every time -- on Fabric every {@code net.minecraft.*} type was
+     * unresolvable, reported as "resolves to a package" because a name that yields no type is treated as
+     * one. Both other targets rename only MEMBERS (1.7.10's SRG and Forge 1.20.1's official class names),
+     * so readable and runtime class names coincide there and the omission was invisible.</p>
+     *
+     * <p>Falls back to the name as given: {@code runtimeClass} answers its input for anything unmapped,
+     * and a caller that already holds a runtime name is still owed its bytes.</p>
+     */
+    private byte[] bytesOfRuntime(String readableInternalName) throws IOException {
+        byte[] bytes = source.bytesOf(mappings.runtimeClass(readableInternalName));
+        return bytes != null ? bytes : source.bytesOf(readableInternalName);
+    }
+
     private int accessOf(String readableInternalName) {
         try {
             byte[] bytes = source.bytesOf(mappings.runtimeClass(readableInternalName));
@@ -193,7 +210,7 @@ public final class ReadableView {
      * which is a worse answer than the one being fixed.</p>
      */
     public byte[] compilableBytesOf(String internalName) throws IOException {
-        byte[] bytes = source.bytesOf(internalName);
+        byte[] bytes = bytesOfRuntime(internalName);
         if (bytes == null) return null;
         Remapper readable = toReadable();
         RuntimeAliases aliases = new RuntimeAliases(mappings, readable);
