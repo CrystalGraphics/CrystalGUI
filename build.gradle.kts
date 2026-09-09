@@ -23,6 +23,9 @@ plugins {
     // needs. Applied to the ROOT because the merged descriptors describe every loader at once and
     // belong to no one of them.
     id("cg-descriptors")
+
+    // The merge: four thin jars and one engine into the artifact every loader installs.
+    id("cg-single-jar")
 }
 
 // Machine-local settings (`local.properties`, gitignored) onto every project's `extra`, before
