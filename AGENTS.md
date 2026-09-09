@@ -3,7 +3,7 @@
 **Project type**: Platform-agnostic retained-mode UI engine, shaped like a lightweight web browser
 (DOM + CSS cascade + Taffy layout + immediate-mode painting).
 **Authored in**: Java 21 (Jabel-desugared toward Java 8 bytecode) · **Layout**: Taffy · **Backend**: CrystalGraphics
-**Targets**: MC 1.7.10 (Forge/LWJGL2) · MC 1.20.1/1.20.4 (Forge/NeoForge/Fabric, LWJGL3) — *neither is in the build today; see [Module layout](#module-layout--what-actually-compiles)*
+**Targets**: MC 1.7.10 (Forge/LWJGL2) · MC 1.20.1/1.20.4 (Forge/NeoForge/Fabric, LWJGL3) — *all four loaders are in the build and running; see [Module layout](#module-layout--what-actually-compiles)*
 
 ---
 
