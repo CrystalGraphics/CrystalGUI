@@ -18,6 +18,11 @@ plugins {
     //
     // Only breaks an IDE sync; a CLI build constructs no IDEA model. plan/platform-mc1201.md L0.
     id("org.jetbrains.gradle.plugin.idea-ext")
+
+    // What this mod says about itself, declared once and printed into every format the merged jar
+    // needs. Applied to the ROOT because the merged descriptors describe every loader at once and
+    // belong to no one of them.
+    id("cg-descriptors")
 }
 
 // Machine-local settings (`local.properties`, gitignored) onto every project's `extra`, before
