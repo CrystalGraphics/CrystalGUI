@@ -360,7 +360,7 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
             }
             return null; // unrecognized trailing arg
         }
-        return new CgUiRect().setFillSprite(sprite);
+        return new CgUiRect().withFillSprite(sprite);
     }
 
     static @Nullable CgUiDrawable parseSprite(String args) {
@@ -389,7 +389,7 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
             }
             return null; // unrecognized trailing arg
         }
-        return new CgUiRect().setFillSprite(sprite
+        return new CgUiRect().withFillSprite(sprite
                 .setSprite(spriteRect[0], spriteRect[1], spriteRect[2], spriteRect[3])
                 .setBorder(borderRect[0], borderRect[1], borderRect[2], borderRect[3]));
     }

@@ -158,8 +158,8 @@ public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware
         // panel that darkened as the radius grew. A separable blur has one number and no mapping.
         CgUiPaintContext.Backdrop backdrop = ctx.backdropFor(x, y, width, height, blurRadius);
         if (backdrop == null || backdrop.sharp() == null || backdrop.blurred() == null) {
-            fallback.setCornerRadius(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL);
-            fallback.setFillColor(fallbackColorArgb);
+            fallback.withCornerRadius(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL);
+            fallback.withFillColor(fallbackColorArgb);
             fallback.draw(ctx, mouseX, mouseY, x, y, width, height);
             return;
         }

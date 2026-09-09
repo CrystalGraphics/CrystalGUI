@@ -95,7 +95,7 @@ public final class TransformBox extends UIElement {
 
     /** Fully rounded, so the square is a circle at any size. @see #HANDLE_SIZE */
     private final CgUiRect dot = new CgUiRect()
-            .setCornerRadius(HANDLE_SIZE * 0.5f, HANDLE_SIZE * 0.5f);
+            .withCornerRadius(HANDLE_SIZE * 0.5f, HANDLE_SIZE * 0.5f);
 
     private static final float PIVOT_SIZE = 9f;
 
@@ -770,7 +770,7 @@ public final class TransformBox extends UIElement {
             edge(paint, corners[i], corners[(i + 1) % 4], colour);
         }
 
-        dot.setFillColor(colour);
+        dot.withFillColor(colour);
         for (Spot spot : Spot.values()) {
             Vector2f at = handleAt(spot);
             if (at == null) continue;
