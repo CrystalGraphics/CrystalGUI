@@ -28,7 +28,7 @@ import static org.junit.Assert.*;
  * Every shipped {@code crystalgui:shaders/*.shader} must generate a vertex stage free of
  * fragment-only GLSL builtins.
  *
- * <p><b>This is the test that catches the AMD crash.</b> {@code gui_rounded_rect.shader} includes
+ * <p><b>This is the test that catches the AMD crash.</b> {@code gui_rect.shader} includes
  * {@code crystalgraphics:shaders/lib/sdf.glsl} at <i>material</i> scope, and the compiler hoists
  * every preamble {@code #}-line into <i>both</i> stages — so {@code sdf_coverage}'s {@code fwidth}
  * landed in the vertex shader. NVIDIA accepted it silently, AMD rejected it, and the gallery could
@@ -125,7 +125,7 @@ public class ShippedShaderStagePurityTest {
     @Test
     public void roundedRect_stillHasSdfCoverage_inTheFragmentStage() throws Exception {
         installCapabilities(CgCapabilities.ShaderBufferPath.SSBO_GL43);
-        String path = "crystalgui:shaders/gui_rounded_rect.shader";
+        String path = "crystalgui:shaders/gui_rect.shader";
         CgParsedShader parsed = CgShaderParser.parse(CgIO.loadSource(path), path);
         CgMaterialShaderCompiler.CompiledSource cs = CgMaterialShaderCompiler.compile(
                 parsed, parsed.passes().get(0), NO_BUFFERS, null,

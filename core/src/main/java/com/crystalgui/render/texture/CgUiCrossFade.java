@@ -38,7 +38,7 @@ public final class CgUiCrossFade implements CgUiDrawable {
 
     /** Exposed so callers that need to reproduce this blend through a different rendering path
      * (e.g. {@code UIElement}'s rounded-background wrapper, which draws each side through a shared
-     * {@code CgUiRoundedRect} shape instead of raw) can inspect the two sides and blend factor. */
+     * {@code CgUiRect} shape instead of raw) can inspect the two sides and blend factor. */
     public CgUiDrawable getFrom() {
         return from;
     }

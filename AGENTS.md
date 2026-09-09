@@ -842,9 +842,8 @@ issue exactly one GPU draw call, or zero for a fully transparent tint.
 
 | Class | Role |
 |---|---|
-| `CgUiQuad` | Flat solid-colour fill; `CgUiDrawable.EMPTY` is one |
-| `CgUiSprite` | Full 9-slice textured sprite (`setTexture`/`setSprite`/`setBorder`, lazy UV cache). **It draws as ONE quad, not nine** — through `gui_rounded_rect.shader`'s `WITH_9SLICE_FILL`, the same nine-region remap done per pixel. Nine quads shared eight interior seams, and a seam is either hard (a staircase, once the sprite is off-axis) or softened from both sides (three-quarter coverage, a hairline); neither is fixable per quad, because each would have to know what its neighbour drew. It is also **2.5-3x cheaper**, measured on `cgui-sprite-stress`: the nine-quad path held material binds to 6 a frame against 1506 and still lost, because nine instances per sprite against one is what dominates (`quadRenderer.flush` drops tenfold) — the same shape as `SvgRasterCache`. Verified equal: `cgui-ore-theme` is byte-identical either way, and `cgui-nineslice`'s two columns now agree in all four tiling modes where `round` used to disagree by a pixel. In that shader the seams are **supersampled**, not texel-filtered: a seam is a line in box-local pixels, and the texel filter reconstructs from `fwidth` in TEXEL space, which is meaningless where a stretched centre meets a 1:1 border. **There is no nine-quad path left** — a missing texture draws one stretched copy of the fallback checkerboard, which is what it always effectively was (`submit` drops the UV crop, so the nine pieces were nine copies of the whole checkerboard) and is the one case the sliced path cannot serve: it would sample the sprite's atlas UVs into an 8x8 fallback and read as a flat colour |
-| `CgUiRoundedRect` | SDF path — per-corner radii, morphing |
+| `CgUiRect` | **The one drawable behind every `background`** — a rectangle with a `Fill` (flat colour, one stretched texture, or a 9-slice sprite), optional per-corner elliptical radii and an optional border. `CgUiDrawable.EMPTY` is one, filled with colour 0. **Two draw paths, and which runs is not a style choice**: a plain rect (no radius, no border, no 9-slice) goes through the frame's own batch — `fillRect` for a colour, one quad for a texture — and only a rect the batch cannot express takes the SDF material (`gui_rect.shader`), which carries sixteen per-draw uniforms. That split is why merging `CgUiQuad` and `CgUiSprite` into it cost nothing: measured on `cgui-gallery`, the material binds, draw calls, flushes and buffer maps per frame are all unchanged (192/76/76/37), and `cgui-ore-theme` is byte-identical. **Equality is by value for a flat fill and by identity otherwise**, which is what the two merged classes each did: the cascade discards a pushed candidate equal to the one present (so a repeated `background` write cannot retarget a live transition), while `TextureValue.sourceOf` is a weak map keyed by equality, where a value-equal drawable that cannot describe itself loses its CSS |
+| `CgUiSprite` | **A FILL, not a drawable** — `sprite.toRect()` is what a caller owing a `CgUiDrawable` wants. Full 9-slice textured sprite (`setTexture`/`setSprite`/`setBorder`, lazy UV cache). **It draws as ONE quad, not nine** — through `gui_rect.shader`'s `WITH_9SLICE_FILL`, the same nine-region remap done per pixel. Nine quads shared eight interior seams, and a seam is either hard (a staircase, once the sprite is off-axis) or softened from both sides (three-quarter coverage, a hairline); neither is fixable per quad, because each would have to know what its neighbour drew. It is also **2.5-3x cheaper**, measured on `cgui-sprite-stress`: the nine-quad path held material binds to 6 a frame against 1506 and still lost, because nine instances per sprite against one is what dominates (`quadRenderer.flush` drops tenfold) — the same shape as `SvgRasterCache`. Verified equal: `cgui-ore-theme` is byte-identical either way, and `cgui-nineslice`'s two columns now agree in all four tiling modes where `round` used to disagree by a pixel. In that shader the seams are **supersampled**, not texel-filtered: a seam is a line in box-local pixels, and the texel filter reconstructs from `fwidth` in TEXEL space, which is meaningless where a stretched centre meets a 1:1 border. **There is no nine-quad path left** — a missing texture draws one stretched copy of the fallback checkerboard, which is what it always effectively was (`submit` drops the UV crop, so the nine pieces were nine copies of the whole checkerboard) and is the one case the sliced path cannot serve: it would sample the sprite's atlas UVs into an 8x8 fallback and read as a flat colour |
 | `CgUiCrossFade` | Blends two drawables, for `background` transitions |
 | `CgUiLayerBox` | Composites a stack; resolves `overlay-size` via `intrinsicWidth()` |
 | `CgUiRepeat` | Tiling modes |
@@ -1324,14 +1323,16 @@ com.crystalgui.render          CgUiPaintContext (singleton), CgUiRenderer, Sciss
                                sharp and blurred textures with UVs. Sits BESIDE the paint context and
                                reaches it through package-private members, as TextEditor's view parts do
   .text                        FontFamilyCache — (font stack, px) -> CgFontFamily
-  .texture                     CgUiDrawable (SPI), CgUiQuad, CgUiSprite (9-slice), CgUiRoundedRect (SDF),
+  .texture                     CgUiDrawable (SPI), CgUiRect (a Fill + radii + border: the one
+                               drawable a background resolves to), CgUiSprite (a 9-slice FILL,
+                               not a drawable — see toRect()),
                                CgUiCrossFade, CgUiLayers (a comma-separated STACK, first on
                                top -- every drawable property takes one), CgUiLayerBox (the
                                rect ONE layer paints into, not a stack), CgUiRepeat,
                                ArgbMath, CgUiSvg,
                                CgUiBackdropFilter (liquid glass — blur, luminosity blend, refraction, specular, noise, over a live
                                backdrop), CornerRadiusAware (the seam that stops a self-clipping drawable
-                               being wrapped in a CgUiRoundedRect it cannot survive),
+                               being wrapped in a CgUiRect it cannot survive),
                                CgUiTransformDrawable (stub)
     .svg                       A full SVG renderer, parse to cached draw ops: SvgScanner (nested tags),
                                SvgPath (the d grammar), SvgTransform, SvgColor, SvgStyle (inheritance),
@@ -1604,7 +1605,7 @@ three-phase event types are in `ui/event/` — there is no `core/event/` package
 | `textures/gui/Spritesheet_UI_Flat.png` | Unreferenced by any stylesheet today. |
 | `ui/fonts/Minecraft.otf`, `MinecraftRegular.otf` | Public-domain MC fonts. |
 | `shaders/gui_quad.shader` | Default material bound by `beginFrame`. **Every quad material here antialiases its own edges when rotated or sheared, with no MSAA** — the `CG_QUAD_EDGE_*` helpers in `cg_env.glsl` (padded geometry, exact-area coverage per edge), `cg_texel_aa_sample` for pixel art, and a wider `sdf_coverage` ramp for the SDF materials; see `CrystalGraphics/AGENTS.md` § *Engine Buffers*. Axis-aligned content is untouched, measured pixel-identical. The `edges` page of `cgui-gallery` shows every material rotated and skewed. |
-| `shaders/gui_rounded_rect.shader` | SDF rounded rects. |
+| `shaders/gui_rect.shader` | SDF rounded rects. |
 | `shaders/gui_layer_blit.shader` | Visual-layer FBO composite. |
 | `shaders/gui_curve.shader` | Bézier strokes, via `ctx.curve()`; filled triangles and quads share it. Declares `#pragma cg_use curve`, not `quad`. |
 | `shaders/gui_curve_coverage.shader`, `gui_curve_coverage_max.shader`, `gui_curve_accumulate.shader` | `gui_curve.shader` with the blend `SvgRasterCache` needs: cells **summed** into alpha as straight-alpha white coverage (`Blend ONE ZERO, ONE ONE`), stroke segments **maxed** (`BlendEquation MAX` — segments overlap at joints), and a fill with its own colours summed premultiplied (`Blend ONE ONE`). A Pass's `RenderState` cannot vary per keyword, hence three files. |
@@ -1633,7 +1634,7 @@ three-phase event types are in `ui/event/` — there is no `core/event/` package
 > Never attach the buffer from Java. See `CrystalGraphics/AGENTS.md` § *Engine Buffers*.
 
 > **A `#include` in a `.shader` is compiled into the vertex stage as well as the fragment stage.**
-> The material compiler hoists every material-scope `#`-line into both. `gui_rounded_rect.shader` is
+> The material compiler hoists every material-scope `#`-line into both. `gui_rect.shader` is
 > the only shipped shader with an include, and its `sdf.glsl` needed `#ifndef CG_VERTEX_STAGE` around
 > `sdf_coverage` — `fwidth` is fragment-only, NVIDIA accepted it anyway, and AMD's refusal made the
 > whole gallery unlaunchable on that hardware. Guard fragment-only code inside the lib, with

@@ -5,7 +5,7 @@ import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.texture.CgUiGradient;
 import com.crystalgui.render.texture.CgUiGrid;
 import com.crystalgui.render.texture.CgUiLayers;
-import com.crystalgui.render.texture.CgUiQuad;
+import com.crystalgui.render.texture.CgUiRect;
 import com.crystalgui.render.texture.CgUiRepeat;
 import com.crystalgui.render.texture.CgUiShape;
 import com.crystalgui.render.texture.CgUiSprite;
@@ -29,8 +29,8 @@ import java.util.WeakHashMap;
  * same thing) — every form is an explicit function call, no implicit/bare-path form:
  * <ul>
  *   <li>{@code #RRGGBB} / {@code #RGB} / {@code #RRGGBBAA} / {@code rgb(...)} / {@code rgba(...)}
- *       — a flat {@link CgUiQuad}, via {@link ColorValue#parseColor}.</li>
- *   <li>{@code image("path")} — a single un-sliced full-texture {@link CgUiSprite}.</li>
+ *       — a flat {@link CgUiRect}, via {@link ColorValue#parseColor}.</li>
+ *   <li>{@code image("path")} — a rect filled with a single un-sliced full-texture {@link CgUiSprite}.</li>
  *   <li>{@code image("path", ...)} — accepts any mix of optional trailing args, type-sniffed
  *       (order-independent): a quoted {@code "x y w h"} crop sub-rect ({@link CgUiSprite#setSprite}),
  *       a quoted {@code "refW refH"} texture-size-reference override
@@ -360,7 +360,7 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
             }
             return null; // unrecognized trailing arg
         }
-        return sprite;
+        return new CgUiRect().setFillSprite(sprite);
     }
 
     static @Nullable CgUiDrawable parseSprite(String args) {
@@ -389,9 +389,9 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
             }
             return null; // unrecognized trailing arg
         }
-        return sprite
+        return new CgUiRect().setFillSprite(sprite
                 .setSprite(spriteRect[0], spriteRect[1], spriteRect[2], spriteRect[3])
-                .setBorder(borderRect[0], borderRect[1], borderRect[2], borderRect[3]);
+                .setBorder(borderRect[0], borderRect[1], borderRect[2], borderRect[3]));
     }
 
     /** {@code "repeat"} or {@code "repeat round"} — CSS {@code border-image-repeat}'s 1-or-2 value

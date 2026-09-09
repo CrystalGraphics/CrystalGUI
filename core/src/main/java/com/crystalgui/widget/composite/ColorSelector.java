@@ -571,7 +571,7 @@ public class ColorSelector extends UIElement {
      *
      * <p>Rounded only on its OWN outer edge — left for the original swatch, right for the new one — so
      * the pair still reads as one pill with a straight seam down the middle, the same shape the CSS
-     * {@code border-*-radius} pair on {@code CgUiRoundedRect}-backed swatches elsewhere in this sheet
+     * {@code border-*-radius} pair on {@code CgUiRect}-backed swatches elsewhere in this sheet
      * gets for free. This one can't get it for free: see {@code setCornerRadius}'s own doc.</p>
      */
     private static void paintSwatch(UIElement swatch, int argb, boolean roundLeft) {

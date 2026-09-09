@@ -1,4 +1,4 @@
-// crystalgui:shaders/gui_rounded_rect.shader
+// crystalgui:shaders/gui_rect.shader
 //
 // SDF-based rounded-rectangle "canvas": interior filled by _FillColor, a sampled _MainTex
 // (WITH_TEXTURE_FILL, single stretched sample), or a 9-slice sprite (WITH_9SLICE_FILL, per-pixel
@@ -33,7 +33,7 @@ Properties {
     _FillColor    ("Fill Color",   color)     = (1.0, 1.0, 1.0, 1.0)
     _BorderColor  ("Border Color", color)     = (0.0, 0.0, 0.0, 1.0)
     // SPLIT_BORDER only. Unity's inset text-field bevel: a darker top edge, a lighter bottom edge --
-    // see CgUiRoundedRect.setBorder(width, top, bottom).
+    // see CgUiRect.setBorder(width, top, bottom).
     _BorderColorTop    ("Border Color Top",    color) = (0.0, 0.0, 0.0, 1.0)
     _BorderColorBottom ("Border Color Bottom", color) = (0.0, 0.0, 0.0, 1.0)
     _CornerRadiusX ("Corner Radii X (TL,TR,BR,BL)", vec4) = (0.0, 0.0, 0.0, 0.0)

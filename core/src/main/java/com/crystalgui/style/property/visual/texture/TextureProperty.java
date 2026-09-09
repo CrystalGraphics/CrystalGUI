@@ -4,7 +4,7 @@ import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.render.texture.CgUiCrossFade;
 import com.crystalgui.render.texture.ArgbMath;
 import com.crystalgui.render.texture.CgUiDrawable;
-import com.crystalgui.render.texture.CgUiQuad;
+import com.crystalgui.render.texture.CgUiRect;
 import com.crystalgui.render.texture.CgUiLayers;
 import com.crystalgui.render.texture.CgUiShape;
 import lombok.experimental.Accessors;
@@ -18,10 +18,10 @@ public class TextureProperty extends StyleProperty<CgUiDrawable> {
     }
 
     /**
-     * {@code background}/{@code overlay} only ever hold a {@code CgUiQuad} or {@code CgUiSprite}
-     * now (rounding/border is a separate wrapping layer applied in {@code UIElement.paintSelf}, not
-     * a background value type) — there's no shared parameter space to lerp between two arbitrary
-     * drawables, so this always draw-both-and-blend-opacity via {@link CgUiCrossFade}.
+     * {@code background}/{@code overlay} hold a {@code CgUiRect} or one of the self-drawing kinds
+     * (gradient, svg, glass) — rounding and border are the painter's, not a background value type —
+     * and there is no shared parameter space to lerp between two arbitrary drawables, so this always
+     * draws both and blends opacity via {@link CgUiCrossFade}.
      */
     private CgUiDrawable interpolate(CgUiDrawable from, CgUiDrawable to, float lerp) {
         return new CgUiCrossFade(from, to, lerp);
@@ -39,7 +39,7 @@ public class TextureProperty extends StyleProperty<CgUiDrawable> {
      * <ul>
      *   <li>the shared EMPTY, which is what every {@code none} in every sheet resolves to, so it is
      *       spelled rather than remembered;</li>
-     *   <li>a flat colour built in Java — a widget writing {@code new CgUiQuad(argb)} rather than a
+     *   <li>a flat colour built in Java — a widget writing {@code CgUiRect.ofColor(argb)} rather than a
      *       stylesheet — which writes as the colour it holds;</li>
      *   <li>a vector mark, which is a record over one enum and so is exactly {@code shape(kind)}.</li>
      * </ul>
@@ -61,7 +61,10 @@ public class TextureProperty extends StyleProperty<CgUiDrawable> {
         if (value == CgUiDrawable.EMPTY) return "none";
         String source = TextureValue.sourceOf(value);
         if (source != null) return source;
-        if (value instanceof CgUiQuad quad) return ArgbMath.toCss(quad.getColorArgb());
+        if (value instanceof CgUiRect rect && rect.isPlain()
+                && rect.getFill() instanceof CgUiRect.Fill.Color(int argb)) {
+            return ArgbMath.toCss(argb);
+        }
         if (value instanceof CgUiShape shape) return "shape(\"" + CgUiShape.cssName(shape.kind()) + "\")";
         // A STACK IS ITS LAYERS, written the same way and comma-joined. It needs this rather than a
         // remembered source because a stack is BUILT in Java whenever one layer is pasted onto another

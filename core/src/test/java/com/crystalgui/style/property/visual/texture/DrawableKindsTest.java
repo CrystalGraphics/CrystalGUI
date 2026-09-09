@@ -11,7 +11,7 @@ import java.util.List;
 import org.junit.Test;
 
 import com.crystalgui.render.texture.CgUiDrawable;
-import com.crystalgui.render.texture.CgUiQuad;
+import com.crystalgui.render.texture.CgUiRect;
 import com.crystalgui.serialization.style.DrawableParts;
 import com.crystalgui.serialization.style.StyleParts;
 
@@ -58,7 +58,7 @@ public class DrawableKindsTest {
     @Test
     public void registeringAKindGivesItBothParsingAndASectionOfItsOwn() {
         DrawableKinds.register(DrawableKinds.Kind.function(
-                "test-swatch", "Test Swatch", "test-swatch", args -> new CgUiQuad(0xFF123456)));
+                "test-swatch", "Test Swatch", "test-swatch", args -> CgUiRect.ofColor(0xFF123456)));
         try {
             CgUiDrawable parsed = DrawableKinds.parse("test-swatch(anything)");
             assertNotNull("a registered kind parses", parsed);

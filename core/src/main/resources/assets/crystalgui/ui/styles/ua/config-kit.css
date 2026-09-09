@@ -1092,7 +1092,7 @@ colorselector .__swatches__ .__swatch-new__ {
 }
 /* NO `border-radius` here, deliberately — it would do nothing. Both swatches paint themselves through
  * `CgUiColorField` (a `GRADIENT`, so the alpha checkerboard shows through correctly), and
- * `UIElement.resolveRoundedFill` only recognises `CgUiQuad`/`CgUiSprite` fills as something the generic
+ * `BoxPainter` only re-shapes a `CgUiRect` background, so only something the generic
  * rounded-wrap layer can clip — a `CgUiColorField` draws its own shape via its own shader, so there is
  * no flat fill for that layer to wrap around. CSS `border-radius` on these two elements was written,
  * looked correct, and silently painted nothing for exactly that reason.

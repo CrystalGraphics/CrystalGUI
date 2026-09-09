@@ -20,6 +20,7 @@ import com.crystalgui.style.property.visual.texture.TextureValue;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
+import com.crystalgui.render.texture.CgUiRect;
 
 /**
  * <b>A drawable is filed under the function that produced it.</b>
@@ -115,7 +116,7 @@ public class DrawablePartsTest extends UiDocumentTestBase {
     @Test
     public void aColourBuiltInJavaStillCopies() {
         StyleGroup.inlinePipeline(source.getStyle().getGeneralGroup(),
-                g -> g.background(new com.crystalgui.render.texture.CgUiQuad(0xFF00FF00)));
+                g -> g.background(CgUiRect.ofColor(0xFF00FF00)));
 
         AttributeSet copied = new StyleAttributes(source).copyAttributes();
 

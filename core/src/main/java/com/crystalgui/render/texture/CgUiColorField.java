@@ -12,7 +12,7 @@ import com.crystalgui.render.CgUiPaintContext;
  * comes from a texture. These are <b>functions of position</b>: a hue ring's colour depends on the
  * angle, an SV square's on both axes at once. A texture would have to be regenerated whenever the hue
  * changed and would band visibly at any size, so they go through their own material — the same reason
- * {@link CgUiRoundedRect} does.</p>
+ * {@link CgUiRect} does.</p>
  *
  * <h3>One drawable, three modes</h3>
  * <p>They share a class because they share everything except six lines of GLSL: the same rounded-box
@@ -56,7 +56,7 @@ public final class CgUiColorField implements CgUiDrawable {
      * <p>Deferring it keeps the rule the codebase already states: a CrystalGraphics core type may be
      * reached from inside a paint-method body, and nowhere else.</p>
      *
-     * @see CgUiRoundedRect for why this needs no {@code attachTo} — the shader declares its buffer
+     * @see CgUiRect for why this needs no {@code attachTo} — the shader declares its buffer
      */
     private static CgMaterial material;
 
@@ -103,17 +103,17 @@ public final class CgUiColorField implements CgUiDrawable {
 
     /**
      * Independent elliptical radius per corner, CSS {@code border-radius} order (TL,TR,BR,BL), each an
-     * (rx,ry) pair — same signature and same order as {@link CgUiRoundedRect#setCornerRadius(float,
+     * (rx,ry) pair — same signature and same order as {@link CgUiRect#setCornerRadius(float,
      * float, float, float, float, float, float, float)}.
      *
      * <p>This is the ONLY way a {@code CgUiColorField}-backed element gets rounded. It does not go
      * through CSS {@code border-radius}: {@code UIElement.resolveRoundedFill} only recognises
-     * {@code CgUiQuad} and {@code CgUiSprite} as fills the generic rounded-wrap layer can clip — a
+     * {@code CgUiRect}'s own fills as what the generic rounded layer can clip — a
      * hue ring, an SV square or a gradient swatch paints ITSELF via this shader, so there is no flat
      * fill for that layer to wrap. {@link com.crystalgui.ui.elements.ColorSelector}'s before/after swatch
  * pair is the one place
      * this is called with asymmetric corners (each swatch rounds only its own outer edge, matching the
-     * "one pill, straight seam" shape {@code CgUiRoundedRect}-backed pairs get from CSS elsewhere in
+     * "one pill, straight seam" shape {@code CgUiRect}-backed pairs get from CSS elsewhere in
      * this file) — every other mode here is round (the ring) or square (everything else) on purpose
      * and never calls this at all.</p>
      */

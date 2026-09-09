@@ -214,7 +214,7 @@ public final class CgUiGradient implements CgUiDrawable, CornerRadiusAware {
      * whose {@code t} is in {@code [windowFrom, windowTo)}.
      *
      * <p>Properties are set INSIDE the body and nothing is flushed there: {@code withMaterial} uploads
-     * them on its second bind and flushes after it, which is the ordering {@link CgUiRoundedRect}
+     * them on its second bind and flushes after it, which is the ordering {@link CgUiRect}
      * follows and the one that drew every segment with stale colours when it was broken here.</p>
      */
     private void drawWindow(CgUiPaintContext ctx, float x, float y, float width, float height, int tint,

@@ -19,7 +19,7 @@ import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.CgUiGradient;
 import com.crystalgui.render.texture.CgUiGrid;
 import com.crystalgui.render.texture.CgUiLayers;
-import com.crystalgui.render.texture.CgUiQuad;
+import com.crystalgui.render.texture.CgUiRect;
 import com.crystalgui.render.texture.CgUiShape;
 import com.crystalgui.style.property.StylePropertyRegistry;
 
@@ -61,8 +61,8 @@ public class CgUiLayersTest {
     public void theFirstLayerWrittenIsTheTopOne() {
         CgUiLayers layers = (CgUiLayers) parse("#FF0000FF, #00FF00FF");
         assertNotNull(layers);
-        assertEquals(0xFFFF0000, ((CgUiQuad) layers.layers().get(0)).getColorArgb());
-        assertEquals(0xFF00FF00, ((CgUiQuad) layers.layers().get(1)).getColorArgb());
+        assertEquals(0xFFFF0000, ((CgUiRect.Fill.Color) ((CgUiRect) layers.layers().get(0)).getFill()).argb());
+        assertEquals(0xFF00FF00, ((CgUiRect.Fill.Color) ((CgUiRect) layers.layers().get(1)).getFill()).argb());
     }
 
     /** A function's own commas are not layer separators. */
@@ -70,7 +70,7 @@ public class CgUiLayersTest {
     public void aValueThatMerelyLooksLikeAStackIsOneLayer() {
         assertTrue(parse("linear-gradient(to bottom, #3574F0FF, #2E436EFF)") instanceof CgUiGradient);
         assertTrue(parse("grid(16 24, #6EDCD024, 2)") instanceof CgUiGrid);
-        assertTrue(parse("rgba(0, 0, 0, 0.5)") instanceof CgUiQuad);
+        assertTrue(parse("rgba(0, 0, 0, 0.5)") instanceof CgUiRect rect && rect.getFill() instanceof CgUiRect.Fill.Color);
     }
 
     /**
@@ -139,7 +139,7 @@ public class CgUiLayersTest {
         assertEquals(2, layers.size());
         assertTrue("the pasted layer replaced the top one", layers.get(0) instanceof CgUiGrid);
         assertEquals("…and the target's second layer is untouched",
-                0xFF00FF00, ((CgUiQuad) layers.get(1)).getColorArgb());
+                0xFF00FF00, ((CgUiRect.Fill.Color) ((CgUiRect) layers.get(1)).getFill()).argb());
     }
 
     /**

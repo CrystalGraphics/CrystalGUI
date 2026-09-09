@@ -9,7 +9,7 @@ package com.crystalgui.render.texture;
  * sprite-pack JSON.</p>
  *
  * <p>The same {@link #tileCount} drives both renderers — {@link CgUiSprite}'s CPU quad loop and the
- * {@code WITH_9SLICE_FILL} branch of {@code gui_rounded_rect.shader}, which receives the count as a
+ * {@code WITH_9SLICE_FILL} branch of {@code gui_rect.shader}, which receives the count as a
  * uniform rather than recomputing it. Agreement is by construction: the two paths cannot round
  * differently.</p>
  */

@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.Assert.*;
+import com.crystalgui.render.texture.CgUiRect;
 
 /**
  * The kit's guard rail — <b>every control kind, measured, in one pass.</b>
@@ -582,8 +583,8 @@ public class ConfigKitTest extends UiDocumentTestBase {
     private static int backgroundOf(UIElement e) {
         var drawable = e.getStyle().getGeneralGroup().background();
         assertTrue("expected a flat fill, got " + drawable,
-                drawable instanceof com.crystalgui.render.texture.CgUiQuad);
-        return ((com.crystalgui.render.texture.CgUiQuad) drawable).getColorArgb();
+                drawable instanceof CgUiRect);
+        return ((CgUiRect.Fill.Color) ((CgUiRect) drawable).getFill()).argb();
     }
 
     /** The checkbox's own size — the kit's one deliberate exception, so it needs its own assertion. */

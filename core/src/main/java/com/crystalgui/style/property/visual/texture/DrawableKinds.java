@@ -12,7 +12,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.style.property.visual.color.ColorValue;
-import com.crystalgui.render.texture.CgUiQuad;
+import com.crystalgui.render.texture.CgUiRect;
 
 /**
  * Every CSS function that produces a drawable — <b>declared once, read by everything</b>.
@@ -134,6 +134,6 @@ public final class DrawableKinds {
     @Nullable
     private static CgUiDrawable parseColour(String css) {
         Integer color = ColorValue.parseColor(css);
-        return color == null ? null : new CgUiQuad(color);
+        return color == null ? null : CgUiRect.ofColor(color);
     }
 }

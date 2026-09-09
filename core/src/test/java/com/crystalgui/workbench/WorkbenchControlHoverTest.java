@@ -8,7 +8,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import com.crystalgui.render.texture.CgUiDrawable;
-import com.crystalgui.render.texture.CgUiQuad;
+import com.crystalgui.render.texture.CgUiRect;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
@@ -236,7 +236,7 @@ public class WorkbenchControlHoverTest extends UiDocumentTestBase {
 
     private static int backgroundOf(UIElement node) {
         CgUiDrawable drawable = node.getStyle().getGeneralGroup().background();
-        assertTrue("expected a flat fill, got " + drawable, drawable instanceof CgUiQuad);
-        return ((CgUiQuad) drawable).getColorArgb();
+        assertTrue("expected a flat fill, got " + drawable, drawable instanceof CgUiRect);
+        return ((CgUiRect.Fill.Color) ((CgUiRect) drawable).getFill()).argb();
     }
 }

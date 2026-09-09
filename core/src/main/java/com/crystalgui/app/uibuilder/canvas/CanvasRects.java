@@ -8,7 +8,7 @@ import org.joml.Vector3f;
 
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgui.render.texture.CgUiRoundedRect;
+import com.crystalgui.render.texture.CgUiRect;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.ui.box.Box;
@@ -194,7 +194,7 @@ public final class CanvasRects {
     public static void outline(CgUiPaintContext ctx, @Nullable float[] rect, float thickness, int argb) {
         float[] ring = outlineRing(rect, thickness);
         if (ring == null) return;
-        CgUiRoundedRect stroke = new CgUiRoundedRect();
+        CgUiRect stroke = new CgUiRect();
         // A transparent interior carrying the stroke's rgb, so the shader's edge-to-fill mix has no dark
         // fringe to bleed. @see BoxPainter#paintRounded, which does the same for the same reason.
         stroke.setFillColor(argb & 0x00FFFFFF);

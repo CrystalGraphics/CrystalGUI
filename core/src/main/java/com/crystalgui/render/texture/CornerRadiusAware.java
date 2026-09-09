@@ -6,7 +6,7 @@ package com.crystalgui.render.texture;
  * <h3>Why this exists rather than the usual wrap</h3>
  *
  * <p>{@code UIElement.paintSelf} normally wraps whatever {@code background} resolves to in a
- * {@link CgUiRoundedRect} when the element has a radius or a border — rounding is orthogonal to what a
+ * {@link CgUiRect} when the element has a radius or a border — rounding is orthogonal to what a
  * background <em>is</em>, exactly as it is in CSS, so one layer handles it for every fill type.</p>
  *
  * <p>That is right for a fill and impossible for a <b>material</b>. {@link CgUiBackdrop} carries its own

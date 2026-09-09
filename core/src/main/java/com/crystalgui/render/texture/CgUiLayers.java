@@ -24,7 +24,7 @@ import com.crystalgui.render.CgUiPaintContext;
  * <h3>Corner radii reach the layers that can use them</h3>
  *
  * <p>A stack clips itself, because it has to: the painter's alternative is to wrap the whole background
- * in a {@link CgUiRoundedRect}, and a wrap can only round ONE fill. So the radii are forwarded to every
+ * in a {@link CgUiRect}, and a wrap can only round ONE fill. So the radii are forwarded to every
  * layer that is {@link CornerRadiusAware} — a gradient masks itself, glass measures its bezel — and a
  * layer that is not simply paints unclipped, exactly as it would today wherever the wrap does not apply.
  * Per-layer clipping for the rest is stage 2, along with per-layer {@code background-size} and

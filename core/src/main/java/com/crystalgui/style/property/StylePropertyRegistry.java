@@ -82,7 +82,7 @@ public class StylePropertyRegistry {
     // object-position. Defaults reproduce the engine's pre-existing behaviour exactly (stretch to
     // the full border box), so adding them changes nothing until a stylesheet opts in. Deliberately
     // NOT transition-enabled — enums don't interpolate.
-    // `background` has no equivalents yet: its rect doubles as CgUiRoundedRect's _BoxSize and as the
+    // `background` has no equivalents yet: its rect doubles as CgUiRect's _BoxSize and as the
     // basis for percentage border-radius, so it can't be re-boxed without redefining border-radius.
     public static final StyleProperty<BoxOrigin> OVERLAY_ORIGIN =
             create("overlay-origin", BoxOrigin.class, BoxOrigin.BORDER_BOX);
@@ -394,7 +394,7 @@ public class StylePropertyRegistry {
     // how margin/padding/border-width work (BoxEdgeShorthands).
     public static final StyleProperty<Integer> BORDER_COLOR = create(new ColorProperty("border-color", 0xFF000000));
     // A per-edge OVERRIDE, not an independent colour — the initial value is fully transparent, which
-    // this pair reads as "unset" rather than as a real colour: CgUiRoundedRect falls back to
+    // this pair reads as "unset" rather than as a real colour: CgUiRect falls back to
     // border-color's own resolved value whenever an edge's alpha is 0, so a widget that only ever sets
     // border-color keeps painting exactly as it always has. Unity's inset text-field bevel (a darker
     // top edge, a lighter bottom edge, same colour left/right) is what this exists for — the SDF border
