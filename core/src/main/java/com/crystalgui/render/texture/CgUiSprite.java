@@ -319,9 +319,9 @@ public final class CgUiSprite implements CgUiDrawable {
         return spriteSize.height > 0 ? spriteSize.height : -1f;
     }
 
-    /** Built on the first off-axis draw and kept: the one-quad path is rare, and a fresh one per
-     * frame would be garbage in the paint loop. @see #draw */
-    private CgUiRoundedRect offAxis;
+    /** The sliced draw, built once and kept -- a fresh one per frame would be garbage in the paint
+     * loop. Holds no state of its own beyond the sprite it is pointed at. @see #draw */
+    private CgUiRoundedRect slicer;
 
     @Override
     public void draw(CgUiPaintContext ctx, float mouseX, float mouseY, float x, float y, float width, float height) {
@@ -339,216 +339,50 @@ public final class CgUiSprite implements CgUiDrawable {
         final int tintArgb = ArgbMath.multiply(this.tintArgb, ctx.getColor());
         ctx.bindTexture(resolved);
 
-        if (!hasBorder) {
+        // A MISSING TEXTURE IS NOT WORTH SLICING, and a whole sprite was never sliced. Without a UV
+        // crop (see below) the nine pieces were nine copies of the whole checkerboard rather than a
+        // nine-slice, so one stretched copy says "missing" just as loudly -- and it is the one case the
+        // sliced path cannot serve, since that samples the sprite's own atlas UVs, which land in an
+        // arbitrary corner of the 8x8 fallback and read as a flat colour rather than as broken.
+        if (!hasBorder || missingTexture) {
             if (width > 0 && height > 0) {
-                submit(ctx, x, y, width, height, u0, v0, u3, v3, tintArgb);
+                CgQuadRenderer.Quad q = ctx.quad().at(x, y).size(width, height).color(tintArgb);
+                // THE FALLBACK GETS NO UV CROP: it has no meaningful sub-rect, so cropping into it
+                // samples an arbitrary corner and a broken sprite reads as a solid colour instead of as
+                // missing. CgUiPaintContext.drawImage is the only other site that can be handed one.
+                if (!missingTexture) q.uv(u0, v0, u3, v3);
+                q.submit();
                 ctx.flush();
             }
             return;
         }
 
-        // OFF-AXIS, THE NINE PIECES ARE ONE DRAW. Nine quads share eight interior seams, and a seam is
-        // either hard — the rasteriser's own cut, which is a visible staircase once the sprite is off
-        // its axis — or softened from both sides, which composites to three quarters and reads as a
-        // hairline down the middle of the art. Neither is fixable per quad, because each one would have
-        // to know what its neighbour drew. gui_rounded_rect's WITH_9SLICE_FILL is the same nine-region
-        // remap done per PIXEL, so there are no seams to get wrong and the outline is antialiased once.
+        // THE NINE PIECES ARE ONE DRAW. gui_rounded_rect's WITH_9SLICE_FILL is the same nine-region
+        // remap done per PIXEL, and it is better on both counts that used to be traded off.
         //
-        // Only off-axis, because axis-aligned there is nothing to see: the rasteriser snaps every seam
-        // to the same pixel boundary. Not for cost -- measured on cgui-sprite-stress, one quad is 2.5-3x
-        // cheaper than nine either way, since nine instances per sprite outweigh the material switch.
-        // Whole-sprite draws (no border) are already one quad and never come here.
+        // CORRECTNESS: nine quads shared eight interior seams, and a seam is either hard -- the
+        // rasteriser's own cut, a visible staircase once the sprite is off its axis -- or softened from
+        // both sides, which composites to three quarters and reads as a hairline down the middle of the
+        // art. Neither is fixable per quad, because each would have to know what its neighbour drew.
+        // The two paths also disagreed under ROUND tiling, by a pixel on every tile divider: this one
+        // places them continuously where the quad loop rounded each tile's rect. cgui-nineslice draws
+        // the same sprite both ways and says they must match; now there is one answer.
+        //
+        // COST: this was assumed to be the expensive path, because it is a material switch where nine
+        // quads join the frame's existing batch. Measured on cgui-sprite-stress -- 500 sprite-backed
+        // cells, nothing else on screen -- it is 2.5-3x CHEAPER, and the batching is real but not where
+        // the money is: the nine-quad path held material binds to 6 a frame against 1506, and still
+        // lost, because nine instances per sprite against one is what dominates. quadRenderer.flush
+        // drops about tenfold. The same shape as SvgRasterCache: the instance upload is the cost.
         // @see CgUiRoundedRect#setFillSprite
-        if (!missingTexture && ctx.poseIsOffAxis()) {
-            if (offAxis == null) offAxis = new CgUiRoundedRect();
-            offAxis.setFillSprite(this);
-            int outerTint = ctx.getColor();
-            ctx.setColor(tintArgb);   // the material reads the quad colour, and this is the same product
-            try {
-                offAxis.draw(ctx, mouseX, mouseY, x, y, width, height);
-            } finally {
-                ctx.setColor(outerTint);
-            }
-            return;
-        }
-
-        float bL = borderLeftTop.x * borderScale;
-        float bT = borderLeftTop.y * borderScale;
-        float bR = borderRightBottom.x * borderScale;
-        float bB = borderRightBottom.y * borderScale;
-
-        float scaleX = Math.min(1.0f, width / Math.max(1.0f, bL + bR));
-        float scaleY = Math.min(1.0f, height / Math.max(1.0f, bT + bB));
-
-        float drawL = bL * scaleX;
-        float drawR = bR * scaleX;
-        float drawT = bT * scaleY;
-        float drawB = bB * scaleY;
-
-        float x0 = x;
-        float x1 = x + drawL;
-        float x2 = x + width - drawR;
-        float x3 = x + width;
-
-        float y0 = y;
-        float y1 = y + drawT;
-        float y2 = y + height - drawB;
-        float y3 = y + height;
-
-        float colW0 = x1 - x0, colW1 = x2 - x1, colW2 = x3 - x2;
-        float rowH0 = y1 - y0, rowH1 = y2 - y1, rowH2 = y3 - y2;
-
-        // Tiling only ever applies along the centre column (horizontally) and centre row
-        // (vertically) — corners are always a single stretched quad, matching CSS.
-        Axis tilesX = Axis.of(repeatX, colW1, centerSourceWidth(), u1, u2);
-        Axis tilesY = Axis.of(repeatY, rowH1, centerSourceHeight(), v1, v2);
-
-        // Top / bottom edges: tiled horizontally, stretched vertically.
-        if (rowH0 > 0) {
-            if (colW0 > 0) submit(ctx, x0, y0, colW0, rowH0, u0, v0, u1, v1, tintArgb, abuts(0, 0));
-            emitRow(ctx, tilesX, x1, y0, rowH0, v0, v1, tintArgb, abuts(1, 0));
-            if (colW2 > 0) submit(ctx, x2, y0, colW2, rowH0, u2, v0, u3, v1, tintArgb, abuts(2, 0));
-        }
-        // Left / right edges tiled vertically; centre tiled on both axes.
-        if (rowH1 > 0) {
-            for (int ty = 0; ty < tilesY.count; ty++) {
-                float ty0 = y1 + tilesY.offset(ty);
-                float th = tilesY.size(ty);
-                if (th <= 0) continue;
-                float tv0 = tilesY.uvStart();
-                float tv1 = tilesY.uvEnd(ty);
-                if (colW0 > 0) submit(ctx, x0, ty0, colW0, th, u0, tv0, u1, tv1, tintArgb, abuts(0, 1));
-                if (fillCenter) emitRow(ctx, tilesX, x1, ty0, th, tv0, tv1, tintArgb, abuts(1, 1));
-                if (colW2 > 0) submit(ctx, x2, ty0, colW2, th, u2, tv0, u3, tv1, tintArgb, abuts(2, 1));
-                maybeFlush(ctx);
-            }
-        }
-        if (rowH2 > 0) {
-            if (colW0 > 0) submit(ctx, x0, y2, colW0, rowH2, u0, v2, u1, v3, tintArgb, abuts(0, 2));
-            emitRow(ctx, tilesX, x1, y2, rowH2, v2, v3, tintArgb, abuts(1, 2));
-            if (colW2 > 0) submit(ctx, x2, y2, colW2, rowH2, u2, v2, u3, v3, tintArgb, abuts(2, 2));
-        }
-
-        ctx.flush();
-        pendingQuads = 0;
-    }
-
-    /**
-     * Queues one quad, applying the missing-texture UV rule.
-     *
-     * <p>The fallback checkerboard has no meaningful sub-rect, so cropping into it samples an
-     * arbitrary corner and a broken sprite reads as a solid colour rather than as "missing". Dropping
-     * the crop makes every quad show the whole checkerboard, which is recognisable at any size.</p>
-     *
-     * <p>This rule used to live centrally in {@code CgUiPaintContext.submitQuad}, which could inspect
-     * the bound texture before writing UVs. The fluent {@code ctx.quad()} builder has the caller set
-     * UVs directly, so the check now lives at the two places that can actually be handed a fallback:
-     * here, and {@code CgUiPaintContext.drawImage}. Everything else either binds the 1×1 white pixel
-     * or an FBO colour attachment.</p>
-     */
-    private void submit(CgUiPaintContext ctx, float x, float y, float w, float h,
-                        float u0, float v0, float u1, float v1, int argb) {
-        submit(ctx, x, y, w, h, u0, v0, u1, v1, argb, 0);
-    }
-
-    /**
-     * @param abutting which edges of this piece meet another piece — {@code CgQuadRenderer.ABUTS_*} — so
-     *                 those stay hard however the sprite is rotated while its outer edges are
-     *                 antialiased. A whole sprite drawn as one quad abuts nothing
-     */
-    private void submit(CgUiPaintContext ctx, float x, float y, float w, float h,
-                        float u0, float v0, float u1, float v1, int argb, int abutting) {
-        CgQuadRenderer.Quad q = ctx.quad().at(x, y).size(w, h).color(argb);
-        if (!missingTexture) q.uv(u0, v0, u1, v1);
-        if (abutting != 0) q.abutting(abutting);
-        q.submit();
-    }
-
-    /** The edges a nine-slice piece at {@code (col, row)} shares with its neighbours. */
-    private static int abuts(int col, int row) {
-        return (col > 0 ? CgQuadRenderer.ABUTS_LEFT : 0) | (col < 2 ? CgQuadRenderer.ABUTS_RIGHT : 0)
-                | (row > 0 ? CgQuadRenderer.ABUTS_TOP : 0) | (row < 2 ? CgQuadRenderer.ABUTS_BOTTOM : 0);
-    }
-
-    /** Emits one horizontal strip of tiles at a fixed y/height and fixed vertical UV range. */
-    private void emitRow(CgUiPaintContext ctx, Axis tilesX, float xStart, float yPos, float h,
-                         float vTop, float vBottom, int tintArgb, int abutting) {
-        for (int tx = 0; tx < tilesX.count; tx++) {
-            float tx0 = xStart + tilesX.offset(tx);
-            float tw = tilesX.size(tx);
-            if (tw <= 0) continue;
-            submit(ctx, tx0, yPos, tw, h, tilesX.uvStart(), vTop, tilesX.uvEnd(tx), vBottom, tintArgb, abutting);
-            maybeFlush(ctx);
-        }
-    }
-
-    /** Quads staged since the last flush. Tiling can emit far more than the 9 a stretch draw does,
-     * and the shared quad index buffer tops out at 16384 — past which {@code flush()} reads off the
-     * end of the index buffer silently rather than throwing. Flushing in chunks keeps us clear of
-     * it. Safe mid-draw: flush touches no shader/texture/blend state, and only whole quads are ever
-     * staged here. */
-    private int pendingQuads = 0;
-
-    private void maybeFlush(CgUiPaintContext ctx) {
-        if (++pendingQuads >= FLUSH_EVERY_QUADS) {
-            ctx.flush();
-            pendingQuads = 0;
-        }
-    }
-
-    private static final int FLUSH_EVERY_QUADS = 4096;
-
-    /**
-     * One axis's tile layout: how many tiles, where each starts, how long it is, and what UV range it
-     * samples. Collapses all four repeat modes into a uniform interface so the emission loops don't
-     * branch per mode.
-     */
-    private record Axis(int count, float tileSize, float gap, float uvLo, float uvHi, float lastFraction) {
-        static Axis of(CgUiRepeat mode, float span, float src, float uvLo, float uvHi) {
-            if (span <= 0f) return new Axis(0, 0f, 0f, uvLo, uvHi, 1f);
-            float rawCount = mode.tileCount(span, src);
-            if (mode == CgUiRepeat.STRETCH || rawCount <= 1f && mode != CgUiRepeat.REPEAT) {
-                // Single tile filling the span — the pre-existing stretch behaviour.
-                return new Axis(1, span, 0f, uvLo, uvHi, 1f);
-            }
-            return switch (mode) {
-                // Whole tiles at natural size plus a clipped remainder; the partial tile samples a
-                // proportionally shortened UV range so it crops rather than squashes.
-                case REPEAT -> {
-                    int whole = (int) Math.floor(rawCount);
-                    float frac = rawCount - whole;
-                    int total = frac > 0.001f ? whole + 1 : whole;
-                    yield new Axis(Math.max(1, total), src, 0f, uvLo, uvHi, frac > 0.001f ? frac : 1f);
-                }
-                // Tile size stretched slightly so a whole number fits exactly — no clipped tile.
-                case ROUND -> {
-                    int n = Math.max(1, Math.round(rawCount));
-                    yield new Axis(n, span / n, 0f, uvLo, uvHi, 1f);
-                }
-                // Whole tiles at natural size, leftover space split into equal gaps around them.
-                case SPACE -> {
-                    int n = Math.max(1, (int) rawCount);
-                    yield new Axis(n, src, mode.gap(span, src, n), uvLo, uvHi, 1f);
-                }
-                default -> new Axis(1, span, 0f, uvLo, uvHi, 1f);
-            };
-        }
-
-        float offset(int index) {
-            return gap + index * (tileSize + gap);
-        }
-
-        float size(int index) {
-            return index == count - 1 ? tileSize * lastFraction : tileSize;
-        }
-
-        float uvStart() {
-            return uvLo;
-        }
-
-        /** The last tile under REPEAT is cropped, so it samples only part of the UV range. */
-        float uvEnd(int index) {
-            return index == count - 1 && lastFraction < 1f ? uvLo + (uvHi - uvLo) * lastFraction : uvHi;
+        if (slicer == null) slicer = new CgUiRoundedRect();
+        slicer.setFillSprite(this);
+        int outerTint = ctx.getColor();
+        ctx.setColor(tintArgb);   // the material reads the quad colour, and this is the same product
+        try {
+            slicer.draw(ctx, mouseX, mouseY, x, y, width, height);
+        } finally {
+            ctx.setColor(outerTint);
         }
     }
 }

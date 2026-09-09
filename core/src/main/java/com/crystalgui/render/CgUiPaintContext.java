@@ -670,25 +670,6 @@ public final class CgUiPaintContext {
     }
 
     /**
-     * Whether the current pose rotates or shears what is drawn under it, so a caller can pick a draw
-     * that survives being off-axis.
-     *
-     * <p>The same question {@code cg_quad_edge_rotated} asks per instance in {@code cg_env.glsl}, and
-     * the same answer: a quad's edge vectors come from this matrix's columns, so {@code right.y} and
-     * {@code up.x} are exactly the two off-diagonal terms below. Anything axis-aligned — which is
-     * every element in a document that is not being transformed — answers false and pays nothing.</p>
-     *
-     * <pre>
-     * if (ctx.poseIsOffAxis()) drawAsOnePiece(ctx);   // seams between pieces would show
-     * else                     drawAsNinePieces(ctx);
-     * </pre>
-     */
-    public boolean poseIsOffAxis() {
-        Matrix4f m = poseStack.last().pose();
-        return Math.abs(m.m01()) > 1.0e-4f || Math.abs(m.m10()) > 1.0e-4f;
-    }
-
-    /**
      * Turns off the host's fixed-function alpha test for the duration of a UI pass.
      *
      * <p><b>Minecraft 1.7.10 enables {@code GL_ALPHA_TEST} with {@code glAlphaFunc(GL_GREATER, 0.1)} in
