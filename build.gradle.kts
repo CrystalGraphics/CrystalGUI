@@ -93,10 +93,42 @@ val deploySingleJars = tasks.register("deploySingleJars") {
             mods.listFiles().orEmpty()
                 .filter { it.name.startsWith("crystalgui-") || it.name.startsWith("crystalgraphics-") }
                 .forEach { it.delete() }
-            jars.forEach { it.copyTo(File(mods, it.name), overwrite = true) }
+            jars.forEach { source ->
+                val target = File(mods, source.name)
+                // A RUNNING CLIENT HOLDS ITS MOD JARS OPEN on Windows, and Kotlin's copyTo reports
+                // that as "tried to overwrite the destination, but failed to delete it" -- which
+                // names neither the instance nor the cause.
+                if (target.exists() && !target.delete()) {
+                    throw GradleException(
+                        "${target.name} in $key is locked, so it cannot be replaced. A Minecraft "
+                            + "client is still running from that instance; close it and run again.")
+                }
+                source.copyTo(target, overwrite = true)
+            }
             logger.lifecycle("[cgui] {} -> {}", key, mods)
         }
     }
+}
+
+// ── Every installed client, driven (J6) ──────────────────────────────────────────────────────────
+//
+// The client half of the matrix. `checkSingleJar` asserts what the jar IS; this asserts that four
+// real clients each draw from it. Sequential, because there is one GPU and one launcher.
+//
+//   ./gradlew prodSmoke
+//   ./gradlew prodSmoke -PcgTargets=1710,1201forge
+val prodSmoke = tasks.register<cgbuildlogic.ProdSmoke>("prodSmoke") {
+    dependsOn(deploySingleJars)
+    instances.set(listOf(
+        "prismLauncher1710Dir=1710",
+        "prismLauncher1201ForgeDir=1201forge",
+        "prismLauncher1204NeoForgeDir=1204neoforge",
+        "prismLauncher1201FabricDir=1201fabric",
+    ))
+    outputDir.set(layout.buildDirectory.dir("prodSmoke"))
+    onlyTargets.set(
+        (providers.gradleProperty("cgTargets").orNull ?: "")
+            .split(',').map { it.trim() }.filter { it.isNotEmpty() })
 }
 
 tasks.register("assembleConsumerRuntime") {
