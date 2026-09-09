@@ -319,6 +319,10 @@ public final class CgUiSprite implements CgUiDrawable {
         return spriteSize.height > 0 ? spriteSize.height : -1f;
     }
 
+    /** Built on the first off-axis draw and kept: the one-quad path is rare, and a fresh one per
+     * frame would be garbage in the paint loop. @see #draw */
+    private CgUiRoundedRect offAxis;
+
     @Override
     public void draw(CgUiPaintContext ctx, float mouseX, float mouseY, float x, float y, float width, float height) {
         // Via the accessor, not the field: this is the point where a lazily-deferred texture path
@@ -339,6 +343,31 @@ public final class CgUiSprite implements CgUiDrawable {
             if (width > 0 && height > 0) {
                 submit(ctx, x, y, width, height, u0, v0, u3, v3, tintArgb);
                 ctx.flush();
+            }
+            return;
+        }
+
+        // OFF-AXIS, THE NINE PIECES ARE ONE DRAW. Nine quads share eight interior seams, and a seam is
+        // either hard — the rasteriser's own cut, which is a visible staircase once the sprite is off
+        // its axis — or softened from both sides, which composites to three quarters and reads as a
+        // hairline down the middle of the art. Neither is fixable per quad, because each one would have
+        // to know what its neighbour drew. gui_rounded_rect's WITH_9SLICE_FILL is the same nine-region
+        // remap done per PIXEL, so there are no seams to get wrong and the outline is antialiased once.
+        //
+        // Only off-axis, because axis-aligned there is nothing to see: the rasteriser snaps every seam
+        // to the same pixel boundary. Not for cost -- measured on cgui-sprite-stress, one quad is 2.5-3x
+        // cheaper than nine either way, since nine instances per sprite outweigh the material switch.
+        // Whole-sprite draws (no border) are already one quad and never come here.
+        // @see CgUiRoundedRect#setFillSprite
+        if (!missingTexture && ctx.poseIsOffAxis()) {
+            if (offAxis == null) offAxis = new CgUiRoundedRect();
+            offAxis.setFillSprite(this);
+            int outerTint = ctx.getColor();
+            ctx.setColor(tintArgb);   // the material reads the quad colour, and this is the same product
+            try {
+                offAxis.draw(ctx, mouseX, mouseY, x, y, width, height);
+            } finally {
+                ctx.setColor(outerTint);
             }
             return;
         }
