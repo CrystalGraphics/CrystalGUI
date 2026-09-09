@@ -111,6 +111,10 @@ jvmdg.multiReleaseOriginal.set(false)
 dependencies {
     compileOnly(project(":core"))
 
+    // :mc-shared, for `LoaderProbe` -- which loader this process is, answered once for every variant.
+    // compileOnly because shadowJar bundles the classes itself; see the `from(zipTree(...))` below.
+    compileOnly(project(":mc-shared"))
+
     // :language's engine API, for the DOWNGRADE CLASSPATH ONLY -- see downgradeJar below.
     engineApi(project(path = ":language", configuration = "engineApi"))
 
@@ -653,6 +657,7 @@ tasks.shadowJar {
     // Bundle core/ and language/ classes into the shadow JAR so the mod is self-contained
     dependsOn(":core:jar")
     dependsOn(":language:jar")
+    dependsOn(":mc-shared:jar")
 }
 
 // ONE MERGED META-INF/services, and the shipped jar was WRONG without it.
@@ -708,6 +713,14 @@ afterEvaluate {
         dependsOn(mergeShippedServices)
         val coreJar = project(":core").tasks.named<Jar>("jar").get()
         from(zipTree(coreJar.archiveFile.get())) { exclude("META-INF/services/**") }
+
+        // :mc-shared, which `mixins.crystalgui.json` names as its plugin. UNPACKED rather than
+        // declared as `shadowImplementation` for the same reason :language is: this module relocates
+        // what it shadows, and a relocated plugin class is one the config can no longer name.
+        //
+        // Only until J4, when the root merge adds it once for every loader.
+        val sharedJar = project(":mc-shared").tasks.named<Jar>("jar").get()
+        from(zipTree(sharedJar.archiveFile.get()))
 
         // :language, and the tree-sitter jars it needs.
         //

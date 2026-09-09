@@ -82,6 +82,12 @@ if (!embedded || harnessRequested) include("gl-debug-harness")
 // no native libraries, so core/ owns the SyntaxTokenizer interface and nothing that needs a .dll/.so.
 include("language")
 
+// What every loader variant in the single jar shares: the mixin config plugin that decides whose
+// mixins may apply, and the loader probe under it. Java 8, one dependency (Mixin, compileOnly), and
+// no Minecraft type at all -- so it is included unconditionally, embedded or not, and needs none of
+// the toolchains the loader modules below do.
+include("mc-shared")
+
 // The MC 1.7.10 loader.
 //
 // `include`, NOT `includeBuild` -- this line read `//includeBuild("mc1710")` for months and could never
