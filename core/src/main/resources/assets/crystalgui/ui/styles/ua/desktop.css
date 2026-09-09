@@ -629,10 +629,26 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background-color: var(--window-i
  *
  * The slot itself is bare: it exists to be a stable hook and to be hidden while empty, and whatever it
  * hosts brings its own layout. */
+/* AND IT IS WHAT GIVES WAY WHEN THE WINDOW IS NARROWED. Adopted chrome is the one thing in a caption
+ * with no bound on its width -- a menu bar is as wide as its menus, a panel header as wide as its tabs
+ * -- and with `flex-shrink: 0` it kept that width at every window size. The title collapses first
+ * (`flex-basis: 0`), and then there is nothing left to give: the controls were pushed off the frame's
+ * right edge and, since a caption clips nothing, PAINTED THERE. Measured at 174.8px of chrome in a
+ * 160px window: the close button drew from 256 to 276.
+ *
+ * Shrinking is not the growing the rule below forbids. A shrink only acts once the row overflows, so
+ * at any width where the caption fits nothing moves at all -- the drag region between the chrome and
+ * the controls is exactly as it was.
+ *
+ * `clip` because the adopted bar itself does not shrink and must not: a panel header's title is
+ * `flex-shrink: 0` deliberately, so "Problems" is never rendered as "Pr". The slot is the boundary
+ * that knows how much room there is, so the cut belongs here rather than in each bar. */
 .__window__ > .__title-bar__ > .__caption-chrome__ {
     flex-direction: row;
     align-items: center;
-    flex-shrink: 0;
+    flex-shrink: 1;
+    min-width: 0px;
+    overflow: clip;
 }
 
 /* AND THE ADOPTED BAR STOPS LOOKING LIKE A BAR. Its own fill and its 24px indent are for sitting at
@@ -950,10 +966,13 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background-color: var(--window-i
  *
  * The label keeps the base rule's `flex-grow: 1; flex-basis: 0` and is simply EMPTIED, in Java, by
  * ToolWindowFrame -- so the space between the adopted header and the window controls is a real,
- * pointer-transparent box, which is precisely what a drag region is. */
+ * pointer-transparent box, which is precisely what a drag region is.
+ *
+ * GROWING ONLY. The shrink is the base rule's and must stay 1, or a torn-out panel's header pushes the
+ * window controls off its own frame the moment it is made narrow -- which is the case this whole slot
+ * is most often in, since a tool window's minimum is 140px. */
 .__window__.__tool-window__ > .__title-bar__ > .__caption-chrome__ {
     flex-grow: 0;
-    flex-shrink: 0;
 }
 
 /* Dock: put it back in the region it never stopped belonging to. Sized and coloured exactly as the
