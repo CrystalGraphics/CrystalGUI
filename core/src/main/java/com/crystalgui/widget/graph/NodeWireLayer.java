@@ -87,36 +87,37 @@ public class NodeWireLayer extends UIElement {
      * the wire is not where clicking says it is.</p>
      */
     /**
-     * The vertical spread given to a BACKWARDS wire's control points, in plane units.
+     * The horizontal offset of both control points from their own endpoints, SIGNED.
      *
-     * <p>A wire leaves its output port rightwards and enters its input port from the left — both
-     * tangents horizontal, by construction. When the destination is LEFT of the source the curve has
-     * no choice but to double back, and the two passes then run alongside each other separated by
-     * roughly the ports' own vertical offset. Measured on a {@code dx = -120} wire: the gap between
-     * the passes is 1.9 units at {@code dy = 0}, 6.5 at {@code dy = 40}, 12.6 at {@code dy = 80},
-     * against a 2-unit stroke — and changing the PULL barely moves it (6.5 to 9.0 across a sixfold
-     * range). There is nothing missing in that gap: it is the space between two parts of one wire,
-     * and both are drawn correctly.</p>
+     * <p>Forward, it is positive and clamped: {@code x'(0.5)} for this cubic is
+     * {@code 1.5 * (dx - pull)}, so the moment {@code pull > dx} the curve's x runs backwards through
+     * the middle and the wire folds over itself — 9.4px of backtrack at a 6px span. Capped at
+     * {@code 0.9 * span}, which only bites under ~27 units; every longer wire is unchanged.</p>
      *
-     * <p>What makes it read as a crack rather than a loop is landing at a few times the stroke width.
-     * Spreading the control points vertically pushes it clear: at this value the gap measures 4.9 to
-     * 16.4 units across the wire lengths tested, so a feedback edge reads as a deliberate loop.</p>
+     * <p>BACKWARDS, THE SIGN REVERSES, and that is what stops the wire tearing a hole in itself.
+     * Both tangents are horizontal and both point {@code +x}, so with the destination to the LEFT the
+     * curve has to double back twice — once leaving the source, once arriving — and the two passes of
+     * each fold then run alongside each other a few times the stroke width apart. That gap is not
+     * missing fill: it is the space between two parts of one wire, both drawn correctly, and no
+     * stroke width closes it. Measured across wire shapes: 8 to 32 units of backtrack, and a gap of
+     * 1.6 to 9.9 units against a 2-unit stroke.</p>
      *
-     * <p>THE KNOB. Larger opens the loop further at the cost of a taller wire; zero restores the old
-     * crack. Forward wires never fold and never see this.</p>
+     * <p>Pointing the tangents the other way for a backwards wire — out of the source leftwards, into
+     * the destination from its right — makes x strictly monotonic, so there is no fold and nothing to
+     * leave a gap: backtrack measured 0.00 at every shape tried. It gives up the sideways exit
+     * {@link #MIN_TANGENT} exists for, which a backwards wire cannot have without folding anyway.</p>
+     *
+     * <p>ONLY THE SIGN DIFFERS. The magnitude is the same formula in both directions, and it has to
+     * be: capping the backwards one at {@link #MIN_TANGENT} leaves the handles tiny against a long
+     * span, and the wire flattens into a straight line — deviation from its own chord measured 1.1
+     * units on a 500-unit wire, against 11.4 with the shared formula. The {@code 0.9 * span} clamp is
+     * what keeps {@code |pull| < span}, which IS the no-fold condition, so one expression gives a
+     * proportional curve in both directions and can never fold either.</p>
      */
-    private static final float BACKWARD_BOW = 24f;
-
-    /** The vertical offset applied to each control point, away from its own endpoint. Zero unless
-     * the wire runs backwards. */
-    private static float bowFor(float dx) {
-        return dx < 0f ? BACKWARD_BOW : 0f;
-    }
-
     private static float pullFor(float dx) {
         float span = Math.abs(dx);
-        float pull = Math.max(MIN_TANGENT, span * 0.5f);
-        return dx > 0f ? Math.min(pull, span * 0.9f) : pull;
+        float pull = Math.min(Math.max(MIN_TANGENT, span * 0.5f), span * 0.9f);
+        return dx > 0f ? pull : -pull;
     }
 
 
@@ -243,9 +244,8 @@ public class NodeWireLayer extends UIElement {
      */
     private static float distanceToWire(float px, float py, Vector2f a, Vector2f b) {
         float pull = pullFor(b.x() - a.x());
-        float bow = bowFor(b.x() - a.x());
-        float c1x = a.x() + pull, c1y = a.y() + bow;
-        float c2x = b.x() - pull, c2y = b.y() - bow;
+        float c1x = a.x() + pull, c1y = a.y();
+        float c2x = b.x() - pull, c2y = b.y();
 
         float best = Float.MAX_VALUE;
         float prevX = a.x(), prevY = a.y();
@@ -355,9 +355,8 @@ public class NodeWireLayer extends UIElement {
         x0 += radius0;
         x1 -= radius1;
         float pull = pullFor(x1 - x0);
-        float bow = bowFor(x1 - x0);
         ctx.curve()
-                .cubic(x0, y0, x0 + pull, y0 + bow, x1 - pull, y1 - bow, x1, y1)
+                .cubic(x0, y0, x0 + pull, y0, x1 - pull, y1, x1, y1)
                 // Exactly double, so hover reads as "the same wire, thicker" — Unity's own pair is a
                 // hairline and twice a hairline.
                 .width(view.getWireWidth() * (emphasised ? 2f : 1f))
