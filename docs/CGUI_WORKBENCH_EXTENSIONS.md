@@ -246,6 +246,11 @@ writes with the etag, a change on the server reloads a clean document and marks 
 list survives a quit, and the tab says which file it is — **none of which you write**, because all of it
 is the document layer's.
 
+> `DocumentEditor.view()` is a **getter**, not a factory. Build the element once, in the constructor,
+> and return the same one — it reads like a getter and returning `new MyView()` hands a different
+> element to the dock, to the editor class and to the Inspector. `EditorService.Tab` asks once, so the
+> engine is consistent either way; anything holding your editor directly is not.
+
 Matching files:
 
 ```java
@@ -349,7 +354,7 @@ FileDecorationProvider provider = new FileDecorationProvider() {
     @Override public Collection<CgPath> decorated() { return dirtyPaths; }
 };
 
-workbench.decorations().addProvider(provider);
+Disposable handle = workbench.decorations().addProvider(provider);
 return () -> workbench.decorations().removeProvider(provider);
 ```
 
@@ -553,7 +558,7 @@ public final class MyFeature implements WorkbenchExtension {
 | …plus its extensions | `workbench.contribute(kind, "recipe", "rcp")` | with the workbench |
 | A command | `CommandRegistry.global().register(Command.of(...))` | **`unregister(id)` yourself** |
 | A status entry | `workbench.statusBar().addEntry(entry, id, alignment, priority)` | `accessor.dispose()` |
-| An explorer decoration | `workbench.decorations().addProvider(p)` | `removeProvider(p)` |
+| An explorer decoration | `workbench.decorations().addProvider(p)` | returned |
 | Diagnostics | `workbench.markers().forResource(r).changeOne(owner, list)` | `remove(owner)` |
 | Session state | `workbench.registerSessionSlice(slice)` | returned |
 | A whole application | `ApplicationKind.of(...)` + an `ApplicationKinds` service | — |

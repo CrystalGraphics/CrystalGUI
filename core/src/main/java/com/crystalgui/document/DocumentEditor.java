@@ -19,7 +19,20 @@ import com.crystalgui.ui.dom.UIElement;
  */
 public interface DocumentEditor {
 
-    /** The element the dock shows. */
+    /**
+     * The element the dock shows — <b>the same one every time</b>.
+     *
+     * <pre>{@code
+     * private final UIElement view = new MyView();      // built once, in the constructor
+     * @Override public UIElement view() { return view; }
+     * }</pre>
+     *
+     * <p>It reads like a getter and it is one. Building here instead — {@code return new MyView()} —
+     * hands a different element to each of the things that act on a view: what the dock shows, what the
+     * editor class is stamped on, and what the Inspector is told has closed. The engine asks
+     * {@code EditorService.Tab} rather than this, and the Tab asks once, so a mistake here is contained
+     * — but anything holding the editor directly still gets whatever this returns.</p>
+     */
     UIElement view();
 
     /**
