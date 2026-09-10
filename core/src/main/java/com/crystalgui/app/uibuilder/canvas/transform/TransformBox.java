@@ -94,8 +94,11 @@ public final class TransformBox extends UIElement {
     private static final float GRAB = HANDLE_SIZE * 0.5f + 1f;
 
     /** Fully rounded, so the square is a circle at any size. @see #HANDLE_SIZE */
-    private final CgUiRect dot = new CgUiRect()
+    private CgUiRect dot = new CgUiRect()
             .withCornerRadius(HANDLE_SIZE * 0.5f, HANDLE_SIZE * 0.5f);
+
+    /** What {@link #dot} is currently filled with, so the accent is re-applied only when it moves. */
+    private int dotColour;
 
     private static final float PIVOT_SIZE = 9f;
 
@@ -770,7 +773,13 @@ public final class TransformBox extends UIElement {
             edge(paint, corners[i], corners[(i + 1) % 4], colour);
         }
 
-        dot.withFillColor(colour);
+        // ASSIGNED, because CgUiRect is immutable -- `withFillColor` answers a new rect and dropping it
+        // leaves the dot on its constructed white. Memoised so a paint that runs every frame does not
+        // allocate for a colour that never moves.
+        if (dotColour != colour) {
+            dotColour = colour;
+            dot = dot.withFillColor(colour);
+        }
         for (Spot spot : Spot.values()) {
             Vector2f at = handleAt(spot);
             if (at == null) continue;
