@@ -13,7 +13,6 @@ The repository-level index, with the full reasoning behind each entry, is
 | What | Where in this jar | Licence | Form |
 |---|---|---|---|
 | **Taffy** (`taffy-java`) | `com/crystalgui/shadow/dev/vfyjxf/taffy/` | MIT — © 2026 vfyjxf | Vendored, **modified**, relocated. Statement of changes: `taffy/MODIFICATIONS.md` |
-| **fastutil** | `com/crystalgui/shadow/it/unimi/dsi/fastutil/` | Apache 2.0 — © 2002–2023 Sebastiano Vigna | Verbatim, relocated. Taffy's dependency |
 | **IntelliJ diff/merge algorithms** | `com/crystalgui/text/diff/` | Apache 2.0 — © 2000–2024 JetBrains s.r.o. | **Ported source, modified.** Each class names its upstream file and its modifications in its own javadoc, per § 4(b) |
 | **IntelliJ Platform icons** | `assets/crystalgui/ui/icons/filetypes/` | Apache 2.0 — © 2000–2021 JetBrains s.r.o. | Verbatim. See `assets/crystalgui/ui/icons/ATTRIBUTION.md`, which ships beside them |
 | **Feather icons** | `assets/crystalgui/ui/icons/` | MIT — © 2013–2023 Cole Bemis | Verbatim |

@@ -807,7 +807,7 @@ val reobfLangThinJar = tasks.register<com.gtnewhorizons.retrofuturagradle.mcp.Re
 // ── The thin jar (J1) ────────────────────────────────────────────────────────────────────────────
 //
 // One input to the single-jar merge: this loader's own classes and resources at SRG names, and
-// nothing else. `core`, `language`, taffy, fastutil, the engine band and tree-sitter enter the merge
+// nothing else. `core`, `language`, taffy, the engine band and tree-sitter enter the merge
 // once at the root, so a copy here would ship four times over.
 //
 // ITS INPUT IS `jar`, NOT `shadowJar`. GTNH's `jar` is already exactly this module's output -- the
