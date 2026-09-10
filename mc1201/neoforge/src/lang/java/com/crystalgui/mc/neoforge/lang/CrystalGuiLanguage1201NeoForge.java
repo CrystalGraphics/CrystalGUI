@@ -7,15 +7,15 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 
 /**
- * The language stack's NeoForge 1.20.4 entry. @see CrystalGuiLang1201Forge for the shape; the only
+ * The language stack's NeoForge 1.20.4 entry. @see CrystalGuiLanguage1201Forge for the shape; the only
  * difference is that NeoForge hands the mod bus to the constructor.
  */
-@Mod(CrystalGuiLang1201NeoForge.MODID)
-public final class CrystalGuiLang1201NeoForge {
+@Mod(CrystalGuiLanguage1201NeoForge.MODID)
+public final class CrystalGuiLanguage1201NeoForge {
 
-    public static final String MODID = "crystalgui_lang";
+    public static final String MODID = "crystalgui_language";
 
-    public CrystalGuiLang1201NeoForge(IEventBus modBus) {
+    public CrystalGuiLanguage1201NeoForge(IEventBus modBus) {
         // CLIENT ONLY, and structurally so: the script service registers against a live Minecraft
         // instance and a dedicated server has none. FMLClientSetupEvent fires on no server at all.
         modBus.addListener(this::clientSetup);

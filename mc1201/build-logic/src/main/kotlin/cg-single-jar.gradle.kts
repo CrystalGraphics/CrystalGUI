@@ -57,7 +57,7 @@ registerSingleJarPipeline(SingleJarSpec(
         ":mc1201:neoforge" to "thinShadowJar",
         ":mc1201:fabric" to "remapThinJar",
     ),
-    // NO `:language` SINCE J8 -- it and everything under it ship as `crystalgui_lang`, the second
+    // NO `:language` SINCE J8 -- it and everything under it ship as `crystalgui_language`, the second
     // pipeline registered below. That is 36 MB of the 68 this jar used to be, downloaded by everyone
     // and used by whoever writes a script.
     libraryProjects = listOf(":core", ":taffy", ":mc-shared"),
@@ -135,6 +135,12 @@ registerSingleJarPipeline(SingleJarSpec(
             "mixins.crystalgui.json",
             "com/crystalgui/mc/shared/LoaderProbe.class",
             "com/crystalgui/mixins/CrystalGuiMixins.class",
+            // Every entry point the descriptors name -- see the language jar's list for what this
+            // catches. These four are each loader's own package, which no relocation touches.
+            "com/crystalgui/CrystalGUI.class",
+            "com/crystalgui/mc/forge/CrystalGUI1201Forge.class",
+            "com/crystalgui/mc/neoforge/CrystalGUI1201NeoForge.class",
+            "com/crystalgui/mc/fabric/CrystalGUI1201Fabric.class",
             // G7: the notice for what THIS jar carries, in the jar.
             "META-INF/NOTICE.md",
         ))
@@ -164,8 +170,8 @@ registerSingleJarPipeline(SingleJarSpec(
 // and one that shows a progress bar.
 registerSingleJarPipeline(SingleJarSpec(
     name = "language",
-    modId = "crystalgui_lang",
-    fileName = "crystalgui_lang-${project.version}.jar",
+    modId = "crystalgui_language",
+    fileName = "crystalgui-language-${project.version}.jar",
     shadePath = "com/crystalgui/lang/shadow",
 
     thinJars = listOf(
@@ -199,7 +205,7 @@ registerSingleJarPipeline(SingleJarSpec(
         "FMLCorePluginContainsFMLMod" to true,
         "ForceLoadAsMod" to true,
         "Implementation-Version" to project.version.toString(),
-        "Automatic-Module-Name" to "crystalgui_lang",
+        "Automatic-Module-Name" to "crystalgui_language",
     ),
     fabricThinJar = ":mc1201:fabric" to "remapLangThinJar",
     descriptorsTask = "generateLanguageDescriptors",
@@ -207,7 +213,7 @@ registerSingleJarPipeline(SingleJarSpec(
     extraContent = {
         // THE NOTICE, in the binary (G7). Most of this jar by weight is somebody else's work, and
         // EPL-2.0 and MPL-2.0 both require the notice to reach whoever receives it.
-        from(project.rootProject.file("notices/crystalgui_lang.md")) {
+        from(project.rootProject.file("notices/crystalgui-language.md")) {
             into("META-INF")
             rename { "NOTICE.md" }
         }
@@ -250,7 +256,16 @@ registerSingleJarPipeline(SingleJarSpec(
         ))
         requiredEntries.set(listOf(
             "META-INF/mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta",
-            "com/crystalgui/mc/lang/CrystalGuiLang.class",
+            // EVERY ENTRY POINT THE DESCRIPTORS NAME. A descriptor naming a class that is not here is
+            // a crash at mod construction on Forge and a hard loader error on Fabric, and nothing else
+            // in this build looks: a rename that updated the classes and mangled the descriptor
+            // strings passed every other check and produced a jar whose Fabric entrypoint did not
+            // exist. Only the `com.crystalgui.mc.lang` half is relocated, so the three loader entries
+            // keep their own package.
+            "com/crystalgui/mc/lang/CrystalGuiLanguage.class",
+            "com/crystalgui/mc/forge/lang/CrystalGuiLanguage1201Forge.class",
+            "com/crystalgui/mc/neoforge/lang/CrystalGuiLanguage1201NeoForge.class",
+            "com/crystalgui/mc/fabric/lang/CrystalGuiLanguage1201Fabric.class",
             // G7: the notice for what THIS jar carries, in the jar.
             "META-INF/NOTICE.md",
             "assets/crystalgui/engines/8/index.txt",

@@ -86,7 +86,7 @@ public final class Lifecycle1201 {
         List<String> contributors = LanguageRegistry.contributors();
         if (contributors.isEmpty()) {
             CrystalGuiCore.LOGGER.info("[cgui-1201] no language stack installed -- source files colour "
-                    + "from core's built-in lexers and are not analysed. Install crystalgui_lang for "
+                    + "from core's built-in lexers and are not analysed. Install crystalgui_language for "
                     + "grammars, analysis and scripting.");
         } else {
             CrystalGuiCore.LOGGER.info("[cgui-1201] language contributors: {}", contributors);

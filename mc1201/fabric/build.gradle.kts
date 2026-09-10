@@ -120,7 +120,7 @@ tasks.named<cgbuildlogic.CheckThinJar>("checkThinJar") {
 }
 tasks.named("assemble") { dependsOn(remapThinJar) }
 
-// A DEV RUN SEES crystalgui_lang BECAUSE KNOT SCANS THE CLASSPATH (J8). Loom's run resolves from
+// A DEV RUN SEES crystalgui_language BECAUSE KNOT SCANS THE CLASSPATH (J8). Loom's run resolves from
 // `main`'s runtime classpath, and Knot treats any entry carrying a fabric.mod.json as a mod -- so the
 // lang source set's output directory IS the second mod, with the descriptor `processLangResources`
 // put there. Forge and NeoForge take theirs through `mods {}` instead; putting it on both would

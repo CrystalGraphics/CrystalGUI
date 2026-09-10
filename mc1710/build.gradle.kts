@@ -765,7 +765,7 @@ dependencies {
     "langAnnotationProcessor"("org.projectlombok:lombok:1.18.44")
 }
 
-// A DEV RUN SEES crystalgui_lang BECAUSE FML SCANS THE CLASSPATH for @Mod (J8) -- no descriptor
+// A DEV RUN SEES crystalgui_language BECAUSE FML SCANS THE CLASSPATH for @Mod (J8) -- no descriptor
 // needed here, unlike the three ModLauncher/Knot loaders. `-PcgNoLanguage` leaves it off, which is
 // how the degraded configuration is exercised without building a jar.
 if (!providers.gradleProperty("cgNoLanguage").isPresent) {

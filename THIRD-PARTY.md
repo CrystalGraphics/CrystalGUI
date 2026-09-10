@@ -15,7 +15,7 @@ whoever receives the **binary**, and since J8 there are two binaries carrying di
 | Jar | What it carries | Notice, checked in | Notice, shipped |
 |---|---|---|---|
 | `crystalgui-<version>.jar` | the engine and the workbench: Taffy, the IntelliJ diff port, the icon sets, the fonts | [`notices/crystalgui.md`](notices/crystalgui.md) | `META-INF/NOTICE.md` |
-| `crystalgui_lang-<version>.jar` | the scripting stack: tree-sitter and its grammars, ECJ, Rhino, CFR, ASM | [`notices/crystalgui_lang.md`](notices/crystalgui_lang.md) | `META-INF/NOTICE.md` |
+| `crystalgui-language-<version>.jar` | the scripting stack: tree-sitter and its grammars, ECJ, Rhino, CFR, ASM | [`notices/crystalgui-language.md`](notices/crystalgui-language.md) | `META-INF/NOTICE.md` |
 
 Each jar's `check<Name>Jar` lists `META-INF/NOTICE.md` among its required entries, so a jar that lost
 its notice is not shippable and is deleted rather than left on disk. **Moving a library between the two

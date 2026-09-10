@@ -29,7 +29,7 @@ import java.util.Set;
 /**
  * The unattended run's scripting half — the part that needs the language stack.
  *
- * <p>Registered by {@link CrystalGuiLang}, on the frames {@link CgUiAutoTest} publishes:</p>
+ * <p>Registered by {@link CrystalGuiLanguage}, on the frames {@link CgUiAutoTest} publishes:</p>
  *
  * <pre>{@code
  * LanguageAutoTest1710.register();   // once, from the language mod's client preInit

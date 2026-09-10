@@ -58,7 +58,7 @@ legacyForge {
         // A SECOND MOD ON THE DEV RUN (J8), because that is what it is in production. `-PcgNoLanguage`
         // leaves it out, which is how the degraded configuration is exercised without building a jar.
         if (!providers.gradleProperty("cgNoLanguage").isPresent) {
-            create("crystalgui_lang") {
+            create("crystalgui_language") {
                 sourceSet(sourceSets["lang"])
                 sourceSet(project(":mc1201:common").extensions.getByType<SourceSetContainer>()["lang"])
             }

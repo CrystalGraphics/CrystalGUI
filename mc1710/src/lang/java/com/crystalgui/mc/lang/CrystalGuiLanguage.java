@@ -26,15 +26,15 @@ import java.util.List;
  * have to exist before anything here is provided, and {@code after} is what orders two FML mods.</p>
  */
 @Mod(
-    modid = CrystalGuiLang.MODID,
-    name = CrystalGuiLang.NAME,
-    version = CrystalGuiLang.VERSION,
+    modid = CrystalGuiLanguage.MODID,
+    name = CrystalGuiLanguage.NAME,
+    version = CrystalGuiLanguage.VERSION,
     dependencies = "required-after:crystalgui",
     acceptedMinecraftVersions = "[1.7.10]"
 )
-public class CrystalGuiLang {
+public class CrystalGuiLanguage {
 
-    public static final String MODID = "crystalgui_lang";
+    public static final String MODID = "crystalgui_language";
 
     public static final String NAME = "CrystalGUI Language";
 
